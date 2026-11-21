@@ -1,11 +1,10 @@
-//! `budget`: the slow state, the overrun and the hang follow the rule of 4.4 exactly at each boundary. The clock and
+//! `budget`: the slow state and the overrun follow the rule of 4.4 exactly at each boundary. The clock and
 //! the frame counter are injected, so nothing sleeps.
 
 use std::cell::Cell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use super::watchdog::{Action, action, decide};
 use super::*;
 
 const US: Duration = Duration::from_micros(1);
@@ -116,18 +115,6 @@ fn the_window_rolls_and_the_news_comes_once_a_session() {
 }
 
 #[test]
-fn the_record_keeps_the_watchdogs_clock() {
-    let bench = Bench::new();
-    let dir = opencode_util::temp::tempdir().unwrap();
-    let record = Arc::new(Record::create(dir.path()).unwrap());
-    bench.monitor.attach(record.clone()).unwrap();
-    bench.now.set(Duration::from_secs(3600));
-    let slot = bench.monitor.slot(&Artifact::builtin("p"));
-    let (started, _) = bench.monitor.call(slot, "run-command", || record.running().map(|running| running.started));
-    assert!(started.is_some_and(|started| started < 60_000), "{started:?}");
-}
-
-#[test]
 fn an_overrun_is_one_call_over_100_ms_and_a_cold_first_call_is_exempt() {
     let bench = Bench::new();
     let slot = bench.monitor.slot(&Artifact::builtin("p"));
@@ -135,7 +122,7 @@ fn an_overrun_is_one_call_over_100_ms_and_a_cold_first_call_is_exempt() {
     assert!(!bench.call(slot, "run-command", long).overrun);
     assert!(bench.call(slot, "run-command", long + NS).overrun);
     assert!(!bench.call(slot, "setup", Duration::from_secs(1)).overrun);
-    assert_eq!(bench.monitor.load("p").1, Some(Duration::from_secs(1)));
+    assert_eq!(bench.monitor.setup_time("p"), Some(Duration::from_secs(1)));
     assert!(!bench.call(slot, "render-slot", Duration::from_millis(500)).overrun);
     assert!(bench.call(slot, "render-slot", long + NS).overrun);
     assert!(!bench.call(slot, "dispose", Duration::from_secs(1)).overrun);
@@ -201,6 +188,7 @@ fn an_overrun_is_judged_by_cpu_time_not_wall_time() {
 #[cfg(target_os = "linux")]
 #[test]
 fn the_kernel_tells_the_time_on_a_run_queue() {
+    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
     // SAFETY: `sched_getcpu` takes nothing.
     #[allow(unsafe_code)]
@@ -285,24 +273,8 @@ fn all_plugins_share_four_ms_a_frame() {
 }
 
 #[test]
-fn the_watchdog_notices_at_half_a_second_and_acts_at_two() {
-    let limits = Limits::default();
-    let ms = Duration::from_millis;
-    for (running, noticed, expected) in [
-        (ms(499), false, Action::Wait),
-        (ms(500), false, Action::Notice),
-        (ms(500), true, Action::Wait),
-        (ms(1999), true, Action::Wait),
-        (ms(2000), true, Action::Hang),
-        (ms(2000), false, Action::Hang),
-    ] {
-        assert_eq!(action(&limits, running, noticed), expected, "{running:?} noticed {noticed}");
-    }
-}
-
-#[test]
 fn the_limits_parse_from_text() {
-    let limits = Limits::parse("frame=2ms, overrun=250ms,hang=3s,notice=750000us,window=60,slow=6,all=8ms").unwrap();
+    let limits = Limits::parse("frame=2ms, overrun=250ms,window=60,slow=6,all=8ms").unwrap();
     assert_eq!(
         limits,
         Limits {
@@ -311,8 +283,6 @@ fn the_limits_parse_from_text() {
             overrun: Duration::from_millis(250),
             window: 60,
             slow: 6,
-            notice: Duration::from_millis(750),
-            hang: Duration::from_secs(3),
         }
     );
     assert_eq!(Limits::parse(""), Ok(Limits::default()));
@@ -377,55 +347,14 @@ fn a_new_build_starts_with_fresh_statistics() {
 }
 
 #[test]
-fn a_call_that_unwinds_leaves_the_record() {
+fn a_call_that_unwinds_ends_the_call() {
     let bench = Bench::new();
-    let dir = opencode_util::temp::tempdir().unwrap();
-    let record = Arc::new(Record::create(dir.path()).unwrap());
-    bench.monitor.attach(record.clone()).unwrap();
     let slot = bench.monitor.slot(&Artifact::builtin("p"));
     let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         bench.monitor.call(slot, "run-command", || panic!("boom"));
     }));
     assert!(unwound.is_err());
-    assert_eq!(record.running(), None);
     assert!(bench.call(slot, "run-command", Duration::from_millis(150)).overrun);
-}
-
-#[test]
-fn a_call_that_was_noticed_tells_the_host() {
-    let bench = Bench::new();
-    let dir = opencode_util::temp::tempdir().unwrap();
-    let record = Arc::new(Record::create(dir.path()).unwrap());
-    bench.monitor.attach(record.clone()).unwrap();
-    let told: Rc<std::cell::RefCell<Vec<(Artifact, Duration)>>> = Rc::default();
-    let seen = told.clone();
-    bench.monitor.set_on_notice(move |artifact, took| seen.borrow_mut().push((artifact.clone(), took)));
-    let slot = bench.monitor.slot(&Artifact::builtin("p"));
-    let now = bench.now.clone();
-    let inner = record.clone();
-    bench.monitor.call(slot, "run-command", || {
-        let running = inner.running().unwrap();
-        inner.noticed(running.generation);
-        now.set(now.get() + Duration::from_millis(700));
-    });
-    bench.call(slot, "run-command", US);
-    assert_eq!(*told.borrow(), [(Artifact::builtin("p"), Duration::from_millis(700))]);
-}
-
-#[test]
-fn the_watchdog_decides_from_the_record() {
-    let dir = opencode_util::temp::tempdir().unwrap();
-    let record = Record::create(dir.path()).unwrap();
-    let limits = Limits::default();
-    let s = Duration::from_secs;
-    assert_eq!(decide(&limits, &record, s(10), 0).0, Action::Wait);
-    let generation = record.enter(0, 1, 1000);
-    assert_eq!(decide(&limits, &record, Duration::from_millis(1400), 0).0, Action::Wait);
-    assert_eq!(decide(&limits, &record, Duration::from_millis(1500), 0).0, Action::Notice);
-    assert_eq!(decide(&limits, &record, Duration::from_millis(1500), generation).0, Action::Wait);
-    assert_eq!(decide(&limits, &record, s(3), generation).0, Action::Hang);
-    assert!(record.leave(generation));
-    assert_eq!(decide(&limits, &record, s(3), generation).0, Action::Wait);
 }
 
 #[test]
@@ -437,28 +366,6 @@ fn a_build_set_up_again_starts_fresh() {
     bench.call(slot, "setup", US);
     assert!(!bench.monitor.is_slow("p"));
     assert_eq!(bench.monitor.report("p"), None);
-}
-
-#[test]
-fn the_notice_is_only_for_a_running_call() {
-    let dir = opencode_util::temp::tempdir().unwrap();
-    let record = Arc::new(Record::create(dir.path()).unwrap());
-    record.name(0, &Artifact::builtin("p"));
-    let paint = |running| {
-        let (send, receive) = std::sync::mpsc::sync_channel(1);
-        send.send(running).unwrap();
-        drop(send);
-        watchdog::paint(Arc::downgrade(&record), receive, Limits::default(), None, Instant::now());
-    };
-    let returned = record.enter(0, 1, 0);
-    let stale = record.running().unwrap();
-    assert!(record.leave(returned));
-    paint(stale);
-    assert!(!record.was_noticed(returned));
-    let live = record.enter(0, 1, 0);
-    paint(record.running().unwrap());
-    assert!(record.was_noticed(live));
-    assert!(record.leave(live));
 }
 
 #[test]
@@ -544,61 +451,6 @@ fn a_backlog_that_starts_or_ends_is_a_change_of_slow() {
     // Backlogged a second time, with its news told already: a change all the same.
     backlogged(&bench, slot, 13);
     assert!(bench.monitor.take_flipped() && bench.monitor.is_slow("p"));
-}
-
-#[test]
-fn a_build_keeps_one_slot_from_its_load_to_its_activation() {
-    let bench = Bench::new();
-    let dir = opencode_util::temp::tempdir().unwrap();
-    let record = Arc::new(Record::create(dir.path()).unwrap());
-    bench.monitor.attach(record.clone()).unwrap();
-    let (anonymous, named) =
-        (Artifact::external("", "/p", "0000000000000001"), Artifact::external("p", "/p", "0000000000000001"));
-    let load = bench.monitor.slot(&anonymous);
-    assert!(bench.monitor.attributed(load));
-    bench.call(load, "load", Duration::from_millis(3));
-    let active = bench.monitor.slot(&named);
-    assert_eq!(active, load, "the activation took another slot");
-    assert_eq!(record.named(active.0), Some(named.clone()));
-    assert_eq!(bench.monitor.load("p").0, Some(Duration::from_millis(3)));
-    assert_eq!(bench.monitor.slot(&anonymous), load, "a load of the same build again");
-    let crashed = |slot: Slot, kind: &str| {
-        record.enter(slot.0, record::kind(kind), 0);
-        record.crash().artifact
-    };
-    assert_eq!(crashed(active, "setup"), Some(named.clone()));
-    let other = bench.monitor.slot(&Artifact::external("", "/p", "0000000000000002"));
-    assert_ne!(other, load, "a new build shares a slot");
-    // An ID the record cannot hold beside its target.
-    let long = Artifact::external(&"x".repeat(record::NAME_BYTES), "/p", "0000000000000002");
-    assert_eq!(bench.monitor.slot(&long), other);
-    assert_eq!(crashed(other, "setup"), Some(Artifact::external("", "/p", "0000000000000002")));
-    let again = bench.monitor.slot(&Artifact::external("", "/p", "0000000000000002"));
-    assert_eq!(again, other);
-    assert!(bench.monitor.attributed(again), "the same build is refused on its reload");
-    assert!(bench.monitor.attributed(active), "a build named with its ID");
-}
-
-#[test]
-fn a_build_the_record_cannot_name_is_not_attributed() {
-    let bench = Bench::new();
-    let long = Artifact::external("", &"/p".repeat(record::NAME_BYTES), "0000000000000001");
-    assert!(bench.monitor.attributed(bench.monitor.slot(&long)), "no record");
-    let bench = Bench::new();
-    let dir = opencode_util::temp::tempdir().unwrap();
-    let record = Arc::new(Record::create(dir.path()).unwrap());
-    bench.monitor.attach(record.clone()).unwrap();
-    let snapshot = Snapshot { session: Some("ses_a".into()), draft: "kept".into(), dropped: false };
-    record.publish(&snapshot);
-    assert!(!bench.monitor.attributed(bench.monitor.slot(&long)), "too long");
-    for index in 1..record::NAMES {
-        let slot = bench.monitor.slot(&Artifact::builtin(&format!("b{index}")));
-        assert!(bench.monitor.attributed(slot), "{index}");
-    }
-    let past = bench.monitor.slot(&Artifact::external("", "/q", "0000000000000001"));
-    assert!(!bench.monitor.attributed(past), "past the record's slots");
-    // Nothing was written past the names: the snapshot after them reads back.
-    assert_eq!(record.snapshot(), Some(snapshot));
 }
 
 #[test]

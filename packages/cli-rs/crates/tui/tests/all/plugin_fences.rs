@@ -67,7 +67,7 @@ impl Fences {
             ..support::deps(Arc::new(fake))
         };
         let harness = support::mount(100, 60, deps);
-        let external = External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() };
+        let external = External { config_dir, cwd: root.path().to_path_buf() };
         external_with(&harness.tui, external, Some(config));
         let pipe = Pipe { harness, root };
         pipe.active(ID);

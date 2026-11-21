@@ -30,10 +30,6 @@ default = ["ts", "luau"]
 ts = []
 # Disable Luau at runtime with `OPENCODE_PLUGIN_LUAU=0`.
 luau = ["dep:mlua"]
-# Native plugin libraries, opened in process over the C ABI (native-feature): the loader's library path, the C ABI's
-# carrier, the conformance harness, macOS quarantine and the library half of approvals. Off by default (native-off);
-# `OPENCODE_PLUGIN_NATIVE=0` turns it off at runtime in a build with it. A static musl build compiles them out anyway (build.rs's `cfg(native)`, O-188).
-native = ["opencode-plugin-abi/c-abi"]
 
 [target.'cfg(unix)'.dependencies]
 # Who owns the approvals file, and opening it without following a link.
@@ -43,6 +39,3 @@ libc.workspace = true
 opencode-util.workspace = true
 # The operations table test's Rust column (`client::probe`).
 opencode-api-types = { workspace = true, features = ["probe"] }
-# The LaTeX and Mermaid built-ins, run through the C ABI's byte shims in the loader's tests.
-opencode-latex.workspace = true
-opencode-mermaid.workspace = true

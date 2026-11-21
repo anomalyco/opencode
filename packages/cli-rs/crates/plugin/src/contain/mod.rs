@@ -1,16 +1,28 @@
-//! Measures plugin calls using the host clock. The monitor tracks slow calls, frame budgets and mailbox pressure;
-//! the parent uses the run record to attribute a crash to the active build.
+//! Measures plugin calls using the host clock. The monitor tracks slow calls, frame budgets and mailbox pressure.
 
-pub mod record;
-pub mod watchdog;
-
-use std::cell::{Cell, OnceCell, RefCell};
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-pub use record::{Artifact, Crash, Handoff, Record, Snapshot};
+/// What a plugin is: its ID, and for an external plugin its target and build. An external plugin's ID while it loads
+/// is not known yet: it is then empty.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Artifact {
+    pub id: String,
+    pub target: Option<String>,
+    pub digest: Option<String>,
+}
+
+impl Artifact {
+    pub fn builtin(id: &str) -> Artifact {
+        Artifact { id: id.to_owned(), target: None, digest: None }
+    }
+
+    pub fn external(id: &str, target: &str, digest: &str) -> Artifact {
+        Artifact { id: id.to_owned(), target: Some(target.to_owned()), digest: Some(digest.to_owned()) }
+    }
+}
 
 thread_local! {
     /// How many plugin calls on this thread run inside [`catch`]: a panic now is a plugin's, which its catch stops.
@@ -66,10 +78,6 @@ pub struct Limits {
     pub window: usize,
     /// Over the frame budget in more of the window's frames than this is slow.
     pub slow: usize,
-    /// The watchdog paints its notice.
-    pub notice: Duration,
-    /// The watchdog ends the client.
-    pub hang: Duration,
 }
 
 impl Default for Limits {
@@ -80,8 +88,6 @@ impl Default for Limits {
             overrun: Duration::from_millis(100),
             window: 120,
             slow: 12,
-            notice: Duration::from_millis(500),
-            hang: Duration::from_secs(2),
         }
     }
 }
@@ -98,8 +104,6 @@ impl Limits {
                 "frame" => limits.frame = duration(value)?,
                 "all" => limits.all = duration(value)?,
                 "overrun" => limits.overrun = duration(value)?,
-                "notice" => limits.notice = duration(value)?,
-                "hang" => limits.hang = duration(value)?,
                 "window" => limits.window = count()?.max(1),
                 "slow" => limits.slow = count()?,
                 _ => return Err(format!("{name}: no such limit")),
@@ -176,8 +180,6 @@ pub struct Monitor {
     queued: RefCell<Rc<dyn Fn() -> Duration>>,
     /// The CPU time this thread has used so far ([`thread_cpu`]), where the OS can say.
     cpu: RefCell<Rc<dyn Fn() -> Option<Duration>>>,
-    /// A test set the clock: the record still takes the monotonic clock, which the watchdog reads.
-    injected: Cell<bool>,
     frame: RefCell<Rc<dyn Fn() -> u64>>,
     /// The time of the calls and host work nested in each host work that runs, innermost last ([`Monitor::host`]).
     nested: RefCell<Vec<Duration>>,
@@ -196,15 +198,9 @@ pub struct Monitor {
     idle: Cell<u64>,
     /// The frame of the latest call that was no timer's reply ([`crate::ticking`]).
     plain: Cell<Option<u64>>,
-    record: OnceCell<(Arc<Record>, Instant)>,
-    /// Told when a call returns whose hang notice the watchdog painted: the plugin and how long the call took.
-    on_notice: RefCell<Option<Rc<OnNotice>>>,
     /// Report a slow plugin once per plugin ID per session, even after reload.
     told: RefCell<std::collections::HashSet<String>>,
 }
-
-/// What a host does when a call whose hang notice was painted returns.
-type OnNotice = dyn Fn(&Artifact, Duration);
 
 #[derive(Default)]
 struct Stats {
@@ -219,7 +215,6 @@ struct Stats {
     flipped: bool,
     /// The next call is the first after a setup: exempt from overrun.
     cold: bool,
-    load: Option<Duration>,
     setup: Option<Duration>,
     kinds: Vec<(&'static str, Samples)>,
     /// The host's own work for its nodes ([`Monitor::host`]), and all of it so far.
@@ -294,21 +289,11 @@ impl Drop for Published {
 }
 
 /// Leaves the running call however the plugin's call ends, also by unwinding.
-struct Leave<'a> {
-    monitor: &'a Monitor,
-    generation: Option<u64>,
-}
+struct Leave<'a>(&'a Monitor);
 
 impl Drop for Leave<'_> {
     fn drop(&mut self) {
-        self.monitor.depth.set(0);
-        let (Some(generation), Some((record, _))) = (self.generation, self.monitor.record.get()) else { return };
-        if !record.leave(generation) {
-            // The watchdog claimed this call and is ending the process: nothing may run as if it had returned.
-            loop {
-                std::thread::park();
-            }
-        }
+        self.0.depth.set(0);
     }
 }
 
@@ -320,7 +305,6 @@ impl Monitor {
             clock: RefCell::new(Rc::new(Instant::now)),
             queued: RefCell::new(Rc::new(queued)),
             cpu: RefCell::new(Rc::new(thread_cpu)),
-            injected: Cell::new(false),
             frame: RefCell::new(Rc::new(|| 0)),
             nested: RefCell::default(),
             plugins: RefCell::default(),
@@ -332,8 +316,6 @@ impl Monitor {
             closing: Cell::new(false),
             idle: Cell::new(0),
             plain: Cell::new(None),
-            record: OnceCell::new(),
-            on_notice: RefCell::default(),
             told: RefCell::default(),
         }
     }
@@ -352,7 +334,6 @@ impl Monitor {
         *self.clock.borrow_mut() = Rc::new(clock);
         *self.queued.borrow_mut() = Rc::new(|| Duration::ZERO);
         *self.cpu.borrow_mut() = Rc::new(|| None);
-        self.injected.set(true);
     }
 
     /// The time on the monitor's clock.
@@ -415,86 +396,18 @@ impl Monitor {
         self.told.borrow_mut().insert(id.to_owned())
     }
 
-    /// Calls `notice` when a call returns whose hang notice the watchdog painted.
-    pub fn set_on_notice(&self, notice: impl Fn(&Artifact, Duration) + 'static) {
-        *self.on_notice.borrow_mut() = Some(Rc::new(notice));
-    }
-
-    /// Keeps the run record `record` from now on. Once per process: the record names the plugins known so far and those
-    /// that come later.
-    pub fn attach(&self, record: Arc<Record>) -> std::io::Result<()> {
-        if self.record.set((record.clone(), Instant::now())).is_err() {
-            return Err(std::io::Error::other("a record is attached already"));
-        }
-        for (slot, stats) in self.plugins.borrow().iter().enumerate() {
-            record.name(slot as u16, &stats.artifact);
-        }
-        Ok(())
-    }
-
-    /// Starts the watchdog over the attached record, painting its notice on `terminal`. Only a client on a real
-    /// terminal, under a parent, does this.
-    pub fn watch(&self, terminal: Option<std::fs::File>) -> std::io::Result<()> {
-        let (record, epoch) = self.record.get().ok_or_else(|| std::io::Error::other("no record"))?;
-        watchdog::spawn(Arc::downgrade(record), *epoch, self.limits(), terminal)
-    }
-
-    pub fn record(&self) -> Option<&Arc<Record>> {
-        self.record.get().map(|(record, _)| record)
-    }
-
-    /// The slot of `artifact`, made on first use: each build has its own. A library is opened (and its load timed)
-    /// before its ID is known: its build keeps that one slot once it is named, so a crash in its load and in its
-    /// activation names the same artifact.
+    /// The slot of `artifact`, made on first use: each build has its own.
     pub fn slot(&self, artifact: &Artifact) -> Slot {
         let mut plugins = self.plugins.borrow_mut();
         if let Some(index) = plugins.iter().position(|stats| stats.artifact == *artifact) {
             return Slot(index as u16);
         }
-        let build = |stats: &Stats| {
-            artifact.target.is_some()
-                && (stats.artifact.target.as_ref(), stats.artifact.digest.as_ref())
-                    == (artifact.target.as_ref(), artifact.digest.as_ref())
-                && (stats.artifact.id.is_empty() || artifact.id.is_empty())
-        };
-        if let Some(index) = plugins.iter().position(build) {
-            let stats = &mut plugins[index];
-            // Named once its ID is known. A record that cannot hold the longer name keeps the build's target and
-            // digest, which name the artifact all the same.
-            if stats.artifact.id.is_empty() && !artifact.id.is_empty() {
-                if let Some((record, _)) = self.record.get() {
-                    record.name(index as u16, artifact);
-                }
-                stats.artifact = artifact.clone();
-            }
-            return Slot(index as u16);
-        }
         plugins.push(Stats { artifact: artifact.clone(), ..Stats::default() });
-        let slot = (plugins.len() - 1) as u16;
-        if let Some((record, _)) = self.record.get() {
-            record.name(slot, artifact);
-        }
-        Slot(slot)
+        Slot((plugins.len() - 1) as u16)
     }
 
-    /// Whether a crash in a call of `slot` names its artifact: always without a record, as no parent restarts the
-    /// client then. An external build is named by its build, its target and digest, whatever ID the record could
-    /// hold beside them; a built-in by its ID. An external build the record cannot name is not admitted.
-    pub fn attributed(&self, slot: Slot) -> bool {
-        let Some((record, _)) = self.record.get() else { return true };
-        let plugins = self.plugins.borrow();
-        let Some(stats) = plugins.get(usize::from(slot.0)) else { return false };
-        record.named(slot.0).is_some_and(|named| match &stats.artifact.target {
-            Some(_) => (&named.target, &named.digest) == (&stats.artifact.target, &stats.artifact.digest),
-            None => named == stats.artifact,
-        })
-    }
-
-    /// Runs `f` as call `kind` of the plugin in `slot`: timed, and named in the record while it runs. A call within a
-    /// call is part of the outer one.
+    /// Runs `f` as call `kind` of the plugin in `slot`, timed. A call within a call is part of the outer one.
     pub fn call<R>(&self, slot: Slot, kind: &'static str, f: impl FnOnce() -> R) -> (R, Timed) {
-        // The record names a call by its kind's index: an unlisted kind would leave a crash in it unnamed.
-        debug_assert!(record::KINDS.contains(&kind), "call kind {kind} is not in the record's list");
         if self.depth.get() > 0 {
             return (f(), Timed::default());
         }
@@ -503,25 +416,15 @@ impl Monitor {
         let (start, waited, used) = (clock(), queued(), cpu());
         // A Luau call arms its budget from this reading rather than taking its own ([`call_cpu`]).
         #[cfg(luau)]
-        let _published = Published::new(used.filter(|_| !self.injected.get()));
-        let generation = self.record.get().map(|(record, epoch)| {
-            let now = if self.injected.get() { Instant::now() } else { start };
-            record.enter(slot.0, record::kind(kind), now.saturating_duration_since(*epoch).as_millis() as u64)
-        });
+        let _published = Published::new(used);
         self.depth.set(1);
-        let leave = Leave { monitor: self, generation };
+        let leave = Leave(self);
         let value = f();
         drop(leave);
         let took = clock().saturating_duration_since(start);
         // Runnable but not running is the machine's load, not the plugin's time.
         let charged = took.saturating_sub(queued().saturating_sub(waited));
         let cpu = used.zip(cpu()).map(|(before, after)| after.saturating_sub(before));
-        let noticed =
-            generation.zip(self.record.get()).is_some_and(|(generation, (record, _))| record.was_noticed(generation));
-        if noticed && let Some(notice) = self.on_notice.borrow().clone() {
-            let artifact = self.plugins.borrow()[usize::from(slot.0)].artifact.clone();
-            notice(&artifact, took);
-        }
         (value, self.account(slot, kind, charged, cpu))
     }
 
@@ -578,12 +481,8 @@ impl Monitor {
         let mut plugins = self.plugins.borrow_mut();
         let stats = &mut plugins[usize::from(slot.0)];
         match kind {
-            "load" => {
-                stats.load = Some(took);
-                return Timed { took, cpu, ..Timed::default() };
-            }
             "setup" => {
-                *stats = Stats { artifact: std::mem::take(&mut stats.artifact), load: stats.load, ..Stats::default() };
+                *stats = Stats { artifact: std::mem::take(&mut stats.artifact), ..Stats::default() };
                 stats.setup = Some(took);
                 stats.cold = true;
                 return Timed { took, cpu, ..Timed::default() };
@@ -754,11 +653,7 @@ impl Monitor {
                         format!("{kind} {:.1}/{:.1}/{:.1} ms", ms(at(0.5)), ms(at(0.99)), ms(samples.worst))
                     })
                     .collect();
-                let start: Vec<String> = [("load", stats.load), ("setup", stats.setup)]
-                    .into_iter()
-                    .filter_map(|(name, took)| Some(format!("{name} {:.1} ms", ms(took?))))
-                    .collect();
-                let start = if start.is_empty() { String::new() } else { format!("; {}", start.join(", ")) };
+                let start = stats.setup.map(|took| format!("; setup {:.1} ms", ms(took))).unwrap_or_default();
                 let backlog = backlog.map(|backlog| format!("; {backlog}")).unwrap_or_default();
                 format!("slow (p50/p99/worst): {}{start}{backlog}", kinds.join(", "))
             })
@@ -766,9 +661,9 @@ impl Monitor {
         .flatten()
     }
 
-    /// How long plugin `id`'s newest build took to load and to set up.
-    pub fn load(&self, id: &str) -> (Option<Duration>, Option<Duration>) {
-        self.latest(id, |stats| (stats.load, stats.setup)).unwrap_or_default()
+    /// How long plugin `id`'s newest build took to set up.
+    pub fn setup_time(&self, id: &str) -> Option<Duration> {
+        self.latest(id, |stats| stats.setup).flatten()
     }
 }
 

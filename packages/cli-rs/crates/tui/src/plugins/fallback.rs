@@ -89,11 +89,22 @@ fn pick(tui: &Rc<Tui>, key: &str, by_input: bool) {
     if entry.key == opencode_plugin::Entry::plugin_key(super::manager::ID) {
         if by_input && failed(&entry) && super::host::fallback_shown(tui) {
             tui.dialogs.clear();
-            super::contain::enable(tui, key);
+            enable(tui, key);
         }
         return;
     }
     details(tui, key);
+}
+
+fn enable(tui: &Rc<Tui>, key: &str) {
+    match tui.plugins.toggle_entry(&super::host::host(tui), key, true) {
+        Some(Err(error)) => {
+            tui.toasts.error(error);
+            super::host::tell_plugins(tui);
+        }
+        Some(Ok(())) => super::host::host(tui).remount(),
+        None => {}
+    }
 }
 
 fn details(tui: &Rc<Tui>, key: &str) {

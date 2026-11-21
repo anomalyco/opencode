@@ -84,8 +84,6 @@ enum Place {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Carrier {
     InProcess,
-    #[cfg_attr(not(native), allow(dead_code))]
-    CAbi,
     Pipe,
     #[cfg(luau)]
     Luau,
@@ -210,12 +208,6 @@ fn request_ownership_in_process() {
 }
 
 #[test]
-#[cfg(native)]
-fn request_ownership_through_the_c_abi() {
-    table(Carrier::CAbi);
-}
-
-#[test]
 fn request_ownership_over_the_pipe() {
     table(Carrier::Pipe);
 }
@@ -228,10 +220,8 @@ fn request_ownership_in_luau() {
 
 #[test]
 fn a_task_parked_on_its_mounts_fetch_goes_on_once_cancelled() {
-    #[cfg_attr(not(any(luau, native)), allow(unused_mut))]
+    #[cfg_attr(not(luau), allow(unused_mut))]
     let mut carriers = vec![Carrier::InProcess];
-    #[cfg(native)]
-    carriers.push(Carrier::CAbi);
     #[cfg(luau)]
     carriers.push(Carrier::Luau);
     for carrier in carriers {
@@ -243,12 +233,7 @@ fn parked(carrier: Carrier) {
     let (fake, gate, served, asked) = held();
     PARKED.with_borrow_mut(Vec::clear);
     let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
-    let host = opencode_tui::plugins::host::host(&h.tui);
     let definition = match carrier {
-        Carrier::CAbi => {
-            let entries = crate::support::loopback_entries!("test.parked", parked_plugin);
-            crate::support::loopback(&host, entries).unwrap().0
-        }
         #[cfg(luau)]
         Carrier::Luau => {
             let sources = opencode_plugin::luau::Sources::from_files([
@@ -346,39 +331,30 @@ end)
 
 #[test]
 fn a_task_a_mount_wakes_keeps_the_activations_owner() {
-    for loopback in crate::support::LOOPBACK {
-        let (fake, gate, served, asked) = held();
-        PARKED.with_borrow_mut(Vec::clear);
-        WOKEN.with_borrow_mut(|woken| *woken = (false, None));
-        let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
-        let host = opencode_tui::plugins::host::host(&h.tui);
-        let definition = match loopback {
-            true => {
-                let entries = crate::support::loopback_entries!("test.woken", woken_plugin);
-                crate::support::loopback(&host, entries).unwrap().0
-            }
-            false => abi::Plugin { id: "test.woken", setup: woken_plugin }.into(),
-        };
-        opencode_tui::plugins::host::add(&h.tui, definition);
-        h.tui.navigate(Route::Plugin { id: "test.woken".into(), name: "probe".into() });
-        turns(&h, 3);
-        h.app.press("x");
-        let sent = h.app.wait_until(support::WAIT, || {
-            h.app.advance(Duration::from_millis(1));
-            asked.load(Ordering::SeqCst) == 1
-        });
-        assert!(sent, "loopback {loopback}: the woken task sent nothing");
-        h.tui.navigate(Route::Home);
-        turns(&h, 3);
-        *gate.0.lock().unwrap() = true;
-        gate.1.notify_all();
-        assert!(h.app.wait_until(support::WAIT, || served.load(Ordering::SeqCst) == 1), "never served");
-        h.app.wait_until(support::WAIT, || {
-            h.app.advance(Duration::from_millis(1));
-            !PARKED.with_borrow(Vec::is_empty)
-        });
-        assert_eq!(PARKED.with_borrow(Vec::clone), ["ok"], "loopback {loopback}: the mount's close took its fetch");
-    }
+    let (fake, gate, served, asked) = held();
+    PARKED.with_borrow_mut(Vec::clear);
+    WOKEN.with_borrow_mut(|woken| *woken = (false, None));
+    let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
+    let definition = abi::Plugin { id: "test.woken", setup: woken_plugin }.into();
+    opencode_tui::plugins::host::add(&h.tui, definition);
+    h.tui.navigate(Route::Plugin { id: "test.woken".into(), name: "probe".into() });
+    turns(&h, 3);
+    h.app.press("x");
+    let sent = h.app.wait_until(support::WAIT, || {
+        h.app.advance(Duration::from_millis(1));
+        asked.load(Ordering::SeqCst) == 1
+    });
+    assert!(sent, "the woken task sent nothing");
+    h.tui.navigate(Route::Home);
+    turns(&h, 3);
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+    assert!(h.app.wait_until(support::WAIT, || served.load(Ordering::SeqCst) == 1), "never served");
+    h.app.wait_until(support::WAIT, || {
+        h.app.advance(Duration::from_millis(1));
+        !PARKED.with_borrow(Vec::is_empty)
+    });
+    assert_eq!(PARKED.with_borrow(Vec::clone), ["ok"], "the mount's close took its fetch");
 }
 
 thread_local! {
@@ -763,7 +739,7 @@ fn turns(h: &Harness, count: usize) {
 }
 
 thread_local! {
-    /// The row the in-process and C ABI probe runs.
+    /// The row the in-process probe runs.
     static ROW: Cell<Option<Row>> = const { Cell::new(None) };
     static MARK: RefCell<PathBuf> = RefCell::default();
     static SEEN: RefCell<Probed> = const { RefCell::new((Vec::new(), Vec::new())) };
@@ -787,7 +763,7 @@ impl Probe {
             std::fs::create_dir_all(&plugin).unwrap();
             std::fs::write(plugin.join("tui.ts"), script(row, &log, mark)).unwrap();
             let harness = support::mount(80, 24, Deps { route: Route::Home, ..deps });
-            let external = External { config_dir: root.join("config"), cwd: root.to_path_buf(), dev: Vec::new() };
+            let external = External { config_dir: root.join("config"), cwd: root.to_path_buf() };
             external_with(&harness.tui, external, config());
             let pipe = Pipe { harness, root: opencode_util::temp::tempdir().unwrap() };
             pipe.active("example.probe");
@@ -810,15 +786,7 @@ impl Probe {
         SEEN.with_borrow_mut(|seen| *seen = Default::default());
         OTHER.with_borrow_mut(Vec::clear);
         let harness = support::mount(80, 24, Deps { route: Route::Home, ..deps });
-        let host = opencode_tui::plugins::host::host(&harness.tui);
-        let definition = match carrier {
-            Carrier::CAbi => {
-                let entries = crate::support::loopback_entries!("test.probe", probe);
-                crate::support::loopback(&host, entries).unwrap().0
-            }
-            _ => abi::Plugin { id: "test.probe", setup: probe }.into(),
-        };
-        opencode_tui::plugins::host::add(&harness.tui, definition);
+        opencode_tui::plugins::host::add(&harness.tui, abi::Plugin { id: "test.probe", setup: probe }.into());
         Probe::Native(harness)
     }
 
@@ -851,7 +819,7 @@ impl Probe {
         }
     }
 
-    /// Holds what the JS host answers, or handles what it held; in process and over the C ABI nothing waits.
+    /// Holds what the JS host answers, or handles what it held; in process nothing waits.
     fn hold(&self, held: bool) {
         if let Probe::Pipe(pipe, _) = self {
             pipe.scripts().hold_answers(held);

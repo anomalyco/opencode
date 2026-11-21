@@ -139,43 +139,6 @@ impl Mailbox {
         Ok(())
     }
 
-    /// [`Mailbox::put`] of JSON text from the C ABI. A closed or full mailbox answers before the text is read; text
-    /// that is not JSON, or a key that is not UTF-8, is [`abi::ERROR`].
-    #[cfg_attr(not(native), allow(dead_code))]
-    pub fn put_json(&self, key: &[u8], message: &[u8]) -> i32 {
-        let Ok(key) = std::str::from_utf8(key) else { return abi::ERROR };
-        {
-            let state = self.state();
-            // No entry waits under the empty key: `put` takes it as no key.
-            let waiting = state.entries.iter().any(|(known, ..)| known.as_deref() == Some(key));
-            if state.closed || state.refusing {
-                return abi::CLOSED;
-            }
-            // A message past the bytes is refused before it is read.
-            let past = state.held.saturating_add((key.len() + message.len()) as u64) > self.bytes && !waiting;
-            if !waiting && state.entries.len() >= abi::BOUND || past {
-                drop(state);
-                return self.refuse_full();
-            }
-        }
-        let Ok(text) = std::str::from_utf8(message) else { return abi::ERROR };
-        if serde_json::from_str::<serde::de::IgnoredAny>(text).is_err() {
-            return abi::ERROR;
-        }
-        match self.put(Some(key), Message::Json(text.to_owned())) {
-            Ok(()) => abi::OK,
-            Err((Refused::Full, _)) => abi::FULL,
-            Err((Refused::Closed, _)) => abi::CLOSED,
-            Err((Refused::Unencodable, _)) => abi::ERROR,
-        }
-    }
-
-    #[cfg_attr(not(native), allow(dead_code))]
-    fn refuse_full(&self) -> i32 {
-        self.state().refused += 1;
-        abi::FULL
-    }
-
     /// A thread panicked: the first report of an open mailbox is kept, cut to [`REPORT`] bytes, and wakes the UI thread.
     pub fn panicked(&self, mut message: String) {
         {
@@ -279,8 +242,8 @@ impl Mailbox {
     }
 }
 
-/// What a message under `key` counts of the mailbox's bytes: its key, and its JSON text, as the C ABI sends it or as
-/// an in-process value was written.
+/// What a message under `key` counts of the mailbox's bytes: its key, and its JSON text, or as an in-process value was
+/// written.
 fn size(key: Option<&str>, message: &Message) -> u64 {
     let text = match message {
         Message::Json(text) => text.len(),
@@ -333,21 +296,25 @@ mod tests {
         let _limits =
             crate::limits::set(crate::limits::Limits { plugin_content: 100, ..crate::limits::Limits::default() });
         let mailbox = Mailbox::new("test.bytes", Arc::new(Wake::new(None)));
+        let put = |key: Option<&str>, text: &str| {
+            mailbox.put(key, Message::Json(text.to_owned())).map_err(|(refused, _)| refused)
+        };
+        let full = |put: Result<(), Refused>| matches!(put, Err(Refused::Full));
         let forty = format!("\"{}\"", "x".repeat(38));
-        assert_eq!(mailbox.put_json(b"", forty.as_bytes()), abi::OK);
-        assert_eq!(mailbox.put_json(b"", forty.as_bytes()), abi::OK);
-        assert_eq!(mailbox.put_json(b"", forty.as_bytes()), abi::FULL, "past the bytes");
+        assert!(put(None, &forty).is_ok());
+        assert!(put(None, &forty).is_ok());
+        assert!(full(put(None, &forty)), "past the bytes");
         assert_eq!(mailbox.stats().waiting, 2);
         assert!(mailbox.take_one(None).is_some());
-        assert_eq!(mailbox.put_json(b"", forty.as_bytes()), abi::OK, "freed");
+        assert!(put(None, &forty).is_ok(), "freed");
         // A key's bytes count, and a replace counts the difference.
         let twenty = format!("\"{}\"", "x".repeat(18));
-        assert_eq!(mailbox.put_json(b"k", twenty.as_bytes()), abi::FULL, "80 bytes and 21");
+        assert!(full(put(Some("k"), &twenty)), "80 bytes and 21");
         assert!(mailbox.take_one(None).is_some());
-        assert_eq!(mailbox.put_json(b"k", twenty.as_bytes()), abi::OK, "40 bytes and 21");
-        assert_eq!(mailbox.put_json(b"k", b"1"), abi::OK, "a replace by 2 bytes");
-        assert_eq!(mailbox.put_json(b"k", forty.as_bytes()), abi::OK, "a replace by 41 bytes");
-        assert_eq!(mailbox.put_json(b"k", format!("{forty}{}", " ".repeat(20)).as_bytes()), abi::FULL, "by 61");
+        assert!(put(Some("k"), &twenty).is_ok(), "40 bytes and 21");
+        assert!(put(Some("k"), "1").is_ok(), "a replace by 2 bytes");
+        assert!(put(Some("k"), &forty).is_ok(), "a replace by 41 bytes");
+        assert!(full(put(Some("k"), &format!("{forty}{}", " ".repeat(20)))), "by 61");
     }
 
     #[test]
@@ -402,26 +369,6 @@ mod tests {
             assert!(dropped.load(Ordering::SeqCst));
         }
     }
-
-    #[test]
-    fn the_c_abi_send_reads_keys_and_text() {
-        let mailbox = Mailbox::new("test.json", Arc::new(Wake::new(None)));
-        assert_eq!(mailbox.put_json(b"", b"1"), abi::OK);
-        assert_eq!(mailbox.put_json(b"", b"2"), abi::OK);
-        assert_eq!(mailbox.stats().waiting, 2, "an empty key replaced");
-        assert!(mailbox.put(Some(""), Message::Json("3".into())).is_ok());
-        assert_eq!(mailbox.stats().waiting, 3, "an empty key replaced in process");
-        assert_eq!(mailbox.put_json(&[0xff], b"1"), abi::ERROR);
-        assert_eq!(mailbox.put_json(b"k", b"{not json"), abi::ERROR);
-        assert_eq!(mailbox.put_json(b"k", &[0xff]), abi::ERROR);
-        for number in 3..abi::BOUND {
-            assert_eq!(mailbox.put_json(b"", number.to_string().as_bytes()), abi::OK);
-        }
-        assert_eq!(mailbox.put_json(b"", b"{not json"), abi::FULL);
-        mailbox.close();
-        assert_eq!(mailbox.put_json(b"", b"{not json"), abi::CLOSED);
-    }
-
     #[test]
     fn the_registry_keeps_one_row_a_plugin() {
         let before = rows();

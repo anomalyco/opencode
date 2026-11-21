@@ -502,8 +502,6 @@ impl Inner {
     pub(crate) fn parts_changed(&self) {
         if let Some(tui) = self.tui.upgrade() {
             self.previews.update(&tui, self);
-            // Every change of the text (typing, restore, reset, stash) ends here: `set_text` calls no change handler.
-            crate::plugins::contain::sync(&tui);
         }
     }
 

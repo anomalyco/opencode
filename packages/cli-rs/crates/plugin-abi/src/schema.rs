@@ -94,8 +94,8 @@ macro_rules! unit {
 
 mod wire;
 
-/// The JSON Schema of the plugin ABI 2.0, versioned by its `$id` and `x-abi`. Its definitions are normative: what
-/// `describe` and `create` answer (`Metadata`, `Manifest`), the requests of each side (`Request`, `HostRequest`, with
+/// The JSON Schema of the plugin ABI 2.0, versioned by its `$id` and `x-abi`. Its definitions are normative: what a
+/// plugin registers (`Manifest`), the requests of each side (`Request`, `HostRequest`, with
 /// `InputTo`), what each is answered with (`x-messages` names the definition of each request type's reply:
 /// `ViewReply`, `ClaimReply`, `LayoutReply`, `Handled`, ...), the tree a view returns (`Node`), and the binary list a
 /// draw returns (`DrawList`).
@@ -131,7 +131,7 @@ pub fn schema() -> Value {
         Keep { key: string() } { },
         Canvas { } { id: nullable(string()), layout: reference("Layout"), version: uint64(), animate: boolean() },
         Fence { } { id: nullable(string()), bg: nullable(reference("Color")), layout: reference("Layout") },
-        #[cfg(any(test, feature = "next"))]
+        #[cfg(test)]
         Later { text: string() } { id: nullable(string()) },
     });
     // A box's `interact` is flattened: its fields sit beside the box's own.
@@ -435,7 +435,7 @@ pub fn schema() -> Value {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": format!("opencode plugin ABI {}.{}", crate::ABI_MAJOR, crate::ABI_MINOR),
         "description": "Generated from opencode_plugin_abi by `examples/schema.rs`; do not edit. Normative for every \
-                        binding: `describe` answers Metadata and `create` a Manifest; the host's `call` sends a \
+                        binding: a plugin registers a Manifest; the host's `call` sends a \
                         Request and the plugin's sends a HostRequest, each answered as `x-messages` says by the \
                         request's type; a view answers a ViewReply whose tree is a Node, and a draw a DrawList. A \
                         field the schema leaves out of `required` may be left out; a reader ignores a field it does \
@@ -693,68 +693,6 @@ mod tests {
     }
 
     #[test]
-    fn the_schema_takes_every_message_of_the_transcripts() {
-        let schema = shipped();
-        let defs = &schema["$defs"];
-        let messages = &schema["x-messages"];
-        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/conformance/transcripts.jsonl");
-        let text = std::fs::read_to_string(file).unwrap();
-        let answer = |side: &str, kind: &str| messages[side].get(kind).unwrap_or(&messages[side]["*"]).clone();
-        // What the next `return` answers: the schema of its reply, or `None` for a draw's bytes.
-        let mut waiting: Vec<Option<Value>> = Vec::new();
-        let (mut requests, mut replies, mut completed) = (0, 0, 0);
-        for (number, line) in text.lines().enumerate() {
-            let entry: Value = serde_json::from_str(line).unwrap();
-            let at = format!("transcripts.jsonl:{}", number + 1);
-            if entry == json!("describe") {
-                waiting.push(Some(messages["describe"].clone()));
-            } else if entry.get("create").is_some() {
-                waiting.push(Some(messages["create"].clone()));
-            } else if let Some(call) = entry.get("call") {
-                let request = &call["request"];
-                assert!(conforms(request, &defs["Request"], defs), "{at}: {request}");
-                requests += 1;
-                completed += usize::from(request["part"]["tool"]["state"]["status"] == "completed");
-                let kind = request["type"].as_str().unwrap();
-                waiting.push((kind != "draw").then(|| answer("call", kind)));
-            } else if let Some(host) = entry.get("host") {
-                let request = &host["request"];
-                assert!(conforms(request, &defs["HostRequest"], defs), "{at}: {request}");
-                requests += 1;
-                if host["status"] == json!(crate::OK) {
-                    let reply = answer("host", request["type"].as_str().unwrap());
-                    assert!(conforms(&host["reply"], &reply, defs), "{at}: {} as {reply}", host["reply"]);
-                    replies += 1;
-                }
-            } else if let Some(returned) = entry.get("return") {
-                let expected = waiting.pop().unwrap_or_else(|| panic!("{at}: a return of no call"));
-                if returned["status"] != json!(crate::OK) {
-                    continue;
-                }
-                match expected {
-                    Some(expected) => {
-                        let reply = &returned["reply"];
-                        assert!(conforms(reply, &expected, defs), "{at}: {reply} as {expected}");
-                    }
-                    None => {
-                        let hex = returned["reply"]["list"].as_str().unwrap_or_default();
-                        let bytes: Vec<u8> = (0..hex.len())
-                            .step_by(2)
-                            .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
-                            .collect();
-                        assert_eq!(bytes.first().copied().map(u64::from), defs["DrawList"]["x-version"].as_u64());
-                        assert!(crate::canvas::check(&bytes).is_ok(), "{at}: {hex}");
-                    }
-                }
-                replies += 1;
-            }
-        }
-        assert!(requests > 100 && replies > 100, "{requests} requests and {replies} replies checked");
-        // A completed call, whose output the host keeps from the claim's view.
-        assert!(completed > 0, "no completed tool claim in the transcripts");
-    }
-
-    #[test]
     fn the_shipped_schema_resolves_its_references_and_refuses_what_the_host_refuses() {
         let schema = shipped();
         let defs = &schema["$defs"];
@@ -794,11 +732,6 @@ mod tests {
             conforms(&json!({}), &json!({ "$ref": format!("{}#/components/schemas/Nope", wire::OPENAPI) }), defs)
         });
         assert!(unknown.is_err(), "the validator took a reference that names nothing");
-        let describe = |name: &str, value: Value| conforms(&value, &schema["x-messages"][name], defs);
-        assert!(!describe("describe", json!({})));
-        assert!(!describe("describe", json!({ "id": "" })));
-        assert!(!describe("describe", json!({ "version": "1.0.0" })));
-        assert!(describe("describe", json!({ "id": "x", "version": "1.0.0" })));
         let session = &schema["x-messages"]["host"]["session"];
         assert!(conforms(&Value::Null, session, defs));
         assert!(!conforms(&json!({ "info": 1, "status": "idle" }), session, defs));

@@ -17,7 +17,7 @@ use opentui::widget::CodeBlock;
 
 use crate::{Claimed, Host, SlotInput, reconcile, slot};
 
-/// A slot claim's render on either path: in process it reads the host directly, over the C ABI it asks the plugin.
+/// A slot claim's render: in process it reads the host directly, over the pipe it asks the plugin.
 pub(crate) type SlotRender = Rc<dyn Fn(&dyn Host, &abi::SlotInput, &abi::Changed) -> abi::Render>;
 /// A slot claim's mount handler on either path: `true` as a claim mounts, before its first render, `false` as it goes.
 pub(crate) type MountFn = Rc<dyn Fn(&dyn Host, &abi::SlotInput, bool)>;

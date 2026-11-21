@@ -3,9 +3,8 @@
 //! and `FreeLibrary` on Windows. Errors are the loader's own message, with the path or symbol on Windows. Elsewhere,
 //! and in a static musl build, opening fails.
 //!
-//! A static musl executable (the shipped musl builds, O-188) has no dynamic loader, so it opens nothing: the build
-//! scripts of opencode-plugin, opencode-tui and opencode-cli compile native plugins out there (`cfg(native)`), and the
-//! editor context's SQLite is not found, as on a machine without it.
+//! A static musl executable (the shipped musl builds, O-188) has no dynamic loader, so it opens nothing: the editor
+//! context's SQLite is not found, as on a machine without it.
 
 #![allow(unsafe_code)]
 

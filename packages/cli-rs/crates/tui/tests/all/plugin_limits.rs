@@ -1,7 +1,6 @@
-//! Check plugin resource admission and release on linked and ABI carriers. Compare the frame at the limit with the
+//! Check plugin resource admission and release of linked plugins. Compare the frame at the limit with the
 //! over-limit placeholder.
 
-use crate::plugin_surface::{CARRIERS, Carrier, builtin};
 use crate::support::{self, Harness};
 
 use std::cell::RefCell;
@@ -99,13 +98,13 @@ fn old(setup: &mut abi::Setup) -> Result<(), String> {
 
 const OLD: &str = "test.old";
 
-fn open(carrier: Carrier) -> Harness {
+fn open() -> Harness {
     let deps = Deps {
         route: Route::Home,
         builtins: vec![
-            builtin(carrier, abi::Plugin { id: ID, setup }),
-            builtin(carrier, abi::Plugin { id: SIBLING, setup: sibling }),
-            builtin(carrier, abi::Plugin { id: OLD, setup: old }),
+            abi::Plugin { id: ID, setup }.into(),
+            abi::Plugin { id: SIBLING, setup: sibling }.into(),
+            abi::Plugin { id: OLD, setup: old }.into(),
         ],
         ..support::deps(Arc::new(support::empty()))
     };
@@ -498,31 +497,29 @@ fn code(content: v2::Source) -> v2::Node {
 
 #[test]
 fn a_tree_at_each_limit_shows_and_one_over_shows_its_placeholder() {
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        for row in rows() {
-            let (frame, work, held, views) = {
-                let _limits = limits::set(row.limits);
-                let (before, views) = (reconcile::work(), VIEWS.with(std::cell::Cell::get));
-                let frame = show(&harness, row.subject.clone());
-                (frame, reconcile::work().since(before), limits::held(ID), VIEWS.with(std::cell::Cell::get) - views)
-            };
-            let twin = {
-                let _limits = support::unlimited();
-                show(&harness, row.shows.clone())
-            };
-            let name = format!("{carrier:?}, {}", row.name);
-            assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
-            // Each view's tree is a revision, which adopts its placeholders; a patch or code is parsed once.
-            assert_eq!(work.placeholders, row.placeholders * views, "{name}: placeholders in {views} views");
-            assert_eq!(work.parses, row.parses, "{name}: parses");
-            assert_eq!((held.nodes, held.content), (row.nodes, row.content), "{name}: held");
-        }
-        // Nothing is held once the route is gone.
-        harness.tui.navigate(Route::Home);
-        settle(&harness);
-        assert_eq!(limits::held(ID), limits::Held::default(), "{carrier:?}: held after the route closed");
+    let harness = open();
+    for row in rows() {
+        let (frame, work, held, views) = {
+            let _limits = limits::set(row.limits);
+            let (before, views) = (reconcile::work(), VIEWS.with(std::cell::Cell::get));
+            let frame = show(&harness, row.subject.clone());
+            (frame, reconcile::work().since(before), limits::held(ID), VIEWS.with(std::cell::Cell::get) - views)
+        };
+        let twin = {
+            let _limits = support::unlimited();
+            show(&harness, row.shows.clone())
+        };
+        let name = &row.name;
+        assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+        // Each view's tree is a revision, which adopts its placeholders; a patch or code is parsed once.
+        assert_eq!(work.placeholders, row.placeholders * views, "{name}: placeholders in {views} views");
+        assert_eq!(work.parses, row.parses, "{name}: parses");
+        assert_eq!((held.nodes, held.content), (row.nodes, row.content), "{name}: held");
     }
+    // Nothing is held once the route is gone.
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    assert_eq!(limits::held(ID), limits::Held::default(), "held after the route closed");
 }
 
 #[test]
@@ -530,72 +527,64 @@ fn a_list_over_its_nodes_keeps_the_items_that_fit() {
     let item =
         |index: usize| v2::ListItem { node: text(&format!("item {index}")).with_id(format!("i{index}")), estimate: 1 };
     let list = |items: Vec<v2::ListItem>| v2::Node::list(items).with_id("list");
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let (frame, held) = {
-            let _limits = limits::set(small());
-            let frame = show(&harness, subject(move |_| framed(list((0..60).map(item).collect()))));
-            (frame, limits::held(ID))
-        };
-        let twin = {
-            let _limits = support::unlimited();
-            show(
-                &harness,
-                subject(move |_| {
-                    let mut items: Vec<v2::ListItem> = (0..37).map(item).collect();
-                    items.push(v2::ListItem { node: placeholder(Some("i37"), "too many nodes"), estimate: 1 });
-                    v2::Node::column(vec![text("head"), list(items), placeholder(None, "too many nodes")])
-                }),
-            )
-        };
-        assert!(frame.cells == twin.cells, "{carrier:?}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
-        assert_eq!(held.nodes, 40, "{carrier:?}");
-    }
+    let harness = open();
+    let (frame, held) = {
+        let _limits = limits::set(small());
+        let frame = show(&harness, subject(move |_| framed(list((0..60).map(item).collect()))));
+        (frame, limits::held(ID))
+    };
+    let twin = {
+        let _limits = support::unlimited();
+        show(
+            &harness,
+            subject(move |_| {
+                let mut items: Vec<v2::ListItem> = (0..37).map(item).collect();
+                items.push(v2::ListItem { node: placeholder(Some("i37"), "too many nodes"), estimate: 1 });
+                v2::Node::column(vec![text("head"), list(items), placeholder(None, "too many nodes")])
+            }),
+        )
+    };
+    assert!(frame.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+    assert_eq!(held.nodes, 40);
 }
 
 #[test]
 fn a_plugin_spends_its_own_share_of_what_all_plugins_may_hold() {
     let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        // The host's own plugins hold nodes too: all plugins may hold 14 beside what they hold on the page.
-        let others = || limits::total().nodes - limits::held(ID).nodes - limits::held(SIBLING).nodes;
-        let shares = |others: u64| Limits { nodes: 100, plugin_nodes: 10, all_nodes: others + 14, ..small() };
-        for (beside, admitted) in [(1, 9), (6, 6)] {
-            harness.tui.navigate(Route::Home);
-            settle(&harness);
-            let _limits = limits::set(shares(others()));
-            BESIDE.with(|slot| *slot.borrow_mut() = subject(move |_| texts(beside)));
-            WAKER.with(|waker| waker.borrow().as_ref().expect("the sibling's waker").wake());
-            settle(&harness);
-            let screen = harness.app.render().text();
-            assert_eq!(
-                limits::held(SIBLING).nodes,
-                beside as u64 + 1,
-                "{carrier:?}: the sibling holds its column\n{screen}"
-            );
-            // On the route, beside what the host's own plugins hold there.
-            show(&harness, subject(|_| text("route")));
-            let on_route = others();
-            let _limits = limits::set(shares(on_route));
-            let frame = show(&harness, subject(move |_| texts(12)));
-            let held = (limits::held(ID).nodes, limits::total().nodes - on_route);
-            let twin = {
-                let _unlimited = support::unlimited();
-                show(
-                    &harness,
-                    subject(move |_| {
-                        let mut kept: Vec<v2::Node> = (0..admitted).map(|index| text(&format!("t{index}"))).collect();
-                        kept.push(placeholder(None, "too many nodes"));
-                        v2::Node::column(kept)
-                    }),
-                )
-            };
-            let (shown, wanted) = (frame.text(), twin.text());
-            assert!(frame.cells == twin.cells, "{carrier:?}, {beside}: not the twin's frame\n{shown}\n---\n{wanted}");
-            let own = admitted as u64 + 1;
-            assert_eq!(held, (own, own + beside as u64 + 1), "{carrier:?}, {beside}: held by the plugin and by all");
-        }
+    let harness = open();
+    // The host's own plugins hold nodes too: all plugins may hold 14 beside what they hold on the page.
+    let others = || limits::total().nodes - limits::held(ID).nodes - limits::held(SIBLING).nodes;
+    let shares = |others: u64| Limits { nodes: 100, plugin_nodes: 10, all_nodes: others + 14, ..small() };
+    for (beside, admitted) in [(1, 9), (6, 6)] {
+        harness.tui.navigate(Route::Home);
+        settle(&harness);
+        let _limits = limits::set(shares(others()));
+        BESIDE.with(|slot| *slot.borrow_mut() = subject(move |_| texts(beside)));
+        WAKER.with(|waker| waker.borrow().as_ref().expect("the sibling's waker").wake());
+        settle(&harness);
+        let screen = harness.app.render().text();
+        assert_eq!(limits::held(SIBLING).nodes, beside as u64 + 1, "the sibling holds its column\n{screen}");
+        // On the route, beside what the host's own plugins hold there.
+        show(&harness, subject(|_| text("route")));
+        let on_route = others();
+        let _limits = limits::set(shares(on_route));
+        let frame = show(&harness, subject(move |_| texts(12)));
+        let held = (limits::held(ID).nodes, limits::total().nodes - on_route);
+        let twin = {
+            let _unlimited = support::unlimited();
+            show(
+                &harness,
+                subject(move |_| {
+                    let mut kept: Vec<v2::Node> = (0..admitted).map(|index| text(&format!("t{index}"))).collect();
+                    kept.push(placeholder(None, "too many nodes"));
+                    v2::Node::column(kept)
+                }),
+            )
+        };
+        let (shown, wanted) = (frame.text(), twin.text());
+        assert!(frame.cells == twin.cells, "{beside}: not the twin's frame\n{shown}\n---\n{wanted}");
+        let own = admitted as u64 + 1;
+        assert_eq!(held, (own, own + beside as u64 + 1), "{beside}: held by the plugin and by all");
     }
 }
 
@@ -677,77 +666,68 @@ fn corner(frame: &opentui::native::Capture) -> Vec<opentui::native::Cell> {
 #[test]
 fn images_decode_on_a_worker_within_their_limits() {
     let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let base = Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() };
-        let _limits = limits::set(base);
-        let bytes = png(16, 16, gradient);
-        let expected = drawn_in_the_frame(&bytes);
+    let harness = open();
+    let base = Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() };
+    let _limits = limits::set(base);
+    let bytes = png(16, 16, gradient);
+    let expected = drawn_in_the_frame(&bytes);
+    let before = reconcile::work();
+    show(&harness, picture(bytes));
+    let decoded = harness.app.wait_until(Duration::from_secs(10), || corner(&harness.app.render()) == expected);
+    assert!(decoded, "the image never showed as OpenTUI draws it\n{}", harness.app.render().text());
+    assert_eq!(reconcile::work().since(before).parses, 1, "one decode");
+    assert_eq!(limits::held(ID).images, 16 * 16 * 4, "the decoded bytes are held");
+    // Two images of 16 by 16 are twice what the plugin may hold decoded: the second is over.
+    let (first, second) = (Rc::new(png(16, 16, gradient)), Rc::new(png(16, 16, |x, y| gradient(y, x))));
+    let two: Subject = subject(move |cx| {
+        let (first, second) = (first.clone(), second.clone());
+        let one = given(cx, move || (*first).clone());
+        let other = cx.content((*second).clone());
+        v2::Node::column(vec![image(v2::Source::Content(one)), image(v2::Source::Content(other)), text("foot")])
+    });
+    // Exercise decoded dimensions and encoded byte limits independently.
+    let roomy = Limits { plugin_images: 1 << 20, ..base };
+    let encoded = png(16, 16, gradient);
+    let one_short = Limits { image_bytes: encoded.len() as u64 - 1, ..roomy };
+    // Exceed the global decoded-image limit while staying within the individual plugin limit.
+    let all = Limits { all_images: 16 * 16 * 4, ..roomy };
+    let cases = [
+        ("pixels", picture(png(16, 17, gradient)), 0, roomy),
+        ("a row", picture(png(17, 1, gradient)), 0, roomy),
+        ("bytes", picture(encoded), 0, one_short),
+        ("share", two.clone(), 1, base),
+        ("all", two, 1, all),
+    ];
+    for (name, subject, decodes, case) in cases {
+        // A job holds what it reserved until it ends: the case before gives it back first.
+        let ended = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+        assert!(ended, "{name}: a job of the case before never ended");
+        let _limits = limits::set(case);
         let before = reconcile::work();
-        show(&harness, picture(bytes));
-        let decoded = harness.app.wait_until(Duration::from_secs(10), || corner(&harness.app.render()) == expected);
-        assert!(decoded, "{carrier:?}: the image never showed as OpenTUI draws it\n{}", harness.app.render().text());
-        assert_eq!(reconcile::work().since(before).parses, 1, "{carrier:?}: one decode");
-        assert_eq!(limits::held(ID).images, 16 * 16 * 4, "{carrier:?}: the decoded bytes are held");
-        // Two images of 16 by 16 are twice what the plugin may hold decoded: the second is over.
-        let (first, second) = (Rc::new(png(16, 16, gradient)), Rc::new(png(16, 16, |x, y| gradient(y, x))));
-        let two: Subject = subject(move |cx| {
-            let (first, second) = (first.clone(), second.clone());
-            let one = given(cx, move || (*first).clone());
-            let other = cx.content((*second).clone());
-            v2::Node::column(vec![image(v2::Source::Content(one)), image(v2::Source::Content(other)), text("foot")])
-        });
-        // Exercise decoded dimensions and encoded byte limits independently.
-        let roomy = Limits { plugin_images: 1 << 20, ..base };
-        let encoded = png(16, 16, gradient);
-        let one_short = Limits { image_bytes: encoded.len() as u64 - 1, ..roomy };
-        // Exceed the global decoded-image limit while staying within the individual plugin limit.
-        let all = Limits { all_images: 16 * 16 * 4, ..roomy };
-        let cases = [
-            ("pixels", picture(png(16, 17, gradient)), 0, roomy),
-            ("a row", picture(png(17, 1, gradient)), 0, roomy),
-            ("bytes", picture(encoded), 0, one_short),
-            ("share", two.clone(), 1, base),
-            ("all", two, 1, all),
-        ];
-        for (name, subject, decodes, case) in cases {
-            // A job holds what it reserved until it ends: the case before gives it back first.
-            let ended = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
-            assert!(ended, "{carrier:?}, {name}: a job of the case before never ended");
-            let _limits = limits::set(case);
-            let before = reconcile::work();
-            let frame = show(&harness, subject);
-            let text = frame.text();
-            let lines: Vec<&str> = text.lines().map(str::trim).collect();
-            assert!(lines.contains(&"⋯ image too large"), "{carrier:?}, {name}: no placeholder\n{text}");
-            assert!(lines.contains(&"foot"), "{carrier:?}, {name}: the rest of the tree is gone\n{text}");
-            assert_eq!(reconcile::work().since(before).parses, decodes, "{carrier:?}, {name}: decodes");
-            if decodes == 0 {
-                let twin = {
-                    let _limits = support::unlimited();
-                    show(
-                        &harness,
-                        crate::plugin_limits::subject(|_| {
-                            v2::Node::column(vec![
-                                placeholder(None, "image too large"),
-                                crate::plugin_limits::text("foot"),
-                            ])
-                        }),
-                    )
-                };
-                assert!(
-                    frame.cells == twin.cells,
-                    "{carrier:?}, {name}: not the twin's frame\n{text}\n---\n{}",
-                    twin.text()
-                );
-            }
+        let frame = show(&harness, subject);
+        let text = frame.text();
+        let lines: Vec<&str> = text.lines().map(str::trim).collect();
+        assert!(lines.contains(&"⋯ image too large"), "{name}: no placeholder\n{text}");
+        assert!(lines.contains(&"foot"), "{name}: the rest of the tree is gone\n{text}");
+        assert_eq!(reconcile::work().since(before).parses, decodes, "{name}: decodes");
+        if decodes == 0 {
+            let twin = {
+                let _limits = support::unlimited();
+                show(
+                    &harness,
+                    crate::plugin_limits::subject(|_| {
+                        v2::Node::column(vec![placeholder(None, "image too large"), crate::plugin_limits::text("foot")])
+                    }),
+                )
+            };
+            assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{text}\n---\n{}", twin.text());
         }
-        harness.tui.navigate(Route::Home);
-        settle(&harness);
-        // A job holds what it reserved until it ends.
-        assert!(harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0));
-        assert_eq!(limits::held(ID).images, 0, "{carrier:?}: decoded bytes held after the route closed");
     }
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    // A job holds what it reserved until it ends.
+    assert!(harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0));
+    assert_eq!(limits::held(ID).images, 0, "decoded bytes held after the route closed");
 }
 
 /// Rust-like lines to highlight.
@@ -767,39 +747,34 @@ fn show_in(harness: &Harness, command: &str, subject: Subject) -> opentui::nativ
 #[test]
 fn panels_and_overlays_are_held_to_the_limits() {
     let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
-    for carrier in CARRIERS {
-        let deps = Deps {
-            builtins: vec![
-                builtin(carrier, abi::Plugin { id: ID, setup }),
-                builtin(carrier, abi::Plugin { id: SIBLING, setup: sibling }),
-            ],
-            ..support::deps(Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY))))
+    let deps = Deps {
+        builtins: vec![abi::Plugin { id: ID, setup }.into(), abi::Plugin { id: SIBLING, setup: sibling }.into()],
+        ..support::deps(Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY))))
+    };
+    let harness = support::mount(100, 30, deps);
+    still(&harness);
+    settle(&harness);
+    for command in ["limits.panel", "limits.overlay"] {
+        let (frame, held) = {
+            let _limits = limits::set(Limits { nodes: 12, ..small() });
+            let frame = show_in(&harness, command, subject(move |_| framed(texts(9))));
+            (frame, limits::held(ID).nodes)
         };
-        let harness = support::mount(100, 30, deps);
-        still(&harness);
-        settle(&harness);
-        for command in ["limits.panel", "limits.overlay"] {
-            let (frame, held) = {
-                let _limits = limits::set(Limits { nodes: 12, ..small() });
-                let frame = show_in(&harness, command, subject(move |_| framed(texts(9))));
-                (frame, limits::held(ID).nodes)
+        let twin = {
+            let _limits = support::unlimited();
+            let shows = move |_: &mut v2::View<'_>| {
+                v2::Node::column(vec![text("head"), texts(9), placeholder(None, "too many nodes")])
             };
-            let twin = {
-                let _limits = support::unlimited();
-                let shows = move |_: &mut v2::View<'_>| {
-                    v2::Node::column(vec![text("head"), texts(9), placeholder(None, "too many nodes")])
-                };
-                show_in(&harness, command, subject(shows))
-            };
-            let (shown, wanted) = (frame.text(), twin.text());
-            assert!(frame.cells == twin.cells, "{carrier:?}, {command}: not the twin's frame\n{shown}\n---\n{wanted}");
-            assert!(shown.contains("⋯ too many nodes"), "{carrier:?}, {command}: no placeholder\n{shown}");
-            assert_eq!(held, 12, "{carrier:?}, {command}: held");
-        }
-        harness.tui.keymap.dispatch("limits.close", None);
-        settle(&harness);
-        assert_eq!(limits::held(ID).nodes, 0, "{carrier:?}: held once they closed");
+            show_in(&harness, command, subject(shows))
+        };
+        let (shown, wanted) = (frame.text(), twin.text());
+        assert!(frame.cells == twin.cells, "{command}: not the twin's frame\n{shown}\n---\n{wanted}");
+        assert!(shown.contains("⋯ too many nodes"), "{command}: no placeholder\n{shown}");
+        assert_eq!(held, 12, "{command}: held");
     }
+    harness.tui.keymap.dispatch("limits.close", None);
+    settle(&harness);
+    assert_eq!(limits::held(ID).nodes, 0, "held once they closed");
 }
 
 /// A tree at the client's limits ([`Limits::default`]) with `extra` texts more: a column of a chain of 62 boxes around
@@ -824,7 +799,7 @@ fn at_the_limits(extra: usize) -> v2::Node {
 #[test]
 fn a_tree_at_the_clients_limits_renders() {
     let run = std::thread::Builder::new().stack_size(8 << 20).spawn(|| {
-        let harness = open(Carrier::Linked);
+        let harness = open();
         let before = reconcile::work();
         let tree = Rc::new(at_the_limits(0));
         show(&harness, subject(move |_| (*tree).clone()));
@@ -876,82 +851,78 @@ fn next_phase(harness: &Harness) {
 #[test]
 fn a_keep_counts_what_it_keeps_and_a_release_gives_content_back() {
     let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let (frame, held) = {
-            let _limits = limits::set(Limits { text: 1 << 20, ..small() });
-            PHASE.with(|phase| phase.set(0));
-            show(
-                &harness,
-                subject(move |_| match PHASE.with(std::cell::Cell::get) {
-                    0 => v2::Node::column(vec![texts(30).with_id("k")]),
-                    _ => v2::Node::column(vec![v2::Node::Keep { key: "k".into() }, texts(15)]),
-                }),
-            );
-            next_phase(&harness);
-            (harness.app.render(), limits::held(ID).nodes)
-        };
-        let twin = {
-            let _limits = support::unlimited();
-            show(
-                &harness,
-                subject(move |_| {
-                    let mut added: Vec<v2::Node> = (0..7).map(|index| text(&format!("t{index}"))).collect();
-                    added.push(placeholder(None, "too many nodes"));
-                    v2::Node::column(vec![texts(30).with_id("k"), v2::Node::column(added)])
-                }),
-            )
-        };
-        let (shown, wanted) = (frame.text(), twin.text());
-        assert!(frame.cells == twin.cells, "{carrier:?}: not the twin's frame\n{shown}\n---\n{wanted}");
-        assert_eq!(held, 40, "{carrier:?}: held with the keep");
+    let harness = open();
+    let (frame, held) = {
         let _limits = limits::set(Limits { text: 1 << 20, ..small() });
         PHASE.with(|phase| phase.set(0));
         show(
             &harness,
-            subject(|cx| {
-                let handle = given(cx, || vec![b'x'; 100]);
-                match PHASE.with(std::cell::Cell::get) {
-                    0 => framed(code(v2::Source::Content(handle))),
-                    _ => {
-                        cx.release(handle);
-                        framed(text("released"))
-                    }
-                }
+            subject(move |_| match PHASE.with(std::cell::Cell::get) {
+                0 => v2::Node::column(vec![texts(30).with_id("k")]),
+                _ => v2::Node::column(vec![v2::Node::Keep { key: "k".into() }, texts(15)]),
             }),
         );
-        assert_eq!(limits::held(ID).content, 100, "{carrier:?}: content held");
         next_phase(&harness);
-        assert!(harness.app.render().text().contains("released"), "{carrier:?}: the second phase did not draw");
-        assert_eq!(limits::held(ID).content, 0, "{carrier:?}: content held after its release");
-    }
+        (harness.app.render(), limits::held(ID).nodes)
+    };
+    let twin = {
+        let _limits = support::unlimited();
+        show(
+            &harness,
+            subject(move |_| {
+                let mut added: Vec<v2::Node> = (0..7).map(|index| text(&format!("t{index}"))).collect();
+                added.push(placeholder(None, "too many nodes"));
+                v2::Node::column(vec![texts(30).with_id("k"), v2::Node::column(added)])
+            }),
+        )
+    };
+    let (shown, wanted) = (frame.text(), twin.text());
+    assert!(frame.cells == twin.cells, "not the twin's frame\n{shown}\n---\n{wanted}");
+    assert_eq!(held, 40, "held with the keep");
+    let _limits = limits::set(Limits { text: 1 << 20, ..small() });
+    PHASE.with(|phase| phase.set(0));
+    show(
+        &harness,
+        subject(|cx| {
+            let handle = given(cx, || vec![b'x'; 100]);
+            match PHASE.with(std::cell::Cell::get) {
+                0 => framed(code(v2::Source::Content(handle))),
+                _ => {
+                    cx.release(handle);
+                    framed(text("released"))
+                }
+            }
+        }),
+    );
+    assert_eq!(limits::held(ID).content, 100, "content held");
+    next_phase(&harness);
+    assert!(harness.app.render().text().contains("released"), "the second phase did not draw");
+    assert_eq!(limits::held(ID).content, 0, "content held after its release");
 }
 
 #[test]
 fn a_measure_reads_each_handle_once_and_nothing_past_the_text_limit() {
     let many = |source: v2::Source| v2::Node::column((0..64).map(|_| code(source.clone())).collect());
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let _limits = limits::set(Limits {
-            nodes: 1_000,
-            rows: 10_000,
-            text: 1_000,
-            plugin_content: 1 << 20,
-            all_content: 1 << 20,
-            ..small()
-        });
-        // Over the limit, by a handle and inline: nothing is read.
-        let before = reconcile::work();
-        show(&harness, subject(move |cx| many(v2::Source::Content(given(cx, || vec![b'x'; 1_001])))));
-        show(&harness, subject(move |_| many(source("x".repeat(1_001)))));
-        assert_eq!(reconcile::work().since(before).scanned, 0, "{carrier:?}: read past the limit");
-        // Within it: one handle's 1,000 bytes are read once in the mount, through its views and another revision.
-        let before = reconcile::work();
-        PHASE.with(|phase| phase.set(0));
-        show(&harness, subject(move |cx| many(v2::Source::Content(given(cx, || b"fn f() {}\n".repeat(100))))));
-        next_phase(&harness);
-        assert_eq!(reconcile::work().since(before).scanned, 1_000, "{carrier:?}: read more than once");
-    }
+    let harness = open();
+    let _limits = limits::set(Limits {
+        nodes: 1_000,
+        rows: 10_000,
+        text: 1_000,
+        plugin_content: 1 << 20,
+        all_content: 1 << 20,
+        ..small()
+    });
+    // Over the limit, by a handle and inline: nothing is read.
+    let before = reconcile::work();
+    show(&harness, subject(move |cx| many(v2::Source::Content(given(cx, || vec![b'x'; 1_001])))));
+    show(&harness, subject(move |_| many(source("x".repeat(1_001)))));
+    assert_eq!(reconcile::work().since(before).scanned, 0, "read past the limit");
+    // Within it: one handle's 1,000 bytes are read once in the mount, through its views and another revision.
+    let before = reconcile::work();
+    PHASE.with(|phase| phase.set(0));
+    show(&harness, subject(move |cx| many(v2::Source::Content(given(cx, || b"fn f() {}\n".repeat(100))))));
+    next_phase(&harness);
+    assert_eq!(reconcile::work().since(before).scanned, 1_000, "read more than once");
 }
 
 /// A patch that adds a file of `lines` lines; `valid: false` makes its last line context, so it adds no whole file.
@@ -967,118 +938,109 @@ fn added(lines: usize, valid: bool) -> String {
 #[test]
 fn a_patch_is_charged_as_the_renderer_draws_it() {
     let patch = |text: String| v2::Node::diff(source(text)).view(v2::DiffView::Unified);
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        for (lines, valid, fits) in
-            [(2_999, true, false), (3_000, true, false), (3_001, true, true), (3_001, false, false)]
-        {
-            let text = added(lines, valid);
-            let frame = {
-                let _limits = limits::set(Limits { text: 1 << 20, ..Limits::default() });
-                let text = text.clone();
-                show(&harness, subject(move |_| framed(patch(text.clone()))))
-            };
-            let twin = {
-                let _limits = support::unlimited();
-                match fits {
-                    true => show(&harness, subject(move |_| framed(patch(text.clone())))),
-                    false => show(&harness, subject(|_| framed(placeholder(None, "too large to build at once")))),
-                }
-            };
-            let name = format!("{carrier:?}, {lines} lines, valid {valid}");
-            assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
-        }
+    let harness = open();
+    for (lines, valid, fits) in [(2_999, true, false), (3_000, true, false), (3_001, true, true), (3_001, false, false)]
+    {
+        let text = added(lines, valid);
+        let frame = {
+            let _limits = limits::set(Limits { text: 1 << 20, ..Limits::default() });
+            let text = text.clone();
+            show(&harness, subject(move |_| framed(patch(text.clone()))))
+        };
+        let twin = {
+            let _limits = support::unlimited();
+            match fits {
+                true => show(&harness, subject(move |_| framed(patch(text.clone())))),
+                false => show(&harness, subject(|_| framed(placeholder(None, "too large to build at once")))),
+            }
+        };
+        let name = format!("{lines} lines, valid {valid}");
+        assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
     }
 }
 
 #[test]
 fn an_image_job_holds_its_bytes_until_it_is_done() {
     let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let _limits = limits::set(Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() });
-        let hold = opencode_plugin::image::hold(ID);
-        show(&harness, picture(png(16, 16, gradient)));
-        assert_eq!((opencode_plugin::image::jobs(ID), limits::held(ID).images), (1, 1024), "{carrier:?}: a job");
-        harness.tui.navigate(Route::Home);
-        settle(&harness);
-        assert_eq!((opencode_plugin::image::jobs(ID), limits::held(ID).images), (1, 1024), "{carrier:?}: closed");
-        let before = reconcile::work();
-        let frame = show(&harness, picture(png(16, 16, |x, y| gradient(y, x))));
-        assert!(frame.text().contains("⋯ image too large"), "{carrier:?}: another image had room\n{}", frame.text());
-        assert_eq!(reconcile::work().since(before).parses, 0, "{carrier:?}: another decode");
-        drop(hold);
-        let done = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
-        assert!(done, "{carrier:?}: the job never ended");
-        harness.tui.navigate(Route::Home);
-        settle(&harness);
-        assert_eq!(limits::held(ID).images, 0, "{carrier:?}: held after the job ended");
-        let mut cut = png(16, 16, gradient);
-        cut.truncate(cut.len() - 40);
-        let good = png(16, 16, |x, y| gradient(y, x));
-        let expected = drawn_in_the_frame(&good);
-        let (cut, good) = (Rc::new(cut), Rc::new(good));
-        PHASE.with(|phase| phase.set(0));
-        show(
-            &harness,
-            subject(move |cx| {
-                let bytes = if PHASE.with(std::cell::Cell::get) == 0 { cut.clone() } else { good.clone() };
-                v2::Node::column(vec![image(v2::Source::Content(cx.content((*bytes).clone()))), text("foot")])
-            }),
-        );
-        let failed = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
-        assert!(failed && limits::held(ID).images == 0, "{carrier:?}: a failed decode kept its bytes");
-        next_phase(&harness);
-        let shown = harness.app.wait_until(Duration::from_secs(10), || corner(&harness.app.render()) == expected);
-        assert!(shown, "{carrier:?}: the next image never showed\n{}", harness.app.render().text());
-    }
+    let harness = open();
+    let _limits = limits::set(Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() });
+    let hold = opencode_plugin::image::hold(ID);
+    show(&harness, picture(png(16, 16, gradient)));
+    assert_eq!((opencode_plugin::image::jobs(ID), limits::held(ID).images), (1, 1024), "a job");
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    assert_eq!((opencode_plugin::image::jobs(ID), limits::held(ID).images), (1, 1024), "closed");
+    let before = reconcile::work();
+    let frame = show(&harness, picture(png(16, 16, |x, y| gradient(y, x))));
+    assert!(frame.text().contains("⋯ image too large"), "another image had room\n{}", frame.text());
+    assert_eq!(reconcile::work().since(before).parses, 0, "another decode");
+    drop(hold);
+    let done = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+    assert!(done, "the job never ended");
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    assert_eq!(limits::held(ID).images, 0, "held after the job ended");
+    let mut cut = png(16, 16, gradient);
+    cut.truncate(cut.len() - 40);
+    let good = png(16, 16, |x, y| gradient(y, x));
+    let expected = drawn_in_the_frame(&good);
+    let (cut, good) = (Rc::new(cut), Rc::new(good));
+    PHASE.with(|phase| phase.set(0));
+    show(
+        &harness,
+        subject(move |cx| {
+            let bytes = if PHASE.with(std::cell::Cell::get) == 0 { cut.clone() } else { good.clone() };
+            v2::Node::column(vec![image(v2::Source::Content(cx.content((*bytes).clone()))), text("foot")])
+        }),
+    );
+    let failed = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+    assert!(failed && limits::held(ID).images == 0, "a failed decode kept its bytes");
+    next_phase(&harness);
+    let shown = harness.app.wait_until(Duration::from_secs(10), || corner(&harness.app.render()) == expected);
+    assert!(shown, "the next image never showed\n{}", harness.app.render().text());
 }
 
 #[test]
 fn a_mount_keeps_no_text_a_limit_refused() {
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let _limits = limits::set(Limits { text: 64, ..small() });
-        let kept = |subject: Subject| {
-            harness.tui.navigate(Route::Home);
-            settle(&harness);
-            let heap = support::heap::measure();
-            show(&harness, subject);
-            heap.kept()
-        };
-        let over = kept(subject(|_| framed(text(&"x".repeat(1 << 20)))));
-        let alone = kept(subject(|_| framed(placeholder(None, "too large: 1048576 bytes"))));
-        assert!(over - alone < 64 << 10, "{carrier:?}: kept {over} bytes, {alone} for the placeholder alone");
-    }
+    let harness = open();
+    let _limits = limits::set(Limits { text: 64, ..small() });
+    let kept = |subject: Subject| {
+        harness.tui.navigate(Route::Home);
+        settle(&harness);
+        let heap = support::heap::measure();
+        show(&harness, subject);
+        heap.kept()
+    };
+    let over = kept(subject(|_| framed(text(&"x".repeat(1 << 20)))));
+    let alone = kept(subject(|_| framed(placeholder(None, "too large: 1048576 bytes"))));
+    assert!(over - alone < 64 << 10, "kept {over} bytes, {alone} for the placeholder alone");
 }
 
 #[test]
 fn a_kept_placeholder_that_fits_now_is_asked_for_again() {
     let open_file = || text("Open file").with_id("open");
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let frame = {
-            let _limits = limits::set(Limits { nodes: 4, ..small() });
-            PHASE.with(|phase| phase.set(0));
-            show(
-                &harness,
-                subject(move |cx| match (PHASE.with(std::cell::Cell::get), cx.input.full) {
-                    (0, _) => v2::Node::column(vec![text("a"), text("b"), text("c"), open_file()]),
-                    (_, true) => v2::Node::column(vec![open_file()]),
-                    (_, false) => v2::Node::column(vec![v2::Node::Keep { key: "open".into() }]),
-                }),
-            );
-            let before = harness.app.render();
-            assert!(before.text().contains("⋯ too many nodes"), "{carrier:?}: no placeholder\n{}", before.text());
-            next_phase(&harness);
-            harness.app.render()
-        };
-        let twin = {
-            let _limits = support::unlimited();
-            show(&harness, subject(move |_| v2::Node::column(vec![open_file()])))
-        };
-        assert!(frame.cells == twin.cells, "{carrier:?}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
-    }
+    let harness = open();
+    let frame = {
+        let _limits = limits::set(Limits { nodes: 4, ..small() });
+        PHASE.with(|phase| phase.set(0));
+        show(
+            &harness,
+            subject(move |cx| match (PHASE.with(std::cell::Cell::get), cx.input.full) {
+                (0, _) => v2::Node::column(vec![text("a"), text("b"), text("c"), open_file()]),
+                (_, true) => v2::Node::column(vec![open_file()]),
+                (_, false) => v2::Node::column(vec![v2::Node::Keep { key: "open".into() }]),
+            }),
+        );
+        let before = harness.app.render();
+        assert!(before.text().contains("⋯ too many nodes"), "no placeholder\n{}", before.text());
+        next_phase(&harness);
+        harness.app.render()
+    };
+    let twin = {
+        let _limits = support::unlimited();
+        show(&harness, subject(move |_| v2::Node::column(vec![open_file()])))
+    };
+    assert!(frame.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
 }
 
 fn revisions(harness: &Harness, limits: Limits, phases: Subject) -> (opentui::native::Capture, u64, u64) {
@@ -1102,126 +1064,117 @@ fn code_lines(id: &str, lines: usize) -> v2::Node {
 #[test]
 fn a_keep_is_admitted_as_the_subtree_it_stands_for() {
     let keyed = |count: usize| (0..count).map(|index| text(&format!("m{index}")).with_id(format!("m{index}")));
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let twin = |subject: Subject| {
-            let _limits = support::unlimited();
-            show(&harness, subject)
-        };
-        let same = |name: &str, frame: &opentui::native::Capture, twin: opentui::native::Capture| {
-            assert!(frame.cells == twin.cells, "{carrier:?}, {name}\n{}\n---\n{}", frame.text(), twin.text());
-        };
-        let (frame, views, placeholders) = revisions(
-            &harness,
-            Limits { nodes: 6, ..small() },
-            subject(move |_| match phase() {
-                0 => v2::Node::column([text("h0")].into_iter().chain(keyed(7)).collect()),
-                _ => v2::Node::column(
-                    [text("h1")]
-                        .into_iter()
-                        .chain((0..7).map(|index| v2::Node::Keep { key: format!("m{index}") }))
-                        .collect(),
-                ),
-            }),
-        );
-        let mut shown: Vec<v2::Node> = [text("h1")].into_iter().chain(keyed(4)).collect();
-        shown.push(placeholder(Some("m4"), "too many nodes"));
-        same("absorbed keeps", &frame, twin(subject(move |_| v2::Node::column(shown.clone()))));
-        assert_eq!((views, placeholders), (1, 1), "{carrier:?}: absorbed keeps, views and placeholders");
-        let (frame, _, placeholders) = revisions(
-            &harness,
-            Limits { text: 1 << 20, ..small() },
-            subject(move |_| match phase() {
-                0 => v2::Node::column(vec![code_lines("f", 30), code_lines("b", 30), text("c")]),
-                _ => {
-                    v2::Node::column(vec![code_lines("f", 20), v2::Node::Keep { key: "b".into() }, code_lines("z", 30)])
-                }
-            }),
-        );
-        let shown =
-            || v2::Node::column(vec![code_lines("f", 20), placeholder(Some("b"), "too large to build at once")]);
-        same("kept placeholder", &frame, twin(subject(move |_| shown())));
-        assert_eq!(placeholders, 1, "{carrier:?}: kept placeholder, placeholders");
-        let (frame, ..) = revisions(
-            &harness,
-            Limits { text: 1 << 20, ..small() },
-            subject(move |_| match phase() {
-                0 => v2::Node::column(vec![code_lines("k", 30)]),
-                _ => v2::Node::column(vec![v2::Node::Keep { key: "k".into() }, code_lines("z", 30)]),
-            }),
-        );
-        let shown =
-            || v2::Node::column(vec![code_lines("k", 30), placeholder(Some("z"), "too large to build at once")]);
-        same("kept rows", &frame, twin(subject(move |_| shown())));
-        // A box opened in room for five nodes, kept once there is room for it whole: asked for again, and whole.
-        let outer = move || v2::Node::column(keyed(6).collect()).with_id("outer");
-        let phases = subject(move |cx| match (phase(), cx.input.full) {
-            (0, _) | (_, true) => v2::Node::column(vec![outer()]),
-            _ => v2::Node::column(vec![v2::Node::Keep { key: "outer".into() }]),
-        });
-        {
-            let _limits = limits::set(Limits { nodes: 5, ..small() });
-            PHASE.with(|phase| phase.set(0));
-            show(&harness, phases);
-        }
-        let frame = {
-            let _limits = limits::set(small());
-            next_phase(&harness);
-            harness.app.render()
-        };
-        same("opened box", &frame, twin(subject(move |_| v2::Node::column(vec![outer()]))));
+    let harness = open();
+    let twin = |subject: Subject| {
+        let _limits = support::unlimited();
+        show(&harness, subject)
+    };
+    let same = |name: &str, frame: &opentui::native::Capture, twin: opentui::native::Capture| {
+        assert!(frame.cells == twin.cells, "{name}\n{}\n---\n{}", frame.text(), twin.text());
+    };
+    let (frame, views, placeholders) = revisions(
+        &harness,
+        Limits { nodes: 6, ..small() },
+        subject(move |_| match phase() {
+            0 => v2::Node::column([text("h0")].into_iter().chain(keyed(7)).collect()),
+            _ => v2::Node::column(
+                [text("h1")]
+                    .into_iter()
+                    .chain((0..7).map(|index| v2::Node::Keep { key: format!("m{index}") }))
+                    .collect(),
+            ),
+        }),
+    );
+    let mut shown: Vec<v2::Node> = [text("h1")].into_iter().chain(keyed(4)).collect();
+    shown.push(placeholder(Some("m4"), "too many nodes"));
+    same("absorbed keeps", &frame, twin(subject(move |_| v2::Node::column(shown.clone()))));
+    assert_eq!((views, placeholders), (1, 1), "absorbed keeps, views and placeholders");
+    let (frame, _, placeholders) = revisions(
+        &harness,
+        Limits { text: 1 << 20, ..small() },
+        subject(move |_| match phase() {
+            0 => v2::Node::column(vec![code_lines("f", 30), code_lines("b", 30), text("c")]),
+            _ => v2::Node::column(vec![code_lines("f", 20), v2::Node::Keep { key: "b".into() }, code_lines("z", 30)]),
+        }),
+    );
+    let shown = || v2::Node::column(vec![code_lines("f", 20), placeholder(Some("b"), "too large to build at once")]);
+    same("kept placeholder", &frame, twin(subject(move |_| shown())));
+    assert_eq!(placeholders, 1, "kept placeholder, placeholders");
+    let (frame, ..) = revisions(
+        &harness,
+        Limits { text: 1 << 20, ..small() },
+        subject(move |_| match phase() {
+            0 => v2::Node::column(vec![code_lines("k", 30)]),
+            _ => v2::Node::column(vec![v2::Node::Keep { key: "k".into() }, code_lines("z", 30)]),
+        }),
+    );
+    let shown = || v2::Node::column(vec![code_lines("k", 30), placeholder(Some("z"), "too large to build at once")]);
+    same("kept rows", &frame, twin(subject(move |_| shown())));
+    // A box opened in room for five nodes, kept once there is room for it whole: asked for again, and whole.
+    let outer = move || v2::Node::column(keyed(6).collect()).with_id("outer");
+    let phases = subject(move |cx| match (phase(), cx.input.full) {
+        (0, _) | (_, true) => v2::Node::column(vec![outer()]),
+        _ => v2::Node::column(vec![v2::Node::Keep { key: "outer".into() }]),
+    });
+    {
+        let _limits = limits::set(Limits { nodes: 5, ..small() });
+        PHASE.with(|phase| phase.set(0));
+        show(&harness, phases);
     }
+    let frame = {
+        let _limits = limits::set(small());
+        next_phase(&harness);
+        harness.app.render()
+    };
+    same("opened box", &frame, twin(subject(move |_| v2::Node::column(vec![outer()]))));
 }
 
 #[test]
 fn two_plugins_share_the_rows_of_a_frame() {
     let both = |phase: u8| [code_lines("r", 10), text(&format!("route {phase}"))];
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let limits = Limits { text: 1 << 20, frame_rows: 30, ..small() };
-        PHASE.with(|phase| phase.set(0));
-        BESIDE.with(|beside| {
-            *beside.borrow_mut() = subject(move |_| {
-                let phase = PHASE.with(std::cell::Cell::get);
-                v2::Node::column(vec![code_lines("s", 10), text(&format!("beside {phase}"))])
-            })
-        });
-        let (first, second) = {
-            let _limits = limits::set(limits);
-            show(&harness, subject(move |_| v2::Node::column(both(phase()).to_vec())));
-            caught_up(&harness);
-            PHASE.with(|phase| phase.set(1));
-            WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
-            WAKER.with(|waker| waker.borrow().as_ref().unwrap().wake());
-            HEARD.with(|heard| heard.borrow_mut().clear());
-            let before = reconcile::work();
-            let first = harness.app.render().text();
-            let deferred = reconcile::work().since(before).deferred;
-            assert_eq!(deferred, 1, "{carrier:?}: revisions left for the next frame");
-            // Before the next paint, storage changes, which draws the sibling in the next frame's rows; then the
-            // terminal resizes, which finds none left: its cause joins the revision that waits.
-            opencode_tui::plugins::host::host(&harness.tui).storage_changed();
-            harness.app.advance(Duration::ZERO);
-            harness.app.resize(81, 30);
-            let second = caught_up(&harness);
-            let heard = HEARD.with(|heard| heard.borrow().clone());
-            for surface in ["route", "beside"] {
-                let woke = heard.iter().any(|(name, woke, _)| *name == surface && *woke);
-                assert!(woke, "{carrier:?}: {surface} never heard it woke: {heard:?}");
-            }
-            let both = heard.iter().any(|(name, woke, size)| *name == "beside" && *woke && *size);
-            assert!(both, "{carrier:?}: the waiting revision lost a cause: {heard:?}");
-            (first, second)
-        };
-        assert!(first.contains("route 1") != first.contains("beside 1"), "{carrier:?}: one revision a frame\n{first}");
-        let twin = {
-            let _limits = support::unlimited();
-            show(&harness, subject(move |_| v2::Node::column(both(1).to_vec())))
-        };
-        let name = format!("{carrier:?}");
-        assert!(second.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", second.text(), twin.text());
-        BESIDE.with(|beside| *beside.borrow_mut() = subject(|_| text("sibling")));
-    }
+    let harness = open();
+    let limits = Limits { text: 1 << 20, frame_rows: 30, ..small() };
+    PHASE.with(|phase| phase.set(0));
+    BESIDE.with(|beside| {
+        *beside.borrow_mut() = subject(move |_| {
+            let phase = PHASE.with(std::cell::Cell::get);
+            v2::Node::column(vec![code_lines("s", 10), text(&format!("beside {phase}"))])
+        })
+    });
+    let (first, second) = {
+        let _limits = limits::set(limits);
+        show(&harness, subject(move |_| v2::Node::column(both(phase()).to_vec())));
+        caught_up(&harness);
+        PHASE.with(|phase| phase.set(1));
+        WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
+        WAKER.with(|waker| waker.borrow().as_ref().unwrap().wake());
+        HEARD.with(|heard| heard.borrow_mut().clear());
+        let before = reconcile::work();
+        let first = harness.app.render().text();
+        let deferred = reconcile::work().since(before).deferred;
+        assert_eq!(deferred, 1, "revisions left for the next frame");
+        // Before the next paint, storage changes, which draws the sibling in the next frame's rows; then the
+        // terminal resizes, which finds none left: its cause joins the revision that waits.
+        opencode_tui::plugins::host::host(&harness.tui).storage_changed();
+        harness.app.advance(Duration::ZERO);
+        harness.app.resize(81, 30);
+        let second = caught_up(&harness);
+        let heard = HEARD.with(|heard| heard.borrow().clone());
+        for surface in ["route", "beside"] {
+            let woke = heard.iter().any(|(name, woke, _)| *name == surface && *woke);
+            assert!(woke, "{surface} never heard it woke: {heard:?}");
+        }
+        let both = heard.iter().any(|(name, woke, size)| *name == "beside" && *woke && *size);
+        assert!(both, "the waiting revision lost a cause: {heard:?}");
+        (first, second)
+    };
+    assert!(first.contains("route 1") != first.contains("beside 1"), "one revision a frame\n{first}");
+    let twin = {
+        let _limits = support::unlimited();
+        show(&harness, subject(move |_| v2::Node::column(both(1).to_vec())))
+    };
+    assert!(second.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", second.text(), twin.text());
+    BESIDE.with(|beside| *beside.borrow_mut() = subject(|_| text("sibling")));
 }
 
 #[test]
@@ -1234,26 +1187,24 @@ fn a_lists_items_share_the_rows_of_a_frame() {
         }
         v2::Node::column(vec![list])
     };
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let (first, frame) = {
-            let _limits = limits::set(Limits { text: 1 << 20, frame_rows: 100, ..small() });
-            PHASE.with(|phase| phase.set(0));
-            show(&harness, subject(move |_| if phase() == 0 { text("none") } else { tabs() }));
-            let before = reconcile::work();
-            PHASE.with(|phase| phase.set(1));
-            WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
-            harness.app.render();
-            let first = reconcile::work().since(before).parses;
-            (first, caught_up(&harness))
-        };
-        assert!(first <= 2, "{carrier:?}: {first} items parsed in the paint that showed the list");
-        let twin = {
-            let _limits = support::unlimited();
-            show(&harness, subject(move |_| tabs()))
-        };
-        assert!(frame.cells == twin.cells, "{carrier:?}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
-    }
+    let harness = open();
+    let (first, frame) = {
+        let _limits = limits::set(Limits { text: 1 << 20, frame_rows: 100, ..small() });
+        PHASE.with(|phase| phase.set(0));
+        show(&harness, subject(move |_| if phase() == 0 { text("none") } else { tabs() }));
+        let before = reconcile::work();
+        PHASE.with(|phase| phase.set(1));
+        WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
+        harness.app.render();
+        let first = reconcile::work().since(before).parses;
+        (first, caught_up(&harness))
+    };
+    assert!(first <= 2, "{first} items parsed in the paint that showed the list");
+    let twin = {
+        let _limits = support::unlimited();
+        show(&harness, subject(move |_| tabs()))
+    };
+    assert!(frame.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
 }
 
 #[test]
@@ -1272,65 +1223,55 @@ fn a_lists_anchors_respect_the_limits_of_a_patch() {
             v2::Node::list(items).with_id("l").layout(abi::Layout::default().height(abi::Width::Cells(3))),
         ])
     };
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let _limits = limits::set(Limits { nodes: 1_000, rows: 1_000, text: 1 << 20, ..small() });
-        for (count, anchors) in [(3, 60), (5, 0)] {
-            show(&harness, subject(move |_| list(count)));
-            caught_up(&harness);
-            let _ = harness.tui.keymap.dispatch("limits.anchors", None);
-            let seen = ANCHORS.with(|seen| seen.borrow().len());
-            assert_eq!(seen, anchors, "{carrier:?}: anchors of patches of {count} hunks");
-        }
+    let harness = open();
+    let _limits = limits::set(Limits { nodes: 1_000, rows: 1_000, text: 1 << 20, ..small() });
+    for (count, anchors) in [(3, 60), (5, 0)] {
+        show(&harness, subject(move |_| list(count)));
+        caught_up(&harness);
+        let _ = harness.tui.keymap.dispatch("limits.anchors", None);
+        let seen = ANCHORS.with(|seen| seen.borrow().len());
+        assert_eq!(seen, anchors, "anchors of patches of {count} hunks");
     }
 }
 
 #[test]
 fn a_long_line_costs_its_rows() {
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        for (bytes, fits) in [(90 << 10, true), (100 << 10, false)] {
-            let frame = {
-                let _limits = limits::set(Limits { text: 1 << 20, ..small() });
-                show(&harness, subject(move |_| v2::Node::column(vec![text(&"x".repeat(bytes))])))
-            };
-            let twin = {
-                let _limits = support::unlimited();
-                match fits {
-                    true => show(&harness, subject(move |_| v2::Node::column(vec![text(&"x".repeat(bytes))]))),
-                    false => show(
-                        &harness,
-                        subject(|_| v2::Node::column(vec![placeholder(None, "too large to build at once")])),
-                    ),
+    let harness = open();
+    for (bytes, fits) in [(90 << 10, true), (100 << 10, false)] {
+        let frame = {
+            let _limits = limits::set(Limits { text: 1 << 20, ..small() });
+            show(&harness, subject(move |_| v2::Node::column(vec![text(&"x".repeat(bytes))])))
+        };
+        let twin = {
+            let _limits = support::unlimited();
+            match fits {
+                true => show(&harness, subject(move |_| v2::Node::column(vec![text(&"x".repeat(bytes))]))),
+                false => {
+                    show(&harness, subject(|_| v2::Node::column(vec![placeholder(None, "too large to build at once")])))
                 }
-            };
-            let name = format!("{carrier:?}, {bytes} bytes");
-            assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
-        }
+            }
+        };
+        let name = format!("{bytes} bytes");
+        assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
     }
 }
 
 #[test]
 fn trees_of_abi_1_are_held_to_the_limits() {
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        // Host time is measured: the real clock.
-        harness.tui.plugins.monitor().set_clock(std::time::Instant::now);
-        let host_time = harness.tui.plugins.monitor().host_time(OLD);
-        harness.tui.navigate(Route::Plugin { id: OLD.to_owned(), name: "old".to_owned() });
-        settle(&harness);
-        assert!(harness.app.render().text().contains("old 9"), "{carrier:?}: the route of ABI 1.x");
-        assert_eq!(limits::held(OLD).nodes, 11, "{carrier:?}: held for a route of ABI 1.x");
-        assert!(harness.tui.plugins.monitor().host_time(OLD) > host_time, "{carrier:?}: its host time");
-        let _ = harness.tui.keymap.dispatch("old.panel", None);
-        settle(&harness);
-        let screen = harness.app.render().text();
-        assert!(
-            screen.contains("old panel") && screen.contains("⋯ too large to build at once"),
-            "{carrier:?}\n{screen}"
-        );
-        assert!(!screen.contains("body 0"), "{carrier:?}: the body past the rows shows\n{screen}");
-    }
+    let harness = open();
+    // Host time is measured: the real clock.
+    harness.tui.plugins.monitor().set_clock(std::time::Instant::now);
+    let host_time = harness.tui.plugins.monitor().host_time(OLD);
+    harness.tui.navigate(Route::Plugin { id: OLD.to_owned(), name: "old".to_owned() });
+    settle(&harness);
+    assert!(harness.app.render().text().contains("old 9"), "the route of ABI 1.x");
+    assert_eq!(limits::held(OLD).nodes, 11, "held for a route of ABI 1.x");
+    assert!(harness.tui.plugins.monitor().host_time(OLD) > host_time, "its host time");
+    let _ = harness.tui.keymap.dispatch("old.panel", None);
+    settle(&harness);
+    let screen = harness.app.render().text();
+    assert!(screen.contains("old panel") && screen.contains("⋯ too large to build at once"), "{screen}");
+    assert!(!screen.contains("body 0"), "the body past the rows shows\n{screen}");
 }
 
 /// A route of one image given inline, and a foot: a GIF of one pixel, all of its bytes ASCII, so they are text;
@@ -1346,145 +1287,139 @@ fn inline(background: u8) -> v2::Node {
 #[test]
 fn images_are_given_back_and_decode_two_at_a_time() {
     let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let _limits = limits::set(Limits {
-            text: 1 << 20,
-            plugin_content: 1 << 20,
-            all_content: 1 << 20,
-            plugin_images: 1 << 20,
-            ..small()
-        });
-        let done = |harness: &Harness| {
-            let ended = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
-            assert!(ended, "{carrier:?}: a job never ended");
-        };
-        // Past the bytes, whatever they are.
-        let frame = show(
-            &harness,
-            subject(|cx| {
-                v2::Node::column(vec![image(v2::Source::Content(given(cx, || vec![b'x'; 4097]))), text("foot")])
-            }),
-        );
-        assert!(frame.text().contains("⋯ image too large"), "{carrier:?}: bytes past the limit\n{}", frame.text());
-        // A revision refused for a keep the host does not hold gives back the image it admitted; the whole tree shows
-        // none.
-        let picture = Rc::new(png(16, 16, gradient));
-        let shown = picture.clone();
-        show(
-            &harness,
-            subject(move |cx| match cx.input.full {
-                true => text("whole"),
-                false => v2::Node::column(vec![
-                    image(v2::Source::Content(cx.content((*shown).clone()))),
-                    v2::Node::Keep { key: "nowhere".into() },
-                ]),
-            }),
-        );
-        done(&harness);
-        settle(&harness);
-        assert_eq!(limits::held(ID).images, 0, "{carrier:?}: held after a refused revision");
-        // An image given inline, then another: only the one shown is held.
-        PHASE.with(|phase| phase.set(0));
-        show(&harness, subject(move |_| inline(phase())));
-        done(&harness);
-        assert_eq!(limits::held(ID).images, 4, "{carrier:?}: held for an inline image");
-        next_phase(&harness);
-        done(&harness);
-        settle(&harness);
-        assert_eq!(limits::held(ID).images, 4, "{carrier:?}: held after the inline image changed");
-        // Six images held at the workers: two are taken, the others wait.
-        let hold = opencode_plugin::image::hold(ID);
-        let six = picture.clone();
-        show(
-            &harness,
-            subject(move |cx| {
-                let images = (0..6).map(|_| image(v2::Source::Content(cx.content((*six).clone())))).collect();
-                v2::Node::column(images)
-            }),
-        );
-        let taken = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::taken(ID) == 2);
-        std::thread::sleep(Duration::from_millis(20));
-        let (jobs, taken_now) = (opencode_plugin::image::jobs(ID), opencode_plugin::image::taken(ID));
-        drop(hold);
-        assert!(taken, "{carrier:?}: the workers never took two");
-        assert!(jobs >= 6 && taken_now == 2, "{carrier:?}: {jobs} jobs, {taken_now} a worker took");
-        done(&harness);
-    }
+    let harness = open();
+    let _limits = limits::set(Limits {
+        text: 1 << 20,
+        plugin_content: 1 << 20,
+        all_content: 1 << 20,
+        plugin_images: 1 << 20,
+        ..small()
+    });
+    let done = |harness: &Harness| {
+        let ended = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+        assert!(ended, "a job never ended");
+    };
+    // Past the bytes, whatever they are.
+    let frame = show(
+        &harness,
+        subject(|cx| v2::Node::column(vec![image(v2::Source::Content(given(cx, || vec![b'x'; 4097]))), text("foot")])),
+    );
+    assert!(frame.text().contains("⋯ image too large"), "bytes past the limit\n{}", frame.text());
+    // A revision refused for a keep the host does not hold gives back the image it admitted; the whole tree shows
+    // none.
+    let picture = Rc::new(png(16, 16, gradient));
+    let shown = picture.clone();
+    show(
+        &harness,
+        subject(move |cx| match cx.input.full {
+            true => text("whole"),
+            false => v2::Node::column(vec![
+                image(v2::Source::Content(cx.content((*shown).clone()))),
+                v2::Node::Keep { key: "nowhere".into() },
+            ]),
+        }),
+    );
+    done(&harness);
+    settle(&harness);
+    assert_eq!(limits::held(ID).images, 0, "held after a refused revision");
+    // An image given inline, then another: only the one shown is held.
+    PHASE.with(|phase| phase.set(0));
+    show(&harness, subject(move |_| inline(phase())));
+    done(&harness);
+    assert_eq!(limits::held(ID).images, 4, "held for an inline image");
+    next_phase(&harness);
+    done(&harness);
+    settle(&harness);
+    assert_eq!(limits::held(ID).images, 4, "held after the inline image changed");
+    // Six images held at the workers: two are taken, the others wait.
+    let hold = opencode_plugin::image::hold(ID);
+    let six = picture.clone();
+    show(
+        &harness,
+        subject(move |cx| {
+            let images = (0..6).map(|_| image(v2::Source::Content(cx.content((*six).clone())))).collect();
+            v2::Node::column(images)
+        }),
+    );
+    let taken = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::taken(ID) == 2);
+    std::thread::sleep(Duration::from_millis(20));
+    let (jobs, taken_now) = (opencode_plugin::image::jobs(ID), opencode_plugin::image::taken(ID));
+    drop(hold);
+    assert!(taken, "the workers never took two");
+    assert!(jobs >= 6 && taken_now == 2, "{jobs} jobs, {taken_now} a worker took");
+    done(&harness);
 }
 
 #[test]
 fn what_a_mount_holds_goes_and_its_host_work_is_timed() {
     let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
-    for carrier in CARRIERS {
-        let harness = open(carrier);
-        let _limits = limits::set(Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() });
-        // Host time is measured: the real clock.
-        harness.tui.plugins.monitor().set_clock(std::time::Instant::now);
-        let monitor = harness.tui.plugins.monitor().clone();
-        let decoded = |harness: &Harness| {
-            let done = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
-            assert!(done, "{carrier:?}: a job never ended");
-            settle(harness);
-        };
-        let hold = opencode_plugin::image::hold(ID);
-        show(&harness, picture(png(16, 16, gradient)));
-        let before = monitor.host_time(ID);
-        drop(hold);
-        decoded(&harness);
-        assert!(monitor.host_time(ID) > before, "{carrier:?}: the copy in is not host time");
-        PHASE.with(|phase| phase.set(0));
-        let picture_bytes = Rc::new(png(16, 16, gradient));
-        show(
-            &harness,
-            subject(move |cx| {
-                let handle = given(cx, || (*picture_bytes).clone());
-                match phase() {
-                    0 => v2::Node::column(vec![image(v2::Source::Content(handle)), text("foot")]),
-                    _ => {
-                        cx.release(handle);
-                        text("released")
-                    }
+    let harness = open();
+    let _limits = limits::set(Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() });
+    // Host time is measured: the real clock.
+    harness.tui.plugins.monitor().set_clock(std::time::Instant::now);
+    let monitor = harness.tui.plugins.monitor().clone();
+    let decoded = |harness: &Harness| {
+        let done = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+        assert!(done, "a job never ended");
+        settle(harness);
+    };
+    let hold = opencode_plugin::image::hold(ID);
+    show(&harness, picture(png(16, 16, gradient)));
+    let before = monitor.host_time(ID);
+    drop(hold);
+    decoded(&harness);
+    assert!(monitor.host_time(ID) > before, "the copy in is not host time");
+    PHASE.with(|phase| phase.set(0));
+    let picture_bytes = Rc::new(png(16, 16, gradient));
+    show(
+        &harness,
+        subject(move |cx| {
+            let handle = given(cx, || (*picture_bytes).clone());
+            match phase() {
+                0 => v2::Node::column(vec![image(v2::Source::Content(handle)), text("foot")]),
+                _ => {
+                    cx.release(handle);
+                    text("released")
                 }
-            }),
-        );
-        decoded(&harness);
-        assert_eq!(limits::held(ID).images, 1024, "{carrier:?}: held while shown");
-        next_phase(&harness);
-        assert_eq!(limits::held(ID).images, 0, "{carrier:?}: held after the release");
-        // A failed plugin holds nothing, while its failed mount shows.
-        show(&harness, picture(png(16, 16, gradient)));
-        decoded(&harness);
-        assert_eq!(limits::held(ID).images, 1024, "{carrier:?}: held before the failure");
-        PHASE.with(|phase| phase.set(0));
-        SUBJECT.with(|slot| *slot.borrow_mut() = subject(|_| panic!("the view failed")));
-        WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
-        settle(&harness);
-        assert_eq!(limits::held(ID).images, 0, "{carrier:?}: held after the plugin failed");
-        harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&harness.tui), ID, false);
-        harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&harness.tui), ID, true);
-        settle(&harness);
-        let items = || {
-            let items = (0..100)
-                .map(|index| v2::ListItem::new(text(&format!("i{index}")).with_id(format!("i{index}")), 1))
-                .collect();
-            v2::Node::column(vec![
-                v2::Node::list(items).with_id("l").layout(abi::Layout::default().height(abi::Width::Cells(5))),
-            ])
-        };
-        show(&harness, subject(move |_| items()));
-        caught_up(&harness);
-        let before = monitor.host_time(ID);
-        let wheel = opentui::prelude::MouseEvent {
-            kind: opentui::prelude::MouseEventKind::ScrollDown,
-            x: 2,
-            y: 2,
-            modifiers: opentui::prelude::Modifiers::NONE,
-        };
-        for _ in 0..10 {
-            harness.app.app().dispatch(opentui::prelude::Event::Mouse(wheel));
-            harness.app.render();
-        }
-        assert!(monitor.host_time(ID) > before, "{carrier:?}: a list's window is not host time");
+            }
+        }),
+    );
+    decoded(&harness);
+    assert_eq!(limits::held(ID).images, 1024, "held while shown");
+    next_phase(&harness);
+    assert_eq!(limits::held(ID).images, 0, "held after the release");
+    // A failed plugin holds nothing, while its failed mount shows.
+    show(&harness, picture(png(16, 16, gradient)));
+    decoded(&harness);
+    assert_eq!(limits::held(ID).images, 1024, "held before the failure");
+    PHASE.with(|phase| phase.set(0));
+    SUBJECT.with(|slot| *slot.borrow_mut() = subject(|_| panic!("the view failed")));
+    WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
+    settle(&harness);
+    assert_eq!(limits::held(ID).images, 0, "held after the plugin failed");
+    harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&harness.tui), ID, false);
+    harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&harness.tui), ID, true);
+    settle(&harness);
+    let items = || {
+        let items = (0..100)
+            .map(|index| v2::ListItem::new(text(&format!("i{index}")).with_id(format!("i{index}")), 1))
+            .collect();
+        v2::Node::column(vec![
+            v2::Node::list(items).with_id("l").layout(abi::Layout::default().height(abi::Width::Cells(5))),
+        ])
+    };
+    show(&harness, subject(move |_| items()));
+    caught_up(&harness);
+    let before = monitor.host_time(ID);
+    let wheel = opentui::prelude::MouseEvent {
+        kind: opentui::prelude::MouseEventKind::ScrollDown,
+        x: 2,
+        y: 2,
+        modifiers: opentui::prelude::Modifiers::NONE,
+    };
+    for _ in 0..10 {
+        harness.app.app().dispatch(opentui::prelude::Event::Mouse(wheel));
+        harness.app.render();
     }
+    assert!(monitor.host_time(ID) > before, "a list's window is not host time");
 }

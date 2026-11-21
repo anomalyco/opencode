@@ -1,10 +1,9 @@
 //! The host's side of what a plugin asks for in a [`HostRequest`], and the effects and replies it leads to: one plugin's
-//! calls, outside any carrier. The C ABI's carrier ([`super::native`]) and the pipe each hand their plugins' requests
-//! here.
+//! calls, outside any carrier. The pipe hands its plugins' requests here.
 
-// A build with neither the C ABI nor the JS host has no plugin that sends requests: only the replies and the cancels of
-// the linked plugins' fetches are used.
-#![cfg_attr(not(any(native, feature = "ts")), allow(dead_code))]
+// A build without the JS host has no plugin that sends requests: only the replies and the cancels of the linked plugins'
+// fetches are used.
+#![cfg_attr(not(feature = "ts"), allow(dead_code))]
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};

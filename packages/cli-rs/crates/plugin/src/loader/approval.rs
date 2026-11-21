@@ -1,7 +1,6 @@
-//! Project plugins require approval for the discovered directory, resolved path and SHA-256 of the loaded bytes.
-//! Script approvals hash the directory tree. A changed build or path needs a new decision. Clients share decisions
-//! through a locked, user-private state file; if the project can reach the file or others can write it, decisions
-//! stay in memory.
+//! Project plugins require approval for the discovered directory, its resolved path and the SHA-256 of its files. A
+//! changed tree or path needs a new decision. Clients share decisions through a locked, user-private state file; if the
+//! project can reach the file or others can write it, decisions stay in memory.
 
 use std::cell::RefCell;
 use std::fs::File;
@@ -15,62 +14,19 @@ use serde_json::Value;
 /// The file of the decisions in the client's state directory.
 pub const FILE: &str = "plugin-approvals.json";
 
-/// The largest library the loader reads: a bigger file is refused before anything is allocated for it.
+/// The most bytes of plugin files a hash reads: a larger tree is refused.
 pub const LIMIT: u64 = 512 * 1024 * 1024;
 
-/// What an approval names: the plugin directory it was found as, the real path of its library, and the SHA-256 of the
-/// library's bytes in hex; or, for a TypeScript plugin (`script`), the real path of the directory and the SHA-256 of
+/// What an approval names: the plugin directory it was found as, the real path of that directory, and the SHA-256 of
 /// its files.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Artifact {
     pub target: PathBuf,
     pub path: PathBuf,
     pub sha256: String,
-    pub script: bool,
 }
 
 impl Artifact {
-    /// Opens the library `file` of plugin directory `target` once and hashes what it reads. The returned handle is the
-    /// file that was hashed, for [`Artifact::bytes`]. An error when the file is not a regular file, is over [`LIMIT`],
-    /// or its name led to another file by the time it was read.
-    #[cfg(native)]
-    pub fn open(target: &Path, file: &Path) -> Result<(Self, File), String> {
-        let error = |error: std::io::Error| format!("{}: {error}", file.display());
-        let path = std::fs::canonicalize(file).map_err(error)?;
-        #[cfg(windows)]
-        let index = opencode_util::win::file_index(&path).map_err(error)?;
-        let mut handle = File::open(&path).map_err(error)?;
-        let metadata = handle.metadata().map_err(error)?;
-        if !metadata.is_file() {
-            return Err(format!("{}: not a regular file", path.display()));
-        }
-        if metadata.len() > LIMIT {
-            return Err(format!("{}: larger than {} MiB", path.display(), LIMIT / 1024 / 1024));
-        }
-        let sha256 = sha256(&mut handle).map_err(|error| format!("{}: {error}", path.display()))?;
-        #[cfg(test)]
-        AFTER_HASH.with_borrow(|after| after.as_ref().map(|after| after()));
-        // The name still leads to the file that was read: a link or a directory swapped meanwhile is another file.
-        let same = std::fs::canonicalize(file).map_err(error)? == path && {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::MetadataExt;
-                let now = std::fs::metadata(&path).map_err(error)?;
-                (now.dev(), now.ino()) == (metadata.dev(), metadata.ino())
-            }
-            #[cfg(windows)]
-            {
-                opencode_util::win::file_index(&path).map_err(error)? == index
-            }
-            #[cfg(not(any(unix, windows)))]
-            true
-        };
-        if !same {
-            return Err(format!("{}: changed while it was read", file.display()));
-        }
-        Ok((Self { target: target.to_path_buf(), path, sha256, script: false }, handle))
-    }
-
     /// The TypeScript plugin directory `target`, which the JS host would run: its real path, and the SHA-256 of what
     /// it holds. Each file's path and bytes count, in name order, hidden ones and its dependencies in `node_modules`
     /// too: whatever the JS host may import from it. The JS host reads the files itself, so a change after the hash is
@@ -100,7 +56,7 @@ impl Artifact {
             Some(root) => install_sha256(&sha256, &root)?,
             None => sha256,
         };
-        Ok(Self { target: target.to_path_buf(), path, sha256, script: true })
+        Ok(Self { target: target.to_path_buf(), path, sha256 })
     }
 
     /// The tree [`Artifact::tree`] hashed, as a copy under `root` named by its hash, which the JS host imports instead
@@ -135,20 +91,6 @@ impl Artifact {
             let _ = std::fs::remove_dir_all(&partial);
         }
         staged.is_dir().then_some(staged).ok_or_else(|| format!("{}: cannot be staged", self.path.display()))
-    }
-
-    /// The bytes of `handle`, the file [`Artifact::open`] hashed, once they are checked to be the ones it hashed: what
-    /// is loaded is what was approved.
-    #[cfg(native)]
-    pub fn bytes(&self, handle: &mut File) -> Result<Vec<u8>, String> {
-        let error = |error: std::io::Error| format!("{}: {error}", self.path.display());
-        std::io::Seek::rewind(handle).map_err(error)?;
-        let mut bytes = Vec::new();
-        handle.take(LIMIT + 1).read_to_end(&mut bytes).map_err(error)?;
-        match sha256(&mut bytes.as_slice()) {
-            Ok(digest) if digest == self.sha256 => Ok(bytes),
-            _ => Err(format!("{}: changed since it was hashed", self.path.display())),
-        }
     }
 
     /// The first 16 hex digits of the hash, to show.
@@ -315,12 +257,6 @@ impl<R: Read, W: std::io::Write> Read for Tee<'_, R, W> {
     }
 }
 
-#[cfg(all(test, native))]
-thread_local! {
-    /// Runs in [`Artifact::open`] once the file is hashed, to change the disk at that moment.
-    pub(crate) static AFTER_HASH: RefCell<Option<Box<dyn Fn()>>> = RefCell::new(None);
-}
-
 /// The SHA-256 in hex of the file at `path`, counted in [`hashed`].
 #[cfg(any(feature = "ts", luau))]
 pub(crate) fn digest_file(path: &Path) -> Result<String, String> {
@@ -376,7 +312,7 @@ impl Stored {
         }
     }
 
-    /// Whether it names the same plugin directory and library path as `other`.
+    /// Whether it names the same plugin directory and real path as `other`.
     fn same_place(&self, other: &Stored) -> bool {
         (&self.target, &self.path) == (&other.target, &other.path)
     }
@@ -395,7 +331,7 @@ fn encode(path: &Path) -> String {
     }
 }
 
-/// The user's decisions, at most one for a plugin directory and library path: the last.
+/// The user's decisions, at most one for a plugin directory and real path: the last.
 pub struct Approvals {
     store: Store,
     /// Where [`Artifact::stage`] copies approved trees when decisions are not saved: a private directory of this client.

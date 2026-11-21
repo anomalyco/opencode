@@ -540,9 +540,9 @@ impl Core {
         // A part is as tall as its tree: a claim gets no height, which a resize could leave stale.
         let changed = abi::Changed::everything();
         let input = v2::SurfaceInput { width, height: 0, palette, full, panel: None, changed, slot: None };
-        let (held, remote, mut memo) = {
+        let (held, mut memo) = {
             let mut state = self.state.borrow_mut();
-            (state.memo_entries(), state.remote, std::mem::take(&mut state.memo))
+            (state.memo_entries(), std::mem::take(&mut state.memo))
         };
         book(|ledger| ledger.views += 1);
         let staged = RefCell::new(HashMap::new());
@@ -572,7 +572,6 @@ impl Core {
             give: &mut give,
             release: &mut release,
             kept: &kept,
-            held: remote,
             // A claim keeps no placeholder height of its own.
             laid: None,
         };

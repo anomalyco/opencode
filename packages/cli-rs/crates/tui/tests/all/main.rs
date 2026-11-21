@@ -28,18 +28,12 @@ mod messages;
 mod models;
 mod navigate;
 mod permission;
-#[cfg(native)]
-mod plugin_approval;
 mod plugin_behave;
 mod plugin_builtins;
 mod plugin_canvas;
-#[cfg(native)]
-mod plugin_carriers;
 mod plugin_claim;
 #[cfg(feature = "ts")]
 mod plugin_compat;
-#[cfg(native)]
-mod plugin_contain;
 #[cfg(feature = "ts")]
 mod plugin_fences;
 mod plugin_fetch;
@@ -52,8 +46,6 @@ mod plugin_luau;
 mod plugin_machines;
 mod plugin_mail;
 mod plugin_manager;
-#[cfg(native)]
-mod plugin_model;
 #[cfg(feature = "ts")]
 mod plugin_npm;
 #[cfg(feature = "ts")]

@@ -1319,13 +1319,12 @@ enum Fault {
 
 thread_local! {
     static PAINT_FAULT: std::cell::Cell<Option<Fault>> = const { std::cell::Cell::new(None) };
-    /// What the record named and whether a panic would unwind to the host's catch, in each draw.
-    static PAINT_SEEN: RefCell<Vec<(Option<String>, bool)>> = const { RefCell::new(Vec::new()) };
+    /// Whether a panic would unwind to the host's catch, in each draw.
+    static PAINT_SEEN: RefCell<Vec<bool>> = const { RefCell::new(Vec::new()) };
     static PAINT_CLOCK: std::cell::Cell<Duration> = const { std::cell::Cell::new(Duration::ZERO) };
-    static PAINT_RECORD: RefCell<Option<Arc<opencode_plugin::contain::Record>>> = const { RefCell::new(None) };
 }
 
-/// A built-in with one animating canvas on route `paint`, whose draw notes what the record names and fails as armed.
+/// A built-in with one animating canvas on route `paint`, whose draw notes whether it is caught and fails as armed.
 fn paint_setup(setup: &mut abi::Setup) -> Result<(), String> {
     let view = |_: &mut v2::View<'_>| {
         v2::Node::column(vec![v2::Node::canvas("c").animate(true).layout(abi::Layout {
@@ -1335,11 +1334,7 @@ fn paint_setup(setup: &mut abi::Setup) -> Result<(), String> {
         })])
     };
     setup.surface(v2::Surface::new("paint", v2::Place::Route("paint".into()), view).draw(|_| {
-        let named = PAINT_RECORD.with_borrow(|record| {
-            let running = record.as_ref()?.running()?;
-            opencode_plugin::contain::record::KINDS.get(usize::from(running.kind)).map(|kind| (*kind).to_owned())
-        });
-        PAINT_SEEN.with_borrow_mut(|seen| seen.push((named, opencode_plugin::contain::catching())));
+        PAINT_SEEN.with_borrow_mut(|seen| seen.push(opencode_plugin::contain::catching()));
         match PAINT_FAULT.take() {
             Some(Fault::Panic) => panic!("the canvas's draw panics"),
             Some(Fault::Overrun) => PAINT_CLOCK.set(PAINT_CLOCK.get() + Duration::from_millis(150)),
@@ -1354,10 +1349,6 @@ fn paint_setup(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn a_canvas_draw_is_contained() {
-    use opencode_plugin::contain::{Crash, Record};
-    let root = opencode_util::temp::tempdir().unwrap();
-    let record = Arc::new(Record::create(root.path()).unwrap());
-    PAINT_RECORD.set(Some(record.clone()));
     PAINT_SEEN.take();
     PAINT_FAULT.set(None);
     let deps = Deps {
@@ -1365,8 +1356,7 @@ fn a_canvas_draw_is_contained() {
         builtins: vec![abi::Plugin { id: "test.paint", setup: paint_setup }.into()],
         ..support::deps(Arc::new(support::empty()))
     };
-    let contain = opencode_tui::plugins::contain::Contain { record: Some(record), ..Default::default() };
-    let harness = support::mount_on(TestApp::new(80, 24), deps, opencode_tui::Args { contain, ..Default::default() });
+    let harness = support::mount(80, 24, deps);
     let (app, tui) = (&harness.app, &harness.tui);
     let base = std::time::Instant::now();
     tui.plugins.monitor().set_clock(move || base + PAINT_CLOCK.get());
@@ -1382,7 +1372,7 @@ fn a_canvas_draw_is_contained() {
     let _ = frame(&harness, Duration::from_millis(16));
     assert_eq!((tui.plugins.monitor().host_overruns(), status()), (1, opencode_plugin::Status::Active));
     let seen = PAINT_SEEN.take();
-    assert!(seen.len() >= 4 && seen.iter().all(|seen| *seen == (Some("draw".to_owned()), true)), "{seen:?}");
+    assert!(seen.len() >= 4 && seen.iter().all(|caught| *caught), "{seen:?}");
 
     PAINT_FAULT.set(Some(Fault::Panic));
     let _ = frame(&harness, Duration::from_millis(16));
@@ -1400,8 +1390,6 @@ fn a_canvas_draw_is_contained() {
     assert!(!app.render().text().contains("painted"));
     assert!(!app.needs_frame(), "a failed plugin's canvas animates");
     assert_eq!(host::ledger(), baseline);
-    assert_eq!(tui.plugins.monitor().record().unwrap().crash(), Crash::default(), "the record names nobody after");
-    PAINT_RECORD.set(None);
 }
 
 thread_local! {
@@ -2041,50 +2029,4 @@ fn a_run_is_a_record_a_row() {
 thread_local! {
     /// The first byte of the 2 MiB list `test.huge`'s draw returns.
     static HUGE: std::cell::Cell<u8> = const { std::cell::Cell::new(list::VERSION) };
-}
-
-/// A canvas in the home footer whose draw returns 2 MiB that start with [`HUGE`], twice the bytes one list may have.
-#[cfg(native)]
-fn huge_setup(setup: &mut abi::Setup) -> Result<(), String> {
-    let place = v2::Place::Slot(abi::Placement::append("home.footer.status"));
-    let view = |_: &mut v2::View<'_>| {
-        v2::Node::canvas("huge").layout(abi::Layout {
-            width: Some(abi::Width::Cells(30)),
-            height: Some(abi::Width::Cells(1)),
-            ..abi::Layout::default()
-        })
-    };
-    setup.surface(v2::Surface::new("huge", place, view).draw(|_| {
-        let mut bytes = vec![0; 2 << 20];
-        bytes[0] = HUGE.get();
-        Some(List::from_bytes(bytes))
-    }));
-    Ok(())
-}
-
-#[test]
-#[cfg(native)]
-fn a_draw_past_a_lists_bytes_is_over_and_not_copied() {
-    for carrier in crate::plugin_surface::CARRIERS {
-        for (first, over) in [(list::VERSION, true), (0, false)] {
-            HUGE.set(first);
-            let plugin = crate::plugin_surface::builtin(carrier, abi::Plugin { id: "test.huge", setup: huge_setup });
-            let before = opencode_plugin::loader::native::crossed();
-            let harness = open_tui(80, 24, vec![plugin]);
-            let screen = frame(&harness, Duration::from_millis(16)).text();
-            let received = opencode_plugin::loader::native::crossed().received - before.received;
-            assert!(received < 1 << 20, "{carrier:?}: the host copied {received} bytes");
-            let status = status(&harness, "test.huge");
-            match over {
-                true => {
-                    assert!(screen.contains(PLACEHOLDER), "{carrier:?}:\n{screen}");
-                    assert!(matches!(status, opencode_plugin::Status::Active), "{carrier:?}: {status:?}");
-                }
-                false => assert!(
-                    matches!(status, opencode_plugin::Status::Failed(ref error) if error.contains("cannot read")),
-                    "{carrier:?}: {status:?}"
-                ),
-            }
-        }
-    }
 }

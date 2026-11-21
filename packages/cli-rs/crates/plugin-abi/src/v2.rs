@@ -276,7 +276,7 @@ pub enum Node {
     },
     /// A kind a later 2.x minor adds, which only the SDK's own tests and its `next` feature have: what an author's
     /// fallback for an older host is checked against. No host knows it.
-    #[cfg(any(test, feature = "next"))]
+    #[cfg(test)]
     #[doc(hidden)]
     Later {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -287,9 +287,9 @@ pub enum Node {
 
 /// The newest minor of [`crate::ABI_MAJOR`] whose node kinds the SDK has ([`Node::since`]): above a host's minor, a
 /// view's tree is checked for kinds the host lacks before it is encoded.
-#[cfg(not(any(test, feature = "next")))]
+#[cfg(not(test))]
 const NEWEST_KIND: u32 = 0;
-#[cfg(any(test, feature = "next"))]
+#[cfg(test)]
 const NEWEST_KIND: u32 = 1;
 
 /// What a surface's [`Surface::draw`] gets: the host's reads, the mount, the canvas's id and the frame it draws for.
@@ -593,7 +593,7 @@ impl Node {
     /// The minor of [`crate::ABI_MAJOR`] that added the node's kind: 0 for every kind of 2.0.
     pub fn since(&self) -> u32 {
         match self {
-            #[cfg(any(test, feature = "next"))]
+            #[cfg(test)]
             Node::Later { .. } => 1,
             _ => 0,
         }
@@ -942,7 +942,7 @@ impl Node {
             | Node::Code { id, .. }
             | Node::Image { id, .. }
             | Node::Fence { id, .. } => id.as_deref(),
-            #[cfg(any(test, feature = "next"))]
+            #[cfg(test)]
             Node::Later { id, .. } => id.as_deref(),
             Node::Keep { key } => Some(key),
             Node::Slot { .. } => None,
@@ -963,7 +963,7 @@ impl Node {
             | Node::Code { id, .. }
             | Node::Image { id, .. }
             | Node::Fence { id, .. } => Some(id),
-            #[cfg(any(test, feature = "next"))]
+            #[cfg(test)]
             Node::Later { id, .. } => Some(id),
             Node::Keep { .. } | Node::Slot { .. } => None,
         }

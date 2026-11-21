@@ -18,8 +18,6 @@ thread_local! {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Carrier {
     Linked,
-    #[cfg_attr(not(native), allow(dead_code))]
-    CAbi,
     #[cfg(luau)]
     Luau,
 }
@@ -27,8 +25,6 @@ enum Carrier {
 fn carriers() -> Vec<Carrier> {
     vec![
         Carrier::Linked,
-        #[cfg(native)]
-        Carrier::CAbi,
         #[cfg(luau)]
         Carrier::Luau,
     ]
@@ -69,13 +65,8 @@ fn a_field_shown_and_focused_in_one_call_takes_the_focus() {
 fn open(carrier: Carrier) -> Harness {
     SHOW.set(false);
     let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let host = opencode_tui::plugins::host::host(&h.tui);
     let definition = match carrier {
         Carrier::Linked => abi::Plugin { id: ID, setup: probe }.into(),
-        Carrier::CAbi => {
-            let entries = crate::support::loopback_entries!("test.focus", probe);
-            crate::support::loopback(&host, entries).unwrap().0
-        }
         #[cfg(luau)]
         Carrier::Luau => {
             let sources = opencode_plugin::luau::Sources::from_files([

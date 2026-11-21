@@ -1,16 +1,8 @@
-//! C ABI and Rust SDK for native TUI plugins. A shared library exports [`ENTRY`], which returns its [`PluginApi`].
-//! Requests and replies cross the boundary in byte buffers. Each side frees what it allocates.
+//! The plugin contract and its Rust SDK: what the built-in plugins link against, and the messages the Luau and pipe
+//! carriers exchange with the host. JSON readers ignore unknown fields. The wire schema is `schema/v2.json`.
 //!
-//! Within an ABI major, tables grow only at the end. Readers check table size before reading an entry and check
-//! callbacks for null before calling them. JSON readers ignore unknown fields. A plugin declares its minimum host
-//! minor in [`PluginApi::requires_minor`] and required features in [`Metadata::requires`]. The wire schema is
-//! `schema/v2.json`.
-//!
-//! A Rust plugin exports a `cdylib` with [`plugin!`] and registers renderers and handlers through [`Setup`].
-//! Renderers receive a [`Read`] and return data for the host to draw. Handlers receive a [`Host`]; their effects
-//! run after the outermost callback returns. Keep `panic = "unwind"` so the SDK can report panics to the host.
-
-#![allow(unsafe_code)]
+//! A Rust plugin registers renderers and handlers through [`Setup`]. Renderers receive a [`Read`] and return data for
+//! the host to draw. Handlers receive a [`Host`]; their effects run after the outermost callback returns.
 
 // A builder for a variant field leaves nodes of other kinds unchanged.
 macro_rules! node_setters {
@@ -57,8 +49,6 @@ pub mod v2;
 pub use mail::{BOUND, SendError, Sender, Spawner, Stop};
 
 use std::borrow::Cow;
-#[cfg(feature = "c-abi")]
-use std::ffi::c_void;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
 use std::sync::{Arc, PoisonError, RwLock};
@@ -82,10 +72,6 @@ pub const ABI_MAJOR: u32 = 2;
 /// The minor version of [`ABI_MAJOR`]. 2.0 is everything this crate has; a later minor only appends.
 pub const ABI_MINOR: u32 = 0;
 
-/// The symbol every 2.x plugin exports, of type [`EntryFn`].
-#[cfg(feature = "c-abi")]
-pub const ENTRY: &str = "opencode_plugin_v2";
-
 /// The shortest a timer waits ([`Host::try_timer`]): one asked for less waits this long. A shorter tick is a canvas's
 /// `animate`.
 pub const MIN_TIMER: std::time::Duration = std::time::Duration::from_millis(20);
@@ -98,7 +84,7 @@ fn timer_ms(delay: std::time::Duration) -> u64 {
     u64::try_from(delay.as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX)
 }
 
-/// The optional features this crate's host side knows ([`HostApi::features`]).
+/// The optional features this crate's host side knows ([`Read::abi`]).
 pub const FEATURES: &[&str] = &[IMAGE_BOUNDS, FOCUS_INPUT, FENCE_NODE];
 
 /// The host answers [`HostRequest::ImageBounds`] with the bounds of the images it decodes, so the SDK answers
@@ -107,8 +93,7 @@ pub const IMAGE_BOUNDS: &str = "image-bounds";
 
 /// [`Host::focus`] gives the focus to a [`v2::Node::Input`] with an id, as a click does, so what the user types goes
 /// into the field. A host without it refuses that focus, and the field takes the focus only from the user's click. A
-/// plugin that cannot work without it names it in `requires` on [`plugin!`]; one that can reads [`Read::abi`]'s
-/// [`Abi::has_feature`].
+/// plugin reads [`Read::abi`]'s [`Abi::has_feature`].
 pub const FOCUS_INPUT: &str = "focus-input";
 
 /// The host draws [`v2::Node::Fence`], its own code view of a claimed fence, in a fence claim's tree. A host without
@@ -166,247 +151,11 @@ impl Abi {
     }
 }
 
-/// Status codes of [`PluginApi::create`], [`PluginApi::call`], and [`HostApi::call`]. With [`OK`] the output buffer
-/// holds the JSON result; otherwise it holds the error text.
-pub const OK: i32 = 0;
-pub const ERROR: i32 = 1;
-/// The callee panicked; the output holds the panic message.
-pub const PANIC: i32 = 2;
-/// [`HostApi::send`]: the mailbox holds [`BOUND`] entries, and nothing was stored.
-pub const FULL: i32 = 3;
-/// [`HostApi::send`]: the plugin has left `active`, and nothing was stored.
-pub const CLOSED: i32 = 4;
-
-#[cfg(feature = "c-abi")]
-pub type EntryFn = unsafe extern "C" fn() -> *const PluginApi;
-
-/// Bytes borrowed for the length of one call.
-#[cfg(feature = "c-abi")]
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Bytes {
-    pub ptr: *const u8,
-    pub len: usize,
-}
-
-#[cfg(feature = "c-abi")]
-impl Bytes {
-    pub fn new(bytes: &[u8]) -> Self {
-        Self { ptr: bytes.as_ptr(), len: bytes.len() }
-    }
-
-    /// The bytes, checked as every receiver checks borrowed bytes: a null `ptr` with a length, or a length over
-    /// [`MAX_BUFFER`], is refused before anything is read through it.
-    ///
-    /// # Safety
-    /// A non-null `ptr` must point to `len` readable bytes of one allocation that outlive the returned slice.
-    pub unsafe fn checked<'a>(self) -> Result<&'a [u8], String> {
-        match (self.ptr.is_null(), self.len) {
-            (true, 0) => Ok(&[]),
-            (true, len) => Err(format!("a null buffer of {len} bytes")),
-            (false, len) if len > MAX_BUFFER => Err(format!("a buffer of {len} bytes, over {MAX_BUFFER}")),
-            // SAFETY: as documented; `len` is under `isize::MAX`.
-            (false, len) => Ok(unsafe { std::slice::from_raw_parts(self.ptr, len) }),
-        }
-    }
-
-    /// [`Bytes::checked`], with a refused descriptor read as no bytes.
-    ///
-    /// # Safety
-    /// As for [`Bytes::checked`].
-    pub unsafe fn as_slice<'a>(self) -> &'a [u8] {
-        // SAFETY: the caller promises what `checked` needs: a non-null `ptr` points to `len` bytes that outlive `'a`.
-        unsafe { self.checked() }.unwrap_or_default()
-    }
-}
-
-/// The largest buffer either side takes from the other, borrowed ([`Bytes`]) or returned ([`Owned`]): 256 MiB.
-#[cfg(feature = "c-abi")]
-pub const MAX_BUFFER: usize = 256 << 20;
-
-/// A buffer the callee allocated; the caller copies it out, then passes it to the callee's `free`.
-#[cfg(feature = "c-abi")]
-#[repr(C)]
-pub struct Owned {
-    pub ptr: *mut u8,
-    pub len: usize,
-    pub cap: usize,
-}
-
-#[cfg(feature = "c-abi")]
-impl Owned {
-    pub const EMPTY: Self = Self { ptr: std::ptr::null_mut(), len: 0, cap: 0 };
-
-    pub fn from_vec(bytes: Vec<u8>) -> Self {
-        let mut bytes = std::mem::ManuallyDrop::new(bytes);
-        Self { ptr: bytes.as_mut_ptr(), len: bytes.len(), cap: bytes.capacity() }
-    }
-
-    /// # Safety
-    /// `self` must come from [`Owned::from_vec`] in the same library, unchanged, or be [`Owned::EMPTY`].
-    pub unsafe fn into_vec(self) -> Vec<u8> {
-        if self.ptr.is_null() {
-            return Vec::new();
-        }
-        // SAFETY: the caller promises an unchanged descriptor from `from_vec` in this library, so this allocator owns it.
-        unsafe { Vec::from_raw_parts(self.ptr, self.len, self.cap) }
-    }
-
-    /// Frees a buffer this side made with [`Owned::from_vec`], as a `free` does: by its `ptr` and `cap`, whatever
-    /// `len` says, so a descriptor whose `len` the other side broke frees what was allocated and reads nothing.
-    ///
-    /// # Safety
-    /// `ptr` and `cap` must come from [`Owned::from_vec`] in the same library, or `ptr` be null.
-    pub unsafe fn release(self) {
-        if !self.ptr.is_null() {
-            // SAFETY: as documented; a `Vec<u8>` of no length drops no element.
-            drop(unsafe { Vec::from_raw_parts(self.ptr, 0, self.cap) });
-        }
-    }
-
-    /// A copy of the bytes, leaving the buffer for its owner to free. A descriptor [`received`] refuses copies nothing.
-    ///
-    /// # Safety
-    /// A non-null `ptr` must point to `len` readable bytes.
-    pub unsafe fn to_vec(&self) -> Vec<u8> {
-        // SAFETY: the caller promises a non-null `ptr` points to `len` readable bytes, all `bytes` reads.
-        unsafe { self.bytes() }.map(<[u8]>::to_vec).unwrap_or_default()
-    }
-
-    /// The initialized bytes, or why the descriptor cannot describe a buffer the other side allocated: a null `ptr`
-    /// with a length, a `len` past `cap`, or a buffer over [`MAX_BUFFER`].
-    unsafe fn bytes(&self) -> Result<&[u8], String> {
-        if !self.ptr.is_null() && self.len > self.cap {
-            return Err(format!("a buffer of {} bytes in {} of room", self.len, self.cap));
-        }
-        // SAFETY: as for `to_vec`.
-        unsafe { Bytes { ptr: self.ptr, len: self.len }.checked() }
-    }
-}
-
-/// What every receiver of the C ABI does with a buffer the other side returned ([`PluginApi::create`],
-/// [`PluginApi::call`], [`PluginApi::describe`], [`HostApi::call`]): it checks the descriptor, copies the bytes out,
-/// and hands that exact descriptor back to the other side's `free` once, also when it refuses it. A null `ptr` with a
-/// length, a `len` past `cap`, and a buffer over [`MAX_BUFFER`] are refused unread.
-///
-/// # Safety
-/// `out` was written by the side whose `free` this is; a non-null `ptr` points to `len` readable bytes when the
-/// descriptor is not refused.
-#[cfg(feature = "c-abi")]
-pub unsafe fn received(out: Owned, free: unsafe extern "C" fn(Owned)) -> Result<Vec<u8>, String> {
-    // SAFETY: as documented.
-    let bytes = unsafe { out.bytes() }.map(<[u8]>::to_vec);
-    // SAFETY: the buffer goes back to the side that wrote it, once, as it was received.
-    unsafe { free(out) };
-    bytes
-}
-
-/// What the host gives a plugin instance. It stays valid until the host destroys the instance. A plugin reads an
-/// entry only when `size` covers it.
-#[cfg(feature = "c-abi")]
-#[repr(C)]
-#[cfg_attr(not(feature = "host"), non_exhaustive)]
-pub struct HostApi {
-    /// `size_of::<HostApi>()` of the host's build.
-    pub size: usize,
-    pub major: u32,
-    pub minor: u32,
-    pub ctx: *mut c_void,
-    /// Handles a [`HostRequest`] and writes the JSON result into `out`. A plugin treats a null entry, or a null
-    /// `free`, as a host that answers every request with an error. Only on the thread that calls into the plugin (the
-    /// UI thread): a call from another thread is refused with [`ERROR`] and does nothing; that thread calls `wake`.
-    pub call: Option<unsafe extern "C" fn(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32>,
-    /// Frees a buffer `call` wrote.
-    pub free: Option<unsafe extern "C" fn(owned: Owned)>,
-    /// Whether the page theme is dark ([`THEME_DARK`]) or light ([`THEME_LIGHT`]), as TS plugins read
-    /// `api.themeMode`. Only on the UI thread, as `call`: another thread gets [`THEME_DARK`].
-    pub theme_mode: Option<unsafe extern "C" fn(ctx: *mut c_void) -> u32>,
-    /// Asks the host to request the rows of the plugin's mounted slot claims and routes again, on its UI thread.
-    /// It is a redraw hint: it carries no data and drains nothing for the plugin, which keeps its own results and
-    /// reads all of them when the host asks for rows. Wakes that arrive before the host handles one count once, and
-    /// the host never drops the last one. Callable from any thread, but `ctx` is valid only until `destroy` returns,
-    /// so a plugin makes sure no thread calls it after that. A Rust plugin reads it as [`Setup::waker`], whose
-    /// [`Waker`] the SDK revokes in `destroy`.
-    pub wake: Option<unsafe extern "C" fn(ctx: *mut c_void)>,
-    /// Puts `message`, JSON text, in the plugin's mailbox: at the end with an empty `key`, else in the place of the
-    /// entry that waits under `key`. Returns [`OK`], [`FULL`] or [`CLOSED`] at once and never blocks; [`ERROR`] for a
-    /// message that is not JSON. The host then runs [`Request::Message`] on its UI thread. Callable from any thread
-    /// until `destroy` returns, as `wake` is.
-    pub send: Option<unsafe extern "C" fn(ctx: *mut c_void, key: Bytes, message: Bytes) -> i32>,
-    /// A thread of the plugin panicked with `message`, text: the host fails the plugin and says so once. Callable
-    /// from any thread until `destroy` returns.
-    pub report: Option<unsafe extern "C" fn(ctx: *mut c_void, message: Bytes)>,
-    /// 1 once the plugin has left `active`, else 0: its threads should end. Callable from any thread until `destroy`
-    /// returns.
-    pub stopped: Option<unsafe extern "C" fn(ctx: *mut c_void) -> u32>,
-    /// The host's optional features, a JSON array of names, valid while the instance lives.
-    pub features: Bytes,
-}
-
-/// [`HostApi::theme_mode`] results.
-#[cfg(feature = "c-abi")]
-pub const THEME_DARK: u32 = 0;
-#[cfg(feature = "c-abi")]
-pub const THEME_LIGHT: u32 = 1;
-
 /// Dark or light, from [`Read::theme_mode`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThemeMode {
     Dark,
     Light,
-}
-
-/// What a plugin exports. Every entry here is in a 2.0 table, which the host refuses when shorter; entries added by
-/// later minor versions go at the end, are optional, and are read only when `size` covers them.
-#[cfg(feature = "c-abi")]
-#[repr(C)]
-#[cfg_attr(not(feature = "host"), non_exhaustive)]
-pub struct PluginApi {
-    /// `size_of` the struct as the plugin built it.
-    pub size: usize,
-    pub major: u32,
-    pub minor: u32,
-    /// The oldest host minor version the plugin works with; 0 for any.
-    pub requires_minor: u32,
-    /// Runs the plugin's setup with `options` (the JSON of its `plugins` entry's options, or empty). On [`OK`] it
-    /// sets `instance` and writes the [`Manifest`] JSON into `out`. Required: the host refuses a null entry.
-    pub create: Option<
-        unsafe extern "C" fn(host: *const HostApi, options: Bytes, instance: *mut *mut c_void, out: *mut Owned) -> i32,
-    >,
-    /// Handles a [`Request`] and writes the JSON result into `out`. Required.
-    pub call: Option<unsafe extern "C" fn(instance: *mut c_void, request: Bytes, out: *mut Owned) -> i32>,
-    /// Destroys an instance. Optional: a plugin without per-instance state leaves it null.
-    pub destroy: Option<unsafe extern "C" fn(instance: *mut c_void)>,
-    /// Frees a buffer `create`, `call`, or `describe` wrote. Required.
-    pub free: Option<unsafe extern "C" fn(owned: Owned)>,
-    /// Writes the plugin's [`Metadata`] JSON into `out`. Required: the host learns the plugin's ID here, before any
-    /// `create`.
-    pub describe: Option<unsafe extern "C" fn(out: *mut Owned) -> i32>,
-}
-
-// Each table is all of 2.0, so a reader takes one whose `size` covers the struct through a reference (the loader, the
-// conformance replay, `HostHandle::core`). An entry a later minor appends fails these: the readers then keep 2.0's size
-// as the least they take, and read the new entry only where `size` covers it.
-#[cfg(feature = "c-abi")]
-const _: () = assert!(size_of::<PluginApi>() == std::mem::offset_of!(PluginApi, describe) + size_of::<usize>());
-#[cfg(feature = "c-abi")]
-const _: () = assert!(size_of::<HostApi>() == std::mem::offset_of!(HostApi, features) + size_of::<Bytes>());
-
-/// What [`PluginApi::describe`] returns.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(not(feature = "host"), non_exhaustive)]
-pub struct Metadata {
-    /// The plugin's own version, such as its crate version.
-    #[serde(default)]
-    pub version: Option<String>,
-    /// The plugin's ID, the one its [`Manifest`] will have; required and nonempty. The host reads it before any
-    /// setup, so setup runs once, at activation, and may use storage.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    /// The optional host features the plugin cannot work without. A host that lacks one refuses the plugin at
-    /// load and names it.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub requires: Vec<String>,
 }
 
 /// Everything a plugin registered in its setup.
@@ -1635,23 +1384,6 @@ pub enum InputTo {
     },
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Layer { layer: usize },
-}
-
-thread_local! {
-    /// The mount of the request the SDK runs on this thread, which [`Read::mount`] names over the C ABI.
-    static CALLED: std::cell::RefCell<Option<v2::MountId>> = const { std::cell::RefCell::new(None) };
-}
-
-/// Runs `f` as a call for `mount`: [`Read::mount`] names it until `f` returns or unwinds.
-fn for_mount<R>(mount: Option<&v2::MountId>, f: impl FnOnce() -> R) -> R {
-    struct Restore(Option<v2::MountId>);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            CALLED.with(|called| *called.borrow_mut() = self.0.take());
-        }
-    }
-    let _restore = Restore(CALLED.with(|called| called.replace(mount.cloned())));
-    f()
 }
 
 /// What [`Request::View`] returns: the tree, the content the view gave the host with its handles, and how many values
@@ -2900,12 +2632,12 @@ pub trait Read {
         Vec::new()
     }
     /// Calls `visit` with the loaded messages of session `id`, oldest first; empty when none are loaded. In process
-    /// the host lends its own list; over the C ABI the plugin gets a copy.
+    /// the host lends its own list.
     fn messages(&self, _id: &str, visit: &mut dyn FnMut(&[SessionMessageInfo])) {
         visit(&[]);
     }
-    /// Calls `visit` with loaded message `message` of session `session`, or `None`. Over the C ABI only that message
-    /// crosses, so a view that hears a change in place of one message reads what changed, not the session.
+    /// Calls `visit` with loaded message `message` of session `session`, or `None`: a view that hears a change in
+    /// place of one message reads what changed, not the session.
     fn message(&self, session: &str, message: &str, visit: &mut dyn FnMut(Option<&SessionMessageInfo>)) {
         self.messages(session, &mut |messages| visit(messages.iter().find(|item| item.id() == message)));
     }
@@ -2971,8 +2703,7 @@ pub trait Read {
     }
     /// What the host serves the plugin, as it stated at load: its major, its minor of that major, and its optional
     /// features. A plugin of this SDK that uses what a later 2.x minor adds checks it here, or lowers it with
-    /// [`v2::View::or`]; one that cannot work without it sets `requires_minor` on [`plugin!`] instead, and an older
-    /// host refuses it. In process the host is this crate's own.
+    /// [`v2::View::or`]. In process the host is this crate's own.
     fn abi(&self) -> Abi {
         Abi::current()
     }
@@ -3071,9 +2802,9 @@ pub trait Read {
     }
     /// The width and height of the image `bytes` decode to in the host, or `None` where an image node of them would
     /// show nothing: not a PNG, GIF, JPEG or WebP image, past the host's bounds, or bytes that do not decode.
-    /// [`image_size`] reads only the header. Over the C ABI the bytes cross to the host in base64, and the host
-    /// decodes an image within its bounds: ask once per content and keep the answer, not in each view. A host with
-    /// [`IMAGE_BOUNDS`] states its bounds once, and bytes past them answer `None` without crossing.
+    /// [`image_size`] reads only the header. The host decodes an image within its bounds: ask once per content and
+    /// keep the answer, not in each view. A host with [`IMAGE_BOUNDS`] states its bounds once, and bytes past them
+    /// answer `None` without being decoded.
     fn image_size(&self, _bytes: &[u8]) -> Option<(u32, u32)> {
         None
     }
@@ -3196,7 +2927,7 @@ pub trait Host: Read {
     /// Starts a timer: [`Setup::on_reply`] gets `null` with the ID this returns once `delay` passed on the host's
     /// clock, on the UI thread, with no thread of the plugin's. A delay under [`MIN_TIMER`] waits [`MIN_TIMER`]. It is
     /// owned as a fetch is ([`Host::try_fetch`], [`Host::set_owner`]): a mount's timer ends with its mount, which
-    /// [`Setup::on_cancelled`] hears, and every timer ends with the activation. The delay crosses the C ABI in whole
+    /// [`Setup::on_cancelled`] hears, and every timer ends with the activation. The delay crosses to the host in whole
     /// milliseconds, a part of one counted as one. A JS plugin on the pipe keeps its own timers: the pipe refuses this
     /// request. With [`MAX_TIMERS`] of the plugin's timers waiting, the reply is that refusal, at once. An error is a
     /// timer the host did not take, as for [`Host::try_fetch`]: no reply comes for it. A host without timers, by
@@ -3317,9 +3048,6 @@ fn storage_merge_whole<H: Host + ?Sized>(host: &H, key: &str, fields: serde_json
 /// own: a plugin gets it only as the [`Read`] or [`Host`] of one callback.
 #[derive(Clone, Default)]
 struct HostHandle {
-    /// Null in process, and without the C ABI there is no table at all: then every request is refused.
-    #[cfg(feature = "c-abi")]
-    api: *const HostApi,
     /// The bounds of the images the host decodes, asked once, on the first [`Read::image_size`]; `None` inside for a
     /// host that has no [`IMAGE_BOUNDS`] or did not answer. The instance's own: a table at the same address after it
     /// is another host's.
@@ -3327,62 +3055,9 @@ struct HostHandle {
 }
 
 impl HostHandle {
-    #[cfg(feature = "c-abi")]
-    fn new(api: *const HostApi) -> Self {
-        Self { api, image_bounds: Rc::default() }
-    }
-
-    #[cfg(feature = "c-abi")]
-    fn request(&self, request: &HostRequest) -> Result<serde_json::Value, String> {
-        let json = serde_json::to_vec(request).map_err(|error| error.to_string())?;
-        let mut out = Owned::EMPTY;
-        let core = self.core().ok_or("no host")?;
-        let (Some(call), Some(free)) = (core.call, core.free) else {
-            return Err("the host takes no requests".to_owned());
-        };
-        // SAFETY: `call` writes `out`, which goes back to `free` as the host wrote it, also when it is refused.
-        let (status, bytes) = unsafe {
-            let status = call(core.ctx, Bytes::new(&json), &mut out);
-            (status, received(out, free))
-        };
-        let bytes = bytes.map_err(|error| format!("the host returned a bad result: {error}"))?;
-        match status {
-            OK => serde_json::from_slice(&bytes).map_err(|error| error.to_string()),
-            _ => Err(String::from_utf8_lossy(&bytes).into_owned()),
-        }
-    }
-
-    /// Without the C ABI there is no host table: every request is refused, as a null table's is.
-    #[cfg(not(feature = "c-abi"))]
+    /// There is no host table: every request is refused.
     fn request(&self, _: &HostRequest) -> Result<serde_json::Value, String> {
         Err("no host".to_owned())
-    }
-
-    /// Whether there is no host table: the registration's own host of a plugin in process.
-    fn is_null(&self) -> bool {
-        #[cfg(feature = "c-abi")]
-        return self.api.is_null();
-        #[cfg(not(feature = "c-abi"))]
-        return true;
-    }
-
-    /// The host's table, of ABI 2 and with every entry of 2.0; `None` for a null, misaligned or shorter table, or one of
-    /// another major, which is no host this SDK can talk to. An entry a later 2.x appends is read only when `size`
-    /// covers it.
-    #[cfg(feature = "c-abi")]
-    fn core(&self) -> Option<&HostApi> {
-        if self.api.is_null() || !self.api.is_aligned() {
-            return None;
-        }
-        // SAFETY: the host keeps the table alive until it destroys the instance, and every table starts with `size`.
-        // Nothing past it is read before `size` says the table has it.
-        let size = unsafe { std::ptr::addr_of!((*self.api).size).read() };
-        if size < size_of::<HostApi>() {
-            return None;
-        }
-        // SAFETY: `size` covers the 2.0 table, which is all of `HostApi`.
-        let table = unsafe { &*self.api };
-        (table.major == ABI_MAJOR).then_some(table)
     }
 
     /// The JSON text stored under one of the plugin's storage keys.
@@ -3395,90 +3070,12 @@ impl HostHandle {
         let _ = self.request(&HostRequest::Log { level, message: message.to_owned() });
     }
 
-    /// Whether the page theme is dark or light; `None` without a host or its entry.
-    #[cfg(feature = "c-abi")]
-    fn mode(&self) -> Option<ThemeMode> {
-        let core = self.core()?;
-        // SAFETY: the host keeps the entry valid while the instance lives.
-        match unsafe { (core.theme_mode?)(core.ctx) } {
-            THEME_DARK => Some(ThemeMode::Dark),
-            THEME_LIGHT => Some(ThemeMode::Light),
-            _ => None,
-        }
-    }
-
-    /// A handle that wakes the host from any thread; `None` without a host or its entry.
-    #[cfg(feature = "c-abi")]
-    fn waker(&self) -> Option<Waker> {
-        let core = self.core()?;
-        let (wake, ctx) = (core.wake?, Ctx(core.ctx));
-        // SAFETY: `ctx` is valid until `destroy` returns, and `destroy` revokes the waker first.
-        Some(Waker::new(move || unsafe { wake(ctx.get()) }))
-    }
-
-    /// What the plugin's threads reach the host through; `None` without a host or its entries.
-    #[cfg(feature = "c-abi")]
-    fn link(&self) -> Option<Arc<dyn mail::Link>> {
-        let core = self.core()?;
-        let (send, report, stopped) = (core.send?, core.report?, core.stopped?);
-        Some(Arc::new(AbiLink { ctx: Ctx(core.ctx), send, report, stopped }))
-    }
-
-    #[cfg(not(feature = "c-abi"))]
     fn mode(&self) -> Option<ThemeMode> {
         None
     }
 
-    /// The host's optional features; none without a host.
-    #[cfg(feature = "c-abi")]
-    fn features(&self) -> Vec<String> {
-        // SAFETY: the host keeps the bytes while the instance lives.
-        let bytes = self.core().map(|core| unsafe { core.features.as_slice() }).unwrap_or_default();
-        serde_json::from_slice(bytes).unwrap_or_default()
-    }
-
-    #[cfg(not(feature = "c-abi"))]
     fn features(&self) -> Vec<String> {
         Vec::new()
-    }
-}
-
-/// [`mail::Link`] over the C ABI: the host's entries, with its `ctx`, from any thread.
-#[cfg(feature = "c-abi")]
-struct AbiLink {
-    ctx: Ctx,
-    send: unsafe extern "C" fn(*mut c_void, Bytes, Bytes) -> i32,
-    report: unsafe extern "C" fn(*mut c_void, Bytes),
-    stopped: unsafe extern "C" fn(*mut c_void) -> u32,
-}
-
-#[cfg(feature = "c-abi")]
-impl mail::Link for AbiLink {
-    fn json(&self) -> bool {
-        true
-    }
-
-    fn send(&self, key: Option<&str>, message: mail::Outgoing) -> Result<(), (mail::Refused, mail::Outgoing)> {
-        let mail::Outgoing::Json(json) = &message else { return Err((mail::Refused::Closed, message)) };
-        let key = key.unwrap_or_default();
-        // SAFETY: `ctx` is valid until `destroy` returns, and `destroy` revokes this link first.
-        let status = unsafe { (self.send)(self.ctx.get(), Bytes::new(key.as_bytes()), Bytes::new(json.as_bytes())) };
-        match status {
-            OK => Ok(()),
-            FULL => Err((mail::Refused::Full, message)),
-            CLOSED => Err((mail::Refused::Closed, message)),
-            _ => Err((mail::Refused::Unencodable, message)),
-        }
-    }
-
-    fn report(&self, message: &str) {
-        // SAFETY: as for `send`.
-        unsafe { (self.report)(self.ctx.get(), Bytes::new(message.as_bytes())) };
-    }
-
-    fn stopped(&self) -> bool {
-        // SAFETY: as for `send`.
-        unsafe { (self.stopped)(self.ctx.get()) != 0 }
     }
 }
 
@@ -3593,10 +3190,6 @@ impl Read for HostHandle {
     }
 
     fn abi(&self) -> Abi {
-        #[cfg(feature = "c-abi")]
-        if let Some(core) = self.core() {
-            return Abi::new(core.major, core.minor, self.features());
-        }
         Abi::new(0, 0, Vec::new())
     }
 
@@ -3650,10 +3243,6 @@ impl Read for HostHandle {
 
     fn mode(&self) -> Option<String> {
         self.read(&HostRequest::InputMode).flatten()
-    }
-
-    fn mount(&self) -> Option<v2::MountId> {
-        CALLED.with(|called| called.borrow().clone())
     }
 
     fn plugins(&self) -> Vec<PluginEntry> {
@@ -3868,7 +3457,7 @@ impl HostHandle {
     }
 }
 
-/// Wakes the host from any thread, from [`Setup::waker`] (over the C ABI, [`HostApi::wake`]): the host
+/// Wakes the host from any thread, from [`Setup::waker`]: the host
 /// then runs the plugin's [`Setup::on_wake`] handlers and renders its mounted slot claims and routes again, with
 /// [`Changed::woken`], so a plugin that works on its own thread can show the result.
 ///
@@ -3902,25 +3491,6 @@ impl Waker {
     #[doc(hidden)]
     pub fn revoke(&self) {
         self.0.write().unwrap_or_else(PoisonError::into_inner).take();
-    }
-}
-
-/// The host's `ctx` as a wake of the C ABI takes it, from any thread.
-#[cfg(feature = "c-abi")]
-#[derive(Clone, Copy)]
-struct Ctx(*mut c_void);
-
-// SAFETY: the host's `wake` may be called from any thread with its `ctx` until `destroy` returns ([`HostApi::wake`]).
-#[cfg(feature = "c-abi")]
-unsafe impl Send for Ctx {}
-// SAFETY: `Ctx` is a `Copy` pointer with no state of its own, so sharing it is sending copies, which `Send` covers.
-#[cfg(feature = "c-abi")]
-unsafe impl Sync for Ctx {}
-
-#[cfg(feature = "c-abi")]
-impl Ctx {
-    fn get(self) -> *mut c_void {
-        self.0
     }
 }
 
@@ -4202,7 +3772,7 @@ impl Setup<'_> {
     }
 
     /// Registers a surface of contract 2.0 ([`v2`]): a route or a slot claim whose view returns a keyed tree, which
-    /// the host reconciles. Over the C ABI from 2.0 ([`Request::View`]).
+    /// the host reconciles ([`Request::View`]).
     pub fn surface(&mut self, surface: v2::Surface) {
         let claim = SurfaceClaim {
             name: surface.name.clone(),
@@ -4262,15 +3832,14 @@ impl Setup<'_> {
     pub fn abi(&self) -> Abi {
         let served = match self.host {
             Some(host) => host.abi(),
-            None if self.registered.host.is_null() => Abi::current(),
-            None => self.registered.host.abi(),
+            None => Abi::current(),
         };
         Abi::new(served.major, served.minor, self.registered.features.clone())
     }
 
     /// A search a [`Select`] names (`search`): with the host's reads, the query and the select's enabled options, it
     /// returns the values of the options to list, in order (TS `dialog.select`'s `search`). It runs as one call of the
-    /// plugin, with no effects, while the user types; over the C ABI, as [`Request::Search`].
+    /// plugin, with no effects, while the user types ([`Request::Search`]).
     pub fn search(&mut self, name: &str, search: impl Fn(&dyn Read, &str, &[SelectOption]) -> Vec<String> + 'static) {
         self.registered.manifest.searches.push(name.to_owned());
         self.registered.searches.push((name.to_owned(), Rc::new(search)));
@@ -4278,7 +3847,7 @@ impl Setup<'_> {
 
     /// Keys the plugin takes while `layer`'s scope holds ([`interact::Layer`]): of the composer, or global. They are
     /// the plugin's until it leaves `active`. A layer of a surface's own scope belongs on [`v2::Surface::layers`].
-    /// Over the C ABI, its handler runs as [`Request::Input`].
+    /// Its handler runs as [`Request::Input`].
     pub fn layer(
         &mut self,
         layer: interact::Layer,
@@ -4329,13 +3898,9 @@ pub struct Registered {
     /// What the plugin's threads reach the host through; disposal revokes it.
     link: mail::Revocable,
     features: Vec<String>,
-    /// The [`v2::Memo`] table of each mount, by generation, for the views of [`Request::View`].
-    memos: std::cell::RefCell<std::collections::HashMap<u64, v2::Memo>>,
     layers: Vec<(interact::Layer, interact::HandlerFn)>,
     searches: Vec<(String, SearchFn)>,
     claims: Vec<claim::Claim>,
-    /// What the host of the C ABI serves the plugin, read once; `None` in process.
-    abi: Option<Abi>,
     /// The plugin's tasks, once [`Setup::tasks`] registered them.
     tasks: Option<Rc<task::Shared>>,
 }
@@ -4349,10 +3914,6 @@ impl Registered {
     /// The registrations of a plugin the host runs in process: without an ABI host, so a [`Setup`] of its own
     /// ([`Registered::setup`]) answers every request with an error.
     pub fn new(id: &str, options: Option<String>) -> Self {
-        // The host in process is this crate's, with its features.
-        #[cfg(feature = "c-abi")]
-        let registered = Self::with_host(id, options, std::ptr::null());
-        #[cfg(not(feature = "c-abi"))]
         let registered =
             Self { manifest: Manifest { id: id.to_owned(), ..Manifest::default() }, options, ..Self::default() };
         Self { features: Abi::current().features, ..registered }
@@ -4512,465 +4073,13 @@ impl Registered {
     pub fn events(&self) -> impl Iterator<Item = (&[String], &EventFn)> {
         self.manifest.events.iter().map(Vec::as_slice).zip(&self.events)
     }
-
-    #[cfg(feature = "c-abi")]
-    fn with_host(id: &str, options: Option<String>, host: *const HostApi) -> Self {
-        let host = HostHandle::new(host);
-        Self {
-            manifest: Manifest { id: id.to_owned(), ..Manifest::default() },
-            options,
-            waker: host.waker(),
-            link: host.link().map(mail::Revocable::new).unwrap_or_default(),
-            features: host.features(),
-            abi: host.core().map(|_| host.abi()),
-            host,
-            ..Self::default()
-        }
-    }
-
-    /// Runs the draw of surface `surface` for `canvas` of `mount` at `frame` ([`Request::Draw`]): the list's bytes,
-    /// or none to keep the list.
-    #[cfg_attr(not(feature = "c-abi"), allow(dead_code))]
-    fn draw(&self, surface: usize, mount: &v2::MountId, canvas: &str, frame: v2::Frame) -> Result<Vec<u8>, String> {
-        let surface = self.surfaces.get(surface).ok_or("no such surface")?;
-        let draw = surface.draw.as_ref().ok_or("the surface has no draw")?;
-        let list = for_mount(Some(mount), || draw(&mut v2::Draw { read: &self.host, mount, canvas, frame }));
-        Ok(list.map(canvas::List::into_bytes).unwrap_or_default())
-    }
-
-    /// Refuses a tree that holds a node kind the host lacks, before it crosses: the author lowers it with
-    /// [`v2::View::or`].
-    #[cfg_attr(not(feature = "c-abi"), allow(dead_code))]
-    fn lowered(&self, node: &v2::Node) -> Result<(), String> {
-        let host = self.abi.as_ref().map_or_else(String::new, |abi| format!("{}.{}", abi.major, abi.minor));
-        if let Some(feature) = self.abi.as_ref().and_then(|abi| v2::unknown_feature(node, abi)) {
-            return Err(format!(
-                "the view returned a node of the feature {feature}, which this host ({host}) lacks; lower it with View::or"
-            ));
-        }
-        let Some(minor) = self.abi.as_ref().and_then(|abi| v2::unknown_to(node, abi)) else { return Ok(()) };
-        Err(format!(
-            "the view returned a node of ABI {ABI_MAJOR}.{minor}, which this host ({host}) lacks; lower it with View::or"
-        ))
-    }
-
-    #[cfg_attr(not(feature = "c-abi"), allow(dead_code))]
-    fn handle(&self, request: Request) -> Result<serde_json::Value, String> {
-        let json = |value: Result<serde_json::Value, serde_json::Error>| value.map_err(|error| error.to_string());
-        match request {
-            Request::RenderFence(RenderFence { fence, index }) => {
-                let render = match index {
-                    Some(index) => self.fences.get(index),
-                    None => self.fences.iter().find(|(language, _)| *language == fence.language),
-                };
-                let fenced = render.map_or(Fenced::Code, |(_, render)| render(&self.host, &fence));
-                json(serde_json::to_value(fenced))
-            }
-            Request::Render { claim, input, changed } => {
-                let render = self.slots.get(claim).ok_or("no such slot claim")?;
-                json(serde_json::to_value(render(&self.host, &input, &changed)))
-            }
-            Request::Command { name, input } => {
-                let (_, run) = self.commands().find(|(command, _)| command.name == name).ok_or("no such command")?;
-                // A command that declines its key answers `"pass"`.
-                match run(&self.host, input.as_deref()) {
-                    interact::Handled::Consume => Ok(serde_json::Value::Null),
-                    interact::Handled::Pass => Ok(serde_json::Value::String("pass".to_owned())),
-                }
-            }
-            Request::Event { handler, event } => {
-                self.events.get(handler).ok_or("no such event handler")?(&self.host, &event);
-                Ok(serde_json::Value::Null)
-            }
-            Request::RenderRoute { name, changed } => {
-                let (_, render) = self.views.iter().find(|(route, _)| *route == name).ok_or("no such route")?;
-                json(serde_json::to_value(render(&self.host, &changed)))
-            }
-            // 0 names no request, so no handler hears a reply to it.
-            Request::Reply { id: RequestId(0), .. } => Err("the host sent a reply to request ID 0".to_owned()),
-            Request::Reply { id, result } => {
-                // The last handler takes the reply and the others a copy, as on the linked path.
-                if let Some((last, rest)) = self.replies.split_last() {
-                    rest.iter().for_each(|run| run(&self.host, id, result.clone()));
-                    last(&self.host, id, result);
-                }
-                Ok(serde_json::Value::Null)
-            }
-            Request::Mount { claim, input, mounted } => {
-                let runs = self.mounts.iter().filter(|(index, _)| *index == claim);
-                runs.for_each(|(_, run)| run(&self.host, &input, mounted));
-                Ok(serde_json::Value::Null)
-            }
-            Request::Wake => {
-                self.wakes.iter().for_each(|run| run(&self.host));
-                Ok(serde_json::Value::Null)
-            }
-            Request::Plugins => {
-                self.plugins.iter().for_each(|run| run(&self.host));
-                Ok(serde_json::Value::Null)
-            }
-            Request::RouteMount { name, mounted } => {
-                let runs = self.route_mounts.iter().filter(|(route, _)| *route == name);
-                runs.for_each(|(_, run)| run(&self.host, mounted));
-                Ok(serde_json::Value::Null)
-            }
-            Request::FenceGone { key } => {
-                self.fence_gone.iter().for_each(|run| run(key));
-                Ok(serde_json::Value::Null)
-            }
-            Request::Cancelled { id } => {
-                self.cancelled.iter().for_each(|run| run(&self.host, id));
-                Ok(serde_json::Value::Null)
-            }
-            Request::Deltas { events } => {
-                self.deltas.iter().for_each(|run| run(&self.host, &events));
-                Ok(serde_json::Value::Null)
-            }
-            Request::View { surface, mount, input, next } => {
-                let surface = self.surfaces.get(surface).ok_or("no such surface")?;
-                let mut memo = self.memos.borrow_mut().remove(&mount.generation).unwrap_or_default();
-                let (mut next, mut content, mut released) = (next, Vec::new(), Vec::new());
-                let mut give = |bytes: Vec<u8>| {
-                    next += 1;
-                    content.push((v2::ContentRef(next), Blob(bytes)));
-                    v2::ContentRef(next)
-                };
-                let mut release = |handle| released.push(handle);
-                let node = for_mount(Some(&mount), || {
-                    (surface.view)(&mut v2::View::new(&self.host, &input, &mount, &mut memo, &mut give, &mut release))
-                });
-                self.lowered(&node)?;
-                // The table keeps what the returned tree holds. A tree the host refuses is followed by a request for a
-                // whole one, whose view starts with an empty table.
-                memo.finish(std::slice::from_ref(&node));
-                let reply = ViewReply { node, content, released, memo: memo.len() };
-                self.memos.borrow_mut().insert(mount.generation, memo);
-                json(serde_json::to_value(reply))
-            }
-            Request::Draw { .. } => Err("a draw answers with the list's bytes, not JSON".to_owned()),
-            Request::Claim { claim, mount, input, part, next } => {
-                let claim = self.claims.get(claim).ok_or("no such claim")?;
-                let mut memo = self.memos.borrow_mut().remove(&mount.generation).unwrap_or_default();
-                let (mut next, mut content, mut released) = (next, Vec::new(), Vec::new());
-                let mut give = |bytes: Vec<u8>| {
-                    next += 1;
-                    content.push((v2::ContentRef(next), Blob(bytes)));
-                    v2::ContentRef(next)
-                };
-                let mut release = |handle| released.push(handle);
-                let node = for_mount(Some(&mount), || {
-                    (claim.view)(
-                        &mut v2::View::new(&self.host, &input, &mount, &mut memo, &mut give, &mut release),
-                        &part,
-                    )
-                });
-                if let Some(node) = &node {
-                    self.lowered(node)?;
-                }
-                // A declined part keeps its table: the host asks for a whole tree when it next shows the part.
-                match &node {
-                    Some(node) => memo.finish(std::slice::from_ref(node)),
-                    None => memo.discard(),
-                }
-                let reply = claim::Reply { node, content, released, memo: memo.len() };
-                self.memos.borrow_mut().insert(mount.generation, memo);
-                json(serde_json::to_value(reply))
-            }
-            Request::Unmount { mount } => {
-                self.memos.borrow_mut().remove(&mount.generation);
-                Ok(serde_json::Value::Null)
-            }
-            Request::Message { message } => {
-                let run = self.message.as_ref().ok_or("no message handler")?;
-                run(&self.host, mail::Message::Json(message));
-                Ok(serde_json::Value::Null)
-            }
-            Request::Layout { surface, geometry } => {
-                let layout =
-                    self.surfaces.get(surface).and_then(|surface| surface.layout.as_ref()).ok_or("no layout")?;
-                json(serde_json::to_value(for_mount(geometry.mount.as_ref(), || layout(&geometry))))
-            }
-            Request::Input { to, event } => {
-                let (handler, mount) = match to {
-                    InputTo::Surface { surface, mount } => {
-                        (self.surfaces.get(surface).and_then(|surface| surface.handler.clone()), mount)
-                    }
-                    InputTo::Layer { layer } => (self.layers.get(layer).map(|(_, handler)| handler.clone()), None),
-                };
-                let handler = handler.ok_or("no such handler")?;
-                json(serde_json::to_value(for_mount(mount.as_ref(), || handler(&self.host, &event))))
-            }
-            Request::Search { name, query, options } => {
-                let (_, search) = self.searches.iter().find(|(known, _)| *known == name).ok_or("no such search")?;
-                json(serde_json::to_value(search(&self.host, &query, &options)))
-            }
-        }
-    }
 }
 
-/// A plugin the host runs in process: its ID and setup, as [`plugin!`] takes them.
+/// A plugin the host runs in process: its ID and setup.
 #[derive(Clone, Copy)]
 pub struct Plugin {
     pub id: &'static str,
     pub setup: fn(&mut Setup) -> Result<(), String>,
-}
-
-/// Exports a plugin from its setup, `fn setup(setup: &mut Setup) -> Result<(), String>`: `plugin!(setup)` with the
-/// crate's package name as the plugin's ID, or `plugin!(id = "my.plugin", setup)`. The macro holds every `unsafe` the
-/// C ABI needs: it exports [`ENTRY`] with the current [`PluginApi`], catches every panic at the edge, and describes
-/// the plugin with the crate's version, so the author writes none.
-///
-/// A plugin that cannot work without what a later 2.x minor adds asks for that host with `requires_minor`, and an older
-/// host refuses it at load with a message naming both versions; one that can do without reads [`Read::abi`] and falls
-/// back ([`v2::View::or`]). One that needs an optional host feature names it with `requires`:
-///
-/// ```ignore
-/// plugin!(id = "my.plugin", requires_minor = 1, setup);
-/// plugin!(id = "my.plugin", requires_minor = 1, requires = ["terminal"], setup);
-/// ```
-#[cfg(feature = "c-abi")]
-#[macro_export]
-macro_rules! plugin {
-    // A plugin that cannot work without the optional host features it names (`Metadata::requires`).
-    (id = $id:expr, requires = [$($feature:expr),* $(,)?], $setup:path) => {
-        $crate::plugin!(id = $id, requires_minor = 0, requires = [$($feature),*], $setup);
-    };
-    // A plugin that cannot work without what host minor `requires_minor` of ABI 2 added.
-    (id = $id:expr, requires_minor = $requires:expr, requires = [$($feature:expr),* $(,)?], $setup:path) => {
-        $crate::export_plugin!(@entry $crate::ABI_MAJOR, $crate::ABI_MINOR, $requires, $id, $setup, [$($feature),*]);
-    };
-    (id = $id:expr, requires_minor = $requires:expr, $setup:path) => {
-        $crate::plugin!(id = $id, requires_minor = $requires, requires = [], $setup);
-    };
-    (id = $id:expr, $setup:path) => {
-        $crate::plugin!(id = $id, requires_minor = 0, requires = [], $setup);
-    };
-    ($setup:path) => {
-        $crate::plugin!(id = env!("CARGO_PKG_NAME"), $setup);
-    };
-}
-
-/// What [`plugin!`] expands to, and the entries the loader's tests wire a setup through: not for plugins, which call
-/// [`plugin!`].
-#[doc(hidden)]
-#[cfg(feature = "c-abi")]
-#[macro_export]
-macro_rules! export_plugin {
-    // A plugin that pretends to be built against another version, for the loader's tests.
-    (@version $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path) => {
-        $crate::export_plugin!(@entry $major, $minor, $requires, $id, $setup, []);
-    };
-    (@entry $major:expr, $minor:expr, $requires:expr, $id:expr, $setup:path, [$($feature:expr),*]) => {
-        // A panic is caught at the edge only when it unwinds; with `abort` it would end the client.
-        #[cfg(panic = "abort")]
-        compile_error!("an opencode plugin must be built with panic = \"unwind\"");
-        #[unsafe(no_mangle)]
-        pub extern "C" fn opencode_plugin_v2() -> *const $crate::PluginApi {
-            unsafe extern "C" fn create(
-                host: *const $crate::HostApi,
-                options: $crate::Bytes,
-                instance: *mut *mut ::std::ffi::c_void,
-                out: *mut $crate::Owned,
-            ) -> i32 {
-                // SAFETY: the host passes the pointers `PluginApi::create` documents, which `runtime::create` requires.
-                unsafe { $crate::runtime::create($id, $setup, host, options, instance, out) }
-            }
-            unsafe extern "C" fn describe(out: *mut $crate::Owned) -> i32 {
-                // SAFETY: the host passes an `out` valid for writes, as `PluginApi::describe` documents.
-                unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), &[$($feature),*], out) }
-            }
-            static API: $crate::PluginApi = $crate::runtime::table($major, $minor, $requires, create, describe);
-            &API
-        }
-    };
-    // The `create` and `describe` of `$setup`, for tests that wire a plugin through the byte shims
-    // (`loader::native::loopback`); a library describes itself with its ID before any `create`.
-    (@loopback $id:expr, $setup:expr) => {{
-        let (create, describe) = $crate::export_plugin!(@loopback_described $id, $setup);
-        $crate::runtime::Loopback { create, describe }
-    }};
-    // The `create` of `$setup` alone, for a test that builds its own table.
-    (@loopback_create $id:expr, $setup:expr) => {{
-        #[allow(unsafe_code)]
-        unsafe extern "C" fn create(
-            host: *const $crate::HostApi,
-            options: $crate::Bytes,
-            instance: *mut *mut ::std::ffi::c_void,
-            out: *mut $crate::Owned,
-        ) -> i32 {
-            // SAFETY: the loader passes what `PluginApi::create` documents.
-            unsafe { $crate::runtime::create($id, $setup, host, options, instance, out) }
-        }
-        create
-    }};
-    // The `create` and `describe` of `$setup`, for `loader::native::loopback_described`.
-    (@loopback_described $id:expr, $setup:expr) => {{
-        #[allow(unsafe_code)]
-        unsafe extern "C" fn describe(out: *mut $crate::Owned) -> i32 {
-            // SAFETY: the loader passes what `PluginApi::describe` documents.
-            unsafe { $crate::runtime::describe($id, env!("CARGO_PKG_VERSION"), &[], out) }
-        }
-        ($crate::export_plugin!(@loopback_create $id, $setup), describe)
-    }};
-}
-
-/// The shims [`plugin!`] wires into [`PluginApi`]. Each catches panics, so none unwinds into the host.
-#[doc(hidden)]
-#[cfg(feature = "c-abi")]
-pub mod runtime {
-    use super::*;
-
-    /// A plugin has its own copy of std and so its own panic hook. The default one prints to stderr, over the TUI; the
-    /// host shows the caught message instead, so the first `create` silences it.
-    static QUIET: std::sync::Once = std::sync::Once::new();
-
-    /// Keeps the process's panic hook: for a host that links these shims into its own process, as a test does, whose
-    /// std is the plugin's. It marks the hook silenced without touching it, so no `create` replaces it.
-    pub fn keep_panic_hook() {
-        QUIET.call_once(|| {});
-    }
-
-    /// The table [`plugin!`] exports, built here rather than in the plugin's crate, so an entry a later 2.x appends to
-    /// [`PluginApi`] is no break of the plugin's source.
-    pub const fn table(
-        major: u32,
-        minor: u32,
-        requires_minor: u32,
-        create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
-        describe: unsafe extern "C" fn(*mut Owned) -> i32,
-    ) -> PluginApi {
-        PluginApi {
-            size: size_of::<PluginApi>(),
-            major,
-            minor,
-            requires_minor,
-            create: Some(create),
-            call: Some(call),
-            destroy: Some(destroy),
-            free: Some(free),
-            describe: Some(describe),
-        }
-    }
-
-    /// The entries `export_plugin!(@loopback ..)` makes of a setup, for the loader's tests.
-    #[derive(Clone, Copy)]
-    pub struct Loopback {
-        pub create: unsafe extern "C" fn(*const HostApi, Bytes, *mut *mut c_void, *mut Owned) -> i32,
-        pub describe: unsafe extern "C" fn(*mut Owned) -> i32,
-    }
-
-    /// Runs `setup`. When it fails or panics, the dispose callbacks it registered run before this returns, while the
-    /// host is still valid.
-    ///
-    /// # Safety
-    /// The host's pointers must be valid as [`PluginApi::create`] documents.
-    pub unsafe fn create(
-        id: &str,
-        setup: fn(&mut Setup) -> Result<(), String>,
-        host: *const HostApi,
-        options: Bytes,
-        instance: *mut *mut c_void,
-        out: *mut Owned,
-    ) -> i32 {
-        QUIET.call_once(|| std::panic::set_hook(Box::new(|_| {})));
-        // SAFETY: the host passes valid pointers for the length of the call.
-        let options = unsafe { options.checked() };
-        guard(out, || {
-            let options = options.map_err(|error| format!("the host passed bad options: {error}"))?;
-            if instance.is_null() {
-                return Err("no instance pointer".to_owned());
-            }
-            // Setup runs only with a host it can talk to: a table of ABI 2 with every entry of 2.0.
-            if HostHandle::new(host).core().is_none() {
-                return Err(format!(
-                    "the host passed no plugin table of ABI {ABI_MAJOR}.0 or newer; this plugin needs opencode-native \
-                     with plugin ABI {ABI_MAJOR}"
-                ));
-            }
-            let options = (!options.is_empty()).then(|| String::from_utf8_lossy(options).into_owned());
-            let mut registered = Registered::with_host(id, options, host);
-            match catch_unwind(AssertUnwindSafe(|| setup(&mut registered.setup()))) {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    registered.dispose(None);
-                    return Err(error);
-                }
-                Err(panic) => {
-                    registered.dispose(None);
-                    std::panic::resume_unwind(panic);
-                }
-            }
-            let manifest = serde_json::to_vec(&registered.manifest).map_err(|error| error.to_string())?;
-            // SAFETY: `instance` is non-null and valid for writes during the call.
-            unsafe { *instance = Box::into_raw(Box::new(registered)).cast() };
-            Ok(manifest)
-        })
-    }
-
-    /// # Safety
-    /// `out` must be valid for writes.
-    pub unsafe fn describe(id: &str, version: &str, requires: &[&str], out: *mut Owned) -> i32 {
-        guard(out, || {
-            let requires = requires.iter().map(|feature| (*feature).to_owned()).collect();
-            let metadata = Metadata { version: Some(version.to_owned()), id: Some(id.to_owned()), requires };
-            serde_json::to_vec(&metadata).map_err(|error| error.to_string())
-        })
-    }
-
-    /// # Safety
-    /// `instance` must come from [`create`] and not be destroyed, or be null.
-    pub unsafe extern "C" fn call(instance: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
-        // SAFETY: as documented.
-        let (registered, request) = unsafe { (instance.cast::<Registered>().as_ref(), request.checked()) };
-        guard(out, || {
-            let request = request.map_err(|error| format!("the host sent a bad request: {error}"))?;
-            let registered = registered.ok_or("no instance")?;
-            let request: Request = serde_json::from_slice(request).map_err(|error| error.to_string())?;
-            // A draw answers with its list's bytes as they are, which JSON would only wrap.
-            if let Request::Draw { surface, mount, canvas, frame } = request {
-                return registered.draw(surface, &mount, &canvas, frame);
-            }
-            let value = registered.handle(request)?;
-            serde_json::to_vec(&value).map_err(|error| error.to_string())
-        })
-    }
-
-    /// # Safety
-    /// `instance` must come from [`create`] and not be destroyed, or be null.
-    pub unsafe extern "C" fn destroy(instance: *mut c_void) {
-        if instance.is_null() {
-            return;
-        }
-        // SAFETY: as documented.
-        let mut registered = unsafe { Box::from_raw(instance.cast::<Registered>()) };
-        let _ = catch_unwind(AssertUnwindSafe(move || {
-            registered.dispose(None);
-            drop(registered);
-        }));
-    }
-
-    /// # Safety
-    /// `owned` must come from this library; only its `ptr` and `cap` are read.
-    pub unsafe extern "C" fn free(owned: Owned) {
-        // SAFETY: as documented.
-        unsafe { owned.release() };
-    }
-
-    /// Runs `f` and writes its result into `out`. With a null `out` nothing runs: there is nowhere to put the
-    /// result.
-    fn guard(out: *mut Owned, f: impl FnOnce() -> Result<Vec<u8>, String>) -> i32 {
-        if out.is_null() {
-            return ERROR;
-        }
-        let (status, bytes) = match catch_unwind(AssertUnwindSafe(f)) {
-            Ok(Ok(bytes)) => (OK, bytes),
-            Ok(Err(error)) => (ERROR, error.into_bytes()),
-            Err(panic) => (PANIC, panic_message(&*panic).into_bytes()),
-        };
-        // SAFETY: `out` is non-null and valid for writes during the call.
-        unsafe { *out = Owned::from_vec(bytes) };
-        status
-    }
 }
 
 /// The text of a caught panic.
@@ -5026,353 +4135,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn call(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
-        // SAFETY: the host handle passes an `out` valid for writes, as `HostApi::call` documents.
-        unsafe { *out = Owned::EMPTY };
-        ERROR
-    }
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn free(_: Owned) {}
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn light(_: *mut c_void) -> u32 {
-        THEME_LIGHT
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn the_theme_mode_is_read_only_when_the_host_offers_it() {
-        let current = HostApi { theme_mode: Some(light), features: Bytes::new(&[]), ..host_table() };
-        assert_eq!(HostHandle::new(&current).mode(), Some(ThemeMode::Light));
-        let null = HostApi { theme_mode: None, ..current };
-        assert_eq!(HostHandle::new(&null).mode(), None);
-        let short = HostApi { size: std::mem::offset_of!(HostApi, features), ..current };
-        assert_eq!(HostHandle::new(&short).mode(), None);
-    }
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn answer(ctx: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
-        // SAFETY: the test passes a live counter.
-        unsafe { &*ctx.cast::<std::sync::atomic::AtomicUsize>() }.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        // SAFETY: the host handle passes an `out` valid for writes, as `HostApi::call` documents.
-        unsafe { *out = Owned::EMPTY };
-        OK
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn a_host_of_another_major_is_no_host() {
-        let calls = std::sync::atomic::AtomicUsize::new(0);
-        let ctx = std::ptr::from_ref(&calls).cast_mut().cast();
-        let api = HostApi {
-            major: ABI_MAJOR + 1,
-            ctx,
-            call: Some(answer),
-            theme_mode: Some(light),
-            wake: Some(wake),
-            features: Bytes::new(&[]),
-            ..host_table()
-        };
-        for major in [1, ABI_MAJOR + 1] {
-            let host = HostHandle::new(&HostApi { major, minor: 6, ..api });
-            assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
-            assert_eq!((host.abi(), host.mode(), host.waker().is_none()), (Abi::new(0, 0, Vec::new()), None, true));
-        }
-        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
-        let current = HostHandle::new(&HostApi { major: ABI_MAJOR, minor: 0, ..api });
-        assert_eq!((current.abi().major, current.abi().minor), (ABI_MAJOR, 0));
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn a_table_shorter_than_its_core_is_not_read() {
-        let calls = std::sync::atomic::AtomicUsize::new(0);
-        let ctx = std::ptr::from_ref(&calls).cast_mut().cast();
-        let api = HostApi {
-            size: std::mem::offset_of!(HostApi, ctx),
-            ctx,
-            call: Some(answer),
-            theme_mode: Some(light),
-            wake: Some(wake),
-            features: Bytes::new(&[]),
-            ..host_table()
-        };
-        for size in [std::mem::offset_of!(HostApi, ctx), std::mem::offset_of!(HostApi, features)] {
-            let host = HostHandle::new(&HostApi { size, ..api });
-            assert_eq!(host.request(&HostRequest::Route), Err("no host".to_owned()));
-            assert_eq!((host.mode(), host.waker().is_none()), (None, true));
-        }
-        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
-        let bytes = [0u64; 16];
-        let misaligned = HostHandle::new(bytes.as_ptr().cast::<u8>().wrapping_add(1).cast());
-        assert_eq!(misaligned.request(&HostRequest::Route), Err("no host".to_owned()));
-        let full = HostHandle::new(&HostApi { size: size_of::<HostApi>(), ..api });
-        assert!(full.request(&HostRequest::Route).is_err_and(|error| error.contains("EOF")));
-        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
-    }
-
-    thread_local! {
-        /// The descriptors the fake host's `free` took back, in order.
-        static FREED: std::cell::RefCell<Vec<(usize, usize, usize)>> = const { std::cell::RefCell::new(Vec::new()) };
-    }
-
-    /// A host whose `call` answers what `ctx`, a `(status, Owned)`, holds, as it holds it.
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn answer_as(ctx: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
-        // SAFETY: the test passes a live row.
-        let (status, owned) = unsafe { &*ctx.cast::<(i32, Owned)>() };
-        // SAFETY: the host handle passes an `out` valid for writes, as `HostApi::call` documents.
-        unsafe { *out = Owned { ptr: owned.ptr, len: owned.len, cap: owned.cap } };
-        *status
-    }
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn counted_free(owned: Owned) {
-        FREED.with(|freed| freed.borrow_mut().push((owned.ptr as usize, owned.len, owned.cap)));
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn the_sdk_refuses_a_host_buffer_the_host_cannot_have_written() {
-        let mut json = *b"null      ";
-        let ptr = json.as_mut_ptr();
-        let rows: [(_, Result<serde_json::Value, &str>); 7] = [
-            ((OK, Owned { ptr, len: 4, cap: 10 }), Ok(serde_json::Value::Null)),
-            ((OK, Owned { ptr: std::ptr::null_mut(), len: 5, cap: 5 }), Err("a null buffer of 5 bytes")),
-            // The bytes past `cap` are there and read as JSON: only the check refuses them.
-            ((OK, Owned { ptr, len: 10, cap: 4 }), Err("a buffer of 10 bytes in 4 of room")),
-            ((OK, Owned { ptr, len: MAX_BUFFER + 1, cap: usize::MAX }), Err("over")),
-            ((ERROR, Owned { ptr, len: 10, cap: 4 }), Err("in 4 of room")),
-            ((PANIC, Owned { ptr: std::ptr::null_mut(), len: 1, cap: 0 }), Err("a null buffer")),
-            ((ERROR, Owned { ptr, len: 4, cap: 10 }), Err("null")),
-        ];
-        for (index, (row, expected)) in rows.into_iter().enumerate() {
-            let api = HostApi {
-                ctx: std::ptr::from_ref(&row).cast_mut().cast(),
-                call: Some(answer_as),
-                free: Some(counted_free),
-                features: Bytes::new(&[]),
-                ..host_table()
-            };
-            FREED.with(|freed| freed.borrow_mut().clear());
-            let got = HostHandle::new(&api).request(&HostRequest::Route);
-            match expected {
-                Ok(value) => assert_eq!(got, Ok(value), "row {index}"),
-                Err(needle) => assert!(got.as_ref().is_err_and(|error| error.contains(needle)), "row {index}: {got:?}"),
-            }
-            let freed = FREED.with(|freed| freed.borrow().clone());
-            assert_eq!(
-                freed,
-                [(row.1.ptr as usize, row.1.len, row.1.cap)],
-                "row {index} was not freed once, as it came"
-            );
-        }
-    }
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn null_call(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
-        // SAFETY: the SDK passes an `out` valid for writes.
-        unsafe { *out = Owned::from_vec(b"null".to_vec()) };
-        OK
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn a_later_node_lowers_to_its_fallback_on_an_older_host() {
-        fn text() -> v2::Node {
-            v2::Node::text(vec![Span::new("hi")]).with_id("n")
-        }
-        fn later() -> v2::Node {
-            v2::Node::Later { id: Some("n".into()), text: "hi".into() }
-        }
-        fn lowering(setup: &mut Setup) -> Result<(), String> {
-            setup.surface(v2::Surface::new("s", v2::Place::Route("r".into()), |cx| cx.or(later(), |_| text())));
-            Ok(())
-        }
-        fn fallback(setup: &mut Setup) -> Result<(), String> {
-            setup.surface(v2::Surface::new("s", v2::Place::Route("r".into()), |_| text()));
-            Ok(())
-        }
-        fn forgetting(setup: &mut Setup) -> Result<(), String> {
-            setup.surface(v2::Surface::new("s", v2::Place::Route("r".into()), |_| later()));
-            Ok(())
-        }
-        let features = br#"["f"]"#;
-        let viewed = |setup: fn(&mut Setup) -> Result<(), String>, minor: u32| {
-            let api = HostApi {
-                minor,
-                call: Some(null_call),
-                free: Some(runtime::free),
-                features: Bytes::new(features),
-                ..host_table()
-            };
-            let mut registered = Registered::with_host("t", None, &api);
-            setup(&mut registered.setup()).unwrap();
-            assert_eq!(registered.setup().abi(), Abi::new(ABI_MAJOR, minor, vec!["f".to_owned()]));
-            let mount = v2::MountId { surface: "s".into(), key: "s".into(), generation: 1 };
-            let request = Request::View { surface: 0, mount, input: v2::SurfaceInput::default(), next: 0 };
-            registered.handle(request).map(|reply| serde_json::to_string(&reply).unwrap())
-        };
-        let old = viewed(lowering, 0).unwrap();
-        assert_eq!(old, viewed(fallback, 0).unwrap(), "the older host's tree is not the fallback's");
-        assert!(!old.contains("later"), "{old}");
-        assert!(viewed(lowering, 1).unwrap().contains(r#""type":"later""#));
-        let refused = viewed(forgetting, 0).unwrap_err();
-        assert!(refused.contains("ABI 2.1") && refused.contains("(2.0) lacks"), "{refused}");
-        assert!(viewed(forgetting, 1).is_ok());
-        assert_eq!(Registered::new("t", None).setup().abi(), Abi::current());
-    }
-
-    thread_local! {
-        /// The requests the fake host below was sent, by type.
-        static ASKED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
-    }
-
-    /// A host that answers every request with `0`.
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn zero_call(_: *mut c_void, _: Bytes, out: *mut Owned) -> i32 {
-        // SAFETY: `out` is valid for writes.
-        unsafe { *out = Owned::from_vec(b"0".to_vec()) };
-        OK
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn a_request_id_of_zero_is_a_malformed_answer() {
-        let api = HostApi { call: Some(zero_call), free: Some(runtime::free), ..host_table() };
-        let host = HostHandle::new(&api);
-        let fetch = || Fetch::new("GET", "/api/session");
-        let program = || Foreground::new("true");
-        assert!(host.try_fetch(fetch()).is_err_and(|error| error.contains("request ID 0")));
-        assert!(host.try_foreground(program()).is_err_and(|error| error.contains("request ID 0")));
-    }
-
-    /// A host that states image bounds of 100 bytes and 10 pixels a side, and answers an image's size as [4, 3].
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn bounded_call(_: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
-        // SAFETY: the SDK lends the request for the call.
-        let request: serde_json::Value = serde_json::from_slice(unsafe { request.as_slice() }).unwrap();
-        let kind = request["type"].as_str().unwrap_or_default().to_owned();
-        let answer = match kind.as_str() {
-            "image-bounds" => r#"{"bytes":100,"side":10}"#,
-            _ => "[4,3]",
-        };
-        ASKED.with_borrow_mut(|asked| asked.push(kind));
-        // SAFETY: `out` is valid for writes.
-        unsafe { *out = Owned::from_vec(answer.as_bytes().to_vec()) };
-        OK
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn image_size_past_the_host_s_bounds_answers_without_the_host() {
-        let png = |side: u32| {
-            let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
-            bytes.extend(side.to_be_bytes());
-            bytes.extend(side.to_be_bytes());
-            bytes
-        };
-        for (features, expected) in [
-            (&br#"["image-bounds"]"#[..], ["image-bounds", "image-size"].as_slice()),
-            (&b"[]"[..], ["image-size", "image-size", "image-size"].as_slice()),
-        ] {
-            ASKED.with_borrow_mut(Vec::clear);
-            let api = HostApi {
-                call: Some(bounded_call),
-                free: Some(runtime::free),
-                features: Bytes::new(features),
-                ..host_table()
-            };
-            let host = HostHandle::new(&api);
-            let sizes = [host.image_size(&[0; 200]), host.image_size(&png(11)), host.image_size(&png(9))];
-            let bounded = expected.len() == 2;
-            let past = if bounded { None } else { Some((4, 3)) };
-            assert_eq!(sizes, [past, past, Some((4, 3))], "features {}", String::from_utf8_lossy(features));
-            assert_eq!(ASKED.with_borrow(Vec::clone), expected, "features {}", String::from_utf8_lossy(features));
-        }
-        assert!(FEATURES.contains(&IMAGE_BOUNDS));
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn image_bounds_end_with_their_instance() {
-        let mut api = HostApi {
-            call: Some(bounded_call),
-            free: Some(runtime::free),
-            features: Bytes::new(br#"["image-bounds"]"#),
-            ..host_table()
-        };
-        ASKED.with_borrow_mut(Vec::clear);
-        let first = Registered::with_host("a", None, &api);
-        assert_eq!(first.host.image_size(&[0; 200]), None);
-        drop(first);
-        api.features = Bytes::new(b"[]");
-        let second = Registered::with_host("b", None, &api);
-        assert_eq!(second.host.image_size(&[0; 200]), Some((4, 3)), "the first instance's bounds outlived it");
-        assert_eq!(ASKED.with_borrow(Vec::clone), ["image-bounds", "image-size"]);
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn borrowed_bytes_and_free_check_what_they_can() {
-        let bytes = b"abc";
-        let refused = [
-            (Bytes { ptr: std::ptr::null(), len: 2 }, "a null buffer of 2 bytes"),
-            (Bytes { ptr: bytes.as_ptr(), len: MAX_BUFFER + 1 }, "over"),
-        ];
-        for (borrowed, needle) in refused {
-            // SAFETY: refused before anything is read, as the test checks.
-            assert!(unsafe { borrowed.checked() }.is_err_and(|error| error.contains(needle)));
-            // SAFETY: refused before anything is read, so `as_slice` reads nothing.
-            assert!(unsafe { borrowed.as_slice() }.is_empty());
-        }
-        // SAFETY: `Bytes::new` borrows `bytes`, which outlives the slice.
-        assert_eq!(unsafe { Bytes::new(bytes).checked() }, Ok(&bytes[..]));
-        // SAFETY: a null descriptor of no length reads nothing.
-        assert_eq!(unsafe { Bytes { ptr: std::ptr::null(), len: 0 }.checked() }, Ok(&[][..]));
-        let mut owned = Owned::from_vec(b"abcdef".to_vec());
-        owned.len = usize::MAX;
-        // SAFETY: `ptr` and `cap` are `from_vec`'s.
-        unsafe { runtime::free(owned) };
-    }
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn wake(ctx: *mut c_void) {
-        // SAFETY: the test passes a live counter.
-        unsafe { &*ctx.cast::<std::sync::atomic::AtomicUsize>() }.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn a_waker_wakes_the_host_from_another_thread_when_the_host_offers_it() {
-        let wakes = std::sync::atomic::AtomicUsize::new(0);
-        let ctx = std::ptr::from_ref(&wakes).cast_mut().cast();
-        let api = HostApi { ctx, wake: Some(wake), features: Bytes::new(&[]), ..host_table() };
-        let waker = HostHandle::new(&api).waker().unwrap();
-        std::thread::spawn(move || waker.wake()).join().unwrap();
-        assert_eq!(wakes.load(std::sync::atomic::Ordering::SeqCst), 1);
-        assert!(HostHandle::new(&HostApi { wake: None, ..api }).waker().is_none());
-        let short = HostApi { size: std::mem::offset_of!(HostApi, send), ..api };
-        assert!(HostHandle::new(&short).waker().is_none());
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn a_null_host_or_host_callback_is_an_error() {
-        let set = HostRequest::StorageSet { key: "count".into(), value: "{}".into() };
-        let host = HostHandle::new(std::ptr::null());
-        assert_eq!(host.storage_text("count"), None);
-        assert_eq!(host.request(&set), Err("no host".to_owned()));
-        assert_eq!(host.mode(), None);
-        assert!(host.waker().is_none());
-        let api = HostApi { call: None, free: None, features: Bytes::new(&[]), ..host_table() };
-        assert_eq!(HostHandle::new(&api).request(&set), Err("the host takes no requests".to_owned()));
-        let api = HostApi { call: Some(call), ..api };
-        assert_eq!(HostHandle::new(&api).request(&set), Err("the host takes no requests".to_owned()));
-    }
-
     #[test]
     fn colors_and_rows_round_trip() {
         let line = vec![Span { bg: Some(Rgba::new(255, 255, 255, 20).into()), ..Span::new("a").fg("#102030") }];
@@ -5389,254 +4151,6 @@ mod tests {
         assert_eq!(Rgba::parse("#0a0b0c"), Some(Rgba::new(10, 11, 12, 255)));
         assert_eq!(Rgba::parse("#0a0b0"), None);
         assert_eq!(Rgba::parse("#+a+b+c"), None);
-    }
-
-    #[test]
-    fn an_unknown_slot_index_is_refused() {
-        let mut registered = Registered::new("new", None);
-        let mut setup = registered.setup();
-        setup.slot(Placement::append("sidebar.content"), |_, input, _| match &input.session_id {
-            Some(_) => Render::Hide,
-            None => Render::Keep,
-        });
-        assert_eq!(setup.renders().count(), 1);
-        let render = |claim| Request::Render { claim, input: SlotInput::default(), changed: Changed::everything() };
-        assert_eq!(setup.handle(render(0)).unwrap(), serde_json::json!({ "type": "keep" }));
-        assert!(setup.handle(render(1)).is_err());
-    }
-
-    #[test]
-    fn replies_reach_all_handlers_but_zero_reaches_none() {
-        let mut registered = Registered::new("new", None);
-        let mut setup = registered.setup();
-        setup.route("page", |_, changed| match changed.woken {
-            true => Render::Hide,
-            false => Render::Keep,
-        });
-        let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
-        for _ in 0..2 {
-            let into = seen.clone();
-            setup.on_reply(move |_, id, result| into.borrow_mut().push((id, result)));
-        }
-        assert_eq!(setup.manifest().routes, ["page"]);
-        let render =
-            Request::RenderRoute { name: "page".into(), changed: Changed { woken: true, ..Changed::default() } };
-        assert_eq!(setup.handle(render).unwrap(), serde_json::json!({ "type": "hide" }));
-        let reply = Request::Reply { id: RequestId(7), result: Err("gone".into()) };
-        let reply = serde_json::from_slice(&serde_json::to_vec(&reply).unwrap()).unwrap();
-        assert_eq!(setup.handle(reply).unwrap(), serde_json::Value::Null);
-        assert_eq!(*seen.borrow(), [(RequestId(7), Err("gone".to_owned())), (RequestId(7), Err("gone".to_owned()))]);
-        // A reply to ID 0, which names no request, is refused before a handler runs.
-        let zero = serde_json::json!({ "type": "reply", "id": 0, "result": { "Ok": null } });
-        assert!(setup.handle(serde_json::from_value(zero).unwrap()).is_err());
-        assert_eq!(seen.borrow().len(), 2, "a handler heard a reply to ID 0");
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn the_shims_check_null_pointers() {
-        let request = serde_json::to_vec(&Request::Wake).unwrap();
-        let mut out = Owned::EMPTY;
-        // SAFETY: null pointers are what is under test; `out` is freed by the same library.
-        unsafe {
-            assert_eq!(runtime::call(std::ptr::null_mut(), Bytes::new(&request), &mut out), ERROR);
-            assert_eq!(out.to_vec(), b"no instance");
-            runtime::free(out);
-            assert_eq!(runtime::call(std::ptr::null_mut(), Bytes::new(&request), std::ptr::null_mut()), ERROR);
-            runtime::destroy(std::ptr::null_mut());
-            let mut out = Owned::EMPTY;
-            let status =
-                runtime::create("x", |_| Ok(()), std::ptr::null(), Bytes::new(b""), std::ptr::null_mut(), &mut out);
-            assert_eq!((status, out.to_vec()), (ERROR, b"no instance pointer".to_vec()));
-            runtime::free(out);
-            let mut instance = std::ptr::null_mut();
-            let status = runtime::create(
-                "x",
-                |_| Ok(()),
-                std::ptr::null(),
-                Bytes::new(b""),
-                &mut instance,
-                std::ptr::null_mut(),
-            );
-            assert_eq!(status, ERROR);
-            assert!(instance.is_null());
-        }
-    }
-
-    thread_local! {
-        /// The dispose callbacks that ran on this thread, in order.
-        static DISPOSED: std::cell::RefCell<Vec<&'static str>> = const { std::cell::RefCell::new(Vec::new()) };
-    }
-
-    /// Registers three dispose callbacks, the middle one panicking, then fails as `options` says.
-    #[cfg(feature = "c-abi")]
-    fn failing(setup: &mut Setup) -> Result<(), String> {
-        let disposed = |name: &'static str| move |_: &dyn Host| DISPOSED.with(|ran| ran.borrow_mut().push(name));
-        setup.on_dispose(disposed("first"));
-        setup.on_dispose(|_| panic!("a dispose callback panicked"));
-        setup.on_dispose(disposed("last"));
-        match setup.options() {
-            Some("error") => Err("setup failed".to_owned()),
-            Some("panic") => panic!("setup panicked"),
-            _ => Ok(()),
-        }
-    }
-
-    /// A whole host table of 2.0 whose `call` answers every request with an error.
-    #[cfg(feature = "c-abi")]
-    fn host_table() -> HostApi {
-        HostApi {
-            size: size_of::<HostApi>(),
-            major: ABI_MAJOR,
-            minor: ABI_MINOR,
-            ctx: std::ptr::null_mut(),
-            call: Some(call),
-            free: Some(free),
-            theme_mode: None,
-            wake: None,
-            send: None,
-            report: None,
-            stopped: None,
-            features: Bytes::new(b"[]"),
-        }
-    }
-
-    thread_local! {
-        /// Whether [`counted_setup`] ran on this thread.
-        static SET_UP: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    }
-
-    #[cfg(feature = "c-abi")]
-    fn counted_setup(_: &mut Setup) -> Result<(), String> {
-        SET_UP.set(true);
-        Ok(())
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn create_refuses_a_host_table_it_cannot_read_before_setup() {
-        /// The host table of ABI 1.6, which ends before `send`.
-        #[repr(C)]
-        struct V1_6 {
-            size: usize,
-            major: u32,
-            minor: u32,
-            ctx: *mut c_void,
-            call: Option<unsafe extern "C" fn(*mut c_void, Bytes, *mut Owned) -> i32>,
-            free: Option<unsafe extern "C" fn(Owned)>,
-            theme_mode: Option<unsafe extern "C" fn(*mut c_void) -> u32>,
-            wake: Option<unsafe extern "C" fn(*mut c_void)>,
-        }
-        let old = V1_6 {
-            size: size_of::<V1_6>(),
-            major: 1,
-            minor: 6,
-            ctx: std::ptr::null_mut(),
-            call: Some(call),
-            free: Some(free),
-            theme_mode: None,
-            wake: None,
-        };
-        let short = HostApi { size: std::mem::offset_of!(HostApi, ctx), ..host_table() };
-        let whole = host_table();
-        let rows: [(&str, *const HostApi, bool); 4] = [
-            ("no table", std::ptr::null(), false),
-            ("a 1.6 table", std::ptr::from_ref(&old).cast(), false),
-            ("a 2.0 table cut to its header", &short, false),
-            ("a whole 2.0 table", &whole, true),
-        ];
-        for (name, host, takes) in rows {
-            SET_UP.set(false);
-            let (mut instance, mut out) = (std::ptr::null_mut(), Owned::EMPTY);
-            // SAFETY: each table lives for the call; `out` is freed by the same library.
-            let (status, text) = unsafe {
-                let status = runtime::create("x", counted_setup, host, Bytes::new(b""), &mut instance, &mut out);
-                let text = String::from_utf8_lossy(&out.to_vec()).into_owned();
-                runtime::free(out);
-                (status, text)
-            };
-            assert_eq!((status == OK, SET_UP.get(), !instance.is_null()), (takes, takes, takes), "{name}: {text}");
-            if takes {
-                // SAFETY: `instance` came from `create`.
-                unsafe { runtime::destroy(instance) };
-            } else {
-                assert!(text.contains("no plugin table of ABI 2.0"), "{name}: {text}");
-            }
-        }
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn a_failed_setup_disposes_what_it_registered() {
-        let hook = std::panic::take_hook();
-        let host = host_table();
-        for (options, status, message) in
-            [("error", ERROR, "setup failed"), ("panic", PANIC, "setup panicked"), ("", OK, "")]
-        {
-            let (mut instance, mut out) = (std::ptr::null_mut(), Owned::EMPTY);
-            // SAFETY: valid pointers for the call; `out` is freed by the same library.
-            let (got, bytes) = unsafe {
-                let got = runtime::create("x", failing, &host, Bytes::new(options.as_bytes()), &mut instance, &mut out);
-                let bytes = out.to_vec();
-                runtime::free(out);
-                (got, bytes)
-            };
-            assert_eq!(got, status, "{options}");
-            if status != OK {
-                assert_eq!(String::from_utf8(bytes).unwrap(), message);
-                assert!(instance.is_null());
-            } else {
-                assert!(DISPOSED.with(|ran| ran.borrow().is_empty()));
-                // SAFETY: `instance` came from `create`.
-                unsafe { runtime::destroy(instance) };
-            }
-            assert_eq!(DISPOSED.with(|ran| ran.take()), ["last", "first"], "{options}");
-        }
-        std::panic::set_hook(hook);
-    }
-
-    thread_local! {
-        /// The requests the recording host got on this thread.
-        static REQUESTS: std::cell::RefCell<Vec<HostRequest>> = const { std::cell::RefCell::new(Vec::new()) };
-    }
-
-    /// A host that records each request and refuses `storage-merge` when `ctx` is non-null.
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn record(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
-        // SAFETY: the plugin passes the request for the length of the call.
-        let request: HostRequest = serde_json::from_slice(unsafe { request.as_slice() }).unwrap();
-        let refused = !ctx.is_null() && matches!(request, HostRequest::StorageMerge { .. });
-        REQUESTS.with(|requests| requests.borrow_mut().push(request));
-        let bytes = if refused { b"unknown variant".to_vec() } else { b"null".to_vec() };
-        // SAFETY: `out` is valid for writes during the call.
-        unsafe { *out = Owned::from_vec(bytes) };
-        if refused { ERROR } else { OK }
-    }
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn release(owned: Owned) {
-        // SAFETY: `record` made it.
-        drop(unsafe { owned.into_vec() });
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn storage_merge_sends_the_fields() {
-        let fields = serde_json::json!({ "open": false }).as_object().cloned().unwrap();
-        for ctx in [std::ptr::null_mut(), std::ptr::dangling_mut::<u8>().cast()] {
-            let api =
-                HostApi { ctx, call: Some(record), free: Some(release), features: Bytes::new(&[]), ..host_table() };
-            HostHandle::new(&api).storage_merge("view", fields.clone());
-        }
-        let merge = HostRequest::StorageMerge { key: "view".into(), fields };
-        assert_eq!(
-            REQUESTS.with(|requests| requests.take()),
-            [
-                merge.clone(),
-                merge,
-                HostRequest::Log { level: Level::Warn, message: "storage view: unknown variant".into() },
-            ]
-        );
     }
 
     #[test]
@@ -5672,100 +4186,6 @@ mod tests {
         thread.join().unwrap();
         waker.wake();
         assert_eq!(wakes.load(Ordering::SeqCst), 1);
-    }
-
-    /// A host that takes only toasts and dialogs: it answers them `null`, logs every request in the `Vec` at `ctx`, and
-    /// answers every other request with an error.
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn toasts_only(ctx: *mut c_void, request: Bytes, out: *mut Owned) -> i32 {
-        // SAFETY: the test passes a live log and the request's bytes.
-        let (log, request) = unsafe { (&*ctx.cast::<std::sync::Mutex<Vec<String>>>(), request.as_slice()) };
-        let text = String::from_utf8_lossy(request).into_owned();
-        let json: serde_json::Value = serde_json::from_slice(request).unwrap();
-        let (status, reply) = match matches!(json["type"].as_str(), Some("toast" | "dialog")) {
-            true => (OK, b"null".to_vec()),
-            false => (ERROR, b"unsupported host request".to_vec()),
-        };
-        log.lock().unwrap().push(text);
-        // SAFETY: the host handle passes an `out` valid for writes, as `HostApi::call` documents.
-        unsafe { *out = Owned::from_vec(reply) };
-        status
-    }
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn free_buffer(owned: Owned) {
-        // SAFETY: `owned` is a reply `toasts_only` made with `Owned::from_vec`, handed back unchanged.
-        drop(unsafe { owned.into_vec() });
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn refused_reads_and_verbs_answer_their_defaults() {
-        let log = std::sync::Mutex::new(Vec::<String>::new());
-        let api = HostApi {
-            ctx: std::ptr::from_ref(&log).cast_mut().cast(),
-            call: Some(toasts_only),
-            free: Some(free_buffer),
-            features: Bytes::new(&[]),
-            ..host_table()
-        };
-        let host = HostHandle::new(&api);
-        assert_eq!((host.variants(), host.tabs_enabled(), host.tabs()), (Vec::new(), false, Vec::new()));
-        assert_eq!((host.keymap_pending(), host.keymap_active()), (Vec::new(), Vec::new()));
-        assert_eq!((host.keymap_commands(), host.shortcuts("x")), (Vec::new(), Vec::<String>::new()));
-        assert_eq!((host.selection(), host.theme(), host.themes()), (None, None, Vec::<String>::new()));
-        assert!(!host.set_variant(Some("high")));
-        assert!(!host.edit_tab(TabEdit::Focus { session: "ses_1".into() }));
-        assert!(!host.set_theme("nord"));
-        assert!(host.try_foreground(Foreground { command: "less".into(), ..Foreground::default() }).is_err());
-        host.set_model("p", "m");
-        host.clear_selection();
-        host.set_title("t");
-        host.install_theme("t", serde_json::json!({}));
-        host.toast(Toast::new(Variant::Info, "a"));
-        let panel = Panel::new("k", Vec::new(), Node::column(Vec::new())).size(PanelSize::XLarge);
-        host.dialog(Dialog::Panel(panel));
-        let log = std::mem::take(&mut *log.lock().unwrap());
-        let shown: Vec<&String> = log.iter().filter(|request| request.contains("\"type\":\"dialog\"")).collect();
-        assert_eq!(shown.len(), 1, "{log:?}");
-        assert!(shown[0].contains("\"size\":\"xlarge\""), "{log:?}");
-        assert_eq!(log.iter().filter(|request| request.contains("\"type\":\"toast\"")).count(), 1);
-        // Every read and verb above asked once, and nothing more.
-        assert_eq!(log.len(), 20, "{log:?}");
-    }
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn sent(_: *mut c_void, _: Bytes, _: Bytes) -> i32 {
-        OK
-    }
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn reported(_: *mut c_void, _: Bytes) {}
-
-    #[cfg(feature = "c-abi")]
-    unsafe extern "C" fn running(_: *mut c_void) -> u32 {
-        0
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn only_a_2_0_host_offers_threads_and_features() {
-        let features = br#"["terminal"]"#;
-        let api = HostApi {
-            send: Some(sent),
-            report: Some(reported),
-            stopped: Some(running),
-            features: Bytes::new(features),
-            ..host_table()
-        };
-        let host = HostHandle::new(&api);
-        assert!(host.link().is_some());
-        assert_eq!(host.features(), ["terminal"]);
-        let mut registered = Registered::with_host("x", None, &api);
-        assert_eq!(registered.setup().features(), ["terminal"]);
-        let old = HostApi { major: 1, minor: 4, ..api };
-        let host = HostHandle::new(&old);
-        assert!(host.link().is_none() && host.features().is_empty());
     }
 
     #[test]
@@ -5823,73 +4243,6 @@ mod tests {
         assert_eq!(json, r#"{"base64":"/wCJUE5H"}"#);
         assert_eq!(serde_json::from_str::<Blob>(&json).unwrap(), binary);
         assert_eq!(serde_json::to_string(&Blob(b"text".to_vec())).unwrap(), r#""text""#);
-
-        let mut registered = Registered::new("x", None);
-        let given = binary.0.clone();
-        registered.setup().surface(v2::Surface::new("s", v2::Place::Route("s".into()), move |cx| {
-            let handle = cx.content(given.clone());
-            v2::Node::Diff {
-                id: None,
-                content: v2::Source::Content(handle),
-                view: v2::DiffView::Unified,
-                filetype: None,
-                hunks: None,
-                wrap: Default::default(),
-                padding: 0,
-            }
-        }));
-        let mount = v2::MountId { surface: "s".into(), key: "s".into(), generation: 1 };
-        let request = Request::View { surface: 0, mount, input: v2::SurfaceInput::default(), next: 4 };
-        let reply: ViewReply = serde_json::from_value(registered.handle(request).unwrap()).unwrap();
-        assert_eq!(reply.content, [(v2::ContentRef(5), binary)]);
-    }
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn a_draw_answers_with_the_lists_bytes() {
-        let mut registered = Registered::new("x", None);
-        let surface = |name: &str| v2::Surface::new(name, v2::Place::Route(name.into()), |_| v2::Node::canvas("c"));
-        registered.setup().surface(surface("drawn").draw(|cx| {
-            (cx.frame.cause == v2::Cause::Animate).then(|| {
-                let mut list = canvas::List::new();
-                list.text(0, 0, cx.canvas, canvas::Style::new());
-                list
-            })
-        }));
-        registered.setup().surface(surface("still"));
-        let claims: Vec<bool> = registered.manifest.surfaces.iter().map(|claim| claim.draw).collect();
-        assert_eq!(claims, [true, false]);
-        let instance = Box::into_raw(Box::new(registered)).cast::<c_void>();
-        let draw = |surface: usize, cause: v2::Cause| {
-            let mount = v2::MountId { surface: "drawn".into(), key: "drawn".into(), generation: 1 };
-            let frame = v2::Frame { width: 4, height: 1, cause, dt: std::time::Duration::from_micros(16_667) };
-            let request = Request::Draw { surface, mount, canvas: "c".into(), frame };
-            let json = serde_json::to_value(&request).unwrap();
-            assert_eq!(
-                json["frame"],
-                serde_json::json!({ "width": 4, "height": 1, "cause": cause, "dt": { "secs": 0, "nanos": 16_667_000 } })
-            );
-            let mut out = Owned::EMPTY;
-            // SAFETY: `instance` is the registration above, destroyed below; `out` goes back to this library's `free`.
-            unsafe {
-                let status = runtime::call(instance, Bytes::new(&serde_json::to_vec(&json).unwrap()), &mut out);
-                let bytes = out.to_vec();
-                runtime::free(out);
-                (status, bytes)
-            }
-        };
-        let mut list = canvas::List::new();
-        list.text(0, 0, "c", canvas::Style::new());
-        assert_eq!(draw(0, v2::Cause::Animate), (OK, list.into_bytes()));
-        assert_eq!(draw(0, v2::Cause::Version), (OK, Vec::new()));
-        assert_eq!(draw(1, v2::Cause::First), (ERROR, b"the surface has no draw".to_vec()));
-        assert_eq!(draw(2, v2::Cause::First), (ERROR, b"no such surface".to_vec()));
-        // SAFETY: as above.
-        let registered = unsafe { Box::from_raw(instance.cast::<Registered>()) };
-        let mount = v2::MountId { surface: "drawn".into(), key: "drawn".into(), generation: 1 };
-        let frame = v2::Frame { width: 4, height: 1, cause: v2::Cause::First, dt: std::time::Duration::ZERO };
-        let json = registered.handle(Request::Draw { surface: 0, mount, canvas: "c".into(), frame });
-        assert_eq!(json, Err("a draw answers with the list's bytes, not JSON".to_owned()));
     }
 
     #[test]
@@ -5898,29 +4251,5 @@ mod tests {
         let spawner = Spawner::new("x.y", mail::Revocable::default());
         spawner.spawn("work", move |_| named.send(std::thread::current().name().map(str::to_owned)).unwrap()).unwrap();
         assert_eq!(name.recv().unwrap().as_deref(), Some("x.y:work"));
-    }
-
-    #[cfg(feature = "c-abi")]
-    fn named(_: &mut Setup) -> Result<(), String> {
-        Ok(())
-    }
-
-    #[cfg(feature = "c-abi")]
-    plugin!(named);
-
-    #[test]
-    #[cfg(feature = "c-abi")]
-    fn plugin_without_an_id_takes_the_package_name() {
-        let api = opencode_plugin_v2();
-        // SAFETY: the table the macro exported, with its `describe`.
-        let describe = unsafe { (*api).describe.unwrap() };
-        let mut out = Owned::EMPTY;
-        // SAFETY: `out` is valid for writes, and goes back to the shims' `free`.
-        let bytes = unsafe {
-            assert_eq!(describe(&mut out), OK);
-            out.into_vec()
-        };
-        let metadata: Metadata = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(metadata.id.as_deref(), Some("opencode-plugin-abi"));
     }
 }

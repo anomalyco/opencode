@@ -47,17 +47,14 @@ end)
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Carrier {
     InProcess,
-    CAbi,
     #[cfg(luau)]
     Luau,
 }
 
 #[test]
 fn a_ticking_plugin_that_changes_nothing_makes_no_frame() {
-    #[cfg_attr(not(any(luau, native)), allow(unused_mut))]
+    #[cfg_attr(not(luau), allow(unused_mut))]
     let mut carriers = vec![Carrier::InProcess];
-    #[cfg(native)]
-    carriers.push(Carrier::CAbi);
     #[cfg(luau)]
     carriers.push(Carrier::Luau);
     for carrier in carriers {
@@ -70,10 +67,6 @@ fn ticks_without_frames(carrier: Carrier) {
     let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     let host = opencode_tui::plugins::host::host(&h.tui);
     let definition = match carrier {
-        Carrier::CAbi => {
-            let entries = crate::support::loopback_entries!("test.tick", ticking);
-            crate::support::loopback(&host, entries).unwrap().0
-        }
         #[cfg(luau)]
         Carrier::Luau => {
             let sources = opencode_plugin::luau::Sources::from_files([
@@ -92,7 +85,7 @@ fn ticks_without_frames(carrier: Carrier) {
     let ticks = TICKS.get();
     let ticking = h.app.idle(Duration::from_secs(5));
     assert_eq!(ticking.frames, 0, "{carrier:?}: the ticks painted frames: {ticking:?}");
-    if matches!(carrier, Carrier::InProcess | Carrier::CAbi) {
+    if carrier == Carrier::InProcess {
         assert_eq!(TICKS.get() - ticks, 5, "{carrier:?}: it did not tick once a second");
     }
     let long = h.app.idle(Duration::from_secs(400));
@@ -134,7 +127,6 @@ export default {{ id: "example.timer", setup(api) {{
     let external = opencode_tui::plugins::host::External {
         config_dir: root.path().join("config"),
         cwd: root.path().to_path_buf(),
-        dev: Vec::new(),
     };
     opencode_tui::plugins::host::external_with(&harness.tui, external, Some(config));
     let pipe = crate::plugin_pipe::Pipe { harness, root: opencode_util::temp::tempdir().unwrap() };
@@ -196,21 +188,14 @@ end)
 
 #[test]
 fn an_every_a_mount_started_ends_with_that_mount() {
-    #[cfg_attr(not(any(luau, native)), allow(unused_mut))]
+    #[cfg_attr(not(luau), allow(unused_mut))]
     let mut carriers = vec![Carrier::InProcess];
-    #[cfg(native)]
-    carriers.push(Carrier::CAbi);
     #[cfg(luau)]
     carriers.push(Carrier::Luau);
     for carrier in carriers {
         MOUNT_TICKS.set(0);
         let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-        let host = opencode_tui::plugins::host::host(&h.tui);
         let definition = match carrier {
-            Carrier::CAbi => {
-                let entries = crate::support::loopback_entries!("test.tick", every_of_a_mount);
-                crate::support::loopback(&host, entries).unwrap().0
-            }
             #[cfg(luau)]
             Carrier::Luau => {
                 let files = [("plugin.toml", "id = \"test.tick\""), ("init.luau", EVERY_OF_A_MOUNT)];
@@ -333,26 +318,13 @@ fn dropped_sleeps(setup: &mut abi::Setup) -> Result<(), String> {
 
 #[test]
 fn dropped_sleeps_hold_no_timer() {
-    for carrier in [Carrier::InProcess, Carrier::CAbi] {
-        if matches!(carrier, Carrier::CAbi) && !cfg!(native) {
-            continue;
-        }
-        SLEPT.with_borrow_mut(Vec::clear);
-        let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-        h.app.idle(Duration::from_secs(3));
-        let quiet = h.app.idle(Duration::from_secs(61));
-        let host = opencode_tui::plugins::host::host(&h.tui);
-        let definition = match carrier {
-            Carrier::CAbi => {
-                let entries = crate::support::loopback_entries!("test.dropped", dropped_sleeps);
-                crate::support::loopback(&host, entries).unwrap().0
-            }
-            _ => abi::Plugin { id: "test.dropped", setup: dropped_sleeps }.into(),
-        };
-        opencode_tui::plugins::host::add(&h.tui, definition);
-        h.app.idle(Duration::from_millis(100));
-        assert_eq!(SLEPT.with_borrow(Vec::clone), [Ok(())], "{carrier:?}: the dropped sleeps kept their timers");
-        let after = h.app.idle(Duration::from_secs(61));
-        assert!(after.wakeups <= quiet.wakeups, "{carrier:?}: the dropped sleeps woke the app: {after:?}, {quiet:?}");
-    }
+    SLEPT.with_borrow_mut(Vec::clear);
+    let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    h.app.idle(Duration::from_secs(3));
+    let quiet = h.app.idle(Duration::from_secs(61));
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "test.dropped", setup: dropped_sleeps }.into());
+    h.app.idle(Duration::from_millis(100));
+    assert_eq!(SLEPT.with_borrow(Vec::clone), [Ok(())], "the dropped sleeps kept their timers");
+    let after = h.app.idle(Duration::from_secs(61));
+    assert!(after.wakeups <= quiet.wakeups, "the dropped sleeps woke the app: {after:?}, {quiet:?}");
 }

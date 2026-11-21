@@ -242,7 +242,6 @@ pub fn deps(transport: Arc<dyn Transport>) -> Deps {
         continue_: false,
         events: false,
         builtins: vec![opencode_mermaid::plugin().into(), opencode_latex::plugin().into()],
-        abi_builtins: false,
     }
 }
 
@@ -487,63 +486,6 @@ macro_rules! deref_harness {
     };
 }
 pub(crate) use deref_harness;
-
-/// The entries `export_plugin!(@loopback ..)` makes of plugin `$id`'s `$setup`, for [`loopback`]; in a build without the
-/// `native` feature, which has no C ABI, nothing.
-macro_rules! loopback_entries {
-    ($id:expr, $setup:expr) => {{
-        #[cfg(native)]
-        let entries = opencode_plugin::abi::export_plugin!(@loopback $id, $setup);
-        #[cfg(not(native))]
-        let entries = {
-            let _ = ($id, $setup);
-            crate::support::Loopback
-        };
-        entries
-    }};
-}
-pub(crate) use loopback_entries;
-
-/// Whether a run puts its plugin on the C ABI's byte shims: linked first, then through the C ABI in a build with the
-/// `native` feature, which only it has.
-#[cfg(native)]
-pub const LOOPBACK: [bool; 2] = [false, true];
-#[cfg(not(native))]
-pub const LOOPBACK: [bool; 1] = [false];
-
-/// What [`loopback_entries!`] makes.
-#[cfg(native)]
-pub type Loopback = opencode_plugin::abi::runtime::Loopback;
-#[cfg(not(native))]
-#[derive(Clone, Copy)]
-pub struct Loopback;
-
-/// `plugin` on the C ABI's byte shims ([`opencode_plugin::Builtin::Abi`]), a carrier only a build with the `native`
-/// feature has.
-pub fn abi_builtin(plugin: opencode_plugin::abi::Plugin) -> opencode_plugin::Builtin {
-    #[cfg(native)]
-    return opencode_plugin::Builtin::Abi(plugin);
-    #[cfg(not(native))]
-    {
-        let _ = plugin;
-        unreachable!("a build without the native feature has no C ABI carrier")
-    }
-}
-
-/// A plugin wired through the byte shims of the C ABI (`loader::native::loopback`), as a loaded library runs. A build
-/// without the `native` feature has no C ABI: the tests that ask for it run only with the feature.
-pub fn loopback(
-    host: &Rc<dyn opencode_plugin::Host>,
-    entries: Loopback,
-) -> Result<(opencode_plugin::Definition, opencode_plugin::ErrorFn), String> {
-    #[cfg(native)]
-    return opencode_plugin::loader::native::loopback(host, entries);
-    #[cfg(not(native))]
-    {
-        let _ = (host, entries);
-        unreachable!("a build without the native feature has no C ABI to loop back through")
-    }
-}
 
 impl Harness {
     /// Waits until the screen shows `text`, and returns the screen.

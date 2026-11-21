@@ -1,19 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "opencode plugin ABI 2.0",
-  "description": "Generated from opencode_plugin_abi by `examples/schema.rs`; do not edit. Normative for every binding: `describe` answers Metadata and `create` a Manifest; the host's `call` sends a Request and the plugin's sends a HostRequest, each answered as `x-messages` says by the request's type; a view answers a ViewReply whose tree is a Node, and a draw a DrawList. A field the schema leaves out of `required` may be left out; a reader ignores a field it does not know. A later 2.x minor only adds optional fields, request types and node kinds. The HTTP API's types are references into its OpenAPI document, `packages/protocol/openapi.json`, relative to this file.",
+  "description": "Generated from opencode_plugin_abi by `examples/schema.rs`; do not edit. Normative for every binding: a plugin registers a Manifest; the host's `call` sends a Request and the plugin's sends a HostRequest, each answered as `x-messages` says by the request's type; a view answers a ViewReply whose tree is a Node, and a draw a DrawList. A field the schema leaves out of `required` may be left out; a reader ignores a field it does not know. A later 2.x minor only adds optional fields, request types and node kinds. The HTTP API's types are references into its OpenAPI document, `packages/protocol/openapi.json`, relative to this file.",
   "x-abi": {
     "major": 2,
     "minor": 0,
     "features": ["image-bounds", "focus-input", "fence-node"]
   },
   "x-messages": {
-    "describe": {
-      "$ref": "#/$defs/Metadata"
-    },
-    "create": {
-      "$ref": "#/$defs/Manifest"
-    },
     "call": {
       "render-fence": {
         "$ref": "#/$defs/Fenced"
@@ -2430,33 +2424,6 @@
       "required": ["kind", "message", "row", "height"],
       "description": "A mounted row of the transcript."
     },
-    "Metadata": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "version": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "requires": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": ["id"],
-      "description": "What a library's `describe` answers: its nonempty ID, which the host reads before any `create`."
-    },
     "Manifest": {
       "type": "object",
       "properties": {
@@ -2552,7 +2519,7 @@
         }
       },
       "required": ["id", "commands", "fences", "slots", "routes", "storage"],
-      "description": "What `create` answers: everything the plugin registered in its setup."
+      "description": "Everything the plugin registered in its setup."
     },
     "Command": {
       "type": "object",

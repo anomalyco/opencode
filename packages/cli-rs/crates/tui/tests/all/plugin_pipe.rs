@@ -16,7 +16,6 @@ use opencode_tui::plugins::host::{External, external_with};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 
-use crate::plugin_surface::{Carrier, builtin};
 use crate::support::{self, Harness};
 
 pub(crate) const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../plugin/examples/pipe");
@@ -123,7 +122,7 @@ pub fn open_on(
         deps.config = support::config(info);
     }
     let harness = support::mount(size.0, size.1, deps);
-    let external = External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir, cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     Pipe { harness, root }
 }
@@ -138,7 +137,7 @@ fn plugin_files(name: &str, log: &str) -> (opencode_util::temp::TempDir, PathBuf
 
 fn mount_server(root: opencode_util::temp::TempDir, config: Config, server: support::Fake) -> Pipe {
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     Pipe { harness, root }
 }
@@ -306,7 +305,7 @@ fn screen(cells: &[opentui::testing::Cell]) -> String {
     cells.chunks(80).map(|row| row.iter().map(|cell| cell.symbol.as_str()).collect::<String>() + "\n").collect()
 }
 
-/// Run the same checkpoints on the linked, pipe and C ABI versions. Each run owns its TUI and plugin directory.
+/// Run the same checkpoints on the linked and pipe versions. Each run owns its TUI and plugin directory.
 fn compare_twin(
     config: Config,
     name: &str,
@@ -314,7 +313,7 @@ fn compare_twin(
     script: impl Fn(&Harness, &dyn Fn(), &mut dyn FnMut(&'static str)),
 ) -> Vec<Seen> {
     let id = plugin.id;
-    let run = |pipe: Option<Config>, carrier| {
+    let run = |pipe: Option<Config>| {
         let (h, _root) = match pipe {
             Some(config) => {
                 let pipe = open(&[(name, None)], config, (80, 30));
@@ -323,7 +322,7 @@ fn compare_twin(
             }
             None => {
                 let mut deps = Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) };
-                deps.builtins.push(builtin(carrier, abi::Plugin { id, setup: plugin.setup }));
+                deps.builtins.push(abi::Plugin { id, setup: plugin.setup }.into());
                 (support::mount(80, 30, deps), None)
             }
         };
@@ -338,24 +337,19 @@ fn compare_twin(
         });
         seen
     };
-    let linked = run(None, Carrier::Linked);
-    #[cfg_attr(not(native), allow(unused_mut))]
-    let mut others = vec![("pipe", run(Some(config), Carrier::Linked))];
-    #[cfg(native)]
-    others.push(("abi", run(None, Carrier::Abi)));
-    for (carrier, trace) in others {
-        assert_eq!(trace.len(), linked.len(), "{carrier} checkpoints");
-        for ((name, expected), (step, actual)) in linked.iter().zip(trace) {
-            assert_eq!(*name, step);
-            assert_eq!(expected.1, actual.1, "{carrier} at {name}: toasts");
-            assert_eq!(expected.2, actual.2, "{carrier} at {name}: status");
-            assert!(
-                expected.0 == actual.0,
-                "{carrier} at {name}: cells\nlinked:\n{}\n{carrier}:\n{}",
-                screen(&expected.0),
-                screen(&actual.0)
-            );
-        }
+    let linked = run(None);
+    let trace = run(Some(config));
+    assert_eq!(trace.len(), linked.len(), "pipe checkpoints");
+    for ((name, expected), (step, actual)) in linked.iter().zip(trace) {
+        assert_eq!(*name, step);
+        assert_eq!(expected.1, actual.1, "pipe at {name}: toasts");
+        assert_eq!(expected.2, actual.2, "pipe at {name}: status");
+        assert!(
+            expected.0 == actual.0,
+            "pipe at {name}: cells\nlinked:\n{}\npipe:\n{}",
+            screen(&expected.0),
+            screen(&actual.0)
+        );
     }
     linked.into_iter().map(|(_, seen)| seen).collect()
 }
@@ -1130,7 +1124,7 @@ fn prints_of_a_plugin_and_its_dependencies_never_reach_the_protocol() {
     .unwrap();
     copy(&Path::new(EXAMPLES).join("twin"), &config_dir.join("plugins/twin"));
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir, cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.printer");
@@ -1175,7 +1169,7 @@ impl Project {
         let source = std::fs::read_to_string(dir.join("tui.ts")).unwrap();
         std::fs::write(dir.join("tui.ts"), format!("{source}\n// build 0\n")).unwrap();
         let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-        let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+        let external = External { config_dir: root.path().join("config"), cwd: work };
         external_with(&harness.tui, external, Some(config));
         let project = Self { pipe: Pipe { harness, root }, dir };
         project.settle();
@@ -1198,7 +1192,6 @@ impl Project {
     fn answer(&self, decision: opencode_plugin::loader::approval::Decision) -> bool {
         let tui = &self.pipe.harness.tui;
         let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(tui, &self.target()) else { return false };
-        assert!(artifact.script, "{artifact:?}");
         let recorded = decide(&self.pipe.harness, &self.target(), &artifact, decision).unwrap();
         self.settle();
         recorded
@@ -1438,7 +1431,7 @@ fn the_manager_asks_before_a_project_typescript_plugin_runs() {
     let dir = work.join(".opencode").join("plugins").join("probe");
     copy(&Path::new(EXAMPLES).join("probe"), &dir);
     let harness = support::mount(100, 40, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: work };
     external_with(&harness.tui, external, Some(config));
     let (app, tui) = (&harness.app, &harness.tui);
     // Wait for off-thread hashing before inspecting the question.
@@ -1544,7 +1537,7 @@ fn probes(count: usize, config: Config) -> Pipe {
         std::fs::write(dir.join("tui.ts"), source).unwrap();
     }
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() }, Some(config));
+    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf() }, Some(config));
     let pipe = Pipe { harness, root };
     (0..count).for_each(|index| pipe.active(&format!("example.probe{index}")));
     pipe
@@ -1744,7 +1737,7 @@ fn keys(config: Config) -> (Pipe, PathBuf) {
     copy(&Path::new(EXAMPLES).join("keys"), &config_dir.join("plugins/keys"));
     let server = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
     let harness = support::mount(120, 30, support::deps(Arc::new(server)));
-    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() }, Some(config));
+    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf() }, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active(KEYS);
     let log = pipe.root.path().join("config/plugins/.keys.log.jsonl");
@@ -2135,7 +2128,7 @@ fn a_disabled_plugin_is_not_set_up_until_enabled() {
         ..support::deps(Arc::new(support::empty()))
     };
     let harness = support::mount(80, 30, deps);
-    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() }, Some(config));
+    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf() }, Some(config));
     let pipe = Pipe { harness, root };
     quietly(&pipe, "the probe is listed", || pipe.status(PROBE).is_some());
     pipe.settle();
@@ -2150,34 +2143,6 @@ fn a_disabled_plugin_is_not_set_up_until_enabled() {
     pipe.harness.tui.keymap.dispatch("probe.step", Some("1"));
     assert_eq!(toasted(&pipe, "step"), "step 1");
     let _ = std::fs::remove_file(&log);
-}
-
-#[test]
-fn safe_mode_holds_a_typescript_plugin() {
-    let Some(config) = config() else { return };
-    let log = std::env::temp_dir().join(format!("safe-{}-{:?}.log", std::process::id(), std::thread::current().id()));
-    let _ = std::fs::remove_file(&log);
-    let root = opencode_util::temp::tempdir().unwrap();
-    let config_dir = root.path().join("config");
-    let dir = config_dir.join("plugins").join("probe");
-    copy(&Path::new(EXAMPLES).join("probe"), &dir);
-    let entries = serde_json::json!({ "plugins": [{ "package": dir.to_string_lossy(), "options": { "log": log.to_string_lossy() } }] });
-    let deps = Deps {
-        route: Route::Home,
-        config: support::config(support::decode(&entries.to_string())),
-        ..support::deps(Arc::new(support::empty()))
-    };
-    let harness = support::mount(80, 30, deps);
-    harness.tui.plugins.set_safe();
-    external_with(&harness.tui, External { config_dir, cwd: root.path().to_path_buf(), dev: Vec::new() }, Some(config));
-    let pipe = Pipe { harness, root };
-    for _ in 0..50 {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        std::thread::sleep(Duration::from_millis(2));
-    }
-    assert_eq!(pipe.scripts().pid(), None, "a JS host started in safe mode");
-    assert_eq!(setups(&log), 0);
-    assert_ne!(pipe.status(PROBE), Some(Status::Active));
 }
 
 #[test]
@@ -2258,7 +2223,7 @@ fn a_directory_named_by_its_verbatim_path_loads() {
     let info = serde_json::json!({ "plugins": [{ "package": verbatim, "options": {} }] });
     deps.config = support::config(support::decode(&info.to_string()));
     let harness = support::mount(80, 30, deps);
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active(twin::ID);
@@ -2429,7 +2394,7 @@ export default {{ id: "example.late", setup(api) {{
     let host = opencode_tui::plugins::host::host(&harness.tui);
     let value = serde_json::json!({ "t": "x".repeat(300 << 10) }).to_string();
     opencode_plugin::Host::storage_write(&*host, "plugin.example.late.a", &value).unwrap();
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.late");
@@ -2577,7 +2542,7 @@ export default {{ id: "example.quota", setup(api) {{
     );
     std::fs::write(plugin.join("tui.ts"), module).unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.quota");
@@ -2760,7 +2725,7 @@ fn the_first_frame_does_not_wait_on_a_plugins_files() {
     std::fs::write(dir.join("tui.ts"), "export default { id: \"example.heavy\", setup() {} }\n").unwrap();
     let before = opencode_plugin::loader::approval::hashed();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     harness.app.render();
     assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the plugin's files");
@@ -2787,7 +2752,7 @@ fn an_approval_does_not_wait_on_a_plugins_files() {
     }
     std::fs::write(dir.join("tui.ts"), "export default { id: \"example.heavy\", setup() {} }\n").unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: work };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     walked(&pipe.harness, &pipe.scripts());
@@ -2828,7 +2793,7 @@ fn a_stage_that_finds_other_bytes_hashes_off_the_ui_thread() {
     );
     std::fs::write(dir.join("tui.ts"), module).unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: work, dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: work };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.settle();
@@ -2927,7 +2892,7 @@ fn hostile(runtime: impl FnOnce(&Path) -> Option<Config>) {
     std::fs::write(plugin.join("tui.ts"), seen).unwrap();
     config.directory = project.clone();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir, cwd: project.clone(), dev: Vec::new() };
+    let external = External { config_dir, cwd: project.clone() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.seen");
@@ -3291,7 +3256,7 @@ fn snapshot_across_a_new_build(held: bool) {
     );
     std::fs::write(plugin.join("tui.ts"), first).unwrap();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.snap");
@@ -3399,7 +3364,7 @@ fn a_late_reply_does_not_reach_a_mount_opened_again_over_the_pipe() {
     std::fs::write(plugin.join("tui.ts"), module).unwrap();
     let (fake, gate, served, asked) = crate::plugin_surface::held();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.owned");
@@ -3543,7 +3508,7 @@ export default {{ id: "example.queued", setup(api) {{
     std::fs::write(plugin.join("tui.ts"), module).unwrap();
     let (fake, server_gate, served, asked) = crate::plugin_surface::held();
     let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.queued");
@@ -3616,7 +3581,7 @@ fn a_v2_plugin_reads_a_sessions_pending_inbox() {
     });
     let deps = Deps { route: support::session_route("ses_q"), ..support::deps(Arc::new(server)) };
     let harness = support::mount(100, 30, deps);
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf() };
     external_with(&harness.tui, external, Some(config));
     let pipe = Pipe { harness, root };
     pipe.active("example.pending");

@@ -334,60 +334,6 @@ fn a_catalog_read_inside_the_messages_visitor_loads_after_the_render() {
     assert!(asked, "{:?}", h.memory.requests());
 }
 
-/// The frames of the sidebar's context and limit sections while a session's replies end. With `loopback`, the
-/// sections are wired through the byte shims of the C ABI (`Loopback`) instead of running in process.
-#[cfg(native)]
-fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
-    let others = ["-opencode.sidebar.mcp", "-opencode.sidebar.todo"];
-    let plugins: Vec<&str> = if loopback {
-        [&others[..], &["-opencode.sidebar.context", "-opencode.sidebar.limit"]].concat()
-    } else {
-        others.to_vec()
-    };
-    let h = mount_at(170, "ses_a", json!({ "animations": false, "plugins": plugins }));
-    if loopback {
-        for create in [
-            crate::support::loopback_entries!(
-                "loopback.sidebar.context",
-                opencode_tui::plugins::sidebar_context::plugin().setup
-            ) as _,
-            crate::support::loopback_entries!(
-                "loopback.sidebar.limit",
-                opencode_tui::plugins::sidebar_limit::plugin().setup
-            ) as _,
-        ] {
-            let (definition, _) = crate::support::loopback(&opencode_tui::plugins::host::host(&h.tui), create).unwrap();
-            opencode_tui::plugins::host::add(&h.tui, definition);
-        }
-    }
-    h.wait_for("Answer 30 three.");
-    h.wait_for("Running low on Big Pickle");
-    h.tui.toasts.dismiss();
-    h.wait_for("$5 remaining");
-    let mut frames = vec![h.app.render()];
-    // The last end is of an earlier reply, which changes nothing.
-    for (seq, message, input, shows) in
-        [(1, "msg_029b", 2_000, "2,000 tokens"), (2, "msg_030b", 12_000, "12,000 tokens"), (3, "msg_029b", 30_000, "")]
-    {
-        h.ended(seq, message, input);
-        if shows.is_empty() {
-            h.settle();
-        } else {
-            support::wait_for_all(&h.app, &[shows, &format!("{}% used", input / 2_000)]);
-        }
-        frames.push(h.app.render());
-    }
-    let screen = h.app.text();
-    assert!(screen.contains("6% used") && screen.contains("12,000 tokens"), "{screen}");
-    frames
-}
-
-#[test]
-#[cfg(native)]
-fn the_sidebar_sections_draw_the_same_through_the_c_abi_loopback() {
-    assert_eq!(sidebar_frames(true), sidebar_frames(false));
-}
-
 #[test]
 fn the_sidebar_limit_follows_the_selected_model() {
     use opencode_local::model_pref::Model;

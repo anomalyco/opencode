@@ -22,8 +22,6 @@ pub struct Args {
     pub server_executable: Option<std::path::PathBuf>,
     pub auto: bool,
     pub environment: Option<IndexMap<String, String>>,
-    /// State passed to a client restarted after a plugin crash.
-    pub contain: crate::plugins::contain::Contain,
 }
 
 impl Default for Args {
@@ -41,7 +39,6 @@ impl Default for Args {
             server_executable: None,
             auto: false,
             environment: None,
-            contain: Default::default(),
         }
     }
 }

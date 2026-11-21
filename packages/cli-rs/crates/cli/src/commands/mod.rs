@@ -10,7 +10,6 @@ pub mod mini;
 pub mod models;
 pub mod pair;
 pub mod plugin;
-pub mod plugin_dev;
 pub mod reload;
 pub mod run;
 pub mod serve;
@@ -29,8 +28,6 @@ pub struct Context {
     pub server: ServerFlags,
     /// The arguments after the program name, decoded once in `main`.
     pub args: Vec<String>,
-    /// A plugin library the TUI loads besides the configured ones: `plugin dev`'s.
-    pub dev: Option<std::path::PathBuf>,
 }
 
 pub fn run(context: &Context, cli: &Cli) -> error::Result<()> {

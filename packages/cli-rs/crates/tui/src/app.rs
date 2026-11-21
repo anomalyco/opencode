@@ -32,9 +32,6 @@ pub struct Deps {
     /// Renderer plugins in registration order: Mermaid, then LaTeX. The shell receives them from the caller to avoid
     /// depending on the renderers.
     pub builtins: Vec<opencode_plugin::Builtin>,
-    /// Run built-ins through the native plugin ABI for carrier comparison tests. A build without the `native` feature has
-    /// no such carrier and runs them in process.
-    pub abi_builtins: bool,
 }
 
 pub struct Roots {
@@ -272,8 +269,6 @@ impl Tui {
         crate::features::title::route_changed(self);
         crate::features::devtools::route_changed(self);
         crate::features::attention::program_status::sync(self);
-        // The new route's session and its prompt's text, restored or not, are what a restart brings back.
-        crate::plugins::contain::sync(self);
         self.app.request_redraw();
     }
 
@@ -507,7 +502,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         storage: files.as_ref().and_then(|files| files.storage.clone()),
     });
 
-    let plugins = crate::plugins::host::registry(&deps.config.info, deps.builtins, deps.abi_builtins);
+    let plugins = crate::plugins::host::registry(&deps.config.info, deps.builtins);
     let settings =
         crate::dialogs::settings::Live::new(deps.config, args.auto, files.as_ref().map(|files| files.config.clone()));
     let tui = Rc::new_cyclic(|this: &Weak<Tui>| Tui {
