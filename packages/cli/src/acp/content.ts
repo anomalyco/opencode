@@ -50,15 +50,15 @@ function contentBlockToParts(block: ContentBlock): PromptPart[] {
         const filepath = path.sep === "\\" ? decoded.replace(/\\/g, "/") : decoded
         return [{ type: "text", text: `[${filepath}${line ? `:${line}` : ""}]\n${block.resource.text}` }]
       }
-      if (!block.resource.mimeType) return []
+      const mime = block.resource.mimeType ?? "application/octet-stream"
       return [
         {
           type: "file",
           url: block.resource.uri.startsWith("data:")
             ? block.resource.uri
-            : `data:${block.resource.mimeType};base64,${block.resource.blob}`,
+            : `data:${mime};base64,${block.resource.blob}`,
           filename: filenameFromUri(block.resource.uri) ?? "file",
-          mime: block.resource.mimeType,
+          mime,
         },
       ]
     default:
