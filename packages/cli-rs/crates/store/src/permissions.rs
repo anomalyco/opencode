@@ -5,17 +5,21 @@ use crate::state::{Data, Error, State, Task, evict_missing, is_tag};
 impl State {
     /// Pending permission requests of a session; none until read or asked.
     pub fn permissions(&self, session: &(impl AsRef<str> + ?Sized)) -> Option<&[PermissionRequest]> {
-        self.permission.get(session.as_ref()).map(Vec::as_slice)
+        self.sessions.get(session.as_ref())?.permissions.as_deref()
     }
 
     /// Sessions with pending permission requests.
     pub fn permission_sessions(&self) -> Vec<&SessionID> {
-        self.permission.iter().filter(|(_, requests)| !requests.is_empty()).map(|(session, _)| session).collect()
+        self.sessions
+            .iter()
+            .filter(|session| session.permissions.as_ref().is_some_and(|requests| !requests.is_empty()))
+            .map(|session| &session.id)
+            .collect()
     }
 
     pub(crate) fn on_permission_asked(&mut self, data: &PermissionAskedData) {
         // A session the store found missing shows nothing, whatever arrives late (model O9).
-        if self.missing.contains(&data.session_id) {
+        if self.is_missing(&data.session_id) {
             return;
         }
         let request = PermissionRequest {
@@ -28,10 +32,11 @@ impl State {
             source: data.source.clone(),
             message: data.message.clone(),
         };
-        if let Some(read) = self.permission_reads.get_mut(&data.session_id) {
+        let session = self.sessions.get_or_insert(&data.session_id);
+        if let Some(read) = &mut session.permission_read {
             read.record(&data.id.0, Some(request.clone()));
         }
-        let requests = self.permission.entry(data.session_id.clone()).or_default();
+        let requests = session.permissions.get_or_insert_default();
         if requests.iter().any(|item| item.id == data.id) {
             return;
         }
@@ -40,10 +45,11 @@ impl State {
     }
 
     pub(crate) fn remove_permission(&mut self, session: &SessionID, request: &PermissionID) {
-        if let Some(read) = self.permission_reads.get_mut(session) {
+        let Some(record) = self.sessions.get_mut(session) else { return };
+        if let Some(read) = &mut record.permission_read {
             read.record(&request.0, None);
         }
-        let Some(requests) = self.permission.get_mut(session) else { return };
+        let Some(requests) = &mut record.permissions else { return };
         let before = requests.len();
         requests.retain(|item| item.id != *request);
         if requests.len() != before {
@@ -60,15 +66,18 @@ impl Data {
         self.overlay_sync(
             format!("session.permission:{}", session.0),
             session.clone(),
-            |state| &mut state.permission_reads,
             session.clone(),
+            |state, session, overlay| state.sessions.get_or_insert(session).permission_read = Some(overlay),
+            |state, session, ticket| {
+                state.sessions.get_mut(session)?.permission_read.take_if(|read| read.ticket() == ticket)
+            },
             |request| &request.id.0,
             move |data| async move {
                 let list = data.client().permission_list(&PermissionListInput { session_id: fetched }).await;
                 Ok((list.map_err(|error| evict_missing(&data, error))?, ()))
             },
             |state, session, list, ()| {
-                state.permission.insert(session.clone(), list);
+                state.sessions.get_or_insert(session).permissions = Some(list);
                 state.log.permissions(session);
             },
             move |data| data.permission_sync(&again),

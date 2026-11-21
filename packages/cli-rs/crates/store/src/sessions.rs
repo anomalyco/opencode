@@ -1,15 +1,311 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::ops::{Index, IndexMut};
 
 use futures_util::FutureExt;
+use indexmap::IndexMap;
 use opencode_api::generated::*;
 
 use crate::connection::Follow;
-use crate::inbox::now;
-use crate::messages::from_event;
-use crate::state::{Data, Error, SessionStatus, State, Task, evict_missing};
+use crate::forms::Form;
+use crate::inbox::{PendingUpdate, now};
+use crate::messages::{HeadRead, Transcript, from_event};
+use crate::state::{Compacting, Data, Error, Overlay, SessionStatus, State, Task, evict_missing};
 
 /// Children per page of a family read (`CHILD_PAGE`).
 const CHILD_PAGE: i64 = 200;
+
+/// The fewest slots at which [`Sessions::sweep`] looks for records that hold nothing.
+const SWEEP_FLOOR: usize = 256;
+
+/// Where a session's record is in [`Sessions`]. A freed slot takes its next session under a new generation, so a
+/// key kept past its record finds nothing, never another session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SessionKey {
+    index: u32,
+    generation: u32,
+}
+
+/// One record per session the store holds anything of, found by ID once.
+///
+/// A record that holds nothing (see [`Session::is_vacant`]) is freed by [`Sessions::sweep`] and its slot taken by
+/// the next new session, so the slots stay within about twice the records that hold something. Until the sweep it costs
+/// its slot, its ID and its key's entry, and a freed slot its size alone: what a deleted or evicted session held is
+/// dropped when it is deleted or evicted.
+#[derive(Default)]
+pub(crate) struct Sessions {
+    slots: Vec<Slot>,
+    keys: HashMap<SessionID, SessionKey>,
+    /// Slots freed by a sweep, for the next new sessions.
+    free: Vec<u32>,
+    /// The slot count at which the next sweep runs.
+    sweep_at: usize,
+}
+
+struct Slot {
+    generation: u32,
+    /// `None` once freed.
+    session: Option<Session>,
+}
+
+/// Everything the store holds of one session.
+#[derive(Default)]
+pub(crate) struct Session {
+    pub(crate) id: SessionID,
+    pub(crate) info: Option<SessionInfo>,
+    pub(crate) life: Life,
+    /// `None` until an event or the `session.active` snapshot names the session.
+    pub(crate) status: Option<SessionStatus>,
+    /// The family this session keys, as its root or as the furthest known ancestor while the root is not loaded:
+    /// every session of it, this one included once loaded. Empty when it keys none.
+    pub(crate) family: Vec<SessionID>,
+    /// The loaded messages; `None` until read or written.
+    pub(crate) transcript: Option<Transcript>,
+    /// The cursor of the next older page, while older pages remain.
+    pub(crate) cursor: Option<String>,
+    /// An older-page load runs.
+    pub(crate) loading: bool,
+    /// Pending inbox items in admission order.
+    pub(crate) pending: Vec<SessionInboxInfo>,
+    /// Pending permission requests; `None` until read or asked.
+    pub(crate) permissions: Option<Vec<PermissionRequest>>,
+    /// Pending forms; `None` until read or created.
+    pub(crate) forms: Option<Vec<Form>>,
+    /// The token of the transcript window that ended last, while it is one of the newest that ended; else 0.
+    pub(crate) incarnation: u64,
+    /// The inbox read in flight, by token, with the inbox events that overtook it.
+    pub(crate) pending_read: Option<(u64, IndexMap<String, PendingUpdate>)>,
+    /// The permission read in flight, with the asks and replies that overtook it.
+    pub(crate) permission_read: Option<Overlay<PermissionRequest>>,
+    /// The head read in flight, with what overtook it.
+    pub(crate) head_read: Option<HeadRead>,
+    /// The older-page load in flight, by token.
+    pub(crate) message_load: Option<(u64, Task<bool>)>,
+    /// The last admission, by token: each admission waits for the previous one to settle.
+    pub(crate) sending: Option<(u64, Task<()>)>,
+    pub(crate) compacting: Option<Compacting>,
+    /// As the root of a synced job tree: the job IDs the server listed, plus those events added for owners in the
+    /// tree. Loaded session info only reaches direct children, so parents alone would drop a grandchild's jobs.
+    pub(crate) job_tree: Option<HashSet<String>>,
+    /// The job read of the tree in flight, with the job events that overtook it.
+    pub(crate) job_read: Option<Overlay<JobInfo>>,
+}
+
+/// Where a session stands between this client's creation of it and its deletion.
+#[derive(Default)]
+pub(crate) enum Life {
+    /// Neither deleted nor being created by this client.
+    #[default]
+    Known,
+    /// Deleted at deletion epoch `epoch`: one of the newest deletions.
+    Missing { epoch: u64 },
+    /// An optimistic creation in flight, by token; prompts to the session wait for `gate`.
+    Creating { token: u64, gate: Task<()>, echo: Echo },
+}
+
+/// What the server said of a creation in flight.
+pub(crate) enum Echo {
+    /// Nothing yet: a failure rolls the record back.
+    Awaited,
+    /// The `session.created` echo or a response acknowledged it.
+    Received,
+    /// Acknowledged, then deleted at deletion epoch `epoch`.
+    Deleted { epoch: u64 },
+}
+
+impl Life {
+    /// The deletion epoch, while the session is one of the newest deletions.
+    pub(crate) fn deleted(&self) -> Option<u64> {
+        match self {
+            Life::Missing { epoch } | Life::Creating { echo: Echo::Deleted { epoch }, .. } => Some(*epoch),
+            _ => None,
+        }
+    }
+
+    /// A creation of this client the server has not acknowledged.
+    pub(crate) fn unacknowledged(&self) -> bool {
+        matches!(self, Life::Creating { echo: Echo::Awaited, .. })
+    }
+
+    /// Acknowledges a creation; true when it was unacknowledged.
+    pub(crate) fn acknowledge(&mut self) -> bool {
+        let Life::Creating { echo, .. } = self else { return false };
+        if !matches!(echo, Echo::Awaited) {
+            return false;
+        }
+        *echo = Echo::Received;
+        true
+    }
+
+    /// Marks the session deleted at `epoch`.
+    pub(crate) fn delete(&mut self, epoch: u64) {
+        match self {
+            Life::Creating { echo, .. } => *echo = Echo::Deleted { epoch },
+            _ => *self = Life::Missing { epoch },
+        }
+    }
+
+    /// Forgets a deletion; true when there was one.
+    pub(crate) fn undelete(&mut self) -> bool {
+        match self {
+            Life::Missing { .. } => *self = Life::Known,
+            Life::Creating { echo: echo @ Echo::Deleted { .. }, .. } => *echo = Echo::Received,
+            _ => return false,
+        }
+        true
+    }
+
+    /// Ends the creation `token`; true when it was the one in flight.
+    fn end_creation(&mut self, token: u64) -> bool {
+        let Life::Creating { token: current, echo, .. } = self else { return false };
+        if *current != token {
+            return false;
+        }
+        *self = match echo {
+            Echo::Deleted { epoch } => Life::Missing { epoch: *epoch },
+            _ => Life::Known,
+        };
+        true
+    }
+}
+
+impl Session {
+    /// True when the record holds nothing: the store then answers for the session as for one it never saw.
+    fn is_vacant(&self) -> bool {
+        let Session {
+            id: _,
+            info,
+            life,
+            status,
+            family,
+            transcript,
+            cursor,
+            loading,
+            pending,
+            permissions,
+            forms,
+            incarnation,
+            pending_read,
+            permission_read,
+            head_read,
+            message_load,
+            sending,
+            compacting,
+            job_tree,
+            job_read,
+        } = self;
+        matches!(life, Life::Known)
+            && info.is_none()
+            && status.is_none()
+            && family.is_empty()
+            && transcript.is_none()
+            && cursor.is_none()
+            && !loading
+            && pending.is_empty()
+            && permissions.is_none()
+            && forms.is_none()
+            && *incarnation == 0
+            && pending_read.is_none()
+            && permission_read.is_none()
+            && head_read.is_none()
+            && message_load.is_none()
+            && sending.is_none()
+            && compacting.is_none()
+            && job_tree.is_none()
+            && job_read.is_none()
+    }
+}
+
+impl Sessions {
+    pub(crate) fn key(&self, id: &(impl AsRef<str> + ?Sized)) -> Option<SessionKey> {
+        self.keys.get(id.as_ref()).copied()
+    }
+
+    pub(crate) fn get(&self, id: &(impl AsRef<str> + ?Sized)) -> Option<&Session> {
+        self.key(id).map(|key| &self[key])
+    }
+
+    pub(crate) fn get_mut(&mut self, id: &(impl AsRef<str> + ?Sized)) -> Option<&mut Session> {
+        let key = self.key(id)?;
+        Some(&mut self[key])
+    }
+
+    /// The key of `id`'s record, added empty when there is none.
+    pub(crate) fn entry(&mut self, id: &(impl AsRef<str> + ?Sized)) -> SessionKey {
+        let id = id.as_ref();
+        if let Some(key) = self.key(id) {
+            return key;
+        }
+        let session = Some(Session { id: SessionID::from(id), ..Session::default() });
+        let key = match self.free.pop() {
+            Some(index) => {
+                let slot = &mut self.slots[index as usize];
+                slot.session = session;
+                SessionKey { index, generation: slot.generation }
+            }
+            None => {
+                let index = u32::try_from(self.slots.len()).expect("fewer than 2^32 sessions");
+                self.slots.push(Slot { generation: 0, session });
+                SessionKey { index, generation: 0 }
+            }
+        };
+        self.keys.insert(SessionID::from(id), key);
+        key
+    }
+
+    /// `id`'s record, added empty when there is none.
+    pub(crate) fn get_or_insert(&mut self, id: &(impl AsRef<str> + ?Sized)) -> &mut Session {
+        let key = self.entry(id);
+        &mut self[key]
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Session> {
+        self.slots.iter().filter_map(|slot| slot.session.as_ref())
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Session> {
+        self.slots.iter_mut().filter_map(|slot| slot.session.as_mut())
+    }
+
+    /// Every record with its key.
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (SessionKey, &Session)> {
+        self.slots.iter().enumerate().filter_map(|(index, slot)| {
+            Some((SessionKey { index: index as u32, generation: slot.generation }, slot.session.as_ref()?))
+        })
+    }
+
+    /// Frees the records that hold nothing, once the slots have doubled since the last sweep. Run it only where no
+    /// key is held: a freed slot goes to the next new session.
+    pub(crate) fn sweep(&mut self) {
+        if self.slots.len() < self.sweep_at.max(SWEEP_FLOOR) {
+            return;
+        }
+        for (index, slot) in self.slots.iter_mut().enumerate() {
+            let Some(session) = slot.session.take_if(|session| session.is_vacant()) else { continue };
+            self.keys.remove(&session.id);
+            slot.generation = slot.generation.wrapping_add(1);
+            self.free.push(index as u32);
+        }
+        self.sweep_at = 2 * (self.slots.len() - self.free.len());
+    }
+}
+
+impl Index<SessionKey> for Sessions {
+    type Output = Session;
+
+    fn index(&self, key: SessionKey) -> &Session {
+        let slot = &self.slots[key.index as usize];
+        assert_eq!(slot.generation, key.generation, "a freed session key");
+        slot.session.as_ref().expect("a live session key")
+    }
+}
+
+impl IndexMut<SessionKey> for Sessions {
+    fn index_mut(&mut self, key: SessionKey) -> &mut Session {
+        let slot = &mut self.slots[key.index as usize];
+        assert_eq!(slot.generation, key.generation, "a freed session key");
+        slot.session.as_mut().expect("a live session key")
+    }
+}
 
 /// Input of [`Data::session_create`].
 #[derive(Debug, Clone, Default)]
@@ -33,35 +329,35 @@ pub(crate) enum Outcome {
 impl State {
     /// Loaded sessions, most recently updated first.
     pub fn sessions(&self) -> Vec<&SessionInfo> {
-        let mut sessions: Vec<_> = self.info.values().collect();
+        let mut sessions: Vec<_> = self.sessions.iter().filter_map(|session| session.info.as_ref()).collect();
         sessions.sort_by(|a, b| b.time.updated.total_cmp(&a.time.updated));
         sessions
     }
 
     /// True when any session is loaded.
     pub fn has_sessions(&self) -> bool {
-        !self.info.is_empty()
+        self.sessions.iter().any(|session| session.info.is_some())
     }
 
     pub fn session(&self, id: &(impl AsRef<str> + ?Sized)) -> Option<&SessionInfo> {
-        self.info.get(id.as_ref())
+        self.sessions.get(id.as_ref())?.info.as_ref()
     }
 
     /// True when the session is known to be deleted.
     pub fn is_missing(&self, id: &(impl AsRef<str> + ?Sized)) -> bool {
-        self.missing.contains(id.as_ref())
+        self.sessions.get(id.as_ref()).is_some_and(|session| session.life.deleted().is_some())
     }
 
     /// True while an optimistic creation of the session is in flight.
     pub fn is_creating(&self, id: &(impl AsRef<str> + ?Sized)) -> bool {
-        self.creating.contains_key(id.as_ref())
+        self.sessions.get(id.as_ref()).is_some_and(|session| matches!(session.life, Life::Creating { .. }))
     }
 
     /// The family root: the walk up `parentID` through loaded info stops at the first parent that
     /// is not loaded (the furthest known ancestor) or repeats. On a repeat it is the last session
     /// before the first one seen twice.
     pub fn root<'a>(&'a self, id: &'a (impl AsRef<str> + ?Sized)) -> &'a str {
-        let parent = |id: &str| self.info.get(id).and_then(|info| info.parent_id.as_ref()).map(SessionID::as_str);
+        let parent = |id: &str| self.session(id).and_then(|info| info.parent_id.as_ref()).map(SessionID::as_str);
         // Brent's cycle detection: `hare` walks while `tortoise` waits at each power of two, so a cycle of
         // length `length` shows as `hare` meeting `tortoise`, with no memory of the walk.
         let start = id.as_ref();
@@ -94,61 +390,62 @@ impl State {
 
     /// Every known session of the family of `id`.
     pub fn family(&self, id: &(impl AsRef<str> + ?Sized)) -> &[SessionID] {
-        self.family.get(self.root(id)).map(Vec::as_slice).unwrap_or_default()
+        self.sessions.get(self.root(id)).map(|root| root.family.as_slice()).unwrap_or_default()
     }
 
     /// A child's own cost, or a root's cost with every known descendant.
     pub fn cost(&self, id: &(impl AsRef<str> + ?Sized)) -> f64 {
-        let id = id.as_ref();
-        let Some(session) = self.info.get(id) else { return 0.0 };
-        if session.parent_id.is_some() {
-            return session.cost;
+        let Some(session) = self.sessions.get(id.as_ref()) else { return 0.0 };
+        let Some(info) = &session.info else { return 0.0 };
+        if info.parent_id.is_some() || session.family.is_empty() {
+            return info.cost;
         }
-        match self.family.get(id) {
-            Some(family) => family.iter().map(|member| self.info.get(member).map_or(0.0, |info| info.cost)).sum(),
-            None => session.cost,
-        }
+        session.family.iter().map(|member| self.session(member).map_or(0.0, |info| info.cost)).sum()
     }
 
     pub fn status(&self, id: &(impl AsRef<str> + ?Sized)) -> SessionStatus {
-        self.active.get(id.as_ref()).copied().unwrap_or(SessionStatus::Idle)
+        self.sessions.get(id.as_ref()).and_then(|session| session.status).unwrap_or(SessionStatus::Idle)
     }
 
     /// Running sessions.
     pub fn active_sessions(&self) -> Vec<&SessionID> {
-        self.active.iter().filter(|(_, status)| **status == SessionStatus::Running).map(|(id, _)| id).collect()
+        self.sessions
+            .iter()
+            .filter(|session| session.status == Some(SessionStatus::Running))
+            .map(|session| &session.id)
+            .collect()
     }
 
     pub(crate) fn set_status(&mut self, id: &SessionID, status: SessionStatus) {
         if let Some((_, updates)) = &mut self.active_updates {
             updates.insert(id.clone(), Some(status));
         }
-        if self.active.insert(id.clone(), status) != Some(status) {
+        if self.sessions.get_or_insert(id).status.replace(status) != Some(status) {
             self.log.status(id);
         }
     }
 
     /// Stores fetched or optimistic info (`remember`).
     pub(crate) fn remember(&mut self, info: SessionInfo) {
-        let id = info.id.clone();
-        self.clear_deleted(&id);
-        self.info.insert(id.clone(), info);
-        self.log.session(&id);
-        self.syncs.complete(&format!("session:{}", id.0));
-        self.register(&id);
+        let key = self.sessions.entry(&info.id);
+        self.clear_deleted(key);
+        self.log.session(&info.id);
+        self.syncs.complete(&format!("session:{}", info.id.0));
+        self.sessions[key].info = Some(info);
+        self.register(key);
     }
 
     /// Adds a session to the family index; a tentative family keyed by the session folds into
     /// its resolved root (`registerSession`).
-    pub(crate) fn register(&mut self, id: &SessionID) {
-        if !self.info.contains_key(id) {
+    pub(crate) fn register(&mut self, key: SessionKey) {
+        if self.sessions[key].info.is_none() {
             return;
         }
-        let root = SessionID::from(self.root(id));
-        if root != *id
-            && let Some(orphans) = self.family.remove(id)
-        {
-            let members = self.family.entry(root.clone()).or_default();
+        let root = SessionID::from(self.root(&self.sessions[key].id));
+        let root_key = self.sessions.entry(&root);
+        if root_key != key {
+            let orphans = std::mem::take(&mut self.sessions[key].family);
+            let members = &mut self.sessions[root_key].family;
             for member in orphans {
                 if !members.contains(&member) {
                     members.push(member);
@@ -157,9 +454,10 @@ impl State {
         }
         // The root's family and cost cover this session.
         self.log.session(&root);
-        let family = self.family.entry(root).or_default();
-        if !family.contains(id) {
-            family.push(id.clone());
+        let id = &self.sessions[key].id;
+        if !self.sessions[root_key].family.contains(id) {
+            let id = id.clone();
+            self.sessions[root_key].family.push(id);
         }
     }
 
@@ -167,33 +465,33 @@ impl State {
         if let Some((_, updates)) = &mut self.active_updates {
             updates.insert(id.clone(), None);
         }
-        for item in self.pending.get(id).into_iter().flatten() {
-            self.outbox.remove(item.id());
-        }
         for key in ["session", "session.family", "session.pending", "session.message", "session.permission"] {
             self.syncs.invalidate(&format!("{key}:{}", id.0));
         }
         self.syncs.invalidate_prefix(&format!("session.form:{}:", id.0));
-        self.info.remove(id);
-        self.active.remove(id);
-        self.end_transcript(id);
-        self.head_reads.remove(id);
-        self.messages.remove(id);
-        self.cursor.remove(id);
-        self.loading.remove(id);
-        self.pending.remove(id);
-        self.permission.remove(id);
-        self.forms.remove(&id.0);
-        self.remove_job_tree(id);
-        let roots: Vec<SessionID> =
-            self.family.iter().filter(|(_, family)| family.contains(id)).map(|(root, _)| root.clone()).collect();
-        for root in &roots {
-            self.log.session(root);
+        let key = self.sessions.entry(id);
+        self.end_transcript(key);
+        let session = &mut self.sessions[key];
+        for item in &session.pending {
+            self.outbox.remove(item.id());
         }
-        self.family.retain(|_, family| {
-            family.retain(|member| member != id);
-            !family.is_empty()
-        });
+        session.info = None;
+        session.status = None;
+        session.head_read = None;
+        session.transcript = None;
+        session.cursor = None;
+        session.loading = false;
+        session.pending = Vec::new();
+        session.permissions = None;
+        session.forms = None;
+        self.remove_job_tree(key);
+        for session in self.sessions.iter_mut() {
+            if session.family.contains(id) {
+                // The family and cost of its root change.
+                self.log.session(&session.id);
+                session.family.retain(|member| member != id);
+            }
+        }
         self.log.session(id);
         self.log.status(id);
         self.log.messages(id);
@@ -204,47 +502,47 @@ impl State {
 
     /// Drops heavy cached data of one session, keeping unacknowledged submissions
     /// (`evictSession`).
-    fn evict_session(&mut self, id: &SessionID) {
-        if self.session_outbox.contains(id) {
+    fn evict_session(&mut self, key: SessionKey) {
+        let session = &self.sessions[key];
+        if session.life.unacknowledged() {
             return;
         }
-        self.syncs.invalidate(&format!("session.pending:{}", id.0));
-        self.syncs.invalidate(&format!("session.message:{}", id.0));
-        self.message_loads.remove(id);
-        let pending: Vec<_> = self.pending(id).iter().filter(|item| self.outbox.contains(item.id())).cloned().collect();
-        let messages: Vec<_> =
-            self.messages(id).iter().filter(|item| self.outbox.contains(item.id())).cloned().collect();
-        self.end_transcript(id);
-        self.head_reads.remove(id);
-        self.messages.remove(id);
-        self.cursor.remove(id);
-        self.loading.remove(id);
-        self.pending.remove(id);
+        self.syncs.invalidate(&format!("session.pending:{}", session.id.0));
+        self.syncs.invalidate(&format!("session.message:{}", session.id.0));
+        self.end_transcript(key);
+        let session = &mut self.sessions[key];
+        session.message_load = None;
+        session.head_read = None;
+        session.cursor = None;
+        session.loading = false;
+        session.pending.retain(|item| self.outbox.contains(item.id()));
+        session.pending.shrink_to_fit();
+        let mut messages = session.transcript.take().map(Transcript::into_items).unwrap_or_default();
+        messages.retain(|item| self.outbox.contains(item.id()));
         if !messages.is_empty() {
-            self.messages.insert(id.clone(), crate::messages::Transcript::new(messages));
+            messages.shrink_to_fit();
+            session.transcript = Some(Transcript::new(messages));
         }
-        if !pending.is_empty() {
-            self.pending.insert(id.clone(), pending);
-        }
-        self.log.messages(id);
-        self.log.pending(id);
+        self.log.messages(&session.id);
+        self.log.pending(&session.id);
     }
 
     /// Clears heavy cached data of the root and every known descendant (`evict`).
     pub(crate) fn evict(&mut self, id: &SessionID) {
-        let root = self.root(id);
-        let mut members = vec![SessionID::from(root), id.clone()];
-        members.extend(self.family.get(root).into_iter().flatten().cloned());
-        let mut seen = HashSet::new();
-        for member in members {
-            if seen.insert(member.clone()) {
-                self.evict_session(&member);
+        let root = SessionID::from(self.root(id));
+        let root = self.sessions.entry(&root);
+        let mut members = vec![root, self.sessions.entry(id)];
+        // A family lists only sessions with info, so each has a record.
+        members.extend(self.sessions[root].family.iter().filter_map(|member| self.sessions.key(member)));
+        for (index, key) in members.iter().enumerate() {
+            if !members[..index].contains(key) {
+                self.evict_session(*key);
             }
         }
     }
 
     fn edit_info(&mut self, id: &SessionID, f: impl FnOnce(&mut SessionInfo)) {
-        if let Some(info) = self.info.get_mut(id) {
+        if let Some(info) = self.sessions.get_mut(id).and_then(|session| session.info.as_mut()) {
             f(info);
             self.log.session(id);
             // A child's cost is part of its root's.
@@ -254,14 +552,14 @@ impl State {
     }
 
     fn log_selected(&mut self, id: &SessionID) {
-        if let Some(info) = self.info.get(id) {
+        if let Some(info) = self.sessions.get(id).and_then(|session| session.info.as_ref()) {
             self.log.selected(id, info.agent.clone(), info.model.clone());
         }
     }
 
     /// True when a session read is worth revalidating: its info is loaded or a read is active.
     fn known(&self, id: &SessionID) -> bool {
-        self.info.contains_key(id) || self.syncs.has(&format!("session:{}", id.0))
+        self.session(id).is_some() || self.syncs.has(&format!("session:{}", id.0))
     }
 
     fn revalidate(&mut self, id: &SessionID) -> Vec<Follow> {
@@ -274,8 +572,10 @@ impl State {
 
     pub(crate) fn on_session_created(&mut self, data: &SessionCreatedData) -> Vec<Follow> {
         let id = &data.session_id;
-        self.clear_deleted(id);
-        self.session_outbox.remove(id);
+        if let Some(key) = self.sessions.key(id) {
+            self.clear_deleted(key);
+            self.sessions[key].life.acknowledge();
+        }
         self.syncs.invalidate(&format!("session:{}", id.0));
         // A new session starts empty, so live events are its source of truth. Separate pending and
         // message reads could both miss an input promoted between them and overwrite the events.
@@ -293,7 +593,7 @@ impl State {
 
     pub(crate) fn on_agent_selected(&mut self, event: &SessionAgentSelected) {
         let data = &event.data;
-        let previous = self.info.get(&data.session_id).and_then(|info| info.agent.clone());
+        let previous = self.session(&data.session_id).and_then(|info| info.agent.clone());
         self.edit_info(&data.session_id, |info| info.agent = Some(data.agent.clone()));
         self.log_selected(&data.session_id);
         let row = SessionMessageAgentSelected {
@@ -310,11 +610,12 @@ impl State {
     pub(crate) fn on_model_selected(&mut self, event: &SessionModelSelected) -> Vec<Follow> {
         let data = &event.data;
         let previous =
-            data.previous.clone().or_else(|| self.info.get(&data.session_id).and_then(|info| info.model.clone()));
+            data.previous.clone().or_else(|| self.session(&data.session_id).and_then(|info| info.model.clone()));
         self.edit_info(&data.session_id, |info| info.model = Some(data.model.clone()));
         self.log_selected(&data.session_id);
         // A head read in flight places the row (models M2, O3).
-        if !self.messages.contains_key(&data.session_id) && !self.head_reads.contains_key(&data.session_id) {
+        let shown = self.sessions.get(&data.session_id);
+        if !shown.is_some_and(|session| session.transcript.is_some() || session.head_read.is_some()) {
             return Vec::new();
         }
         let id = from_event(&event.id);
@@ -332,7 +633,7 @@ impl State {
 
     pub(crate) fn on_moved(&mut self, event: &SessionMoved) {
         let data = &event.data;
-        let Some(current) = self.info.get(&data.session_id) else { return };
+        let Some(current) = self.session(&data.session_id) else { return };
         let previous = SessionMessageLocationSwitchedPrevious {
             location: current.location.clone(),
             project_id: Some(current.project_id.clone()),
@@ -383,10 +684,10 @@ impl State {
         self.on_revert_cleared(id);
         // The projector also deletes inbox items enqueued at or after the boundary, without a
         // cancel event.
-        let pending = self.pending.entry(id.clone()).or_default();
-        pending.retain(|item| item.id() < data.to.as_str());
+        let key = self.sessions.entry(id);
+        self.sessions[key].pending.retain(|item| item.id() < data.to.as_str());
         self.log.pending(id);
-        self.end_transcript(id);
+        self.end_transcript(key);
         self.revert_messages(id, &data.to);
     }
 
@@ -508,8 +809,9 @@ impl Data {
         let location = input.location.clone().unwrap_or_else(|| LocationPublicRef {
             directory: AbsolutePath(state.default_location().directory.clone()),
         });
-        let fresh = !state.info.contains_key(&id);
-        state.clear_deleted(&id);
+        let fresh = state.session(&id).is_none();
+        let key = state.sessions.entry(&id);
+        state.clear_deleted(key);
         if fresh {
             let created = now();
             let project_id = input
@@ -522,7 +824,6 @@ impl Data {
                         .map(|info| info.project.id.clone())
                 })
                 .unwrap_or_default();
-            state.session_outbox.insert(id.clone());
             state.remember(SessionInfo {
                 id: id.clone(),
                 project_id,
@@ -555,21 +856,20 @@ impl Data {
         let task = self.spawn(async move {
             let result = data.client().session_create(&request).await.map_err(Error::new);
             data.write(|state| {
+                // A failure of a call that admitted nothing leaves another call's creation unacknowledged.
+                let acknowledged = (result.is_ok() || fresh)
+                    && state.sessions.get_mut(&session).is_some_and(|record| record.life.acknowledge());
                 match &result {
-                    Ok(info) => {
-                        state.session_outbox.remove(&session);
-                        state.remember(info.clone());
-                    }
+                    Ok(info) => state.remember(info.clone()),
                     // Roll back only a record this call admitted and neither the echo nor the
                     // response acknowledged: anything else is server state.
                     Err(_) => {
-                        if fresh && state.session_outbox.remove(&session) {
+                        if acknowledged {
                             state.remove_session(&session);
                         }
                     }
                 }
-                if state.creating.get(&session).is_some_and(|(current, _)| *current == token) {
-                    state.creating.remove(&session);
+                if state.sessions.get_mut(&session).is_some_and(|record| record.life.end_creation(token)) {
                     // `is_creating` is part of the session's view.
                     state.log.session(&session);
                 }
@@ -578,7 +878,7 @@ impl Data {
         });
         if fresh {
             let gate = task.clone().map(|result| result.map(|_| ())).boxed().shared();
-            state.creating.insert(id.clone(), (token, gate));
+            state.sessions[key].life = Life::Creating { token, gate, echo: Echo::Awaited };
         }
         self.flush(&mut state);
         (id, task)
@@ -641,5 +941,24 @@ impl Data {
             data.write(|state| state.edit_info(&session, |info| info.title = Some(title)));
             Ok(())
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The store remembers the newest 512 deletions, and the records of sessions it forgot go to new sessions.
+    #[test]
+    fn forgotten_deletions_free_their_records() {
+        let mut state = State::default();
+        let id = |n: usize| SessionID(format!("ses_{n}"));
+        for n in 0..4096 {
+            state.mark_deleted(&id(n));
+            state.sessions.sweep();
+        }
+        assert!(state.is_missing(&id(4095)) && state.is_missing(&id(4096 - 512)));
+        assert!(!state.is_missing(&id(4095 - 512)));
+        assert!(state.sessions.slots.len() <= 3 * 512, "{} slots", state.sessions.slots.len());
     }
 }

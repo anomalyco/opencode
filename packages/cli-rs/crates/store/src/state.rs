@@ -9,12 +9,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures_util::FutureExt;
 use futures_util::future::{BoxFuture, Shared};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use opencode_api::client::Client;
-use opencode_api::generated::{
-    JobInfo, PermissionRequest, Project, ProjectID, SessionID, SessionInboxCompaction, SessionInboxInfo, SessionInfo,
-    SessionMessageID,
-};
+use opencode_api::generated::{JobInfo, Project, ProjectID, SessionID, SessionInboxCompaction, SessionMessageID};
 use opencode_util::lock;
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
@@ -22,9 +19,8 @@ use tokio::task::AbortHandle;
 
 use crate::changes::{Changes, Log};
 use crate::forms::Form;
-use crate::inbox::PendingUpdate;
 use crate::location::{Location, LocationData};
-use crate::messages::Transcript;
+use crate::sessions::{SessionKey, Sessions};
 
 /// How many [`Data::signals`] events a slow receiver may fall behind. One batch may hold hundreds of a listened type
 /// (a burst of `filesystem.changed`).
@@ -65,19 +61,9 @@ pub enum SessionStatus {
 /// The store contents and its bookkeeping. Read it through [`Data::read`].
 #[derive(Default)]
 pub struct State {
-    pub(crate) info: HashMap<SessionID, SessionInfo>,
-    pub(crate) missing: HashSet<SessionID>,
-    /// Family index keyed by a family's root, or by its furthest known ancestor while the root is
-    /// not loaded. Each value lists every session of the family, the key included once loaded.
-    pub(crate) family: HashMap<SessionID, Vec<SessionID>>,
-    pub(crate) active: HashMap<SessionID, SessionStatus>,
-    pub(crate) messages: HashMap<SessionID, Transcript>,
-    pub(crate) cursor: HashMap<SessionID, String>,
-    pub(crate) loading: HashSet<SessionID>,
-    pub(crate) pending: HashMap<SessionID, Vec<SessionInboxInfo>>,
-    pub(crate) permission: HashMap<SessionID, Vec<PermissionRequest>>,
-    /// Pending forms by owner: a session ID or [`crate::forms::GLOBAL`].
-    pub(crate) forms: HashMap<String, Vec<Form>>,
+    pub(crate) sessions: Sessions,
+    /// Pending forms of [`crate::forms::GLOBAL`]; `None` until read or created. A session's own are in its record.
+    pub(crate) global_forms: Option<Vec<Form>>,
     /// In insertion order, as the TS store's keys: projects that sort equal keep it.
     pub(crate) projects: IndexMap<ProjectID, Project>,
     pub(crate) locations: HashMap<Location, LocationData>,
@@ -93,41 +79,22 @@ pub struct State {
     next_token: u64,
     /// Status events received while a `session.active` snapshot is in flight, by connection.
     pub(crate) active_updates: Option<(u64, StatusUpdates)>,
-    /// Inbox events received while an inbox read is in flight, by read.
-    pub(crate) pending_updates: HashMap<SessionID, (u64, IndexMap<String, PendingUpdate>)>,
     /// Inbox IDs of optimistic admissions the server has not acknowledged.
     pub(crate) outbox: HashSet<String>,
-    /// Session IDs of optimistic creations the server has not acknowledged.
-    pub(crate) session_outbox: HashSet<SessionID>,
-    /// In-flight optimistic creations; prompts to the session wait for them.
-    pub(crate) creating: HashMap<SessionID, (u64, Task<()>)>,
-    /// The per-session admission chain: each admission waits for the previous one to settle.
-    pub(crate) sending: HashMap<SessionID, (u64, Task<()>)>,
-    pub(crate) message_loads: HashMap<SessionID, (u64, Task<bool>)>,
-    pub(crate) compacting: HashMap<SessionID, Compacting>,
     pub(crate) deletion_epoch: u64,
-    /// Deleted sessions by deletion epoch, oldest first.
-    pub(crate) deleted_at: IndexMap<SessionID, u64>,
-    /// The incarnation of each transcript window that ended (deleted, evicted or reverted), a token, oldest first.
-    /// It keeps the newest [`DELETED_LIMIT`]; a window that never ended has incarnation 0.
-    incarnations: IndexMap<SessionID, u64>,
+    /// The newest [`DELETED_LIMIT`] deletions, oldest first: the sessions whose [`crate::sessions::Life`] holds a deletion
+    /// epoch.
+    deleted: IndexSet<SessionKey>,
+    /// The sessions whose transcript window ended last (deleted, evicted or reverted), oldest first: the newest
+    /// [`DELETED_LIMIT`], the only ones with an incarnation.
+    ended: IndexSet<SessionKey>,
     /// Trailing refetch timers by key, with the token of the newest.
     pub(crate) settling: HashMap<String, (u64, AbortHandle)>,
-    /// The permission read in flight per session, with the asks and replies that overtook it.
-    pub(crate) permission_reads: HashMap<SessionID, Overlay<PermissionRequest>>,
     /// The form read in flight per owner (and location, for [`crate::forms::GLOBAL`]), with the
     /// forms created and settled that overtook it.
     pub(crate) form_reads: HashMap<crate::forms::Read, Overlay<Form>>,
-    /// The head read in flight per transcript, with what overtook it.
-    pub(crate) head_reads: HashMap<SessionID, crate::messages::HeadRead>,
     /// Running background jobs by ID, of the trees synced and of job events since (`store.job`).
     pub(crate) jobs: IndexMap<String, JobInfo>,
-    /// The job IDs the server listed for each synced tree root, plus those events added for owners in the tree
-    /// (`store.jobTree`). Loaded session info only reaches direct children, so parents alone would drop a
-    /// grandchild's jobs.
-    pub(crate) job_trees: HashMap<SessionID, HashSet<String>>,
-    /// The job read in flight per tree root, with the job events that overtook it.
-    pub(crate) job_reads: HashMap<SessionID, Overlay<JobInfo>>,
     /// The `durable.seq` of the event being applied, for the rows it creates.
     pub(crate) event_seq: Option<i64>,
 }
@@ -220,48 +187,52 @@ impl State {
         (self.log.revision(), self.log.since(seen))
     }
 
-    pub(crate) fn clear_deleted(&mut self, id: &SessionID) {
-        self.deleted_at.shift_remove(id);
-        if self.missing.remove(id) {
-            self.log.session(id);
+    pub(crate) fn clear_deleted(&mut self, key: SessionKey) {
+        if self.sessions[key].life.undelete() {
+            self.deleted.shift_remove(&key);
+            self.log.session(&self.sessions[key].id);
         }
     }
 
     pub(crate) fn mark_deleted(&mut self, id: &SessionID) {
-        if self.session_outbox.contains(id) {
+        if self.sessions.get(id).is_some_and(|session| session.life.unacknowledged()) {
             return;
         }
-        self.deleted_at.shift_remove(id);
+        let key = self.sessions.entry(id);
+        self.deleted.shift_remove(&key);
         self.deletion_epoch += 1;
-        self.deleted_at.insert(id.clone(), self.deletion_epoch);
-        if self.deleted_at.len() > DELETED_LIMIT
-            && let Some((oldest, _)) = self.deleted_at.shift_remove_index(0)
+        self.deleted.insert(key);
+        if self.deleted.len() > DELETED_LIMIT
+            && let Some(oldest) = self.deleted.shift_remove_index(0)
         {
-            self.missing.remove(&oldest);
+            self.sessions[oldest].life.undelete();
         }
-        self.missing.insert(id.clone());
+        self.sessions[key].life.delete(self.deletion_epoch);
         self.remove_session(id);
     }
 
     /// True when `id` was deleted after the epoch a read started at.
     pub(crate) fn deleted_since(&self, id: &SessionID, started: u64) -> bool {
-        self.deleted_at.get(id).copied().unwrap_or(0) > started
+        self.sessions.get(id).and_then(|session| session.life.deleted()).unwrap_or(0) > started
     }
 
     /// The incarnation of `id`'s transcript window. A completion publishes into the window only while it is the
     /// incarnation the completion began in (models M2 rule 5, deviation O6-held-message-read).
     pub(crate) fn incarnation(&self, id: &SessionID) -> u64 {
-        self.incarnations.get(id).copied().unwrap_or(0)
+        self.sessions.get(id).map_or(0, |session| session.incarnation)
     }
 
-    /// Ends `id`'s transcript window, so completions that began in it publish nothing. The token counter never
+    /// Ends a transcript window, so completions that began in it publish nothing. The token counter never
     /// repeats, so a later window never matches an earlier incarnation.
-    pub(crate) fn end_transcript(&mut self, id: &SessionID) {
+    pub(crate) fn end_transcript(&mut self, key: SessionKey) {
         let token = self.token();
-        self.incarnations.shift_remove(id);
-        self.incarnations.insert(id.clone(), token);
-        if self.incarnations.len() > DELETED_LIMIT {
-            self.incarnations.shift_remove_index(0);
+        self.ended.shift_remove(&key);
+        self.ended.insert(key);
+        self.sessions[key].incarnation = token;
+        if self.ended.len() > DELETED_LIMIT
+            && let Some(oldest) = self.ended.shift_remove_index(0)
+        {
+            self.sessions[oldest].incarnation = 0;
         }
     }
 }
@@ -523,6 +494,8 @@ impl Data {
         if state.batch > 0 {
             return;
         }
+        // No key outlives a write, so a freed slot can go to the next session.
+        state.sessions.sweep();
         if let Some(revision) = state.log.flush() {
             self.inner.revision.send_replace(revision);
         }
@@ -661,15 +634,16 @@ impl Data {
         &self,
         key: String,
         session: SessionID,
-        reads: fn(&mut State) -> &mut HashMap<K, Overlay<V>>,
         read: K,
+        open: fn(&mut State, &K, Overlay<V>),
+        close: fn(&mut State, &K, u64) -> Option<Overlay<V>>,
         id: fn(&V) -> &str,
         fetch: impl FnOnce(Data) -> F + Send + 'static,
         publish: impl FnOnce(&mut State, &K, Vec<V>, T) + Send + 'static,
         again: impl FnOnce(Data) -> Task<()> + Send + 'static,
     ) -> Task<()>
     where
-        K: Hash + Eq + Clone + Send + 'static,
+        K: Clone + Send + 'static,
         V: Send + 'static,
         T: Send + 'static,
         F: Future<Output = Result<(Vec<V>, T), Error>> + Send + 'static,
@@ -679,19 +653,19 @@ impl Data {
             key.clone(),
             move |state| {
                 let ticket = state.token();
-                reads(state).insert(begin, Overlay::new(ticket));
+                open(state, &begin, Overlay::new(ticket));
                 (state.deletion_epoch, ticket)
             },
             move |data, (started, ticket)| async move {
                 let (list, extra) = match fetch(data.clone()).await {
                     Ok(fetched) => fetched,
                     Err(error) => {
-                        data.write(|state| Overlay::take(reads(state), &read, ticket));
+                        data.write(|state| close(state, &read, ticket));
                         return Err(error);
                     }
                 };
                 let reread = data.write(|state| {
-                    let Some(overlay) = Overlay::take(reads(state), &read, ticket) else { return false };
+                    let Some(overlay) = close(state, &read, ticket) else { return false };
                     if state.deleted_since(&session, started) {
                         return false;
                     }

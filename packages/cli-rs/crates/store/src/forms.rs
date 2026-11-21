@@ -1,9 +1,9 @@
-//! Pending forms are keyed by session ID, or [`GLOBAL`] for elicitations without a session.
+//! Pending forms are kept in their session's record, or under [`GLOBAL`] for elicitations without a session.
 use opencode_api::client::Client;
 use opencode_api::generated::*;
 
 use crate::location::Location;
-use crate::state::{Data, Error, State, Task, evict_missing};
+use crate::state::{Data, Error, Overlay, State, Task, evict_missing};
 
 /// The owner of global MCP elicitations. They temporarily use "global" instead of a real session
 /// ID, so the server cannot recover their location when settling them; the store keeps the event
@@ -29,26 +29,35 @@ impl State {
     /// Pending forms of a session, or the global forms of `location`. Global forms need a
     /// location; `None` until read or created.
     pub fn forms(&self, owner: &str, location: Option<&Location>) -> Option<Vec<&Form>> {
-        let forms = self.forms.get(owner)?;
         if owner != GLOBAL {
-            return Some(forms.iter().collect());
+            return Some(self.sessions.get(owner)?.forms.as_ref()?.iter().collect());
         }
+        let forms = self.global_forms.as_ref()?;
         let location = location?;
         Some(forms.iter().filter(|form| form.location.as_ref() == Some(location)).collect())
     }
 
     /// Sessions with pending forms.
     pub fn form_sessions(&self) -> Vec<&str> {
-        self.forms
+        self.sessions
             .iter()
-            .filter(|(owner, forms)| owner.as_str() != GLOBAL && !forms.is_empty())
-            .map(|(owner, _)| owner.as_str())
+            .filter(|session| session.forms.as_ref().is_some_and(|forms| !forms.is_empty()))
+            .map(|session| session.id.as_str())
             .collect()
+    }
+
+    /// The forms of `owner`, created unread when missing.
+    fn owner_forms(&mut self, owner: &str) -> &mut Vec<Form> {
+        let forms = match owner {
+            GLOBAL => &mut self.global_forms,
+            _ => &mut self.sessions.get_or_insert(owner).forms,
+        };
+        forms.get_or_insert_default()
     }
 
     pub(crate) fn on_form_created(&mut self, form: &FormInfo, location: &Location) {
         // A session the store found missing shows nothing, whatever arrives late (model O9).
-        if self.missing.contains(&SessionID(form.session_id.clone())) {
+        if self.is_missing(&form.session_id) {
             return;
         }
         let item = Form {
@@ -62,7 +71,7 @@ impl State {
             location: (form.session_id == GLOBAL).then(|| location.clone()),
         };
         self.record_form(&form.session_id, &form.id, Some(location), Some(&item));
-        let forms = self.forms.entry(form.session_id.clone()).or_default();
+        let forms = self.owner_forms(&form.session_id);
         if forms.iter().any(|item| item.info.id == form.id) {
             return;
         }
@@ -73,7 +82,11 @@ impl State {
     /// Removes a form; a global form only at `location`, when given. True when one was removed.
     pub(crate) fn remove_form(&mut self, owner: &str, id: &FormID, location: Option<&Location>) -> bool {
         self.record_form(owner, id, location, None);
-        let Some(forms) = self.forms.get_mut(owner) else { return false };
+        let forms = match owner {
+            GLOBAL => self.global_forms.as_mut(),
+            _ => self.sessions.get_mut(owner).and_then(|session| session.forms.as_mut()),
+        };
+        let Some(forms) = forms else { return false };
         let before = forms.len();
         forms.retain(|form| {
             if form.info.id != *id {
@@ -103,7 +116,7 @@ impl State {
 
     /// Publishes a form read; a global read only replaces the forms of `at`, where the server read them.
     fn publish_forms(&mut self, owner: &str, mut list: Vec<Form>, at: Option<Location>) {
-        let forms = self.forms.entry(owner.to_owned()).or_default();
+        let forms = self.owner_forms(owner);
         match at {
             Some(at) => {
                 // Forms created at another location stay where `on_form_created` put them.
@@ -128,8 +141,11 @@ impl Data {
         self.overlay_sync(
             sync_key(&owner, &location),
             SessionID(owner.clone()),
-            |state| &mut state.form_reads,
             read,
+            |state, read, overlay| {
+                state.form_reads.insert(read.clone(), overlay);
+            },
+            |state, read, ticket| Overlay::take(&mut state.form_reads, read, ticket),
             |form| &form.info.id.0,
             move |data| async move {
                 if owner == GLOBAL {
