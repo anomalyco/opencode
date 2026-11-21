@@ -514,10 +514,15 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       )
     const attempt = terminate(opts?.killSignal ?? "SIGTERM")
     if (opts?.forceKillAfter === undefined) return attempt
-    return Effect.timeoutOrElse(attempt, {
-      duration: opts.forceKillAfter,
-      orElse: () => terminate("SIGKILL"),
-    })
+    // A descendant that doesn't hold the output pipes can outlive the leader in its group, and "close" doesn't wait for
+    // it. Once the leader has closed, kill what is left of the group. Waiting for the group to empty instead never ends
+    // where nothing reaps orphans (opencode as PID 1 in a container), since zombies keep the group alive.
+    return Effect.timeoutOrElse(
+      globalThis.process.platform !== "win32" && (command.options.detached ?? true)
+        ? Effect.andThen(attempt, Effect.ignore(killGroup(command, proc, "SIGKILL")))
+        : attempt,
+      { duration: opts.forceKillAfter, orElse: () => terminate("SIGKILL") },
+    )
   }
 
   const source = (handle: ChildProcessHandle, from: ChildProcess.PipeFromOption | undefined) => {
