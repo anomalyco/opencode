@@ -3,6 +3,7 @@ import { readFile, rename, writeFile } from "node:fs/promises"
 import { Effect } from "effect"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import { Global } from "@opencode/util/global"
+import { Flock } from "@opencode/util/flock"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { Config } from "../../../config"
@@ -13,7 +14,7 @@ export default Runtime.handler(
   Effect.fn("cli.plugin.remove")(function* (input) {
     const global = yield* Global.Service
     const configPath = yield* Effect.promise(() => resolveConfigPath(global.config))
-    const server = yield* Effect.promise(() => removePluginConfig(configPath, input.package))
+    const server = yield* Effect.promise((signal) => removePluginConfig(configPath, input.package, signal))
     const config = yield* Config.Service
     const info = yield* config.get()
     const tui = configured(info.plugins, input.package)
@@ -33,7 +34,9 @@ export default Runtime.handler(
   }),
 )
 
-export async function removePluginConfig(configPath: string, spec: string) {
+export async function removePluginConfig(configPath: string, spec: string, signal?: AbortSignal) {
+  await using _ = await Flock.acquire(configPath, { signal })
+  signal?.throwIfAborted()
   const text = await readFile(configPath, "utf8").catch((error) => {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return undefined
     throw error
