@@ -123,6 +123,7 @@ import { WebSearchPlugins } from "./websearch/index.js"
 import { SkillPlugin } from "./skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { ToolInputRepairPlugin } from "./tool-input-repair.js"
+import { DoomLoopPlugin } from "./doom-loop.js"
 import { OptimizePlugin } from "./optimize.js"
 import { VcsGitPlugin } from "./vcs/git.js"
 import { VerbosityPlugin } from "./verbosity.js"
@@ -263,6 +264,7 @@ export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
 const pre = [
   ToolInputRepairPlugin.Plugin,
+  DoomLoopPlugin.Plugin,
   ConfigWorktreePlugin.Plugin,
   ConfigMcpPlugin.Plugin,
   McpCodeModeDefaultsPlugin.Plugin,
