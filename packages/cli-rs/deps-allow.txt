@@ -173,5 +173,5 @@ zmij build
 # Third-party crates only non-default features bring in, over normal, build and dev edges of the whole workspace
 # with --all-features. The same rules apply. Empty: the `luau` feature is on by default, so the crates it brings
 # in are in the shipped graph above, among them mlua and mlua-sys from mlua's git at Luau 747, maybe-dangling, which
-# that mlua adds, and luau0-src from simonklee/luau-src-rs's git.
+# that mlua adds, and luau0-src from the git of a Luau fork with fixes not yet upstream.
 

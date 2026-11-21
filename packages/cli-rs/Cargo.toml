@@ -128,7 +128,7 @@ tree-sitter-xml = "=0.7.0"
 [patch.crates-io]
 mlua = { git = "https://github.com/mlua-rs/mlua", rev = "01b48a402fffa83c1429b4a49cfd55c6caaa5939" }
 mlua-sys = { git = "https://github.com/mlua-rs/mlua", rev = "01b48a402fffa83c1429b4a49cfd55c6caaa5939" }
-# Luau 747 with simonklee/luau's fixes, their flags on by default: linear-time plain `string.find`,
+# A Luau 747 fork with fixes not yet upstream, their flags on by default: linear-time plain `string.find`,
 # `string.split` and literal `gsub`; table built-ins and pattern matching bounded between interrupts; a collector goal
 # by heap size, for the carrier to set; small allocator pages while a heap is small; single-class patterns matched
 # against a byte table; `string.format` and `bit32` edge cases defined; and a build without the codegen-only libraries,
