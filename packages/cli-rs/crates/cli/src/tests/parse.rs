@@ -120,6 +120,20 @@ fn server_flags_apply_where_declared() {
     assert!(!server(&["debug", "heap-dump"]).standalone);
 }
 
+/// login-alias.test.ts: the hidden `login` parses into the same input as `auth login`.
+#[test]
+fn login_parses_like_auth_login() {
+    let args = ["openai", "--method", "api", "--answer", "key=value", "--server", "http://127.0.0.1:4096"];
+    let parsed = |line: Vec<&str>| {
+        let invocation = parse(&line).unwrap();
+        format!("{:?} {:?}", invocation.cli.command, invocation.server)
+    };
+    let login = parsed([&["login"][..], &args].concat());
+    assert_eq!(login, parsed([&["auth", "login"][..], &args].concat()));
+    assert!(login.contains(r#"target: Some("openai"), method: Some("api"), answer: ["key=value"]"#), "{login}");
+    assert!(login.contains(r#"server: Some("http://127.0.0.1:4096")"#), "{login}");
+}
+
 #[test]
 fn root_flags_do_not_pass_to_subcommands() {
     assert!(error(&["--auto", "session", "list"]).contains("Unrecognized flag: --auto"));

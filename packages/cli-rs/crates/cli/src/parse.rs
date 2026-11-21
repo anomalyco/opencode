@@ -418,7 +418,7 @@ fn parse_levels(tokens: Vec<Token>, trailing: Vec<String>, program: &str) -> Tre
                 }
                 if spec.arguments().next().is_none() && !spec.commands.is_empty() {
                     let keys: Vec<&str> =
-                        spec.commands.iter().flat_map(|sub| std::iter::once(sub.name).chain(sub.alias)).collect();
+                        spec.listed().flat_map(|sub| std::iter::once(sub.name).chain(sub.alias)).collect();
                     let suggestions: Vec<String> = suggest(value, &keys).iter().map(|name| name.to_string()).collect();
                     errors.push(format!(
                         "Unknown subcommand \"{value}\" for \"{}\"{}",

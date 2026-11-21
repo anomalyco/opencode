@@ -89,7 +89,7 @@ impl From<Quit> for Stop {
 
 fn prompt_command(node: &'static Spec, line: &mut Vec<String>, section: &str) -> Result<(), Stop> {
     // Effect asks for a group's shared flags only, and no command here has any.
-    let (flags, arguments): (Vec<Prompted>, Vec<Prompted>) = match node.commands.is_empty() {
+    let (flags, arguments): (Vec<Prompted>, Vec<Prompted>) = match node.listed().next().is_none() {
         true => node.params.iter().map(param).partition(|param| param.flag),
         false => (Vec::new(), Vec::new()),
     };
@@ -98,7 +98,7 @@ fn prompt_command(node: &'static Spec, line: &mut Vec<String>, section: &str) ->
         for flag in &flags {
             line.extend(prompt_param(flag)?);
         }
-        if !arguments.is_empty() || !node.commands.is_empty() {
+        if !arguments.is_empty() || node.listed().next().is_some() {
             log_command("Current command", line, MAGENTA, WHITE);
         }
     }
@@ -107,22 +107,23 @@ fn prompt_command(node: &'static Spec, line: &mut Vec<String>, section: &str) ->
         for argument in &arguments {
             line.extend(prompt_param(argument)?);
         }
-        if !node.commands.is_empty() {
+        if node.listed().next().is_some() {
             log_command("Current command", line, MAGENTA, WHITE);
         }
     }
-    if node.commands.is_empty() {
+    if node.listed().next().is_none() {
         return Ok(());
     }
+    let listed: Vec<&'static Spec> = node.listed().collect();
     let index = Select {
         message: "Command".into(),
-        choices: node.commands.iter().map(|sub| (sub.name.to_string(), Some(sub.description.to_string()))).collect(),
+        choices: listed.iter().map(|sub| (sub.name.to_string(), Some(sub.description.to_string()))).collect(),
     }
     .prompt()?;
     log("");
-    let child = &node.commands[index];
+    let child = listed[index];
     line.push(child.name.to_string());
-    if !child.commands.is_empty() || !child.params.is_empty() {
+    if child.listed().next().is_some() || !child.params.is_empty() {
         log_command("Current command", line, MAGENTA, WHITE);
     }
     prompt_command(child, line, child.name)

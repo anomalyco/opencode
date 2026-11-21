@@ -14,8 +14,7 @@ struct Command {
 
 fn descriptor(spec: &'static Spec, name: &str) -> Command {
     let subcommands = spec
-        .commands
-        .iter()
+        .listed()
         .flat_map(|sub| std::iter::once(sub.name).chain(sub.alias).map(move |name| descriptor(sub, name)))
         .collect();
     Command {

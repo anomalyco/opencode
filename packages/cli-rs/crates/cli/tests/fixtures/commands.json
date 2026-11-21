@@ -49,6 +49,7 @@
      {"name":"switch","aliases":[],"description":"switch the active account for an integration","globalFlags":[],"arguments":[{"name":"target","type":"String","choices":[],"description":"Integration ID or name","optional":true,"variadic":false},{"name":"credential","type":"String","choices":[],"description":"Credential ID or label (opens an account picker when omitted)","optional":true,"variadic":false}],"flags":[],"commands":[]}
     ]
    },
+   {"name":"login","aliases":[],"description":"Connect an integration (alias for auth login)","hidden":true,"globalFlags":["standalone","server"],"arguments":[{"name":"target","type":"String","choices":[],"description":"Integration ID, name, or well-known provider URL","optional":true,"variadic":false}],"flags":[{"name":"method","aliases":[],"type":"String","choices":[],"description":"Authentication method ID","hidden":false,"optional":true,"repeated":false,"optionalValue":false},{"name":"answer","aliases":[],"type":"String","choices":[],"description":"Provider form answer (key=value; repeat for multiple fields)","hidden":false,"optional":true,"repeated":true,"max":100,"optionalValue":false}],"commands":[]},
    {
     "name": "mcp",
     "aliases": [],

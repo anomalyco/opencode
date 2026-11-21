@@ -55,7 +55,7 @@ fn the_root_command_shows_help_for_a_missing_directory() {
     let home = opencode_util::temp::tempdir().unwrap();
     let file = home.path().join("file.txt");
     std::fs::write(&file, "").unwrap();
-    for argument in [OsStr::new("login"), file.as_os_str()] {
+    for argument in [OsStr::new("missing-directory-not-a-command"), file.as_os_str()] {
         let output = scratch(
             Command::new(env!("CARGO_BIN_EXE_opencode-native")).arg(argument).args(["--server", "http://127.0.0.1:1"]),
             home.path(),
