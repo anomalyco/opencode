@@ -2,6 +2,9 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
+import { Database } from "@opencode/core/database/database"
 import { AppProcess } from "@opencode/util/process"
 import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
@@ -20,9 +23,12 @@ import { Machines } from "@opencode/core/machine/machines"
 import { Permission } from "@opencode/core/permission"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
 import { Ripgrep } from "@opencode/core/ripgrep"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionTable } from "@opencode/core/session/sql"
 import { SessionInstructions } from "@opencode/core/session/instructions"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
@@ -107,9 +113,13 @@ interface Fixture {
   readonly processes: ChildProcess.Command[]
 }
 
-const graph = (fixture: Fixture) =>
+const graph = (fixture: Fixture, realPermissions = false) =>
   AppNodeBuilder.build(
     LayerNode.group([
+      Agent.node,
+      Bus.node,
+      Database.node,
+      Permission.node,
       Tool.node,
       toolPlugins,
       FileAccess.node,
@@ -143,11 +153,15 @@ const graph = (fixture: Fixture) =>
           }),
         ).pipe(Layer.provide(LayerNode.compile(AppProcess.node))),
       ),
-      Permission.node.replace(
-        permissionLayer({
-          assert: (input) => Effect.sync(() => void fixture.assertions.push(input)),
-        }),
-      ),
+      ...(realPermissions
+        ? []
+        : [
+            Permission.node.replace(
+              permissionLayer({
+                assert: (input) => Effect.sync(() => void fixture.assertions.push(input)),
+              }),
+            ),
+          ]),
       PersistentPty.node.replace(disabledPersistentPtyLayer),
       Session.node.replace(Layer.mock(Session.Service, { revert })),
       Config.node.replace(Config.testLayer()),
@@ -177,6 +191,69 @@ const slash = (value: string) => value.replaceAll("\\", "/")
 
 const on = testEffect(Layer.succeed(Flag.Overrides, "machines"))
 const off = testEffect(Layer.succeed(Flag.Overrides, "-machines"))
+
+on.live("reads, writes and runs commands on a paired machine without requesting approval under default rules", () =>
+  withTempDir((tmp) =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      yield* database.db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make(tmp.path), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          directory: tmp.path,
+          slug: "test",
+          version: "test",
+          agent: toolIdentity.agent,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const agents = yield* Agent.Service
+      yield* agents.transform((editor) => editor.update(toolIdentity.agent, () => {}))
+      const bus = yield* Bus.Service
+      const prompts: string[] = []
+      const unsubscribe = yield* bus.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === Permission.Event.Asked.type) prompts.push(event.type)
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const machines = yield* Machines.Service
+      const { id, worker } = yield* connected(machines, "gpu")
+      const machine = yield* machines.get(id)
+      yield* machine.files.mkdir("/work")
+      yield* machine.files.write("/work/a.txt", bytes("before\n"))
+      const registry = yield* Tool.Service
+      expect(yield* executeTool(registry, call("read", { path: "gpu:/work/a.txt" }))).toMatchObject({
+        status: "completed",
+        output: { type: "text", content: "before\n" },
+      })
+      expect(
+        yield* executeTool(registry, call("write", { path: "gpu:/work/a.txt", content: "after\n" })),
+      ).toMatchObject({ status: "completed" })
+      expect(text((yield* machine.files.read("/work/a.txt")).bytes)).toBe("after\n")
+      const running = yield* Effect.forkChild(
+        executeTool(registry, call("shell", { command: "pwd", workdir: "gpu:/work" })),
+        { startImmediately: true },
+      )
+      while (worker.runs.length === 0) yield* Effect.yieldNow
+      yield* worker.runs[0].print("/work\n")
+      yield* worker.runs[0].exit(0)
+      expect(yield* Fiber.join(running)).toMatchObject({
+        status: "completed",
+        output: { exitCode: 0, output: "/work\n" },
+      })
+      const permission = yield* Permission.Service
+      expect(yield* permission.list()).toEqual([])
+      expect(prompts).toEqual([])
+    }).pipe(Effect.provide(graph(fixture(tmp.path), true))),
+  ),
+)
 
 describe("MachinePath", () => {
   const machinePaths: ReadonlyArray<readonly [string, { machine: string; path: string } | undefined]> = [
@@ -390,7 +467,7 @@ on.effect("reads a recovered filename on the machine, not this server's disk", (
   }),
 )
 
-on.effect("uses a rule for the machine's path, never one for the same path without the machine", () =>
+on.effect("matches machine-qualified paths and keeps machine-specific saved rules", () =>
   withTempDir((tmp) => {
     const tools = fixture(tmp.path)
     return Effect.gen(function* () {
@@ -408,7 +485,7 @@ on.effect("uses a rule for the machine's path, never one for the same path witho
       const allow = (resource: string) => [{ action: "read" as const, resource, effect: "allow" as const }]
       expect(Permission.evaluate("read", "gpu:/work/a.txt", allow("gpu:*")).effect).toBe("allow")
       expect(Permission.evaluate("read", "cpu:/work/a.txt", allow("gpu:*")).effect).toBe("ask")
-      expect(Permission.evaluate("read", "gpu:/work/a.txt", allow("*")).effect).toBe("ask")
+      expect(Permission.evaluate("read", "gpu:/work/a.txt", allow("*")).effect).toBe("allow")
       expect(Permission.evaluate("read", "gpu:/work/a.txt", allow("/work/*")).effect).toBe("ask")
       expect(Permission.evaluate("read", "gpu:/work/a.txt", allow("gpu:/work/*")).effect).toBe("allow")
       const external = (resource: string) => [
@@ -673,13 +750,20 @@ off.effect("resolves a directory a command names against its working directory",
   }),
 )
 
-on.effect("refuses a machine it does not know with the list's message", () =>
+on.effect("refuses unknown and removed machines with the list's message", () =>
   withTempDir((tmp) => {
     const tools = fixture(tmp.path)
     return Effect.gen(function* () {
       const result = yield* executeTool(yield* Tool.Service, call("read", { path: "gpu:/work/a.txt" }))
       expect(result.status).toBe("error")
       expect(result.error?.message).toContain('No machine named "gpu".')
+      const machines = yield* Machines.Service
+      const { id } = yield* connected(machines, "gpu")
+      yield* machines.remove(id)
+      const removed = yield* executeTool(yield* Tool.Service, call("read", { path: "gpu:/work/a.txt" }))
+      expect(removed.status).toBe("error")
+      expect(removed.error?.message).toContain('No machine named "gpu".')
+      expect(tools.assertions).toEqual([])
     }).pipe(Effect.provide(graph(tools)))
   }),
 )
