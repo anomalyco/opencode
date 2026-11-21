@@ -6,4 +6,3 @@ mod live;
 mod oracle;
 mod review;
 mod sse;
-mod ws;

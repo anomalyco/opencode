@@ -214,3 +214,17 @@ pub(crate) async fn silent_peer() -> (Url, tokio::task::JoinHandle<()>) {
     });
     (crate::js::parse_url(&format!("ws://{address}/socket")).unwrap(), server)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_stream_that_ends_without_a_close_frame_closes_the_socket() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = crate::js::parse_url(&format!("ws://{}/socket", listener.local_addr().unwrap())).unwrap();
+        tokio::spawn(async move { drop(tokio_tungstenite::accept_async(listener.accept().await.unwrap().0).await) });
+        let mut socket = open::<Vec<u8>>(url, Vec::new()).await.unwrap();
+        assert_eq!(socket.incoming.recv().await, Some(Incoming::Closed));
+    }
+}

@@ -125,6 +125,8 @@ async fn data_envelope_is_unwrapped() {
     let script = Script::new(200, "application/json", r#"{"data":{"ses_1":{"type":"busy"}}}"#);
     let active = client(&script).session_active().await.unwrap();
     assert_eq!(active["ses_1"].r#type, "busy");
+    let script = Script::new(200, "application/json", r#"{"data":{"ses_1":{"type":"\ud83d"}}}"#);
+    assert_eq!(client(&script).session_active().await.unwrap()["ses_1"].r#type, "\u{fffd}");
 }
 
 #[tokio::test]
@@ -208,16 +210,16 @@ async fn query_auth_puts_the_token_in_the_url() {
 
 #[tokio::test]
 async fn event_stream_decodes_generated_events() {
-    let body = "data: {\"id\":\"e1\",\"type\":\"server.connected\",\"data\":{}}\n\n: keepalive\n\ndata: {\"type\":\"future.event\"}\n\n";
+    let body = "data: {\"id\":\"e1\",\"type\":\"server.connected\",\"data\":{}}\n\n: keepalive\n\ndata: {\"type\":\"future.event\"}\n\ndata: {\"id\":\"e2\",\"created\":1,\"type\":\"skill.updated\",\"data\":\"x\"}\n\n";
     let script = Script::new(200, "text/event-stream", body);
     let response = client(&script).event_subscribe(&EventSubscribeInput::default()).await.unwrap();
     let events: Vec<_> = response.events(|| {}).collect().await;
     let kinds: Vec<_> = events.iter().map(|event| event.as_ref().unwrap().kind().to_owned()).collect();
-    assert_eq!(kinds, ["server.connected", "future.event"]);
+    assert_eq!(kinds, ["server.connected", "future.event", "skill.updated"]);
 
-    let script = Script::new(200, "application/json", "{}");
+    let script = Script::new(200, "", "{}");
     let error = client(&script).event_subscribe(&EventSubscribeInput::default()).await.unwrap_err();
-    assert!(matches!(error, Error::UnsupportedContentType(_)), "{error:?}");
+    assert_eq!(error.to_string(), "UnsupportedContentType");
 }
 
 // Expected: `reply`, which takes any status, makes an error status a declared error when its body has a tag or a
