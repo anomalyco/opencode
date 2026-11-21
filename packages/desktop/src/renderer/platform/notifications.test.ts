@@ -51,6 +51,23 @@ afterEach(() => {
 })
 
 describe("desktop notifications", () => {
+  test("shows the session title above the status, without an icon", async () => {
+    globalThis.Notification = FakeNotification
+
+    const notify = createDesktopNotify({
+      getWindowFocused: async () => false,
+      showWindow: async () => {},
+      setWindowFocus: async () => {},
+    })
+
+    await notify("Refactor auth flow", "Response ready")
+
+    expect(created[0]?.title).toBe("Refactor auth flow")
+    expect(created[0]?.body).toBe("Response ready")
+    expect(created[0]?.icon).toBe("")
+    expect(created[0]?.silent).toBe(true)
+  })
+
   test("shows and focuses the window on click, runs the callback, and closes the notification", async () => {
     globalThis.Notification = FakeNotification
 
@@ -64,7 +81,7 @@ describe("desktop notifications", () => {
       },
     })
 
-    await notify("Response ready", "Refactor auth flow", () => {
+    await notify("Refactor auth flow", "Response ready", () => {
       events.push("session.select")
     })
 
@@ -74,7 +91,7 @@ describe("desktop notifications", () => {
     notification?.onclick?.call(notification, new Event("click"))
 
     expect(events).toEqual([
-      "created:Response ready:Refactor auth flow",
+      "created:Refactor auth flow:Response ready",
       "api.showWindow",
       "api.setWindowFocus",
       "session.select",
@@ -122,7 +139,7 @@ describe("desktop notifications", () => {
       setWindowFocus: async () => {},
     })
 
-    await notify("Response ready", "Active session")
+    await notify("Active session", "Response ready")
     expect(events).toEqual([])
     expect(created).toEqual([])
   })

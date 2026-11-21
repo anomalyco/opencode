@@ -326,7 +326,7 @@ export function createServerNotificationState(input: {
 
       if (hasOpenTab && settings.notifications.agent()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
+          platform.notify(session.title ?? sessionID, language.t("notification.session.responseReady.title"), () =>
             openNotificationSession(tabs, input.key, sessionID),
           ),
         )
@@ -346,11 +346,11 @@ export function createServerNotificationState(input: {
         void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.errors()))
       }
 
-      const description = session?.title ?? language.t("notification.session.error.fallbackDescription")
+      const title = session?.title ?? language.t("notification.session.error.fallbackDescription")
 
       if (hasOpenTab && settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.error.title"), description, () =>
+          platform.notify(title, language.t("notification.session.error.title"), () =>
             openNotificationSession(tabs, input.key, sessionID),
           ),
         )
@@ -397,7 +397,7 @@ export function createServerNotificationState(input: {
       if (!pending()) return
       void platform.requestAttention?.().catch(() => undefined)
 
-      return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, () =>
+      return platform.notify(session.title ?? sessionID, language.t(requestTitles[kind]), () =>
         openNotificationSession(tabs, input.key, target),
       )
     })
