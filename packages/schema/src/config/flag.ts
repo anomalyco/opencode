@@ -16,7 +16,7 @@ export const registry = {
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
   mcp_events:
-    "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
+    "Enable experimental MCP Events, a beta MCP extension: declare support to MCP servers and read the events of 2026-07-28 servers that offer them.",
   recommended_api: "Use each model's recommended API from models.dev instead of the first API it lists.",
   full_codemode: "Enable the full Code Mode work in progress.",
   machines: "Let a tool path name a machine, as in gpu:/work/train.py, and act on that machine's files and processes.",

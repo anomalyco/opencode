@@ -68,25 +68,25 @@ const isTransient = (error: unknown) =>
     ? error.status === 408 || error.status === 429 || (error.status >= 500 && error.status !== 501)
     : error instanceof TypeError && "code" in error
 
-// MCP Events (SEP-3415), a draft extension. Every `notifications/events/*` names its stream by the JSON-RPC id of
-// the `events/stream` request that opened it.
+// MCP Events (SEP-3415), a beta extension on 2026-07-28. Every `notifications/events/*` names its stream by the
+// JSON-RPC id of the `events/stream` request that opened it.
 const EVENTS = "io.modelcontextprotocol/events"
 const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
-// Servers send a heartbeat at least every 30 seconds; twice that in silence means the stream is dead.
-const EVENT_STREAM_IDLE = Duration.seconds(60)
+// A stream is dead after three granted heartbeat intervals pass in silence, or 60 seconds before the server grants one.
+const MISSED_HEARTBEATS = 3
+const UNGRANTED_HEARTBEAT = Duration.seconds(20)
 const EVENT_LIST_PAGES = 100
 
-/** Experimental: MCP Events is a draft extension; may change without compatibility guarantees. */
+/** Experimental: MCP Events is a beta extension; may change without compatibility guarantees. */
 export const EventType = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
-  /** Any of "poll", "push" and "webhook". */
-  delivery: Schema.optional(Schema.Array(Schema.String)),
-  inputSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  payloadSchema: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  delivery: Schema.NonEmptyArray(Schema.Literals(["poll", "push", "webhook"])),
+  inputSchema: Schema.Record(Schema.String, Schema.Unknown),
+  payloadSchema: Schema.Record(Schema.String, Schema.Unknown),
 })
 export type EventType = typeof EventType.Type
-const EventError = Schema.Struct({ code: Schema.Number, message: Schema.String, data: Schema.optional(Schema.Json) })
+const EventError = Schema.Struct({ code: Schema.Int, message: Schema.String, data: Schema.optional(Schema.Json) })
 export type EventError = typeof EventError.Type
 // An absent cursor means null: the event type has no replay.
 const Cursor = Schema.optional(Schema.NullOr(Schema.String))
@@ -94,16 +94,21 @@ const Subscribed = { _meta: Schema.Struct({ [SUBSCRIPTION_ID]: Schema.Union([Sch
 const EventList = Schema.toStandardSchemaV1(
   Schema.Struct({ events: Schema.Array(EventType), nextCursor: Schema.optional(Schema.String) }),
 )
-const StreamResult = Schema.toStandardSchemaV1(Schema.Unknown)
+const AnyValue = Schema.toStandardSchemaV1(Schema.Unknown)
 const ActiveNotification = Schema.toStandardSchemaV1(
-  Schema.Struct({ cursor: Cursor, truncated: Schema.optional(Schema.Boolean), ...Subscribed }),
+  Schema.Struct({
+    cursor: Cursor,
+    truncated: Schema.optional(Schema.Boolean),
+    heartbeatMs: Schema.Int.check(Schema.isGreaterThan(0)),
+    ...Subscribed,
+  }),
 )
 const EventNotification = Schema.toStandardSchemaV1(
   Schema.Struct({
     eventId: Schema.String,
     name: Schema.String,
-    timestamp: Schema.String,
-    data: Schema.Json,
+    timestamp: Schema.String.check(Schema.makeFilter((text) => !Number.isNaN(Date.parse(text)))),
+    data: Schema.Record(Schema.String, Schema.Json),
     cursor: Cursor,
     ...Subscribed,
   }),
@@ -113,7 +118,7 @@ const ErrorNotification = Schema.toStandardSchemaV1(Schema.Struct({ error: Event
 
 /**
  * One message on an event stream. Persist the latest non-null `cursor` to resume from it.
- * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ * Experimental: MCP Events is a beta extension; may change without compatibility guarantees.
  */
 export type EventMessage =
   /** The stream is live. Sent first, and again with `truncated` when the server skipped events it could not replay. */
@@ -123,7 +128,7 @@ export type EventMessage =
       readonly eventId: string
       readonly name: string
       readonly timestamp: string
-      readonly data: Schema.Json
+      readonly data: { readonly [key: string]: Schema.Json }
       readonly cursor: string | null
     }
   /** Nothing matched; the server has checked up to `cursor`. */
@@ -246,7 +251,7 @@ export interface Connection {
       readonly sessionID?: Session.ID
     } & PerRequest,
   ) => Effect.Effect<CallToolResult, Error>
-  /** MCP Events, when the connection declared them and the server offers them. Experimental; see `Events`. */
+  /** MCP Events, when the connection declared them and negotiated 2026-07-28 with a server that offers them. Experimental; see `Events`. */
   readonly events: Events | undefined
   readonly onClose: (callback: (reason: string) => void) => void
   readonly onSessionExpired: (callback: () => void) => void
@@ -255,14 +260,14 @@ export interface Connection {
   readonly onResourcesChanged: (callback: () => void) => void
 }
 
-/** Experimental: MCP Events is a draft extension; may change without compatibility guarantees. */
+/** Experimental: MCP Events is a beta extension; may change without compatibility guarantees. */
 export interface Events {
   /** Every event type the server offers (`events/list`). */
   readonly list: () => Effect.Effect<ReadonlyArray<EventType>, Error>
   /**
    * Push delivery (`events/stream`) from `cursor`, or from now. Ends when the server closes the stream. Fails with
    * EventStreamRejectedError when the server refuses the subscription, EventStreamTerminatedError when it ends it,
-   * and with another error when the stream breaks or falls silent for a minute, after which it can be opened again
+   * and with another error when the stream breaks or misses three heartbeats, after which it can be opened again
    * from the last cursor. Interrupting it cancels it.
    */
   readonly stream: (input: {
@@ -278,6 +283,8 @@ export interface Events {
 export interface Attached {
   readonly type: "attached"
   readonly transport: Transport
+  /** Defaults to "legacy": attached clients run ordinary SDK servers over the initialize handshake. */
+  readonly protocol?: ConfigMCP.Protocol
 }
 
 export interface ConnectOptions {
@@ -291,7 +298,7 @@ export interface ConnectOptions {
   readonly clientInfo?: Implementation
   /** False declares no roots and leaves `roots/list` unanswered, for a connection no one directory owns. */
   readonly roots?: boolean
-  /** Experimental: declares MCP Events, a draft extension, and exposes `Connection.events` for a server that offers them. */
+  /** Experimental: declares MCP Events, a beta extension, and exposes `Connection.events` for a 2026-07-28 server that offers them. */
   readonly events?: boolean
 }
 
@@ -308,8 +315,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   // modern connection the SDK opens the subscriptions/listen stream behind these itself.
   const timeout: (typeof ConfigMCP.Server.Type)["timeout"] =
     config.type === "attached" ? { execution: ATTACHED_EXECUTION_TIMEOUT } : config.timeout
-  // Attached clients run ordinary SDK servers over the initialize handshake.
-  const protocol = config.type === "attached" ? "legacy" : (config.protocol ?? "auto")
+  const protocol = config.protocol ?? (config.type === "attached" ? "legacy" : "auto")
   const changed = { tools: () => {}, prompts: () => {}, resources: () => {} }
   const listChanged = (key: keyof typeof changed) => ({
     autoRefresh: false,
@@ -324,8 +330,10 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     return signal
   }
 
-  // Open event streams, by the JSON-RPC id of their `events/stream` request.
-  const streams = new Map<string, Queue.Queue<EventMessage, Error | Cause.Done>>()
+  // Open event streams, by the JSON-RPC id of their `events/stream` request: each counts what it has heard and the
+  // heartbeat interval the server granted, for the watchdog that tells a quiet stream from a dead one.
+  type OpenStream = { queue: Queue.Queue<EventMessage, Error | Cause.Done>; heard: number; interval: Duration.Duration }
+  const streams = new Map<string, OpenStream>()
 
   // The SDK fails pending requests with a bare "Connection closed"; the transport error before it says why.
   let lastError: string | undefined
@@ -382,40 +390,41 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     if (options.roots !== false)
       client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(options.directory).href }] }))
     if (options.events) {
-      const subscribed = (params: { readonly _meta: { readonly [SUBSCRIPTION_ID]: string | number } }) =>
-        streams.get(String(params._meta[SUBSCRIPTION_ID]))
+      const deliver = (
+        params: { readonly _meta: { readonly [SUBSCRIPTION_ID]: string | number } },
+        message: EventMessage,
+      ) => {
+        const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
+        if (!open) return
+        open.heard++
+        Queue.offerUnsafe(open.queue, message)
+      }
       client.setNotificationHandler("notifications/events/active", { params: ActiveNotification }, (params) => {
-        const queue = subscribed(params)
-        if (queue)
-          Queue.offerUnsafe(queue, {
-            type: "active",
-            cursor: params.cursor ?? null,
-            truncated: params.truncated === true,
-          })
+        // The server's grant is authoritative, and it comes with every `active`.
+        const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
+        if (open) open.interval = Duration.millis(params.heartbeatMs)
+        deliver(params, { type: "active", cursor: params.cursor ?? null, truncated: params.truncated === true })
       })
-      client.setNotificationHandler("notifications/events/event", { params: EventNotification }, (params) => {
-        const queue = subscribed(params)
-        if (queue)
-          Queue.offerUnsafe(queue, {
-            type: "event",
-            eventId: params.eventId,
-            name: params.name,
-            timestamp: params.timestamp,
-            data: params.data,
-            cursor: params.cursor ?? null,
-          })
-      })
-      client.setNotificationHandler("notifications/events/heartbeat", { params: HeartbeatNotification }, (params) => {
-        const queue = subscribed(params)
-        if (queue) Queue.offerUnsafe(queue, { type: "heartbeat", cursor: params.cursor ?? null })
-      })
-      client.setNotificationHandler("notifications/events/error", { params: ErrorNotification }, (params) => {
-        const queue = subscribed(params)
-        if (queue) Queue.offerUnsafe(queue, { type: "error", error: params.error })
-      })
+      client.setNotificationHandler("notifications/events/event", { params: EventNotification }, (params) =>
+        deliver(params, {
+          type: "event",
+          eventId: params.eventId,
+          name: params.name,
+          timestamp: params.timestamp,
+          data: params.data,
+          cursor: params.cursor ?? null,
+        }),
+      )
+      client.setNotificationHandler("notifications/events/heartbeat", { params: HeartbeatNotification }, (params) =>
+        deliver(params, { type: "heartbeat", cursor: params.cursor ?? null }),
+      )
+      client.setNotificationHandler("notifications/events/error", { params: ErrorNotification }, (params) =>
+        deliver(params, { type: "error", error: params.error }),
+      )
       client.setNotificationHandler("notifications/events/terminated", { params: ErrorNotification }, (params) => {
-        const queue = subscribed(params)
-        if (queue) Queue.failCauseUnsafe(queue, Cause.fail(new EventStreamTerminatedError({ server, ...params.error })))
+        const open = streams.get(String(params._meta[SUBSCRIPTION_ID]))
+        if (open)
+          Queue.failCauseUnsafe(open.queue, Cause.fail(new EventStreamTerminatedError({ server, ...params.error })))
       })
     }
     if (elicitation) {
@@ -576,6 +585,41 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     // first and leave the request unmade; the result is the same empty list without the noise.
     const advertised = (capability: "tools" | "prompts" | "resources") =>
       Boolean(client.getServerCapabilities()?.[capability])
+    // Each listed event type's `x-mcp-header` annotations, mirrored as `Mcp-Param-*` headers on its stream.
+    const eventHeaders = new Map<string, ReadonlyArray<HeaderParam>>()
+    const listEvents = Effect.fnUntraced(function* () {
+      const events: EventType[] = []
+      let cursor: string | undefined
+      for (let page = 0; page < EVENT_LIST_PAGES; page++) {
+        const result = yield* list("list MCP events", (signal) =>
+          client.request({ method: "events/list", params: cursor === undefined ? {} : { cursor } }, EventList, {
+            ...catalog,
+            signal,
+          }),
+        )
+        events.push(...result.events)
+        cursor = result.nextCursor
+        if (cursor === undefined) break
+      }
+      if (cursor !== undefined)
+        yield* Effect.logWarning("MCP event list has more pages than read", { server, pages: EVENT_LIST_PAGES })
+      eventHeaders.clear()
+      const valid: EventType[] = []
+      for (const event of events) {
+        const params = headerParams(event.inputSchema)
+        if (typeof params === "string") {
+          yield* Effect.logWarning("skipping MCP event type with an invalid x-mcp-header", {
+            server,
+            event: event.name,
+            reason: params,
+          })
+          continue
+        }
+        eventHeaders.set(event.name, params)
+        valid.push(event)
+      }
+      return valid
+    })
 
     // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
     const connection: Connection = {
@@ -583,53 +627,58 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       protocolVersion: client.getNegotiatedProtocolVersion(),
       title: client.getServerVersion()?.title?.trim() || undefined,
       instructions: client.getInstructions()?.trim() || undefined,
+      // Events are defined for 2026-07-28 only.
       events:
-        options.events && client.getServerCapabilities()?.extensions?.[EVENTS]
+        options.events && client.getProtocolEra() === "modern" && client.getServerCapabilities()?.extensions?.[EVENTS]
           ? {
-              list: Effect.fnUntraced(function* () {
-                const events: EventType[] = []
-                let cursor: string | undefined
-                for (let page = 0; page < EVENT_LIST_PAGES; page++) {
-                  const result = yield* list("list MCP events", (signal) =>
-                    client.request(
-                      { method: "events/list", params: cursor === undefined ? {} : { cursor } },
-                      EventList,
-                      {
-                        ...catalog,
-                        signal,
-                      },
-                    ),
-                  )
-                  events.push(...result.events)
-                  cursor = result.nextCursor
-                  if (cursor === undefined) return events
-                }
-                yield* Effect.logWarning("MCP event list has more pages than read", { server, pages: EVENT_LIST_PAGES })
-                return events
-              }),
+              list: listEvents,
               stream: (input) =>
                 Stream.callback<EventMessage, Error>((queue) =>
                   Effect.gen(function* () {
+                    const stream: OpenStream = { queue, heard: 0, interval: UNGRANTED_HEARTBEAT }
                     yield* Effect.addFinalizer(() =>
                       Effect.sync(() => {
-                        for (const [id, open] of streams) if (open === queue) streams.delete(id)
+                        for (const [id, open] of streams) if (open === stream) streams.delete(id)
                       }),
                     )
+                    // Heartbeats, not a request timeout, tell a quiet stream from a dead one: it fails once
+                    // MISSED_HEARTBEATS intervals in a row pass without a message.
+                    yield* Effect.gen(function* () {
+                      let silent = 0
+                      while (silent < MISSED_HEARTBEATS) {
+                        const heard = stream.heard
+                        yield* Effect.sleep(stream.interval)
+                        silent = stream.heard === heard ? silent + 1 : 0
+                      }
+                      yield* Queue.fail(
+                        queue,
+                        new Error(`MCP server ${server} stopped sending event stream heartbeats`),
+                      )
+                    }).pipe(Effect.forkScoped)
                     // Interrupting the request cancels the stream; the server closing it resolves the request.
-                    yield* Effect.tryPromise({
+                    const request = Effect.tryPromise({
                       try: (signal) =>
-                        client.request({ method: "events/stream", params: input }, StreamResult, {
+                        client.request({ method: "events/stream", params: input }, AnyValue, {
                           signal,
-                          // Heartbeats, not a request timeout, tell a quiet stream from a dead one; see below.
+                          headers: paramHeaders(eventHeaders.get(input.name) ?? [], input.arguments),
                           timeout: Infinity,
                           // Routes the stream's notifications, which can arrive before the request settles.
-                          onRequestId: (id) => streams.set(String(id), queue),
+                          onRequestId: (id) => streams.set(String(id), stream),
                         }),
-                      catch: (error) =>
+                      catch: (error) => error,
+                    })
+                    // A modern server rejects headers mirrored from a stale or unlisted event type before opening
+                    // the stream, so relist and retry once with the fresh schema.
+                    yield* request.pipe(
+                      Effect.catchIf(
+                        (error) => error instanceof ProtocolError && error.code === HEADER_MISMATCH,
+                        () => listEvents().pipe(Effect.andThen(request)),
+                      ),
+                      Effect.mapError((error) =>
                         error instanceof ProtocolError && EVENT_STREAM_REJECTED.has(error.code)
                           ? new EventStreamRejectedError({ server, code: error.code, message: error.message })
                           : failure(error),
-                    }).pipe(
+                      ),
                       Effect.tapError((error) =>
                         Effect.logWarning("failed to stream MCP events", { server, error: error.message }),
                       ),
@@ -639,12 +688,6 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                       }),
                       Effect.forkScoped,
                     )
-                  }),
-                ).pipe(
-                  Stream.timeoutOrElse({
-                    duration: EVENT_STREAM_IDLE,
-                    orElse: () =>
-                      Stream.fail(new Error(`MCP server ${server} sent nothing on the event stream for 60 seconds`)),
                   }),
                 ),
             }
@@ -793,6 +836,24 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         changed.resources = callback
       },
     }
+    // A server whose event types change at runtime says so on a `subscriptions/listen` stream; relisting keeps each
+    // type's mirrored headers current. Open streams keep running.
+    const settings = client.getServerCapabilities()?.extensions?.[EVENTS]
+    if (connection.events && isRecord(settings) && settings.listChanged === true) {
+      const run = Effect.runForkWith(yield* Effect.context())
+      client.setNotificationHandler("notifications/events/list_changed", { params: AnyValue }, () => {
+        run(listEvents().pipe(Effect.ignore))
+      })
+      // The SDK's filter type predates Events; it sends the filter as given.
+      const filter: Record<string, boolean> = { eventsListChanged: true }
+      yield* Effect.tryPromise(() => client.listen(filter, { timeout: catalog.timeout })).pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("failed to listen for MCP event list changes", { server, error: describe(error) }),
+        ),
+        Effect.ignore,
+        Effect.forkScoped,
+      )
+    }
     return connection
   }
 
@@ -861,4 +922,94 @@ function toCallToolResult(result: SdkCallToolResult): CallToolResult {
       return []
     }),
   }
+}
+
+// SEP-2243 `x-mcp-header` mirroring, which the SDK applies to tool calls but does not export for other requests.
+type HeaderParam = { readonly path: ReadonlyArray<string>; readonly header: string }
+const HEADER_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+const HEADER_TYPES = new Set(["string", "integer", "boolean"])
+// Subschemas a properties-only chain never passes through; an annotation under one invalidates the schema.
+const UNREACHABLE = new Set([
+  "items",
+  "prefixItems",
+  "contains",
+  "additionalProperties",
+  "unevaluatedProperties",
+  "unevaluatedItems",
+  "propertyNames",
+  "patternProperties",
+  "dependentSchemas",
+  "oneOf",
+  "anyOf",
+  "allOf",
+  "not",
+  "if",
+  "then",
+  "else",
+  "$defs",
+  "definitions",
+])
+
+/** The annotated arguments of an input schema, or why its annotations are invalid. */
+function headerParams(schema: unknown): HeaderParam[] | string {
+  const params: HeaderParam[] = []
+  const seen = new Set<string>()
+  const visit = (node: unknown, path: string[], reachable: boolean): string | undefined => {
+    if (Array.isArray(node)) return node.map((child) => visit(child, path, false)).find(Boolean)
+    if (!isRecord(node)) return undefined
+    const header = node["x-mcp-header"]
+    if (header !== undefined) {
+      const at = path.join(".") || "<root>"
+      if (!reachable || path.length === 0)
+        return `${at}: x-mcp-header is only allowed on a property reached through properties`
+      if (typeof header !== "string" || !HEADER_TOKEN.test(header))
+        return `${at}: x-mcp-header is not a valid header name`
+      if (typeof node.type !== "string" || !HEADER_TYPES.has(node.type))
+        return `${at}: x-mcp-header needs a string, integer or boolean type`
+      if (seen.has(header.toLowerCase())) return `${at}: x-mcp-header ${header} is declared twice`
+      seen.add(header.toLowerCase())
+      params.push({ path, header })
+    }
+    if (isRecord(node.properties))
+      for (const [key, child] of Object.entries(node.properties)) {
+        const fault = visit(child, [...path, key], reachable)
+        if (fault) return fault
+      }
+    for (const [key, child] of Object.entries(node)) {
+      if (!UNREACHABLE.has(key)) continue
+      const fault = visit(
+        isRecord(child) && /^(patternProperties|dependentSchemas|\$defs|definitions)$/.test(key)
+          ? Object.values(child)
+          : child,
+        path,
+        false,
+      )
+      if (fault) return fault
+    }
+    return undefined
+  }
+  return visit(schema, [], true) ?? params
+}
+
+/** `Mcp-Param-*` headers for the annotated arguments that hold a primitive value. */
+function paramHeaders(params: ReadonlyArray<HeaderParam>, args: unknown) {
+  return Object.fromEntries(
+    params.flatMap((param) => {
+      const value = param.path.reduce<unknown>((node, key) => (isRecord(node) ? node[key] : undefined), args)
+      const text =
+        typeof value === "string"
+          ? value
+          : typeof value === "boolean" ||
+              (typeof value === "number" &&
+                Number.isFinite(value) &&
+                (!Number.isInteger(value) || Number.isSafeInteger(value)))
+            ? String(value)
+            : undefined
+      if (text === undefined) return []
+      // Values that are not plain visible ASCII, or would be read as the sentinel, travel as base64.
+      const plain =
+        text !== "" && text === text.trim() && /^[\t\x20-\x7e]*$/.test(text) && !/^=\?base64\?.*\?=$/.test(text)
+      return [[`Mcp-Param-${param.header}`, plain ? text : `=?base64?${Buffer.from(text).toString("base64")}?=`]]
+    }),
+  )
 }

@@ -2,7 +2,7 @@ import { Schema } from "effect"
 
 /**
  * The server refused the subscription, as for an unknown event type, bad arguments or missing access.
- * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ * Experimental: MCP Events is a beta extension; may change without compatibility guarantees.
  */
 export class EventStreamRejectedError extends Schema.TaggedError<EventStreamRejectedError>()(
   "MCP.EventStreamRejectedError",
@@ -15,7 +15,7 @@ export class EventStreamRejectedError extends Schema.TaggedError<EventStreamReje
 
 /**
  * The server ended the subscription, as when access was revoked or the event type was removed or changed.
- * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ * Experimental: MCP Events is a beta extension; may change without compatibility guarantees.
  */
 export class EventStreamTerminatedError extends Schema.TaggedError<EventStreamTerminatedError>()(
   "MCP.EventStreamTerminatedError",

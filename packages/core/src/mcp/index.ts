@@ -137,7 +137,10 @@ const URL_ELICITATION_FIELD_KEY = "elicitation"
 const changes = { tools: McpEvent.ToolsChanged, resources: McpEvent.ResourcesChanged, prompts: PromptsChanged }
 
 // A broken, silent or closed event stream reopens after a delay growing from a second to this cap.
-const EVENT_REOPEN = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")])
+// Jittered so streams that broke together don't all reopen at the same moment.
+const EVENT_REOPEN = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")]).pipe(
+  Schedule.jittered,
+)
 
 const isEnded = (error: Error) =>
   error instanceof EventStreamRejectedError || error instanceof EventStreamTerminatedError
@@ -221,7 +224,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/MC
 
 /**
  * Why `subscribe` cannot follow a server's events.
- * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ * Experimental: MCP Events is a beta extension; may change without compatibility guarantees.
  */
 export class EventsUnavailableError extends Schema.TaggedError<EventsUnavailableError>()("MCP.EventsUnavailableError", {
   server: ServerName,
@@ -230,7 +233,7 @@ export class EventsUnavailableError extends Schema.TaggedError<EventsUnavailable
 
 /**
  * An event type of a server, followed onto the bus as `experimental.mcp.event`.
- * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ * Experimental: MCP Events is a beta extension; may change without compatibility guarantees.
  */
 export interface Subscription {
   /** The same for every subscribe to this server, event name and arguments, within this Location. */

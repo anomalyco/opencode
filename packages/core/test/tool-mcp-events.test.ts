@@ -25,11 +25,11 @@ const setup = Effect.fnUntraced(function* (input: { flag?: string } = {}) {
       inputSchema: {},
       payloadSchema: { type: "object" },
     },
-    { name: "job.polled", delivery: ["poll"] },
+    { name: "job.polled", delivery: ["poll"], inputSchema: {}, payloadSchema: {} },
   ])
   const connection = yield* McpClient.connect({
     server: "jobs",
-    config: { type: "attached", transport: producer.client },
+    config: { type: "attached", transport: producer.client, protocol: "2026-07-28" },
     directory: import.meta.dir,
     events: true,
   }).pipe(Effect.provide(hostEnvironmentLayer))
