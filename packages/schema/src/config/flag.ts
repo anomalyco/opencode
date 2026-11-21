@@ -25,8 +25,8 @@ export const registry = {
   project_overlay:
     "Load a personal config dir for each project from ~/.config/opencode/project/<project-id>/, read like an extra .opencode dir that ranks above the repo's own, and let home memory keep the skills it builds for the user there.",
   sqlite_fts:
-    "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=sqlite_fts or experimental.sqlite_fts: true.",
+    "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
-export const optInOnly: ReadonlySet<Key> = new Set(["todo", "sqlite_fts"])
+export const optInOnly: ReadonlySet<Key> = new Set(["todo"])
