@@ -38,6 +38,7 @@ import {
 } from "solid-js"
 import { stringWidth } from "../util/string-width"
 import { errorMessage } from "../util/error"
+import { I18n } from "../i18n"
 import {
   createPromptHistory,
   EXIT_COMMANDS,
@@ -286,7 +287,7 @@ export function RunPromptBody(props: {
                 const [failed, setFailed] = createSignal(false)
                 return (
                   <box width={props.layout().images * 2} height="100%" flexShrink={1}>
-                    <Show when={!failed()} fallback={<text fg={props.theme().muted}>No preview</text>}>
+                    <Show when={!failed()} fallback={<text fg={props.theme().muted}>{I18n.t("prompt.images.nopreview")}</text>}>
                       <image
                         id={`mini-prompt-image-${index()}`}
                         source={image}
@@ -303,7 +304,7 @@ export function RunPromptBody(props: {
             </For>
             <Show when={props.images().length > 3}>
               <text fg={props.theme().muted} wrapMode="none" truncate>
-                +{props.images().length - 3} more
+                {I18n.t("prompt.images.more", { count: props.images().length - 3 })}
               </text>
             </Show>
           </box>
@@ -344,7 +345,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const [shell, setShell] = createSignal(false)
   const placeholder = createMemo(() => {
     if (shell()) {
-      return new StyledText([fg(input.theme().muted)('Run a command… "git status"')])
+      return new StyledText([fg(input.theme().muted)(I18n.t("prompt.placeholder.shell"))])
     }
 
     if (!input.state().first) {
@@ -352,7 +353,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     return new StyledText([
-      fg(input.theme().muted)(`Ask anything, / for commands, @ for context${input.mono() ? "..." : "…"}`),
+      fg(input.theme().muted)(I18n.t("prompt.placeholder.ask", { ellipsis: input.mono() ? "..." : "…" })),
     ])
   })
 
@@ -512,24 +513,30 @@ export function createPromptState(input: PromptInput): PromptState {
         action: "editor" as const,
         name: "editor",
         display: "/editor",
-        description: "compose in your external editor",
+        description: I18n.t("prompt.slash.editor"),
       } satisfies SlashOption,
       {
         kind: "slash",
         action: "settings" as const,
         name: "settings",
         display: "/settings",
-        description: "configure Mini transcript output",
+        description: I18n.t("prompt.slash.settings"),
       } satisfies SlashOption,
-      { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
+      {
+        kind: "slash",
+        name: "new",
+        display: "/new",
+        description: I18n.t("prompt.slash.new"),
+      } satisfies SlashOption,
       {
         kind: "slash",
         name: "compact",
         display: "/compact",
-        description: "compact older session context to free space",
+        description: I18n.t("prompt.slash.compact"),
       } satisfies SlashOption,
       ...EXIT_COMMANDS.map(
-        (name) => ({ kind: "slash", name, display: `/${name}`, description: "close OpenCode" }) satisfies SlashOption,
+        (name) =>
+          ({ kind: "slash", name, display: `/${name}`, description: I18n.t("prompt.slash.exit") }) satisfies SlashOption,
       ),
     ]
     const hidden = new Set(builtins.map((item) => item.name))
@@ -876,7 +883,7 @@ export function createPromptState(input: PromptInput): PromptState {
         if (!content || changed()) return
         const image = content.mime.startsWith("image/")
         if (image && shell()) {
-          input.onStatus("image attachments are unavailable in shell mode")
+          input.onStatus(I18n.t("prompt.status.imageShell"))
           return
         }
         if (!image && content.mime !== "text/plain") return
@@ -1023,7 +1030,7 @@ export function createPromptState(input: PromptInput): PromptState {
       })
     } catch {
       restore(current)
-      input.onStatus("failed to open editor")
+      input.onStatus(I18n.t("prompt.status.editorFailed"))
     }
   }
 
@@ -1366,7 +1373,7 @@ export function createPromptState(input: PromptInput): PromptState {
         })
         return
       }
-      input.onStatus(input.state().phase === "running" ? "waiting for current response" : "empty prompt ignored")
+      input.onStatus(input.state().phase === "running" ? I18n.t("prompt.status.waiting") : I18n.t("prompt.status.empty"))
       return
     }
 
@@ -1379,7 +1386,7 @@ export function createPromptState(input: PromptInput): PromptState {
         isExitCommand(next.text) ||
         next.text.trim().toLowerCase() === "/settings")
     ) {
-      input.onStatus("this prompt cannot be queued")
+      input.onStatus(I18n.t("prompt.status.noQueue"))
       return
     }
     if (!command && next.mode !== "shell" && isExitCommand(next.text)) {
@@ -1398,7 +1405,7 @@ export function createPromptState(input: PromptInput): PromptState {
         ? undefined
         : parseSlashCommand(next.text, input.commands())
     if (parsed?.type === "pending") {
-      input.onStatus("loading commands")
+      input.onStatus(I18n.t("prompt.status.loadingCommands"))
       return
     }
 
