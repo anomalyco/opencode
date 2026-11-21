@@ -194,3 +194,31 @@ test("a session draws with its current state and draw never changes it", async (
   expect((await session.draw({ ...frame, id: ":c" })).commands).toEqual([["circle", 19800, 50, 4, { fill: "text" }]])
   expect(session.state).toEqual({ x: 0.25, down: true })
 })
+
+test("a stack layers its children, each placed with place and inset", async () => {
+  const output = await step(
+    program(`
+      function view() {
+        return ui.stack([
+          ui.canvas({ key: "game", height: 200, place: "fill", onPointer: (state) => state }),
+          ui.text("Score 3", { place: "top-left", inset: 8 }),
+          ui.button("Pause", { place: "bottom-right", inset: { right: 12, bottom: 12 }, onPress: (state) => state }),
+        ])
+      }
+    `),
+    { phase: "init", data: null },
+  )
+  expect(output.view).toEqual({
+    type: "stack",
+    children: [
+      { type: "canvas", id: "0/:game", height: 200, place: "fill" },
+      { type: "text", text: "Score 3", place: "top-left", inset: 8 },
+      { type: "button", id: "0/2", label: "Pause", place: "bottom-right", inset: { right: 12, bottom: 12 } },
+    ],
+  })
+  const invalid = (node: string) =>
+    step(program(`function view() { return ${node} }`), { phase: "init", data: null }).catch((error: unknown) => error)
+  expect(await invalid(`ui.stack([ui.text("x", { place: "middle" })])`)).toMatchObject({ kind: "invalid" })
+  expect(await invalid(`ui.stack([ui.text("x", { inset: -1 })])`)).toMatchObject({ kind: "invalid" })
+  expect(await invalid(`ui.stack([ui.text("x", { inset: { top: "4" } })])`)).toMatchObject({ kind: "invalid" })
+})

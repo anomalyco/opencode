@@ -194,7 +194,7 @@ Keep the set small; add types here before using them.
 
 ```ts
 type Tone = "default" | "muted" | "accent" | "success" | "warning" | "error"
-type Node =
+type Node = (
   | { type: "column"; children: Node[]; gap?: 0 | 1 | 2 | 3; align?: "start" | "center" | "end" | "stretch" }
   | { type: "row"; children: Node[]; gap?: 0 | 1 | 2 | 3; align?: "start" | "center" | "end"; wrap?: boolean }
   | { type: "text"; text: string; style?: "title" | "body" | "caption" | "code"; tone?: Tone }
@@ -211,6 +211,13 @@ type Node =
   | { type: "divider" }
   | { type: "canvas"; id?: string; height: number; width?: number; fps?: number; duration?: number; alt?: string;
       poster?: string; wgsl?: string; values?: number[] }   // values only with wgsl
+  | { type: "stack"; children: Node[] }
+) & {
+  // Any node, as a child of a stack (see Stack); ignored elsewhere.
+  place?: "top-left" | "top" | "top-right" | "left" | "center" | "right" | "bottom-left" | "bottom" | "bottom-right"
+    | "fill"                                                    // default "top-left"
+  inset?: number | { top?: number; right?: number; bottom?: number; left?: number }   // logical px, default 0
+}
 ```
 
 A `canvas` takes the full available width unless `width` is set; sizes are logical pixels.
@@ -223,6 +230,31 @@ file name) plus the source instead of pixels where it cannot draw images.
 
 Carousel: one child visible at a time with paging (swipe on touch, arrows on desktop, left/right keys in the TUI) and a
 page indicator. A carousel without `id` pages locally; with one (it has an `onChange`) it also emits `change`.
+
+## Stack
+
+A `stack` layers its children, like a CSS grid with every child in the same cell: the first child at the bottom, the
+last on top. The builder is `ui.stack(props, children)` (or `ui.stack(children)`). Use it for a HUD (text, buttons)
+over a canvas.
+
+- **Width:** the available width, like a column.
+- **Child area:** the stack's box shrunk by the child's `inset` (a number for every side, or per side; default 0).
+- **Placement:** with `place: "fill"` the child takes its whole area (a canvas is drawn at the area's width and height).
+  Any other `place` gives the child its natural size (as it would have in a column of the area's width; a canvas: its
+  `width` or the area's width, by its `height`), at most the area, at that position in the area: `top-left` (the
+  default), `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right`.
+- **Height:** the largest of its children's natural heights plus their top and bottom insets (a `fill` child counts
+  with its natural height too). In full screen a stack that has a canvas child grows like a canvas (Layout in
+  `widgets-fullscreen.md`), unless all its canvas children have `fill: false`, and its `fill` children take its full
+  size.
+- **Pointer input:** the topmost child at the point that takes pointer input gets it: an interactive node (`button`,
+  `checkbox`, `slider`, `select`, `input`, a `card` or `carousel` with an `id`, a `canvas` with an `id`), or a container
+  through one of its interactive descendants. Everything else lets it through to the layer below: `text`, `markdown`,
+  `image`, `divider`, a canvas without an `id`, and the empty parts of containers (they have no background). Pointer
+  capture and `close` work as anywhere else; a canvas's coordinates are its own box.
+- **Order:** keyboard focus and screen readers follow the children's order.
+- **Clients that can't layer** (the TUI) show the children top to bottom in order, like a column, ignoring `place` and
+  `inset`.
 
 ## Canvas
 

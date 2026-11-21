@@ -12,6 +12,7 @@ const ui = (() => {
     row: container("row"),
     carousel: container("carousel"),
     card: container("card"),
+    stack: container("stack"),
     text: (text, props) => ({ ...props, type: "text", text: String(text) }),
     markdown: (text) => ({ type: "markdown", text: String(text) }),
     image: (src, props) => ({ ...props, type: "image", src }),

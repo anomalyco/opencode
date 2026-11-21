@@ -10,7 +10,7 @@ unknown props are ignored by the server and the TUI):
 
 - `true`: offer full screen.
 - `false`: never.
-- absent: offer it for live widgets and whenever the current view contains a `canvas` node.
+- absent: offer it for live widgets and whenever the current view contains a `canvas` node (a stack's included).
 
 The button is a small expand icon in the widget's top-right corner: shown on hover and keyboard focus on desktop,
 always visible on touch devices. It is not offered for submitted or dismissed widgets.

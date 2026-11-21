@@ -107,9 +107,12 @@ async function main(data) {
 · `carousel({ index, onChange }, children)` · `card({ selected, onPress }, children)` · `button(label, { variant,
 disabled, onPress })` · `checkbox(label, checked, { onChange })` · `slider({ label, value, min, max, step, onChange })`
 · `select(options, { value, multiple, onChange })` · `input(value, { placeholder, multiline, onChange })` · `divider()`
+· `stack(props, children)`: layers children, the last on top, each placed by its `place` (`top-left` … `bottom-right`,
+`center`, `fill`) and `inset`; taps pass through text and images to what's below (a HUD over a canvas)
 · `canvas({ height, width, fps, duration, alt, poster, fill, key, onPointer, wgsl, values })`: drawn by `draw` with 2D
-commands, or with `wgsl` by that shader (never both). Pointers are `{ kind: down|move|up, x, y, width, height }`, or
-`{ kind, dx, dy, button }` under capture (`widget.capturePointer()` or root `capture: "pointer"`; Esc always releases it; not on mobile).
+commands, or with `wgsl` by that shader (never both). Pointers are `{ kind: down|move|up, x, y, width, height }`,
+or `{ kind, dx, dy, button }` under capture (`widget.capturePointer()` or root `capture: "pointer"`; Esc always
+releases it; not on mobile).
 
 **Draw** (`const g = ui.draw()`, chainable): `save restore translate rotate scale alpha rect rrect circle line path
 text(x, y, s, { size, weight, align, color, mono }) image`; paint is a color, a theme name (`text muted accent bg

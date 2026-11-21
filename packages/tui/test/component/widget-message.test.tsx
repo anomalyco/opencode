@@ -228,6 +228,22 @@ test("a submitted widget shows its response summary", async () => {
   expect(done).toContain("name: Spring update · rollout: 50")
 })
 
+test("a stack shows its layers top to bottom in order, since the terminal can't layer", async () => {
+  const source = `function view() {
+  return ui.stack([
+    ui.canvas({ height: 200, place: "fill", alt: "Tunnel game" }),
+    ui.text("Score 3", { place: "top-left", inset: 8 }),
+    ui.button("Pause", { place: "bottom-right", inset: 12, onPress: (state) => state }),
+  ])
+}`
+  using setup = await render("confirm", { program: async () => ({ program: program(source), mode: "step" }) })
+  const shown = await frame(setup, (current) => current.includes("Pause"))
+  const at = (text: string) => shown.split("\n").findIndex((line) => line.includes(text))
+  expect(at("◈ Tunnel game")).toBeGreaterThan(-1)
+  expect(at("◈ Tunnel game")).toBeLessThan(at("Score 3"))
+  expect(at("Score 3")).toBeLessThan(at("Pause"))
+})
+
 test("2D and GPU canvases show their alt text", async () => {
   using chart = await render("chart")
   const drawn = await frame(chart, (current) => current.includes("Weekly signups"))

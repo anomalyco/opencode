@@ -116,7 +116,34 @@ export interface Canvas {
   readonly poster?: string
 }
 
-export type Node =
+/** Where a child of a `stack` sits in it (widgets.md, Stack); ignored outside a stack. */
+export type Place =
+  | "top-left"
+  | "top"
+  | "top-right"
+  | "left"
+  | "center"
+  | "right"
+  | "bottom-left"
+  | "bottom"
+  | "bottom-right"
+  | "fill"
+/** Space between a stack's edges and a child: one number for every side, or per side (default 0). */
+export type Inset =
+  | number
+  | { readonly top?: number; readonly right?: number; readonly bottom?: number; readonly left?: number }
+/** How any node is placed as a child of a `stack`. */
+export interface Layer {
+  readonly place?: Place
+  readonly inset?: Inset
+}
+/** Children layered in order, the last on top, each placed by its `place` and `inset`. */
+export interface Stack {
+  readonly type: "stack"
+  readonly children: ReadonlyArray<Node>
+}
+
+export type Node = (
   | Column
   | Row
   | Text
@@ -131,6 +158,9 @@ export type Node =
   | Input
   | Divider
   | Canvas
+  | Stack
+) &
+  Layer
 
 /** A rectangle in a node's logical pixels. */
 export interface Rect {
@@ -279,16 +309,48 @@ export const MAX_COMMANDS = 2000
 const optional = Schema.optionalKey
 const children = Schema.Array(Schema.suspend((): Schema.Codec<Node> => Node))
 const gap = Schema.Literals([0, 1, 2, 3])
+const spacing = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
+// A stack child's placement (widgets.md, Stack); any node may carry it.
+const layer = {
+  place: optional(
+    Schema.Literals([
+      "top-left",
+      "top",
+      "top-right",
+      "left",
+      "center",
+      "right",
+      "bottom-left",
+      "bottom",
+      "bottom-right",
+      "fill",
+    ]),
+  ),
+  inset: optional(
+    Schema.Union([
+      spacing,
+      Schema.Struct({
+        top: optional(spacing),
+        right: optional(spacing),
+        bottom: optional(spacing),
+        left: optional(spacing),
+      }),
+    ]),
+  ),
+}
 
 export const Node: Schema.Codec<Node> = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("stack"), ...layer, children }),
   Schema.Struct({
     type: Schema.Literal("column"),
+    ...layer,
     children,
     gap: optional(gap),
     align: optional(Schema.Literals(["start", "center", "end", "stretch"])),
   }),
   Schema.Struct({
     type: Schema.Literal("row"),
+    ...layer,
     children,
     gap: optional(gap),
     align: optional(Schema.Literals(["start", "center", "end"])),
@@ -296,31 +358,36 @@ export const Node: Schema.Codec<Node> = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("text"),
+    ...layer,
     text: Schema.String,
     style: optional(Schema.Literals(["title", "body", "caption", "code"])),
     tone: optional(Schema.Literals(["default", "muted", "accent", "success", "warning", "error"])),
   }),
-  Schema.Struct({ type: Schema.Literal("markdown"), text: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("markdown"), ...layer, text: Schema.String }),
   Schema.Struct({
     type: Schema.Literal("image"),
+    ...layer,
     src: Schema.String,
     alt: optional(Schema.String),
     aspect: optional(Schema.Finite.check(Schema.isGreaterThan(0))),
   }),
   Schema.Struct({
     type: Schema.Literal("carousel"),
+    ...layer,
     id: optional(Schema.String),
     index: optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
     children,
   }),
   Schema.Struct({
     type: Schema.Literal("card"),
+    ...layer,
     id: optional(Schema.String),
     selected: optional(Schema.Boolean),
     children,
   }),
   Schema.Struct({
     type: Schema.Literal("button"),
+    ...layer,
     id: Schema.String,
     label: Schema.String,
     variant: optional(Schema.Literals(["primary", "secondary", "danger"])),
@@ -328,6 +395,7 @@ export const Node: Schema.Codec<Node> = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("checkbox"),
+    ...layer,
     id: Schema.String,
     label: Schema.String,
     checked: Schema.Boolean,
@@ -335,6 +403,7 @@ export const Node: Schema.Codec<Node> = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("slider"),
+    ...layer,
     id: Schema.String,
     label: optional(Schema.String),
     value: Schema.Finite,
@@ -344,6 +413,7 @@ export const Node: Schema.Codec<Node> = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("select"),
+    ...layer,
     id: Schema.String,
     label: optional(Schema.String),
     options: Schema.Array(
@@ -354,15 +424,17 @@ export const Node: Schema.Codec<Node> = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("input"),
+    ...layer,
     id: Schema.String,
     label: optional(Schema.String),
     value: Schema.String,
     placeholder: optional(Schema.String),
     multiline: optional(Schema.Boolean),
   }),
-  Schema.Struct({ type: Schema.Literal("divider") }),
+  Schema.Struct({ type: Schema.Literal("divider"), ...layer }),
   Schema.Struct({
     type: Schema.Literal("canvas"),
+    ...layer,
     id: optional(Schema.String),
     height: Schema.Finite.check(Schema.isGreaterThan(0)),
     width: optional(Schema.Finite.check(Schema.isGreaterThan(0))),
@@ -399,6 +471,7 @@ export const types: ReadonlyArray<Node["type"]> = [
   "input",
   "divider",
   "canvas",
+  "stack",
 ]
 
 export const StepOutput = Schema.Struct({

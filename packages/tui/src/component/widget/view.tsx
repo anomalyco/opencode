@@ -287,7 +287,7 @@ function NodeView(props: { item: Item }): JSX.Element {
   const node = () => props.item.node
   return (
     <Switch>
-      <Match when={node().type === "column" || node().type === "row"}>
+      <Match when={node().type === "column" || node().type === "row" || node().type === "stack"}>
         <Layout item={props.item} />
       </Match>
       <Match when={node().type === "text"}>
@@ -334,17 +334,22 @@ function Children(props: { item: Item }) {
   return <For each={props.item.children}>{(child) => <NodeView item={child} />}</For>
 }
 
+// A terminal can't layer, so a stack shows its children top to bottom, in order, like a column (widgets.md, Stack).
 function Layout(props: { item: Item }) {
-  const node = () => props.item.node as Extract<Node, { type: "column" | "row" }>
+  const node = () => props.item.node as Extract<Node, { type: "column" | "row" | "stack" }>
   const row = () => node().type === "row"
+  const flow = () => {
+    const current = node()
+    return current.type === "stack" ? { gap: undefined, align: undefined } : current
+  }
   return (
     <box
       flexDirection={row() ? "row" : "column"}
       flexWrap={row() && (node() as Extract<Node, { type: "row" }>).wrap ? "wrap" : "no-wrap"}
       // Gap units are client-relative: one row for gap 1-2 and two for gap 3 vertically, the gap in cells horizontally.
-      rowGap={rows(node().gap)}
-      columnGap={row() ? (node().gap ?? 0) : 0}
-      alignItems={align(node().align ?? (row() ? "start" : "stretch"))}
+      rowGap={rows(flow().gap)}
+      columnGap={row() ? (flow().gap ?? 0) : 0}
+      alignItems={align(flow().align ?? (row() ? "start" : "stretch"))}
       flexShrink={0}
     >
       <Children item={props.item} />
