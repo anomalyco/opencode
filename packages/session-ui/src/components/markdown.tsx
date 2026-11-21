@@ -72,8 +72,8 @@ import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
 import { createDiagramPreview } from "./diagram-preview"
 import { setupFragmentLinks } from "./markdown-fragment-links"
-import { markSessionLinks, sessionReferenceClipboardText, setupSessionLinks } from "./markdown-session-links"
-import { markdownClipboardHtml, markdownMathClipboardText, markdownMathRanges } from "./markdown-clipboard"
+import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
+import { markdownClipboard, markdownClipboardHtml } from "./markdown-clipboard"
 import { createCopyFeedback } from "./copy"
 
 type RenderedBlock =
@@ -815,17 +815,12 @@ function copySelection(event: ClipboardEvent & { currentTarget: HTMLDivElement }
   const ranges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index))
 
   if (!ranges.every((range) => event.currentTarget.contains(range.commonAncestorContainer))) return
-  const math = markdownMathRanges(event.currentTarget, ranges)
+  const special = markdownClipboard(event.currentTarget, ranges)
   event.preventDefault()
-  event.clipboardData.setData(
-    "text/plain",
-    math
-      ? markdownMathClipboardText(event.currentTarget, math)
-      : (sessionReferenceClipboardText(event.currentTarget, ranges) ?? selection.toString()),
-  )
+  event.clipboardData.setData("text/plain", special?.text ?? selection.toString())
   event.clipboardData.setData(
     "text/html",
-    `<meta charset="utf-8">${(math ?? ranges).map((range) => markdownClipboardHtml(event.currentTarget, range)).join("")}`,
+    `<meta charset="utf-8">${(special?.ranges ?? ranges).map((range) => markdownClipboardHtml(event.currentTarget, range)).join("")}`,
   )
 }
 

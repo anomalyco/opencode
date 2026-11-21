@@ -1544,6 +1544,152 @@ async function copySelection(page: Page, select: "markdown" | "harness" | "exist
   return page.evaluate(() => ({ text: document.body.dataset.copiedText, html: document.body.dataset.copiedHtml }))
 }
 
+story("does not copy a display formula touched only at its end", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Intro paragraph here.\n\n$$\na+b\n$$\n\nFollowing paragraph." })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator(".katex")).toHaveCount(1)
+  await markdown.evaluate((root) => {
+    const walker = document.createTreeWalker(root.querySelector(".katex-display")!, NodeFilter.SHOW_TEXT)
+    const nodes: Node[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode)
+    const last = nodes[nodes.length - 1]!
+    const range = document.createRange()
+    range.setStart(last, last.textContent!.length)
+    range.setEnd(root.querySelectorAll("p")[1]!.firstChild!, "Following paragraph.".length)
+    getSelection()!.removeAllRanges()
+    getSelection()!.addRange(range)
+  })
+  const copied = await copySelection(page, "existing")
+  expect(copied.text?.trim()).toBe("Following paragraph.")
+  expect(copied.html).not.toContain("<annotation>")
+})
+
+story("triple-clicking a paragraph before display math does not copy the formula", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Intro paragraph here.\n\n$$\na+b\n$$" })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator(".katex")).toHaveCount(1)
+  await markdown.getByText("Intro paragraph here.").click({ clickCount: 3 })
+  const copied = await copySelection(page, "existing")
+  expect(copied.text?.trim()).toBe("Intro paragraph here.")
+  expect(copied.html).not.toContain("<annotation>")
+})
+
+story("does not copy inline math when selection ends at its first glyph", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "The **inequality** $P(|X-\\mu|\\ge k\\sigma)\\le \\dfrac{1}{k^{2}}$" })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator(".katex-html .mord.mathnormal").first()).toHaveText("P")
+  await markdown.evaluate((root) => {
+    const paragraph = root.querySelector("p")!
+    const range = document.createRange()
+    range.setStart(paragraph.firstChild!, 0)
+    const end = paragraph.querySelector(".katex-html .mord.mathnormal")!.firstChild!
+    range.setEnd(end, 0)
+    getSelection()!.removeAllRanges()
+    getSelection()!.addRange(range)
+  })
+  const copied = await copySelection(page, "existing")
+  expect({ text: copied.text, containsMath: /<math|<annotation/.test(copied.html ?? "") }).toEqual({
+    text: "The inequality ",
+    containsMath: false,
+  })
+})
+
+story("does not copy inline math when selection starts after its last visible text", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Inequality $P(|X-\\mu|\\ge k\\sigma)\\le \\dfrac{1}{k^{2}}$ \ue000following" })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator(".katex")).toHaveCount(1)
+  await markdown.evaluate((root) => {
+    const paragraph = root.querySelector("p")!
+    const walker = document.createTreeWalker(paragraph.querySelector(".katex-html")!, NodeFilter.SHOW_TEXT)
+    const nodes: Text[] = []
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text
+      if (node.data.replace(/[\s\u200b]/g, "")) nodes.push(node)
+    }
+    const last = nodes[nodes.length - 1]!
+    const range = document.createRange()
+    range.setStart(last, last.length)
+    range.setEnd(paragraph.lastChild!, paragraph.lastChild!.textContent!.length)
+    getSelection()!.removeAllRanges()
+    getSelection()!.addRange(range)
+  })
+  const copied = await copySelection(page, "existing")
+  expect({ text: copied.text, containsMath: /<math|<annotation/.test(copied.html ?? "") }).toEqual({
+    text: " \ue000following",
+    containsMath: false,
+  })
+})
+
+story("dragging to the first visible math glyph copies only the selected prefix", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Inequality $P(|X-\\mu|\\ge k\\sigma)\\le \\dfrac{1}{k^{2}}$" })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator(".katex-html .mord.mathnormal").first()).toHaveText("P")
+  await markdown.evaluate((root) => root.scrollIntoView({ block: "center" }))
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const points = await markdown.evaluate((root) => {
+    const paragraph = root.querySelector("p")!
+    const glyph = paragraph.querySelector(".katex-html .mord.mathnormal")!.firstChild!
+    const range = document.createRange()
+    range.setStart(paragraph.firstChild!, 0)
+    range.setEnd(paragraph.firstChild!, 1)
+    const start = range.getBoundingClientRect()
+    range.setStart(glyph, 0)
+    range.setEnd(glyph, 1)
+    const end = range.getBoundingClientRect()
+    return { start: { x: start.x + 1, y: start.y + start.height / 2 }, end: { x: end.x + 1, y: end.y + end.height / 2 } }
+  })
+  await page.mouse.move(points.start.x, points.start.y)
+  await page.mouse.down()
+  await page.mouse.move(points.end.x, points.end.y, { steps: 10 })
+  await page.mouse.up()
+  const endpoint = await markdown.evaluate(() => {
+    const range = getSelection()!.getRangeAt(0)
+    const node = range.endContainer
+    return { offset: range.endOffset, visible: !!(node instanceof Element ? node : node.parentElement)?.closest(".katex-html"), name: node.nodeName, text: node.textContent?.slice(0, 30), parent: node.parentElement?.className }
+  })
+  expect(endpoint).toMatchObject({ offset: 0, visible: true })
+  const copied = await copySelection(page, "existing")
+  expect({ text: copied.text, containsMath: /<math|<annotation/.test(copied.html ?? "") }).toEqual({
+    text: "Inequality ",
+    containsMath: false,
+  })
+})
+
+story("copies selected math but excludes the next formula touched at its visible edge", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "First $x$ then $P(|X-\\mu|\\ge k\\sigma)\\le \\dfrac{1}{k^{2}}$" })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator(".katex")).toHaveCount(2)
+  await markdown.evaluate((root) => {
+    const range = document.createRange()
+    range.setStart(root.querySelector("p")!.firstChild!, 0)
+    range.setEnd(root.querySelectorAll(".katex-html")[1]!.querySelector(".mord.mathnormal")!.firstChild!, 0)
+    getSelection()!.removeAllRanges()
+    getSelection()!.addRange(range)
+  })
+  const copied = await copySelection(page, "existing")
+  expect(copied.text).toBe("First $x$ then ")
+  expect(copied.html).toContain("<annotation>x</annotation>")
+  expect(copied.html).not.toContain("\\dfrac")
+})
+
 story("copies a partially selected visible math glyph as the complete formula", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
