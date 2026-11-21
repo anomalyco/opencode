@@ -5,12 +5,14 @@ import { Effect, Schema } from "effect"
 import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
 
+const searchGuidance = `Before calling an unlisted tool, get its signature with the global \`search(...)\` function, even if you know its name. Do not guess tool names or arguments. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.`
+
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `# Code Mode
 
 The tools listed below${hasMoreTools ? ", and \`search\`," : ""} cannot be called directly: they only work as JavaScript inside the \`execute\` tool. Every other tool you have is a normal tool call: call it directly, never inside \`execute\`.
 
-${hasMoreTools ? `The catalog is partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function. Do not guess tool names. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
+${hasMoreTools ? `The catalog is partial. ${searchGuidance}
 
 - ${searchSignature}` : "The catalog is complete. Do not guess tool names."}
 
@@ -18,7 +20,7 @@ ${hasMoreTools ? `The catalog is partial. Before calling a tool that is not list
 
 // Sent once, when tools arrive that the catalog cannot list in full, so the model learns about `search`.
 // prettier-ignore
-const searchNote = `You can also look up tools that aren't listed with the global \`search(...)\` function inside \`execute\`. Before calling a tool that is not listed, find it this way. Do not guess tool names. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
+const searchNote = `The global \`search(...)\` function is now available inside \`execute\`. ${searchGuidance}
 
 - ${searchSignature}`
 
