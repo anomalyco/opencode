@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { Service, type EnsureReason } from "../src/promise/service"
+import { withEnsureTiming } from "../src/service-timing"
 import {
   catchesSigterm,
   expectNotListening,
@@ -356,4 +357,37 @@ test.skipIf(!catchesSigterm)(
     }
   },
   20_000,
+)
+
+test.skipIf(process.platform === "win32")(
+  "does not spawn a replacement while an incompatible service survives SIGKILL",
+  async () => {
+    await using fixture = await serviceFixture()
+    const registration = fixture.registration
+    fixture.spawnUnreaped("lingering", "60000")
+    await fixture.waitForFile()
+    const original = await Bun.file(registration).json()
+
+    await expect(
+      Service.ensure(
+        withEnsureTiming(
+          {
+            file: registration,
+            version: "other",
+            command: fixture.command("record-start"),
+          },
+          {
+            pollInterval: 20,
+            requestTimeout: 100,
+            spawnDelay: 50,
+            promiseTimeout: 500,
+            stopPollInterval: 5,
+            stopPollAttempts: 15,
+          },
+        ),
+      ),
+    ).rejects.toThrow(`Server process ${original.pid} is still running`)
+    expect(await Bun.file(registration + ".started").exists()).toBe(false)
+  },
+  15_000,
 )

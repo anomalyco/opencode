@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, probeResult, processExited, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { fallback, headers }
@@ -30,6 +30,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
   let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let stopping: Info | undefined
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -50,7 +51,17 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   try {
     while (true) {
       if (Date.now() >= deadline)
-        throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
+        throw (
+          pool.failure() ??
+          (stopping !== undefined
+            ? new Error(`Server process ${stopping.pid} is still running`)
+            : new Error("Timed out waiting for the background service to start"))
+        )
+      if (stopping !== undefined && processExited(stopping.pid)) {
+        await removeRegistration(stopping, options.file)
+        pool.evict(stopping.pid)
+        stopping = undefined
+      }
       const registration = await registered(options.file, timing.requestTimeout)
       if (registration.timedOut && registration.info !== undefined) {
         timeouts = {
@@ -81,13 +92,29 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           announce("version-mismatch", service.version)
           if (service.state !== "ready")
             console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
-          await stop({ file: options.file, pty: decision.pty }).catch(() => undefined)
-          pool.evict(service.info.pid)
+          const exited = await replace(service.info, options, decision.pty, timing)
+          if (exited) {
+            stopping = undefined
+            pool.evict(service.info.pid)
+          }
+          if (!exited) stopping = service.info
         }
+      } else if (stopping !== undefined && !processExited(stopping.pid)) {
+        signal(stopping.pid, "SIGKILL")
       } else {
+        const exited = stopping
+        if (exited !== undefined) {
+          await removeRegistration(exited, options.file)
+          pool.evict(exited.pid)
+          stopping = undefined
+        }
         const failed = pool.reap()
         if (failed !== undefined) throw failed
-        if (pool.shouldRecruit(registration.info !== undefined)) {
+        if (
+          pool.shouldRecruit(
+            registration.info !== undefined && (exited === undefined || !same(registration.info, exited)),
+          )
+        ) {
           announce("missing")
           pool.add(await spawnContender())
         }
@@ -102,12 +129,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
   const info = await read(options.file)
-  // Terminal handoff is best-effort; it must never keep the old service running.
-  await (
-    options.pty === "handoff" && info !== undefined
-      ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
-      : PtyHandoff.clear(options.file ?? fallback())
-  ).catch((cause: unknown) => console.warn("Failed to prepare persistent terminals for replacement", cause))
+  await prepareHandoff(options.file, options.pty, info)
   if (info !== undefined) await terminate(info, options, ensureTiming(options))
 }
 
@@ -133,21 +155,33 @@ function signal(pid: number, name: NodeJS.Signals) {
   } catch {}
 }
 
-function stopped(pid: number) {
-  try {
-    process.kill(pid, 0)
-    return false
-  } catch {
-    return true
-  }
+async function prepareHandoff(file: string | undefined, pty: StopOptions["pty"], info: Info | undefined) {
+  // Terminal handoff is best-effort; it must never keep the old service running.
+  await (
+    pty === "handoff" && info !== undefined
+      ? PtyHandoff.prepare(file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
+      : PtyHandoff.clear(file ?? fallback())
+  ).catch((cause: unknown) => console.warn("Failed to prepare persistent terminals for replacement", cause))
+}
+
+async function removeRegistration(info: Info, file?: string) {
+  const latest = await read(file)
+  if (latest === undefined || !same(latest, info)) return
+  await rm(file ?? fallback(), { force: true })
 }
 
 async function waitUntilStopped(pid: number, timing: EnsureTiming) {
   for (let attempt = 0; attempt <= timing.stopPollAttempts; attempt++) {
-    if (stopped(pid)) return true
+    if (processExited(pid)) return true
     if (attempt < timing.stopPollAttempts) await delay(timing.stopPollInterval)
   }
   return false
+}
+
+async function escalateAndWait(pid: number, timing: EnsureTiming) {
+  if (await waitUntilStopped(pid, timing)) return
+  signal(pid, "SIGKILL")
+  if (!(await waitUntilStopped(pid, timing))) throw new Error(`Server process ${pid} is still running`)
 }
 
 async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
@@ -156,13 +190,22 @@ async function terminate(info: Info, options: { readonly file?: string }, timing
   signal(info.pid, "SIGTERM")
   // The registration can disappear or change hands before this process exits. Only the PID we
   // signalled can tell us whether it has stopped, so escalate based on that process.
-  if (!(await waitUntilStopped(info.pid, timing))) {
-    signal(info.pid, "SIGKILL")
-    if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
+  await escalateAndWait(info.pid, timing)
+  await removeRegistration(info, options.file)
+}
+
+async function replace(info: Info, options: { readonly file?: string }, pty: StopOptions["pty"], timing: EnsureTiming) {
+  const current = await read(options.file)
+  if (current !== undefined && !same(current, info)) return true
+  if (current !== undefined) {
+    await prepareHandoff(options.file, pty, info)
+    await terminate(info, options, timing).catch(() => undefined)
+    return processExited(info.pid)
   }
-  const latest = await read(options.file)
-  if (latest === undefined || !same(latest, info)) return
-  await rm(options.file ?? fallback(), { force: true })
+  // The old process unregistered itself before we could signal it; wait for it to finish exiting
+  // before recruiting a contender so the replacement does not race its shutdown locks.
+  await escalateAndWait(info.pid, timing).catch(() => undefined)
+  return processExited(info.pid)
 }
 
 function delay(milliseconds: number) {
