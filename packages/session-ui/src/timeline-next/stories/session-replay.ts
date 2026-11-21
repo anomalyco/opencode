@@ -813,11 +813,83 @@ const subagentBetweenTools: Beat[] = [
   { kind: "idle" },
 ]
 
+// A script that edits several files, one of them twice, as Code Mode reports the calls it made and the changes they left.
+const scriptEditFiles = (() => {
+  const root = "/workspace/keyboard-modules"
+  const modules = `export const modules = [\n  "layout",\n]\n`
+  const modulesOnce = modules.replace(`  "layout",\n`, `  "layout",\n  "keymap",\n`)
+
+  const modulesTwice = modulesOnce.replace(
+    `  "keymap",\n`,
+    `  "keymap",\n  "macros",\n  "combos",\n  "layers",\n  "tap-dance",\n  "leader",\n  "mouse-keys",\n  "rgb",\n  "oled",\n`,
+  )
+
+  const json = `{\n  "compilerOptions": {\n    "strict": true\n  }\n}\n`
+
+  const paths = json.replace(
+    `    "strict": true\n`,
+    `    "strict": true,\n    "paths": {\n      "@modules/*": ["./modules/*"]\n    }\n`,
+  )
+
+  const one = json.replace(`    "strict": true\n`, `    "strict": true,\n    "composite": true\n`)
+
+  const pkg = `{\n  "dependencies": {\n    "solid-js": "1.9.0"\n  }\n}\n`
+
+  const pkgAfter = pkg.replace(
+    `    "solid-js": "1.9.0"\n`,
+    `    "solid-js": "1.9.0",\n    "@keyboard/modules": "workspace:*"\n`,
+  )
+
+  const uis = `export const moduleUIs = {\n  layout: () => import("./ui/layout"),\n}\n`
+  const uisAfter = uis.replace(`  layout:`, `  keymap: () => import("./ui/keymap"),\n  layout:`)
+
+  return [
+    change(`${root}/tsconfig.json`, json, paths),
+    change(`${root}/apps/server/tsconfig.json`, json, one),
+    change(`${root}/apps/website/tsconfig.json`, json, paths),
+    change(`${root}/apps/server/package.json`, pkg, pkgAfter),
+    change(`${root}/apps/website/package.json`, pkg, pkgAfter),
+    change(`${root}/apps/website/src/playground/local/ModuleUIs.ts`, uis, uisAfter),
+    change(`${root}/apps/website/src/playground/local/PlaygroundModules.ts`, modules, modulesOnce),
+    change(`${root}/apps/website/src/playground/local/PlaygroundModules.ts`, modulesOnce, modulesTwice),
+  ]
+})()
+
+const scriptEdits: Beat[] = [
+  { kind: "user", text: "Wire the modules package into the server and the website playground." },
+  {
+    kind: "think",
+    text: "## Wiring the package\n\nBoth apps need the path alias and the dependency, then the playground lists the new modules.",
+  },
+  {
+    kind: "tool",
+    name: "execute",
+    input: {
+      code: scriptEditFiles
+        .map((file) => `await tools.edit({ path: ${JSON.stringify(file.file)}, oldString: "…", newString: "…" })`)
+        .join("\n"),
+    },
+    output: scriptEditFiles.map((file) => `Edited ${file.file}`).join("\n") + "\nDone",
+    metadata: {
+      toolCalls: scriptEditFiles.map((file) => ({
+        tool: "edit",
+        status: "completed",
+        input: { path: file.file, oldString: "…", newString: "…" },
+      })),
+      files: scriptEditFiles,
+    },
+  },
+  { kind: "step" },
+  { kind: "say", text: "Both apps resolve `@keyboard/modules`, and the playground lists the new modules." },
+  { kind: "idle" },
+]
+
 export const scenarios = {
   "Feature work": featureWork,
   "Every tool": everyTool,
   "Background work": backgroundWork,
   "Subagent between tools": subagentBetweenTools,
+  "Script edits": scriptEdits,
   "Thinking only": thinkingOnly,
   "Thinking after tools": thinkingAfterTools,
   "Encrypted thinking": encryptedThinking,
