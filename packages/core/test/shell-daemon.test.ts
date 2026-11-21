@@ -17,7 +17,9 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppProcess } from "@opencode/util/process"
 import { hostEnvironmentLayer } from "./fixture/environment"
-import { location } from "./fixture/location"
+import { tempGlobalLayer } from "./fixture/global"
+import { location, tempLocationLayer } from "./fixture/location"
+import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
 import { daemonShells, until } from "./fixture/shell-daemon"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { binaryPath } from "@opencode/pty"
@@ -250,7 +252,7 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
-  it.live("stops what a failed command left in its group, and leaves a successful one's", () =>
+  it.live("records successful and failed exits without signalling a finished command", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       yield* env.withShell(env.directory, (shell) =>
@@ -262,8 +264,28 @@ describe("Shell on the process daemon", () => {
           env.daemon.exit(2, 3)
           expect(yield* shell.wait(failed.id)).toMatchObject({ status: "exited", exit: 3 })
           expect(yield* shell.wait(succeeded.id)).toMatchObject({ status: "exited", exit: 0 })
-          expect(env.signals(2)).toEqual(["SIGTERM"])
+          expect(env.signals(2)).toEqual([])
           expect(env.signals(1)).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  it.live("recreates the output directory removed while the Location is open", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          yield* shell.create({ shell: "/bin/sh", command: "echo first" })
+          yield* Effect.promise(() => rm(path.join(env.data, Shell.DIRECTORY), { recursive: true }))
+          const info = yield* shell.create({ shell: "/bin/sh", command: "echo second" })
+          expect(env.created().map((request) => request.output_path)).toContain(info.file)
+          env.daemon.output(2, "second")
+          env.daemon.exit(2, 0)
+          expect(yield* shell.result(info)).toMatchObject({
+            info: { status: "exited", exit: 0 },
+            capture: { output: "second" },
+          })
         }),
       )
     }),
@@ -552,6 +574,31 @@ describe("Shell on the process daemon", () => {
     }),
   )
 })
+
+it.live("the spawner recreates the output directory removed while the Location is open", () =>
+  Effect.gen(function* () {
+    const shell = yield* Shell.Service
+    const global = yield* Global.Service
+    const program = windows ? (Bun.which("pwsh") ?? "powershell.exe") : "/bin/sh"
+    const run = (output: string) =>
+      shell
+        .create({ shell: program, command: windows ? `[Console]::Out.Write('${output}')` : `printf '${output}'` })
+        .pipe(Effect.flatMap((info) => shell.result(info)))
+    yield* run("first")
+    yield* Effect.promise(() => rm(path.join(global.data, Shell.DIRECTORY), { recursive: true }))
+    expect(yield* run("second")).toMatchObject({ info: { status: "exited", exit: 0 }, capture: { output: "second" } })
+  }).pipe(
+    Effect.provide(
+      AppNodeBuilder.build(LayerNode.group([Shell.node, Global.node]), [
+        Location.node.replace(tempLocationLayer),
+        Global.node.replace(tempGlobalLayer),
+        Config.node.replace(Config.testLayer()),
+        Environment.node.replace(hostEnvironmentLayer),
+        PersistentPty.node.replace(disabledPersistentPtyLayer),
+      ]),
+    ),
+  ),
+)
 
 // Against the real opencode-pty, like server/test/persistent-pty.test.ts.
 const binary = process.env.OPENCODE_PTY_BIN ?? binaryPath

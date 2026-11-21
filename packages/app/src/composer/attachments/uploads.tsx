@@ -216,7 +216,7 @@ function UploadToast(props: { toastId: number; language: ReturnType<typeof useLa
                   aria-label={props.language.t("prompt.toast.uploading.cancelFile", { filename: item.filename })}
                   onClick={() => item.cancel()}
                 >
-                  <Icon name="outline-xmark" />
+                  <Icon name="close" />
                 </button>
               </div>
             </div>

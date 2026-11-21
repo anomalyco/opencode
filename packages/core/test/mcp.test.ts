@@ -77,6 +77,7 @@ import { isRecord } from "@opencode/util/record"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 import { location } from "./fixture/location"
 import { host } from "./plugin/host"
@@ -619,7 +620,7 @@ const mcp = Layer.mock(Mcp.Service, {
       } satisfies Mcp.ToolResult
     }),
 })
-const permissions = Layer.mock(Permission.Service, {
+const permissions = permissionLayer({
   assert: (input) =>
     Effect.gen(function* () {
       if (!assertion) return yield* Effect.die("Permission test is not initialized")
@@ -878,7 +879,11 @@ test("reports a local MCP server as failed when the location has no execution pl
   const driver = Environment.makeMemoryDriver()
   const environment = Layer.succeed(
     Environment.Service,
-    Environment.Service.of({ files: Environment.makeFiles(driver), spawner: EnvironmentUnavailable.spawner }),
+    Environment.Service.of({
+      id: Environment.localID,
+      files: Environment.makeFiles(driver),
+      spawner: EnvironmentUnavailable.spawner,
+    }),
   )
 
   await Effect.runPromise(
@@ -985,6 +990,7 @@ test("closes a stdio process that finishes spawning after close", async () => {
   const environment = Layer.succeed(
     Environment.Service,
     Environment.Service.of({
+      id: Environment.localID,
       files: Environment.makeFiles(driver),
       spawner: ChildProcessSpawner.make(() =>
         Effect.gen(function* () {
@@ -1044,7 +1050,7 @@ test("falls back to legacy when a stdio server ignores the version probe", async
             type: "local",
             command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-legacy-silent.ts")],
             protocol: "auto",
-            // The probe waits out the startup timeout before falling back; Windows needs room to start Bun.
+            // The probe waits out the startup timeout, when shorter than the probe's own, before falling back; Windows needs room to start Bun.
             timeout: new ConfigMCP.Timeout({ startup: 1_000 }),
           }),
           import.meta.dir,
@@ -1210,6 +1216,7 @@ for (const entry of [
         url: server.url + entry.query,
         codemode: entry.codemode,
         oauth: false,
+        protocol: "legacy",
       })
       const error = yield* connect("resources", config, import.meta.dir).pipe(Effect.flip)
 
@@ -1787,7 +1794,8 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
         metadata: { server: "resources", uri: "docs://readme" },
         sessionID,
         agent: toolIdentity.agent,
-        source: { type: "tool", messageID: toolIdentity.messageID, id: "call_resource" },
+        // The call's own ID. The real service shows the request on the execute call's row.
+        source: { type: "tool", messageID: toolIdentity.messageID, id: expect.not.stringMatching(/^call_resource$/) },
       })
 
       server.state.contents = [{ uri: "docs://readme", text: "line\n".repeat(20_000), mimeType: "text/plain" }]
@@ -2683,7 +2691,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
       Effect.provide(
         Layer.fresh(
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
-            ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+            ...toolNodeReplacements(permissionLayer({ assert: () => Effect.void })),
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
                 awaitStartup: () => Effect.void,
@@ -2734,7 +2742,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
-        ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+        ...toolNodeReplacements(permissionLayer({ assert: () => Effect.void })),
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
             awaitStartup: () => Effect.void,
@@ -3069,7 +3077,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
       source: {
         type: "tool",
         messageID: toolIdentity.messageID,
-        id: "call_mcp_permission",
+        id: expect.not.stringMatching(/^call_mcp_permission$/),
       },
     })
     expect(calls).toBe(0)
@@ -3535,8 +3543,9 @@ describe("MCP pool", () => {
       expect((yield* status(a.mcp))?.status).toBe("failed")
       expect(probes).toHaveLength(1)
       // On Windows the spawn succeeds through the shell and the missing command shows up only as an exit
-      // during the handshake, which can't be told apart from a server refusing it, so it tries once more.
-      expect(spawns).toHaveLength(process.platform === "win32" ? 1 : 0)
+      // during the handshake, which can't be told apart from a server refusing it, so it connects on its own.
+      // That exit also looks like a legacy server quitting on the version probe, so it respawns once for initialize.
+      expect(spawns).toHaveLength(process.platform === "win32" ? 2 : 0)
     }),
   )
 

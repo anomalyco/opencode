@@ -75,6 +75,13 @@
       }
     }
 
+    /* The ring goes on the tab, which holds the label and close button, inset because the list scrolls and would clip
+       a ring drawn outside it. */
+    &:has([data-slot="tabs-trigger"]:focus-visible) {
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: -2px;
+    }
+
     [data-slot="tabs-trigger-close-button"] {
       display: flex;
       align-items: center;
@@ -607,6 +614,8 @@
   width: auto;
   height: var(--tabs-bar-height);
   padding-inline-end: 0;
+  /* A tab scrolled into view by focus stops clear of the edge fades and the sticky "+". */
+  scroll-padding-inline: 24px calc(var(--tab-strip-add, 0px) + 24px);
   border-bottom: none;
   /* Tabs fade out at each edge with more of them past it. The tab strip's scroll handler sets the fade widths and the
      width of the sticky "+", which the second layer keeps unmasked. */

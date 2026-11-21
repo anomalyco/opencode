@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "次へ",
   "releaseNotes.action.hideFuture": "今後表示しない",
   "releaseNotes.media.alt": "リリースのプレビュー",
+  "action.reload": "再読み込みして更新",
+  "action.reloading": "再読み込み中…",
+  "web.ready.title": "アップデートの準備ができました",
+  "web.ready.message":
+    "OpenCodeの新しいバージョンの準備ができました。再読み込みすると、開いているすべてのウインドウで使用できます。",
+  "web.reload": "再読み込み",
+  "web.reset.title": "サーバーから再読み込み",
+  "web.reset.description": "保存されたアプリのコピーを消去し、サーバーの現在のバージョンを読み込みます",
+  "web.reset.action": "サーバーから再読み込み",
 }

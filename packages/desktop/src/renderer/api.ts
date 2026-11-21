@@ -43,7 +43,7 @@ export const api: ElectronAPI = {
   getWindowID: () => window.electron.windowID,
   getWindowBootstrap: () => window.electron.bootstrap,
   themeReady: () => invoke("WindowThemeReady"),
-  onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
+  onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id, event.accelerator)),
   onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb({ attempt: event.attempt, urls: mutable(event.urls) })),
 
   openDirectoryPicker: (opts) => invoke("FilesOpenDirectoryPicker", { options: opts }).then(mutable),
@@ -54,7 +54,6 @@ export const api: ElectronAPI = {
   saveFile: (opts, content) => invoke("FilesSaveFile", { options: opts, content }),
   openExternal: (url) => send("FilesOpenExternal", { url }),
   openBrowser: (url) => invoke("FilesOpenBrowser", { url }),
-  openLocalFile: (url) => send("FilesOpenLocalFile", { url }),
   openPath: (path, app) => invoke("FilesOpenPath", { path, application: app }).then((value) => value ?? undefined),
   revealPath: (path) => invoke("FilesRevealPath", { path }),
   readClipboardImage: () =>
@@ -63,6 +62,7 @@ export const api: ElectronAPI = {
     ),
   writeClipboardText: (text) => invoke("FilesWriteClipboardText", { text }),
   getWindowFocused: () => invoke("WindowGetFocused"),
+  requestAttention: () => invoke("WindowRequestAttention"),
   requestMicrophone: () => invoke("WindowRequestMicrophone"),
   setVoiceCallActive: (active) => invoke("WindowSetVoiceCallActive", { active }),
   getWindowFullscreen: () => invoke("WindowGetFullscreen"),
@@ -80,6 +80,8 @@ export const api: ElectronAPI = {
   onZoomChanged: (cb) => listen("WindowZoomChanged", (event) => cb({ factor: event.factor, level: event.level })),
   setTitlebar: (theme) => invoke("WindowSetTitlebar", { theme }),
   setTrafficLightsPosition: (position) => invoke("WindowSetTrafficLightsPosition", position),
+  setTaskbarBadge: (count, description) => invoke("WindowSetTaskbarBadge", { count, description }),
+  setTaskbarProgress: (mode) => invoke("WindowSetTaskbarProgress", { mode }),
   runDesktopMenuAction: (action) => invoke("MenuRunAction", { action }),
   setBackgroundColor: (color) => invoke("AppSetBackgroundColor", { color }),
   exportDebugLogs: () => invoke("AppExportDebugLogs"),

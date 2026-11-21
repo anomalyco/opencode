@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Notkun",
   "usage.cost": "Kostnaður",
   "usage.view": "Skoða samhengisnotkun",
-  "systemPrompt.title": "Kerfisboð",
   "rawMessages.title": "Hrá skilaboð",
   "export.session": "Flytja út setu",
   "stats.session": "Lota",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Vistað lota í {{filename}}",
   "export.failed.title": "Mistókst að flytja út lotu",
   "export.failed.description": "Villa kom upp við útflutning á lotunni",
+  "usage.toggle": "Víxla samhengi setu",
 }

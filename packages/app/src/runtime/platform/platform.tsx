@@ -48,9 +48,6 @@ type PlatformBase = {
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
 
-  /** Open a local file URL in its default app (desktop only) */
-  openLocalFile?(url: string): void
-
   /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
   revealPath?(path: string): Promise<boolean>
 
@@ -59,6 +56,9 @@ type PlatformBase = {
 
   /** Send a system notification */
   notify(title: string, description?: string, onClick?: () => void): Promise<void>
+
+  /** Draw the user to a window in the background, as a flashing taskbar button on Windows (desktop only) */
+  requestAttention?(): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?<Value>(

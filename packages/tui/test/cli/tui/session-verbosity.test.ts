@@ -288,3 +288,20 @@ test("a finished execute with no nested calls counts as one tool", () => {
   const message = assistant("a", [])
   expect(activitySummary([{ message, part: tool("x", "execute") }], 0).label).toBe("1 tool")
 })
+
+test("a running script's changes fold into its activity at low and show under it at medium and high", () => {
+  const script: SessionMessageAssistantTool = {
+    ...tool("x", "execute", "running"),
+    state: {
+      status: "running",
+      input: {},
+      metadata: { toolCalls: [{ tool: "patch", status: "completed" }], files: [{ file: "a.ts", status: "modified" }] },
+    },
+  }
+  const open = { ...assistant("a", [tool("r1", "read"), script]), time: { created: 1 } }
+  const shape = (verbosity: "low" | "medium" | "high") =>
+    reduceSessionRows([open], new Set(), false, verbosity).map((row) => (row.type === "group" ? row.kind : row.type))
+  expect(shape("low")).toEqual(["activity"])
+  expect(shape("medium")).toEqual(["exploration", "part"])
+  expect(shape("high")).toEqual(["exploration", "part"])
+})

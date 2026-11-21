@@ -1167,12 +1167,15 @@ function textAnswer(
               resolve(value)
             }}
             description={() => (
-              <box gap={1}>
-                <Show when={field.description}>
-                  {(description) => <text fg={theme.text.muted}>{description()}</text>}
-                </Show>
-                <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
-              </box>
+              // An empty box would still take a row in the prompt's gap, so render nothing without content.
+              <Show when={field.description || error()}>
+                <box gap={1}>
+                  <Show when={field.description}>
+                    {(description) => <text fg={theme.text.muted}>{description()}</text>}
+                  </Show>
+                  <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
+                </box>
+              </Show>
             )}
           />
         )

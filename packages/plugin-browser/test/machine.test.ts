@@ -257,6 +257,8 @@ describe("permission syncs", () => {
 describe("reconcileBrowserPermissions", () => {
   const user = { action: "bash", resource: "*", effect: "ask" } as const
   const allows = BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "allow" as const }))
+  // A grant some versions wrote: the browser allow alone.
+  const partial = [allows[0]!]
 
   test("granting what is already granted writes nothing", () => {
     expect(BrowserMachine.reconcileBrowserPermissions([user, ...allows], true)).toBeUndefined()
@@ -270,9 +272,40 @@ describe("reconcileBrowserPermissions", () => {
     expect(BrowserMachine.reconcileBrowserPermissions(undefined, true)).toEqual(allows)
   })
 
+  test("a grant that allowed the browser alone is revoked and replaced in full", () => {
+    expect(BrowserMachine.reconcileBrowserPermissions([user, ...partial], false)).toEqual([user])
+    expect(BrowserMachine.reconcileBrowserPermissions([user, ...partial], true)).toEqual([user, ...allows])
+  })
+
   test("browser denies are not browser allows", () => {
     const deny = { action: "browser", resource: "*", effect: "deny" } as const
     expect(BrowserMachine.reconcileBrowserPermissions([deny], false)).toBeUndefined()
+  })
+})
+
+describe("selectBrowserRule", () => {
+  const rule = (action: string, effect: "allow" | "deny" | "ask", resource = "*") => ({ action, resource, effect })
+  const effect = (rules: ReturnType<typeof rule>[], operation: string) =>
+    BrowserMachine.selectBrowserRule(rules, operation)?.effect
+
+  test("the last rule whose action and resource match decides", () => {
+    expect(effect([rule("browser", "deny")], "tabs.list")).toBe("deny")
+    expect(effect([rule("*", "deny"), rule("read", "allow")], "tabs.list")).toBe("deny")
+    expect(effect([rule("brow*", "deny")], "tabs.list")).toBe("deny")
+    expect(effect([rule("browser", "deny"), rule("*", "ask")], "tabs.list")).toBe("ask")
+    expect(effect([rule("browser", "deny"), rule("browser", "allow", "tabs.list")], "tabs.list")).toBe("allow")
+    expect(effect([rule("browser", "deny"), rule("browser", "allow", "tabs.list")], "evaluate")).toBe("deny")
+    expect(effect([], "tabs.list")).toBeUndefined()
+  })
+
+  test("resource patterns name operations", () => {
+    expect(effect([rule("browser", "deny", "files.*")], "files.upload")).toBe("deny")
+    expect(effect([rule("browser", "deny", "files.*")], "tabs.list")).toBeUndefined()
+    expect(effect([rule("browser", "deny", "https://bank.example/*")], "tabs.list")).toBeUndefined()
+  })
+
+  test("other actions and literal regex characters do not match", () => {
+    expect(effect([rule("browsers", "deny"), rule("b.owser", "deny")], "tabs.list")).toBeUndefined()
   })
 })
 
@@ -377,6 +410,36 @@ describe("browser state", () => {
 
     const next = run(state, { type: "state.updated", sessionID, connectionID: "conn_1", browserState })
     expect(BrowserMachine.selectTarget(next.state, sessionID, { type: "back", tabID })).toMatchObject({ ok: true, tab })
+  })
+
+  test("a closed or foreign tab ID fails with the open tabs, at most ten", () => {
+    const closed = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
+    const target = (tabs: Browser.Tab[]) =>
+      BrowserMachine.selectTarget(
+        run(attached(), {
+          type: "state.updated",
+          sessionID,
+          connectionID: "conn_1",
+          browserState: { tabs, focusedTabID: null },
+        }).state,
+        sessionID,
+        { type: "reload", tabID: closed },
+      )
+    expect(target([])).toMatchObject({
+      ok: false,
+      error: {
+        message: `[browser.tab_unavailable] No open tab in this session has the ID ${closed}; it was closed or came from another session. This session has no open tabs. Open one with browser.tabs.open({ url }). Never use a request ID, file ID, or element ref as a tabID.`,
+      },
+    })
+    expect(target([tab])).toMatchObject({
+      error: { message: expect.stringContaining(`Open tabs: ${tabID} (${tab.url}). Use one of these IDs.`) },
+    })
+    const many = Array.from({ length: 12 }, () => ({ ...tab, id: Browser.TabID.make(`tab_${crypto.randomUUID()}`) }))
+    const message = (target(many) as { readonly error: { readonly message: string } }).error.message
+    expect(message).toContain(
+      `${many[9]!.id} (${tab.url}), and 2 more from browser.tabs.list({}). Use one of these IDs.`,
+    )
+    expect(message).not.toContain(many[10]!.id)
   })
 })
 

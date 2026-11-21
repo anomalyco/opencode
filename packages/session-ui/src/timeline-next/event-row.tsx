@@ -4,7 +4,8 @@ import { For, Show, createMemo } from "solid-js"
 import { BasicTool } from "../components/basic-tool"
 import { useData } from "../context/data"
 import { taskAgentName } from "../tools/tool-renderer"
-import { summarizeShells, verbKeys, type TimelineEvent } from "./events"
+import { factsOf, summarize } from "../timeline/facts"
+import { verbKeys, type TimelineEvent } from "./events"
 
 /**
  * A run of background shells. Opening its summary lists each command and links back to its call.
@@ -16,7 +17,20 @@ export function TimelineEventRow(props: {
   onRevealShell?: (shellID: string) => void
 }) {
   const i18n = useI18n()
-  const summary = createMemo(() => summarizeShells(props.events))
+
+  const summary = createMemo(
+    () =>
+      summarize(
+        factsOf(
+          props.events.map(({ kind, verb, failed }, index) => ({
+            type: "outcome" as const,
+            id: String(index),
+            outcome: { kind, verb, failed },
+          })),
+        ),
+      ).background,
+  )
+
   const items = createMemo(() => props.events.filter((event) => event.title))
 
   return (
@@ -69,6 +83,16 @@ export function TimelineEventRow(props: {
   )
 }
 
+type SubagentState = "started" | "updated" | "completed" | "failed" | "stopped"
+
+const statusKeys = {
+  started: verbKeys.started,
+  updated: "ui.timeline.subagent.updated",
+  completed: "ui.timeline.subagent.completed",
+  failed: "ui.toolErrorCard.failed",
+  stopped: verbKeys.stopped,
+} as const
+
 /** One subagent or shell an events row or an opened activity group lists: who did it and what it was. */
 export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?: (shellID: string) => void }) {
   const i18n = useI18n()
@@ -93,14 +117,12 @@ export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?:
 
   const clickable = () => !!((props.event.sessionID && (data.navigateToSession || href())) || props.event.shellID)
 
-  const status = () => {
-    if (props.event.failed) return i18n.t("ui.toolErrorCard.failed")
+  const state = (): SubagentState => {
+    if (props.event.failed) return "failed"
 
-    if (props.event.verb === "updated") return i18n.t("ui.timeline.subagent.updated")
+    if (props.event.verb === "ran" || props.event.verb === "finished") return "completed"
 
-    if (props.event.verb === "ran" || props.event.verb === "finished") return i18n.t("ui.timeline.subagent.completed")
-
-    return i18n.t(verbKeys[props.event.verb])
+    return props.event.verb
   }
 
   return (
@@ -126,21 +148,17 @@ export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?:
         open()
       }}
     >
-      <Show
-        when={props.event.kind === "subagent"}
-        fallback={<span data-slot="timeline-event-item-name">{name()}</span>}
-      >
-        <Badge data-slot="timeline-event-item-name" variant="neutral">
-          {name()}
-        </Badge>
+      {/* A subagent leads with its status. */}
+      <Show when={props.event.kind === "subagent"}>
+        <span data-slot="timeline-event-item-status" data-state={state()}>
+          {i18n.t(statusKeys[state()])}
+        </span>
       </Show>
+      <span data-slot="timeline-event-item-name">{name()}</span>
       <Show when={props.event.title}>
         <bdi dir="auto" data-slot="timeline-event-item-title">
           {props.event.title}
         </bdi>
-      </Show>
-      <Show when={props.event.kind === "subagent"}>
-        <span class={props.event.failed ? "text-v2-state-fg-danger" : "text-v2-text-text-muted"}>{status()}</span>
       </Show>
       <Show when={props.event.failed && props.event.kind === "shell"}>
         <Badge variant="danger">{i18n.t("ui.toolErrorCard.failed")}</Badge>

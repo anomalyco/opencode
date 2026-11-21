@@ -198,6 +198,8 @@ export type ScrollbackOptions = {
   suppressBackgrounds?: boolean
   shellOutput?: boolean
   mono?: boolean
+  // The session.markdown setting; defaults to rendered.
+  markdown?: "source" | "rendered"
 }
 
 type ToolCodeSnapshot = {

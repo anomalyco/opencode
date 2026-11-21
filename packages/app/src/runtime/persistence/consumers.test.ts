@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { WorkspaceOnboardingSchema, ProviderTipSchema } from "@/new-session/view"
+import { WorkspaceOnboardingSchema } from "@/new-session/view"
+import { ProviderTipSchema } from "@/providers/connect/tip"
 import { ModelSelectionSchema } from "@/providers/models/selection"
 import { Persistence } from "@/runtime/persistence/schema"
 import { FileViewsSchema } from "@/workspaces/files/view-cache"

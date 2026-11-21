@@ -386,6 +386,31 @@ export function toolFailed(
   })
 }
 
+/** The calls of a shell the model ran in the background. */
+export function backgroundShell(sessionID: string, shellID: string) {
+  return [
+    toolStarted(sessionID, `call_${shellID}`, "shell"),
+    toolCalled(sessionID, `call_${shellID}`, { command: "build", background: true }),
+    toolSucceeded(sessionID, `call_${shellID}`, { shellID, status: "running" }, "backgrounded"),
+  ]
+}
+
+/** A finished shell's notice. A background job's carries its job ID; a user's shell command's has none. */
+export function shellNotice(sessionID: string, inboxID: string, shellID: string, options = { job: true }) {
+  return durableEvent("session.inbox.enqueued", {
+    sessionID,
+    inboxID,
+    item: {
+      type: "synthetic",
+      payload: {
+        text: `<shell id="${shellID}" state="completed">`,
+        metadata: { source: "shell", shellID, ...(options.job ? { jobID: shellID } : {}) },
+      },
+      delivery: "steer",
+    },
+  })
+}
+
 export function permissionAsked(
   sessionID: string,
   id: string,

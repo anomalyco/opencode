@@ -12,4 +12,12 @@ export default {
   noChanges: "Ongar broytingar",
   "settings.wrapLines.title": "Brót linjur",
   "settings.wrapLines.description": "Pakka langar linjur inn í fartelefon diffs í staðin fyri at rulla vatnrætt",
+  "menu.count.one": "{{count}} fíla broytt",
+  "menu.count.other": "{{count}} fílur broyttar",
+  "folder.more": "{{count}} · fleiri ikki víst",
+  "folder.failed": "Kundi ikki heinta broytingar",
+  "command.open": "Lat ummæli upp",
+  "load.failed": "Kundi ikki heinta broytingar",
+  "load.timeout": "Ambætarin var ov leingi um at svara",
+  offline: "Fái ikki samband við henda ambætaran",
 }

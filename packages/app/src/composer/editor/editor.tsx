@@ -50,6 +50,7 @@ import type {
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment, promptLength } from "../prompt-parts"
 import { editorMatchesPrompt, getCursorPosition, isEditorDomBlank, isPromptInlineBlank } from "./dom"
+import { createFieldFocus } from "@opencode/ui/context/field-focus"
 import {
   INITIAL_EDITOR_SYNC_STATE,
   INPUT_PARSED,
@@ -102,6 +103,8 @@ export type ComposerEditorProps = {
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
+  const keyboardFocus = createFieldFocus()
+
   const i18n = useI18n()
   const markdown = useMarkdown()
   const state = props.controller.state
@@ -172,6 +175,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
     })
   })
   let sync = INITIAL_EDITOR_SYNC_STATE
+  let firstFocus = true
 
   const updateCursor = () => {
     const cursor = editor && getCursorPosition(editor)
@@ -425,7 +429,21 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   if (caret.top < bounds.top + 16) viewport.scrollTop += caret.top - bounds.top - 16
                 })
               }}
-              onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
+              data-field-focus
+              data-keyboard-focus={keyboardFocus.visible() || undefined}
+              onPointerDown={keyboardFocus.pointer}
+              onClick={(event) => {
+                if (event.detail > 0) keyboardFocus.pointer()
+              }}
+              onBlur={keyboardFocus.leave}
+              onFocus={(event) => {
+                keyboardFocus.enter(event.currentTarget)
+
+                // A request dock can replace the editor. Keyboard focus on the new editor must keep the draft's caret.
+                if (firstFocus && keyboardFocus.visible()) props.controller.restoreCaret()
+                firstFocus = false
+                props.controller.dispatch({ type: "focus.editor" })
+              }}
             />
             <Show when={!props.controller.value()}>
               <div
@@ -528,8 +546,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   size="small"
                   class="me-3 gap-1.5 px-1.5"
                   onClick={() => {
-                    props.controller.dispatch({ type: "mode.normal" })
+                    // Before the mode change unmounts this button, so focus keeps its ring state.
                     props.controller.restoreFocus()
+                    props.controller.dispatch({ type: "mode.normal" })
                   }}
                 >
                   {i18n.t("ui.promptInput.exitShell")}
@@ -779,7 +798,7 @@ function ComposerAttachments(props: {
         (props.files?.length ?? 0) > 0
       }
     >
-      <div data-component="composer-attachments" data-slot="composer-attachments" class="relative">
+      <div data-component="composer-attachments" data-slot="composer-attachments" data-focus-scope class="relative">
         <div
           data-slot="composer-attachments-scroll"
           class="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar px-2 pt-2 pb-1"
@@ -818,7 +837,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -847,7 +866,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -862,7 +881,7 @@ function ComposerAttachments(props: {
               const missing = () => url.state === "errored" || (url.state === "ready" && !url())
 
               return (
-                <div class="relative group shrink-0">
+                <div class="relative group shrink-0 self-start">
                   <Tooltip
                     value={attachment.type === "path" ? attachment.path : attachment.filename}
                     placement="top"
@@ -876,12 +895,12 @@ function ComposerAttachments(props: {
                         </AttachmentCard>
                       }
                     >
-                      <Show when={src()} fallback={<div class="w-[58px] h-[46px]" />}>
+                      <Show when={src()} fallback={<div class="w-[78px] h-[52px]" />}>
                         {(value) => (
                           <img
                             src={value()}
                             alt={attachment.filename}
-                            class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                            class="w-[78px] h-[52px] rounded-[6px] object-cover"
                             onClick={(event) => props.onAttachmentClick?.(attachment, event.currentTarget)}
                           />
                         )}
@@ -895,7 +914,7 @@ function ComposerAttachments(props: {
                     class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                     aria-label={props.removeLabel}
                   >
-                    <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                    <Icon name="close" class="text-v2-icon-icon-contrast" />
                   </button>
                 </div>
               )
@@ -918,7 +937,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={i18n.t("ui.promptInput.cancelUpload")}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -1370,7 +1389,7 @@ function ComposerEditorPopover(props: {
                       {item.label || item.description || i18n.t("ui.promptInput.history.contextOnly")}
                     </bdi>
                     <Show when={item.description}>
-                      <Icon name="file-document" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                      <Icon name="file-document" class="shrink-0 text-v2-icon-icon-muted" />
                     </Show>
                   </button>
                 )}
@@ -1539,7 +1558,7 @@ function ComposerEditorSubmitButton(props: {
           props.busy && !props.stopping ? (
             <Loader class="size-4" />
           ) : (
-            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />
+            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "enter" : "arrow-up"} />
           )
         }
         aria-busy={props.busy && !props.stopping}
@@ -1626,8 +1645,8 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
             class="h-11 rounded-lg px-3 text-[15px] leading-5"
             onMouseDown={keep}
             onClick={() => {
-              props.controller.dispatch({ type: "mode.normal" })
               props.controller.restoreFocus()
+              props.controller.dispatch({ type: "mode.normal" })
             }}
           >
             {i18n.t("ui.promptInput.exitShell")}
@@ -1678,7 +1697,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
             onMouseDown={keep}
             onClick={props.controller.stop}
           >
-            <Icon name="stop" size="small" />
+            <Icon name="stop" />
             {i18n.t("ui.promptInput.stop")}
           </Button>
         }
@@ -1708,7 +1727,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
           {label()}
           <Show
             when={busy()}
-            fallback={<Icon name={props.controller.mode() === "shell" ? "arrow-undo-down" : "arrow-up"} />}
+            fallback={<Icon name={props.controller.mode() === "shell" ? "enter" : "arrow-up"} />}
           >
             <Loader class="size-4" />
           </Show>
@@ -1719,11 +1738,11 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
 }
 
 function ComposerSuggestionIcon(props: { item: ComposerSuggestion }) {
-  if (props.item.kind === "session") return <Icon name="speech-bubble" size="small" class="shrink-0" />
+  if (props.item.kind === "session") return <Icon name="comment" class="shrink-0" />
 
   if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-icon-info-active" />
 
-  if (props.item.kind === "skill") return <Icon name="post-skill" size="small" class="shrink-0" />
+  if (props.item.kind === "skill") return <Icon name="post-skill" class="shrink-0" />
 
   if (props.item.kind === "command") return null
 
