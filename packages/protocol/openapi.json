@@ -21501,6 +21501,32 @@
           },
           "arch": {
             "type": "string"
+          },
+          "connection": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["websocket", "iroh"]
+              },
+              "path": {
+                "type": "string",
+                "enum": ["direct", "relayed"]
+              },
+              "rtt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "online", "paired"],
@@ -21519,9 +21545,30 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "reach": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Machine.Reach"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["iroh"]
+                    }
+                  },
+                  "required": ["type"],
+                  "additionalProperties": false
+                }
+              ]
+            }
           }
         },
-        "required": ["name", "join", "expires"],
+        "required": ["name", "join", "expires", "reach"],
         "additionalProperties": false
       },
       "Machine.Reach": {

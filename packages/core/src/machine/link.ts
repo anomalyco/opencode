@@ -3,6 +3,7 @@ export * as Link from "./link.js"
 import { Effect, Schema } from "effect"
 import { Frames } from "./frames.js"
 import { Identity } from "./identity.js"
+import type { Machine } from "./index.js"
 import { Machines } from "./machines.js"
 import { Noise } from "./noise.js"
 import { FromWorker, ToWorker } from "./wire.js"
@@ -62,6 +63,8 @@ export class Refused extends Schema.TaggedError<Refused>()("Link.Refused", {}) {
  * must be interruptible, or `accept`'s deadline cannot cut short a peer that stops reading or writing.
  */
 export interface Carrier {
+  /** Read on demand, so a path change is reflected by the next machine list. */
+  readonly describe?: Machine.Connection["describe"]
   readonly send: (message: Uint8Array) => Effect.Effect<void>
   /** The next message, failing once the carrier has ended. */
   readonly receive: Effect.Effect<Uint8Array, Closed>
@@ -136,7 +139,7 @@ export const serve = Effect.fn("Link.serve")(function* (carrier: Carrier, fixed:
   })
   return {
     machine: link.machine,
-    connection: { hello: link.hello, send: frames.send, messages: frames.messages },
+    connection: { hello: link.hello, send: frames.send, messages: frames.messages, describe: carrier.describe },
   }
 })
 
