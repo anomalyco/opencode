@@ -50,7 +50,9 @@ export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers)
           const locations = Option.getOrThrow(yield* Effect.serviceOption(LocationServiceMap.Service))
           // Resolve through requestRef so the key matches the shape the location
           // middleware cached the services under.
-          yield* locations.invalidate(requestRef(ctx.request))
+          const ref = requestRef(ctx.request)
+          if (ref instanceof InvalidRequestError) return yield* ref
+          yield* locations.invalidate(ref)
         }),
       )
   }),
