@@ -8,6 +8,19 @@ import { Provider } from "@opencode/core/provider"
 const run = <A, E>(effect: (http: HttpClient.HttpClient) => Effect.Effect<A, E>) =>
   Effect.runPromise(HttpClient.HttpClient.pipe(Effect.flatMap(effect), Effect.provide(FetchHttpClient.layer)))
 
+test.each([404, 405])("offers standard Auto tiers when metadata discovery is unsupported (%s)", async (status) => {
+  const server = Bun.serve({ port: 0, fetch: () => new Response(null, { status }) })
+  try {
+    expect(await run((http) => CopilotModels.loadTiers(http, server.url.origin, {}))).toEqual([
+      "efficiency",
+      "balance",
+      "intelligence",
+    ])
+  } finally {
+    await server.stop(true)
+  }
+})
+
 test("defensively syncs advertised Copilot models", async () => {
   const server = Bun.serve({
     port: 0,

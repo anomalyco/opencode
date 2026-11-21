@@ -62,6 +62,31 @@ const RemoteModel = Schema.Struct({
 
 const Response = Schema.Struct({ data: Schema.Array(Schema.Unknown) })
 const decodeModel = Schema.decodeUnknownOption(RemoteModel)
+const Metadata = Schema.Struct({
+  auto: Schema.optional(
+    Schema.Struct({
+      tiers: Schema.Array(
+        Schema.Struct({ id: Schema.String, type: Schema.String, status: Schema.Struct({ enabled: Schema.Boolean }) }),
+      ),
+    }),
+  ),
+})
+
+export const loadTiers = Effect.fn("CopilotModels.loadTiers")(function* (
+  http: HttpClient.HttpClient,
+  baseURL: string,
+  headers: Headers.Input,
+) {
+  const response = yield* http.execute(
+    HttpClientRequest.get(`${baseURL}/meta`).pipe(HttpClientRequest.setHeaders(headers)),
+  )
+  // Older deployments have no discovery endpoint; /auto enforces tier availability there.
+  if (response.status === 404 || response.status === 405) return ["efficiency", "balance", "intelligence"]
+  const metadata = yield* HttpClientResponse.filterStatusOk(response).pipe(
+    Effect.flatMap(HttpClientResponse.schemaBodyJson(Metadata)),
+  )
+  return metadata.auto?.tiers.flatMap((tier) => (tier.type === "auto" && tier.status.enabled ? [tier.id] : [])) ?? []
+})
 
 type RemoteModel = typeof RemoteModel.Type
 type UsableModel = RemoteModel & {
@@ -128,7 +153,7 @@ export function derive(baseURL: string, remote: Snapshot, existing: readonly Mod
 /** Copilot's Auto model. Copilot's router picks the model that serves each Session from the account's Auto pool. */
 export const auto = Model.ID.make("auto")
 
-export function autoModel(baseURL: string, remote: Snapshot) {
+export function autoModel(baseURL: string, remote: Snapshot, tiers: readonly string[] = []) {
   const pool = Array.from(remote.values()).filter((model) => model.billing?.auto_discount !== undefined)
   if (pool.length === 0) return
   const route = routeFor(auto, "chat", baseURL)
@@ -138,6 +163,7 @@ export function autoModel(baseURL: string, remote: Snapshot) {
     name: "Auto",
     package: route.package,
     settings: { baseURL: route.baseURL },
+    variants: tiers.map((tier) => ({ id: Model.VariantID.make(tier) })),
     capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
     // Any pool model may serve a Session, so show the smallest window.
     limit: {

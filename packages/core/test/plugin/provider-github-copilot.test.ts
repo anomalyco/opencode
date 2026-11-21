@@ -173,6 +173,7 @@ describe("GithubCopilotPlugin", () => {
       expect(requests).toEqual([
         "https://api.github.com/copilot_internal/user",
         "https://api.business.githubcopilot.com/models",
+        "https://api.business.githubcopilot.com/meta",
       ])
       expect(required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5"))).settings).toMatchObject({
         baseURL: "https://api.business.githubcopilot.com",
@@ -195,7 +196,7 @@ describe("GithubCopilotPlugin", () => {
       yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, failing))
       yield* advance(() => requests.some((url) => url.endsWith("/models")))
 
-      expect(requests.at(-1)).toBe("https://api.individual.githubcopilot.com/models")
+      expect(requests).toContain("https://api.individual.githubcopilot.com/models")
     }),
   )
 
@@ -680,6 +681,7 @@ describe("GithubCopilotPlugin", () => {
         Effect.gen(function* () {
           if (request.url.endsWith("/copilot_internal/user"))
             return HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))
+          if (request.url.endsWith("/meta")) return HttpClientResponse.fromWeb(request, Response.json({}))
           if (request.url.endsWith("/models")) {
             state.listed = true
             return HttpClientResponse.fromWeb(
@@ -790,6 +792,125 @@ describe("GithubCopilotPlugin", () => {
 
       state.available = false
       expect(yield* resolve("primary", ids.child)).toBe("fallback")
+    }),
+  )
+
+  it.effect("offers account-enabled Auto tiers and routes again when the selected tier changes", () =>
+    Effect.gen(function* () {
+      const picks: unknown[] = []
+      const state = { listed: false, available: true, metadata: true }
+      const api = HttpClient.make((request) =>
+        Effect.sync(() => {
+          if (request.url.endsWith("/copilot_internal/user"))
+            return HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))
+          if (request.url.endsWith("/meta")) {
+            state.listed = true
+            if (!state.metadata) return HttpClientResponse.fromWeb(request, new Response(null, { status: 403 }))
+            return HttpClientResponse.fromWeb(
+              request,
+              Response.json({
+                auto: {
+                  tiers: [
+                    { id: "efficiency", type: "auto", status: { enabled: true } },
+                    { id: "balance", type: "auto", status: { enabled: false } },
+                    { id: "intelligence", type: "auto", status: { enabled: true } },
+                    { id: "manual", type: "manual", status: { enabled: true } },
+                  ],
+                },
+              }),
+            )
+          }
+          if (request.url.endsWith("/models"))
+            return HttpClientResponse.fromWeb(
+              request,
+              Response.json({
+                data: [
+                  {
+                    id: "routed",
+                    name: "Routed",
+                    version: "routed",
+                    model_picker_enabled: false,
+                    billing: { auto_discount: 0.1 },
+                    capabilities: {
+                      family: "routed",
+                      limits: { max_prompt_tokens: 128_000, max_output_tokens: 64_000 },
+                      supports: { tool_calls: true, reasoning_effort: ["low", "high"] },
+                    },
+                  },
+                ],
+              }),
+            )
+          picks.push(
+            request.body._tag === "Uint8Array" ? JSON.parse(new TextDecoder().decode(request.body.body)) : null,
+          )
+          return HttpClientResponse.fromWeb(
+            request,
+            state.available
+              ? Response.json({
+                  selected_model: { id: "routed" },
+                  session_token: "tier-token",
+                  expires_at: 4_000_000_000,
+                })
+              : new Response(null, { status: 503 }),
+          )
+        }),
+      )
+      yield* connect({ apiEndpoint: "https://copilot.test" })
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, api))
+      yield* advance(() => state.listed)
+      yield* drain
+      const models = yield* Model.Service
+      expect(
+        required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("auto"))).variants.map((v) => v.id),
+      ).toEqual([Model.VariantID.make("efficiency"), Model.VariantID.make("intelligence")])
+      const hooks = yield* PluginHooks.Service
+      const ids = yield* sessions()
+      const resolve = (tier?: string) =>
+        hooks.trigger("session", "experimental.model.resolve", {
+          sessionID: ids.parent,
+          agent: Agent.ID.make("build"),
+          kind: "primary",
+          model: Model.Ref.make({
+            providerID: Provider.ID.githubCopilot,
+            id: Model.ID.make("auto"),
+            ...(tier ? { variant: Model.VariantID.make(tier) } : {}),
+          }),
+        })
+      expect((yield* resolve("efficiency")).model).toEqual({
+        providerID: Provider.ID.githubCopilot,
+        id: Model.ID.make("routed"),
+      })
+      yield* resolve("efficiency")
+      expect(picks).toEqual([
+        {
+          prompt: "",
+          tier: "efficiency",
+          multi_turn: { routing_intent: "anchor", turns_since_anchor: 0 },
+          hydra_rl_multi_turn: {},
+        },
+      ])
+      yield* resolve("intelligence")
+      expect(picks).toHaveLength(2)
+      expect(picks.at(-1)).toMatchObject({ tier: "intelligence" })
+      yield* resolve()
+      expect(picks.at(-1)).toEqual({ prompt: "" })
+      yield* resolve("default")
+      expect(picks).toHaveLength(3)
+      const rejected = yield* resolve("balance").pipe(Effect.exit)
+      expect(String(rejected)).toContain("not enabled for this account")
+      expect(picks).toHaveLength(3)
+      state.available = false
+      const failed = yield* resolve("intelligence").pipe(Effect.exit)
+      expect(String(failed)).toContain("could not select tier 'intelligence'")
+      expect(picks).toHaveLength(4)
+      state.metadata = false
+      state.listed = false
+      yield* connect({ apiEndpoint: "https://copilot-unavailable.test" })
+      yield* advance(() => state.listed)
+      yield* drain
+      const unverified = yield* resolve("efficiency").pipe(Effect.exit)
+      expect(String(unverified)).toContain("Could not verify Copilot Auto tier availability")
+      expect(picks).toHaveLength(4)
     }),
   )
 
