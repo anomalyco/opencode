@@ -51,6 +51,7 @@ import { ServerAuth } from "./auth"
 import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
+import { interruptBodyLayer } from "./middleware/interrupt-body"
 import { schemaErrorLayer } from "./middleware/schema-error"
 import { defectResponseLayer } from "./middleware/defect-response"
 import { ServerPairing } from "./pairing"
@@ -221,6 +222,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(auth),
         HttpRouter.provideRequest(requestServices),
         Layer.merge(defectResponseLayer),
+        Layer.merge(interruptBodyLayer),
         Layer.provideMerge(services),
         Layer.provideMerge(HttpRouter.layer),
       )

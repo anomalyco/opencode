@@ -679,8 +679,15 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.post("session.interrupt", "/api/session/:sessionID/interrupt", {
         params: { sessionID: Session.ID },
         query: { resume: BooleanFromString.pipe(Schema.optional) },
+        // The body itself is optional: callers that sent no body before this endpoint
+        // gained a reason must still get 200. Effect's JSON codec cannot decode an absent
+        // body against a declared payload, so the server's interrupt-body middleware
+        // supplies "{}" for an empty body before decoding (see middleware/interrupt-body.ts).
+        // "shutdown" is deliberately absent: it is only ever published when the process
+        // owner interrupts the execution fiber on teardown, never supplied by a caller
+        // (see SessionExecution.terminal).
         payload: Schema.Struct({
-          reason: SessionEvent.Execution.Interrupted.fields.data.fields.reason.pipe(Schema.optional).annotate({
+          reason: Schema.Literals(["user", "superseded", "inactivity"]).pipe(Schema.optional).annotate({
             description:
               'Why the execution is being interrupted. Defaults to "user" when omitted. Only "user" lets tools awaiting cancellation stop and settle their own call; any other reason interrupts them at once.',
           }),
@@ -697,6 +704,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           summary: "Interrupt session execution",
           description:
             "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When resume=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
+          // Effect's OpenAPI generator marks every declared payload required, but this
+          // payload is optional: a body-less POST is the pre-reason call shape.
+          transform: (operation) => ({
+            ...operation,
+            requestBody:
+              operation.requestBody === undefined ? undefined : { ...operation.requestBody, required: false },
+          }),
         }),
       ),
     )
