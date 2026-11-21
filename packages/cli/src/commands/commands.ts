@@ -566,6 +566,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     }),
     Spec.make("machine", {
       description: "Manage remote machines",
+      globalFlags: ServerFlags,
       commands: [
         Spec.make("add", {
           description: "Add a machine and print a one-time join string",
