@@ -45,6 +45,7 @@ export default {
   "open.app.xcode": "Xcode",
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
+  "open.app.windowsTerminal": "Windows Terminal",
   "open.app.sublimeText": "Sublime Text",
   selectToOpen: "Select a file to open",
   "open.finder": "Finder",
