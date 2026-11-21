@@ -4,6 +4,7 @@ import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DeepLinks } from "../deep-links"
+import { deepLinkArguments, takeLaunchLinks } from "./launch-links"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsOrigin } from "../windows/state"
@@ -103,7 +104,7 @@ const runtime = Layer.effect(
     const deepLinks = yield* DeepLinks.make(focusWindow)
 
     const secondInstance = (_event: Event, argv: string[]) => {
-      const urls = argv.filter((arg) => arg.startsWith("opencode://"))
+      const urls = deepLinkArguments(argv)
 
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
@@ -167,6 +168,15 @@ const runtime = Layer.effect(
     app.on("render-process-gone", renderProcessGone)
     process.on("SIGINT", signal)
     process.on("SIGTERM", signal)
+
+    // The router waits for a window to be ready, so the links the app was started with open once one is.
+    const launched = takeLaunchLinks()
+
+    if (launched.length) {
+      runFork(Effect.logInfo("deep link received at launch", { urls: launched }))
+      deepLinks.receive(launched)
+    }
+
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         app.off("second-instance", secondInstance)
