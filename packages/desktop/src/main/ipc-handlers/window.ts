@@ -2,6 +2,7 @@ import { app, BrowserWindow, systemPreferences } from "electron"
 import { Effect } from "effect"
 import { WindowRpcs } from "../../shared/ipc-rpc"
 import { IpcPortHandoff } from "../ipc-transport"
+import { Toasts } from "../notifications"
 import {
   getPinchZoomEnabled,
   setPinchZoomEnabled,
@@ -85,6 +86,9 @@ export const windowHandlers = WindowRpcs.toLayer(
 
           if (win) setTaskbarProgress(win, mode)
         }),
+      WindowShowToast: ({ tag, ...input }, context) =>
+        Effect.sync(() => Toasts.show(sender(handoff, context), tag, input)),
+      WindowDismissToast: ({ tag }) => Effect.sync(() => Toasts.dismiss(tag)),
     })
   }),
 )
