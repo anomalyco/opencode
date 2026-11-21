@@ -74,6 +74,7 @@ type CycleResult = {
 
 type RunFooterOptions = {
   directory: () => string
+  home?: string
   findFiles: (query: string) => Promise<string[]>
   agents: RunAgent[]
   references: RunReference[]
@@ -330,6 +331,7 @@ export class RunFooter implements FooterApi {
           get children() {
             return createComponent(RunFooterView, {
               directory: options.directory,
+              home: options.home,
               state: footer.state,
               startup: footer.startup,
               view: footer.view,
