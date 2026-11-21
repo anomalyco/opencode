@@ -16,13 +16,14 @@ const state: DragOutState = { current: undefined }
 export function startDragOut(platform: Pick<Platform, "startFileDrag">, event: DragEvent, path: string) {
   if (!platform.startFileDrag || !event.dataTransfer) return false
   const drag = { path, text: event.dataTransfer.getData("text/plain") }
-  const source = event.target
+  // The row may sit in a shadow root (the file tree's does), where `target` is retargeted to its host.
+  const source = event.composedPath()[0] ?? event.target
   event.preventDefault()
   state.current = drag
 
   const end = () => {
     if (state.current === drag) state.current = undefined
-    source?.dispatchEvent(new DragEvent("dragend", { bubbles: true }))
+    source?.dispatchEvent(new DragEvent("dragend", { bubbles: true, composed: true }))
   }
 
   void platform.startFileDrag(path).then(end, end)
@@ -44,9 +45,9 @@ export function dragOutText(paths: readonly string[]) {
   return drag.text
 }
 
-// The system drag is Windows-only, where paths ignore case and take either separator.
+// The system drag is Windows-only, where paths ignore case, take either separator and may end in one.
 function sameFile(a: string, b: string) {
-  const key = (value: string) => value.replaceAll("/", "\\").toLowerCase()
+  const key = (value: string) => value.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase()
 
   return key(a) === key(b)
 }

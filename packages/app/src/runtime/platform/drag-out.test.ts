@@ -3,29 +3,38 @@ import { dragOutText, draggingOut, startDragOut } from "./drag-out"
 
 const path = "C:\\repo\\src\\index.ts"
 
-function rowDrag(row = document.createElement("button")) {
+// A file row inside a shadow root, as the file tree renders it, whose `dragstart` is handled on the host outside it.
+function rowDrag(platform: Parameters<typeof startDragOut>[0]) {
+  const host = document.createElement("div")
+  const row = document.createElement("button")
+  host.attachShadow({ mode: "open" }).append(row)
+  document.body.append(host)
+  const handled = { started: false, event: undefined as DragEvent | undefined }
+  host.addEventListener("dragstart", (event) => {
+    handled.event = event
+    handled.started = startDragOut(platform, event, path)
+  })
+
   const dataTransfer = new DataTransfer()
   dataTransfer.setData("text/plain", "file:src/index.ts")
-
-  const event = new DragEvent("dragstart", { dataTransfer, cancelable: true })
+  const event = new DragEvent("dragstart", { dataTransfer, bubbles: true, composed: true, cancelable: true })
   // happy-dom drops `dataTransfer` from the init dictionary; a browser keeps it.
   Object.defineProperty(event, "dataTransfer", { value: dataTransfer })
-
   row.dispatchEvent(event)
 
-  return event
+  return { ...handled, row }
 }
 
 describe("drag out", () => {
   test("a drop of the dragged-out file reads as the row's drag until the system drag ends, which ends the row's drag", async () => {
     const ended = Promise.withResolvers<boolean>()
-    const row = document.createElement("button")
+    const drag = rowDrag({ startFileDrag: () => ended.promise })
     const ends: string[] = []
-    row.addEventListener("dragend", (end) => ends.push(end.type))
-    const event = rowDrag(row)
+    drag.row.addEventListener("dragend", () => ends.push("row"))
+    window.addEventListener("dragend", () => ends.push("window"), { once: true })
 
-    expect(startDragOut({ startFileDrag: () => ended.promise }, event, path)).toBe(true)
-    expect(event.defaultPrevented).toBe(true)
+    expect(drag.started).toBe(true)
+    expect(drag.event?.defaultPrevented).toBe(true)
     expect(draggingOut()).toBe(true)
     expect(dragOutText([path])).toBe("file:src/index.ts")
     // Windows paths ignore case and take either separator.
@@ -39,14 +48,14 @@ describe("drag out", () => {
 
     expect(draggingOut()).toBe(false)
     expect(dragOutText([path])).toBeUndefined()
-    expect(ends).toEqual(["dragend"])
+    expect(ends).toEqual(["row", "window"])
   })
 
   test("without a system drag the row keeps its own drag", () => {
-    const event = rowDrag()
+    const drag = rowDrag({})
 
-    expect(startDragOut({}, event, path)).toBe(false)
-    expect(event.defaultPrevented).toBe(false)
+    expect(drag.started).toBe(false)
+    expect(drag.event?.defaultPrevented).toBe(false)
     expect(draggingOut()).toBe(false)
   })
 })
