@@ -3966,10 +3966,11 @@ describe("MCP events", () => {
       Effect.map((all) => all[0]?.status),
     )
 
-  // Lists "job.finished" with its `job` argument mirrored into a header, rejects a stream without that header,
-  // and answers any other `events/stream` with one `active` notification, then closes the stream.
+  // Lists "job.finished", from the second listing on with its `job` argument mirrored into a header, rejects a stream
+  // without that header, and answers any other `events/stream` with one `active` notification, then closes the stream.
   const eventServer = (input: { events?: boolean } = {}) => {
     const streams: Array<{ name: string | null; job: string | null; params: unknown }> = []
+    let lists = 0
     return resourceServer({
       modern: true,
       events: input.events,
@@ -3977,7 +3978,7 @@ describe("MCP events", () => {
         if (request.method !== "POST") return undefined
         const body: unknown = await request.clone().json()
         if (!isRecord(body)) return undefined
-        if (body.method === "events/list")
+        if (body.method === "events/list" && ++lists)
           return Response.json({
             jsonrpc: "2.0",
             id: body.id,
@@ -3987,7 +3988,10 @@ describe("MCP events", () => {
                 {
                   name: "job.finished",
                   delivery: ["push"],
-                  inputSchema: { type: "object", properties: { job: { type: "string", "x-mcp-header": "Job" } } },
+                  inputSchema: {
+                    type: "object",
+                    properties: { job: { type: "string", ...(lists > 1 ? { "x-mcp-header": "Job" } : {}) } },
+                  },
                   payloadSchema: { type: "object" },
                 },
               ],
@@ -4036,7 +4040,7 @@ describe("MCP events", () => {
           if (!events) throw new Error("expected MCP events")
           const messages = yield* Stream.runCollect(events.stream({ name: "job.finished", arguments: { job: "j1" } }))
           expect(messages).toEqual([{ type: "active", cursor: "c1", truncated: false }])
-          // Unlisted at first, so the stream relists after the server rejects it for the missing header.
+          // The first listing has no annotation, so the stream relists after the server rejects it for the missing header.
           const params = expect.objectContaining({ name: "job.finished", arguments: { job: "j1" } })
           expect(server.streams).toEqual([
             { name: "job.finished", job: null, params },
@@ -4046,8 +4050,7 @@ describe("MCP events", () => {
       }),
   )
 
-  // Holds each `events/stream` open so a test can send notifications on it or close it. An event named "missing"
-  // is refused with NotFound.
+  // Lists "job.finished" and holds each `events/stream` open so a test can send notifications on it or close it.
   const streamServer = Effect.fnUntraced(function* (input: { events?: boolean; failedOpens?: number } = {}) {
     const attempts: unknown[] = []
     const streams = yield* Queue.unbounded<{
@@ -4064,12 +4067,19 @@ describe("MCP events", () => {
       respond: async (request) => {
         if (request.method !== "POST") return undefined
         const body: unknown = await request.clone().json()
+        if (isRecord(body) && body.method === "events/list")
+          return Response.json({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              resultType: "complete",
+              events: [{ name: "job.finished", delivery: ["push"], inputSchema: {}, payloadSchema: {} }],
+            },
+          })
         if (!isRecord(body) || body.method !== "events/stream") return undefined
         attempts.push(body.params)
         if (attempts.length <= (input.failedOpens ?? 0))
           return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32603, message: "Temporary failure" } })
-        if (isRecord(body.params) && body.params.name === "missing")
-          return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32023, message: "Unknown event type" } })
         const meta = { "io.modelcontextprotocol/subscriptionId": body.id }
         const controller = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>()
         const aborted = Deferred.makeUnsafe<void>()
@@ -4305,7 +4315,8 @@ describe("MCP events", () => {
           error: { code: -32023 },
         })
         yield* TestClock.adjust("30 seconds")
-        expect(server.attempts).toMatchObject([{ name: "job.finished" }, { name: "missing" }])
+        // "missing" isn't listed, so the client refuses it without asking the server.
+        expect(server.attempts).toMatchObject([{ name: "job.finished" }])
       }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
     }),
   )

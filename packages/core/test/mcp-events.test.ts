@@ -165,7 +165,13 @@ describe("MCP events", () => {
       ).pipe(Effect.forkChild({ startImmediately: true }))
       yield* until(() => server.state.streams.length === 1)
       const stream = server.state.streams[0]
-      expect(stream.params).toEqual({ name: "job.finished", arguments: { job: "j1" }, cursor: "c0" })
+      // Resuming from a cursor replays at most an hour.
+      expect(stream.params).toEqual({
+        name: "job.finished",
+        arguments: { job: "j1" },
+        cursor: "c0",
+        maxAgeMs: 3_600_000,
+      })
       yield* server.notify("active", stream.id, { cursor: "c0", truncated: true, heartbeatMs: 30_000 })
       yield* server.event(stream.id, "e1", "c1")
       yield* server.notify("heartbeat", stream.id, { cursor: "c2" })

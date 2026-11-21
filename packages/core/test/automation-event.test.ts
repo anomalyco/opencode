@@ -350,7 +350,7 @@ for (const outcome of ["continue", "done", "reject"]) {
           runCount: 1,
           state: "first",
         })
-        expect(position).toMatchObject({ cursor: "first", id: "first" })
+        expect(position).toMatchObject({ cursor: "first", seen: ["first"] })
       }
       expect(yield* f.cancelled).toBe(stream.id)
       expect(wakes).toEqual([sessionID])
@@ -656,7 +656,7 @@ it.effect("rejects an oversized rendered event prompt before creating a child", 
   }),
 )
 
-for (const stop of ["malformed", "terminated", "permission revoked", "expired"]) {
+for (const stop of ["terminated", "permission revoked", "expired"]) {
   it.effect(`stops the stream without a wake: ${stop}`, () =>
     Effect.gen(function* () {
       const f = yield* setup()
@@ -664,15 +664,6 @@ for (const stop of ["malformed", "terminated", "permission revoked", "expired"])
       yield* f.start
       const first = yield* f.opened
       switch (stop) {
-        case "malformed":
-          yield* f.notify("event", first.id, {
-            name: trigger.event,
-            eventId: "x",
-            timestamp,
-            data: { status: 2 },
-            cursor: "bad",
-          })
-          break
         case "terminated":
           yield* f.notify("terminated", first.id, {
             error: { code: -32024, message: "revoked" },
@@ -702,7 +693,6 @@ for (const stop of ["malformed", "terminated", "permission revoked", "expired"])
         runCount: 0,
         state: undefined,
       })
-      if (stop === "malformed") expect(row.lastOutput).toContain("payloadSchema")
       expect(yield* f.cancelled).toBe(first.id)
       expect(f.state.streams).toHaveLength(1)
       expect(wakes).toEqual([])

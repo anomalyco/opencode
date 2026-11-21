@@ -1,11 +1,10 @@
 export * as AutomationEvent from "./event.js"
 
 import type { Automation } from "@opencode/schema/automation"
-import { Effect, Option, Schema, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { LocationLifecycle } from "../location-lifecycle.js"
 import { McpClient } from "../mcp/client.js"
 import { Mcp } from "../mcp/index.js"
-import { codecFor } from "../tool/runtime.js"
 
 export type Message = Extract<McpClient.EventMessage, { type: "event" }>
 export class Disconnected extends Schema.TaggedError<Disconnected>()("Automation.EventDisconnected", {
@@ -17,17 +16,6 @@ export const input = (message: Message) => ({
   data: message.data,
 })
 
-/** Fail closed if the server supplies a schema we cannot compile. Never coerce or strip fields from event data. */
-function validator(schema: McpClient.EventType["payloadSchema"]) {
-  if (schema === undefined) return () => true
-  const codec = codecFor(schema)
-  if (!codec) return undefined
-  const decode = Schema.decodeUnknownOption(codec, {
-    onExcessProperty: "error",
-  })
-  return (data: unknown) => Option.isSome(decode(data))
-}
-
 // `undefined` opens a new watch; `null` reopens a known one with no replay position from now.
 export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event, cursor?: string | null) {
   const mcp = yield* Mcp.Service
@@ -37,13 +25,7 @@ export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event, c
     // A known watch may have to wait for its replacement connection; a new watch needs a producer now.
     return yield* Effect.fail(cursor === undefined ? new Error(message) : new Disconnected({ message }))
   }
-  const type = (yield* events.list()).find((type) => type.name === trigger.event)
-  if (!type?.delivery?.includes("push"))
-    return yield* Effect.fail(new Error(`No push event ${trigger.event} on ${trigger.server}`))
-  if (!validator(type.inputSchema)?.(trigger.args ?? {}))
-    return yield* Effect.fail(new Error("Event arguments do not match inputSchema"))
-  const valid = validator(type.payloadSchema)
-  if (!valid) return yield* Effect.fail(new Error("Unsupported event payloadSchema"))
+  yield* events.check({ name: trigger.event, arguments: trigger.args })
   const lifecycle = yield* LocationLifecycle.Service
   return events.stream({ name: trigger.event, arguments: trigger.args, cursor }).pipe(
     Stream.onStart(lifecycle.retain),
@@ -58,13 +40,9 @@ export const resolve = Effect.fnUntraced(function* (trigger: Automation.Event, c
     Stream.filter((message) => message.type !== "error"),
     Stream.mapEffect((message) => {
       if (message.cursor && message.cursor.length > 4096) return Effect.fail(new Error("Oversized event cursor"))
-      if (
-        message.type === "event" &&
-        (message.name !== trigger.event ||
-          Buffer.byteLength(JSON.stringify(input(message))) > 16_384 ||
-          !valid(message.data))
-      )
-        return Effect.fail(new Error("Invalid MCP event: wrong name, oversized event or data does not match payloadSchema"))
+      // A prompt carries the event, so its size is bounded here; the MCP client already checked its shape.
+      if (message.type === "event" && Buffer.byteLength(JSON.stringify(input(message))) > 16_384)
+        return Effect.fail(new Error("Oversized MCP event"))
       return Effect.succeed(message)
     }),
   )

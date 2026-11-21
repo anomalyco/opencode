@@ -137,6 +137,8 @@ const FAILED_RETRY = 5 * MINUTE
 /** How long an automation whose code failed waits before trying again, up to MAX_CODE_FAILURES. */
 const CODE_FAILED_RETRY = MINUTE
 const MAX_CODE_FAILURES = 3
+// Event IDs a watch remembers to skip a duplicate the server replays.
+const SEEN_EVENTS = 100
 const TICK_CONCURRENCY = 4
 
 const duration = (value: string) =>
@@ -368,7 +370,8 @@ const layer = Layer.effect(
           event_position: {
             ...row.event_position,
             cursor: event.cursor,
-            id: event.eventId,
+            // A server replaying from an older cursor can send an event again; the last ones are remembered.
+            seen: [...(row.event_position.seen ?? []), event.eventId].slice(-SEEN_EVENTS),
           },
         }
       const next = following(row, ended)
@@ -868,7 +871,7 @@ const layer = Layer.effect(
                 })
                 return true
               }
-              if (current.event_position?.id === message.eventId) return true
+              if (current.event_position?.seen?.includes(message.eventId)) return true
               yield* runAction(current, at, message)
               return (yield* find(id)).status === "active"
             }, delivery.withPermit),

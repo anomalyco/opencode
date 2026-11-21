@@ -136,6 +136,9 @@ const URL_ELICITATION_FIELD_KEY = "elicitation"
 
 const changes = { tools: McpEvent.ToolsChanged, resources: McpEvent.ResourcesChanged, prompts: PromptsChanged }
 
+// Event IDs a subscription remembers to skip a duplicate the server replays.
+const SEEN_EVENTS = 100
+
 const isEnded = (error: Error) =>
   error instanceof EventStreamRejectedError || error instanceof EventStreamTerminatedError
 
@@ -292,7 +295,7 @@ export const layer = (options?: Options) =>
 
       // Experimental MCP Events subscriptions, by server. Each streams while its server is connected; the streams
       // run here, in this Location, not in a pooled connection's scope.
-      type Followed = { -readonly [K in keyof Subscription]: Subscription[K] } & { gap: boolean }
+      type Followed = { -readonly [K in keyof Subscription]: Subscription[K] } & { gap: boolean; seen: string[] }
       const followed = new Map<ServerName, Map<string, Followed>>()
       const streams = yield* FiberMap.make<string>()
       const runStream = yield* FiberMap.runtime(streams)<never>()
@@ -328,6 +331,11 @@ export const layer = (options?: Options) =>
             sub.cursor = message.cursor
             sub.gap ||= message.cursor !== null && message.truncated
           }).pipe(Effect.andThen(setStatus(sub, { status: "active" })))
+        // A server replaying from an older cursor can send an event again; the last ones are remembered.
+        if (sub.seen.includes(message.eventId))
+          return Effect.sync(() => {
+            sub.cursor = message.cursor
+          })
         // The cursor moves past the event only once it is published.
         return bus
           .publish(McpEvent.ExperimentalEvent, {
@@ -345,6 +353,7 @@ export const layer = (options?: Options) =>
               Effect.sync(() => {
                 sub.cursor = message.cursor
                 sub.gap = false
+                sub.seen = [...sub.seen, message.eventId].slice(-SEEN_EVENTS)
               }),
             ),
           )
@@ -1084,6 +1093,7 @@ export const layer = (options?: Options) =>
             status: { status: "pending" },
             cursor: input.cursor ?? existing?.cursor ?? null,
             gap: false,
+            seen: existing?.seen ?? [],
           }
           subs.set(id, sub)
           yield* bus.publish(McpEvent.ExperimentalSubscriptionChanged, { id })

@@ -46,6 +46,7 @@ import {
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
+import { codecFor } from "../tool/runtime.js"
 import { McpStdio } from "./stdio.js"
 import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-errors.js"
 
@@ -90,6 +91,8 @@ const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
 const MISSED_HEARTBEATS = 3
 const UNGRANTED_SILENCE = Duration.seconds(30 * MISSED_HEARTBEATS)
 const EVENT_LIST_PAGES = 100
+// A watch that was down for long resumes with at most this much backlog, not everything since its cursor.
+const REPLAY_LIMIT_MS = 60 * 60 * 1_000
 
 /** Experimental: MCP Events is a beta extension; may change without compatibility guarantees. */
 export const EventType = Schema.Struct({
@@ -285,19 +288,27 @@ export interface Connection {
 
 /** Experimental: MCP Events is a beta extension; may change without compatibility guarantees. */
 export interface Events {
-  /** Every event type the server offers (`events/list`). */
+  /** Every event type the server offers (`events/list`), leaving out those whose schemas can't be used. */
   readonly list: () => Effect.Effect<ReadonlyArray<EventType>, Error>
+  /**
+   * Fails with EventStreamRejectedError when an event type is unknown, offers no push delivery, or doesn't accept
+   * these arguments. `stream` runs the same check before opening.
+   */
+  readonly check: (input: {
+    readonly name: string
+    readonly arguments?: Record<string, unknown>
+  }) => Effect.Effect<void, Error>
   /**
    * Push delivery (`events/stream`) from `cursor`, or from now. Ends when the server closes the stream. Fails with
    * EventStreamRejectedError when the server refuses the subscription, EventStreamTerminatedError when it ends it,
    * and with another error when the stream breaks or misses three heartbeats, after which it can be opened again
-   * from the last cursor. Interrupting it cancels it.
+   * from the last cursor. Interrupting it cancels it. Events whose name or data don't match the event type are dropped.
    */
   readonly stream: (input: {
     readonly name: string
     readonly arguments?: Record<string, unknown>
     readonly cursor?: string | null
-    /** Replays nothing older than this, even from an older cursor. */
+    /** Replays nothing older than this, even from an older cursor. Defaults to an hour when resuming from a cursor. */
     readonly maxAgeMs?: number
   }) => Stream.Stream<EventMessage, Error>
 }
@@ -612,9 +623,16 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     // first and leave the request unmade; the result is the same empty list without the noise.
     const advertised = (capability: "tools" | "prompts" | "resources") =>
       Boolean(client.getServerCapabilities()?.[capability])
-    // Each listed event type's `x-mcp-header` annotations, mirrored as `Mcp-Param-*` headers on its stream. One
-    // refresh runs at a time and swaps in a complete map, so a stream never reads a half-built one.
-    let eventHeaders = new Map<string, ReadonlyArray<HeaderParam>>()
+    // Each listed event type with its `x-mcp-header` annotations, mirrored as `Mcp-Param-*` headers on its stream,
+    // and checks for its arguments and data. One refresh runs at a time and swaps in a complete map, so a stream never
+    // reads a half-built one.
+    type Known = {
+      readonly type: EventType
+      readonly headers: ReadonlyArray<HeaderParam>
+      readonly arguments: (value: unknown) => boolean
+      readonly data: (value: unknown) => boolean
+    }
+    let eventTypes = new Map<string, Known>()
     const refresh = yield* Semaphore.make(1)
     const listEvents = Effect.fnUntraced(function* () {
       const events: unknown[] = []
@@ -632,8 +650,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       }
       if (cursor !== undefined)
         yield* Effect.logWarning("MCP event list has more pages than read", { server, pages: EVENT_LIST_PAGES })
-      const headers = new Map<string, ReadonlyArray<HeaderParam>>()
-      const valid: EventType[] = []
+      const known = new Map<string, Known>()
       for (const raw of events) {
         const decoded = decodeEventType(raw)
         if (Option.isNone(decoded)) {
@@ -653,12 +670,29 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           })
           continue
         }
-        headers.set(event.name, params)
-        valid.push(event)
+        const args = matcher(event.inputSchema)
+        const data = matcher(event.payloadSchema)
+        if (!args || !data) {
+          yield* Effect.logWarning("skipping MCP event type with a schema that can't be checked", {
+            server,
+            event: event.name,
+          })
+          continue
+        }
+        known.set(event.name, { type: event, headers: params, arguments: args, data })
       }
-      eventHeaders = headers
-      return valid
+      eventTypes = known
+      return Array.from(known.values(), (entry) => entry.type)
     }, refresh.withPermit)
+    const checkEvent: Events["check"] = Effect.fnUntraced(function* (input) {
+      if (!eventTypes.has(input.name)) yield* listEvents()
+      const known = eventTypes.get(input.name)
+      const reject = (code: number, message: string) => new EventStreamRejectedError({ server, code, message })
+      if (!known?.type.delivery.includes("push"))
+        return yield* reject(-32023, `No push event type ${input.name} on MCP server ${server}`)
+      if (!known.arguments(input.arguments ?? {}))
+        return yield* reject(-32602, `Arguments for ${input.name} do not match its inputSchema`)
+    })
 
     // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
     const connection: Connection = {
@@ -671,6 +705,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         options.events && client.getProtocolEra() === "modern" && client.getServerCapabilities()?.extensions?.[EVENTS]
           ? {
               list: listEvents,
+              check: checkEvent,
               stream: (input) =>
                 Stream.callback<EventMessage, Error>((queue) =>
                   Effect.gen(function* () {
@@ -693,12 +728,16 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                       ),
                       Effect.forkScoped,
                     )
+                    const params =
+                      typeof input.cursor === "string" && input.maxAgeMs === undefined
+                        ? { ...input, maxAgeMs: REPLAY_LIMIT_MS }
+                        : input
                     // Interrupting the request cancels the stream; the server closing it resolves the request.
                     const request = Effect.tryPromise({
                       try: (signal) =>
-                        client.request({ method: "events/stream", params: input }, AnyValue, {
+                        client.request({ method: "events/stream", params }, AnyValue, {
                           signal,
-                          headers: paramHeaders(eventHeaders.get(input.name) ?? [], input.arguments),
+                          headers: paramHeaders(eventTypes.get(input.name)?.headers ?? [], input.arguments),
                           timeout: Infinity,
                           // Routes the stream's notifications, which can arrive before the request settles.
                           onRequestId: (id) => streams.set(String(id), stream),
@@ -707,15 +746,21 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                     })
                     // A modern server rejects headers mirrored from a stale or unlisted event type before opening
                     // the stream, so relist and retry once with the fresh schema.
-                    yield* request.pipe(
-                      Effect.catchIf(
-                        (error) => error instanceof ProtocolError && error.code === HEADER_MISMATCH,
-                        () => listEvents().pipe(Effect.andThen(request)),
+                    yield* checkEvent(input).pipe(
+                      Effect.andThen(
+                        request.pipe(
+                          Effect.catchIf(
+                            (error) => error instanceof ProtocolError && error.code === HEADER_MISMATCH,
+                            () => listEvents().pipe(Effect.andThen(request)),
+                          ),
+                        ),
                       ),
                       Effect.mapError((error) =>
-                        error instanceof ProtocolError && EVENT_STREAM_REJECTED.has(error.code)
-                          ? new EventStreamRejectedError({ server, code: error.code, message: error.message })
-                          : failure(error),
+                        error instanceof EventStreamRejectedError
+                          ? error
+                          : error instanceof ProtocolError && EVENT_STREAM_REJECTED.has(error.code)
+                            ? new EventStreamRejectedError({ server, code: error.code, message: error.message })
+                            : failure(error),
                       ),
                       Effect.tapError((error) =>
                         Effect.logWarning("failed to stream MCP events", { server, error: error.message }),
@@ -727,6 +772,17 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                       Effect.forkScoped,
                     )
                   }),
+                ).pipe(
+                  Stream.filterEffect((message) =>
+                    message.type !== "event" ||
+                    (message.name === input.name && eventTypes.get(input.name)?.data(message.data) === true)
+                      ? Effect.succeed(true)
+                      : Effect.logWarning("dropping an MCP event that doesn't match its event type", {
+                          server,
+                          event: input.name,
+                          eventId: message.eventId,
+                        }).pipe(Effect.as(false)),
+                  ),
                 ),
             }
           : undefined,
@@ -1073,4 +1129,12 @@ function paramHeaders(params: ReadonlyArray<HeaderParam>, args: unknown) {
       return [[`Mcp-Param-${param.header}`, plain ? text : `=?base64?${Buffer.from(text).toString("base64")}?=`]]
     }),
   )
+}
+
+/** Fails closed: a schema that can't be compiled gives undefined. Never coerces or strips fields. */
+function matcher(schema: Record<string, unknown>) {
+  const codec = codecFor(schema)
+  if (!codec) return undefined
+  const decode = Schema.decodeUnknownOption(codec, { onExcessProperty: "error" })
+  return (value: unknown) => Option.isSome(decode(value))
 }
