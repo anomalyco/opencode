@@ -13,6 +13,15 @@ test("takes whole graphemes within terminal width", () => {
   expect(Locale.graphemes("a👨‍👩‍👧‍👦b")).toEqual(["a", "👨‍👩‍👧‍👦", "b"])
 })
 
+test("formats dates in the configured reply styles", () => {
+  const value = new Date(2026, 10, 6, 21, 41).getTime()
+  expect(Locale.date(value, "locale")).toBe(new Date(value).toLocaleDateString())
+  expect(Locale.date(value, "friendly")).toBe("Nov 6, 2026")
+  expect(Locale.date(value, "dd-mon-yyyy")).toBe("06-Nov-2026")
+  expect(Locale.date(value, "iso")).toBe("2026-11-06")
+  expect(Locale.datetime(value, "dd-mon-yyyy")).toBe(`${Locale.time(value)} · 06-Nov-2026`)
+})
+
 test("rolls the compact form over at the rounding boundary", () => {
   expect(Locale.number(999949)).toBe("999.9K")
   expect(Locale.number(999950)).toBe("1.0M")
