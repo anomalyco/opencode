@@ -69,7 +69,7 @@ export async function runNonInteractivePrompt(input: Input) {
   if ((await stream.next()).done) throw new Error("Event stream disconnected before prompt admission")
 
   const messageID = SessionMessage.ID.create()
-  const render = renderer(input)
+  const render = renderer(input, messageID)
   const state = {
     phase: "running" as "running" | "settled" | "cancelling",
     promoted: false,
@@ -170,6 +170,7 @@ export async function runNonInteractivePrompt(input: Input) {
         }
       }
       if (sessionID !== input.sessionID) continue
+      if (event.type === "session.inbox.enqueued" || event.type === "session.inbox.cancelled") render.inbox(event)
       if (event.type === "session.inbox.delivered" && event.data.inboxID === messageID) state.promoted = true
       // A busy period that ends before this prompt is delivered leaves the prompt queued for good.
       if (terminal && !state.promoted && terminal.error) state.failure ??= terminal.error
@@ -358,10 +359,12 @@ async function projectedMessages(client: OpenCodeClient, sessionID: string, mess
   }
 }
 
-function renderer(input: Input) {
+function renderer(input: Input, promptID: string) {
   const starts = new Map<string, { id: string; timestamp: number }>()
   const tools = new Map<string, Tool>()
   const steps = new Map<string, "started" | "ended">()
+  const synthetics = new Map<string, { text: string; description?: string; metadata?: Record<string, unknown> }>()
+  let compactionID: string | undefined
   // The session can go idle before the last live events arrive; reconcile prints what they missed.
   const printed = new Map<string, string>()
 
@@ -465,6 +468,60 @@ function renderer(input: Input) {
     return emit(type === "step-start" ? "step_start" : "step_finish", timestamp, { part })
   }
 
+  const synthetic = (
+    id: string,
+    messageID: string,
+    item: { text: string; description?: string; metadata?: Record<string, unknown> },
+    timestamp: number,
+  ) => {
+    const marker = key("synthetic", messageID)
+    if (printed.has(marker)) return
+    printed.set(marker, "")
+    emit("synthetic", timestamp, {
+      part: {
+        id,
+        sessionID: input.sessionID,
+        messageID,
+        type: "synthetic" as const,
+        text: item.text,
+        ...(item.description === undefined ? {} : { description: item.description }),
+        ...(item.metadata === undefined ? {} : { metadata: item.metadata }),
+        time: { created: timestamp },
+      },
+    })
+  }
+
+  const compaction = (
+    id: string,
+    messageID: string,
+    item: {
+      reason: "auto" | "manual"
+      summary: string
+      cost?: number
+      tokens?: unknown
+      metadata?: Record<string, unknown>
+    },
+    timestamp: number,
+  ) => {
+    const marker = key("compaction", messageID)
+    if (printed.has(marker)) return
+    printed.set(marker, "")
+    emit("compaction", timestamp, {
+      part: {
+        id,
+        sessionID: input.sessionID,
+        messageID,
+        type: "compaction" as const,
+        reason: item.reason,
+        summary: item.summary,
+        ...(item.cost === undefined ? {} : { cost: item.cost }),
+        ...(item.tokens === undefined ? {} : { tokens: item.tokens }),
+        ...(item.metadata === undefined ? {} : { metadata: item.metadata }),
+        time: { created: timestamp },
+      },
+    })
+  }
+
   return {
     error: (error: RunError) => {
       if (!emit("error", Date.now(), { error })) UI.error(error.message)
@@ -480,8 +537,82 @@ function renderer(input: Input) {
       )
     },
 
+    inbox: (event: Extract<Event, { type: "session.inbox.enqueued" | "session.inbox.cancelled" }>) => {
+      if (event.type === "session.inbox.cancelled") {
+        synthetics.delete(event.data.inboxID)
+        return
+      }
+      if (event.data.item.type === "synthetic") {
+        synthetics.set(event.data.inboxID, {
+          text: event.data.item.payload.text,
+          description: event.data.item.payload.description,
+          metadata: event.data.item.payload.metadata,
+        })
+      }
+    },
+
     event: async (event: Event) => {
       const time = "created" in event ? event.created : Date.now()
+      if (event.type === "session.inbox.delivered") {
+        const queued = synthetics.get(event.data.inboxID)
+        if (queued) {
+          synthetics.delete(event.data.inboxID)
+          synthetic(partID(event.id), event.data.inboxID, queued, time)
+          return
+        }
+        if (input.format !== "json" || event.data.inboxID === promptID) return
+        const projected = await projectedMessages(input.client, input.sessionID, promptID).catch(() => undefined)
+        const match = projected?.messages.find((item) => item.id === event.data.inboxID)
+        if (match?.type !== "synthetic") return
+        synthetic(
+          partID(event.id),
+          match.id,
+          {
+            text: match.text,
+            description: match.description,
+            metadata: match.metadata,
+          },
+          time,
+        )
+        return
+      }
+      if (event.type === "session.synthetic") {
+        synthetic(
+          partID(event.id),
+          SessionMessage.ID.fromEvent(event.id),
+          {
+            text: event.data.text,
+            description: event.data.description,
+            metadata: event.data.metadata,
+          },
+          time,
+        )
+        return
+      }
+      if (event.type === "session.compaction.started") {
+        compactionID = event.data.inputID ?? SessionMessage.ID.fromEvent(event.id)
+        return
+      }
+      if (event.type === "session.compaction.failed") {
+        compactionID = undefined
+        return
+      }
+      if (event.type === "session.compaction.ended") {
+        const messageID = compactionID ?? SessionMessage.ID.fromEvent(event.id)
+        compactionID = undefined
+        compaction(
+          partID(event.id),
+          messageID,
+          {
+            reason: event.data.reason,
+            summary: event.data.text,
+            cost: event.data.cost,
+            tokens: event.data.tokens,
+          },
+          time,
+        )
+        return
+      }
       if (event.type === "session.retry.scheduled") {
         const retry = {
           messageID: event.data.assistantMessageID,
@@ -600,6 +731,34 @@ function renderer(input: Input) {
 
     reconcile: async (messages: SessionMessageInfo[]) => {
       for (const message of messages) {
+        if (message.type === "synthetic") {
+          synthetic(
+            projectedPartID(message.id, "synthetic"),
+            message.id,
+            {
+              text: message.text,
+              description: message.description,
+              metadata: message.metadata,
+            },
+            message.time.created,
+          )
+          continue
+        }
+        if (message.type === "compaction" && message.status === "completed") {
+          compaction(
+            projectedPartID(message.id, "compaction"),
+            message.id,
+            {
+              reason: message.reason,
+              summary: message.summary,
+              cost: message.cost,
+              tokens: message.tokens,
+              metadata: message.metadata,
+            },
+            message.time.created,
+          )
+          continue
+        }
         if (message.type !== "assistant") continue
         const timestamp = message.time.completed ?? message.time.created
         const seen = steps.get(message.id)
