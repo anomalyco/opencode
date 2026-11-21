@@ -2005,6 +2005,7 @@ export type ConfigInfoEncoded = {
         full_codemode: boolean?,
         machines: boolean?,
         home_memory: boolean?,
+        project_overlay: boolean?,
         sqlite_fts: boolean?,
         schedules: boolean?,
         part_rows: boolean?,

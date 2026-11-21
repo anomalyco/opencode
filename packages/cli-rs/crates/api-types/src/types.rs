@@ -12173,6 +12173,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_memory: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_overlay: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite_fts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schedules: Option<bool>,
