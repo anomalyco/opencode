@@ -182,6 +182,15 @@ impl Client {
     endpoint!(" `GET /api/experimental/artifacts/:artifactID/view/*` (`artifacts.view`)", experimental_artifacts_view, experimental_artifacts_view_call, binary, bytes::Bytes, input: ExperimentalArtifactsViewInput);
     endpoint!(" `GET /api/experimental/job` (`job.list`)", experimental_job_list, experimental_job_list_call, data, ExperimentalJobListOutput, input: ExperimentalJobListInput);
     endpoint!(" `POST /api/experimental/job/:id/cancel` (`job.cancel`)", experimental_job_cancel, experimental_job_cancel_call, empty, (), input: ExperimentalJobCancelInput);
+    endpoint!(
+        " `GET /api/experimental/machine` (`machine.list`)",
+        experimental_machine_list,
+        experimental_machine_list_call,
+        data,
+        ExperimentalMachineListOutput
+    );
+    endpoint!(" `POST /api/experimental/machine` (`machine.add`)", experimental_machine_add, experimental_machine_add_call, data, ExperimentalMachineAddOutput, input: ExperimentalMachineAddInput);
+    endpoint!(" `DELETE /api/experimental/machine/:name` (`machine.remove`)", experimental_machine_remove, experimental_machine_remove_call, empty, (), input: ExperimentalMachineRemoveInput);
     endpoint!(" `GET /api/shell` (`list`)", shell_list, shell_list_call, json, ShellListOutput, input: ShellListInput);
     endpoint!(" `POST /api/shell` (`create`)", shell_create, shell_create_call, json, ShellCreateOutput, input: ShellCreateInput);
     endpoint!(" `GET /api/shell/:id` (`get`)", shell_get, shell_get_call, json, ShellGetOutput, input: ShellGetInput);

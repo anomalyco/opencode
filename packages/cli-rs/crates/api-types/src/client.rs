@@ -1759,6 +1759,31 @@ pub fn experimental_job_cancel(input: &ExperimentalJobCancelInput) -> Call<()> {
     call
 }
 
+/// `GET /api/experimental/machine` (`machine.list`)
+pub fn experimental_machine_list() -> Call<ExperimentalMachineListOutput> {
+    Call::new("GET", "/api/experimental/machine".to_owned(), Reply::Data, 200, &[400, 401, 403])
+}
+
+/// `POST /api/experimental/machine` (`machine.add`)
+pub fn experimental_machine_add(input: &ExperimentalMachineAddInput) -> Call<ExperimentalMachineAddOutput> {
+    let mut call =
+        Call::new("POST", "/api/experimental/machine".to_owned(), Reply::Data, 200, &[400, 401, 403, 404, 409]);
+    call.object();
+    call.field("name", &input.name);
+    call.field("reach", &input.reach);
+    if let Some(value) = &input.replace {
+        call.field("replace", value);
+    }
+    call
+}
+
+/// `DELETE /api/experimental/machine/:name` (`machine.remove`)
+pub fn experimental_machine_remove(input: &ExperimentalMachineRemoveInput) -> Call<()> {
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 403, 404]);
+    call.path = format!("/api/experimental/machine/{}", call.param(&input.name));
+    call
+}
+
 /// `GET /api/shell` (`list`)
 pub fn shell_list(input: &ShellListInput) -> Call<ShellListOutput> {
     let mut call = Call::new("GET", "/api/shell".to_owned(), Reply::Json, 200, &[400, 401, 404]);
@@ -2945,6 +2970,18 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         "experimental.job.cancel" => {
             Some((|| Ok(experimental_job_cancel(&ExperimentalJobCancelInput { id: field(input, "id")? }).cast()))())
         }
+        "experimental.machine.list" => Some((|| Ok(experimental_machine_list().cast()))()),
+        "experimental.machine.add" => Some((|| {
+            Ok(experimental_machine_add(&ExperimentalMachineAddInput {
+                name: field(input, "name")?,
+                reach: field(input, "reach")?,
+                replace: field(input, "replace")?,
+            })
+            .cast())
+        })()),
+        "experimental.machine.remove" => Some((|| {
+            Ok(experimental_machine_remove(&ExperimentalMachineRemoveInput { name: field(input, "name")? }).cast())
+        })()),
         "shell.list" => Some((|| Ok(shell_list(&ShellListInput { location: field(input, "location")? }).cast()))()),
         "shell.create" => Some((|| {
             Ok(shell_create(&ShellCreateInput {
