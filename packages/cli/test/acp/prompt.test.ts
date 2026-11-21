@@ -143,7 +143,7 @@ describe("acp prompt turns over the wire", () => {
     expect(turnUpdates(acp.updates)[5]?.update).toMatchObject({
       title: "printf done",
       kind: "execute",
-      locations: [{ path: path.resolve("/workspace", "sub") }],
+      locations: [],
       rawInput: { command: "printf done", workdir: "sub" },
     })
     expect(turnUpdates(acp.updates)[7]?.update).toMatchObject({

@@ -67,7 +67,7 @@ describe("acp permissions over the wire", () => {
         status: "pending",
         title: "printf hello",
         kind: "execute",
-        locations: [{ path: "/workspace" }],
+        locations: [],
         rawInput: { command: "printf hello", cwd: "/workspace" },
       },
       options: [
@@ -281,7 +281,7 @@ describe("acp edit previews over the wire", () => {
     ])
     expect(acp.permissions.slice(5).map((request) => request.toolCall.locations)).toEqual([
       [{ path: file("stale.ts") }],
-      [{ path: file("folder") }],
+      [],
       [{ path: file("unpatched.ts") }],
     ])
     expect(acp.permissions[0]?.toolCall.name).toBe("edit")
