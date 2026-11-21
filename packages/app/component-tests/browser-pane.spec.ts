@@ -1605,6 +1605,9 @@ story("keeps a page note editable beside a tiny viewport and attaches it to the 
   await editor.click()
   await editor.fill("Check the header layout")
   await addPage(page, root)
+  // The menu gives the keyboard back to its button a task after it closes, and would take it from an editor focused
+  // in that task: the Enter below would then open the menu again.
+  await expect(root.getByRole("button", { name: "Browser options", exact: true })).toBeFocused()
   await expect(editor).toHaveValue("Check the header layout")
   await editor.press("Enter")
   await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([/: Check the header layout$/])
@@ -1617,6 +1620,8 @@ story("adds the whole page to the session and keeps the draft when the button is
   await editor.click()
   await editor.fill("Check the header layout")
   await addPage(page, root)
+  // As above: the menu's button has the keyboard again before the editor takes it.
+  await expect(root.getByRole("button", { name: "Browser options", exact: true })).toBeFocused()
   await expect(editor).toHaveValue("Check the header layout")
   await editor.press("Enter")
   await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([/: Check the header layout$/])
