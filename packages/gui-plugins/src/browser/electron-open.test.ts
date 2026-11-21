@@ -7,13 +7,13 @@ type Tab = { readonly url: string; readonly loading: boolean; readonly failed: b
 // A tab closes only for the person, the agent's close tool or the page itself. This runs the real pane in the pinned
 // Electron, attached to a stand-in for the session's server, and opens tabs as a link in the conversation does. A
 // link's tab used to close by itself when its first load rejected: 15 seconds after it opened while its page, shown
-// already, was still loading, or at once when the address did not answer, and the window was told nothing.
+// already, was still loading, or at once when the address did not answer, and the window was told nothing. The fixture
+// gives the pane a 300 ms deadline, so no run waits out the real one.
 test(
-  "a link's tab stays while its page still loads past the command's deadline, and when its address does not answer",
+  "a link's tab stays while its page still loads past the command's deadline, and when its page fails to load",
   async () => {
     const result: {
       origin: string
-      refused: string
       commands: Record<string, string>
       before: string[]
       shown: boolean
@@ -32,11 +32,11 @@ test(
       { url: `${result.origin}/first`, loading: false, failed: false },
       { url: `${result.origin}/second`, loading: false, failed: false },
       { url: `${result.origin}/loading`, loading: true, failed: false },
-      { url: `${result.refused}/`, loading: false, failed: true },
+      { url: `${result.origin}/dropped`, loading: false, failed: true },
     ])
     // No open was undone.
     expect(result.logged).not.toContain("browser tab closed: its open failed")
   },
-  // Starting Electron takes seconds on a loaded runner, and the still-loading page's command waits out its 15 s deadline.
+  // Starting Electron takes seconds on a loaded runner.
   60_000,
 )

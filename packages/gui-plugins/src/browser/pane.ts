@@ -118,6 +118,8 @@ export function createBrowserPane(input: {
   readonly system: SystemMedia
   /** Whether the build offers the device toolbar. */
   readonly toolbar: boolean
+  /** How long a page's `navigate` command waits for its load; `NAVIGATION_DEADLINE_MS` unless given. */
+  readonly navigationDeadlineMs?: number
   /** The plugin instance's file verifier, for workspace files. */
   readonly verifier: HandlePath
   /** The desktop log, which hears why a page ended or stalled (page-log.ts). */
@@ -932,6 +934,7 @@ export function createBrowserPane(input: {
       },
       zoomed: () => handles.get(binding)?.pages.forEach((page) => page.detail()),
       toolbar: input.toolbar,
+      navigationDeadlineMs: input.navigationDeadlineMs,
       shortcut: (shortcut) => {
         if (!focused() || win.isDestroyed()) return
         page.focusHost()

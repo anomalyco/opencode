@@ -8,7 +8,9 @@ import type { Profile } from "./profile"
 // The Electron main process of `electron-open.test.ts`, bundled and run by the pinned Electron. It attaches the real
 // pane to a stand-in for the session's server, then opens tabs as a link in the conversation does (the window's
 // `tabs.open` command with an address): to a page that loads, to a page that shows and is still loading when the
-// command's deadline passes, and to an address nothing answers. It prints the tabs the pane reported, as one JSON line.
+// command's deadline passes, and to a page that fails to load. The pane is given a deadline of 300 ms in place of its
+// 15 seconds, and nothing here depends on a page beating it: a load that outlasts it only settles its command sooner.
+// It prints the tabs the pane reported, as one JSON line.
 
 const loaded = `<!doctype html><title>Loaded</title><p>loaded</p>`
 
@@ -19,6 +21,9 @@ const loading = `<!doctype html><title>Still loading</title><p>shown</p><img src
 function createPages() {
   return createServer((request, response) => {
     if (request.url === "/never") return
+
+    // The server drops the connection, so Chromium fails the load at once.
+    if (request.url === "/dropped") return void request.socket.destroy()
 
     if (request.url === "/favicon.ico") return void response.writeHead(404).end()
     response.writeHead(200, { "content-type": "text/html" })
@@ -121,10 +126,6 @@ void electron.app.whenReady().then(async () => {
   const api = createApi()
   const origin = await listen(pages)
   const server = await listen(api.server)
-  // An address nothing answers: the port of a server that closed.
-  const closed = createServer()
-  const refused = await listen(closed)
-  await new Promise<void>((resolve) => closed.close(() => resolve()))
   const win = new electron.BrowserWindow({ show: false, width: 800, height: 600 })
   const values = new Map<string, unknown>()
 
@@ -175,6 +176,7 @@ void electron.app.whenReady().then(async () => {
 
   const pane = createBrowserPane({
     toolbar: false,
+    navigationDeadlineMs: 300,
     windows: { get: (id) => (id === win.id ? win : undefined), list: () => [win], focused: () => win, on: () => () => undefined },
     t: (key) => key,
     serverEndpoints: { get: () => ({ id: "sidecar", url: server, headers: {}, sameMachine: true }) },
@@ -194,18 +196,27 @@ void electron.app.whenReady().then(async () => {
 
   await pane.register(win.id, "binding", { server: "sidecar", session: "ses_fixture" })
   const open = (url: string) => pane.command(win.id, "binding", { type: "tabs.open", url }).then(() => "settled", (error: Error) => error.message)
-  const addresses = () => (reported.at(-1) ?? []).map((tab) => tab.url)
+  const last = () => reported.at(-1) ?? []
+
+  // Until `check` holds, for at most `ms`: a report that never comes fails the test's comparison, not the fixture.
+  const until = async (check: () => boolean, ms: number) => {
+    const deadline = Date.now() + ms
+
+    while (!check() && Date.now() < deadline) await new Promise<void>((resolve) => setTimeout(resolve, 20))
+  }
+
   const first = await open(`${origin}/first`)
   const second = await open(`${origin}/second`)
-  const before = addresses()
-  // Both at once: the still-loading page's command settles when its 15 s deadline passes.
-  const [still, failed] = await Promise.all([open(`${origin}/loading`), open(`${refused}/`)])
-  // Any report that follows the commands has arrived by now.
-  await new Promise<void>((resolve) => setTimeout(resolve, 500))
+  // The person's two tabs have loaded, however long the first pages of a new process took.
+  await until(() => last().length === 2 && last().every((tab) => tab.url.startsWith(origin) && !tab.loading), 10_000)
+  const before = last().map((tab) => tab.url)
+  // The still-loading page's command settles when the deadline passes; the page goes on loading.
+  const [still, failed] = await Promise.all([open(`${origin}/loading`), open(`${origin}/dropped`)])
+  // Every report that follows the commands: the page that shows, and the one that says why it could not load.
+  await until(() => last().length === 4 && last().some((tab) => tab.url === `${origin}/loading`) && last().some((tab) => tab.failed), 3_000)
   process.stdout.write(
     `${JSON.stringify({
       origin,
-      refused,
       commands: { first, second, still, failed },
       before,
       // The still-loading page committed and showed: an inventory listed its tab at its address.
