@@ -96,6 +96,7 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
         server_executable: connection.executable(),
         auto: args.permissions.auto(),
         environment: local.then(opencode_store::environment::session_environment),
+        no_plugins: args.no_plugins,
         ..Args::default()
     };
     let plugins = External { config_dir: paths.config.clone(), cwd: directory.clone() };

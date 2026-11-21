@@ -42,6 +42,16 @@ fn negation_sets_a_boolean_to_false() {
     assert!(!parse(&["--no-print-logs"]).unwrap().cli.global.print_logs);
 }
 
+// `--no-plugins` (D01-no-plugins) is a flag of its own, not the negation of a `--plugins`, and has none of its own.
+#[test]
+fn no_plugins_is_a_root_flag_of_its_own() {
+    assert!(parse(&["--no-plugins"]).unwrap().cli.root.no_plugins);
+    assert!(parse(&["--no-plugins", "project"]).unwrap().cli.root.no_plugins);
+    assert!(!parse(&["project"]).unwrap().cli.root.no_plugins);
+    assert!(error(&["--no-no-plugins"]).contains("--no-no-plugins"));
+    assert!(error(&["mini", "--no-plugins"]).contains("--no-plugins"));
+}
+
 #[test]
 fn boolean_takes_a_literal() {
     let run = |line: &[&str]| command!(line, Command::Run(args) => (args.permissions.auto, args.message));

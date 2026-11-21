@@ -31,7 +31,8 @@ fn compare_command(path: &str, ts: &Value, spec: &Spec, diffs: &mut Vec<String>)
         // The root adds `--print-logs` separately; the recording includes it with the built-ins.
         "globalFlags": spec.globals.iter().map(|flag| flag.name).filter(|_| path != "opencode").collect::<Vec<_>>(),
         "arguments": spec.arguments().map(argument).collect::<Vec<_>>(),
-        "flags": spec.flags().map(flag).collect::<Vec<_>>(),
+        // opencode-native's own flags are not in the TypeScript tree.
+        "flags": spec.flags().filter(|flag| !flag.own).map(flag).collect::<Vec<_>>(),
     });
     for key in ["name", "aliases", "description", "globalFlags", "arguments", "flags"] {
         compare(&format!("{path} {key}"), &ts[key], &node[key], diffs);

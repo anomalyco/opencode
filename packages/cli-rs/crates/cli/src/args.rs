@@ -36,6 +36,9 @@ pub struct Flag {
     /// `Flag.withOptionalValue`: the flag takes a value only after `=`, and is this value without one.
     pub optional_value: Option<&'static str>,
     pub check: Check,
+    /// opencode-native's own, which the TypeScript CLI does not have: the tests that hold the table, the help and the
+    /// completions to TypeScript's leave it out (`D01-no-plugins`).
+    pub own: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -101,6 +104,7 @@ impl Flag {
             count,
             optional_value: None,
             check: Check::None,
+            own: false,
         }
     }
 
@@ -110,6 +114,10 @@ impl Flag {
 
     const fn hidden(self) -> Flag {
         Flag { hidden: true, ..self }
+    }
+
+    const fn own(self) -> Flag {
+        Flag { own: true, ..self }
     }
 
     const fn check(self, check: Check) -> Flag {
@@ -125,8 +133,9 @@ impl Flag {
     }
 
     /// The long name that sets a boolean to false.
+    /// `--no-<name>` of a boolean flag, but of one that is a negation already (`--no-plugins`).
     pub fn negation(&self) -> Option<String> {
-        self.is_boolean().then(|| format!("no-{}", self.name))
+        (self.is_boolean() && !self.name.starts_with("no-")).then(|| format!("no-{}", self.name))
     }
 }
 
@@ -272,6 +281,7 @@ const DANGEROUSLY: Param = Param::Flag(boolean("dangerously-skip-permissions", "
 const CONTINUE: Param = Param::Flag(boolean("continue", "Continue the last session").alias(&["c"]));
 const SESSION: Param = Param::Flag(string("session", SESSION_TEXT).alias(&["s"]));
 const PROMPT: Param = Param::Flag(string("prompt", "Prompt to use"));
+const NO_PLUGINS: Param = Param::Flag(boolean("no-plugins", "Start with no external plugins (Luau, TypeScript)").own());
 const AGENT: Param = Param::Flag(string("agent", "Agent to use"));
 const FORMAT: Param = Param::Flag(
     choice("format", "Output format", OutputFormat::CHOICES).count(Count::Default(Default::Text("default"))),
@@ -303,6 +313,7 @@ pub static ROOT: Spec = Spec::new("opencode", "OpenCode command line interface")
         CONTINUE,
         SESSION,
         PROMPT,
+        NO_PLUGINS,
     ])
     .commands(&[
         Spec::new("upgrade", "Upgrade OpenCode to the latest or a specific version").alias("update").params(&[
@@ -594,6 +605,8 @@ pub struct RootArgs {
     pub continue_: bool,
     pub session: Option<String>,
     pub prompt: Option<String>,
+    /// `--no-plugins`: the TUI loads no external plugin.
+    pub no_plugins: bool,
 }
 
 /// `--standalone` and `--server` on a command that declares them; they apply to its subcommands too.
@@ -964,6 +977,7 @@ impl Cli {
                 continue_: values.flag("continue"),
                 session: values.string("session"),
                 prompt: values.string("prompt"),
+                no_plugins: values.flag("no-plugins"),
             },
             _ => RootArgs::default(),
         };

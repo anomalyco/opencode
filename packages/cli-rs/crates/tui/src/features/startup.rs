@@ -22,6 +22,8 @@ pub struct Args {
     pub server_executable: Option<std::path::PathBuf>,
     pub auto: bool,
     pub environment: Option<IndexMap<String, String>>,
+    /// `--no-plugins`: no external plugin loads, of any carrier; the built-ins do.
+    pub no_plugins: bool,
 }
 
 impl Default for Args {
@@ -39,6 +41,7 @@ impl Default for Args {
             server_executable: None,
             auto: false,
             environment: None,
+            no_plugins: false,
         }
     }
 }

@@ -90,7 +90,7 @@ impl From<Quit> for Stop {
 fn prompt_command(node: &'static Spec, line: &mut Vec<String>, section: &str) -> Result<(), Stop> {
     // Effect asks for a group's shared flags only, and no command here has any.
     let (flags, arguments): (Vec<Prompted>, Vec<Prompted>) = match node.listed().next().is_none() {
-        true => node.params.iter().map(param).partition(|param| param.flag),
+        true => asked(node).map(param).partition(|param| param.flag),
         false => (Vec::new(), Vec::new()),
     };
     if !flags.is_empty() {
@@ -141,6 +141,12 @@ struct Prompted {
     variadic: Option<(i64, Option<i64>)>,
     /// `Flag.withOptionalValue`: the value goes inline.
     inline: bool,
+}
+
+/// The params of `node` the wizard asks for: the TypeScript CLI's, without opencode-native's own flags (`Flag::own`),
+/// so the wizard asks what TypeScript's does.
+fn asked(node: &'static Spec) -> impl Iterator<Item = &'static Param> {
+    node.params.iter().filter(|param| !matches!(param, Param::Flag(flag) if flag.own))
 }
 
 fn param(param: &'static Param) -> Prompted {
@@ -332,8 +338,7 @@ mod tests {
     }
 
     fn walk(ts: &Value, node: &'static Spec, checked: &mut usize) {
-        let (flags, arguments): (Vec<Prompted>, Vec<Prompted>) =
-            node.params.iter().map(param).partition(|param| param.flag);
+        let (flags, arguments): (Vec<Prompted>, Vec<Prompted>) = asked(node).map(param).partition(|param| param.flag);
         for (params, ts) in [(flags, &ts["flags"]), (arguments, &ts["arguments"])] {
             let ts = ts.as_array().unwrap();
             assert_eq!(params.len(), ts.len(), "{}: params", node.name);

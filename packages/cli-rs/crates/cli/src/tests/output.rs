@@ -28,6 +28,16 @@ fn every_command() -> Vec<Vec<&'static Spec>> {
     out
 }
 
+/// `help` without the lines of opencode-native's own flags (`Flag::own`), which the TypeScript CLI does not have
+/// (`D01-no-plugins`). An own flag is no wider than the flags beside it, so the other lines keep their columns.
+fn typescript_view(help: &str) -> String {
+    let own: Vec<String> = every_command()
+        .iter()
+        .flat_map(|path| path[path.len() - 1].flags().filter(|flag| flag.own).map(|flag| format!("  --{} ", flag.name)))
+        .collect();
+    help.split_inclusive('\n').filter(|line| !own.iter().any(|own| strip(line).starts_with(own.as_str()))).collect()
+}
+
 #[test]
 fn help_matches_the_typescript_cli() {
     let paths = every_command();
@@ -35,9 +45,9 @@ fn help_matches_the_typescript_cli() {
     for path in paths {
         let name = parse::command_path(&path, PROGRAM).join(" ");
         let expected = std::fs::read_to_string(fixtures().join(format!("help/{name}.txt"))).unwrap();
-        let actual = format!("{}\n", help::render(&path, PROGRAM, true));
+        let actual = typescript_view(&format!("{}\n", help::render(&path, PROGRAM, true)));
         assert!(actual == expected, "{name} --help:\n{}", lines_diff(&expected, &actual));
-        let plain = format!("{}\n", help::render(&path, PROGRAM, false));
+        let plain = typescript_view(&format!("{}\n", help::render(&path, PROGRAM, false)));
         assert!(plain == strip(&expected), "{name} --help without colors:\n{}", lines_diff(&strip(&expected), &plain));
     }
 }
@@ -99,7 +109,7 @@ fn usage_errors_match_the_typescript_cli() {
         };
         // The recorded run had no terminal, so its environment alone decides the colors.
         let env = |name: &str| record["env"][name].as_str().map(String::from);
-        let stdout = format!("{}\n", help::render(&path, PROGRAM, help::can_color(env, false)));
+        let stdout = typescript_view(&format!("{}\n", help::render(&path, PROGRAM, help::can_color(env, false))));
         let stderr = help::error_output(&errors, help::can_color(env, false), help::bun_colors(env, false));
         assert!(
             stdout == record["stdout"],
