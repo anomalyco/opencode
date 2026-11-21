@@ -361,52 +361,7 @@ fn targets(patch: &str) -> Vec<String> {
 mod tests {
     use serde_json::json;
 
-    use super::{Counts, applied, change_counts, parse_files, parse_script_changes, targets};
-
-    // script-changes.test.ts
-    #[test]
-    fn a_scripts_changes_parse_one_per_change_with_or_without_a_patch_and_counts() {
-        let changes = json!([
-            { "file": "a.ts", "status": "modified", "additions": 1, "deletions": 1, "patch": "@@ -1 +1 @@\n-a\n+b\n" },
-            { "file": "a.ts", "status": "modified", "additions": 2, "deletions": 0 },
-            { "file": "copy.txt", "status": "added" },
-            { "file": "gone.bin", "status": "deleted" },
-            { "file": "", "status": "added" },
-            { "file": "x.ts", "status": "renamed" },
-            "junk",
-        ]);
-        let parsed: Vec<_> = parse_script_changes(Some(&changes))
-            .into_iter()
-            .map(|file| (file.kind, file.relative_path, file.patch, file.additions, file.deletions))
-            .collect();
-        let row = |kind: &str, path: &str, patch: &str, additions, deletions| {
-            (kind.to_owned(), path.to_owned(), patch.to_owned(), additions, deletions)
-        };
-        assert_eq!(
-            parsed,
-            [
-                row("update", "a.ts", "@@ -1 +1 @@\n-a\n+b\n", Some(1.0), Some(1.0)),
-                row("update", "a.ts", "", Some(2.0), Some(0.0)),
-                row("add", "copy.txt", "", None, None),
-                row("delete", "gone.bin", "", None, None),
-            ]
-        );
-    }
-
-    #[test]
-    fn a_change_without_its_diff_shows_its_counts_or_only_its_path() {
-        let text = |additions, deletions| {
-            change_counts(additions, deletions).map(|Counts { additions, deletions, unit }| {
-                [additions, deletions].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" ") + unit
-            })
-        };
-        assert_eq!(text(Some(2.0), Some(0.0)).as_deref(), Some("+2 lines"));
-        assert_eq!(text(None, Some(40.0)).as_deref(), Some("-40 lines"));
-        assert_eq!(text(None, Some(1.0)).as_deref(), Some("-1 line"));
-        assert_eq!(text(Some(5.0), Some(1.0)).as_deref(), Some("+5 -1 lines"));
-        assert_eq!(text(Some(0.0), Some(0.0)), None);
-        assert_eq!(text(None, None), None);
-    }
+    use super::{applied, parse_files, targets};
 
     #[test]
     fn targets_match_the_patch_headers() {

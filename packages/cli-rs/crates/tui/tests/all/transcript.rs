@@ -284,6 +284,60 @@ fn long_session() -> View {
     open(80, 20, "ses_w", messages, info)
 }
 
+/// Scrolls up one wheel step at a time until `turn`'s question shows. Every step keeps the
+/// reader's line on screen while older rows mount above it, and each older page shows the
+/// history hint until it lands. Returns the last screen.
+fn scroll_up_to(h: &View, turn: u32) -> String {
+    let screen = h.wait_for("Answer 50 part 3");
+    assert!(!screen.contains("Question 50"), "only the tail is on screen:\n{screen}");
+    let target = format!("┃  Question {turn}");
+    let unique = |screen: &str| {
+        screen
+            .lines()
+            .find(|line| line.contains("Question") || line.contains("Answer"))
+            .map(str::trim)
+            .map(str::to_owned)
+    };
+    let hint = "Loading session history…";
+    let mut previous = screen;
+    let mut history = Vec::new();
+    let mut gated = false;
+    for _ in 0..3000 {
+        let mut screen = h.scroll_up();
+        if screen.contains(hint) {
+            // The first older page waits at the gate, so the hint shows until it lands.
+            if !gated {
+                gated = true;
+                h.gate.add_permits(100);
+            }
+            assert!(h.app.wait_until(WAIT, || !h.app.text().contains(hint)), "the page never landed");
+            screen = h.app.text();
+        }
+        if let Some(line) = unique(&previous) {
+            assert!(
+                screen.contains(&line),
+                "the view jumped: {line:?} left the screen\nbefore:\n{previous}\nafter:\n{screen}"
+            );
+        }
+        if screen != previous {
+            history.push(screen.clone());
+        }
+        previous = screen;
+        if previous.lines().any(|line| line.trim() == target) {
+            break;
+        }
+    }
+    assert!(
+        previous.lines().any(|line| line.trim() == target),
+        "{target:?} never showed after {} older reads; the last screens:\n{}",
+        h.older.load(Ordering::SeqCst),
+        history[history.len().saturating_sub(4)..].join("\n=====\n")
+    );
+    assert!(gated, "the history hint never showed");
+    assert!(!previous.contains(hint), "{previous}");
+    previous
+}
+
 thread_local! {
     static SEEN: std::cell::RefCell<Vec<opencode_plugin::abi::v2::TranscriptView>> = const {
         std::cell::RefCell::new(Vec::new())
@@ -408,6 +462,14 @@ fn a_plugin_moves_the_transcript_through_its_own_scroll_path() {
     );
 }
 
+#[test]
+fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
+    let h = long_session();
+    scroll_up_to(&h, 1);
+    // The first page plus four older ones.
+    assert_eq!(h.older.load(Ordering::SeqCst), 4);
+}
+
 /// Ten turns whose replies wrap at every width, all on the first page, one row per wheel step.
 fn wrapping_session() -> View {
     let filler = "the quick brown fox jumps over the lazy dog ".repeat(5);
@@ -464,6 +526,20 @@ fn a_resize_keeps_the_readers_row_at_the_top() {
     }
 }
 
+/// A view at the bottom still follows it after a resize.
+#[test]
+fn a_resize_at_the_bottom_keeps_following() {
+    let h = wrapping_session();
+    h.wait_for("Paragraph 10");
+    for width in [50, 120] {
+        h.app.resize(width, 20);
+        h.app.render();
+        let screen = h.app.render().text();
+        assert!(screen.contains("Paragraph 10") && !screen.contains("Jump to latest"), "{width} columns:\n{screen}");
+    }
+}
+
+/// A recorded sequence of multi-step timings spans a turn across the page boundary.
 #[test]
 fn the_footer_spans_a_turn_whose_prompt_is_on_an_older_page() {
     const PROMPT: u64 = 1_787_836_326_838;

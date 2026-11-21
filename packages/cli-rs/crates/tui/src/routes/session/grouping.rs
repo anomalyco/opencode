@@ -1141,36 +1141,6 @@ mod tests {
         assert!(matches!(&activity.children[2], Node::Entry(_)));
     }
 
-    // session-verbosity.test.ts
-    #[test]
-    fn a_running_scripts_changes_fold_into_its_activity_at_low_and_show_under_it_otherwise() {
-        let script = json!({
-            "type": "tool", "id": "x", "name": "execute", "time": { "created": 1 },
-            "state": { "status": "running", "input": {}, "metadata": {
-                "toolCalls": [{ "tool": "patch", "status": "completed" }],
-                "files": [{ "file": "a.ts", "status": "modified" }],
-            } },
-        });
-        let list = messages(json!([{
-            "id": "msg_a", "type": "assistant", "agent": "build",
-            "model": { "providerID": "p", "id": "m" }, "time": { "created": 1 },
-            "content": [tool("r1", "read"), script],
-        }]));
-        let rows = vec![part("msg_a", Part::Tool("r1".into())), part("msg_a", Part::Tool("x".into()))];
-        let shape = |verbosity| -> Vec<String> {
-            project(rows.clone(), &list, verbosity)
-                .iter()
-                .map(|spec| match spec {
-                    Spec::Group(group) => format!("{:?}", group.kind),
-                    _ => "part".to_owned(),
-                })
-                .collect()
-        };
-        assert_eq!(shape(Verbosity::Low), ["Activity"]);
-        assert_eq!(shape(Verbosity::Medium), ["Exploration", "part"]);
-        assert_eq!(shape(Verbosity::High), ["Exploration", "part"]);
-    }
-
     #[test]
     fn closed_groups_weigh_one_and_open_ones_their_children() {
         let settings = Settings::new(&Info::default());

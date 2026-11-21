@@ -117,6 +117,13 @@ fn long_pastes_collapse_into_parts_that_send_their_text() {
     setup.wait_text("see [Pasted ~3 lines] [Pasted ~1 lines] go");
     let sent = setup.submit();
     assert_eq!(sent["text"], format!("see one\ntwo\nthree {long} go"));
+    // A paste replaces a selection that ends after the cursor, and its part marks its own label.
+    setup.app.type_text("a");
+    setup.app.press("up");
+    setup.app.press("shift+right");
+    setup.app.paste("l1\nl2\nl3");
+    setup.wait_text("[Pasted ~3 lines] ");
+    assert_eq!(setup.submit()["text"], "l1\nl2\nl3 ");
 }
 
 #[test]

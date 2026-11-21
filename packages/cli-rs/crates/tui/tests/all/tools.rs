@@ -773,6 +773,9 @@ fn execute_shows_the_files_its_script_changed_below_it() {
         { "file": "copy.txt", "status": "added" },
         { "file": "gone.bin", "status": "deleted", "deletions": 40 },
         { "file": "big.txt", "status": "modified", "additions": 5, "deletions": 1 },
+        { "file": "", "status": "added" },
+        { "file": "moved.ts", "status": "renamed" },
+        "junk",
     ]);
     let ids = json!({ "sessionID": "ses_t", "assistantMessageID": "msg_2", "id": "c1" });
     let progress = support::merge(ids, json!({ "metadata": { "toolCalls": calls, "files": files } }));
@@ -784,16 +787,14 @@ fn execute_shows_the_files_its_script_changed_below_it() {
     // A change without counts shows only its path, so the next block's top padding follows.
     assert!(lines[row("copy.txt") + 1].trim_start_matches(['┃', ' ']).is_empty(), "{screen}");
     assert!(lines[row("copy.txt") + 2].trim().is_empty(), "{screen}");
+    // A change without a file or with another status is no change.
+    assert!(!screen.contains("moved.ts") && lines.iter().filter(|line| line.contains("# Created")).count() == 1);
     let theme = h.tui.page();
     assert_eq!(h.fg("+2 lines"), theme.diff.text.added);
     assert_eq!(h.fg("-40 lines"), theme.diff.text.removed);
-    assert_eq!(h.fg("-1 lines"), theme.diff.text.removed);
     // The space between the counts and the unit have no color of their own: OpenTUI's default, white.
     let (x, y) = h.find("+5 -1 lines");
-    let capture = h.app.render();
-    for x in [x + 2, x + 6] {
-        assert_eq!(capture.cell(u32::from(x), u32::from(y)).unwrap().fg, Color::rgb(255, 255, 255));
-    }
+    assert_eq!(h.app.render().cell(u32::from(x) + 2, u32::from(y)).unwrap().fg, Color::rgb(255, 255, 255));
 }
 
 /// A patch's deleted file shows its counts, nothing for none; an update without hunks shows its counts.

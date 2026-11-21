@@ -130,6 +130,16 @@ impl Nav {
         self.idle()
     }
 
+    /// A user message lands, as events.
+    fn deliver(&self, seq: u64, text: &str) {
+        let ids = json!({ "sessionID": "ses_n", "inboxID": format!("msg_new{seq}") });
+        let item = json!({ "item": { "type": "user", "delivery": "steer", "payload": { "text": text } } });
+        self.tui.data.apply(&[
+            support::event("ses_n", "session.inbox.enqueued", seq, support::merge(ids.clone(), item)),
+            support::event("ses_n", "session.inbox.delivered", seq + 1, ids),
+        ]);
+    }
+
     fn row(screen: &str, text: &str) -> Option<usize> {
         screen.lines().position(|line| line.contains(text))
     }
@@ -137,6 +147,94 @@ impl Nav {
 
 /// The transcript's first row on screen, under the tab strip.
 const TOP: usize = 1;
+
+/// How far the content moved down between two screens, by the first answer or question line of
+/// `before` that `after` still shows.
+fn shift(before: &str, after: &str) -> Option<isize> {
+    let before: Vec<_> = before.lines().collect();
+    let after: Vec<_> = after.lines().collect();
+    before.iter().enumerate().skip(TOP).find_map(|(row, line)| {
+        if !(line.contains("Answer") || line.contains("Question")) {
+            return None;
+        }
+        let to = after.iter().position(|other| other == line)?;
+        Some(to as isize - row as isize)
+    })
+}
+
+#[test]
+fn line_half_page_and_page_scroll_by_their_distances() {
+    let h = open(turns(30), Info::default());
+    let start = h.app.text();
+    let anchor = "Answer 30 one.";
+    let at = Nav::row(&start, anchor).unwrap();
+    assert!(!start.contains("Jump to latest"), "{start}");
+
+    let screen = h.press("ctrl+alt+y");
+    assert_eq!(Nav::row(&screen, anchor), Some(at + 1), "{screen}");
+    assert!(screen.contains("Jump to latest ↓"), "{screen}");
+    let screen = h.press("ctrl+alt+e");
+    assert_eq!(Nav::row(&screen, anchor), Some(at), "{screen}");
+
+    let before = h.app.text();
+    let half = h.press("ctrl+alt+u");
+    let moved = shift(&before, &half).unwrap();
+    let page = h.press("pageup");
+    assert!((3..=5).contains(&moved), "half page moved {moved}:\n{half}");
+    assert_eq!(shift(&half, &page), Some(moved * 2), "{half}\n=====\n{page}");
+    let back = h.press("ctrl+alt+d");
+    assert_eq!(shift(&page, &back), Some(-moved), "{back}");
+    for _ in 0..3 {
+        h.press("pagedown");
+    }
+    let bottom = h.app.text();
+    assert_eq!(Nav::row(&bottom, anchor), Some(at), "{bottom}");
+    assert!(!bottom.contains("Jump to latest"), "{bottom}");
+}
+
+#[test]
+fn page_up_backfills_then_last_returns_to_the_tail() {
+    let h = open(turns(30), Info::default());
+    let mut screen = h.app.text();
+    for _ in 0..400 {
+        if screen.contains("┃  Question 1\n") {
+            break;
+        }
+        let previous = screen;
+        screen = h.press("pageup");
+        let first = previous.lines().skip(TOP).find(|line| line.contains("Question") || line.contains("Answer"));
+        if let Some(line) = first {
+            assert!(screen.contains(line), "{line:?} left:\n{previous}\n=====\n{screen}");
+        }
+    }
+    assert!(screen.contains("┃  Question 1\n"), "{screen}");
+    assert!(h.older.load(Ordering::SeqCst) >= 2);
+    assert!(screen.contains("Jump to latest ↓"), "{screen}");
+
+    // `session.last` (end): back at the newest rows, following the bottom.
+    let screen = h.press("end");
+    let screen = if screen.contains("Answer 30 three.") { screen } else { h.wait_for("Answer 30 three.") };
+    assert!(!screen.contains("Jump to latest"), "{screen}");
+    assert!(!screen.contains("Question 1\n"), "{screen}");
+}
+
+#[test]
+fn first_loads_the_history_and_jump_to_latest_returns() {
+    let h = open(turns(30), Info::default());
+    // `session.first` (ctrl+g) loads every older page at once and shows the first message on top.
+    h.press("ctrl+g");
+    let screen = h.wait_for("┃  Question 1\n");
+    assert_eq!(h.older.load(Ordering::SeqCst), 1, "one request for every page");
+    assert_eq!(Nav::row(&screen, "Question 1"), Some(TOP + 2), "{screen}");
+    assert!(screen.contains("Jump to latest ↓"), "{screen}");
+
+    // A click on "Jump to latest" is `session.last`.
+    let (x, y) = position(&screen, "Jump to latest");
+    h.app.click(x as u16 + 2, y as u16);
+    h.app.advance(Duration::from_millis(1));
+    let screen = h.wait_for("Answer 30 three.");
+    assert!(!screen.contains("Jump to latest"), "{screen}");
+}
 
 #[test]
 fn first_mounts_the_head_and_newer_rows_mount_on_the_way_down() {
@@ -188,12 +286,30 @@ fn message_navigation_aligns_messages_with_the_top() {
     let screen = settle(&h, h.dispatch("session.message.previous"));
     assert_eq!(Nav::row(&screen, "Answer 29 one."), Some(TOP + 1), "{screen}");
     assert!(screen.contains("Jump to latest ↓"), "{screen}");
+    // A new message keeps the view the jump holds.
+    h.deliver(1, "Question 31");
+    let screen = settle(&h, h.idle());
+    assert_eq!(Nav::row(&screen, "Answer 29 one."), Some(TOP + 1), "{screen}");
+    // Then the question before it, its box on the top row.
+    let screen = settle(&h, h.dispatch("session.message.previous"));
+    assert_eq!(Nav::row(&screen, "Question 29"), Some(TOP + 1), "{screen}");
+    // Next steps from the last jump, whatever the view shows.
+    let screen = settle(&h, h.dispatch("session.message.next"));
+    assert_eq!(Nav::row(&screen, "Answer 29 one."), Some(TOP + 1), "{screen}");
+    // User-only skips the replies.
+    let screen = settle(&h, h.dispatch("session.message.user.next"));
+    assert_eq!(Nav::row(&screen, "Question 30"), Some(TOP + 1), "{screen}");
+    let screen = settle(&h, h.dispatch("session.message.user.previous"));
+    assert_eq!(Nav::row(&screen, "Question 29"), Some(TOP + 1), "{screen}");
 
-    // The last user message (alt+end) aligns too: the slack below the last rows makes room. Turn 2's reply, reasoning
-    // alone, is no stop.
+    // The last user message (alt+end) aligns too: the slack below the last rows makes room.
     h.press("end");
     let screen = settle(&h, h.press("alt+end"));
-    assert_eq!(Nav::row(&screen, "Question 30"), Some(TOP + 1), "{screen}");
+    assert_eq!(Nav::row(&screen, "Question 31"), Some(TOP + 1), "{screen}");
+    // A resize ends the jump and drops its slack, so the view is at the bottom again.
+    h.app.resize(100, 25);
+    let screen = settle(&h, h.idle());
+    assert!(!screen.contains("Jump to latest"), "{screen}");
 
     for _ in 0..80 {
         h.dispatch("session.message.user.previous");
@@ -206,6 +322,12 @@ fn message_navigation_aligns_messages_with_the_top() {
         let screen = settle(&h, h.dispatch(&format!("session.message.{direction}")));
         assert_eq!(Nav::row(&screen, text), Some(TOP + 1), "{screen}");
     }
+
+    // In rows shorter than the view, a jump lands at the top too.
+    let h = open(turns(1), Info::default());
+    settle(&h, h.dispatch("session.message.next"));
+    let screen = settle(&h, h.dispatch("session.message.next"));
+    assert_eq!(Nav::row(&screen, "Answer 1 one."), Some(TOP + 1), "{screen}");
 }
 
 #[test]
@@ -285,6 +407,49 @@ fn the_scrollbar_toggles_and_the_wheel_moves_three_rows() {
     assert_eq!(thumb(&screen), 0, "{screen}");
     let screen = settle(&h, h.dispatch("session.toggle.scrollbar"));
     assert!(thumb(&screen) > 0, "a bar in the last column:\n{screen}");
+}
+
+#[test]
+fn a_tab_reopens_where_the_reader_left_it() {
+    let h = open(turns(30), Info::default());
+    let transcript = |screen: &str| -> Vec<String> { screen.lines().skip(TOP).take(17).map(str::to_owned).collect() };
+    let switch = |id: &str| {
+        h.tui.navigate(support::session_route(id));
+        h.app.advance(Duration::from_millis(1));
+    };
+    for _ in 0..3 {
+        h.press("pageup");
+    }
+    let screen = h.idle();
+    let left = transcript(&screen);
+    assert!(left.iter().any(|line| line.contains("Jump to latest ↓")), "{screen}");
+
+    switch("ses_m");
+    let other = h.app.wait_until(WAIT, || {
+        let screen = h.app.text();
+        screen.contains("Answer 30 three.") && !screen.contains("Jump to latest")
+    });
+    assert!(other, "{}", h.app.text());
+    switch("ses_n");
+    let restored = h.app.wait_until(WAIT, || transcript(&h.app.text()) == left);
+    assert!(restored, "{left:#?}\n=====\n{:#?}", transcript(&h.app.text()));
+
+    h.press("end");
+    let bottom = transcript(&h.wait_for("Answer 30 three."));
+    switch("ses_m");
+    h.wait_for("Answer 30 three.");
+    switch("ses_n");
+    let found = h.app.wait_until(WAIT, || transcript(&h.app.text()) == bottom);
+    assert!(found, "{bottom:#?}\n=====\n{}", h.app.text());
+
+    h.press("ctrl+g");
+    h.wait_for("┃  Question 1\n");
+    let first = transcript(&h.idle());
+    switch("ses_m");
+    h.wait_for("Answer 30 three.");
+    switch("ses_n");
+    let found = h.app.wait_until(WAIT, || transcript(&h.app.text()) == first);
+    assert!(found, "{first:#?}\n=====\n{}", h.app.text());
 }
 
 #[test]
