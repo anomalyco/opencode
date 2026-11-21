@@ -254,10 +254,10 @@ void electron.app.whenReady().then(async () => {
   const person = { commands: { first, second, still, failed }, before, after: last().map(view) }
 
   // A plugin: the handle it gets is its only way to close the tab again.
-  const handed = async (address: string) => {
+  const handed = async (address: string, stands: (item: Browser.Tab) => boolean) => {
     const opened = await settle(pane.createTab(win.id, "binding", "plugin", `${origin}${address}`))
-    // Its page says how the load stands: still under way, or failed.
-    await until(() => "error" in opened || !!tab(address)?.loading || !!tab(address)?.loadError, 3_000)
+    // Its tab says how the load stands: still under way, or failed.
+    await until(() => "error" in opened || last().some((item) => item.url.endsWith(address) && stands(item)), 3_000)
     const listed = tab(address)
     const closed = "value" in opened ? await pane.closeTab(win.id, "binding", "plugin", opened.value) : undefined
     await until(() => !tab(address), 3_000)
@@ -265,13 +265,18 @@ void electron.app.whenReady().then(async () => {
     return { opened: "value" in opened ? "handle" : opened.error, listed: listed && view(listed), closed, left: !!tab(address) }
   }
 
-  const plugin = { loading: await handed("/loading?plugin"), dropped: await handed("/dropped?plugin"), nothing: await handed("/nothing") }
+  const plugin = {
+    loading: await handed("/loading?plugin", (item) => item.loading),
+    dropped: await handed("/dropped?plugin", (item) => item.loadError !== undefined),
+    nothing: await handed("/nothing", () => true),
+  }
 
   // The agent: its command, what the pane answered, and what the pane asked the window to show meanwhile.
   const asked = async (action: Browser.Action, address: string) => {
     const from = shown.length
     const outcome = await api.agent(action)
-    await until(() => !!tab(address), 3_000)
+    // The tab is at its address: a web page still loading there, as the test compares.
+    await until(() => !!tab(address) && (action.type === "preview" || !!tab(address)?.loading), 3_000)
     const listed = tab(address)
 
     return {
