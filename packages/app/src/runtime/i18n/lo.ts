@@ -1171,7 +1171,6 @@ export const dict = {
   "common.closeTabsBelow": "ປິດແຖບຂ້າງລຸ່ມ",
   "sidebar.inbox.empty": "ເຊດຊັນທີ່ທ່ານເຮັດວຽກຈະປາກົດຢູ່ທີ່ນີ້",
   "sidebar.inbox.section.needsAttention": "ຕ້ອງການຄວາມສົນໃຈ",
-  "sidebar.inbox.section.unread": "ຍັງບໍ່ໄດ້ອ່ານ",
   "sidebar.inbox.showMore": "ສະແດງເພີ່ມເຕີມ",
   "sidebar.inbox.showLess": "ສະແດງໜ້ອຍລົງ",
   "sidebar.inbox.announce.approval": "{{title}} ຕ້ອງການການອະນຸມັດ.",

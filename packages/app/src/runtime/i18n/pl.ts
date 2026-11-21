@@ -1239,7 +1239,6 @@ export const dict = {
   "common.closeTabsBelow": "Zamknij karty poniżej",
   "sidebar.inbox.empty": "Sesje, nad którymi pracujesz, pojawią się tutaj",
   "sidebar.inbox.section.needsAttention": "Wymaga uwagi",
-  "sidebar.inbox.section.unread": "Nieprzeczytane",
   "sidebar.inbox.showMore": "Pokaż więcej",
   "sidebar.inbox.showLess": "Pokaż mniej",
   "sidebar.inbox.announce.approval": "{{title}}: wymaga zatwierdzenia.",

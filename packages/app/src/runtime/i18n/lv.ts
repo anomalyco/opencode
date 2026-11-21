@@ -1216,7 +1216,6 @@ export const dict = {
   "common.closeTabsBelow": "Aizvērt cilnes zemāk",
   "sidebar.inbox.empty": "Šeit parādīsies sesijas, ar kurām strādājat",
   "sidebar.inbox.section.needsAttention": "Nepieciešama uzmanība",
-  "sidebar.inbox.section.unread": "Nelasītās",
   "sidebar.inbox.showMore": "Rādīt vairāk",
   "sidebar.inbox.showLess": "Rādīt mazāk",
   "sidebar.inbox.announce.approval": "{{title}} gaida apstiprinājumu.",

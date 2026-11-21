@@ -1226,7 +1226,6 @@ export const dict = {
   "common.closeTabsBelow": "Tabs darunter schließen",
   "sidebar.inbox.empty": "Sitzungen, an denen Sie arbeiten, erscheinen hier",
   "sidebar.inbox.section.needsAttention": "Erfordert Aufmerksamkeit",
-  "sidebar.inbox.section.unread": "Ungelesen",
   "sidebar.inbox.showMore": "Mehr anzeigen",
   "sidebar.inbox.showLess": "Weniger anzeigen",
   "sidebar.inbox.announce.approval": "{{title}} benötigt eine Genehmigung.",

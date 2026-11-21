@@ -1183,7 +1183,6 @@ export const dict = {
   "common.closeTabsBelow": "Loka flipum fyrir neðan",
   "sidebar.inbox.empty": "Setur sem þú vinnur í birtast hér",
   "sidebar.inbox.section.needsAttention": "Þarfnast athygli",
-  "sidebar.inbox.section.unread": "Ólesið",
   "sidebar.inbox.showMore": "Sýna meira",
   "sidebar.inbox.showLess": "Sýna minna",
   "sidebar.inbox.announce.approval": "{{title}} þarfnast samþykkis.",

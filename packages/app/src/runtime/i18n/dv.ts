@@ -1229,7 +1229,6 @@ export const dict = {
   "common.closeTabsBelow": "ތިރީގެ ޓެބްތައް ބަންދުކުރާ",
   "sidebar.inbox.empty": "ތިބާ މަސައްކަތްކުރާ ސެޝަންތައް މިތަނުން ފެންނާނެއެވެ",
   "sidebar.inbox.section.needsAttention": "ސަމާލުކަން ބޭނުން",
-  "sidebar.inbox.section.unread": "ނުކިޔާ",
   "sidebar.inbox.showMore": "އިތުރަށް ދައްކާ",
   "sidebar.inbox.showLess": "މަދުކޮށް ދައްކާ",
   "sidebar.inbox.announce.approval": "⁨{{title}}⁩ އަށް ހުއްދަ ބޭނުންވެއެވެ.",

@@ -1201,7 +1201,6 @@ export const dict = {
   "common.closeTabsBelow": "Затваряне на разделите отдолу",
   "sidebar.inbox.empty": "Сесиите, по които работите, ще се показват тук",
   "sidebar.inbox.section.needsAttention": "Изисква внимание",
-  "sidebar.inbox.section.unread": "Непрочетени",
   "sidebar.inbox.showMore": "Показване на още",
   "sidebar.inbox.showLess": "Показване на по-малко",
   "sidebar.inbox.announce.approval": "{{title}} изисква одобрение.",

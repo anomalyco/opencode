@@ -1176,7 +1176,6 @@ export const dict = {
   "common.closeTabsBelow": "Sule allpool olevad vahekaardid",
   "sidebar.inbox.empty": "Siin kuvatakse seansid, millega töötad",
   "sidebar.inbox.section.needsAttention": "Vajab tähelepanu",
-  "sidebar.inbox.section.unread": "Lugemata",
   "sidebar.inbox.showMore": "Näita rohkem",
   "sidebar.inbox.showLess": "Näita vähem",
   "sidebar.inbox.announce.approval": "{{title}} vajab kinnitust.",

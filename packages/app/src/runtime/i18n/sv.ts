@@ -1192,7 +1192,6 @@ export const dict = {
   "common.closeTabsBelow": "Stäng flikar nedan",
   "sidebar.inbox.empty": "Sessioner du arbetar med visas här",
   "sidebar.inbox.section.needsAttention": "Behöver uppmärksamhet",
-  "sidebar.inbox.section.unread": "Olästa",
   "sidebar.inbox.showMore": "Visa mer",
   "sidebar.inbox.showLess": "Visa mindre",
   "sidebar.inbox.announce.approval": "{{title}} behöver godkännande.",

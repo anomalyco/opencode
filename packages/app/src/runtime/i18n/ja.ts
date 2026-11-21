@@ -1200,7 +1200,6 @@ export const dict = {
   "common.closeTabsBelow": "下のタブを閉じる",
   "sidebar.inbox.empty": "作業中のセッションがここに表示されます",
   "sidebar.inbox.section.needsAttention": "要対応",
-  "sidebar.inbox.section.unread": "未読",
   "sidebar.inbox.showMore": "さらに表示",
   "sidebar.inbox.showLess": "表示を減らす",
   "sidebar.inbox.announce.approval": "{{title}}は承認が必要です。",

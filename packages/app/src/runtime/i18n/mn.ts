@@ -1199,7 +1199,6 @@ export const dict = {
   "common.closeTabsBelow": "Доорх табуудыг хаах",
   "sidebar.inbox.empty": "Таны ажиллаж буй сессүүд энд харагдана",
   "sidebar.inbox.section.needsAttention": "Анхаарал шаардлагатай",
-  "sidebar.inbox.section.unread": "Уншаагүй",
   "sidebar.inbox.showMore": "Илүүг харуулах",
   "sidebar.inbox.showLess": "Бага харуулах",
   "sidebar.inbox.announce.approval": "{{title}} зөвшөөрөл шаардаж байна.",

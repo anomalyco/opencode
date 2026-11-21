@@ -1218,7 +1218,6 @@ export const dict = {
   "common.closeTabsBelow": "Κλείσιμο καρτελών από κάτω",
   "sidebar.inbox.empty": "Οι συνεδρίες στις οποίες εργάζεστε θα εμφανίζονται εδώ",
   "sidebar.inbox.section.needsAttention": "Χρειάζονται προσοχή",
-  "sidebar.inbox.section.unread": "Μη αναγνωσμένες",
   "sidebar.inbox.showMore": "Εμφάνιση περισσότερων",
   "sidebar.inbox.showLess": "Εμφάνιση λιγότερων",
   "sidebar.inbox.announce.approval": "Το {{title}} χρειάζεται έγκριση.",

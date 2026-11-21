@@ -1229,7 +1229,6 @@ export const dict = {
   "common.closeTabsBelow": "Uždaryti žemiau esančius skirtukus",
   "sidebar.inbox.empty": "Čia bus rodomi seansai, su kuriais dirbate",
   "sidebar.inbox.section.needsAttention": "Reikia dėmesio",
-  "sidebar.inbox.section.unread": "Neskaityti",
   "sidebar.inbox.showMore": "Rodyti daugiau",
   "sidebar.inbox.showLess": "Rodyti mažiau",
   "sidebar.inbox.announce.approval": "{{title}} laukia patvirtinimo.",
