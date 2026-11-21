@@ -25,7 +25,7 @@ class FakeNotification extends EventTarget implements Notification {
   readonly icon: string
   readonly lang = ""
   readonly silent: boolean | null
-  readonly tag = ""
+  readonly tag: string
   readonly title: string
 
   constructor(title: string, options?: NotificationOptions) {
@@ -34,12 +34,13 @@ class FakeNotification extends EventTarget implements Notification {
     this.body = options?.body ?? ""
     this.icon = options?.icon ?? ""
     this.silent = options?.silent ?? null
+    this.tag = options?.tag ?? ""
     events.push(`created:${title}:${this.body}`)
     created.push(this)
   }
 
   close() {
-    events.push("notification.close")
+    events.push(`notification.close${this.tag ? `:${this.tag}` : ""}`)
     this.onclose?.call(this, new Event("close"))
   }
 }
@@ -62,7 +63,7 @@ describe("desktop notifications", () => {
       setWindowFocus: async () => {
         events.push("api.setWindowFocus")
       },
-    })
+    }).notify
 
     await notify("Response ready", "Refactor auth flow", () => {
       events.push("session.select")
@@ -94,7 +95,7 @@ describe("desktop notifications", () => {
         getWindowFocused: async () => false,
         showWindow: async () => {},
         setWindowFocus: async () => {},
-      })
+      }).notify
 
       await notify("Session error")
 
@@ -120,10 +121,43 @@ describe("desktop notifications", () => {
       getWindowFocused: async () => true,
       showWindow: async () => {},
       setWindowFocus: async () => {},
-    })
+    }).notify
 
     await notify("Response ready", "Active session")
     expect(events).toEqual([])
     expect(created).toEqual([])
+  })
+
+  test.each([
+    {
+      os: "windows" as const,
+      icon: "favicon-96x96-v3.png",
+      events: [
+        "created:Permission required:Fix login\nbash: git status",
+        "notification.close:server\0request:per_1",
+        "created:Permission required:Fix login\nbash: git push",
+        "notification.close:server\0request:per_1",
+      ],
+    },
+    {
+      os: "macos" as const,
+      icon: "https://opencode.ai/favicon-96x96-v3.png",
+      events: ["created:Permission required:Fix login", "created:Permission required:Fix login"],
+    },
+  ])("on $os a tagged notification replaces its predecessor and its dismissal takes it back", async (input) => {
+    globalThis.Notification = FakeNotification
+
+    const desktop = createDesktopNotify(
+      { getWindowFocused: async () => false, showWindow: async () => {}, setWindowFocus: async () => {} },
+      input.os,
+    )
+
+    const tag = "server\0request:per_1"
+    await desktop.notify("Permission required", "Fix login", undefined, { tag, detail: "bash: git   status" })
+    await desktop.notify("Permission required", "Fix login", undefined, { tag, detail: "bash: git push" })
+    desktop.dismissNotification?.(tag)
+
+    expect(events).toEqual(input.events)
+    expect(created.map((notification) => notification.icon)).toEqual([input.icon, input.icon])
   })
 })

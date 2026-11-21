@@ -5,43 +5,80 @@ type DesktopNotifyAPI = Pick<ElectronAPI, "getWindowFocused" | "showWindow" | "s
 
 const MAX_ACTIVE_NOTIFICATIONS = 40
 
+// What a Windows toast's second line shows of a request, at most.
+const DETAIL_LIMIT = 160
+
 const activeNotifications = new Set<Notification>()
 
-export function createDesktopNotify(api: DesktopNotifyAPI): Platform["notify"] {
-  return async (title, description, onClick) => {
-    const focused = await api.getWindowFocused().catch(() => document.hasFocus())
+// Windows toasts by tag, so a repeat replaces its toast and an answer takes it out of the notification center.
+const tagged = new Map<string, Notification>()
 
-    if (focused) return
+export function createDesktopNotify(
+  api: DesktopNotifyAPI,
+  os?: "macos" | "windows" | "linux",
+): Pick<Platform, "notify" | "dismissNotification"> {
+  const windows = os === "windows"
 
-    const notification = new Notification(title, {
-      body: description ?? "",
-      icon: "https://opencode.ai/favicon-96x96-v3.png",
-      silent: true,
-    })
+  return {
+    notify: async (title, description, onClick, options) => {
+      const focused = await api.getWindowFocused().catch(() => document.hasFocus())
 
-    if (activeNotifications.size >= MAX_ACTIVE_NOTIFICATIONS) {
-      const oldest = activeNotifications.values().next().value
+      if (focused) return
+      const tag = windows ? options?.tag : undefined
+      const detail = windows ? clip(options?.detail) : undefined
 
-      if (oldest) activeNotifications.delete(oldest)
-    }
+      if (tag) tagged.get(tag)?.close()
 
-    activeNotifications.add(notification)
+      const init: NotificationOptions = {
+        body: [description, detail].filter(Boolean).join("\n"),
+        // On Windows the renderer's own icon, resolved against the page, so a toast needs no network to show it.
+        icon: windows ? "favicon-96x96-v3.png" : "https://opencode.ai/favicon-96x96-v3.png",
+        silent: true,
+      }
 
-    const release = () => {
-      activeNotifications.delete(notification)
-      notification.onclick = null
-      notification.onclose = null
-      notification.onerror = null
-    }
+      if (tag) init.tag = tag
 
-    notification.onclose = release
-    notification.onerror = release
+      const notification = new Notification(title, init)
 
-    notification.onclick = () => {
-      release()
-      void Promise.all([api.showWindow(), api.setWindowFocus()])
-      onClick?.()
-      notification.close()
-    }
+      if (activeNotifications.size >= MAX_ACTIVE_NOTIFICATIONS) {
+        const oldest = activeNotifications.values().next().value
+
+        if (oldest) activeNotifications.delete(oldest)
+      }
+
+      activeNotifications.add(notification)
+
+      if (tag) tagged.set(tag, notification)
+
+      const release = () => {
+        activeNotifications.delete(notification)
+
+        if (tag && tagged.get(tag) === notification) tagged.delete(tag)
+        notification.onclick = null
+        notification.onclose = null
+        notification.onerror = null
+      }
+
+      notification.onclose = release
+      notification.onerror = release
+
+      notification.onclick = () => {
+        release()
+        void Promise.all([api.showWindow(), api.setWindowFocus()])
+        onClick?.()
+        notification.close()
+      }
+    },
+    dismissNotification: (tag) => {
+      tagged.get(tag)?.close()
+    },
   }
+}
+
+function clip(value: string | undefined) {
+  const text = value?.split(/\s+/).filter(Boolean).join(" ")
+
+  if (!text || text.length <= DETAIL_LIMIT) return text
+
+  return `${text.slice(0, DETAIL_LIMIT - 1)}…`
 }

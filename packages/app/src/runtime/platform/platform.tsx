@@ -54,8 +54,19 @@ type PlatformBase = {
   /** Restart the app  */
   restart(): Promise<void>
 
-  /** Send a system notification */
-  notify(title: string, description?: string, onClick?: () => void): Promise<void>
+  /**
+   * Send a system notification. `options.tag` names it so a later one with the same tag replaces it and
+   * `dismissNotification` can take it back; `options.detail` is a second line saying what it is about.
+   */
+  notify(
+    title: string,
+    description?: string,
+    onClick?: () => void,
+    options?: { tag?: string; detail?: string },
+  ): Promise<void>
+
+  /** Take back the system notification sent with this tag, when it is still shown (desktop only) */
+  dismissNotification?(tag: string): void
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?<Value>(
