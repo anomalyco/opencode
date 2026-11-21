@@ -1047,6 +1047,25 @@ test("a mount a reload begins again adopts the one it ended", async () => {
   expect(text(surface.view(cx(4)))).toBe("run 3")
 })
 
+test("a mount a reload begins again with another session's input builds whole", () => {
+  const fake = host()
+  const ctx = plugin("t.otherinput", fake)
+  const runs: string[] = []
+  // The body runs once per mount, as the force-input plugin's does: it reads its slot's session there.
+  const Child = (props: Json) => (runs.push(props.slot.sessionID), h("text", { children: props.slot.sessionID }))
+  ctx.ui.slot({ append: "sidebar.content", render: (slot: Json) => h(Child, { slot }) })
+  const cx = (generation: number, session: string) => ({
+    mount: { surface: "slot#0", key: "a", generation },
+    input: { width: 40, height: 10, slot: { session_id: session } },
+  })
+  const surface = fake.surfaces[0]
+  expect(text(surface.view(cx(1, "ses_a")))).toBe("ses_a")
+  surface.options.unmount(cx(1, "ses_a").mount, true)
+  // A root made for `ses_a` keeps what its bodies read then: another session in the slot is a new mount.
+  expect(text(surface.view(cx(2, "ses_b")))).toBe("ses_b")
+  expect(runs).toEqual(["ses_a", "ses_b"])
+})
+
 test("a built renderable returned draws, and a node's layout is the host's", () => {
   const fake = host()
   const ctx = plugin("t.layout", fake)

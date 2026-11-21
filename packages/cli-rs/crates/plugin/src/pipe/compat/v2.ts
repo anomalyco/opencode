@@ -895,6 +895,13 @@ export function context(base: Base, carrier: Carrier) {
       if (!kept) return undefined
       clearTimeout(kept.timer)
       parked.delete(slot)
+      // A component body runs once, so the input it read then (`sessionID`, a mode) is that root's for good: only
+      // the mount that input was made for can go on showing it. Another composer's or session's mount of the same
+      // slot key is a new mount, whose render runs again as it does in TS.
+      if (JSON.stringify(kept.entry.input) !== JSON.stringify(input(cx))) {
+        kept.entry.dispose()
+        return undefined
+      }
       rendered.set(key(cx), kept.entry)
       // Restore focus on handover only if this field held it when the old mount ended.
       const field = focusedNode
