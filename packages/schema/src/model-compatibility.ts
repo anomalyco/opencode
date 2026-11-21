@@ -40,6 +40,8 @@ export const Compatibility = Schema.Struct({
   streamUsage: Schema.Boolean.pipe(optional),
   /** Prompt-cache marker syntax the endpoint accepts. Overrides the route default; both send `cache_control`, and `alibaba` skips tool definitions. */
   cacheFormat: CacheFormat.pipe(optional),
+  /** OpenAI Chat: put an anthropic tool-result marker on the tool message instead of its content part, for a gateway that translates the chat shape into Anthropic's messages. */
+  cacheControlAtMessageLevel: Schema.Boolean.pipe(optional),
   /** Anthropic Messages and Bedrock Converse: supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
   supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
   /** Anthropic Messages and OpenAI Responses: supports per-message effort updates. Overrides model-ID detection. */
