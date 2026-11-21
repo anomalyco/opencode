@@ -26,6 +26,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/En
 
 export const make = (id: ID, driver: Driver): Interface => ({ id, files: makeFiles(driver), spawner: driver.spawner })
 
+/** Where a path or a command that names no directory is taken to be: the Location's directory, in its environment. */
+export const workingDirectory = Effect.gen(function* () {
+  const location = yield* Location.Service
+  const environment = yield* Service
+  return { absolute: location.directory, environment }
+})
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {

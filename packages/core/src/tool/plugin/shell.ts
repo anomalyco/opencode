@@ -13,7 +13,6 @@ import { Environment } from "../../environment/index.js"
 import { Flag } from "../../flag.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
-import { Location } from "../../location.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
@@ -307,7 +306,7 @@ export const Plugin = {
     const jobs = yield* Job.Service
     const access = yield* FileAccess.Service
     const environment = yield* Environment.Service
-    const location = yield* Location.Service
+    const workingDirectory = yield* Environment.workingDirectory
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
@@ -329,10 +328,7 @@ export const Plugin = {
           ? requested.target
           : yield* access.resolve({
               path: invocation.cwd,
-              base:
-                requested.target.environment.id === environment.id
-                  ? { absolute: location.directory, environment }
-                  : requested.target,
+              base: requested.target.environment.id === environment.id ? workingDirectory : requested.target,
               kind: "directory",
             })
       invocation.cwd = target.absolute
@@ -441,7 +437,7 @@ export const Plugin = {
                 )
                 return yield* Effect.gen(function* () {
                   // The same default `Shell.create` gives the hooks, so `prepare` can tell whether one moved it.
-                  const cwd = input.workdir ?? location.directory
+                  const cwd = input.workdir ?? workingDirectory.absolute
                   const target = yield* restore(
                     Effect.raceFirst(access.resolve({ path: cwd, kind: "directory" }), stoppedBeforeStart),
                   )
