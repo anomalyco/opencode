@@ -47,7 +47,7 @@ import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
 import { McpStdio } from "./stdio.js"
-import { EventStreamRejectedError, EventStreamTerminatedError } from "./event-errors.js"
+import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-errors.js"
 
 export { EventStreamRejectedError, EventStreamTerminatedError }
 
@@ -85,13 +85,11 @@ const isTransient = (error: unknown) =>
 // JSON-RPC id of the `events/stream` request that opened it.
 const EVENTS = "io.modelcontextprotocol/events"
 const SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
-// A stream is dead once three granted heartbeat intervals pass without a message, or a minute before the first grant.
+// A stream is dead once three heartbeat intervals pass without a message: the server's grant, or the spec's
+// recommended 30 seconds before the first grant arrives.
 const MISSED_HEARTBEATS = 3
-const UNGRANTED_SILENCE = Duration.minutes(1)
+const UNGRANTED_SILENCE = Duration.seconds(30 * MISSED_HEARTBEATS)
 const EVENT_LIST_PAGES = 100
-const LISTEN_REOPEN = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")]).pipe(
-  Schedule.jittered,
-)
 
 /** Experimental: MCP Events is a beta extension; may change without compatibility guarantees. */
 export const EventType = Schema.Struct({
@@ -118,15 +116,7 @@ const EventList = Schema.toStandardSchemaV1(
 )
 const decodeEventType = Schema.decodeUnknownOption(EventType)
 const ISO_8601 =
-  /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d+)?)?(Z|[+-](0\d|1[0-4]):[0-5]\d)$/
-// The day must exist in its month: Date.parse rolls 2026-02-31 over to March.
-const isTimestamp = (text: string) => {
-  const match = ISO_8601.exec(text)
-  if (!match) return false
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
-  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
-  return day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
-}
+  /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d+)?)?(Z|[+-](0\d|1[0-4]):[0-5]\d)$/
 const AnyValue = Schema.toStandardSchemaV1(Schema.Unknown)
 const ActiveNotification = Schema.toStandardSchemaV1(
   Schema.Struct({
@@ -140,7 +130,7 @@ const EventNotification = Schema.toStandardSchemaV1(
   Schema.Struct({
     eventId: Schema.String,
     name: Schema.String,
-    timestamp: Schema.String.check(Schema.makeFilter(isTimestamp)),
+    timestamp: Schema.String.check(Schema.isPattern(ISO_8601)),
     data: Schema.Record(Schema.String, Schema.Json),
     cursor: Cursor,
     ...Subscribed,
@@ -916,7 +906,7 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           Effect.logWarning("MCP event list change listener stopped", { server, error: describe(error) }),
         ),
         Effect.retry(
-          LISTEN_REOPEN.pipe(
+          reopen.pipe(
             Schedule.setInputType<unknown>(),
             Schedule.while(({ input }) => !(input instanceof ProtocolError)),
           ),

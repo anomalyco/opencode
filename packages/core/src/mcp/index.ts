@@ -39,7 +39,7 @@ import { Hash } from "@opencode/util/hash"
 import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
-import { EventStreamRejectedError, EventStreamTerminatedError } from "./event-errors.js"
+import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-errors.js"
 import { canonicalJson } from "../util/canonical-json.js"
 import { McpConnection } from "./connection.js"
 import { McpPool } from "./pool.js"
@@ -135,12 +135,6 @@ const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
 
 const changes = { tools: McpEvent.ToolsChanged, resources: McpEvent.ResourcesChanged, prompts: PromptsChanged }
-
-// A broken, silent or closed event stream reopens after a delay growing from a second to about this cap.
-// Jittered so streams that broke together don't all reopen at the same moment.
-const EVENT_REOPEN = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")]).pipe(
-  Schedule.jittered,
-)
 
 const isEnded = (error: Error) =>
   error instanceof EventStreamRejectedError || error instanceof EventStreamTerminatedError
@@ -365,7 +359,7 @@ export const layer = (options?: Options) =>
           Stream.concat(Stream.fail(new Error(`MCP server ${sub.server} closed the event stream`))),
           Stream.tapError((error) => (isEnded(error) ? Effect.void : setStatus(sub, { status: "pending" }))),
           Stream.retry(
-            EVENT_REOPEN.pipe(
+            reopen.pipe(
               Schedule.setInputType<Error>(),
               Schedule.while(({ input }) => !isEnded(input)),
             ),
