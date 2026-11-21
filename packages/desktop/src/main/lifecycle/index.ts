@@ -12,7 +12,7 @@ import { sendMenuCommand } from "../native/menu"
 import { onNativeTranslations } from "../native/translations"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsOrigin } from "../windows/state"
-import { getLastFocusedWindow, mainWindows } from "../windows"
+import { getLastFocusedWindow, getMainWindows, mainWindows } from "../windows"
 import type { Scope } from "@opencode/plugin/gui/host"
 import { marks } from "./marks"
 import {
@@ -139,8 +139,11 @@ const runtime = Layer.effect(
 
       const links = deepLinkArguments(argv)
 
-      // A toast's button answers where the person is, without bringing the app forward.
-      const urls = links.filter((url) => !Toasts.activate(url, () => focusWindow(getLastFocusedWindow())))
+      // A toast's button answers where the person is, without bringing the app forward. A link that answers nothing
+      // brings a window forward instead, also when none has had the focus yet in this run.
+      const urls = links.filter(
+        (url) => !Toasts.activate(url, () => focusWindow(getLastFocusedWindow() ?? getMainWindows()[0] ?? null)),
+      )
 
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
