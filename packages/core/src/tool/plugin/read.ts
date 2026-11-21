@@ -1,7 +1,7 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { basename, dirname, extname, isAbsolute, join, relative } from "path"
+import { basename, dirname, extname, isAbsolute, join, posix, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -49,6 +49,7 @@ export const Plugin = {
     const skills = yield* Skill.Service
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
+    const environment = yield* Environment.Service
     const location = yield* Location.Service
     const config = yield* Config.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
@@ -204,6 +205,8 @@ export const Plugin = {
         (entry) => entry.type === "file" && canonical(entry.name) === base,
       )
       if (matches.length !== 1) return
+      // Another machine's path follows POSIX rules, whatever this server's platform joins with.
+      if (target.environment.id !== environment.id) return posix.join(posix.dirname(target.absolute), matches[0].name)
       return join(dirname(target.absolute), matches[0].name)
     })
 
@@ -219,6 +222,8 @@ export const Plugin = {
     // usually means <location>/src/a.ts, so check that one path and nothing else.
     const reroot = Effect.fn("ReadTool.reroot")(function* (miss: Missing) {
       const root = location.directory
+      // A machine's path is not this server's path to reroot, even when the text happens to sit under the Location.
+      if (miss.requested.environment.id !== environment.id) return []
       if (FSUtil.contains(root, miss.requested.absolute) || !FSUtil.contains(dirname(root), miss.requested.absolute))
         return []
       const target = yield* access.resolve({ path: join(root, relative(dirname(root), miss.requested.absolute)) })

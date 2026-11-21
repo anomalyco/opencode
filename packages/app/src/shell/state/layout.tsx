@@ -16,6 +16,7 @@ import { SessionStateKey } from "@/runtime/server/scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
 import {
+  appendSessionTab,
   closeSessionTab,
   moveSessionTab,
   openSessionTab,
@@ -629,12 +630,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         preview(session: string, tab: string, launchers?: ReadonlySet<string>) {
           applyTabs(session, previewSessionTab(tabState(session), tab, launchers))
         },
-        /** Adds a tab at the end of the strip without selecting it or touching the preview. */
-        append(session: string, tab: string) {
+        /** Adds a tab without selecting it or touching the preview: after `after` when given and stored, else at the end. */
+        append(session: string, tab: string, after?: string) {
           const current = store.sessionTabs[session] ?? { all: [] }
+          const next = appendSessionTab(current, tab, after)
 
-          if (current.all.includes(tab)) return
-          writeTabs(session, { ...current, all: [...current.all, tab] })
+          if (next !== current) writeTabs(session, next)
         },
         focus(session: string, tab: string) {
           writeTabs(session, { ...(store.sessionTabs[session] ?? { all: [] }), active: tab })

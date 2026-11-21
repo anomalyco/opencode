@@ -879,7 +879,11 @@ test("reports a local MCP server as failed when the location has no execution pl
   const driver = Environment.makeMemoryDriver()
   const environment = Layer.succeed(
     Environment.Service,
-    Environment.Service.of({ files: Environment.makeFiles(driver), spawner: EnvironmentUnavailable.spawner }),
+    Environment.Service.of({
+      id: Environment.localID,
+      files: Environment.makeFiles(driver),
+      spawner: EnvironmentUnavailable.spawner,
+    }),
   )
 
   await Effect.runPromise(
@@ -986,6 +990,7 @@ test("closes a stdio process that finishes spawning after close", async () => {
   const environment = Layer.succeed(
     Environment.Service,
     Environment.Service.of({
+      id: Environment.localID,
       files: Environment.makeFiles(driver),
       spawner: ChildProcessSpawner.make(() =>
         Effect.gen(function* () {
@@ -1045,7 +1050,7 @@ test("falls back to legacy when a stdio server ignores the version probe", async
             type: "local",
             command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-legacy-silent.ts")],
             protocol: "auto",
-            // The probe waits out the startup timeout before falling back; Windows needs room to start Bun.
+            // The probe waits out the startup timeout, when shorter than the probe's own, before falling back; Windows needs room to start Bun.
             timeout: new ConfigMCP.Timeout({ startup: 1_000 }),
           }),
           import.meta.dir,
@@ -1211,6 +1216,7 @@ for (const entry of [
         url: server.url + entry.query,
         codemode: entry.codemode,
         oauth: false,
+        protocol: "legacy",
       })
       const error = yield* connect("resources", config, import.meta.dir).pipe(Effect.flip)
 

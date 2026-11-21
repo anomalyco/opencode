@@ -2,6 +2,7 @@ import { Predicate } from "effect"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { unwrap } from "solid-js/store"
 import { useFilteredList } from "@opencode/ui/hooks"
+import { focusField, handOffFocus, handoffRing } from "@opencode/ui/context/field-focus"
 import { abort } from "@opencode/util/abort"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
 import type { Upload } from "../attachments/uploads"
@@ -70,11 +71,10 @@ export type ComposerEditorView = {
     canSubmit?: Accessor<boolean>
     working?: Accessor<boolean>
     queue?: ComposerQueue
-    quote?: {
-      available: Accessor<boolean>
-      delivery: Accessor<ComposerDelivery | undefined>
-      onSubmit: (key: string, comment: string) => Promise<boolean>
-    }
+    /** The quote comment editor's Mod+Enter send, which takes the composer's Mod+Enter delivery. */
+    quote?: ComposerCommentSend
+    /** A plugin comment editor's send, which takes the follow-up behavior the composer's Enter uses. */
+    comment?: ComposerCommentSend
     onSubmit: (options?: { alternate?: boolean; first?: boolean }) => void
     onStop: () => void
   }
@@ -82,6 +82,13 @@ export type ComposerEditorView = {
     onOpen: () => void
     onClose: () => void
   }
+}
+
+/** Sends one attached part on its own; `delivery` is undefined while the session is idle. */
+export type ComposerCommentSend = {
+  available: Accessor<boolean>
+  delivery: Accessor<ComposerDelivery | undefined>
+  onSubmit: (key: string, comment: string) => Promise<boolean>
 }
 
 const DRAFT_EDITED: ComposerInteractionEvent = Object.freeze({ type: "draft.edited" })
@@ -115,24 +122,26 @@ export function createComposerEditor(input: {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
   let focusFrame: number | undefined
-  let focusCursor: number | undefined
+  let focusRequest: { cursor: number; visible: boolean | undefined } | undefined
 
   const cancelFocus = () => {
     if (focusFrame === undefined) return
     cancelAnimationFrame(focusFrame)
     focusFrame = undefined
-    focusCursor = undefined
+    focusRequest = undefined
   }
 
   const flushFocus = () => {
-    const cursor = focusCursor
+    const request = focusRequest
 
-    if (cursor === undefined) return
+    if (!request) return
     cancelFocus()
 
     if (!editor) return
-    editor.focus()
-    setCursorPosition(editor, cursor)
+
+    if (request.visible === undefined) editor.focus()
+    else focusField(editor, request.visible)
+    setCursorPosition(editor, request.cursor)
   }
 
   onCleanup(cancelFocus)
@@ -201,7 +210,9 @@ export function createComposerEditor(input: {
           },
         }),
         editor: () => editor,
-        focusEditor: () => editor?.focus(),
+        focusEditor: () => {
+          if (editor) handOffFocus(editor)
+        },
         addPart,
         setDraggingType: (type) => dispatch({ type: type ? "drag.enter" : "drag.leave" }),
       })
@@ -558,9 +569,9 @@ export function createComposerEditor(input: {
     if (contextList.grouped.state === "ready" && contextList.flat().length === 0) dispatch({ type: "popover.close" })
   })
 
-  const restoreFocus = (cursor = draft.state.cursor ?? promptLength(draft.state.prompt)) => {
+  const restoreFocus = (cursor = draft.state.cursor ?? promptLength(draft.state.prompt), visible?: boolean) => {
     cancelFocus()
-    focusCursor = cursor
+    focusRequest = { cursor, visible: visible ?? handoffRing(editor) }
     focusFrame = requestAnimationFrame(flushFocus)
   }
 
@@ -699,6 +710,9 @@ export function createComposerEditor(input: {
     setEditor(element: HTMLElement) {
       editor = element
       input.onEditor?.(element)
+    },
+    restoreCaret() {
+      if (editor) setCursorPosition(editor, draft.state.cursor ?? promptLength(draft.state.prompt))
     },
     restoreFocus,
     onInput(value: string, prompt?: ComposerPersistedState["prompt"], cursor?: number) {

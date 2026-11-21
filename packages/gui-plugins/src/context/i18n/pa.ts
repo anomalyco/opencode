@@ -5,7 +5,6 @@ export default {
   "usage.usage": "ورتن",
   "usage.cost": "لاگت",
   "usage.view": "سیاق و سباق دا استعمال ویکھو",
-  "systemPrompt.title": "سسٹم پرامپٹ",
   "rawMessages.title": "خام سنیہے",
   "export.session": "سیشن برآمد کرو",
   "stats.session": "سیشن",

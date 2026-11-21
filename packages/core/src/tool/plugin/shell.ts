@@ -13,13 +13,14 @@ import { Environment } from "../../environment/index.js"
 import { Flag } from "../../flag.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
+import { Location } from "../../location.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
 import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
-import { ShellParse } from "../../shell/parse.js"
+import { ShellPermissions } from "../../shell/permissions.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
 import { toolFailure } from "../runtime.js"
@@ -301,6 +302,8 @@ export const Plugin = {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
     const access = yield* FileAccess.Service
+    const environment = yield* Environment.Service
+    const location = yield* Location.Service
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
@@ -310,25 +313,37 @@ export const Plugin = {
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
 
-    const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
-      const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
+    const prepare = Effect.fn("ShellTool.prepare")(function* (
+      invocation: ShellCreateBefore,
+      context: Tool.Context,
+      requested: { readonly cwd: string; readonly target: FileAccess.Target },
+    ) {
+      // Resolved before the hooks ran; only a hook that moved the working directory needs it resolved again. It always
+      // resolves from a base, so a moved path is a plain path on the machine the command was asked for.
+      const target =
+        invocation.cwd === requested.cwd
+          ? requested.target
+          : yield* access.resolve({
+              path: invocation.cwd,
+              base:
+                requested.target.environment.id === environment.id
+                  ? { absolute: location.directory, environment }
+                  : requested.target,
+              kind: "directory",
+            })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
-      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
-      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-        access.resolve({
-          path: FileAccess.resolvePath(target.absolute, directory),
-          kind: "directory",
-        }),
+      const requests = yield* ShellPermissions.requests(access, {
+        command: invocation.command,
+        program: invocation.shell,
+        target,
+        local: target.environment.id === environment.id,
+      })
+      yield* Effect.forEach(
+        requests,
+        (request) => permission.assert({ ...request, ...Permission.invocation(context) }),
+        { discard: true },
       )
-      yield* access.authorizeExternal([target, ...directories], context)
-      if (parsed.commands.length > 0)
-        yield* permission.assert({
-          action: name,
-          resources: parsed.commands.map((command) => command.resource),
-          save: parsed.commands.map((command) => command.save),
-          ...Permission.invocation(context),
-        })
       // Approval can outlive the directory, so validate immediately before spawning.
       const workdir = yield* Environment.typeFollowing(target.environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () =>
@@ -408,11 +423,25 @@ export const Plugin = {
                       Effect.forkChild({ startImmediately: true }),
                     )
                   : undefined
+                // Raced against the slow work that precedes the command, so a stop then ends the call at once.
+                const stoppedBeforeStart = Deferred.await(stopped).pipe(
+                  Effect.andThen(
+                    Effect.fail(new ToolFailure({ message: "Command interrupted by the user before it started." })),
+                  ),
+                )
                 return yield* Effect.gen(function* () {
+                  // The same default `Shell.create` gives the hooks, so `prepare` can tell whether one moved it.
+                  const cwd = input.workdir ?? location.directory
+                  const target = yield* restore(
+                    Effect.raceFirst(access.resolve({ path: cwd, kind: "directory" }), stoppedBeforeStart),
+                  )
                   const info = yield* shell.create(
                     {
                       command: input.command,
-                      cwd: input.workdir,
+                      cwd,
+                      // The environment a command runs in is settled from the requested working directory, before
+                      // hooks run. A hook may move the directory; today that cannot change the environment.
+                      environment: target.environment,
                       timeout,
                       shell: yield* compatibleShell,
                       metadata: { sessionID: context.sessionID },
@@ -431,16 +460,7 @@ export const Plugin = {
                         invocation.env.OPENCODE_SESSION_ID = context.sessionID
                         // Asking for permission can take a while; a stop then ends the call before any command starts.
                         finalTimeout = yield* restore(
-                          Effect.raceFirst(
-                            prepare(invocation, context),
-                            Deferred.await(stopped).pipe(
-                              Effect.andThen(
-                                Effect.fail(
-                                  new ToolFailure({ message: "Command interrupted by the user before it started." }),
-                                ),
-                              ),
-                            ),
-                          ),
+                          Effect.raceFirst(prepare(invocation, context, { cwd, target }), stoppedBeforeStart),
                         )
                         // A foreground timeout moves the command to the background instead of stopping it.
                         if (!background) invocation.timeout = 0

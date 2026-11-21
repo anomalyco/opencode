@@ -67,15 +67,13 @@ describe("modelTools", () => {
       })
   })
 
-  test("treats Anthropic, Claude, and claude-agent models as strong when fullCodeMode is on", () => {
+  test("leaves built-ins in Code Mode for all models when fullCodeMode is on", () => {
     for (const model of [
       makeModel("anthropic", "custom-sonnet"),
       makeModel("claude-agent", "opus"),
-      makeModel("gateway", "sonnet", { canonical: Provider.ID.make("anthropic") }),
-      makeModel("gateway", "opus", { canonical: Provider.ID.make("claude-agent") }),
-      makeModel("amazon-bedrock", "us.anthropic.claude-opus-4-6-v1"),
-      makeModel("custom", "alias", { modelID: Model.ID.make("claude-sonnet-4-5") }),
-      makeModel("custom", "sonnet-v4", { family: Model.Family.make("claude-sonnet") }),
+      makeModel("deepseek", "deepseek-reasoner"),
+      makeModel("zhipu", "glm-5.3"),
+      makeModel("google", "gemini-4-neon"),
     ])
       expect(policy(model)).toEqual({
         direct: [],
@@ -83,7 +81,21 @@ describe("modelTools", () => {
       })
   })
 
-  test("needs no demotion when fullCodeMode is off while still applying patch and websearch rules", () => {
+  test("hides glob, grep, and webfetch for every model when fullCodeMode is on", () => {
+    for (const model of [
+      makeModel("openai", "gpt-5"),
+      makeModel("anthropic", "claude-sonnet-4-5"),
+      makeModel("deepseek", "deepseek-reasoner"),
+      makeModel("zhipu", "glm-5.3"),
+      makeModel("google", "gemini-4-neon"),
+      undefined,
+    ]) {
+      const { hidden } = policy(model)
+      for (const name of ["glob", "grep", "webfetch"]) expect(hidden).toContain(name)
+    }
+  })
+
+  test("applies patch and websearch rules when fullCodeMode is off", () => {
     expect(policy(makeModel("openai", "gpt-5"), true, false)).toEqual({ direct: [], hidden: ["edit", "write"] })
     expect(policy(makeModel("claude-agent", "opus"), false, false)).toEqual({
       direct: [],
@@ -91,18 +103,14 @@ describe("modelTools", () => {
     })
   })
 
-  test("keeps non-strong and absent models direct when fullCodeMode is on, hiding websearch when unavailable", () => {
-    expect(policy(makeModel("deepseek", "deepseek-reasoner"))).toEqual({
-      direct: ["edit", "read", "shell", "websearch", "write"],
-      hidden: ["patch"],
-    })
+  test("handles absent models when fullCodeMode is on, hiding websearch when unavailable", () => {
     expect(policy(undefined, true, true)).toEqual({
-      direct: ["edit", "patch", "read", "shell", "websearch", "write"],
-      hidden: [],
+      direct: [],
+      hidden: ["glob", "grep", "webfetch"],
     })
     expect(policy(undefined, false, true)).toEqual({
-      direct: ["edit", "patch", "read", "shell", "write"],
-      hidden: ["websearch"],
+      direct: [],
+      hidden: ["glob", "grep", "webfetch", "websearch"],
     })
   })
 })
@@ -222,7 +230,7 @@ const defaultIt = testEffect(makeContextLayer(undefined))
 const codeModeIt = testEffect(makeContextLayer("full_codemode"))
 
 describe("SessionContext.select model tool policy", () => {
-  defaultIt.effect("keeps strong-model tools direct when full_codemode is off", () =>
+  defaultIt.effect("keeps built-in tools direct when full_codemode is off", () =>
     Effect.gen(function* () {
       const { select } = yield* setupContext
       expect(names(yield* select("openai", "gpt-5")).join(",")).toBe(
@@ -267,14 +275,20 @@ describe("SessionContext.select model tool policy", () => {
         const directInstructions = (yield* readInitial(gptDirect.instructions)).text
         expect(directInstructions).toContain("Alpha docs")
         expect(directInstructions).not.toContain("through `execute`")
+        // Without `execute`, as for the explore agent, the search and fetch tools stay direct.
+        for (const name of ["glob", "grep", "webfetch"]) expect(names(gptDirect)).toContain(name)
+        const deepseekDirect = yield* select("deepseek", "deepseek-reasoner", [
+          { action: "execute", resource: "*", effect: "deny" },
+        ])
+        for (const name of ["glob", "grep", "webfetch"]) expect(names(deepseekDirect)).toContain(name)
 
         const claude = yield* select("anthropic", "claude-sonnet-4-5")
         expect(names(claude)).toEqual(["execute"])
         expect(paths(claude).join(",")).toBe("alpha.search,edit,opencode.session_move,read,shell,websearch,write")
 
         const deepseek = yield* select("deepseek", "deepseek-reasoner")
-        expect(names(deepseek).join(",")).toBe("edit,glob,grep,read,shell,webfetch,websearch,write,execute")
-        expect(paths(deepseek)).toEqual(["alpha.search", "opencode.session_move"])
+        expect(names(deepseek)).toEqual(["execute"])
+        expect(paths(deepseek).join(",")).toBe("alpha.search,edit,opencode.session_move,read,shell,websearch,write")
 
         yield* websearch.select(false)
         expect(paths(yield* select("openai", "gpt-5"))).not.toContain("websearch")

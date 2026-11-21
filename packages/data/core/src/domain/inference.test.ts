@@ -324,7 +324,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]).toContain('FROM "inference"."generation"')
     expect(queries[0]).toContain("event_type = 'generation.completed'")
     expect(queries[0]).toContain(
-      "AND (product IN ('go', 'go-plus', 'go-teams') OR (lower(COALESCE(model_tier, '')) = 'free'",
+      "AND (product IN ('go', 'go-plus', 'go-teams') OR (COALESCE(product, '') <> 'custom' AND (lower(COALESCE(model_tier, '')) = 'free'",
     )
     expect(queries[0]).toContain("COALESCE(NULLIF(lower(model_tier), ''), '') AS raw_tier")
     expect(queries[0]).toContain("WHEN lower(COALESCE(raw_tier, '')) = 'free'")

@@ -12,6 +12,7 @@ Composable menu primitive built on Kobalte's \`DropdownMenu\` and \`ContextMenu\
 - \`Menu.Context\` namespace mirrors the same shape for right-click menus.
 - \`appearance\`: \`compact\` (default) or \`standard\`.
 - \`Menu.Item\` — supports a freeform \`children\` slot (avatar, icon, text — whatever) plus \`shortcut\` and \`badge\` props.
+- \`Menu.ItemRow\` - a row that is not an action itself: a \`label\` where an item's label is, and small \`Menu.Item\`s as children where a shortcut or chevron is. Up and Down walk them in order; Left and Right move between them.
 - \`Menu.CheckboxItem\` / \`Menu.RadioItem\` — same item shape; auto-render a check indicator when selected.
 - \`Menu.Sub\` / \`Menu.SubTrigger\` / \`Menu.SubContent\` — nested submenus; \`SubTrigger\` auto-renders the trailing chevron.
 
@@ -147,6 +148,44 @@ export const Rich = {
       </Menu.Portal>
     </Menu>
   ),
+}
+
+export const WithItemRow = {
+  render: () => {
+    const [zoom, setZoom] = createSignal(100)
+
+    return (
+      <Menu gutter={6}>
+        <Menu.Trigger as={Button}>Open menu with a row</Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content style={{ width: "220px" }}>
+            <Menu.Item shortcut="? F">Find in page</Menu.Item>
+            <Menu.ItemRow label="Zoom">
+              <Menu.Item aria-label="Zoom out" closeOnSelect={false} onSelect={() => setZoom((value) => value - 10)}>
+                <Icon name="minus" size="small" />
+              </Menu.Item>
+              <Menu.Item aria-label="Reset zoom" closeOnSelect={false} disabled={zoom() === 100} onSelect={() => setZoom(100)}>
+                {zoom()}%
+              </Menu.Item>
+              <Menu.Item aria-label="Zoom in" closeOnSelect={false} onSelect={() => setZoom((value) => value + 10)}>
+                <Icon name="plus" size="small" />
+              </Menu.Item>
+            </Menu.ItemRow>
+            <Menu.Item>Copy link</Menu.Item>
+            <Menu.Separator />
+            <Menu.Sub gutter={4} overflowPadding={16} overlap>
+              <Menu.SubTrigger>More tools</Menu.SubTrigger>
+              <Menu.Portal>
+                <Menu.SubContent>
+                  <Menu.Item>Clear history</Menu.Item>
+                </Menu.SubContent>
+              </Menu.Portal>
+            </Menu.Sub>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
+    )
+  },
 }
 
 function ViewMenu(props: { initiallyOpen?: boolean }) {

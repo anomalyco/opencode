@@ -71,10 +71,10 @@ describe("a failed read", () => {
 })
 
 describe("clearing", () => {
-  test("hides the old count and disables the button until the next read", () => {
-    const clearing = transitionSite(ready(), { type: "clear.clicked" })
+  test.each([["clear.clicked", "clear"], ["clear-cache.clicked", "clear-cache"]] as const)("%s disables both actions and clears only the requested data", (type, effect) => {
+    const clearing = transitionSite(ready(), { type })
 
-    expect(clearing.effects).toEqual([{ type: "clear", attempt: 2 }])
+    expect(clearing.effects).toEqual([{ type: effect, attempt: 2 }])
     expect(siteView(clearing.state)).toMatchObject({ open: true, cookies: undefined, actionDisabled: true })
     expect(transitionSite(clearing.state, { type: "clear.clicked" }).state).toBe(clearing.state)
 

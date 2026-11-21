@@ -5,7 +5,6 @@ export default {
   "usage.usage": "အသုံးပြုမှု",
   "usage.cost": "ကုန်ကျစရိတ်",
   "usage.view": "ဆက်စပ်အကြောင်းအရာ အသုံးပြုမှုကို ကြည့်ပါ။",
-  "systemPrompt.title": "System prompt",
   "rawMessages.title": "အကြမ်း မက်ဆေ့ချ်များ",
   "export.session": "စက်ရှင်ကို ထုတ်ယူရန်",
   "stats.session": "အပိုင်း",

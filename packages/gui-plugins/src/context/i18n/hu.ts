@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Használat",
   "usage.cost": "Költség",
   "usage.view": "Tekintse meg a környezethasználatot",
-  "systemPrompt.title": "Rendszer prompt",
   "rawMessages.title": "Nyers üzenetek",
   "export.session": "Exportálási munkamenet",
   "stats.session": "Munkamenet",

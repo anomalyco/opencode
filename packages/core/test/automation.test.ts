@@ -640,6 +640,16 @@ describe("Automation", () => {
         yield* Effect.flip(
           automations.create({
             name: "x",
+            directory: enabledDirectory,
+            trigger: every("1 hour"),
+            action: { type: "shell", command: "echo x" },
+          }),
+        ),
+      ).toMatchObject({ reason: "A shell action needs a session" })
+      expect(
+        yield* Effect.flip(
+          automations.create({
+            name: "x",
             directory: "relative",
             trigger: every("1 hour"),
             action: { type: "prompt", prompt: "x", to: { session: target } },
@@ -1754,7 +1764,7 @@ describe("Automation", () => {
       }),
     )
 
-    it.effect("rejects dynamic tool access, unknown tools, shell, recursive automation tools and denied permissions", () =>
+    it.effect("rejects dynamic tool access, unknown tools, recursive automation tools and denied permissions", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
         const bad = (text: string) =>
@@ -1765,11 +1775,8 @@ describe("Automation", () => {
         expect(yield* bad("return await tools.slack.missing({})")).toMatchObject({
           reason: "Unknown Code Mode tool: slack.missing",
         })
-        expect(yield* bad('await tools.shell({ command: "pwd" })')).toMatchObject({
-          reason: "Tool shell cannot be used inside an automation",
-        })
-        expect(yield* bad("return await tools.opencode.automation_create({})")).toMatchObject({
-          reason: "Tool opencode.automation_create cannot be used inside an automation",
+        expect(yield* bad("return await tools.automation.create({})")).toMatchObject({
+          reason: "Tool automation.create cannot be used inside an automation",
         })
         expect(
           yield* Effect.flip(
