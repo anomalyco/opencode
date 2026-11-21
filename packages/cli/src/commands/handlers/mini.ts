@@ -17,7 +17,9 @@ export default Runtime.handler(Commands.commands.mini, (input) =>
     const global = yield* Global.Service
     const resolved = resolve(yield* config.get(), { terminalSuspend: process.platform !== "win32" })
     const fileSystem = yield* FileSystem.FileSystem
-    const runServicePromise = Effect.runPromiseWith(Context.make(FileSystem.FileSystem, fileSystem))
+    const runServicePromise = Effect.runPromiseWith(
+      Context.make(FileSystem.FileSystem, fileSystem).pipe(Context.add(Global.Service, global)),
+    )
     const service = server.service
     yield* Effect.promise(() =>
       runMini({
