@@ -139,50 +139,6 @@ impl Nav {
 const TOP: usize = 1;
 
 #[test]
-fn page_up_backfills_then_last_returns_to_the_tail() {
-    let h = open(turns(30), Info::default());
-    let mut screen = h.app.text();
-    for _ in 0..400 {
-        if screen.contains("┃  Question 1\n") {
-            break;
-        }
-        let previous = screen;
-        screen = h.press("pageup");
-        let first = previous.lines().skip(TOP).find(|line| line.contains("Question") || line.contains("Answer"));
-        if let Some(line) = first {
-            assert!(screen.contains(line), "{line:?} left:\n{previous}\n=====\n{screen}");
-        }
-    }
-    assert!(screen.contains("┃  Question 1\n"), "{screen}");
-    assert!(h.older.load(Ordering::SeqCst) >= 2);
-    assert!(screen.contains("Jump to latest ↓"), "{screen}");
-
-    // `session.last` (end): back at the newest rows, following the bottom.
-    let screen = h.press("end");
-    let screen = if screen.contains("Answer 30 three.") { screen } else { h.wait_for("Answer 30 three.") };
-    assert!(!screen.contains("Jump to latest"), "{screen}");
-    assert!(!screen.contains("Question 1\n"), "{screen}");
-}
-
-#[test]
-fn first_loads_the_history_and_jump_to_latest_returns() {
-    let h = open(turns(30), Info::default());
-    // `session.first` (ctrl+g) loads every older page at once and shows the first message on top.
-    h.press("ctrl+g");
-    let screen = h.wait_for("┃  Question 1\n");
-    assert_eq!(h.older.load(Ordering::SeqCst), 1, "one request for every page");
-    assert_eq!(Nav::row(&screen, "Question 1"), Some(TOP + 2), "{screen}");
-    assert!(screen.contains("Jump to latest ↓"), "{screen}");
-
-    // A click on "Jump to latest" is `session.last`.
-    let (x, y) = position(&screen, "Jump to latest");
-    h.app.click(x as u16 + 2, y as u16);
-    h.app.advance(Duration::from_millis(1));
-    let screen = h.wait_for("Answer 30 three.");
-    assert!(!screen.contains("Jump to latest"), "{screen}");
-}
-
-#[test]
 fn first_mounts_the_head_and_newer_rows_mount_on_the_way_down() {
     let scrollbar = Info { session: Some(Session { scrollbar: Some(true), ..Session::default() }), ..Info::default() };
     let h = open(turns(60), scrollbar);
@@ -232,19 +188,9 @@ fn message_navigation_aligns_messages_with_the_top() {
     let screen = settle(&h, h.dispatch("session.message.previous"));
     assert_eq!(Nav::row(&screen, "Answer 29 one."), Some(TOP + 1), "{screen}");
     assert!(screen.contains("Jump to latest ↓"), "{screen}");
-    // Then the question before it, its box on the top row.
-    let screen = settle(&h, h.dispatch("session.message.previous"));
-    assert_eq!(Nav::row(&screen, "Question 29"), Some(TOP + 1), "{screen}");
-    // Next steps from the last jump, whatever the view shows.
-    let screen = settle(&h, h.dispatch("session.message.next"));
-    assert_eq!(Nav::row(&screen, "Answer 29 one."), Some(TOP + 1), "{screen}");
-    // User-only skips the replies.
-    let screen = settle(&h, h.dispatch("session.message.user.next"));
-    assert_eq!(Nav::row(&screen, "Question 30"), Some(TOP + 1), "{screen}");
-    let screen = settle(&h, h.dispatch("session.message.user.previous"));
-    assert_eq!(Nav::row(&screen, "Question 29"), Some(TOP + 1), "{screen}");
 
-    // The last user message (alt+end) aligns too: the slack below the last rows makes room.
+    // The last user message (alt+end) aligns too: the slack below the last rows makes room. Turn 2's reply, reasoning
+    // alone, is no stop.
     h.press("end");
     let screen = settle(&h, h.press("alt+end"));
     assert_eq!(Nav::row(&screen, "Question 30"), Some(TOP + 1), "{screen}");

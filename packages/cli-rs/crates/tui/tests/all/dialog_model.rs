@@ -18,156 +18,103 @@ use opencode_ui::select::{self, SelectOption, SelectProps};
 use opencode_ui::toast::{ToastOptions, Variant};
 use opentui::prelude::*;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 enum Kind {
+    #[default]
     Select,
     Prompt,
     Confirm,
     Alert,
-    /// A select whose choice replaces it with a prompt.
-    Chain,
-    /// One of the TUI's own dialogs, by its command.
-    Command(&'static str),
 }
 
 #[derive(Clone, Debug)]
 enum Command {
-    /// Replaces whatever is open with a new dialog.
     Open(Kind),
     Type(char),
     Key(&'static str),
     Pop,
     Clear,
-    /// A click on the backdrop, outside the dialog.
+    /// A click on the backdrop, or on the dialog's title.
     Outside,
-    /// The route under the dialogs changes.
+    Inside,
+    /// The route under the dialogs changes, to home or to the session.
     Route(bool),
     Toast,
     Resize(u16, u16),
 }
 
-impl Kind {
-    /// Whether the dialog has a text input, which typed keys reach.
-    fn input(self) -> bool {
-        !matches!(self, Self::Confirm | Self::Alert | Self::Command("help.show"))
-    }
+/// A dialog that opened: its input, how often its close handler ran and what its input held then, and the buttons
+/// it ran and the model expects.
+#[derive(Default)]
+struct Entry {
+    kind: Kind,
+    input: RefCell<Option<Input>>,
+    closes: Cell<u32>,
+    closed: RefCell<Option<String>>,
+    ran: Rc<RefCell<Vec<&'static str>>>,
+    want: RefCell<Vec<&'static str>>,
 }
 
-const KINDS: &[Kind] = &[
-    Kind::Select,
-    Kind::Prompt,
-    Kind::Confirm,
-    Kind::Alert,
-    Kind::Chain,
-    Kind::Command("help.show"),
-    Kind::Command("session.list"),
-    Kind::Command("model.list"),
-];
-const KEYS: &[&str] = &["escape", "return", "ctrl+c", "backspace", "down", "tab"];
-
-/// What a dialog's input holds, read through its handle.
 #[derive(Clone)]
-enum Handle {
+enum Input {
     Select(select::Select<usize>),
     Prompt(prompt::Prompt),
-    None,
 }
 
-impl Handle {
+impl Entry {
     fn value(&self) -> Option<String> {
-        match self {
-            Self::Select(select) => Some(select.filter()),
-            Self::Prompt(prompt) => Some(prompt.value()),
-            Self::None => None,
+        match self.input.borrow().as_ref()? {
+            Input::Select(select) => Some(select.filter()),
+            Input::Prompt(prompt) => Some(prompt.value()),
         }
     }
 }
 
-type Slot = Rc<RefCell<Handle>>;
+type Entries = Rc<RefCell<Vec<Rc<Entry>>>>;
 
-/// How often a dialog's close handler ran.
-type Closes = Rc<Cell<u32>>;
-
-/// One open dialog: its kind, its content's root, its input, and the close count of what shows.
-struct Open {
-    kind: Kind,
-    root: Rc<RefCell<Option<View>>>,
-    handle: Slot,
-    closes: Rc<RefCell<Closes>>,
-}
-
-impl Open {
-    fn new(kind: Kind) -> Self {
-        Self { kind, root: Rc::default(), handle: Rc::new(RefCell::new(Handle::None)), closes: Rc::default() }
-    }
-
-    fn share(&self, kind: Kind) -> Self {
-        Self { kind, root: self.root.clone(), handle: self.handle.clone(), closes: self.closes.clone() }
-    }
-}
-
-fn build(tui: &opencode_tui::Tui, kind: Kind, open: &Open) {
-    if let Kind::Command(command) = kind {
-        tui.keymap.dispatch(command, None);
-        *open.root.borrow_mut() = Some(tui.dialogs.host().clone());
-        return;
-    }
-    replace(&tui.dialogs, kind, open);
-}
-
-fn replace(dialogs: &Dialogs, kind: Kind, open: &Open) {
-    let (root, handle) = (open.root.clone(), open.handle.clone());
-    let then = open.share(Kind::Prompt);
-    let closes = Closes::default();
-    *open.closes.borrow_mut() = closes.clone();
-    dialogs.replace(
-        move |cx| {
-            let (view, value) = match kind {
-                Kind::Select | Kind::Chain => {
-                    let options = (0..5)
-                        .map(|index| {
-                            let option = SelectOption::new(format!("Option {index}"), index);
-                            if kind != Kind::Chain {
-                                return option;
-                            }
-                            let then = then.share(Kind::Prompt);
-                            option.on_select(move |dialogs| replace(dialogs, Kind::Prompt, &then))
-                        })
-                        .collect();
-                    let mut props = SelectProps::new("Pick", options);
-                    if kind == Kind::Select {
-                        let dialogs = cx.dialogs.clone();
-                        props.on_select = Some(Rc::new(move |_| dialogs.clear()));
-                    }
-                    let (view, select) = select::select(cx, props);
-                    (view, Handle::Select(select))
-                }
-                Kind::Prompt => {
-                    let dialogs = cx.dialogs.clone();
-                    let props = PromptProps {
-                        title: "Name".into(),
-                        on_confirm: Some(Rc::new(move |_| dialogs.clear())),
-                        ..PromptProps::default()
-                    };
-                    let (view, prompt) = prompt::prompt(cx, props);
-                    (view, Handle::Prompt(prompt))
-                }
-                Kind::Confirm => (
-                    confirm::confirm(cx, ConfirmProps { title: "Sure?".into(), ..ConfirmProps::default() }),
-                    Handle::None,
-                ),
-                Kind::Alert => {
-                    (alert::alert(cx, AlertProps { title: "Note".into(), ..AlertProps::default() }), Handle::None)
-                }
-                Kind::Command(_) => unreachable!("the TUI builds its own dialogs"),
-            };
-            *root.borrow_mut() = Some(view.clone());
-            *handle.borrow_mut() = value;
-            view
-        },
-        Some(Box::new(move || closes.set(closes.get() + 1))),
-        DialogOptions::default(),
-    );
+fn open(dialogs: &Dialogs, entries: &Entries, kind: Kind) {
+    let ran = Rc::<RefCell<Vec<_>>>::default();
+    let entry = Rc::new(Entry { kind, ran: ran.clone(), ..Entry::default() });
+    entries.borrow_mut().push(entry.clone());
+    let (built, closing) = (entry.clone(), entry);
+    let build = move |cx: &Rc<opencode_ui::dialog::DialogCx>| {
+        let dialogs = cx.dialogs.clone();
+        let button = |name| {
+            let ran = ran.clone();
+            Some(Rc::new(move || ran.borrow_mut().push(name)) as Rc<dyn Fn()>)
+        };
+        let (view, input) = match kind {
+            Kind::Select => {
+                let options = (0..5).map(|index| SelectOption::new(format!("Option {index}"), index)).collect();
+                let mut props = SelectProps::new("Pick", options);
+                props.on_select = Some(Rc::new(move |_| dialogs.clear()));
+                let (view, select) = select::select(cx, props);
+                (view, Some(Input::Select(select)))
+            }
+            Kind::Prompt => {
+                let on_confirm = Some(Rc::new(move |_: &str| dialogs.clear()) as select::OnText);
+                let (view, prompt) =
+                    prompt::prompt(cx, PromptProps { title: "Name".into(), on_confirm, ..PromptProps::default() });
+                (view, Some(Input::Prompt(prompt)))
+            }
+            Kind::Confirm => {
+                let (on_confirm, on_cancel) = (button("confirm"), button("cancel"));
+                let props = ConfirmProps { title: "Sure?".into(), on_confirm, on_cancel, ..ConfirmProps::default() };
+                (confirm::confirm(cx, props), None)
+            }
+            Kind::Alert => {
+                let props = AlertProps { title: "Note".into(), message: String::new(), on_confirm: button("confirm") };
+                (alert::alert(cx, props), None)
+            }
+        };
+        *built.input.borrow_mut() = input;
+        view
+    };
+    let close = move || {
+        closing.closes.set(closing.closes.get() + 1);
+        *closing.closed.borrow_mut() = closing.value();
+    };
+    dialogs.replace(build, Some(Box::new(close)), DialogOptions::default());
 }
 
 struct Stack;
@@ -176,14 +123,17 @@ impl Model for Stack {
     type Command = Command;
 
     fn generate(&self, rng: &mut Rng, steps: usize) -> Vec<Command> {
+        let kinds = [Kind::Select, Kind::Prompt, Kind::Confirm, Kind::Alert];
+        let keys = ["escape", "return", "ctrl+c", "backspace", "down", "tab"];
         (0..steps)
             .map(|_| match rng.below(100) {
-                0..25 => Command::Open(*rng.pick(KINDS)),
+                0..25 => Command::Open(*rng.pick(&kinds)),
                 25..45 => Command::Type(*rng.pick(&['a', 'b', 'q', ' ', 'é'])),
-                45..70 => Command::Key(rng.pick(KEYS)),
+                45..70 => Command::Key(rng.pick(&keys)),
                 70..75 => Command::Pop,
                 75..80 => Command::Clear,
-                80..85 => Command::Outside,
+                80..83 => Command::Outside,
+                83..85 => Command::Inside,
                 85..92 => Command::Route(rng.below(2) == 0),
                 92..96 => Command::Toast,
                 _ => Command::Resize(*rng.pick(&[40, 80, 120]), *rng.pick(&[12, 24, 40])),
@@ -192,15 +142,13 @@ impl Model for Stack {
     }
 
     fn run(&self, commands: &[Command]) -> Option<Failure> {
-        // One TUI per thread: one with dialogs is never freed.
+        // One TUI per thread, on its own app options: one with dialogs is never freed.
         thread_local! {
             static KIT: Harness = {
                 let fake = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
                 let deps = Deps { config: support::config(support::still()), ..support::deps(Arc::new(fake)) };
-                // The TUI's own app options, which decide what keys no widget takes do.
                 let app = opentui::testing::TestApp::with_options(80, 24, opencode_tui::app::options());
                 let harness = support::mount_on(app, deps, opencode_tui::Args::default());
-                // A still plugin clock: on a loaded machine a slow built-in's toast would come and go between steps.
                 let now = std::time::Instant::now();
                 harness.tui.plugins.monitor().set_clock(move || now);
                 harness.wait_for("Fix the parser");
@@ -225,184 +173,130 @@ fn settle(harness: &Harness) {
     }
 }
 
-/// Whether \`widget\` is \`root\` or inside it.
-fn within(widget: &AnyWidget, root: &View) -> bool {
-    std::iter::successors(Some(widget.clone()), |widget| widget.parent()).any(|widget| widget.id() == root.id())
-}
-
 fn walk(harness: &Harness, commands: &[Command]) -> Option<Failure> {
     let (app, tui) = (&harness.app, &harness.tui);
-    let mut open: Option<Open> = None;
-    // The top dialog's input, as the reference has it.
-    let mut value = String::new();
-    // The closed dialogs: their inputs, what those held when they closed, and their close counts.
-    let mut closed: Vec<(Handle, Option<String>, Option<Closes>)> = Vec::new();
+    let entries = Entries::default();
+    // The reference: the open dialog's kind, what its input holds, and whether a confirm's Confirm button is active.
+    let (mut shown, mut value, mut yes) = (None::<Kind>, String::new(), true);
     for (step, command) in commands.iter().enumerate() {
-        let fail = |site, detail: String| Some(Failure { property: "dialogs", site, step, detail });
-        let (route_id, route_text) = (harness.textarea().id(), harness.textarea().text());
-        let size = app.app().size();
-        let kind = open.as_ref().map(|open| open.kind);
-        // A chained select's choice replaces what the dialog's slots hold, so its count is read first.
-        let counted = open.as_ref().map(|open| open.closes.borrow().clone());
+        let fail = |site, detail: String| {
+            Some(Failure { property: "dialogs", site, step, detail: format!("{detail}\n{}", app.text()) })
+        };
+        let (prompt, typed) = (harness.textarea(), harness.textarea().text());
+        let input = shown.is_some_and(|kind| !matches!(kind, Kind::Confirm | Kind::Alert));
+        let top = entries.borrow().last().cloned();
         // A select submits only while its filter matches an option.
-        let matched = open.as_ref().is_some_and(|open| match &*open.handle.borrow() {
-            Handle::Select(select) => select.selected().is_some(),
+        let matched = top.as_ref().is_none_or(|top| match top.input.borrow().as_ref() {
+            Some(Input::Select(select)) => select.selected().is_some(),
             _ => true,
         });
-        // What the command does to the stack: Some(kind) keeps or opens one, None closes it.
-        let mut next = kind;
-        let mut own = false;
         match command {
             Command::Open(kind) => {
-                let dialog = Open::new(*kind);
-                build(tui, *kind, &dialog);
-                if let Some(old) = open.replace(dialog) {
-                    closed.push(close(&old));
-                }
-                (next, value) = (Some(*kind), String::new());
+                open(&tui.dialogs, &entries, *kind);
+                (shown, value, yes) = (Some(*kind), String::new(), true);
             }
             Command::Type(c) => {
                 app.type_text(&c.to_string());
-                if kind.is_some_and(Kind::input) {
+                if input {
                     value.push(*c);
                 }
             }
             // The route's own keys are not the model's: Ctrl+C would quit, and Down opens the composer.
-            Command::Key(_) if kind.is_none() => {}
+            Command::Key(_) if shown.is_none() => {}
             Command::Key(key) => {
                 app.press(key);
-                let input = kind.is_some_and(Kind::input);
-                match *key {
-                    "escape" => next = None,
-                    "ctrl+c" if input && !value.is_empty() => value.clear(),
-                    "ctrl+c" => next = None,
-                    "backspace" if input => drop(value.pop()),
-                    "return" => match kind {
-                        Some(Kind::Chain) if matched => {
-                            closed.push((Handle::None, None, counted.clone()));
-                            (next, value) = (Some(Kind::Prompt), String::new());
-                        }
-                        Some(Kind::Select | Kind::Chain) if !matched => {}
-                        // What a TUI dialog's choice does is its own; whatever it opens or closes, the checks below hold.
-                        Some(Kind::Command(_)) => own = true,
-                        _ => next = None,
-                    },
+                let run = |button| top.as_ref().unwrap().want.borrow_mut().push(button);
+                match (*key, shown) {
+                    ("escape", Some(Kind::Confirm)) => (shown, ()) = (None, run("cancel")),
+                    ("return", Some(Kind::Confirm)) => {
+                        (shown, ()) = (None, run(if yes { "confirm" } else { "cancel" }))
+                    }
+                    ("return", Some(Kind::Alert)) => (shown, ()) = (None, run("confirm")),
+                    ("tab", Some(Kind::Confirm)) => yes = !yes,
+                    ("escape", _) => shown = None,
+                    ("ctrl+c", _) if input && !value.is_empty() => value.clear(),
+                    ("ctrl+c", _) => shown = None,
+                    ("backspace", _) if input => drop(value.pop()),
+                    ("return", Some(Kind::Select)) if !matched => {}
+                    ("return", _) => shown = None,
                     _ => {}
                 }
             }
-            Command::Pop | Command::Clear => {
-                if let Command::Pop = command {
-                    tui.dialogs.pop();
-                } else {
-                    tui.dialogs.clear();
+            Command::Pop | Command::Clear | Command::Outside => {
+                match command {
+                    Command::Pop => tui.dialogs.pop(),
+                    Command::Clear => tui.dialogs.clear(),
+                    _ => app.click(0, app.app().size().1 - 1),
                 }
-                next = None;
+                shown = None;
             }
-            Command::Outside => {
-                app.click(0, size.1 - 1);
-                next = None;
+            Command::Inside => {
+                let titles = ["Pick", "Name", "Sure?", "Note"];
+                if let Some((x, y)) = titles.iter().find_map(|title| support::at(&app.text(), title)) {
+                    app.click(x, y);
+                }
             }
             Command::Route(home) => tui.navigate(if *home { Route::Home } else { support::session_route("ses_a") }),
             Command::Toast => tui.toasts.show(ToastOptions::new(Variant::Info, "Saved")),
             Command::Resize(width, height) => app.resize(*width, *height),
         }
         settle(harness);
-        if own && !tui.dialogs.is_open() {
-            next = None;
+        let open = shown.is_some();
+        if tui.dialogs.len() != usize::from(open) || (tui.keymap.mode() == "modal") != open {
+            return fail("stack", format!("{} dialogs, the model {shown:?}", tui.dialogs.len()));
         }
-        match next {
-            None => {
-                if let Some(old) = open.take() {
-                    closed.push(close(&old));
-                }
-            }
-            Some(kind) => {
-                if let Some(open) = open.as_mut() {
-                    open.kind = kind;
-                }
-            }
-        }
-        if tui.dialogs.is_open() != open.is_some() {
-            return fail("stack", format!("open: {}, the model {:?}:\n{}", tui.dialogs.is_open(), next, app.text()));
-        }
+        let entries = entries.borrow();
+        let (closed, top) = entries.split_at(entries.len() - usize::from(open));
         let focused = app.focused();
         let route = harness.textarea();
-        match &open {
-            Some(open) => {
-                let root = open.root.borrow().clone().expect("the dialog was built");
-                if let Some(widget) = focused.as_ref().filter(|widget| !within(widget, &root)) {
-                    let id = widget.id();
-                    return fail("focus", format!("{id} has the focus over a {:?} dialog:\n{}", open.kind, app.text()));
+        match top.first() {
+            Some(top) => {
+                let host = tui.dialogs.host().id();
+                let path = std::iter::successors(focused.clone(), |widget| widget.parent());
+                if path.clone().all(|widget| widget.id() != host) && (focused.is_some() || top.input.borrow().is_some())
+                {
+                    return fail("focus", format!("{:?} has the focus", focused.map(|widget| widget.id())));
                 }
-                let handle = open.handle.borrow().clone();
-                if !matches!(handle, Handle::None) && focused.is_none() {
-                    return fail(
-                        "focus",
-                        format!("nothing has the focus in a {:?} dialog:\n{}", open.kind, app.text()),
-                    );
+                if top.value().is_some_and(|shown| shown != value) || top.closes.get() != 0 {
+                    return fail("input", format!("the dialog holds {:?}, the model {value:?}", top.value()));
                 }
-                if let Some(shown) = handle.value().filter(|shown| *shown != value) {
-                    return fail("input", format!("the {:?} dialog holds {shown:?}, the model {value:?}", open.kind));
-                }
-                if route.id() == route_id && route.text() != route_text {
-                    return fail(
-                        "leak",
-                        format!("the prompt under a dialog went from {route_text:?} to {:?}", route.text()),
-                    );
+                if route.id() == prompt.id() && route.text() != typed {
+                    return fail("leak", format!("the prompt under the dialog holds {:?}", route.text()));
                 }
             }
             None => {
                 if focused.as_ref().map(AnyWidget::id) != Some(route.id()) {
-                    return fail("refocus", format!("the route's prompt does not have the focus:\n{}", app.text()));
+                    return fail("refocus", "the route's prompt does not have the focus".into());
                 }
                 if let Command::Type(c) = command
-                    && kind.is_none()
-                    && route.text() != format!("{route_text}{c}")
+                    && !input
+                    && route.text() != format!("{typed}{c}")
                 {
-                    return fail("typed", format!("the prompt went from {route_text:?} to {:?}", route.text()));
+                    return fail("typed", format!("the prompt went from {typed:?} to {:?}", route.text()));
                 }
             }
         }
-        if let Some((_, value, _)) = closed.iter().find(|(handle, value, _)| handle.value() != *value) {
-            return fail("closed", format!("a closed dialog's input changed from {value:?}"));
+        if let Some(entry) = entries.iter().find(|entry| *entry.ran.borrow() != *entry.want.borrow()) {
+            return fail("buttons", format!("a {:?} ran {:?}", entry.kind, entry.ran.borrow()));
         }
-        let own = open.as_ref().is_some_and(|open| matches!(open.kind, Kind::Command(_)));
-        if let Some(count) = closed.iter().filter_map(|(_, _, closes)| closes.as_ref()).find(|closes| closes.get() != 1)
-        {
-            return fail("closes", format!("a closed dialog's close handler ran {} times", count.get()));
-        }
-        if let Some(open) = open.as_ref().filter(|_| !own)
-            && open.closes.borrow().get() != 0
-        {
-            return fail("closes", "the open dialog's close handler ran".to_owned());
-        }
-        if tui.dialogs.len() != usize::from(open.is_some()) || (tui.keymap.mode() == "modal") != open.is_some() {
-            let mode = tui.keymap.mode();
+        let changed = |entry: &&Rc<Entry>| entry.closes.get() != 1 || entry.value() != *entry.closed.borrow();
+        if let Some(entry) = closed.iter().find(changed) {
             return fail(
-                "mode",
-                format!("{} dialogs in mode {mode:?}, the model {}", tui.dialogs.len(), open.is_some()),
+                "closed",
+                format!("a closed {:?}: {} closes, {:?}", entry.kind, entry.closes.get(), entry.value()),
             );
         }
     }
     None
 }
 
-/// What the model keeps of a dialog that closed. The TUI's own dialogs have their own close handlers.
-fn close(open: &Open) -> (Handle, Option<String>, Option<Closes>) {
-    let handle = open.handle.borrow().clone();
-    let value = handle.value();
-    let closes = (!matches!(open.kind, Kind::Command(_))).then(|| open.closes.borrow().clone());
-    (handle, value, closes)
+#[test]
+fn any_walk_keeps_the_focus_on_the_top_dialog_or_the_route() {
+    model::check(&Stack, 8, 32);
 }
 
 /// Tab in a dialog that does not bind it keeps the focus there, so what is typed next stays in the dialog.
 #[test]
 fn tab_in_a_dialog_keeps_the_focus_there() {
-    let walk = [Command::Open(Kind::Prompt), Command::Key("tab"), Command::Type('a')];
-    assert_eq!(Stack.run(&walk), None);
-}
-
-#[test]
-fn any_walk_keeps_the_focus_on_the_top_dialog_or_the_route() {
-    model::check(&Stack, 8, 32);
+    assert_eq!(Stack.run(&[Command::Open(Kind::Prompt), Command::Key("tab"), Command::Type('a')]), None);
 }

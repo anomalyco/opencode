@@ -50,26 +50,6 @@ fn alert_matches_typescript() {
 }
 
 #[test]
-fn alert_confirms_on_enter_and_closes() {
-    let kit = kit(60, 12);
-    let confirmed = Rc::new(RefCell::new(0));
-    let count = confirmed.clone();
-    alert::show(
-        &kit.dialogs,
-        alert::AlertProps {
-            title: "Heads up".into(),
-            message: "Done.".into(),
-            on_confirm: Some(Rc::new(move || *count.borrow_mut() += 1)),
-        },
-    );
-    kit.app.press("return");
-    assert_eq!(*confirmed.borrow(), 1);
-    assert!(!kit.dialogs.is_open());
-    assert_eq!(kit.keymap.mode(), "base");
-    assert!(kit.app.render().text().trim().is_empty());
-}
-
-#[test]
 fn a_confirm_can_dismiss_on_escape_and_start_on_cancel() {
     for (dismiss, cancel_first, key, chosen) in [
         (true, false, "escape", &[][..]),
@@ -159,16 +139,6 @@ fn confirm_keys_toggle_the_active_button() {
         kit.app.press("return");
         assert_eq!(*log.borrow(), [chosen], "{keys:?}");
     }
-}
-
-#[test]
-fn confirm_cancels_on_escape() {
-    let kit = kit(70, 16);
-    let log = Rc::default();
-    open_confirm(&kit, &log);
-    kit.app.press("escape");
-    assert_eq!(*log.borrow(), ["cancel"]);
-    assert!(!kit.dialogs.is_open());
 }
 
 #[test]
