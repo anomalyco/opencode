@@ -144,11 +144,14 @@ Export session data as JSON.
 $ opencode session export ses_4f2a1c
 ```
 
-Redact sensitive transcript and file data when exporting.
+Export a redacted session with `--sanitize`.
 
 ```bash
 $ opencode session export ses_4f2a1c --sanitize
 ```
+
+OpenCode replaces transcript text, tool inputs and output text, the session title, and the working directory with placeholders. It removes the contents of user attachments.
+The export keeps the message structure, IDs, timestamps, and model and tool names. Error messages can remain, so review the JSON before sharing it.
 
 Import session data from a JSON file or URL.
 
