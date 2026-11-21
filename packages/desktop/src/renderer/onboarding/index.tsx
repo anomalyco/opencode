@@ -1,4 +1,12 @@
-import { ServerConnection, useCurrentRoute, useGlobal, useLanguage, useServers, useTabs } from "@opencode/app/desktop"
+import {
+  ServerConnection,
+  syncWhileBooting,
+  useCurrentRoute,
+  useGlobal,
+  useLanguage,
+  useServers,
+  useTabs,
+} from "@opencode/app/desktop"
 import { showToast } from "@opencode/ui/toast"
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js"
 import type { ElectronAPI } from "../api-types"
@@ -91,8 +99,9 @@ export function DesktopFirstLaunchOnboarding(props: {
 
           return Promise.all([
             ctx.projects.add(directory),
-            ctx.data.location.provider.sync({ directory }),
-            ctx.data.location.model.sync({ directory }),
+            syncWhileBooting(() =>
+              Promise.all([ctx.data.location.provider.sync({ directory }), ctx.data.location.model.sync({ directory })]),
+            ),
           ])
         }).then(
           () => dispatch({ type: "seed.succeeded", revealed: revealed(), canOpenDraft: canOpenDraft() }),
