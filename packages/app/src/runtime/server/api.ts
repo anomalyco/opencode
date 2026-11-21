@@ -45,8 +45,23 @@ export function createApiForServer(input: { server: ServerConnection.HttpBase; f
 export function fileStreamUrl(server: ServerConnection.HttpBase, input: { path: string; directory: string }) {
   if (server.password) return
 
+  return fileUrl(server, "api/fs/read/", input)
+}
+
+/**
+ * The server's sandboxed page for one HTML file, for the preview frame. A blob: frame inherits the app's CSP, and the
+ * web UI the server serves blocks inline scripts. Only on that same origin does the frame's request carry the session
+ * cookie; elsewhere (desktop, a remote server) the preview keeps its blob: frame.
+ */
+export function filePreviewUrl(server: ServerConnection.HttpBase, input: { path: string; directory: string }) {
+  if (server.password || new URL(server.url).origin !== location.origin) return
+
+  return fileUrl(server, "api/experimental/fs/preview/", input)
+}
+
+function fileUrl(server: ServerConnection.HttpBase, route: string, input: { path: string; directory: string }) {
   const url = new URL(
-    `api/fs/read/${input.path.split("/").map(encodeURIComponent).join("/")}`,
+    `${route}${input.path.split("/").map(encodeURIComponent).join("/")}`,
     server.url.endsWith("/") ? server.url : `${server.url}/`,
   )
 

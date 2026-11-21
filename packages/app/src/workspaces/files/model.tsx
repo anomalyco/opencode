@@ -13,8 +13,14 @@ import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { createPathHelpers } from "./path"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { usePlatform } from "@/runtime/platform/platform"
-import { fileStreamUrl } from "@/runtime/server/api"
-import { fileContentFromBytes, headStreamedFile, streamedFileContent, streamedKinds } from "./artifact"
+import { filePreviewUrl, fileStreamUrl } from "@/runtime/server/api"
+import {
+  fileContentFromBytes,
+  headStreamedFile,
+  streamedFileContent,
+  streamedKinds,
+  versionedFileUrl,
+} from "./artifact"
 import { approxBytes, createFileContentCache } from "./content-cache"
 import {
   createFileContentState,
@@ -229,9 +235,19 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const download = () =>
         serverSDK.api.file.read(request, { signal }).then((data) => fileContentFromBytes(file, data))
 
-      const url = streamedKinds.has(artifactKind(file))
-        ? fileStreamUrl(serverSDK.http, { path: request.path, directory: request.location.directory })
-        : undefined
+      const target = { path: request.path, directory: request.location.directory }
+      const preview = artifactKind(file) === "html" ? filePreviewUrl(serverSDK.http, target) : undefined
+
+      // HTML downloads for its source view, and its preview frame loads the server's sandboxed page.
+      if (preview)
+        return Promise.all([
+          download(),
+          headStreamedFile(platform.fetch ?? fetch, preview, signal).catch(() => undefined),
+        ]).then(([content, response]) =>
+          response?.ok ? { ...content, url: versionedFileUrl(preview, response) } : content,
+        )
+
+      const url = streamedKinds.has(artifactKind(file)) ? fileStreamUrl(serverSDK.http, target) : undefined
 
       if (!url) return download()
 

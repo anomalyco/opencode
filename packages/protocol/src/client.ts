@@ -106,6 +106,7 @@ export const deprecatedClientPaths = new Set([
 ])
 
 export const promiseOmitEndpoints = new Set([
+  "fs.preview",
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",
@@ -114,6 +115,7 @@ export const promiseOmitEndpoints = new Set([
 ])
 export const effectOmitEndpoints = new Set([
   "fs.read",
+  "fs.preview",
   "fs.write",
   "media.get",
   "blob.get",
