@@ -52,6 +52,16 @@
   flex-shrink: 0;
 }
 
+/* The icon's ink sits a quarter pixel closer to the project name than to the worktree name. A transform moves it by
+   less than a pixel, which a margin cannot. */
+.session-location-worktree-icon {
+  translate: 0.25px;
+}
+
+.session-location-worktree-icon:dir(rtl) {
+  translate: -0.25px;
+}
+
 /* The label leaves the hit area, but keeps its intrinsic width available to the fit observer. */
 .session-header-layout[data-location-collapse="1"] [data-slot="session-location-worktree"],
 .session-header-layout[data-location-collapse="2"] .session-location-label {
