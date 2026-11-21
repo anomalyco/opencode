@@ -131,3 +131,88 @@ test("Escape closes suggestions, then drops a typed path, before it closes the p
   await input.press("Escape")
   await expect(picker).toBeHidden()
 })
+
+function markerOpacities(page: Page, name: string) {
+  return page.evaluate((name) => {
+    const host = document.querySelector<HTMLElement>(".directory-picker-tree")
+    const rows = host?.shadowRoot
+      ? Array.from(host.shadowRoot.querySelectorAll<HTMLElement>('button[data-type="item"]')).filter(
+          (item) => item.dataset.fileTreeStickyRow !== "true",
+        )
+      : []
+    const row = rows.find((item) => item.getAttribute("aria-label") === name)
+    const markers = row ? Array.from(row.querySelectorAll<HTMLElement>("[data-truncate-marker]")) : []
+
+    return markers.map((marker) => getComputedStyle(marker).opacity)
+  }, name)
+}
+
+test("the picker does not paint truncation markers at fractional UI zoom", async ({ page }) => {
+  const longName = "a-folder-name-that-does-not-fit"
+  const picker = await openPicker(page, {
+    fileList: (path) =>
+      path === directory ? ["alpha", longName].map((name) => fileNode(directory, name, "directory")) : [],
+  })
+
+  await expect(picker.getByRole("treeitem", { name: "alpha", exact: true })).toBeVisible()
+  // The desktop app zooms through Electron; CSS zoom reproduces the same
+  // container-query flip in the browser test. Disable the marker fade so the
+  // settled opacity is observable without a wall-clock wait.
+  await page.evaluate(() => {
+    const host = document.querySelector<HTMLElement>(".directory-picker-tree")
+
+    host?.style.setProperty("--truncate-marker-fade-in-duration", "0s")
+    host?.style.setProperty("--truncate-marker-fade-out-duration", "0s")
+    document.body.style.zoom = "1.1"
+  })
+
+  // Wait for the fractional layout that puts the marker cell inside the 1px
+  // rounding band this fix targets. This also proves the test reproduced it.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const zoom = parseFloat(getComputedStyle(document.body).zoom) || 1
+        const host = document.querySelector<HTMLElement>(".directory-picker-tree")
+        const rows = host?.shadowRoot
+          ? Array.from(host.shadowRoot.querySelectorAll<HTMLElement>('button[data-type="item"]')).filter(
+              (item) => item.dataset.fileTreeStickyRow !== "true",
+            )
+          : []
+        const row = rows.find((item) => item.getAttribute("aria-label") === "alpha")
+        const markers = row ? Array.from(row.querySelectorAll<HTMLElement>("[data-truncate-marker]")) : []
+        const cells = row ? Array.from(row.querySelectorAll<HTMLElement>("[data-truncate-marker-cell]")) : []
+        const oneLine = markers[0] ? markers[0].getBoundingClientRect().height / zoom : undefined
+
+        if (oneLine == null) return false
+
+        return cells.some((cell) => {
+          const height = cell.getBoundingClientRect().height / zoom
+
+          return height > oneLine && height <= oneLine + 1
+        })
+      }),
+    )
+    .toBe(true)
+
+  await expect
+    .poll(async () => {
+      const opacities = await markerOpacities(page, "alpha")
+
+      return opacities.length > 0 && opacities.every((opacity) => opacity === "0")
+    })
+    .toBe(true)
+
+  await page.evaluate(() => {
+    const host = document.querySelector<HTMLElement>(".directory-picker-tree")
+
+    if (host) host.style.width = "72px"
+  })
+
+  await expect
+    .poll(async () => {
+      const opacities = await markerOpacities(page, longName)
+
+      return opacities.includes("1")
+    })
+    .toBe(true)
+})
