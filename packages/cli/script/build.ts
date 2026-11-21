@@ -131,7 +131,8 @@ for (const item of targets) {
   const opencodePty = await resolveOpencodePty({
     platform: item.os,
     arch: item.arch,
-    ...(item.os === "linux" ? { libc: item.abi ?? "glibc" } : {}),
+    // MUSL helper is statically linked, so glibc builds embed it too. GNU needs GLIBC_2.29
+    ...(item.os === "linux" ? { libc: "musl" } : {}),
   })
   const opencodePtyPlugin: BunPlugin = {
     name: "opencode-pty-binary",
