@@ -5,6 +5,7 @@ import { parseSessionMention, sessionMentions } from "@opencode/util/session-men
 import { displayLabel } from "@opencode/util/session-title-fallback"
 import { useData } from "../context/data"
 import { useRoute } from "../context/route"
+import { useLinks } from "../context/link"
 import { useDialog } from "./dialog"
 import { plainClick } from "./link"
 
@@ -16,6 +17,7 @@ import { plainClick } from "./link"
 export function useSessionLinks() {
   const data = useData()
   const route = useRoute()
+  const links = useLinks()
   const dialog = useDialog()
   const renderer = useRenderer()
   const labelOf = (sessionID: string) => {
@@ -85,6 +87,7 @@ export function useSessionLinks() {
       const sessionID = renderable.targetAt(event.x, event.y)
       if (!sessionID) return
       event.stopPropagation()
+      if (links.claim({ type: "session", sessionID })) return
       if (dialog.stack.length > 0) dialog.clear()
       route.navigate({ type: "session", sessionID })
     }

@@ -30,6 +30,7 @@ import { useClient } from "../context/client"
 import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { useRoute } from "../context/route"
+import { useLinks } from "../context/link"
 import { useTuiApp, useTuiPaths } from "../context/runtime"
 import { useLocation } from "../context/location"
 import { useThemes } from "../context/theme"
@@ -82,6 +83,7 @@ export function usePluginHost() {
     client: useClient(),
     data: useData(),
     route: useRoute(),
+    links: useLinks(),
     keymap: Keymap.use(),
     shortcuts: Keymap.useShortcuts(),
     keymapState: Keymap.useState(),
@@ -243,6 +245,18 @@ export function createPluginContext(input: {
         },
         current() {
           return host.route.data
+        },
+      },
+      links: {
+        register(handler) {
+          const active = cleanups
+          if (!active) return () => {}
+          const unregister = host.links.register(handler)
+          active.add(unregister)
+          return () => {
+            active.delete(unregister)
+            unregister()
+          }
         },
       },
       panel: {

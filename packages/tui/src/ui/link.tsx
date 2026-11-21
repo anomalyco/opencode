@@ -1,6 +1,6 @@
 import type { JSX } from "solid-js"
 import type { CliRenderer, MouseEvent, RGBA } from "@opentui/core"
-import { openUrl } from "@opencode/util/open"
+import { useLinks } from "../context/link"
 
 export interface LinkProps {
   href: string
@@ -16,6 +16,7 @@ export interface LinkProps {
  * Clicking anywhere on the link text opens the URL in the default browser.
  */
 export function Link(props: LinkProps) {
+  const links = useLinks()
   const displayText = props.children ?? props.href
 
   return (
@@ -25,7 +26,7 @@ export function Link(props: LinkProps) {
       width={props.width}
       wrapMode={props.wrapMode}
       onMouseUp={() => {
-        openUrl(props.href).catch(() => {})
+        links.openUrl(props.href).catch(() => {})
       }}
     >
       <a href={props.href}>{displayText}</a>

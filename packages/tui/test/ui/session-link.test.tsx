@@ -6,7 +6,9 @@ import { onCleanup, onMount, type JSX } from "solid-js"
 import { ConfigProvider } from "../../src/config"
 import { ClientProvider } from "../../src/context/client"
 import { DataProvider, useData } from "../../src/context/data"
+import type { LinkTarget } from "@opencode/plugin/tui/context"
 import { Keymap } from "../../src/context/keymap"
+import { useLinks } from "../../src/context/link"
 import { RouteProvider, useRoute } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
 import { StorageProvider } from "../../src/context/storage"
@@ -197,6 +199,56 @@ test("clicking a session link in a dialog closes it and opens the session", asyn
     const rows = app.captureCharFrame().split("\n")
     const y = rows.findIndex((row) => row.includes("@Fix"))
     await app.mockMouse.click(rows[y]!.indexOf("@Fix") + 2, y)
+    expect(route.data).toEqual({ type: "session", sessionID: known.id })
+    expect(dialog.stack).toHaveLength(0)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("a link handler that claims a session link replaces the navigation until it unregisters", async () => {
+  await using state = await tmpdir()
+  const calls = createFetch(async () => undefined)
+  const seen: LinkTarget[] = []
+  let route!: ReturnType<typeof useRoute>
+  let dialog!: ReturnType<typeof useDialog>
+  let unregister!: () => void
+
+  function Answer() {
+    const renderer = useRenderer()
+    const syntaxStyle = SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, renderer.nativeScene)
+    onCleanup(() => syntaxStyle.destroy())
+    return <markdown ref={useSessionLinks()} syntaxStyle={syntaxStyle} content={`See ${known.id}`} />
+  }
+  function Probe() {
+    const links = useLinks()
+    useData().session.remember({ ...known })
+    route = useRoute()
+    dialog = useDialog()
+    links.register((link) => {
+      seen.push(link)
+      return false
+    })
+    unregister = links.register((link) => link.type === "session")
+    onMount(() => dialog.replace(() => <Answer />))
+    return null
+  }
+
+  const app = await mount(state.path, calls.fetch, () => <Probe />, 80, 12)
+
+  try {
+    await waitForHighlightedFrame(app, (frame) => frame.includes("@Fix"))
+    const rows = app.captureCharFrame().split("\n")
+    const y = rows.findIndex((row) => row.includes("@Fix"))
+    await app.mockMouse.click(rows[y]!.indexOf("@Fix") + 2, y)
+    expect(seen).toEqual([{ type: "session", sessionID: known.id }])
+    expect(route.data).toEqual({ type: "session", sessionID: current })
+    expect(dialog.stack).toHaveLength(1)
+
+    unregister()
+    app.renderer.clearSelection()
+    await app.mockMouse.click(rows[y]!.indexOf("@Fix") + 2, y)
+    expect(seen).toHaveLength(2)
     expect(route.data).toEqual({ type: "session", sessionID: known.id })
     expect(dialog.stack).toHaveLength(0)
   } finally {

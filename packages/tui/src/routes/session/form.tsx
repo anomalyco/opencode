@@ -9,11 +9,11 @@ import {
   type ScrollBoxRenderable,
   type TextareaRenderable,
 } from "@opentui/core"
-import { openUrl } from "@opencode/util/open"
 import { useTheme } from "../../context/theme"
 import type { FormAnswer, FormField, FormValue } from "@opencode/client"
 import { useData, type FormWithLocation } from "../../context/data"
 import { useClipboard } from "../../context/clipboard"
+import { useLinks } from "../../context/link"
 import { SplitBorder } from "../../ui/border"
 import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
@@ -68,6 +68,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const active = () => enabled() && dialog.stack.length === 0 && keymap.mode.current() === FORM_MODE
   const cursorStyle = useCursorStyle()
   const clipboard = useClipboard()
+  const links = useLinks()
   const toast = useToast()
   const configuredFields = props.form.fields.filter(isFormAnswerField)
   const initial = formInitialValues(props.form.fields)
@@ -480,7 +481,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     const current = externalField()
     if (!current) return
     setStore("error", "")
-    void openUrl(current.url)
+    void links
+      .openUrl(current.url)
       .then(() => setStore("externalReady", { ...store.externalReady, [current.key]: true }))
       .catch(() => setStore("error", "Could not open the browser. Copy the URL and continue manually."))
   }
