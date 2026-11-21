@@ -15,7 +15,6 @@ pub fn is_free(model: &ModelInfo) -> bool {
 }
 
 /// An option of the model list before it becomes a select row.
-#[derive(Clone)]
 struct Row {
     value: Model,
     provider_id: String,
@@ -24,11 +23,31 @@ struct Row {
     category: Option<String>,
     favorite: bool,
     free: bool,
+    /// Shown in the Favorites or Recent section, so left out of the provider groups below them.
+    pinned: bool,
+    /// A favorite when the dialog opened: first among search results (`prioritizeFavorites`).
+    priority: bool,
+}
+
+/// The model list of one catalog: built when the dialog opens and again when the catalog, the favorites or the
+/// recents change, and searched on each keystroke.
+struct Catalog {
+    connected: bool,
+    /// Whether the list shows the Favorites and Recent sections while the filter is empty.
+    sections: bool,
+    favorites: Vec<SelectOption<Model>>,
+    recents: Vec<SelectOption<Model>>,
+    /// Every row, in list order.
+    rows: Vec<Row>,
+    /// The rows' titles and categories, prepared for search.
+    targets: fuzzy::Targets<2>,
+    marker: Color,
 }
 
 /// `sortModelOptions`: OpenCode Go, then OpenCode, then by provider name, free models first; stable otherwise.
-fn sort_rows(rows: &mut [Row], grouped: bool) {
+fn sort_rows<R: std::borrow::Borrow<Row>>(rows: &mut [R], grouped: bool) {
     rows.sort_by(|a, b| {
+        let (a, b) = (a.borrow(), b.borrow());
         let provider = if grouped {
             (b.provider_id == "opencode-go")
                 .cmp(&(a.provider_id == "opencode-go"))
@@ -39,11 +58,6 @@ fn sort_rows(rows: &mut [Row], grouped: bool) {
         let name = if grouped { locale_compare(&a.provider_name, &b.provider_name) } else { std::cmp::Ordering::Equal };
         provider.then(name).then(b.free.cmp(&a.free))
     });
-}
-
-/// `prioritizeFavorites`: favorites first, stable otherwise.
-fn prioritize<T>(items: &mut [T], value: impl Fn(&T) -> &Model, favorites: &[String]) {
-    items.sort_by_key(|item| !favorites.contains(&value(item).key()));
 }
 
 pub fn show(local: &Rc<Local>, provider: Option<String>) {
@@ -70,10 +84,14 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
     let saved = favorites.clone();
     let favorites_at_open = cx.keep(move || saved.clone()).unwrap_or(favorites);
     let marker = cx.theme.text.formfield.selected;
+    let catalog: Rc<RefCell<Option<Catalog>>> = Rc::default();
     let options: select::Options<Model> = {
-        let provider = provider.clone();
+        let (provider, catalog) = (provider.clone(), catalog.clone());
         Rc::new(bind!(local, |local, query: &str| {
-            options(&local, provider.as_deref(), query, &favorites_at_open, marker)
+            let mut catalog = catalog.borrow_mut();
+            let catalog =
+                catalog.get_or_insert_with(|| Catalog::new(&local, provider.as_deref(), &favorites_at_open, marker));
+            catalog.options(query)
         }))
     };
     let title = provider
@@ -126,137 +144,131 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
             local.app.defer(move |_| open(&again, provider, filter));
             return;
         }
+        catalog.take();
         handle.set_options(options(&handle.filter()));
     })));
     view
 }
 
-fn options(
-    local: &Local,
-    provider: Option<&str>,
-    query: &str,
-    favorites_at_open: &[Model],
-    marker: Color,
-) -> Vec<SelectOption<Model>> {
-    local.models(|models| {
-        local.providers(|providers| {
-            catalog_options(local, models, providers, provider, query, favorites_at_open, marker)
+impl Catalog {
+    fn new(local: &Local, provider: Option<&str>, favorites_at_open: &[Model], marker: Color) -> Self {
+        local.models(|models| {
+            local.providers(|providers| Self::of(local, models, providers, provider, favorites_at_open, marker))
         })
-    })
-}
+    }
 
-fn catalog_options(
-    local: &Local,
-    models: &[ModelInfo],
-    providers: &[ProviderInfo],
-    provider: Option<&str>,
-    query: &str,
-    favorites_at_open: &[Model],
-    marker: Color,
-) -> Vec<SelectOption<Model>> {
-    let needle = query.trim();
-    let connected = local.connected();
-    let show_sections = connected && provider.is_none() && needle.is_empty();
-    let favorites: Vec<Model> = if connected { favorites_at_open.to_vec() } else { Vec::new() };
-    let favorite_now = local.favorite();
-    let favorite_priority: Vec<String> = favorites_at_open.iter().map(Model::key).collect();
-    let recents = local.recent();
-    let provider_name = |id: &str| {
-        providers.iter().find(|item| item.id.0 == id).map_or(id.to_owned(), |provider| provider.name.clone())
-    };
-    // The trailing slot only marks favorites.
-    let marked = |option: &mut SelectOption<Model>, favorite: bool| {
-        if favorite {
-            option.footer = Some("*".to_owned());
-            option.footer_fg = Some(marker);
-        }
-    };
-    let section = |items: &[Model], category: &str| -> Vec<SelectOption<Model>> {
-        if !show_sections {
-            return Vec::new();
-        }
-        items
-            .iter()
-            .filter_map(|item| {
-                let model = models.iter().find(|model| is(model, item))?;
-                let mut option = SelectOption::new(model.name.clone(), Model::new(&model.provider_id.0, &model.id))
-                    .description(provider_name(&model.provider_id.0))
-                    .category(category);
-                marked(&mut option, favorite_now.contains(item));
-                Some(option)
-            })
-            .collect()
-    };
-    let favorite_options = section(&favorites, "Favorites");
-    let recent_items: Vec<Model> = recents.iter().filter(|item| !favorites.contains(item)).cloned().collect();
-    let recent_options = section(&recent_items, "Recent");
-
-    // OpenCode's own free models get their own group at the end of the list instead of joining "OpenCode".
-    let free_group = |model: &ModelInfo| provider.is_none() && model.provider_id.0 == "opencode" && is_free(model);
-    let mut rows: Vec<Row> = models
-        .iter()
-        .filter(|model| !matches!(model.status, ModelInfoStatus::Deprecated))
-        .filter(|model| provider.is_none_or(|id| model.provider_id.0 == id))
-        .map(|model| {
-            let value = Model::new(&model.provider_id.0, &model.id);
-            let name = provider_name(&model.provider_id.0);
-            let favorite = favorite_now.contains(&value);
-            Row {
-                provider_id: model.provider_id.0.clone(),
-                provider_name: name.clone(),
-                title: model.name.clone(),
-                category: connected.then(|| if free_group(model) { "Free".to_owned() } else { name }),
-                favorite,
-                free: is_free(model),
-                value,
+    fn of(
+        local: &Local,
+        models: &[ModelInfo],
+        providers: &[ProviderInfo],
+        provider: Option<&str>,
+        favorites_at_open: &[Model],
+        marker: Color,
+    ) -> Self {
+        let connected = local.connected();
+        let sections = connected && provider.is_none();
+        let favorites: Vec<Model> = if connected { favorites_at_open.to_vec() } else { Vec::new() };
+        let favorite_now = local.favorite();
+        let favorite_priority: Vec<String> = favorites_at_open.iter().map(Model::key).collect();
+        let recents = local.recent();
+        let provider_name = |id: &str| {
+            providers.iter().find(|item| item.id.0 == id).map_or(id.to_owned(), |provider| provider.name.clone())
+        };
+        let section = |items: &[Model], category: &str| -> Vec<SelectOption<Model>> {
+            if !sections {
+                return Vec::new();
             }
-        })
-        .filter(|row| !show_sections || (!favorites.contains(&row.value) && !recents.contains(&row.value)))
-        .collect();
-    sort_rows(&mut rows, connected);
+            items
+                .iter()
+                .filter_map(|item| {
+                    let model = models.iter().find(|model| is(model, item))?;
+                    let mut option = SelectOption::new(model.name.clone(), Model::new(&model.provider_id.0, &model.id))
+                        .description(provider_name(&model.provider_id.0))
+                        .category(category);
+                    marked(&mut option, favorite_now.contains(item), marker);
+                    Some(option)
+                })
+                .collect()
+        };
+        let favorite_options = section(&favorites, "Favorites");
+        let recent_items: Vec<Model> = recents.iter().filter(|item| !favorites.contains(item)).cloned().collect();
+        let recent_options = section(&recent_items, "Recent");
 
-    let to_option = |row: Row| {
-        let mut option = SelectOption::new(row.title, row.value);
-        option.category = row.category;
-        marked(&mut option, row.favorite);
-        option
-    };
-    if !needle.is_empty() {
-        let matches = fuzzy::go_scored(
-            needle,
-            &rows,
-            |row| [Some(row.title.as_str()), row.category.as_deref()],
-            |_, score, _| score,
-            0.0,
-            usize::MAX,
-        );
-        let mut results: Vec<Row> = matches.into_iter().map(|index| rows[index].clone()).collect();
-        sort_rows(&mut results, false);
-        prioritize(&mut results, |row| &row.value, &favorite_priority);
-        return results
-            .into_iter()
-            .map(|row| {
-                // Search results name the provider inline. Without a category, the trailing slot keeps the
-                // favorite marker instead of falling back to the provider name.
-                let name = row.provider_name.clone();
-                let mut option = to_option(row);
-                option.description = Some(name);
-                option.category = None;
-                option
+        // OpenCode's own free models get their own group at the end of the list instead of joining "OpenCode".
+        let free_group = |model: &ModelInfo| provider.is_none() && model.provider_id.0 == "opencode" && is_free(model);
+        let mut rows: Vec<Row> = models
+            .iter()
+            .filter(|model| !matches!(model.status, ModelInfoStatus::Deprecated))
+            .filter(|model| provider.is_none_or(|id| model.provider_id.0 == id))
+            .map(|model| {
+                let value = Model::new(&model.provider_id.0, &model.id);
+                let name = provider_name(&model.provider_id.0);
+                Row {
+                    provider_id: model.provider_id.0.clone(),
+                    provider_name: name.clone(),
+                    title: model.name.clone(),
+                    category: connected.then(|| if free_group(model) { "Free".to_owned() } else { name }),
+                    favorite: favorite_now.contains(&value),
+                    free: is_free(model),
+                    pinned: favorites.contains(&value) || recents.contains(&value),
+                    priority: favorite_priority.contains(&value.key()),
+                    value,
+                }
             })
             .collect();
+        sort_rows(&mut rows, connected);
+        let targets = fuzzy::Targets::new(&rows, |row| [Some(row.title.as_str()), row.category.as_deref()]);
+        Self { connected, sections, favorites: favorite_options, recents: recent_options, rows, targets, marker }
     }
-    if !connected {
-        prioritize(&mut rows, |row| &row.value, &favorite_priority);
-        return rows.into_iter().map(to_option).collect();
+
+    fn options(&self, query: &str) -> Vec<SelectOption<Model>> {
+        let needle = query.trim();
+        if !needle.is_empty() {
+            let matches = fuzzy::go_prepared(needle, &self.targets, |_, score, _| score, 0.0, usize::MAX);
+            let mut results: Vec<&Row> = matches.into_iter().map(|index| &self.rows[index]).collect();
+            sort_rows(&mut results, false);
+            results.sort_by_key(|row| !row.priority);
+            return results
+                .into_iter()
+                .map(|row| {
+                    // Search results name the provider inline. Without a category, the trailing slot keeps the
+                    // favorite marker instead of falling back to the provider name.
+                    let mut option = SelectOption::new(row.title.clone(), row.value.clone());
+                    option.description = Some(row.provider_name.clone());
+                    marked(&mut option, row.favorite, self.marker);
+                    option
+                })
+                .collect();
+        }
+        let option = |row: &Row| {
+            let mut option = SelectOption::new(row.title.clone(), row.value.clone());
+            option.category = row.category.clone();
+            marked(&mut option, row.favorite, self.marker);
+            option
+        };
+        if !self.connected {
+            let mut rows: Vec<&Row> = self.rows.iter().collect();
+            rows.sort_by_key(|row| !row.priority);
+            return rows.into_iter().map(option).collect();
+        }
+        let listed = self.rows.iter().filter(|row| !self.sections || !row.pinned);
+        let (free, paid): (Vec<&Row>, Vec<&Row>) = listed.partition(|row| row.category.as_deref() == Some("Free"));
+        self.favorites
+            .iter()
+            .chain(&self.recents)
+            .cloned()
+            .chain(paid.into_iter().map(option))
+            .chain(free.into_iter().map(option))
+            .collect()
     }
-    let (free, paid): (Vec<Row>, Vec<Row>) = rows.into_iter().partition(|row| row.category.as_deref() == Some("Free"));
-    favorite_options
-        .into_iter()
-        .chain(recent_options)
-        .chain(paid.into_iter().map(to_option))
-        .chain(free.into_iter().map(to_option))
-        .collect()
+}
+
+/// Marks a favorite in the trailing slot, which only marks favorites.
+fn marked(option: &mut SelectOption<Model>, favorite: bool, marker: Color) {
+    if favorite {
+        option.footer = Some("*".to_owned());
+        option.footer_fg = Some(marker);
+    }
 }
 
 /// `ModelDetail`: the selected model's price (unless `price` is false), input modalities, context window, and
