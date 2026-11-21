@@ -43,7 +43,10 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
               { status: 401 },
             )
           }
-          if (!browser) return { token }
+          if (!browser) {
+            const name = yield* ServerInfo.deviceName
+            return name === undefined ? { token } : { token, device: { name } }
+          }
           return HttpServerResponse.redirect("/").pipe(
             HttpServerResponse.setCookieUnsafe(ServerAuth.sessionCookieName(request.headers.host), token, {
               path: "/",
