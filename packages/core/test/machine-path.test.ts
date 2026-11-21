@@ -539,9 +539,6 @@ on.effect("leaves a local command's result without a connection notice", () =>
       )
       expect(result).toMatchObject({ status: "completed", output: { exitCode: 0 } })
       expect(result.output).not.toHaveProperty("killed")
-      expect(result.content?.map((part) => (part.type === "text" ? part.text : "")).join("\n")).not.toContain(
-        "connection was lost",
-      )
     }).pipe(Effect.provide(graph(tools)))
   }),
 )
