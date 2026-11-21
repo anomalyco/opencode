@@ -507,8 +507,10 @@ mod tests {
 
     #[tokio::test]
     async fn answers_requests_and_protocol_errors_in_order() {
+        // JavaScript's `trim`: a byte order mark goes, U+0085 stays, so `[]\u{85}` is no batch.
         let (messages, closed) = exchange(
-            b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"nope\"}\r\nnot json\n5\n\n{\"id\":2}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"echo\",\"params\":{\"a\":1}}",
+            "\u{feff}{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"nope\"}\r\n[]\u{85}\n5\n\n{\"id\":2}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"echo\",\"params\":{\"a\":1}}"
+                .as_bytes(),
         )
         .await;
         assert_eq!(closed, Closed::Eof);
@@ -519,22 +521,6 @@ mod tests {
                 json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": "Parse error" } }),
                 json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32600, "message": "Invalid request", "data": 5 } }),
                 json!({ "jsonrpc": "2.0", "id": 3, "result": { "a": 1 } }),
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn lines_trim_as_javascript_does() {
-        // A byte order mark is white space to `trim`; U+0085 is not, so the second line is no batch.
-        let input = "\u{feff}{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"echo\"}\n[]\u{85}\n";
-        let (mut messages, closed) = exchange(input.as_bytes()).await;
-        assert_eq!(closed, Closed::Eof);
-        messages.sort_by_key(Value::to_string);
-        assert_eq!(
-            messages,
-            [
-                json!({ "jsonrpc": "2.0", "id": 1, "result": null }),
-                json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": "Parse error" } }),
             ]
         );
     }
