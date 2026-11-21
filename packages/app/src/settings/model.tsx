@@ -126,6 +126,7 @@ const generalSchema = Persistence.struct({
     commentary: placementOnlySchema,
   }),
   showCustomAgents: Schema.Boolean,
+  showArchivedShortcut: Schema.Boolean,
   showTurnDiffs: Schema.Boolean,
   backgroundActivity: Schema.Literals(["off", "left", "center", "right"]),
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
@@ -310,6 +311,7 @@ export const defaultSettings: Settings = {
   general: {
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: true,
+    showArchivedShortcut: true,
     showTurnDiffs: false,
     backgroundActivity: "left",
     timelineWidth: "comfortable",
@@ -429,6 +431,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showCustomAgents,
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
+        },
+        showArchivedShortcut: withFallback(
+          () => store.general?.showArchivedShortcut,
+          defaultSettings.general.showArchivedShortcut,
+        ),
+        setShowArchivedShortcut(value: boolean) {
+          setStore("general", "showArchivedShortcut", value)
         },
         showTurnDiffs: withFallback(() => store.general?.showTurnDiffs, defaultSettings.general.showTurnDiffs),
         setShowTurnDiffs(value: boolean) {

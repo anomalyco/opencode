@@ -31,6 +31,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
   {
     tab: "general",
+    label: "settings.general.row.showArchivedShortcut.title",
+    description: "settings.general.row.showArchivedShortcut.description",
+    target: "settings-show-archived-shortcut",
+    keywords: "sidebar inbox archive hide shortcut",
+  },
+  {
+    tab: "general",
     label: "settings.general.row.interfaceMode.title",
     target: "settings-tab-layout",
     keywords: "top side tabs inbox sidebar mode layout vertical horizontal focus pro",

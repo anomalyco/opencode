@@ -25,6 +25,7 @@ import { Loader } from "@opencode/ui/loader"
 import { displayName } from "@opencode/ui/project-avatar"
 import { useServers } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useSettings } from "@/settings/model"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { LocalProject } from "@/shell/state/layout"
@@ -50,7 +51,12 @@ export function SidebarInbox() {
   const language = useLanguage()
   const dialog = useDialog()
   const servers = useServers()
-  const inbox = createSessionInbox({ archived: true })
+  const settings = useSettings()
+  const inbox = createSessionInbox({
+    get archived() {
+      return settings.general.showArchivedShortcut()
+    },
+  })
 
   const exporter = createSessionExporter()
 
@@ -293,7 +299,7 @@ export function SidebarInbox() {
         },
         onToggle: () => setState("workingExpanded", !state.workingExpanded),
       }}
-      archived={sections().archived}
+      archived={settings.general.showArchivedShortcut() && sections().archived}
       onArchived={async () => {
         const { DialogSessionSearch } = await import("@/shell/commands/session-search")
 
