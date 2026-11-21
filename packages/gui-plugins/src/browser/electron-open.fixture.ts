@@ -247,6 +247,8 @@ void electron.app.whenReady().then(async () => {
   // The person's two tabs have loaded, however long the first pages of a new process took.
   await until(() => last().length === 2 && last().every((item) => item.url.startsWith(origin) && !item.loading), 10_000)
   const before = last().map((item) => item.url)
+  // What the window has heard so far, which it registers again with at the end.
+  const heard = last()
   // The still-loading page's command settles when the deadline passes; the page goes on loading.
   const [still, failed] = await Promise.all([open(`${origin}/loading`), open(`${origin}/dropped`)])
   // Every report that follows the commands: the page that shows, and the one that says why it could not load.
@@ -293,10 +295,17 @@ void electron.app.whenReady().then(async () => {
     preview: await asked({ type: "preview", path: "report.html" }, "/report.html"),
   }
 
+  // The window registers again with the inventory it last took in, as when its session moves or its server signs in
+  // again, while the reports of the tabs opened since are still on their way to it.
+  const held = last().map((item) => item.url)
+  await pane.register(win.id, "binding-again", { server: "sidecar", session: "ses_fixture", restore: { tabs: heard, focusedTabID: heard[0]?.id ?? null } })
+  const registered = { held, again: last().map((item) => item.url) }
+
   process.stdout.write(
     `${JSON.stringify({
       origin,
       person,
+      registered,
       // The still-loading page committed and showed: an inventory listed its tab at its address.
       committed: reported.some((tabs) => tabs.some((item) => item.url === `${origin}/loading`)),
       plugin,
