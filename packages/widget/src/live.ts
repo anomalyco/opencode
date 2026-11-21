@@ -13,7 +13,7 @@ import {
   platformTransport,
   type Transport,
 } from "./fetch.js"
-import type { Capabilities } from "./template.js"
+import type { Capabilities } from "./widget-template.js"
 
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
 export type LiveFrame = Omit<Frame, "id">
@@ -102,7 +102,7 @@ export interface LiveOptions {
   readonly postsPerSecond?: number
   /** Every valid message the program posts, in order. */
   readonly onMessage?: (message: LiveMessage) => void
-  /** The template's capabilities; without `https`, `fetch` rejects with `CapabilityDenied`. */
+  /** The widget template's capabilities; without `https`, `fetch` rejects with `CapabilityDenied`. */
   readonly capabilities?: Capabilities
   /** Performs `fetch` requests that passed the contract's checks; the platform `fetch` by default. */
   readonly transport?: Transport
@@ -110,7 +110,7 @@ export interface LiveOptions {
 
 /**
  * A running live widget (specs/v2/widgets-live.md) on the TypeScript interpreter: the reference host for client authors
- * and the test harness for live templates. Feed it client input with `event` and `frame`, `pause` and `resume` it as
+ * and the test harness for live widget templates. Feed it client input with `event` and `frame`, `pause` and `resume` it as
  * the widget leaves and comes back into view, and read the last `view` and canvas `drawings`.
  */
 export interface LiveWidget {

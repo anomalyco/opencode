@@ -48,7 +48,7 @@ export function createWidgetFocus(
 
 type Status = WidgetInfo["status"]
 
-/** A widget message in the timeline: loads its template program, runs steps and sends the response. */
+/** A widget message in the timeline: loads its widget template program, runs steps and sends the response. */
 export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }) {
   const theme = useTheme()
   const backend = useWidgetBackend()
@@ -62,31 +62,33 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
     failure?: string
     error?: string
     sending: boolean
-    /** A live template, which this client does not run. */
+    /** A live widget template, which this client does not run. */
     live?: boolean
     sent?: Status
     response?: unknown
   }>({ sending: false })
   const [session, setSession] = createSignal<WidgetSession>()
-  // Lines in the template source, so a position past it (in the appended entry) isn't reported as the template's.
+  // Lines in the widget template source, so a position past it (in the appended entry) isn't reported as the widget template's.
   const source = { lines: 0 }
 
   const status = () => (props.message.status === "open" ? (store.sent ?? "open") : props.message.status)
   const interactive = () => status() === "open" && !store.sending && session() !== undefined
   const active = () =>
     interactive() && props.focus.engaged() === props.message.id && keymap.mode.current() === WIDGET_MODE
-  const title = () => props.message.title || props.message.template.name
+  const title = () => props.message.title || props.message.widgetTemplate.name
 
-  // Keyed by the template version so a status update keeps the view the user just answered.
-  const template = createMemo(() => `${props.message.template.name}@${props.message.template.version}`)
+  // Keyed by the widget template version so a status update keeps the view the user just answered.
+  const widgetTemplate = createMemo(
+    () => `${props.message.widgetTemplate.name}@${props.message.widgetTemplate.version}`,
+  )
   createEffect(
-    on(template, () => {
+    on(widgetTemplate, () => {
       let current = true
       onCleanup(() => (current = false))
       setStore({ view: undefined, failure: undefined, error: undefined, live: false })
       setSession(undefined)
       void backend
-        .program(props.message.template)
+        .program(props.message.widgetTemplate)
         .then((loaded) => {
           // The TUI does not run live programs yet (widgets-live.md).
           if (loaded.mode === "live") return void (current && setStore("live", true))
@@ -118,7 +120,7 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
       .dispatch(event)
       .then((output) => {
         if (session() !== current) return
-        output.warnings?.forEach((warning) => log.warn(warning, { template: props.message.template.name }))
+        output.warnings?.forEach((warning) => log.warn(warning, { widgetTemplate: props.message.widgetTemplate.name }))
         setStore({ view: output.view, error: undefined })
         if (output.dismiss) return respond({ dismiss: true })
         // Programs run on a JSON-only interpreter, so a submitted or sent value is always JSON.
@@ -132,8 +134,8 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
       })
   }
 
-  // The server never runs templates, so a program error (a StepError: the template's code failed or broke a contract)
-  // goes back to the server, which tells the agent when the template is this Session's. Anything else is a client
+  // The server never runs widget templates, so a program error (a StepError: the widget template's code failed or broke a contract)
+  // goes back to the server, which tells the agent when the widget template is this Session's. Anything else is a client
   // error: logged in dev builds, never reported (widgets.md, Failures).
   function report(phase: "init" | "event", error: unknown) {
     if (!(error instanceof StepError)) return clientError("a widget step failed", error)
@@ -160,7 +162,7 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
   }
 
   function clientError(message: string, cause: unknown) {
-    if (dev) log.warn(message, { template: props.message.template.name, cause: errorMessage(cause) })
+    if (dev) log.warn(message, { widgetTemplate: props.message.widgetTemplate.name, cause: errorMessage(cause) })
   }
 
   function send(value: JsonValue, wake: boolean) {
@@ -320,7 +322,7 @@ function liveAlt(data: unknown) {
   return `${data.alt} · Open this widget on desktop or mobile.`
 }
 
-// The interpreter counts lines in the whole program, prelude included; reports count them in the template source.
+// The interpreter counts lines in the whole program, prelude included; reports count them in the widget template source.
 const preludeLines = program("").split("\n").length - 1
 
 function failureText(failure: {

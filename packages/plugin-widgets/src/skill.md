@@ -17,8 +17,8 @@ The `widget` tool shows an interactive surface inline in the conversation, rende
 Decide in this order:
 
 1. A **built-in** fits (table below)? Use it with data; nothing to write.
-2. It changes only when the user acts? Write a **step** template (cheaper, works everywhere, the terminal included).
-3. Something happens on its own (time, frames, polling)? Write a **live** template (`mode: "live"`).
+2. It changes only when the user acts? Write a **step** widget template (cheaper, works everywhere, the terminal included).
+3. Something happens on its own (time, frames, polling)? Write a **live** widget template (`mode: "live"`).
 4. Inside either: plain nodes for UI and text, `canvas` for exact 2D shapes and pointer input, `shader` for
    full-surface GPU effects (it can't draw text; put text in nodes beside it).
 
@@ -26,7 +26,7 @@ Not for one free-text question, a passing yes/no or an explanation (use `questio
 
 ## Showing one
 
-- `data` is a JSON object matching the template's schema; fix errors from the tool and call again. Give a short `title`.
+- `data` is a JSON object matching the widget template's schema; fix errors from the tool and call again. Give a short `title`.
 - Images: real `https:` URLs, `data:` URIs, or paths relative to the session directory. Never invent URLs.
 - Without `wait`: end your turn; don't repeat the options in text. The answer arrives as
   `User responded to widget "<title>": <JSON>` / `User dismissed widget "<title>"`; open widgets may also send
@@ -41,7 +41,7 @@ Not for one free-text question, a passing yes/no or an explanation (use `questio
 All take `title`. Exact schemas: `widget_template` `list`; real sources to copy: `widget_template` `get <name>`.
 Diagrams submit nothing unless `choose: true` adds a Choose button that submits the selected element.
 
-| Template | Data | Submits |
+| Widget template | Data | Submits |
 | --- | --- | --- |
 | `suggestions` | `options: { label, note?, images[1-3], recommended? }[2-3]`, `allowNote?` | `{ choice, index, note? }` |
 | `form` | `fields[]` of `text`, `number` (slider: min, max, step), `boolean`, `select` (options, multiple) | `{ [key]: value }` |
@@ -56,16 +56,16 @@ Diagrams submit nothing unless `choose: true` adds a Choose button that submits 
 `gauge` 1–4 KPIs with targets · `boxplot` groups ≤ 12 · `flowchart` nodes and edges · `sequence` participants and
 messages · `table` ≤ 50 sortable rows with sparklines. For one or two plain series, use `chart`.
 
-## Writing a template
+## Writing a widget template
 
 `widget_template` `save`: `name`, `description`, `data` (JSON Schema, `type: "object"`), `source`, an `example`
-matching the schema, `mode: "live"` for live ones. Saving again makes a new version; templates persist, so keep them
-general and put specifics in `data`. To change a template, prefer `edit` (`edits: [{ oldText, newText }]`, each
-matching once) over resending the source; a template you didn't create in this session, change only when the user
+matching the schema, `mode: "live"` for live ones. Saving again makes a new version; widget templates persist, so keep them
+general and put specifics in `data`. To change a widget template, prefer `edit` (`edits: [{ oldText, newText }]`, each
+matching once) over resending the source; a widget template you didn't create in this session, change only when the user
 asks, otherwise copy it with `from` under a new name. The server only parses and lints the source (entry functions,
 only function and `const` declarations at the top level, no prelude names redeclared, ≤ 128 KB). A program error
 comes back as `Widget "<title>" failed on <client>: <phase>: <message> (line N, col M)` (the tool error with
-`wait: true`), on its own for templates saved in this session, otherwise when the user asks you to fix it: fix the
+`wait: true`), on its own for widget templates saved in this session, otherwise when the user asks you to fix it: fix the
 source, save it and show the widget again.
 
 **Handlers.** Attach handlers to nodes (`onPress`, `onChange`, `onPointer`); the prelude gives nodes ids and routes

@@ -92,7 +92,7 @@ export interface Input {
 export interface Divider {
   readonly type: "divider"
 }
-/** Drawn by the template's `draw(state, data, frame)`; sends `pointer` events when it has an `id` (prelude-assigned). */
+/** Drawn by the widget template's `draw(state, data, frame)`; sends `pointer` events when it has an `id` (prelude-assigned). */
 export interface Canvas {
   readonly type: "canvas"
   readonly id?: string
@@ -179,7 +179,7 @@ export type WidgetEvent =
 
 /** What `draw` gets: the canvas being drawn, the time, its size and the pointer over it. */
 export interface Frame {
-  /** The canvas node's id. The prelude hands the template `frame.key` (the canvas's `key`, or null) instead. */
+  /** The canvas node's id. The prelude hands the widget template `frame.key` (the canvas's `key`, or null) instead. */
   readonly id: string | null
   /** Seconds since the canvas appeared. */
   readonly t: number

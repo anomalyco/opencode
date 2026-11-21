@@ -61,4 +61,4 @@ export {
   type Transport,
 } from "./fetch.js"
 export { draw, StepError, type StepOptions, TIMEOUT_MS, WidgetSession, step } from "./session.js"
-export { builtins, type Capabilities, type Mode, NAME, type Template } from "./template.js"
+export { builtins, type Capabilities, type Mode, NAME, type WidgetTemplate } from "./widget-template.js"

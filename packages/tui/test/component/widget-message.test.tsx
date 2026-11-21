@@ -36,7 +36,9 @@ async function render(
   const asks: Parameters<WidgetBackend["report"]>[0]["error"][] = []
   const [message, setMessage] = createSignal({ ...widgetFixtureMessage(name, options.status), ...options.widget })
   const backend: WidgetBackend = {
-    program: options.program ?? ((template) => cached(template, () => Promise.reject(new Error("not a built-in")))),
+    program:
+      options.program ??
+      ((widgetTemplate) => cached(widgetTemplate, () => Promise.reject(new Error("not a built-in")))),
     async respond(input) {
       responses.push(input.response)
       setMessage((current) => ({
@@ -140,7 +142,7 @@ test("a failing step is reported to the agent", async () => {
   expect(setup.reports).toEqual([{ phase: "event", message: "Error: boom" }])
 })
 
-test("a template that fails to load is reported, with no position past the template's source", async () => {
+test("a widget template that fails to load is reported, with no position past the widget template's source", async () => {
   const source = 'function view() {\n  return ui.text("x")\n}\nfunction helper( {\n}'
   using setup = await render("confirm", { program: async () => ({ program: program(source), mode: "step" }) })
   await frame(setup, (current) => current.includes("Widget failed to load"))

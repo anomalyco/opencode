@@ -12,7 +12,7 @@ import { WidgetLint } from "../src/lint.js"
 
 const sessionID = Session.ID.make("ses_widget_test")
 const messageID = SessionMessage.ID.make("msg_widget_assistant")
-const confirm = builtins.find((template) => template.name === "confirm")!
+const confirm = builtins.find((widgetTemplate) => widgetTemplate.name === "confirm")!
 const confirmData = { title: "Ship it?", message: "Deploys main." }
 
 const pickerSource = `function view(state, data) {
@@ -55,19 +55,24 @@ describe("widget tool", () => {
     run((fake) =>
       Effect.gen(function* () {
         const at = context()
-        const result = yield* execute(fake, "widget", { template: "confirm", data: confirmData, title: "Deploy" }, at)
+        const result = yield* execute(
+          fake,
+          "widget",
+          { widgetTemplate: "confirm", data: confirmData, title: "Deploy" },
+          at,
+        )
 
         expect(result).toEqual(
           Exit.succeed({
             content: WidgetTools.shownText("Deploy", at.id),
-            metadata: { template: { name: "confirm", version: confirm.version } },
+            metadata: { widgetTemplate: { name: "confirm", version: confirm.version } },
           }),
         )
         const expected = {
           sessionID,
           messageID,
           callID: at.id,
-          template: { name: "confirm", version: confirm.version },
+          widgetTemplate: { name: "confirm", version: confirm.version },
           title: "Deploy",
           status: "open",
           wait: false,
@@ -76,22 +81,22 @@ describe("widget tool", () => {
         expect(fake.events).toMatchObject([{ name: "changed", data: { sessionID, state: expected } }])
         expect(fake.asserted).toEqual([{ action: "widget", resources: ["confirm"] }])
         // The built-in version the widget uses is stored, so it stays retrievable after a release changes it.
-        expect(fake.storage.has(`template:confirm:${confirm.version}`)).toBe(true)
+        expect(fake.storage.has(`widget_template:confirm:${confirm.version}`)).toBe(true)
       }),
     ))
 
-  test("returns data that misses the template's schema to the model without posting", () =>
+  test("returns data that misses the widget template's schema to the model without posting", () =>
     run((fake) =>
       Effect.gen(function* () {
-        const result = yield* execute(fake, "widget", { template: "confirm", data: { title: "Ship it?" } })
+        const result = yield* execute(fake, "widget", { widgetTemplate: "confirm", data: { title: "Ship it?" } })
 
         expect(failure(result)).toEqual(
           new Tool.Error({ message: 'Invalid data for widget template "confirm": /message: is required' }),
         )
         expect(yield* states(fake)).toEqual([])
-        expect(yield* execute(fake, "widget", { template: "nope", data: {} }).pipe(Effect.map(Exit.isFailure))).toBe(
-          true,
-        )
+        expect(
+          yield* execute(fake, "widget", { widgetTemplate: "nope", data: {} }).pipe(Effect.map(Exit.isFailure)),
+        ).toBe(true)
       }),
     ))
 })
@@ -122,11 +127,11 @@ describe("widget templates", () => {
           builtin: false,
         })
         expect(yield* fake.call("program", { name: "picker", version: first })).toMatchObject({ source: pickerSource })
-        const listed = yield* fake.call<ReadonlyArray<Widget.Summary>>("templates", {})
-        expect(listed.map((template) => template.name)).toEqual(
-          [...builtins.map((template) => template.name), "picker"].toSorted(),
+        const listed = yield* fake.call<ReadonlyArray<Widget.Summary>>("widgetTemplates", {})
+        expect(listed.map((widgetTemplate) => widgetTemplate.name)).toEqual(
+          [...builtins.map((widgetTemplate) => widgetTemplate.name), "picker"].toSorted(),
         )
-        expect(listed.find((template) => template.name === "picker")).toEqual({
+        expect(listed.find((widgetTemplate) => widgetTemplate.name === "picker")).toEqual({
           name: "picker",
           version: second,
           description: "Pick one",
@@ -136,7 +141,9 @@ describe("widget templates", () => {
         })
 
         expect(failure(yield* save({ name: "form" }))).toEqual(
-          new Tool.Error({ message: 'Invalid widget template "form": built-in templates cannot be overwritten' }),
+          new Tool.Error({
+            message: 'Invalid widget template "form": built-in widget templates cannot be overwritten',
+          }),
         )
         expect(yield* save({ example: { items: [] } }).pipe(Effect.map(Exit.isFailure))).toBe(true)
         expect(
@@ -146,16 +153,16 @@ describe("widget templates", () => {
     ))
 })
 
-test("the template tool says when to change an existing template and when to copy it", () =>
+test("the widget template tool says when to change an existing widget template and when to copy it", () =>
   run((fake) =>
     Effect.sync(() => {
       expect(fake.tools.get("widget_template")!.description).toContain(
-        "Edit or save over an existing template only when the user asks or you created it in this session; otherwise copy it with from under a new name.",
+        "Edit or save over an existing widget template only when the user asks or you created it in this session; otherwise copy it with from under a new name.",
       )
     }),
   ))
 
-describe("template edits", () => {
+describe("widget template edits", () => {
   const save = (fake: Effect.Success<typeof make>) =>
     execute(fake, "widget_template", {
       action: "save",
@@ -231,7 +238,7 @@ describe("template edits", () => {
         ).toContain('edit 2: oldText was not found in the source of "picker" after the earlier edits')
         expect(reason(yield* edit(fake, { edits: [] }))).toContain("`edits` is empty")
         expect(reason(yield* edit(fake, { edits: [{ oldText: "view", newText: "show" }] }))).toContain(
-          "a step template must define `function view(state, data)`",
+          "a step widget template must define `function view(state, data)`",
         )
         expect(
           reason(yield* edit(fake, { edits: [{ oldText: "{}", newText: "{ gap: 1 }" }], data: pickerSchema })),
@@ -253,7 +260,7 @@ describe("template edits", () => {
         expect(
           reason(yield* edit(fake, { name: "confirm", edits: [{ oldText: "Confirm", newText: "Yes" }] })),
         ).toContain(
-          'built-in templates can\'t be edited; copy it under a new name: { action: "edit", name: "my-confirm", from: "confirm"',
+          'built-in widget templates can\'t be edited; copy it under a new name: { action: "edit", name: "my-confirm", from: "confirm"',
         )
         expect(
           reason(
@@ -263,7 +270,7 @@ describe("template edits", () => {
               edits: [{ oldText: '"Confirm"', newText: '"Yes"' }],
             }),
           ),
-        ).toContain("built-in templates cannot be overwritten")
+        ).toContain("built-in widget templates cannot be overwritten")
         const copied = yield* edit(fake, {
           name: "yes-no",
           from: "confirm",
@@ -281,7 +288,7 @@ describe("template edits", () => {
     ))
 })
 
-describe("live templates", () => {
+describe("live widget templates", () => {
   const liveSource = `async function main(data) {
   widget.render(ui.button("Stop", { onPress: () => widget.submit({ stopped: true }) }))
   throw new Error("never runs on the server")
@@ -308,19 +315,21 @@ describe("live templates", () => {
         expect(live).toMatchObject({ mode: "live", source: liveSource })
         expect(live.version).not.toBe(version(liveSource, pickerSchema))
         expect(
-          (yield* fake.call<ReadonlyArray<Widget.Summary>>("templates", {})).find((item) => item.name === "ticker"),
+          (yield* fake.call<ReadonlyArray<Widget.Summary>>("widgetTemplates", {})).find(
+            (item) => item.name === "ticker",
+          ),
         ).toMatchObject({ mode: "live" })
 
         const broken = yield* save({ name: "broken", source: "async function main(data) { let = }" })
         expect(String(failure(broken))).toContain('Invalid widget template "broken": line 1, col 35: SyntaxError')
 
         // The widget tool validates the data and posts without running main.
-        expect(yield* execute(fake, "widget", { template: "ticker", data: { items: ["x"] } })).toMatchObject(
-          Exit.succeed({ metadata: { template: { name: "ticker", version: live.version } } }),
+        expect(yield* execute(fake, "widget", { widgetTemplate: "ticker", data: { items: ["x"] } })).toMatchObject(
+          Exit.succeed({ metadata: { widgetTemplate: { name: "ticker", version: live.version } } }),
         )
-        expect(failure(yield* execute(fake, "widget", { template: "ticker", data: { items: [] } }))).toBeInstanceOf(
-          Tool.Error,
-        )
+        expect(
+          failure(yield* execute(fake, "widget", { widgetTemplate: "ticker", data: { items: [] } })),
+        ).toBeInstanceOf(Tool.Error)
       }),
     ))
 })
@@ -347,7 +356,7 @@ test("every diagram built-in posts with its example data and is listed in the sk
   run((fake) =>
     Effect.gen(function* () {
       for (const [name, data] of Object.entries(examples)) {
-        const result = yield* execute(fake, "widget", { template: name, data })
+        const result = yield* execute(fake, "widget", { widgetTemplate: name, data })
         expect([name, Exit.isSuccess(result) ? "ok" : String(failure(result))]).toEqual([name, "ok"])
         expect(fake.skills[0]!.content).toContain("`" + name + "`")
       }
@@ -371,7 +380,7 @@ describe("capabilities", () => {
       ...input,
     })
 
-  test("stores a live template's capabilities in its version, summary, program and widget states", () =>
+  test("stores a live widget template's capabilities in its version, summary, program and widget states", () =>
     run((fake) =>
       Effect.gen(function* () {
         const capabilities = { https: { hosts: ["api.github.com", "*.githubusercontent.com"] } }
@@ -384,14 +393,14 @@ describe("capabilities", () => {
         expect(granted).toMatchObject({ capabilities })
         expect(granted.version).not.toBe(bare.version)
         expect(
-          (yield* fake.call<ReadonlyArray<Widget.Summary>>("templates", {})).find((item) => item.name === "zen"),
+          (yield* fake.call<ReadonlyArray<Widget.Summary>>("widgetTemplates", {})).find((item) => item.name === "zen"),
         ).toMatchObject({ capabilities })
-        yield* execute(fake, "widget", { template: "zen", data: { items: ["x"] } })
+        yield* execute(fake, "widget", { widgetTemplate: "zen", data: { items: ["x"] } })
         expect((yield* states(fake))[0]).toMatchObject({ capabilities })
       }),
     ))
 
-  test("rejects capabilities on step templates and host lists that are not host names", () =>
+  test("rejects capabilities on step widget templates and host lists that are not host names", () =>
     run((fake) =>
       Effect.gen(function* () {
         const reason = (input: Record<string, unknown>) =>
@@ -399,7 +408,7 @@ describe("capabilities", () => {
 
         expect(
           yield* reason({ mode: "step", source: pickerSource, capabilities: { https: { hosts: ["api.github.com"] } } }),
-        ).toContain("only live templates can declare capabilities")
+        ).toContain("only live widget templates can declare capabilities")
         expect(yield* reason({ capabilities: { https: { hosts: ["https://api.github.com/"] } } })).toContain(
           "is not a host name",
         )
@@ -422,7 +431,7 @@ describe("widget answers", () => {
   const show = (fake: Effect.Success<typeof make>) =>
     Effect.gen(function* () {
       const at = context()
-      yield* execute(fake, "widget", { template: "confirm", data: confirmData, title: "Deploy" }, at)
+      yield* execute(fake, "widget", { widgetTemplate: "confirm", data: confirmData, title: "Deploy" }, at)
       return { sessionID, messageID, callID: at.id }
     })
 
@@ -529,7 +538,7 @@ test("the respond input decodes a dismissal as a dismissal, as the RPC route par
 })
 
 describe("error reports", () => {
-  // The picker template saved in `origin`, shown in `in` (a Session other than the origin, or the same one).
+  // The picker widget template saved in `origin`, shown in `in` (a Session other than the origin, or the same one).
   const show = (fake: Effect.Success<typeof make>, input: { origin?: string; in?: string; wait?: boolean } = {}) =>
     Effect.gen(function* () {
       const origin = Session.ID.make(input.origin ?? sessionID)
@@ -551,7 +560,7 @@ describe("error reports", () => {
       const posted = execute(
         fake,
         "widget",
-        { template: "picker", data: { items: ["a"] }, title: "Pick", wait: input.wait },
+        { widgetTemplate: "picker", data: { items: ["a"] }, title: "Pick", wait: input.wait },
         at,
       )
       const fiber = input.wait ? yield* posted.pipe(Effect.forkChild({ startImmediately: true })) : undefined
@@ -562,7 +571,7 @@ describe("error reports", () => {
     })
   const error = { phase: "view", message: "data.items is undefined", line: 3, column: 12 }
 
-  test("in the template's origin Session: recorded, sent once as a waking message, repeats and floods dropped", () =>
+  test("in the widget template's origin Session: recorded, sent once as a waking message, repeats and floods dropped", () =>
     run((fake) =>
       Effect.gen(function* () {
         const { call } = yield* show(fake)
@@ -631,7 +640,7 @@ describe("error reports", () => {
     run((fake) =>
       Effect.gen(function* () {
         const at = context()
-        yield* execute(fake, "widget", { template: "confirm", data: confirmData, title: "Deploy" }, at)
+        yield* execute(fake, "widget", { widgetTemplate: "confirm", data: confirmData, title: "Deploy" }, at)
         const call = { sessionID, messageID, callID: at.id }
         expect(yield* fake.call("report", { ...call, error, client: "web" })).toMatchObject({
           failure: { sent: false },
@@ -675,7 +684,7 @@ describe("waiting widget tool", () => {
         fake,
         "widget",
         {
-          template: "confirm",
+          widgetTemplate: "confirm",
           data: confirmData,
           title: "Deploy",
           wait: true,
@@ -698,7 +707,7 @@ describe("waiting widget tool", () => {
         expect(yield* Fiber.join(fiber)).toEqual(
           Exit.succeed({
             content: 'User responded to widget "Deploy": {"confirmed":true}',
-            metadata: { template: { name: "confirm", version: confirm.version }, response: { confirmed: true } },
+            metadata: { widgetTemplate: { name: "confirm", version: confirm.version }, response: { confirmed: true } },
           }),
         )
         expect(fake.synthetic.map((message) => message.metadata?.widget)).toMatchObject([{ kind: "message" }])
@@ -714,7 +723,7 @@ describe("waiting widget tool", () => {
         expect(failure(yield* Fiber.join(fiber))).toEqual(
           new Tool.Error({
             message: 'User dismissed widget "Deploy"',
-            metadata: { template: { name: "confirm", version: confirm.version } },
+            metadata: { widgetTemplate: { name: "confirm", version: confirm.version } },
           }),
         )
         expect(fake.synthetic).toEqual([])
@@ -750,13 +759,13 @@ describe("replacing a widget", () => {
     run((fake) =>
       Effect.gen(function* () {
         const first = context()
-        yield* execute(fake, "widget", { template: "confirm", data: confirmData, title: "Deploy" }, first)
+        yield* execute(fake, "widget", { widgetTemplate: "confirm", data: confirmData, title: "Deploy" }, first)
         const second = context()
         const result = yield* execute(
           fake,
           "widget",
           {
-            template: "confirm",
+            widgetTemplate: "confirm",
             data: { ...confirmData, message: "Deploys main and docs." },
             title: "Deploy",
             replaces: first.id,
@@ -790,7 +799,11 @@ describe("replacing a widget", () => {
   test("refuses an unknown call ID without posting", () =>
     run((fake) =>
       Effect.gen(function* () {
-        const result = yield* execute(fake, "widget", { template: "confirm", data: confirmData, replaces: "call_nope" })
+        const result = yield* execute(fake, "widget", {
+          widgetTemplate: "confirm",
+          data: confirmData,
+          replaces: "call_nope",
+        })
         expect((failure(result) as Tool.Error).message).toContain('No widget with call ID "call_nope" in this session')
         expect(yield* states(fake)).toEqual([])
       }),
@@ -803,12 +816,12 @@ describe("replacing a widget", () => {
         const fiber = yield* execute(
           fake,
           "widget",
-          { template: "confirm", data: confirmData, title: "Deploy", wait: true },
+          { widgetTemplate: "confirm", data: confirmData, title: "Deploy", wait: true },
           first,
         ).pipe(Effect.forkChild({ startImmediately: true }))
         while ((yield* states(fake)).length === 0) yield* Effect.yieldNow
         yield* execute(fake, "widget", {
-          template: "confirm",
+          widgetTemplate: "confirm",
           data: confirmData,
           title: "Deploy v2",
           replaces: first.id,

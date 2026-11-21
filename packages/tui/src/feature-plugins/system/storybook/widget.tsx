@@ -7,13 +7,13 @@ import { StoryFooter } from "./footer"
 import type { Story } from "./index"
 import { widgetFixtureMessage, widgetFixtures, type WidgetFixtureName } from "./widget.fixtures"
 
-const templates = Object.keys(widgetFixtures) as WidgetFixtureName[]
+const widgetTemplates = Object.keys(widgetFixtures) as WidgetFixtureName[]
 const statuses: WidgetInfo["status"][] = ["open", "submitted", "dismissed"]
 
 function WidgetStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const theme = props.context.theme
-  const [template, setTemplate] = createSignal<WidgetFixtureName>("suggestions")
+  const [widgetTemplate, setWidgetTemplate] = createSignal<WidgetFixtureName>("suggestions")
   const [narrow, setNarrow] = createSignal(false)
   const [run, setRun] = createSignal(0)
   const [message, setMessage] = createSignal(widgetFixtureMessage("suggestions"))
@@ -22,14 +22,15 @@ function WidgetStory(props: { context: Plugin.Context }) {
   const width = () => (narrow() ? Math.min(48, dimensions().width) : dimensions().width)
 
   const show = (name: WidgetFixtureName, status: WidgetInfo["status"]) => {
-    setTemplate(name)
+    setWidgetTemplate(name)
     setRun((value) => value + 1)
     setMessage(widgetFixtureMessage(name, status, `msg_widget_${name}_${run()}`))
   }
 
   // Responses stay in the story: they flip the fixture message the way the widgets plugin's changed event would.
   const backend: WidgetBackend = {
-    program: (input) => cached(input, () => Promise.reject(new Error(`${input.name} is not a built-in template`))),
+    program: (input) =>
+      cached(input, () => Promise.reject(new Error(`${input.name} is not a built-in widget template`))),
     async respond(input) {
       const response = input.response
       setLast("dismiss" in response ? "dismissed" : JSON.stringify(response.value))
@@ -57,15 +58,19 @@ function WidgetStory(props: { context: Plugin.Context }) {
       },
       {
         bind: "t",
-        title: "Next template",
+        title: "Next widget template",
         group: "Storybook",
-        run: () => show(templates[(templates.indexOf(template()) + 1) % templates.length], message().status),
+        run: () =>
+          show(
+            widgetTemplates[(widgetTemplates.indexOf(widgetTemplate()) + 1) % widgetTemplates.length],
+            message().status,
+          ),
       },
       {
         bind: "s",
         title: "Next status",
         group: "Storybook",
-        run: () => show(template(), statuses[(statuses.indexOf(message().status) + 1) % statuses.length]),
+        run: () => show(widgetTemplate(), statuses[(statuses.indexOf(message().status) + 1) % statuses.length]),
       },
       { bind: "w", title: "Toggle narrow width", group: "Storybook", run: () => setNarrow((value) => !value) },
       { bind: "i", title: "Focus widget", group: "Storybook", run: () => focus.engage(message().id) },
@@ -75,7 +80,7 @@ function WidgetStory(props: { context: Plugin.Context }) {
         group: "Storybook",
         run: () => {
           setLast(undefined)
-          show(template(), "open")
+          show(widgetTemplate(), "open")
         },
       },
     ],
@@ -95,11 +100,11 @@ function WidgetStory(props: { context: Plugin.Context }) {
       <StoryFooter
         context={props.context}
         title="storybook / widget"
-        details={[template(), message().status, narrow() ? "narrow" : "wide"]}
+        details={[widgetTemplate(), message().status, narrow() ? "narrow" : "wide"]}
         status={focus.engaged() ? "widget has the keyboard" : "story keys active"}
         message={last() ? `last response: ${last()}` : "responses stay local to the story"}
         controls={[
-          { shortcut: "t", label: "template" },
+          { shortcut: "t", label: "widgetTemplate" },
           { shortcut: "s", label: "status" },
           { shortcut: "w", label: "width" },
           { shortcut: "i", label: "focus widget" },

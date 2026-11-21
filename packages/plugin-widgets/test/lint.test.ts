@@ -1,10 +1,13 @@
 import { expect, test } from "bun:test"
-import { builtins } from "@opencode/widget/template"
+import { builtins } from "@opencode/widget/widget-template"
 import { WidgetLint } from "../src/lint.js"
 
-test("every built-in template passes the lint", () => {
-  for (const template of builtins)
-    expect([template.name, WidgetLint.lint(template.source, template.mode)]).toEqual([template.name, []])
+test("every built-in widget template passes the lint", () => {
+  for (const widgetTemplate of builtins)
+    expect([widgetTemplate.name, WidgetLint.lint(widgetTemplate.source, widgetTemplate.mode)]).toEqual([
+      widgetTemplate.name,
+      [],
+    ])
 })
 
 test("reports shape problems with their positions, without running anything", () => {
@@ -17,7 +20,7 @@ test("reports shape problems with their positions, without running anything", ()
     "function update(state) { return state }",
   ].join("\n")
   expect(WidgetLint.lint(source, "step")).toEqual([
-    { message: "a step template must define `function view(state, data)`" },
+    { message: "a step widget template must define `function view(state, data)`" },
     { message: "top-level constants must not run code (calls, `new`, assignments)", line: 2, column: 17 },
     {
       message: "only function and `const` declarations may appear at the top level; nothing runs when it loads",
@@ -51,9 +54,9 @@ test("the removed event API is reported with what replaces it", () => {
   ])
 })
 
-test("live templates need an async main; arrow functions in constants run later and are fine", () => {
+test("live widget templates need an async main; arrow functions in constants run later and are fine", () => {
   expect(WidgetLint.lint("function main(data) {}", "live")).toEqual([
-    { message: "a live template must define `async function main(data)`" },
+    { message: "a live widget template must define `async function main(data)`" },
   ])
   expect(WidgetLint.lint("const main = async (data) => widget.render(ui.text(data.title))", "live")).toEqual([])
   expect(WidgetLint.lint("const view = (state, data) => ui.text(data.title)", "step")).toEqual([])
@@ -68,7 +71,7 @@ test("syntax errors carry the parser's position and oversized sources are refuse
 
 test("the plugin never imports a widget runner", async () => {
   const sources = await Promise.all(
-    ["index.ts", "templates.ts", "tools.ts", "lint.ts"].map((file) =>
+    ["index.ts", "widget-templates.ts", "tools.ts", "lint.ts"].map((file) =>
       Bun.file(new URL(`../src/${file}`, import.meta.url)).text(),
     ),
   )

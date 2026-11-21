@@ -39,7 +39,7 @@ more than its own hit area). The widget's own view supplies any title.
 ## Telling the program
 
 - Clients send `{ id: "", type: "fullscreen", value: true | false }` when the widget enters or leaves full screen.
-  Step mode: the template's `onFullscreen(state, on)` hook gets it, so it can switch layouts (e.g. hide the
+  Step mode: the widget template's `onFullscreen(state, on)` hook gets it, so it can switch layouts (e.g. hide the
   explanation text, make the canvas `fill`). Live mode: `widget.on("fullscreen", fn)`. Without a hook it changes
   nothing.
 - `Frame` (canvas `draw` and live `widget.frame()`) gains `fullscreen: boolean`; `width`/`height` change with it.

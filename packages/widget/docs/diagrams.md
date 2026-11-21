@@ -1,11 +1,11 @@
-# Diagram templates
+# Diagram widget templates
 
-Built-in canvas templates for showing data. Each one takes `title` and an optional `choose: true`, which adds a
+Built-in canvas widget templates for showing data. Each one takes `title` and an optional `choose: true`, which adds a
 Choose button that submits the selected element. Without `choose` they submit nothing: the user explores and you keep
 talking. All animate in once, then redraw only when the user taps; colors follow the theme. Exact data schemas come
 from `widget_template` action `list`; `packages/widget/test/fixtures/diagrams.ts` has an example for each.
 
-| Template | Data | Use it for |
+| Widget template | Data | Use it for |
 | --- | --- | --- |
 | `pie` | `slices: { label, value }[]` (≤ 12), `donut?`, `unit?` | Parts of one whole (shares, budgets, traffic sources). Over 6 slices, prefer `chart` bars. |
 | `scatter` | `series: { label, points: { x, y, size?, label? }[] }[]`, `xLabel?`, `yLabel?`, `trend?` | How two measures relate (size vs. time); `size` makes bubbles, `trend` adds least-squares lines. |

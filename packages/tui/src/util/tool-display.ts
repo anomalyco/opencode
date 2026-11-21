@@ -77,5 +77,5 @@ export function widgetTemplateLine(input: Record<string, unknown>, metadata: Rec
     return typeof metadata.count === "number" ? `Listed ${metadata.count} widget templates` : "Listed widget templates"
   const verb = action === "get" ? "Read" : action === "edit" ? "Edited" : "Saved"
   const revision = typeof metadata.revision === "number" ? ` v${metadata.revision}` : ""
-  return `${verb} template ${text(metadata.name) ?? text(input.name) ?? ""}${revision}`.trimEnd()
+  return `${verb} widget template ${text(metadata.name) ?? text(input.name) ?? ""}${revision}`.trimEnd()
 }

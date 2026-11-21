@@ -14,7 +14,7 @@ test("a widget posted by the widget tool is answered in the timeline", async () 
       return {
         tool: {
           name: "widget",
-          input: { template: "confirm", title: "Ship it", data: { title: "Ship it?", message: "Deploys main." } },
+          input: { widgetTemplate: "confirm", title: "Ship it", data: { title: "Ship it?", message: "Deploys main." } },
         },
       }
     },
@@ -39,7 +39,9 @@ test("a widget posted by the widget tool is answered in the timeline", async () 
   const states = await server.api
     .rpc(Widget.Definition)
     .states({ sessionID: session.id }, { location: { directory: process.cwd() } })
-  expect(states).toMatchObject([{ template: { name: "confirm" }, status: "submitted", response: { confirmed: true } }])
+  expect(states).toMatchObject([
+    { widgetTemplate: { name: "confirm" }, status: "submitted", response: { confirmed: true } },
+  ])
   const messages = await server.api.message.list({ sessionID: session.id })
   const tool = messages.data.flatMap((message) => (message.type === "assistant" ? message.content : []))
   expect(tool.find((part) => part.type === "tool" && part.name === "widget")).toMatchObject({
@@ -62,7 +64,7 @@ test("a widget dismissed over the RPC is dismissed and tells the agent", async (
       return {
         tool: {
           name: "widget",
-          input: { template: "confirm", title: "Ship it", data: { title: "Ship it?", message: "x" } },
+          input: { widgetTemplate: "confirm", title: "Ship it", data: { title: "Ship it?", message: "x" } },
         },
       }
     },
@@ -109,7 +111,9 @@ test("a widget's send reaches the agent as a synthetic message and the widget st
       const content = JSON.stringify(last?.content)
       if (content.includes('sent: {\\"pinged\\":true}')) return { text: "Got the ping." }
       if (last?.role === "tool" && content.includes("Saved widget template"))
-        return { tool: { name: "widget", input: { template: "pinger", title: "Pinger", data: { title: "Ping me" } } } }
+        return {
+          tool: { name: "widget", input: { widgetTemplate: "pinger", title: "Pinger", data: { title: "Ping me" } } },
+        }
       if (last?.role === "tool") return { text: "Waiting for pings." }
       return { tool: { name: "widget_template", input: { action: "save", ...pinger } } }
     },
@@ -129,7 +133,7 @@ test("a widget's send reaches the agent as a synthetic message and the widget st
   const states = await server.api
     .rpc(Widget.Definition)
     .states({ sessionID: session.id }, { location: { directory: process.cwd() } })
-  expect(states).toMatchObject([{ template: { name: "pinger" }, status: "open" }])
+  expect(states).toMatchObject([{ widgetTemplate: { name: "pinger" }, status: "open" }])
   const messages = await server.api.message.list({ sessionID: session.id })
   expect(messages.data.find((message) => message.type === "synthetic")).toMatchObject({
     text: 'Widget "Pinger" sent: {"pinged":true}',

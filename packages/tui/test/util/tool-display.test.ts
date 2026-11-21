@@ -67,13 +67,15 @@ describe("toolDisplayMetadata", () => {
 
 test("widget template calls read as one line from their short metadata", () => {
   expect(widgetTemplateLine({ action: "save" }, { action: "save", name: "pinger", revision: 3, lines: 40 })).toBe(
-    "Saved template pinger v3",
+    "Saved widget template pinger v3",
   )
-  expect(widgetTemplateLine({}, { action: "edit", name: "yes-no", revision: 1 })).toBe("Edited template yes-no v1")
-  expect(widgetTemplateLine({}, { action: "get", name: "confirm", lines: 14 })).toBe("Read template confirm")
+  expect(widgetTemplateLine({}, { action: "edit", name: "yes-no", revision: 1 })).toBe(
+    "Edited widget template yes-no v1",
+  )
+  expect(widgetTemplateLine({}, { action: "get", name: "confirm", lines: 14 })).toBe("Read widget template confirm")
   expect(widgetTemplateLine({}, { action: "list", count: 24 })).toBe("Listed 24 widget templates")
   // While running there is only the input.
   expect(widgetTemplateLine({ action: "save", name: "pinger", source: "function view() {}" }, {})).toBe(
-    "Saved template pinger",
+    "Saved widget template pinger",
   )
 })

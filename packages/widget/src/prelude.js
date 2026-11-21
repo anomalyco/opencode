@@ -1,8 +1,8 @@
-// Widget prelude (specs/v2/widgets.md). A widget program is this prelude, a newline, then the template source.
+// Widget prelude (specs/v2/widgets.md). A widget program is this prelude, a newline, then the widget template source.
 // Hosts run `<program>\nreturn __widget_step(__input())` with `__input` as the only host global.
 
 const ui = (() => {
-  // Children may nest arrays and contain null, undefined or false, so templates can write `cond && node` and `...list`;
+  // Children may nest arrays and contain null, undefined or false, so widget templates can write `cond && node` and `...list`;
   // `__widget_tree` flattens them when it turns the view into the tree clients get.
   const container = (type) => (props, nodes) =>
     Array.isArray(props) ? { type, children: props } : { ...props, type, children: nodes ?? [] }
@@ -46,7 +46,7 @@ const __WIDGET_CONTROLS = {
   shader: { event: "pointer", handler: "onPointer", keyed: true },
 }
 
-// Turns a view as templates build it into the tree clients get: children flattened, handler functions and `key`s
+// Turns a view as widget templates build it into the tree clients get: children flattened, handler functions and `key`s
 // removed, and each interactive node given an id from its path (child indices, or `:key` where the author set a key),
 // so the same node keeps its id from one view to the next. Returns the tree, the handlers by id and canvas ids by key.
 function __widget_tree(root) {
@@ -264,7 +264,7 @@ function __widget_step(input) {
   return output
 }
 
-// Routes one client event: system events to the template's hooks, control events to the handler of the node with
+// Routes one client event: system events to the widget template's hooks, control events to the handler of the node with
 // that id in the view of the current state. Nothing else sees either; an event nobody takes changes nothing.
 function __widget_dispatch(state, event, data) {
   if (event.type === "key") {

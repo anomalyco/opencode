@@ -7,11 +7,11 @@ const src = path.resolve(import.meta.dir, "../src")
 
 test("source.ts embeds the canonical .js files", async () => {
   expect(prelude).toBe(await Bun.file(path.join(src, "prelude.js")).text())
-  expect(suggestions).toBe(await Bun.file(path.join(src, "templates/suggestions.js")).text())
-  expect(form).toBe(await Bun.file(path.join(src, "templates/form.js")).text())
-  expect(confirm).toBe(await Bun.file(path.join(src, "templates/confirm.js")).text())
-  expect(chart).toBe(await Bun.file(path.join(src, "templates/chart.js")).text())
-  expect(backdrop).toBe(await Bun.file(path.join(src, "templates/backdrop.js")).text())
+  expect(suggestions).toBe(await Bun.file(path.join(src, "widget-templates/suggestions.js")).text())
+  expect(form).toBe(await Bun.file(path.join(src, "widget-templates/form.js")).text())
+  expect(confirm).toBe(await Bun.file(path.join(src, "widget-templates/confirm.js")).text())
+  expect(chart).toBe(await Bun.file(path.join(src, "widget-templates/chart.js")).text())
+  expect(backdrop).toBe(await Bun.file(path.join(src, "widget-templates/backdrop.js")).text())
 })
 
 test("program is the prelude, a newline, then the source", () => {
@@ -27,8 +27,8 @@ test("version addresses the program and data schema", () => {
   expect(version("source", data)).toBe(expected)
   expect(version("source", data)).toMatch(/^[0-9a-f]{16}$/)
   expect(version("source", { type: "array" })).not.toBe(expected)
-  expect(builtins.map((template) => template.version)).toEqual(
-    builtins.map((template) => version(template.source, template.data, template.mode)),
+  expect(builtins.map((widgetTemplate) => widgetTemplate.version)).toEqual(
+    builtins.map((widgetTemplate) => version(widgetTemplate.source, widgetTemplate.data, widgetTemplate.mode)),
   )
 })
 
@@ -104,7 +104,7 @@ test("ui builders build every node type", async () => {
   })
 })
 
-test("version covers the mode and a live template's capabilities", () => {
+test("version covers the mode and a live widget template's capabilities", () => {
   const data = { type: "object" } as const
   const hash = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex").slice(0, 16)
   const base = prelude + "\nsource\n" + JSON.stringify(data)

@@ -114,15 +114,15 @@ export function widgetFixtureMessage(
   id = `msg_widget_${name}`,
 ): WidgetInfo {
   const fixture = widgetFixtures[name]
-  const template = builtins.find((item) => item.name === name)
-  if (!template) throw new Error(`Unknown built-in widget template: ${name}`)
+  const widgetTemplate = builtins.find((item) => item.name === name)
+  if (!widgetTemplate) throw new Error(`Unknown built-in widget template: ${name}`)
   return {
     id: `${id}:call_widget`,
     sessionID: "ses_widget_story",
     messageID: id,
     callID: "call_widget",
     title: fixture.title,
-    template: { name: template.name, version: template.version },
+    widgetTemplate: { name: widgetTemplate.name, version: widgetTemplate.version },
     data: fixture.data,
     status,
     wait: false,

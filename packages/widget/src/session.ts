@@ -43,7 +43,7 @@ export async function step(
 }
 
 /**
- * Runs the `draw` phase for a canvas: the template's `draw(state, data, frame)`, or nothing without one. Rejects with a
+ * Runs the `draw` phase for a canvas: the widget template's `draw(state, data, frame)`, or nothing without one. Rejects with a
  * `StepError` when it throws, times out or returns invalid commands. The timeout defaults to `TIMEOUT_MS`, not the
  * spec's 8 ms frame budget: this interpreter parses the program on every step, which alone takes a few ms.
  */

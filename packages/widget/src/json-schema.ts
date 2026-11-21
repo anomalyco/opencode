@@ -1,7 +1,7 @@
 export type JSONSchemaType = "string" | "number" | "integer" | "boolean" | "object" | "array" | "null"
 
 /**
- * The JSON Schema (draft 2020-12) subset templates declare their data with. Other keywords are allowed and ignored by
+ * The JSON Schema (draft 2020-12) subset widget templates declare their data with. Other keywords are allowed and ignored by
  * `validateData`; `$ref` is not supported.
  */
 export interface JSONSchema {

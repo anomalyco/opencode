@@ -10,8 +10,8 @@ test("a saved version keeps serving the program it was saved with after the prel
   Effect.runPromise(
     Effect.gen(function* () {
       const fake = yield* make
-      const save = (templates: WidgetTemplates.Interface, text: string) =>
-        templates.save({
+      const save = (widgetTemplates: WidgetTemplates.Interface, text: string) =>
+        widgetTemplates.save({
           name: "card",
           description: "A card",
           data: { type: "object" },

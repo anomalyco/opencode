@@ -5,7 +5,7 @@
   packages/widget/test/guidance.test.ts; keep them in sync.
 -->
 
-A step template computes its view from state and reacts to one event at a time. A **live** template runs one program
+A step widget template computes its view from state and reacts to one event at a time. A **live** widget template runs one program
 for as long as the widget is open: it keeps its state in variables, waits for timers and display frames, and renders
 whenever it wants.
 
@@ -90,7 +90,7 @@ async function main(data) {
 
 ## Example: a live dashboard
 
-Declare the hosts it may reach in the template's `capabilities` (`{ "https": { "hosts": ["api.github.com"] } }`).
+Declare the hosts it may reach in the widget template's `capabilities` (`{ "https": { "hosts": ["api.github.com"] } }`).
 Requests are HTTPS only, at most 4 in flight and 10 a second, 15 s and 2 MB each.
 
 ```js

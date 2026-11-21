@@ -12,15 +12,15 @@ import {
   WidgetSession,
 } from "../src/index.js"
 
-const template = (name: string) => {
+const widgetTemplate = (name: string) => {
   const found = builtins.find((item) => item.name === name)
   if (!found) throw new Error(`no builtin ${name}`)
   return found
 }
 
 const start = async (name: string, data: unknown) => {
-  expect(validateData(template(name).data, data)).toEqual([])
-  return WidgetSession.start(program(template(name).source), data)
+  expect(validateData(widgetTemplate(name).data, data)).toEqual([])
+  return WidgetSession.start(program(widgetTemplate(name).source), data)
 }
 
 // Every node in the view, depth first, for asserting on parts of a built-in's view.
@@ -119,7 +119,7 @@ test("suggestions: no note input when allowNote is false, and dismiss", async ()
 })
 
 test("suggestions data schema enforces 2..3 options with 1..3 images", () => {
-  const data = template("suggestions").data
+  const data = widgetTemplate("suggestions").data
   expect(validateData(data, { title: "x", options: [{ label: "a", images: ["a"] }] })).toEqual([
     "/options: must have at least 2 items",
   ])
@@ -217,7 +217,7 @@ test("form submits defaults untouched", async () => {
 
 test("form data schema checks each field type", () => {
   expect(
-    validateData(template("form").data, {
+    validateData(widgetTemplate("form").data, {
       title: "x",
       fields: [{ key: "n", type: "number", label: "N", min: 0 }],
     }),
@@ -362,7 +362,7 @@ test("chart: the line draws in progressively", async () => {
 })
 
 test("chart data schema checks the kind and colors", () => {
-  const data = template("chart").data
+  const data = widgetTemplate("chart").data
   expect(validateData(data, { title: "x", kind: "pie", series: [{ label: "a", values: [1] }] })).toEqual([
     '/kind: must be one of "bar", "line"',
   ])

@@ -354,14 +354,14 @@ test("fetch reaches declared https hosts and returns status, headers and the bod
 test("fetch rejects what the capability and the contract don't allow", async () => {
   const transport: Transport = async () => json({})
   expect(await result("https://evil.example.com/", transport)).toBe(
-    "CapabilityDenied: evil.example.com is not in the template's https hosts (api.example.com, *.cdn.example.org)",
+    "CapabilityDenied: evil.example.com is not in the widget template's https hosts (api.example.com, *.cdn.example.org)",
   )
   expect(await result("https://cdn.example.org/", transport)).toStartWith("CapabilityDenied: cdn.example.org is not in")
   expect(await result("http://api.example.com/", transport)).toBe(
     "CapabilityDenied: Only https: URLs can be fetched, not http:",
   )
   expect(await result("https://api.example.com/", transport, { capabilities: {} })).toBe(
-    "CapabilityDenied: This template declares no https capability",
+    "CapabilityDenied: This widget template declares no https capability",
   )
   const any = { capabilities: { https: { hosts: ["*"] } } }
   for (const host of ["localhost", "127.0.0.1", "10.1.2.3", "192.168.0.10", "169.254.169.254", "[::1]", "[fe80::1]"])

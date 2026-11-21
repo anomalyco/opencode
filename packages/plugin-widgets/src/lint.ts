@@ -4,12 +4,12 @@ import type { Widget } from "@opencode/schema/widget"
 import { prelude } from "@opencode/widget/source"
 import { parseProgram } from "psychoscript"
 
-/** The most a template's source may hold, in UTF-8 bytes. */
+/** The most a widget template's source may hold, in UTF-8 bytes. */
 export const MAX_SOURCE_BYTES = 128 * 1024
 
 export interface Issue {
   readonly message: string
-  /** 1-based, in the template's source. */
+  /** 1-based, in the widget template's source. */
   readonly line?: number
   readonly column?: number
 }
@@ -49,7 +49,7 @@ const GONE: Record<string, string> = {
 }
 
 /**
- * Parses (never runs) a template's source and checks its shape: the entry functions its mode needs, only function and
+ * Parses (never runs) a widget template's source and checks its shape: the entry functions its mode needs, only function and
  * `const` declarations at the top level so nothing runs when the program loads, no redeclared prelude names, no use of
  * the removed event API (`update`, `widget.event`, `widget.next`), and the size cap. Returns every issue found, in
  * source order.
@@ -93,9 +93,9 @@ export function lint(source: string, mode: Widget.Mode): Issue[] {
   if (update) issues.push(at(update, GONE.update!))
   for (const member of removed(parsed.program as Node)) issues.push(at(member.node, GONE[member.name]!))
   if (mode === "step" && !declared.has("view"))
-    issues.push({ message: "a step template must define `function view(state, data)`" })
+    issues.push({ message: "a step widget template must define `function view(state, data)`" })
   if (mode === "live" && !isAsync(declared.get("main")))
-    issues.push({ message: "a live template must define `async function main(data)`" })
+    issues.push({ message: "a live widget template must define `async function main(data)`" })
   return issues.toSorted((a, b) => (a.line ?? 0) - (b.line ?? 0) || (a.column ?? 0) - (b.column ?? 0))
 
   function declare(name: string, node: Statement | Declarator) {

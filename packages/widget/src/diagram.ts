@@ -1,9 +1,9 @@
 import type { JSONSchema } from "./json-schema.js"
 import { version } from "./program.js"
 import * as source from "./source.js"
-import type { Template } from "./template.js"
+import type { WidgetTemplate } from "./widget-template.js"
 
-// The diagram built-ins: canvas templates an agent fills with data. Each takes `title` and an optional `choose`, which
+// The diagram built-ins: canvas widget templates an agent fills with data. Each takes `title` and an optional `choose`, which
 // adds a Choose button that submits the selected element.
 
 const string = (description: string): JSONSchema => ({ type: "string", description })
@@ -57,12 +57,12 @@ const hierarchy = (depth: number, properties: Record<string, JSONSchema>): JSONS
     ["label"],
   )
 
-const make = (name: string, description: string, data: JSONSchema): Template => {
+const make = (name: string, description: string, data: JSONSchema): WidgetTemplate => {
   const text = (source as Record<string, string>)[name]
   return { name, version: version(text, data, "step"), description, data, source: text, builtin: true, mode: "step" }
 }
 
-export const diagrams: ReadonlyArray<Template> = [
+export const diagrams: ReadonlyArray<WidgetTemplate> = [
   make(
     "pie",
     "A pie or donut chart of parts of a whole; tap slices to select, legend entries to hide. Choose submits { label, index, value, share }.",
@@ -348,7 +348,7 @@ export const diagrams: ReadonlyArray<Template> = [
             ["label", "start"],
           ),
         },
-        today: { ...date, description: "Where to draw the today marker (the template can't read the clock)" },
+        today: { ...date, description: "Where to draw the today marker (the widget template can't read the clock)" },
         choose: choose("the selected task"),
       },
       ["title", "tasks"],

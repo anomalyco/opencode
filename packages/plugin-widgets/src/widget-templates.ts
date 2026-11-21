@@ -1,15 +1,15 @@
-export * as WidgetTemplates from "./templates.js"
+export * as WidgetTemplates from "./widget-templates.js"
 
 import type { StorageDomain } from "@opencode/plugin/effect/storage"
 import { Widget } from "@opencode/schema/widget"
 // Subpath imports: the package root also exports the step and live runners, which the server must never load.
 import { validateData } from "@opencode/widget/json-schema"
 import { program, version } from "@opencode/widget/program"
-import { builtins } from "@opencode/widget/template"
+import { builtins } from "@opencode/widget/widget-template"
 import { WidgetLint } from "./lint.js"
 import { Effect, Option, Schema } from "effect"
 
-export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Widget.TemplateNotFoundError", {
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Widget.WidgetTemplateNotFoundError", {
   name: Schema.String,
   version: Schema.optional(Schema.String),
 }) {
@@ -20,17 +20,20 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Widget.T
   }
 }
 
-/** A template that cannot be saved: a bad name, a built-in name, a broken schema, or a program that fails to run. */
-export class InvalidTemplateError extends Schema.TaggedError<InvalidTemplateError>()("Widget.InvalidTemplateError", {
-  name: Schema.String,
-  reason: Schema.String,
-}) {
+/** A widget template that cannot be saved: a bad name, a built-in name, a broken schema, or a program that fails to run. */
+export class InvalidWidgetTemplateError extends Schema.TaggedError<InvalidWidgetTemplateError>()(
+  "Widget.InvalidWidgetTemplateError",
+  {
+    name: Schema.String,
+    reason: Schema.String,
+  },
+) {
   override get message() {
     return `Invalid widget template "${this.name}": ${this.reason}`
   }
 }
 
-/** Data that does not match the template's schema, or that makes the template's `init` step fail. */
+/** Data that does not match the widget template's schema, or that makes the widget template's `init` step fail. */
 export class InvalidDataError extends Schema.TaggedError<InvalidDataError>()("Widget.InvalidDataError", {
   name: Schema.String,
   reason: Schema.String,
@@ -47,10 +50,10 @@ export interface SaveInput {
   readonly source: string
   /** `step` (default) or `live` (widgets-live.md). */
   readonly mode?: Widget.Mode
-  /** Live templates only. */
+  /** Live widget templates only. */
   readonly capabilities?: Widget.Capabilities
   /**
-   * Data checked against `data` before the template is stored. The server never runs template code; it only parses and
+   * Data checked against `data` before the widget template is stored. The server never runs widget template code; it only parses and
    * lints the source.
    */
   readonly example: Schema.Json
@@ -76,16 +79,16 @@ export interface Builder {
 }
 const current: Builder = { program }
 
-// A stored version: the template, the exact program it was saved with, and the Session that created it (none for
+// A stored version: the widget template, the exact program it was saved with, and the Session that created it (none for
 // built-ins). The origin decides whether the widget's failures reach the agent on their own (widgets.md, Failures).
 const Stored = Schema.Struct({
-  ...Widget.Template.fields,
+  ...Widget.WidgetTemplate.fields,
   program: Schema.optional(Schema.String),
   origin: Schema.optional(Schema.String),
 })
-const decode = Schema.decodeUnknownSync(Widget.Template)
+const decode = Schema.decodeUnknownSync(Widget.WidgetTemplate)
 const encodeStored = Schema.encodeSync(Stored)
-// Versions stored before templates had a mode are step templates.
+// Versions stored before widget templates had a mode are step widget templates.
 const decodeOption = (value: unknown) =>
   Schema.decodeUnknownOption(Stored)(
     typeof value === "object" && value !== null && !("mode" in value) ? { ...value, mode: "step" } : value,
@@ -96,10 +99,10 @@ const decodeOption = (value: unknown) =>
 // (widgets-live.md); clients refuse them otherwise.
 const HOST = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:\d{1,5})?$/
 
-/** Why `capabilities` can't be stored on a template of `mode`, if they can't. */
+/** Why `capabilities` can't be stored on a widget template of `mode`, if they can't. */
 export function capabilitiesProblem(mode: Widget.Mode, capabilities: Widget.Capabilities | undefined) {
   if (capabilities === undefined) return
-  if (mode !== "live") return "only live templates can declare capabilities"
+  if (mode !== "live") return "only live widget templates can declare capabilities"
   const hosts = capabilities.https?.hosts
   if (hosts === undefined) return
   if (hosts.length === 0) return "https.hosts lists no hosts; leave https out instead"
@@ -109,20 +112,21 @@ export function capabilitiesProblem(mode: Widget.Mode, capabilities: Widget.Capa
     return `https.hosts entry ${JSON.stringify(bad)} is not a host name like "api.example.com", "*.example.com", "localhost:4097" or "*"`
 }
 
-// A version lives under its content address and never changes; `latest:<name>` names the newest saved one.
-const versionKey = (name: string, version: string) => `template:${name}:${version}`
-const latestKey = (name: string) => `latest:${name}`
-// The 1-based number of a saved version among its template's versions, in the order they were first saved.
-const revisionKey = (name: string, version: string) => `revision:${name}:${version}`
+// A version lives under its content address and never changes; `widget_template_latest:<name>` names the newest saved one.
+const versionKey = (name: string, version: string) => `widget_template:${name}:${version}`
+const latestKey = (name: string) => `widget_template_latest:${name}`
+// The 1-based number of a saved version among its widget template's versions, in the order they were first saved.
+const revisionKey = (name: string, version: string) => `widget_template_revision:${name}:${version}`
 
-/** A template without its program, for `get` and summaries. */
-export const withoutProgram = ({ program: _, ...template }: Widget.Program): Widget.Template => template
+/** A widget template without its program, for `get` and summaries. */
+export const withoutProgram = ({ program: _, ...widgetTemplate }: Widget.Program): Widget.WidgetTemplate =>
+  widgetTemplate
 
 export const make = (storage: StorageDomain, builder: Builder = current) => {
   // Built-ins are hashed with the prelude they ship with, which is the one the server runs now.
   const builtin = new Map(
-    builtins.map((template) => {
-      const decoded = decode(template)
+    builtins.map((widgetTemplate) => {
+      const decoded = decode(widgetTemplate)
       return [decoded.name, { ...decoded, program: builder.program(decoded.source) } satisfies Widget.Program]
     }),
   )
@@ -131,13 +135,13 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
   const read = Effect.fnUntraced(function* (name: string, version: string) {
     const stored = Option.getOrUndefined(decodeOption(yield* storage.get(versionKey(name, version))))
     if (!stored) return undefined
-    const { origin: _, program: text, ...template } = stored
-    return { ...template, program: text ?? builder.program(template.source) } satisfies Widget.Program
+    const { origin: _, program: text, ...widgetTemplate } = stored
+    return { ...widgetTemplate, program: text ?? builder.program(widgetTemplate.source) } satisfies Widget.Program
   })
-  const store = (template: Widget.Program, origin?: string) =>
+  const store = (widgetTemplate: Widget.Program, origin?: string) =>
     storage.set(
-      versionKey(template.name, template.version),
-      encodeStored(origin === undefined ? template : { ...template, origin }),
+      versionKey(widgetTemplate.name, widgetTemplate.version),
+      encodeStored(origin === undefined ? widgetTemplate : { ...widgetTemplate, origin }),
     )
 
   /** The Session that created a saved version; undefined for built-ins and versions saved before origins were kept. */
@@ -168,10 +172,10 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
     const saved: Widget.Program[] = []
     let after: string | undefined
     do {
-      const page = yield* storage.scan({ prefix: "latest:", after, limit: 100 })
+      const page = yield* storage.scan({ prefix: "widget_template_latest:", after, limit: 100 })
       for (const entry of page.entries) {
-        const template = yield* savedLatest(entry.key.slice("latest:".length))
-        if (template) saved.push(template)
+        const widgetTemplate = yield* savedLatest(entry.key.slice("widget_template_latest:".length))
+        if (widgetTemplate) saved.push(widgetTemplate)
       }
       after = page.next
     } while (after !== undefined)
@@ -181,16 +185,23 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
   })
 
   /** Keeps a built-in version a widget uses, so it stays retrievable after a release changes the built-in. */
-  const remember = Effect.fn("WidgetTemplates.remember")(function* (template: Widget.Program) {
-    if (!template.builtin || (yield* storage.get(versionKey(template.name, template.version))) !== undefined) return
-    yield* store(template)
+  const remember = Effect.fn("WidgetTemplates.remember")(function* (widgetTemplate: Widget.Program) {
+    if (
+      !widgetTemplate.builtin ||
+      (yield* storage.get(versionKey(widgetTemplate.name, widgetTemplate.version))) !== undefined
+    )
+      return
+    yield* store(widgetTemplate)
   })
 
-  // Data only: the server never runs a template, so `init` and `view` errors come back from clients (`report`).
-  const check = Effect.fn("WidgetTemplates.check")(function* (template: Widget.Template, data: Schema.Json) {
-    const errors = validateData(template.data, data)
+  // Data only: the server never runs a widget template, so `init` and `view` errors come back from clients (`report`).
+  const check = Effect.fn("WidgetTemplates.check")(function* (
+    widgetTemplate: Widget.WidgetTemplate,
+    data: Schema.Json,
+  ) {
+    const errors = validateData(widgetTemplate.data, data)
     if (errors.length > 0)
-      return yield* new InvalidDataError({ name: template.name, reason: errors.slice(0, 5).join("; ") })
+      return yield* new InvalidDataError({ name: widgetTemplate.name, reason: errors.slice(0, 5).join("; ") })
   })
 
   /** A saved version's revision number (1 for the first version of a name), or undefined for built-ins. */
@@ -205,17 +216,17 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
   const create = Effect.fn("WidgetTemplates.save")(function* (
     input: Omit<SaveInput, "example"> & { example?: Schema.Json },
   ) {
-    const invalid = (reason: string) => new InvalidTemplateError({ name: input.name, reason })
+    const invalid = (reason: string) => new InvalidWidgetTemplateError({ name: input.name, reason })
     if (!Schema.is(Widget.Name)(input.name))
       return yield* invalid("names are lowercase letters, digits and dashes, starting with a letter, at most 48")
-    if (builtin.has(input.name)) return yield* invalid("built-in templates cannot be overwritten")
+    if (builtin.has(input.name)) return yield* invalid("built-in widget templates cannot be overwritten")
     if (input.description.trim() === "") return yield* invalid("description is empty")
     if (input.data.type !== "object") return yield* invalid('the data schema must have type "object"')
     const mode = input.mode ?? "step"
     const problem = capabilitiesProblem(mode, input.capabilities)
     if (problem) return yield* invalid(problem)
     const text = builder.program(input.source)
-    const template = decode({
+    const widgetTemplate = decode({
       name: input.name,
       version: version(input.source, input.data, mode, input.capabilities),
       mode,
@@ -228,14 +239,17 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
     const issues = WidgetLint.lint(input.source, mode)
     if (issues.length > 0) return yield* invalid(WidgetLint.format(issues))
     if (input.example !== undefined)
-      yield* check(template, input.example).pipe(Effect.mapError((error) => invalid(`example: ${error.reason}`)))
+      yield* check(widgetTemplate, input.example).pipe(Effect.mapError((error) => invalid(`example: ${error.reason}`)))
     // The version first, so `latest` never names a version that is not stored. Saving existing content promotes it
     // again with the new description, and keeps the Session that first created it.
-    yield* store({ ...template, program: text }, (yield* origin(template.name, template.version)) ?? input.origin)
-    if ((yield* revision(template.name, template.version)) === undefined)
-      yield* storage.set(revisionKey(template.name, template.version), yield* count(template.name))
-    yield* storage.set(latestKey(template.name), template.version)
-    return { ...template, program: text } satisfies Widget.Program
+    yield* store(
+      { ...widgetTemplate, program: text },
+      (yield* origin(widgetTemplate.name, widgetTemplate.version)) ?? input.origin,
+    )
+    if ((yield* revision(widgetTemplate.name, widgetTemplate.version)) === undefined)
+      yield* storage.set(revisionKey(widgetTemplate.name, widgetTemplate.version), yield* count(widgetTemplate.name))
+    yield* storage.set(latestKey(widgetTemplate.name), widgetTemplate.version)
+    return { ...widgetTemplate, program: text } satisfies Widget.Program
   })
 
   // How many versions of `name` are stored.
@@ -243,7 +257,7 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
     let total = 0
     let after: string | undefined
     do {
-      const page = yield* storage.scan({ prefix: `template:${name}:`, after, limit: 100 })
+      const page = yield* storage.scan({ prefix: `widget_template:${name}:`, after, limit: 100 })
       total += page.entries.length
       after = page.next
     } while (after !== undefined)
@@ -251,10 +265,10 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
   })
 
   const edit = Effect.fn("WidgetTemplates.edit")(function* (input: EditInput) {
-    const invalid = (reason: string) => new InvalidTemplateError({ name: input.name, reason })
+    const invalid = (reason: string) => new InvalidWidgetTemplateError({ name: input.name, reason })
     if (input.from === undefined && builtin.has(input.name))
       return yield* invalid(
-        `built-in templates can't be edited; copy it under a new name: { action: "edit", name: "my-${input.name}", from: "${input.name}", edits }`,
+        `built-in widget templates can't be edited; copy it under a new name: { action: "edit", name: "my-${input.name}", from: "${input.name}", edits }`,
       )
     const origin = input.from ?? input.name
     const base = yield* latest(origin)
@@ -267,7 +281,7 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
       const matches = source.split(change.oldText).length - 1
       if (matches === 0)
         return yield* invalid(
-          `${at}: oldText was not found in the source of "${origin}"${index > 0 ? " after the earlier edits" : ""}; it must match exactly, whitespace included (get the template to see it)`,
+          `${at}: oldText was not found in the source of "${origin}"${index > 0 ? " after the earlier edits" : ""}; it must match exactly, whitespace included (get the widget template to see it)`,
         )
       if (matches > 1)
         return yield* invalid(

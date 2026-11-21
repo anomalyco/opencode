@@ -1,4 +1,4 @@
-import type { Capabilities } from "./template.js"
+import type { Capabilities } from "./widget-template.js"
 
 /** What `widget.fetch` hands the host (`__host.fetch(request)`). */
 export interface FetchRequest {
@@ -75,7 +75,7 @@ export const platformTransport: Transport = async (request, signal) => {
 /** Why `url` may not be fetched under `capabilities`, if it may not. */
 export function denied(url: URL, capabilities: Capabilities | undefined) {
   const hosts = capabilities?.https?.hosts
-  if (!hosts) return "This template declares no https capability"
+  if (!hosts) return "This widget template declares no https capability"
   if (url.protocol !== "https:") return `Only https: URLs can be fetched, not ${url.protocol}`
   if (url.username || url.password) return "URLs with credentials can't be fetched"
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "")
@@ -85,7 +85,7 @@ export function denied(url: URL, capabilities: Capabilities | undefined) {
       (pattern) => pattern === "*" || pattern === host || (pattern.startsWith("*.") && host.endsWith(pattern.slice(1))),
     )
   )
-    return `${host} is not in the template's https hosts (${hosts.join(", ")})`
+    return `${host} is not in the widget template's https hosts (${hosts.join(", ")})`
 }
 
 // Literal localhost, private, loopback, link-local and unspecified addresses.

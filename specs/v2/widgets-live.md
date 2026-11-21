@@ -1,14 +1,14 @@
 # Live widgets
 
-A template can opt into **live mode**: instead of short `init`/`view`/`draw` steps, the client starts one
+A widget template can opt into **live mode**: instead of short `init`/`view`/`draw` steps, the client starts one
 long-running PsychoScript program per open widget. It keeps its state in the VM, waits on timers and display frames,
 takes input through handlers on its nodes, and renders whenever it wants. This is what games, timers, simulations, step-by-step animations and other
 free-running widgets use. Step mode stays the default; everything in `widgets.md` still applies unless said here.
 
 ## Opting in
 
-A template declares `mode: "live"` (default `"step"`): a field on the template (saved through `widget_template` with
-`mode`, returned in template summaries and programs). A live template defines
+A widget template declares `mode: "live"` (default `"step"`): a field on the widget template (saved through `widget_template` with
+`mode`, returned in widget template summaries and programs). A live widget template defines
 
 ```js
 async function main(data) {
@@ -84,7 +84,7 @@ the next vsync while the widget is visible), `{ type: "resumed", pausedMs }` (af
 
 ## Capabilities
 
-A live template declares what it needs beyond rendering, as a template field:
+A live widget template declares what it needs beyond rendering, as a widget template field:
 
 ```ts
 capabilities?: { https?: { hosts: string[] } }   // e.g. { https: { hosts: ["api.github.com", "*.coingecko.com"] } }
@@ -103,7 +103,7 @@ timeout 15 s, at most 4 in flight and 10 per second per widget. Responses cross 
 private or link-local address. Each host's fetch boundary takes one flag, `allowLocalNetwork` (default `false`), passed
 through its API (e.g. `psychoscript-mobile`'s `LiveOptions`, the web host's `mount` options, Rune's runner options).
 The app sets it from its own dev mode (debug builds or the app's developer setting), never from environment variables.
-When set, `fetch` also allows those destinations and plain `http:` to them, still only for hosts the template declares
+When set, `fetch` also allows those destinations and plain `http:` to them, still only for hosts the widget template declares
 (a declared `localhost`, `127.0.0.1` or `*.local` entry; ports are allowed then, e.g. `localhost:4097`). Every host checks
 the destination against the address it actually connects to (resolve once, check, connect to that address), so DNS
 rebinding can't reach the local network when the flag is off.
@@ -133,10 +133,10 @@ and hands the actual transfer to the app (URLSession / OkHttp), so system TLS an
 
 ## Server
 
-The server never runs template code: the `widget` tool validates `data`, and `widget_template save` parses and lints the
+The server never runs widget template code: the `widget` tool validates `data`, and `widget_template save` parses and lints the
 source (an `async function main`, top-level declarations only; see `widgets.md`, Tools). A client whose live program
 hits a program error (an escaped exception, an invalid post, the 50 ms slice, the heap cap or a rate) reports it with
 the `report` RPC (`phase: "main"`); see `widgets.md`, Failures.
-`widget_template` `save` takes `mode` and `capabilities`; both are part of the template version (see `widgets.md`, Template). Step templates
+`widget_template` `save` takes `mode` and `capabilities`; both are part of the widget template version (see `widgets.md`, Widget template). Step widget templates
 can't declare capabilities. The skill teaches when to use live mode (games, timers, animations,
 simulations) and shows a small live example.

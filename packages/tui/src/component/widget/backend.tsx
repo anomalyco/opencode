@@ -22,7 +22,7 @@ export type WidgetInfo = {
   readonly messageID: string
   readonly callID: string
   readonly title?: string
-  readonly template: { readonly name: string; readonly version: string }
+  readonly widgetTemplate: { readonly name: string; readonly version: string }
   readonly data: unknown
   readonly status: Widget.Status
   readonly response?: unknown
@@ -33,11 +33,11 @@ export type WidgetInfo = {
 
 export type WidgetResponse = { value: JsonValue } | { dismiss: true }
 
-/** A template version's runnable program (prelude + source) and how it runs. */
+/** A widget template version's runnable program (prelude + source) and how it runs. */
 export type WidgetProgram = { readonly program: string; readonly mode: Widget.Mode }
 
 export type WidgetBackend = {
-  program: (template: { name: string; version: string }) => Promise<WidgetProgram>
+  program: (widgetTemplate: { name: string; version: string }) => Promise<WidgetProgram>
   respond: (input: { widget: WidgetInfo; response: WidgetResponse }) => Promise<void>
   /** Sends a non-final value from `send(...)`; the widget stays open. */
   send: (input: { widget: WidgetInfo; value: JsonValue; wake: boolean }) => Promise<void>
@@ -64,7 +64,7 @@ export function widgetInfo(
     messageID,
     callID: part.id,
     title: state.title,
-    template: state.template,
+    widgetTemplate: state.widgetTemplate,
     data: input.data ?? {},
     status: state.status,
     response: state.response,
@@ -150,7 +150,7 @@ export type WidgetStates = ReturnType<typeof createWidgetStates>
 
 const BackendContext = createContext<WidgetBackend>()
 
-/** Overrides the server backend, for stories and tests that keep templates and responses local. */
+/** Overrides the server backend, for stories and tests that keep widget templates and responses local. */
 export function WidgetBackendProvider(props: ParentProps<{ backend: WidgetBackend }>) {
   return <BackendContext.Provider value={props.backend}>{props.children}</BackendContext.Provider>
 }
@@ -166,10 +166,10 @@ export function useWidgetBackend(): WidgetBackend {
     return directory ? { location: { directory } } : undefined
   }
   return {
-    program: (template) =>
-      cached(template, () =>
+    program: (widgetTemplate) =>
+      cached(widgetTemplate, () =>
         rpc()
-          .program(template)
+          .program(widgetTemplate)
           .then((result) => ({ program: result.program, mode: result.mode })),
       ),
     respond: (input) =>
@@ -227,12 +227,12 @@ function isRpcFailure(error: unknown, type: string) {
 // Versions are content addresses and never change, so programs stay cached for the whole process.
 const programs = new Map<string, Promise<WidgetProgram>>()
 
-/** Serves built-in templates locally when the version matches and caches every other program by name@version. */
-export function cached(template: { name: string; version: string }, load: () => Promise<WidgetProgram>) {
-  const key = `${template.name}@${template.version}`
+/** Serves built-in widget templates locally when the version matches and caches every other program by name@version. */
+export function cached(widgetTemplate: { name: string; version: string }, load: () => Promise<WidgetProgram>) {
+  const key = `${widgetTemplate.name}@${widgetTemplate.version}`
   const existing = programs.get(key)
   if (existing) return existing
-  const builtin = builtins.find((item) => item.name === template.name && item.version === template.version)
+  const builtin = builtins.find((item) => item.name === widgetTemplate.name && item.version === widgetTemplate.version)
   const pending: Promise<WidgetProgram> = builtin
     ? Promise.resolve({ program: program(builtin.source), mode: builtin.mode })
     : load()

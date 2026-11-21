@@ -7,27 +7,27 @@ import { backdrop, chart, confirm, form, suggestions } from "./source.js"
 export type Mode = "step" | "live"
 
 /**
- * What a live template may use beyond rendering (widgets-live.md, Capabilities). `https.hosts` entries are exact host
+ * What a live widget template may use beyond rendering (widgets-live.md, Capabilities). `https.hosts` entries are exact host
  * names, `*.` suffix wildcards, or `"*"` for any host.
  */
 export interface Capabilities {
   readonly https?: { readonly hosts: ReadonlyArray<string> }
 }
 
-export interface Template {
+export interface WidgetTemplate {
   /** /^[a-z][a-z0-9-]{0,47}$/, unique per server */
   readonly name: string
   /** `version(source, data, mode, capabilities)`: a content address; a version is immutable. */
   readonly version: string
-  /** One line, shown to the model when listing templates. */
+  /** One line, shown to the model when listing widget templates. */
   readonly description: string
-  /** JSON Schema for the data the template takes. */
+  /** JSON Schema for the data the widget template takes. */
   readonly data: JSONSchema
-  /** The template source, without the prelude; clients run `program(source)`. */
+  /** The widget template source, without the prelude; clients run `program(source)`. */
   readonly source: string
   readonly builtin: boolean
   readonly mode: Mode
-  /** Live templates only. */
+  /** Live widget templates only. */
   readonly capabilities?: Capabilities
 }
 
@@ -55,7 +55,13 @@ const option: JSONSchema = {
   additionalProperties: false,
 }
 
-const make = (name: string, description: string, source: string, data: JSONSchema, mode: Mode = "step"): Template => ({
+const make = (
+  name: string,
+  description: string,
+  source: string,
+  data: JSONSchema,
+  mode: Mode = "step",
+): WidgetTemplate => ({
   name,
   version: version(source, data, mode),
   description,
@@ -65,7 +71,7 @@ const make = (name: string, description: string, source: string, data: JSONSchem
   mode,
 })
 
-export const builtins: ReadonlyArray<Template> = [
+export const builtins: ReadonlyArray<WidgetTemplate> = [
   make(
     "suggestions",
     "2 or 3 options as cards with image carousels; the user picks one, optionally with a note. Submits { choice, index, note? }.",

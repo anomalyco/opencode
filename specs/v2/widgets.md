@@ -1,9 +1,9 @@
 # Widgets
 
 Agents show interactive widgets in a session: suggestion cards with image carousels, forms with sliders, checkboxes and
-selects, confirmations. A widget is a PsychoScript program from a named template plus JSON data. The server stores
-templates; the agent calls the `widget` tool, and that tool call in the session history is the widget; every client
-(TUI, Rune desktop, iOS, Android) downloads the template program, runs it in its own PsychoScript interpreter, and
+selects, confirmations. A widget is a PsychoScript program from a named widget template plus JSON data. The server stores
+widget templates; the agent calls the `widget` tool, and that tool call in the session history is the widget; every client
+(TUI, Rune desktop, iOS, Android) downloads the widget template program, runs it in its own PsychoScript interpreter, and
 renders the JSON view tree it returns with native components. A submission goes back to the agent, as the next prompt or
 as the tool's result.
 
@@ -13,9 +13,9 @@ This document is the contract between the server, the shared TypeScript runtime 
 
 | Piece | Where | Owner |
 | --- | --- | --- |
-| Widget runtime (prelude, node schema, `WidgetSession`, built-in templates) | `packages/widget` (`@opencode/widget`) | runtime |
+| Widget runtime (prelude, node schema, `WidgetSession`, built-in widget templates) | `packages/widget` (`@opencode/widget`) | runtime |
 | RPC contract (`Widget.Definition`, `opencode.widget`) | `packages/schema/src/widget.ts` | core |
-| Server plugin: `widget` and `widget_template` tools, `widgets` skill, template store, widget states, RPC handlers | `packages/plugin-widgets` (`@opencode/plugin-widgets`), registered by `packages/core/src/plugin/internal.ts` | core |
+| Server plugin: `widget` and `widget_template` tools, `widgets` skill, widget template store, widget states, RPC handlers | `packages/plugin-widgets` (`@opencode/plugin-widgets`), registered by `packages/core/src/plugin/internal.ts` | core |
 | TUI renderer | `packages/tui` | tui |
 | Rune desktop renderer (Rust PsychoScript) | `anomalyco/rune-desktop` (`crates/opencode-widget` runner, `crates/opencode-widget-view` renderer) | rune |
 | Mobile runner bindings (UniFFI: step, draw, WGSL translation via naga) | `anomalyco/rune-desktop` `crates/opencode-widget-ffi` | ffi |
@@ -29,36 +29,36 @@ PsychoScript itself (`anomalyco/psychoscript`) does not change: its repo holds o
 "extension" is the prelude and the step ABI below, layered on the stock interpreter, with no host functions besides
 `__input`.
 
-## Template
+## Widget template
 
 ```ts
-type Template = {
+type WidgetTemplate = {
   name: string          // /^[a-z][a-z0-9-]{0,47}$/, unique per server
   version: string       // first 16 hex chars of sha256(program + "\n" + JSON.stringify(data)), where
                         // program = prelude + "\n" + source; a content address that covers the prelude, since
                         // clients cache the served program by name@version forever (`version(source, data)` in
                         // @opencode/widget, synchronous)
-  description: string   // one line, shown to the model when listing templates
-  data: JSONSchema      // JSON Schema (draft 2020-12 subset) for the data the template takes
-  source: string        // the template's PsychoScript source (see "Template source")
-  mode: "step" | "live" // how clients run it; "live" templates are in widgets-live.md (stored versions without a
+  description: string   // one line, shown to the model when listing widget templates
+  data: JSONSchema      // JSON Schema (draft 2020-12 subset) for the data the widget template takes
+  source: string        // the widget template's PsychoScript source (see "Widget template source")
+  mode: "step" | "live" // how clients run it; "live" widget templates are in widgets-live.md (stored versions without a
                         // mode are "step"). A live version hashes program + "\n" + JSON(data) + "\nlive", so the
                         // mode is part of the content address; declared capabilities follow as
                         // "\n" + JSON(capabilities)
-  capabilities?: { https?: { hosts: string[] } }  // live templates only (widgets-live.md, Capabilities)
+  capabilities?: { https?: { hosts: string[] } }  // live widget templates only (widgets-live.md, Capabilities)
   builtin: boolean
 }
 ```
 
-A template version is immutable. Saving a template with an existing name creates a new version and makes it the
+A widget template version is immutable. Saving a widget template with an existing name creates a new version and makes it the
 latest; old versions stay retrievable forever so old widgets keep rendering.
 
-Built-in templates ship in `@opencode/widget` and are always present: `suggestions`, `form`, `confirm`, `chart`,
+Built-in widget templates ship in `@opencode/widget` and are always present: `suggestions`, `form`, `confirm`, `chart`,
 `backdrop`, and the diagrams `pie`, `scatter`, `histogram`, `area`, `heatmap`, `treemap`, `sankey`,
 `graph`, `tree`, `timeline`, `funnel`, `radar`, `gauge`, `boxplot`, `flowchart`, `sequence`, `table`
 (`packages/widget/docs/diagrams.md`).
 
-## Template source
+## Widget template source
 
 PsychoScript (confined JavaScript). It defines top-level functions; input arrives through **handlers on nodes**:
 
@@ -81,7 +81,7 @@ built with the prelude helpers `submit(value)` / `dismiss()` (final: the widget 
 `send(value, { wake?, state? })` (a message to the agent; the widget stays open). Returning `undefined` keeps the
 state. Optional top-level **hooks** take the events that belong to no node: `onKey(state, key)`,
 `onFocus(state, focused)`, `onFullscreen(state, on)` and `onCapture(state, captured)` (`widgets-input.md`,
-`widgets-fullscreen.md`); a template without a hook never sees that event. State and data are plain JSON. Programs
+`widgets-fullscreen.md`); a widget template without a hook never sees that event. State and data are plain JSON. Programs
 must be deterministic and must not rely on time or randomness. There is no `update` function: the lint rejects one.
 
 ## Prelude and step ABI
@@ -101,7 +101,7 @@ The prelude is canonical JavaScript in `packages/widget/src/prelude.js`. It defi
   delivers it without waking the agent: it sees the message on its next turn (use it for background updates).
 - `__widget_step(input)`: runs one step (below).
 
-**Ids.** Before a view leaves the program, the prelude turns the tree templates build into the tree clients get: it
+**Ids.** Before a view leaves the program, the prelude turns the tree widget templates build into the tree clients get: it
 flattens `children`, removes handler functions and `key`s, and gives each interactive node an `id` derived from its
 path: the root is `0` (or `:key`), a child appends `/` and its index among its parent's children (`2`, or `2.1` for
 the second item of a nested array at index 2; a `null`/`false` hole keeps its index) or `:key` when it has a `key`
@@ -123,7 +123,7 @@ Then it runs `view` on the next state. `draw` calls `draw(state, data, frame)` w
 
 The server serves the full **program** = `prelude + "\n" + source`. Clients never need their own prelude copy.
 
-To run a step, a client compiles once per template version:
+To run a step, a client compiles once per widget template version:
 
 ```js
 <program>
@@ -156,7 +156,7 @@ type StepOutput = {
 
 A step that fails (throws, times out, returns an invalid view) leaves the previous state and view in place and shows the
 error inline. The first `init` step failing shows an error card with the message. Either way it is a program error
-(see Failures), which the client sends with the `report` RPC, since the server never runs template code.
+(see Failures), which the client sends with the `report` RPC, since the server never runs widget template code.
 
 ## Events
 
@@ -168,7 +168,7 @@ type WidgetEvent = {
 }
 ```
 
-Clients send `{ id, type, value }` for the ids the prelude put on the nodes and never interpret ids; templates attach
+Clients send `{ id, type, value }` for the ids the prelude put on the nodes and never interpret ids; widget templates attach
 handlers and never see them. The value a client sends, and what the handler gets:
 
 | Node | Event | Handler |
@@ -180,7 +180,7 @@ handlers and never see them. The value a client sends, and what the handler gets
 | `input` | `change`, `value: string` (on commit / blur / debounce >= 300 ms) | `onChange(state, text)` |
 | `carousel` | `change`, `value: number` (new page index) | `onChange(state, index)` |
 | `canvas`, `shader` | `pointer`, `value: { kind, x, y, width, height }` in the node's logical pixels; `move` only while down, at most once per frame (see Canvas) | `onPointer(state, p)`; under pointer capture `p` is `{ kind, dx, dy, button }` |
-| none (`id: ""`) | `key`, `focus`, `fullscreen`, `capture` | the hooks (Template source) |
+| none (`id: ""`) | `key`, `focus`, `fullscreen`, `capture` | the hooks (Widget template source) |
 
 In live mode the same props take closures that get only the value (`onPress()`, `onChange(value)`,
 `onPointer(p)`); see `widgets-live.md`.
@@ -227,7 +227,7 @@ page indicator. A carousel without `id` pages locally; with one (it has an `onCh
 
 ## Canvas
 
-A `canvas` node is drawn by the template's optional `draw(state, data, frame)` function, which returns draw commands.
+A `canvas` node is drawn by the widget template's optional `draw(state, data, frame)` function, which returns draw commands.
 `draw` is pure: it can't change state. Animate with `frame.t`; keep anything that must persist in state via handlers.
 
 Draw step input / output (same `__widget_step` entry point):
@@ -236,7 +236,7 @@ Draw step input / output (same `__widget_step` entry point):
 type StepInput = ... | { phase: "draw"; data: unknown; state: unknown; frame: Frame }
 type Frame = {
   id: string | null   // the canvas node's id; the prelude gives `draw` `key` (the canvas's `key`, or null) instead,
-                      // so templates with several canvases switch on `frame.key`
+                      // so widget templates with several canvases switch on `frame.key`
   t: number           // seconds since the canvas appeared
   dt: number          // seconds since the previous frame
   width: number; height: number; scale: number   // logical size and device pixel ratio
@@ -298,7 +298,7 @@ Clients prepend this header and append the entry point (and provide a full-scree
 ```wgsl
 struct Widget { resolution: vec2f, time: f32, scale: f32, pointer: vec4f, values: array<vec4f, 4> }
 @group(0) @binding(0) var<uniform> widget: Widget;
-// ... template wgsl ...
+// ... widget template wgsl ...
 @fragment fn widget_main(@builtin(position) p: vec4f) -> @location(0) vec4f { return shade(p.xy); }
 ```
 
@@ -306,7 +306,7 @@ struct Widget { resolution: vec2f, time: f32, scale: f32, pointer: vec4f, values
 seconds since the shader appeared. Colors are sRGB-encoded: clients write them to the surface without a linear-to-sRGB
 conversion. With `fps: 0` the shader renders once, and again when its `values` change.
 `widget.pointer` is `(x, y, down, 0)`; `widget.values` carries the node's `values` (up to 16 floats, row-major, zero
-padded), which the template sets from state in `view`. Rune passes WGSL to wgpu as is; iOS gets MSL and Android GLSL
+padded), which the widget template sets from state in `view`. Rune passes WGSL to wgpu as is; iOS gets MSL and Android GLSL
 ES 3.00 translated with naga (`opencode-widget-ffi`). Source is capped at 16 KB. A shader that fails to compile shows
 `poster` (an image src) or `alt` with the error inline; one that takes over 50 ms per frame three frames in a row stops
 and shows its last frame. The TUI shows `poster`/`alt` for `shader` and `alt` for `canvas`.
@@ -317,9 +317,9 @@ restart of `widget.time`. Live programs drive shader games that way, re-renderin
 
 ## Failures
 
-A widget can fail in two ways, and only one is the template's.
+A widget can fail in two ways, and only one is the widget template's.
 
-A **program error** is the template's own code failing or breaking a contract:
+A **program error** is the widget template's own code failing or breaking a contract:
 
 - a parse error or a runtime exception in the program (including a handler, hook, `draw` or `main`);
 - an invalid view or invalid draw output (fails the node or draw command schema, more than 2,000 commands);
@@ -334,14 +334,14 @@ the client, not a widget state. A fetch error a live program gets from `widget.f
 an exception it lets escape is a program error.
 
 A client that hits a program error shows it on the widget (error card or inline error) and calls `report` once with
-`{ phase, message, line?, column? }`, positions relative to the template's source (the prelude's lines subtracted;
-dropped when they fall past the template). The server records it as the widget's `failure`. Whether it reaches the
-agent depends on who made the template:
+`{ phase, message, line?, column? }`, positions relative to the widget template's source (the prelude's lines subtracted;
+dropped when they fall past the widget template). The server records it as the widget's `failure`. Whether it reaches the
+agent depends on who made the widget template:
 
-- **The widget's Session created the template version** (its `widget_template` `save` or `edit` stored that version):
+- **The widget's Session created the widget template version** (its `widget_template` `save` or `edit` stored that version):
   the failure is sent to the agent automatically, as a waking message or, while a `wait: true` call waits, as that
   call's tool error. `failure.sent` becomes `true`.
-- **Otherwise** (a built-in, or a template saved in another Session): nothing is sent; `failure.sent` stays `false`.
+- **Otherwise** (a built-in, or a widget template saved in another Session): nothing is sent; `failure.sent` stays `false`.
   Clients show the error with an **"Ask agent to fix it"** action, which calls `report` again with the same error and
   `ask: true`. That sends it to the agent in the widget's Session once (the text ends with `The user asked you to fix
   it.`) and sets `failure.sent`.
@@ -357,10 +357,10 @@ schema knows about widgets.
 ### The widget in history
 
 A widget is the `widget` tool call: an assistant tool part with `name: "widget"` and input
-`{ template: string; data: object; title?: string; wait?: boolean }`. It is identified by the assistant message ID
+`{ widgetTemplate: string; data: object; title?: string; replaces?: string; wait?: boolean }`. It is identified by the assistant message ID
 plus the call ID (`messageID`, `callID`; a call ID is unique only within its message). Clients find widgets by walking
 tool parts named `widget` and look up their state by `(messageID, callID)`. The completed tool part's `metadata` is
-`{ template: { name, version } }`; while the call runs (or when it failed after posting) the version comes from the
+`{ widgetTemplate: { name, version } }`; while the call runs (or when it failed after posting) the version comes from the
 state.
 
 ### State
@@ -372,7 +372,7 @@ type State = {
   sessionID: string
   messageID: string                     // assistant message holding the widget tool call
   callID: string
-  template: { name: string; version: string }
+  widgetTemplate: { name: string; version: string }
   title?: string
   status: "open" | "submitted" | "dismissed" | "superseded"
   response?: unknown                    // the submitted value
@@ -383,7 +383,7 @@ type State = {
     sent: boolean                       // the agent has been told (automatically, or through ask)
   }
   wait: boolean                         // the tool call waits for the answer (see Tools)
-  capabilities?: { https?: { hosts: string[] } }   // the template's, for the client's grant chip
+  capabilities?: { https?: { hosts: string[] } }   // the widget template's, for the client's grant chip
   time: { created: number; responded?: number }   // epoch ms
 }
 ```
@@ -399,7 +399,7 @@ A widget goes `open → submitted`, `open → dismissed` or `open → superseded
 
 | Method | Input | Output | Errors |
 | --- | --- | --- | --- |
-| `templates` | `{}` | `Summary[]`: latest version of every template, sorted by name, without source | |
+| `widgetTemplates` | `{}` | `Summary[]`: latest version of every widget template, sorted by name, without source | |
 | `program` | `{ name, version? }` | `Program`: that immutable version, or the latest when `version` is omitted | `not_found` |
 | `states` | `{ sessionID }` | `State[]` of the Session, oldest first | |
 | `respond` | `{ sessionID, messageID, callID, response: { value } \| { dismiss: true } }` | the new `State` | `not_found`, `closed` (`data: { status }`) |
@@ -409,7 +409,7 @@ A widget goes `open → submitted`, `open → dismissed` or `open → superseded
 ```ts
 type Summary = {
   name: string; version: string; description: string; data: JSONSchema; mode: "step" | "live"
-  capabilities?: { https?: { hosts: string[] } }   // live templates only
+  capabilities?: { https?: { hosts: string[] } }   // live widget templates only
   builtin: boolean
 }
 type Program = Summary & { source: string; program: string }   // program = prelude + "\n" + source
@@ -442,17 +442,17 @@ prompt: an idle Session starts a turn, a busy one takes them at its next step.
 | report | `Widget "<label>" failed on <client>: <phase>: <message> (line N, col M)`, plus ` The user asked you to fix it.` for `ask` | `<label> failed on <client>` | `error` | yes |
 
 `metadata` is `{ widget: { messageID, callID, kind } }` (`kind`: `response`, `message` or `error`); clients detect these by `metadata.widget`, never by text, and
-show them as one quiet line (`◈ <description>` in the TUI). `<label>` is the title, or the template name. A send with
+show them as one quiet line (`◈ <description>` in the TUI). `<label>` is the title, or the widget template name. A send with
 `wake: false` is admitted without waking (`resume: false`): it stays pending and the model sees it with the next turn.
 
 Waiting tool calls and the lock that serializes respond and send live in the server process, shared by every Location
 and plugin reload in it; this assumes one server process per database, like the goal plugin.
 
 `report` carries one program error (see Failures; never a client error): `phase` is `init`, `event` (a handler or
-hook), `view`, `draw`, `main`, `shader` or another string; `line`/`column` (1-based) are in the template's source when
+hook), `view`, `draw`, `main`, `shader` or another string; `line`/`column` (1-based) are in the widget template's source when
 known; `client` names the client (`tui`, `rune`, `ios`, `android`, `web`). The server writes it as the widget's
 `failure` (publishing `changed`) unless it repeats the recorded one (same phase and message); a different error
-replaces it, unsent. It sends the failure to the agent only when the widget's Session is the template version's
+replaces it, unsent. It sends the failure to the agent only when the widget's Session is the widget template version's
 origin (automatic: repeats of an error already sent are dropped, and at most one automatic send per widget every 10
 seconds), or when `ask: true` and `failure.sent` is still `false` (once). A send fails a waiting `wait: true` call with
 the same text instead of messaging. Reports for a closed widget are ignored. Each saved version records its origin
@@ -467,11 +467,11 @@ Respond and send for one process are serialized, so a widget is answered once.
 `widget` — show a widget.
 
 ```ts
-input: { template: string; data: object; title?: string; replaces?: string; wait?: boolean }
+input: { widgetTemplate: string; data: object; title?: string; replaces?: string; wait?: boolean }
 ```
 
-The plugin resolves the latest version, validates `data` against the template's JSON Schema (errors go back to the
-model as the tool error), stores the widget's state and publishes `changed`. **The server never runs template code**:
+The plugin resolves the latest version, validates `data` against the widget template's JSON Schema (errors go back to the
+model as the tool error), stores the widget's state and publishes `changed`. **The server never runs widget template code**:
 not `init`, `view` or `main`. Errors in running a widget come from the clients that show it, through `report`.
 
 - `replaces`: the call ID of an earlier widget in the same Session (an unknown one is a tool error and nothing is
@@ -489,7 +489,7 @@ not `init`, `view` or `main`. Errors in running a widget come from the clients t
   (interrupt), or the server restarts, the call ends, the widget stays open, and a later answer is delivered as a
   synthetic message with a wake. A send while the tool waits is still a synthetic message.
 
-`widget_template` — manage templates. The input is one flat object (union inputs are poorly supported by some
+`widget_template` — manage widget templates. The input is one flat object (union inputs are poorly supported by some
 providers); fields an action needs are checked at run time.
 
 ```ts
@@ -498,22 +498,22 @@ input: {
   name?: string                    // get, save, edit
   description?: string             // save; edit (optional, keeps the old one)
   data?: JSONSchema                // save; edit (optional); top-level `type` must be "object"
-  from?: string                    // edit: copy this template's latest version to `name` first (e.g. a built-in)
+  from?: string                    // edit: copy this widget template's latest version to `name` first (e.g. a built-in)
   edits?: { oldText: string; newText: string }[]   // edit
   source?: string                  // save
   mode?: "step" | "live"           // save; default "step"
-  capabilities?: { https?: { hosts: string[] } }   // save; live templates only (widgets-live.md, Capabilities)
+  capabilities?: { https?: { hosts: string[] } }   // save; live widget templates only (widgets-live.md, Capabilities)
   example?: object                 // save; edit when `data` changes
 }
 ```
 
 `save` validates the name, checks `example` against the schema, and parses and lints the source without running it
-(psychoscript's parser): at most 128 KB; the entry functions exist (`view` for step templates, `async function main` for
+(psychoscript's parser): at most 128 KB; the entry functions exist (`view` for step widget templates, `async function main` for
 live ones; `init`, `draw` and the hooks are optional); no `update` function and no `widget.event` / `widget.next`
 (the removed event API; the message says what replaces it); only function and `const` declarations at the top level, and no
 `const` initializer that runs code (calls, `new`, assignments), so nothing runs when the program loads; no prelude name
 (`ui`, `widget`, `submit`, `dismiss`, `send`, the `__widget_*` internals, `__input`, `__host`) is redeclared. Problems
-come back as the tool error with `line N, col M`. `capabilities` are rejected on step templates, and each
+come back as the tool error with `line N, col M`. `capabilities` are rejected on step widget templates, and each
 `https.hosts` entry must be a lowercase host name (single labels and IPv4 literals included, for clients' dev-mode
 local network), `*.` plus one, optionally with a `:port`, or `*` (1 to 32 entries). Built-in names cannot be overwritten. Saving content that already exists (same version) makes
 that version the latest again and updates its description.
@@ -521,7 +521,7 @@ that version the latest again and updates its description.
 `edit` applies `edits` in order to the latest source of `name` (or of `from`, saved under the new `name`): each
 `oldText` must occur exactly once in the source as edited so far, and `newText` replaces it literally. Errors name the
 edit (`edit 2: oldText matches 3 times; include more surrounding text so it matches once`, `... was not found ...`,
-empty `edits`, `oldText` equal to `newText`). The result is linted and saved like `save`, keeping the template's mode and
+empty `edits`, `oldText` equal to `newText`). The result is linted and saved like `save`, keeping the widget template's mode and
 capabilities, as a new version. A built-in can only be edited as a copy (`from: "<built-in>"` with a new `name`). An
 `example` is required when `data` changes; otherwise the stored schema stands and no example is checked.
 
@@ -529,17 +529,17 @@ Each saved version gets a **revision**: 1 for the first content saved under a na
 order they were first stored (saving old content again keeps its revision). Results carry short metadata, so clients
 never need the source to show the call: `list` → `{ action, count }`; `get`, `save`, `edit` →
 `{ action, name, version, revision?, lines }` (`revision` is absent for built-ins). Clients render `widget_template`
-calls as one quiet line, never the source: `Saved template <name> v<revision>`, `Edited template <name> v<revision>`,
-`Read template <name>`, `Listed <count> widget templates`.
+calls as one quiet line, never the source: `Saved widget template <name> v<revision>`, `Edited widget template <name> v<revision>`,
+`Read widget template <name>`, `Listed <count> widget templates`.
 
-Permission actions are `widget` (resource: the template name) and `widget_template` (resource: the template name, or
+Permission actions are `widget` (resource: the widget template name) and `widget_template` (resource: the widget template name, or
 `*` for list). The plugin's agent transform allows both for the Build agent, `widget` for Plan, and denies `widget` for
 the `general` subagent; configured rules still win.
 
 The `widgets` skill (shipped by the plugin) covers when to show a widget, when to `wait`, how to fill each built-in,
-and the template language. Tool descriptions teach the node set and the ABI briefly and point at it.
+and the widget template language. Tool descriptions teach the node set and the ABI briefly and point at it.
 
-## Built-in templates
+## Built-in widget templates
 
 `suggestions` — 2 or 3 options to pick from, each with an image carousel (the Mother bot "Suggestions" card).
 
@@ -594,7 +594,7 @@ stays after release, and a tap outside the plot clears it.
 accent?: string /* #rgb | #rrggbb */ }`, submits nothing. The banner is followed by the title, the text and a speed
 slider (0–2, 0 pauses with `fps: 0`); `values` is `[speed, accent r, g, b]`.
 
-Diagrams — canvas templates for data, listed with their data in `packages/widget/docs/diagrams.md`. Each takes
+Diagrams — canvas widget templates for data, listed with their data in `packages/widget/docs/diagrams.md`. Each takes
 `title` and `choose?: boolean`; with `choose` a Choose button submits the selected element, otherwise they submit
 nothing.
 
@@ -611,5 +611,5 @@ nothing.
 - Local state lives only on the client that the user is interacting with; other clients see the result when the
   state turns `submitted`.
 - Post a step's `send` output with `send`; keep the widget interactive.
-- Fetch templates by `name@version` and cache them; show a loading placeholder while fetching.
+- Fetch widget templates by `name@version` and cache them; show a loading placeholder while fetching.
 - Run steps off the render path where the platform allows; steps are small, so synchronous is acceptable in v1.

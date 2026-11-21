@@ -1,22 +1,22 @@
 # @opencode/widget
 
-The shared widget runtime: the canonical prelude, the view node set, the step ABI and the built-in templates
+The shared widget runtime: the canonical prelude, the view node set, the step ABI and the built-in widget templates
 (`suggestions`, `form`, `confirm`, `chart`, `backdrop`, and 17 diagrams listed in
 `docs/diagrams.md`). The contracts are `specs/v2/widgets.md`
 and `specs/v2/widgets-live.md`; this README is the short version for client authors in other languages (Rune desktop,
 Rust). The TypeScript runtime targets Bun.
 
-A template's `version` is the first 16 hex chars of `sha256(program + "\n" + JSON.stringify(dataSchema))`, where
-`program = prelude + "\n" + source`, so a prelude change yields new versions. A live template appends `"\nlive"`, then
+A widget template's `version` is the first 16 hex chars of `sha256(program + "\n" + JSON.stringify(dataSchema))`, where
+`program = prelude + "\n" + source`, so a prelude change yields new versions. A live widget template appends `"\nlive"`, then
 `"\n" + JSON.stringify(capabilities)` when it declares any: `version(source, data, mode, capabilities)`.
-`compile(source, mode)` checks a template's syntax without running it and reports lines in the template source. `entry(mode)` is the line a client appends to the program to run it.
+`compile(source, mode)` checks a widget template's syntax without running it and reports lines in the widget template source. `entry(mode)` is the line a client appends to the program to run it.
 
 ## TypeScript
 
 ```ts
 import { WidgetSession, program, validateData, builtins } from "@opencode/widget"
 
-const session = await WidgetSession.start(program(template.source), data) // or the server's `program` field
+const session = await WidgetSession.start(program(widgetTemplate.source), data) // or the server's `program` field
 render(session.view)
 const output = await session.dispatch({ id: button.id, type: "press" }) // ids come from the view
 if ("submit" in output) respond({ value: output.submit })
@@ -32,7 +32,7 @@ or `invalid`); keep the previous state and view and show the message inline.
 
 ## Live mode
 
-A template with `mode: "live"` defines `async function main(data)` and runs as one long program per open widget:
+A widget template with `mode: "live"` defines `async function main(data)` and runs as one long program per open widget:
 `<program>\nreturn await __widget_live(__input())` with `__input()` = `{ data }` and the host functions `__host.post`,
 `__host.receive`, `__host.sleep`, `__host.now` and `__host.fetch` (see `specs/v2/widgets-live.md` for the messages,
 pausing and budgets). The prelude builds the program-facing `widget` object on them; model guidance with examples is
@@ -44,9 +44,9 @@ in `docs/live-guidance.md`.
 import { LiveWidget, ManualClock, program } from "@opencode/widget"
 
 const clock = new ManualClock() // or the default real clock
-const widget = LiveWidget.start(program(template.source), data, {
+const widget = LiveWidget.start(program(widgetTemplate.source), data, {
   clock,
-  capabilities: template.capabilities, // fetch checks https, hosts, private addresses, size, time and rate
+  capabilities: widgetTemplate.capabilities, // fetch checks https, hosts, private addresses, size, time and rate
   transport, // performs allowed requests one hop at a time; the platform fetch by default
   onMessage: (message) => console.log(message), // render, draw, frame, submit, dismiss, send
 })
@@ -66,8 +66,8 @@ and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
 
 ## ABI for other clients
 
-1. Fetch `GET /api/experimental/widget/template/{name}/{version}` (body wrapped in `{ data }`) once and cache it forever by `name@version`. Its `program` field is
-   the full program (prelude + template); you never need a prelude of your own.
+1. Fetch the widget template version with the `opencode.widget` RPC's `program` method (`{ name, version }`) once and cache it forever by `name@version`. Its `program` field is
+   the full program (prelude + widget template); you never need a prelude of your own.
 2. Compile, once per program, this PsychoScript source:
 
    ```js
@@ -102,7 +102,7 @@ and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
    a warning) and ignore unknown props. A failed step (throw, timeout, invalid view) keeps the previous state and view
    and shows the error inline; a failed `init` shows an error card.
 
-Event `id`s come from the nodes, where the prelude put them (templates attach handlers and never see ids): `button`
+Event `id`s come from the nodes, where the prelude put them (widget templates attach handlers and never see ids): `button`
 and `card` (with `id`) send `press`; `checkbox` (`boolean`), `slider` (`number`, on release), `select` (`string`, or
 `string[]` when `multiple`), `input` (`string`, on commit or after 300 ms) and `carousel` (with `id`, new page index)
 send `change`. `canvas` and `shader` (with `id`) send `pointer` with `{ kind: "down" | "move" | "up", x, y, width,
@@ -118,5 +118,5 @@ the spec's header and entry point.
 
 ## Development
 
-The `.js` files in `src/` (`prelude.js`, `templates/*.js`) are canonical. After editing them run `bun run generate`,
+The `.js` files in `src/` (`prelude.js`, `widget-templates/*.js`) are canonical. After editing them run `bun run generate`,
 which embeds them in `src/source.ts`; a test fails when the two differ.

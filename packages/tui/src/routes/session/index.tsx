@@ -3769,7 +3769,7 @@ function Skill(props: ToolProps) {
   )
 }
 
-// One quiet line per template call; the source stays out of the transcript (the result has short metadata).
+// One quiet line per widget template call; the source stays out of the transcript (the result has short metadata).
 function WidgetTemplate(props: ToolProps) {
   return (
     <InlineTool icon="◈" pending="Writing widget template…" complete={props.metadata.action} part={props.part}>

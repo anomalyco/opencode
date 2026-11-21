@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { Rpc } from "./rpc.js"
 import { optional } from "./schema.js"
 
-/** A template name, unique per server. */
+/** A widget template name, unique per server. */
 export const Name = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,47}$/)).annotate({
   identifier: "Widget.Name",
 })
@@ -22,16 +22,16 @@ export const Ref = Schema.Struct({
   version: Version,
 }).annotate({ identifier: "Widget.Ref" })
 
-/** A JSON Schema (draft 2020-12 subset) describing the data a template takes. */
+/** A JSON Schema (draft 2020-12 subset) describing the data a widget template takes. */
 export const DataSchema = Schema.Record(Schema.String, Schema.Json).annotate({ identifier: "Widget.DataSchema" })
 export type DataSchema = typeof DataSchema.Type
 
-/** How clients run a template: short `init`/`view`/`draw` steps with handlers on nodes, or one long-running `main` (widgets-live.md). */
+/** How clients run a widget template: short `init`/`view`/`draw` steps with handlers on nodes, or one long-running `main` (widgets-live.md). */
 export const Mode = Schema.Literals(["step", "live"]).annotate({ identifier: "Widget.Mode" })
 export type Mode = typeof Mode.Type
 
 /**
- * What a live template may use beyond rendering (widgets-live.md, Capabilities). `https.hosts` entries are exact host
+ * What a live widget template may use beyond rendering (widgets-live.md, Capabilities). `https.hosts` entries are exact host
  * names or `*.` suffix wildcards; `["*"]` is any host.
  */
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
@@ -39,31 +39,31 @@ export const Capabilities = Schema.Struct({
   https: optional(Schema.Struct({ hosts: Schema.Array(Schema.String) })),
 }).annotate({ identifier: "Widget.Capabilities" })
 
-/** A template version without its source, as listed. */
+/** A widget template version without its source, as listed. */
 export interface Summary extends Schema.Schema.Type<typeof Summary> {}
 export const Summary = Schema.Struct({
   name: Name,
   version: Version,
-  /** One line, shown to the model when listing templates. */
+  /** One line, shown to the model when listing widget templates. */
   description: Schema.String,
   data: DataSchema,
   mode: Mode,
-  /** Live templates only. */
+  /** Live widget templates only. */
   capabilities: optional(Capabilities),
   builtin: Schema.Boolean,
 }).annotate({ identifier: "Widget.Summary" })
 
-export interface Template extends Schema.Schema.Type<typeof Template> {}
-export const Template = Schema.Struct({
+export interface WidgetTemplate extends Schema.Schema.Type<typeof WidgetTemplate> {}
+export const WidgetTemplate = Schema.Struct({
   ...Summary.fields,
-  /** The template's PsychoScript source. */
+  /** The widget template's PsychoScript source. */
   source: Schema.String,
-}).annotate({ identifier: "Widget.Template" })
+}).annotate({ identifier: "Widget.WidgetTemplate" })
 
-/** A template with its runnable program: the widget prelude followed by the source. */
+/** A widget template with its runnable program: the widget prelude followed by the source. */
 export interface Program extends Schema.Schema.Type<typeof Program> {}
 export const Program = Schema.Struct({
-  ...Template.fields,
+  ...WidgetTemplate.fields,
   program: Schema.String,
 }).annotate({ identifier: "Widget.Program" })
 
@@ -84,7 +84,7 @@ export const Response = Schema.Union([Submit, Dismiss]).annotate({ identifier: "
 export type Response = Submit | Dismiss
 
 /**
- * A program error a client hit running the widget (widgets.md, Failures): the template's own code failed or broke a
+ * A program error a client hit running the widget (widgets.md, Failures): the widget template's own code failed or broke a
  * contract. `phase` is open: clients may report others.
  */
 export interface RuntimeError extends Schema.Schema.Type<typeof RuntimeError> {}
@@ -93,7 +93,7 @@ export const RuntimeError = Schema.Struct({
     description: '"init", "event" (a handler or hook), "view", "draw", "main", "shader", "fetch" or another',
   }),
   message: Schema.String,
-  /** 1-based, in the template's source. */
+  /** 1-based, in the widget template's source. */
   line: optional(Schema.Number),
   column: optional(Schema.Number),
 }).annotate({ identifier: "Widget.RuntimeError" })
@@ -116,14 +116,14 @@ export const State = Schema.Struct({
   sessionID: Schema.String,
   messageID: Schema.String,
   callID: Schema.String,
-  template: Ref,
+  widgetTemplate: Ref,
   title: optional(Schema.String),
   status: Status,
   /** The submitted value; absent while open and for a dismissal. */
   response: optional(Schema.Json),
   /** The tool call waits for the answer and returns it as its result. */
   wait: Schema.Boolean,
-  /** The template's capabilities, so clients can show what the widget is granted. */
+  /** The widget template's capabilities, so clients can show what the widget is granted. */
   capabilities: optional(Capabilities),
   /** The program error its last report recorded; the widget keeps its status. */
   failure: optional(Failure),
@@ -140,15 +140,15 @@ const Closed = standard(Schema.Struct({ status: Schema.Literals(["submitted", "d
 
 /**
  * The widgets plugin's RPC. Clients list a Session's widgets with `states`, keep them current from `changed`, fetch a
- * template's program once per `name@version` with `program`, and answer with `respond` or `send`. Calls go to the
+ * widget template's program once per `name@version` with `program`, and answer with `respond` or `send`. Calls go to the
  * Session's Location. The schemas are Standard Schemas, so Promise clients can call it.
  */
 export const Definition = Rpc.define({
   id: "opencode.widget",
   methods: {
-    /** The latest version of every template, without sources. */
-    templates: { input: standard(Schema.Struct({})), output: standard(Schema.Array(Summary)) },
-    /** One immutable template version with its program; the latest when `version` is omitted. */
+    /** The latest version of every widget template, without sources. */
+    widgetTemplates: { input: standard(Schema.Struct({})), output: standard(Schema.Array(Summary)) },
+    /** One immutable widget template version with its program; the latest when `version` is omitted. */
     program: {
       input: standard(Schema.Struct({ name: Schema.String, version: optional(Schema.String) })),
       output: standard(Program),
@@ -170,7 +170,7 @@ export const Definition = Rpc.define({
     },
     /**
      * A program error a client hit running the widget (never a client error; widgets.md, Failures). It is recorded as
-     * the widget's `failure`, and sent to the agent automatically only when the widget's Session created the template
+     * the widget's `failure`, and sent to the agent automatically only when the widget's Session created the widget template
      * version (`failure.sent`); `ask: true` sends it once otherwise (the user's "Ask agent to fix it"). Automatic sends
      * drop repeats and go out at most once per widget every 10 seconds. A closed widget ignores reports.
      */

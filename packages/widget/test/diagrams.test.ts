@@ -17,15 +17,15 @@ import { examples } from "./fixtures/diagrams.js"
 
 type Name = keyof typeof examples
 
-const template = (name: string) => {
+const widgetTemplate = (name: string) => {
   const found = builtins.find((item) => item.name === name)
   if (!found) throw new Error(`no builtin ${name}`)
   return found
 }
 
 const start = async (name: string, data: unknown) => {
-  expect(validateData(template(name).data, data)).toEqual([])
-  return WidgetSession.start(program(template(name).source), data)
+  expect(validateData(widgetTemplate(name).data, data)).toEqual([])
+  return WidgetSession.start(program(widgetTemplate(name).source), data)
 }
 
 const nodes = (node: Node): Node[] => [node, ...("children" in node ? node.children.flatMap(nodes) : [])]
@@ -73,8 +73,8 @@ const label = (commands: ReadonlyArray<Command>, text: string) => {
 describe("every diagram", () => {
   for (const name of Object.keys(examples) as Name[]) {
     test(`${name}: valid example, animated canvas, valid draws within budget`, async () => {
-      expect(template(name).builtin).toBe(true)
-      expect(template(name).description.length).toBeGreaterThan(20)
+      expect(widgetTemplate(name).builtin).toBe(true)
+      expect(widgetTemplate(name).description.length).toBeGreaterThan(20)
       const session = await start(name, examples[name])
       expect(texts(session.view)[0]).toBe(examples[name].title)
       const list = canvases(session.view)
@@ -383,7 +383,7 @@ test("boxplot: quartiles from values or stats, tap a box, choose", async () => {
     max: 26,
     outliers: [41],
   })
-  expect(validateData(template("boxplot").data, { title: "x", groups: [{ label: "a" }] })).not.toEqual([])
+  expect(validateData(widgetTemplate("boxplot").data, { title: "x", groups: [{ label: "a" }] })).not.toEqual([])
 })
 
 test("flowchart: layered layout with a cycle, tap a step, choose", async () => {
@@ -486,7 +486,7 @@ test("table: a large table builds in linear time and lines up exactly", async ()
       trend: [1, 2, index % 4],
     })),
   }
-  const source = program(template("table").source)
+  const source = program(widgetTemplate("table").source)
   const times: number[] = []
   let view: Node | undefined
   for (let run = 0; run < 3; run++) {
