@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { app, BrowserWindow, screen } from "electron"
+import { app, BrowserWindow, nativeTheme, screen } from "electron"
 import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
@@ -122,6 +122,13 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
   const storage = yield* DesktopStorage.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const wireWindowRecovery = yield* windowRecovery
+
+  // Turning a Windows contrast theme on or off changes the caption buttons' colour (`titlebarOverlay`).
+  if (process.platform === "win32") {
+    const contrastChanged = () => getMainWindows().forEach(updateTitlebar)
+    nativeTheme.on("updated", contrastChanged)
+    yield* Effect.addFinalizer(() => Effect.sync(() => nativeTheme.off("updated", contrastChanged)))
+  }
 
   // The entry module created and showed the first restored window on ready; it is adopted here,
   // before any renderer loads, so the user never waited for the layers to see a window.
