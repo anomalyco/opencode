@@ -165,6 +165,8 @@ export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.Connec
   message: Schema.String,
   /** The server was reached but refused or broke the handshake, so different connect options might succeed. */
   answered: Schema.optional(Schema.Boolean),
+  /** A stdio server closed on the auto probe, as legacy servers that exit on unknown requests do. */
+  probeClosed: Schema.optional(Schema.Boolean),
 }) {}
 
 /** A legacy Streamable HTTP server no longer recognizes this connection's session; the lifecycle reconnects. */
@@ -804,7 +806,15 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
       server,
       message: `${error.message}; the server supports ${error.supported.join(", ")}. Set "protocol" for this server to one of those or to "legacy".`,
     })
-  return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
+  const answered = !repeats(error)
+  // A shared connection doesn't respawn a server that closed on the probe; its pool decides what comes next.
+  const probeClosed =
+    answered &&
+    config.type === "local" &&
+    protocol === "auto" &&
+    error instanceof SdkError &&
+    error.code === SdkErrorCode.EraNegotiationFailed
+  return yield* new ConnectError({ server, message: explain(error), answered, ...(probeClosed ? { probeClosed } : {}) })
 })
 
 // Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
