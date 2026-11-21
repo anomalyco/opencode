@@ -24,9 +24,17 @@ export const deletePatch = (file: string, content: string) =>
 export const countPatch = (patch: string) => {
   let additions = 0
   let deletions = 0
+  // Headers come only before a file's first hunk, so a changed line whose content starts with `++` or `--`
+  // (SQL and Lua comments, markdown rules) still counts. A `diff --git` line repeats the next file's headers.
+  let headers = true
   for (const line of patch.split("\n")) {
-    if (line.startsWith("+") && !line.startsWith("+++")) additions++
-    else if (line.startsWith("-") && !line.startsWith("---")) deletions++
+    if (line.startsWith("diff --git ")) headers = true
+    else if (line.startsWith("@@")) headers = false
+    else if (line.startsWith("+")) {
+      if (!headers || !line.startsWith("+++")) additions++
+    } else if (line.startsWith("-")) {
+      if (!headers || !line.startsWith("---")) deletions++
+    }
   }
   return { additions, deletions }
 }
