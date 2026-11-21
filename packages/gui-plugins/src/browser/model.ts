@@ -162,9 +162,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const key = (tabID: string) => `${ctx.id}:${tabID}`
 
   // A failure code `failure.ts` has no sentence for still reads as what the person tried. It is logged with its code,
-  // so a new one is noticed and gets a sentence of its own.
+  // which is main's message, and the action, so a new one is noticed and gets a sentence of its own. As one string:
+  // the desktop log writes each argument with `String()`, which turns an object of fields into "[object Object]".
   const noteFailure = (code: string, action: Browser.Action | undefined) => {
-    if (!commandFailure(code, action?.type).known) console.warn("[browser] unmapped failure", { code, action: action?.type })
+    if (!commandFailure(code, action?.type).known)
+      console.warn(`[browser] unmapped failure: ${code.slice(0, 300)} (action: ${action?.type ?? "none"})`)
   }
 
   const dispatch = (event: Event) => {
