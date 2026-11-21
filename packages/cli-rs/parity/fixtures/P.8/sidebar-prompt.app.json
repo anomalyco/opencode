@@ -1,0 +1,73 @@
+{
+ "scenario": "P.8/sidebar-prompt",
+ "width": 140,
+ "height": 34,
+ "directory": "/tmp/opencode/packages/tui",
+ "config": {
+  "experimental": {"new-designs":true},
+  "plugins": ["./out/npm/node_modules/opencode-sidebar-prompt"],
+  "animations": false,
+  "theme": {"name":"opencode"}
+ },
+ "args": {
+  "sessionID": "ses_l"
+ },
+ "env": {
+  "OPENCODE_PARITY_PLUGIN": "npm"
+ },
+ "routes": [
+  {"path":"/api/session/ses_l","json":{"data":{"id":"ses_l","title":"Release notes","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}}},
+  {"path":"/api/session","json":{"data":[{"id":"ses_l","title":"Release notes","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}],"cursor":{}}},
+  {"path":"/api/session/ses_l/message","json":{"data":[{"id":"msg_2","type":"assistant","agent":"build","model":{"providerID":"provider","id":"model"},"content":[{"type":"text","text":"Drafted."}],"finish":"stop","time":{"created":2000,"completed":2001}},{"id":"msg_1","type":"user","text":"Write the release notes for 2.3: the new sidebar, the plugin host, and the fixes to the theme picker. Keep each line short, link every pull request, and leave the upgrade steps for last.\nStep 1: check the notes of change 1 by hand.\nStep 2: check the notes of change 2 by hand.\nStep 3: check the notes of change 3 by hand.\nStep 4: check the notes of change 4 by hand.\nStep 5: check the notes of change 5 by hand.\nStep 6: check the notes of change 6 by hand.\nStep 7: check the notes of change 7 by hand.\nStep 8: check the notes of change 8 by hand.\nStep 9: check the notes of change 9 by hand.\nStep 10: check the notes of change 10 by hand.\nStep 11: check the notes of change 11 by hand.\nStep 12: check the notes of change 12 by hand.\nStep 13: check the notes of change 13 by hand.\nStep 14: check the notes of change 14 by hand.\nStep 15: check the notes of change 15 by hand.\nStep 16: check the notes of change 16 by hand.\nStep 17: check the notes of change 17 by hand.\nStep 18: check the notes of change 18 by hand.\nStep 19: check the notes of change 19 by hand.\nStep 20: check the notes of change 20 by hand.\nStep 21: check the notes of change 21 by hand.\nStep 22: check the notes of change 22 by hand.\nStep 23: check the notes of change 23 by hand.\nStep 24: check the notes of change 24 by hand.\nStep 25: check the notes of change 25 by hand.\nStep 26: check the notes of change 26 by hand.\nStep 27: check the notes of change 27 by hand.\nStep 28: check the notes of change 28 by hand.\nStep 29: check the notes of change 29 by hand.\nStep 30: check the notes of change 30 by hand.\nStep 31: check the notes of change 31 by hand.\nStep 32: check the notes of change 32 by hand.\nStep 33: check the notes of change 33 by hand.\nStep 34: check the notes of change 34 by hand.\nStep 35: check the notes of change 35 by hand.\nStep 36: check the notes of change 36 by hand.\nStep 37: check the notes of change 37 by hand.\nStep 38: check the notes of change 38 by hand.\nStep 39: check the notes of change 39 by hand.\nStep 40: check the notes of change 40 by hand.\nLast line of the prompt.","time":{"created":1000}}],"cursor":{}}},
+  {"path":"/api/session/ses_l/inbox","json":{"data":[]}}
+ ],
+ "steps": [
+  {"checkpoint":"sidebar","until":"Open full prompt","fixture":"P.8/sidebar-prompt/sidebar"},
+  {"type":"/lastprompt"},
+  {"checkpoint":"slash","until":"Show full last prompt","fixture":"P.8/sidebar-prompt/slash"},
+  {"keys":["enter"]},
+  {"checkpoint":"dialog","until":"Esc · Close","fixture":"P.8/sidebar-prompt/dialog"},
+  {"wait":800},
+  {"checkpoint":"kept","until":"Esc · Close","fixture":"P.8/sidebar-prompt/kept"},
+  {"keys":["down","down","down"]},
+  {"checkpoint":"scrolled","until":"Step 36: check the notes","fixture":"P.8/sidebar-prompt/scrolled"},
+  {"keys":["up"]},
+  {"checkpoint":"back","until":"Step 8: check the notes","fixture":"P.8/sidebar-prompt/back"},
+  {"keys":["escape"]},
+  {"checkpoint":"closed","until":"Open full prompt","fixture":"P.8/sidebar-prompt/closed"}
+ ],
+ "requests": {
+  "writes": [],
+  "reads": [
+   {"method":"GET","path":"/api/agent","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/command","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/config","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":[]},
+   {"method":"GET","path":"/api/experimental/job","query":{"descendants":["true"],"sessionID":["ses_l"],"status":["running"]},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/experimental/migration/v1","query":{},"status":200,"json":{"status":"completed"}},
+   {"method":"GET","path":"/api/experimental/session/ses_l/terminal","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/form","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/fs/list","query":{"location[directory]":["<cwd>"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/info","query":{},"status":200,"json":{"version":"test","pid":0,"urls":[],"paths":{"tmp":"/tmp"},"capabilities":{"persistentPty":true}}},
+   {"method":"GET","path":"/api/integration","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/location","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}}},
+   {"method":"GET","path":"/api/mcp","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/mcp/resource","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":{"resources":[],"templates":[]}}},
+   {"method":"GET","path":"/api/model","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/plugin","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/project","query":{},"status":200,"json":[]},
+   {"method":"GET","path":"/api/provider","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/reference","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode/packages/tui","canonical":"/tmp/opencode/packages/tui"}},"data":[]}},
+   {"method":"GET","path":"/api/session","query":{"limit":["200"],"order":["desc"],"parentID":["ses_l"]},"status":200,"json":{"data":[{"id":"ses_l","title":"Release notes","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}],"cursor":{}}},
+   {"method":"GET","path":"/api/session/active","query":{},"status":200,"json":{"data":{}}},
+   {"method":"GET","path":"/api/session/ses_l","query":{},"status":200,"json":{"data":{"id":"ses_l","title":"Release notes","projectID":"proj_test","cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":2,"updated":2},"location":{"directory":"/tmp/opencode/packages/tui"}}}},
+   {"method":"GET","path":"/api/session/ses_l/form","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_l/inbox","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/session/ses_l/message","query":{"limit":["20"],"order":["desc"]},"status":200,"json":{"data":[{"id":"msg_2","type":"assistant","agent":"build","model":{"providerID":"provider","id":"model"},"content":[{"type":"text","text":"Drafted."}],"finish":"stop","time":{"created":2000,"completed":2001}},{"id":"msg_1","type":"user","text":"Write the release notes for 2.3: the new sidebar, the plugin host, and the fixes to the theme picker. Keep each line short, link every pull request, and leave the upgrade steps for last.\nStep 1: check the notes of change 1 by hand.\nStep 2: check the notes of change 2 by hand.\nStep 3: check the notes of change 3 by hand.\nStep 4: check the notes of change 4 by hand.\nStep 5: check the notes of change 5 by hand.\nStep 6: check the notes of change 6 by hand.\nStep 7: check the notes of change 7 by hand.\nStep 8: check the notes of change 8 by hand.\nStep 9: check the notes of change 9 by hand.\nStep 10: check the notes of change 10 by hand.\nStep 11: check the notes of change 11 by hand.\nStep 12: check the notes of change 12 by hand.\nStep 13: check the notes of change 13 by hand.\nStep 14: check the notes of change 14 by hand.\nStep 15: check the notes of change 15 by hand.\nStep 16: check the notes of change 16 by hand.\nStep 17: check the notes of change 17 by hand.\nStep 18: check the notes of change 18 by hand.\nStep 19: check the notes of change 19 by hand.\nStep 20: check the notes of change 20 by hand.\nStep 21: check the notes of change 21 by hand.\nStep 22: check the notes of change 22 by hand.\nStep 23: check the notes of change 23 by hand.\nStep 24: check the notes of change 24 by hand.\nStep 25: check the notes of change 25 by hand.\nStep 26: check the notes of change 26 by hand.\nStep 27: check the notes of change 27 by hand.\nStep 28: check the notes of change 28 by hand.\nStep 29: check the notes of change 29 by hand.\nStep 30: check the notes of change 30 by hand.\nStep 31: check the notes of change 31 by hand.\nStep 32: check the notes of change 32 by hand.\nStep 33: check the notes of change 33 by hand.\nStep 34: check the notes of change 34 by hand.\nStep 35: check the notes of change 35 by hand.\nStep 36: check the notes of change 36 by hand.\nStep 37: check the notes of change 37 by hand.\nStep 38: check the notes of change 38 by hand.\nStep 39: check the notes of change 39 by hand.\nStep 40: check the notes of change 40 by hand.\nLast line of the prompt.","time":{"created":1000}}],"cursor":{}}},
+   {"method":"GET","path":"/api/session/ses_l/permission","query":{},"status":200,"json":{"data":[]}},
+   {"method":"GET","path":"/api/shell","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/skill","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/vcs","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":{"branch":{"current":"main","default":"main"}}}},
+   {"method":"POST","path":"/api/rpc/opencode.goal/get","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"body":{"input":{"sessionID":"ses_l"}},"status":200,"json":{"output":null}}
+  ]
+ }
+}

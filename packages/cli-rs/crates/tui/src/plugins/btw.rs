@@ -1,0 +1,162 @@
+//! `/btw` asks a side question with session context and shows the answer without interrupting the session.
+
+use opencode_api::client::Client;
+use opencode_api::generated::{SessionGenerateInput, SessionGenerateOutput};
+use opencode_plugin::abi::v2::{self, Place, Surface};
+use opencode_plugin::abi::{
+    self, Action, Command, Dialog, Host, Layout, Node, Panel, PanelAction, PanelBind, PanelSize, Placement, Prompt,
+    RequestId, Span, Toast, Variant,
+};
+use opencode_plugin::slot;
+
+use super::fetch::{data, fetch_of};
+use super::kept;
+
+use crate::prelude::*;
+
+const SPINNER: &str = "spinner";
+
+// `session.generate` exposes the session's tools but runs no tool loop, so a tool call would surface as an
+// empty answer.
+const INSTRUCTIONS: &str = "The user is asking a quick side question about the conversation so far. \
+Answer directly and concisely in markdown from what you already know. \
+Do not call any tools and do not take any actions.";
+
+pub const ID: &str = "opencode.btw";
+
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: ID, setup }
+}
+
+#[derive(Default)]
+struct State {
+    pending: RefCell<HashMap<RequestId, String>>,
+    /// The session the open prompt asks about, captured as it opened.
+    prompted: RefCell<Option<String>>,
+    shown: RefCell<Option<Answer>>,
+    answers: Cell<u64>,
+}
+
+struct Answer {
+    key: String,
+    question: String,
+    text: String,
+}
+
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    let state = Rc::new(State::default());
+    let shown = state.clone();
+    // The spinner shows what the plugin's own state holds: its handlers' work (`woken`).
+    let spinner = Surface::new("spinner", Place::Slot(Placement::append(slot::PROMPT_FOOTER_STATUS)), move |cx| {
+        let changed = &cx.input.changed;
+        if !(changed.all || changed.woken) {
+            return kept(SPINNER);
+        }
+        match shown.pending.borrow().is_empty() {
+            true => super::hidden(SPINNER),
+            false => v2::Node::row(vec![v2::Node::Spinner { id: None, label: "/btw".to_owned() }])
+                .layout(Layout::default().shrink(false))
+                .with_id(SPINNER),
+        }
+    });
+    setup.surface(spinner);
+    let aside = state.clone();
+    let command = Command::new("session.aside")
+        .title("Ask a side question")
+        .description("One-shot answer from the session's context without adding to the conversation".to_owned())
+        .group("Session")
+        .palette()
+        .slash("btw")
+        .arguments();
+    setup.command(command, move |host, input| {
+        let abi::Route::Session { id } = host.route() else {
+            host.toast(Toast::new(Variant::Warning, "Open a session first"));
+            return;
+        };
+        let question = input.map(str::trim).unwrap_or_default();
+        if !question.is_empty() {
+            return ask(host, &aside, id, question.to_owned());
+        }
+        *aside.prompted.borrow_mut() = Some(id);
+        let action = Action::command("btw.ask");
+        host.dialog(Dialog::Prompt(Prompt::new("/btw", action).placeholder("Ask anything")));
+    });
+    let prompted = state.clone();
+    setup.command(hidden("btw.ask"), move |host, input| {
+        let Some(session) = prompted.prompted.borrow_mut().take() else { return };
+        if let Some(question) = input.filter(|question| !question.is_empty()) {
+            ask(host, &prompted, session, question.to_owned());
+        }
+    });
+    let copy = state.clone();
+    setup.command(hidden("btw.copy"), move |host, _| {
+        if let Some(answer) = copy.shown.borrow().as_ref() {
+            host.copy(&answer.text, Some(Action::command("btw.copied")));
+        }
+    });
+    let copied = state.clone();
+    setup.command(hidden("btw.copied"), move |host, _| {
+        // A copy that completes after the answer closed leaves it closed.
+        if let Some(answer) = copied.shown.borrow().as_ref()
+            && host.dialog_open(&answer.key)
+        {
+            host.dialog(Dialog::Panel(panel(answer, true)));
+        }
+    });
+    setup.on_reply(move |host, id, reply| {
+        let Some(question) = state.pending.borrow_mut().remove(&id) else { return };
+        let output = match data::<SessionGenerateOutput>(reply) {
+            Ok(output) => output,
+            Err(error) => return host.toast(Toast::new(Variant::Error, error)),
+        };
+        state.answers.set(state.answers.get() + 1);
+        let answer =
+            Answer { key: format!("answer.{}", state.answers.get()), question, text: output.text.trim().to_owned() };
+        host.dialog(Dialog::Panel(panel(&answer, false)));
+        *state.shown.borrow_mut() = Some(answer);
+    });
+    Ok(())
+}
+
+fn hidden(name: &str) -> Command {
+    Command::new(name)
+}
+
+fn ask(host: &dyn Host, state: &State, session: String, question: String) {
+    let input =
+        SessionGenerateInput { session_id: SessionID(session), prompt: format!("{INSTRUCTIONS}\n\n{question}") };
+    let call = Client::session_generate_call(&input).expect("the generate input encodes");
+    match host.try_fetch(fetch_of(call)) {
+        Ok(id) => drop(state.pending.borrow_mut().insert(id, question)),
+        Err(error) => host.toast(Toast::new(Variant::Error, error)),
+    }
+}
+
+/// `Answer`: the question in the header, the answer as Markdown in a body at most 60% of the screen high, and
+/// `copy response` (`c`), which becomes `✓ copied` once copied.
+fn panel(answer: &Answer, copied: bool) -> Panel {
+    let copy = Action::command("btw.copy");
+    let action = match copied {
+        true => PanelAction {
+            title: "✓ copied".to_owned(),
+            key: None,
+            color: Some("text.feedback.success.base".into()),
+            close: false,
+            action: copy.clone(),
+        },
+        false => PanelAction {
+            title: "copy response".to_owned(),
+            key: Some("c".to_owned()),
+            color: None,
+            close: false,
+            action: copy.clone(),
+        },
+    };
+    Panel::new(answer.key.clone(), vec![Span::new("/btw").bold()], Node::Markdown { text: answer.text.clone() })
+        .size(PanelSize::Large)
+        .subtitle(answer.question.clone())
+        .actions(vec![action])
+        .binds(vec![PanelBind { key: "c".to_owned(), title: "Copy answer".to_owned(), action: copy }])
+        .bleed()
+        .centered()
+}

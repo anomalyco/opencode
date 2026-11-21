@@ -1,0 +1,163 @@
+//! The test binary's allocator: the system allocator, which can count the Rust heap one thread allocates and still
+//! holds, so a test can tell what a mount keeps. Each allocation carries in a header the measure it counts in, so
+//! frees of other threads' allocations, such as messages decoded on the runtime's threads, do not count, nor frees of
+//! what this thread allocated before the measure, such as the tasks of an earlier mount that its runtime drops in the
+//! background. OpenTUI's native memory is not counted.
+
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::cell::Cell;
+use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
+use std::sync::{Mutex, MutexGuard};
+
+pub struct Counting;
+
+static MEASURED: AtomicUsize = AtomicUsize::new(0);
+static MEASURE: AtomicUsize = AtomicUsize::new(0);
+static NEXT_MEASURE: AtomicUsize = AtomicUsize::new(1);
+static LIVE: AtomicIsize = AtomicIsize::new(0);
+static NEXT_THREAD: AtomicUsize = AtomicUsize::new(1);
+static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+
+thread_local! {
+    static THREAD: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Count allocations on this thread until the guard drops.
+pub fn measure() -> Measure {
+    let lock = ONE_AT_A_TIME.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    LIVE.store(0, Ordering::SeqCst);
+    MEASURE.store(NEXT_MEASURE.fetch_add(1, Ordering::SeqCst), Ordering::SeqCst);
+    MEASURED.store(thread(), Ordering::SeqCst);
+    Measure { _lock: lock }
+}
+
+pub struct Measure {
+    _lock: MutexGuard<'static, ()>,
+}
+
+impl Measure {
+    /// Bytes allocated on this thread during the measurement that remain live.
+    pub fn kept(&self) -> isize {
+        LIVE.load(Ordering::SeqCst)
+    }
+}
+
+impl Drop for Measure {
+    fn drop(&mut self) {
+        MEASURED.store(0, Ordering::SeqCst);
+        MEASURE.store(0, Ordering::SeqCst);
+    }
+}
+
+/// This thread's number. A `const` thread local without drop glue allocates nothing and stays readable while the
+/// thread exits.
+fn thread() -> usize {
+    THREAD
+        .try_with(|id| {
+            if id.get() == 0 {
+                id.set(NEXT_THREAD.fetch_add(1, Ordering::Relaxed));
+            }
+            id.get()
+        })
+        .unwrap_or(0)
+}
+
+/// The room before an allocation for its header, keeping the allocation's alignment.
+fn header(layout: Layout) -> usize {
+    layout.align().max(size_of::<usize>())
+}
+
+fn counted_in() -> usize {
+    let measured = MEASURED.load(Ordering::Relaxed);
+    if measured == 0 || measured != thread() {
+        return 0;
+    }
+    MEASURE.load(Ordering::Relaxed)
+}
+
+fn count(measure: usize, bytes: isize) {
+    if measure != 0 && measure == MEASURE.load(Ordering::Relaxed) {
+        LIVE.fetch_add(bytes, Ordering::Relaxed);
+    }
+}
+
+// SAFETY: each allocation is the system's, `header(layout)` bytes larger and aligned as asked; the caller gets the
+// pointer past the header, whose last word holds the measure the allocation counts in.
+#[allow(unsafe_code)]
+unsafe impl GlobalAlloc for Counting {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: `with_header` is non-zero sized, and `tag` gets the system's allocation of that layout or null.
+        unsafe { tag(System.alloc(with_header(layout)), layout) }
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: `with_header` is non-zero sized, and `tag` gets the system's allocation of that layout or null.
+        unsafe { tag(System.alloc_zeroed(with_header(layout)), layout) }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // SAFETY: `ptr` came from `alloc`, so the header before it holds the measure and `System` allocated its base.
+        unsafe {
+            count(counts_in(ptr), -(layout.size() as isize));
+            System.dealloc(ptr.sub(header(layout)), with_header(layout));
+        }
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        // SAFETY: `ptr` came from `alloc`, so the header before it holds the measure and `System` allocated its base.
+        unsafe {
+            let measure = counts_in(ptr);
+            let base = System.realloc(ptr.sub(header(layout)), with_header(layout), new_size + header(layout));
+            if base.is_null() {
+                return base;
+            }
+            count(measure, new_size as isize - layout.size() as isize);
+            base.add(header(layout))
+        }
+    }
+}
+
+fn with_header(layout: Layout) -> Layout {
+    Layout::from_size_align(layout.size() + header(layout), layout.align()).expect("allocation size overflows")
+}
+
+#[allow(unsafe_code)]
+unsafe fn tag(base: *mut u8, layout: Layout) -> *mut u8 {
+    if base.is_null() {
+        return base;
+    }
+    let measure = counted_in();
+    count(measure, layout.size() as isize);
+    // SAFETY: `base` is a live allocation of `with_header(layout)` bytes, so the header's last word is in bounds.
+    unsafe {
+        let ptr = base.add(header(layout));
+        ptr.cast::<usize>().sub(1).write_unaligned(measure);
+        ptr
+    }
+}
+
+#[allow(unsafe_code)]
+unsafe fn counts_in(ptr: *mut u8) -> usize {
+    // SAFETY: `ptr` came from `tag`, which wrote the measure in the word before it.
+    unsafe { ptr.cast::<usize>().sub(1).read_unaligned() }
+}
+
+/// Memory this thread allocated before a measure and another thread frees during it is not part of the measure, as
+/// the tasks of a mount that ended, which its runtime frees in the background while the next mount is measured.
+#[test]
+fn a_measure_counts_no_free_of_what_came_before_it() {
+    let before = vec![0u8; 65_536];
+    let barrier = std::sync::Barrier::new(2);
+    std::thread::scope(|scope| {
+        let barrier = &barrier;
+        scope.spawn(move || {
+            barrier.wait();
+            drop(before);
+            barrier.wait();
+        });
+        let measure = measure();
+        barrier.wait();
+        barrier.wait();
+        assert_eq!(measure.kept(), 0);
+    });
+}

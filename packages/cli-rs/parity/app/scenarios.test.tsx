@@ -1,0 +1,427 @@
+// P-APP, TypeScript side (docs/testing.md): records every parity/scenarios/*/*.app.ts through the whole TS TUI in
+// createAppFixture. Writes parity/fixtures/<step>/<name>.app.json and one cell file per checkpoint.
+// `PARITY_SCENARIO=<step>/<name>` selects one scenario.
+import { test } from "bun:test"
+import { CodeRenderable, type Renderable } from "@opentui/core"
+import { Database } from "bun:sqlite"
+import type { ServerWebSocket } from "bun"
+import { mkdtemp, rm } from "node:fs/promises"
+import { mkdirSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { Effect } from "effect"
+import { AppNodeBuilder } from "../../../core/src/effect/app-node-builder"
+import { Global } from "../../../util/src/global"
+import { Npm } from "../../../util/src/npm"
+import { createAppFixture } from "../../../tui/test/fixture/app"
+import { createFetch, directory } from "../../../tui/test/fixture/tui-client"
+import { applyMasks, recordingText, withNewDesigns, type AppScenario, type Route, type Step } from "../lib/app"
+import { readCells, writeFixture, type Fixture } from "../lib/cells"
+import { installFakePty } from "../lib/pty-socket"
+
+// Session lists group by local date; UTC keeps the recorded cells the same on every machine.
+process.env.TZ = "UTC"
+const parity = new URL("..", import.meta.url).pathname
+const only = process.env.PARITY_SCENARIO
+const files = Array.from(new Bun.Glob("scenarios/*/*.app.ts").scanSync({ cwd: parity }))
+  .sort()
+  .filter((file) => !only || file === `scenarios/${only}.app.ts`)
+
+const STARTUP_READS_MS = 1_500
+
+type Setup = Awaited<ReturnType<typeof createAppFixture>>
+type Logged = {
+  method: string
+  path: string
+  query: Record<string, string[]>
+  body?: unknown
+  status: number
+  json?: unknown
+  text?: string
+  contentType?: string
+  unmatched?: true
+}
+
+for (const file of files) {
+  const name = file.slice("scenarios/".length, -".app.ts".length)
+  // The cold import of src/app takes seconds on a loaded machine; each checkpoint may wait 5 s.
+  test(name, () => record(name, file), 60_000)
+}
+
+async function record(name: string, file: string) {
+  const scenario: AppScenario = (await import(`${parity}${file}`)).default
+  const config = withNewDesigns({ ...scenario.config, animations: false })
+  const routes = scenario.routes ?? []
+  const defaults = createFetch().fetch
+  const log: Logged[] = []
+  // The paths a `release` step let go, and the requests of `hold` routes that wait for one.
+  const released = new Set<string>()
+  const waiting: { path: string; go: () => void }[] = []
+  await using ide = scenario.ide ? startIde() : undefined
+  await using zed = scenario.zed ? await zedDatabase(scenario.zed.sql) : undefined
+  const env = {
+    ...scenario.env,
+    ...(ide ? { OPENCODE_EDITOR_SSE_PORT: String(ide.port) } : {}),
+    ...(zed ? { ZED_TERM: "true", OPENCODE_ZED_DB: zed.db, HOME: zed.home } : {}),
+  }
+  const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]))
+  Object.assign(process.env, env)
+  await using _env = {
+    [Symbol.asyncDispose]: async () =>
+      Object.entries(saved).forEach(([key, value]) =>
+        value === undefined ? delete process.env[key] : (process.env[key] = value),
+      ),
+  }
+  unpackNpm(config)
+  await using cache = scenario.cache ? await npmCache(scenario.cache) : undefined
+  let index = 0
+  const pty = scenario.pty ? installFakePty(scenario.pty, () => index) : undefined
+  await using _pty = { [Symbol.asyncDispose]: async () => pty?.restore() }
+  await using setup = await createAppFixture({
+    width: scenario.width ?? 100,
+    height: scenario.height ?? 30,
+    config,
+    args: scenario.args ?? {},
+    ...(cache ? { packages: cache.packages } : {}),
+    fetch: async (url, request) => {
+      // The fixture serves its own event stream.
+      if (url.pathname === "/api/event") return undefined
+      const body = request.body ? await request.clone().text() : ""
+      const route = routes.find(
+        (route) =>
+          matches(route, request.method, url.pathname) &&
+          (route.query === undefined || Bun.deepEquals(route.query, query(url))),
+      )
+      if (route?.hold && !released.has(route.path))
+        await new Promise<void>((go) => waiting.push({ path: route.path, go }))
+      const response = route
+        ? respond(route)
+        : await defaults(request).catch(
+            (error: Error) => new Response(JSON.stringify({ message: error.message }), { status: 500 }),
+          )
+      log.push({
+        method: request.method,
+        path: url.pathname,
+        query: query(url),
+        ...(body ? { body: parse(body) } : {}),
+        ...(await logged(response.clone())),
+        ...(!route && response.status === 500 ? { unmatched: true as const } : {}),
+      })
+      return response
+    },
+  })
+  // Disposed before the app: a request still held when a step fails is answered, so the app can close.
+  await using _held = { [Symbol.asyncDispose]: async () => waiting.forEach((held) => held.go()) }
+  await setup.ready
+  const started = Date.now()
+  const steps: (Step & { fixture?: string })[] = []
+  for (const [stepIndex, step] of scenario.steps.entries()) {
+    index = stepIndex
+    if ("pty" in step) pty?.step(step.pty)
+    if ("keys" in step) step.keys.forEach((key) => press(setup, key))
+    if ("type" in step) await setup.mockInput.typeText(step.type)
+    if ("paste" in step) await setup.mockInput.pasteBracketedText(step.paste)
+    if ("click" in step) await setup.mockMouse.click(...step.click)
+    if ("rightClick" in step) await setup.mockMouse.click(...step.rightClick, 2)
+    if ("event" in step) setup.events.emit(step.event as never)
+    if ("drag" in step) await setup.mockMouse.drag(...step.drag[0], ...step.drag[1])
+    if ("release" in step) {
+      released.add(step.release)
+      waiting.filter((held) => held.path === step.release).forEach((held) => held.go())
+    }
+    if ("wait" in step) await Bun.sleep(step.wait)
+    if ("ide" in step) {
+      if (!ide) throw new Error(`${name}: an ide step needs \`ide: true\``)
+      await ide.notify(step.ide)
+    }
+    if (!("checkpoint" in step)) {
+      steps.push(step)
+      continue
+    }
+    const cells = applyMasks(await settle(setup, step.until, `${name}/${step.checkpoint}`), step.masks ?? [])
+    const fixture = `${name}/${step.checkpoint}`
+    await writeFixture(`${parity}fixtures/${fixture}.json`, cells)
+    steps.push({ ...step, fixture })
+  }
+  // The migration status poll starts 1 s after mount (src/component/migration-overlay.tsx:19). Staying open
+  // past it records it in every scenario, however fast the steps ran.
+  await Bun.sleep(Math.max(0, STARTUP_READS_MS - (Date.now() - started)))
+  const unmatched = log.filter((entry) => entry.unmatched)
+  if (unmatched.length > 0)
+    throw new Error(
+      `${name}: no route or default for ${unmatched.map((entry) => `${entry.method} ${entry.path}`).join(", ")}`,
+    )
+  const recording = {
+    scenario: name,
+    width: scenario.width ?? 100,
+    height: scenario.height ?? 30,
+    directory,
+    config,
+    args: scenario.args ?? {},
+    ...(scenario.env ? { env: scenario.env } : {}),
+    ...(scenario.cache ? { cache: scenario.cache } : {}),
+    routes,
+    ...(ide ? { ide: ide.received } : {}),
+    ...(scenario.zed ? { zed: scenario.zed } : {}),
+    steps,
+    ...(pty ? { sockets: pty.recordings } : {}),
+    ...(scenario.requests ? { deviation: scenario.requests.deviation } : {}),
+    requests: {
+      writes: log.filter((entry) => !isRead(entry)).map((entry) => ({ ...entry, body: minted(entry.body) })),
+      reads: dedupe(log.filter(isRead)),
+    },
+  }
+  await Bun.write(`${parity}fixtures/${name}.app.json`, recordingText(recording))
+}
+
+// P8: each `plugins` entry `./out/npm/node_modules/<name>` is the published tarball `plugins/npm/<name>.tgz` (a scope's
+// `/` as `__`), unpacked there afresh, as an install puts a package under `node_modules`; the Rust replay does the same
+// (`npm` in crates/tui/tests/all/app.rs).
+function unpackNpm(config: Record<string, unknown>) {
+  const prefix = "./out/npm/node_modules/"
+  const entries = (config.plugins as unknown[] | undefined) ?? []
+  for (const entry of entries) {
+    const target = typeof entry === "string" ? entry : (entry as { package: string }).package
+    if (!target.startsWith(prefix)) continue
+    const name = target.slice(prefix.length)
+    unpackPinned(name, `${parity}${target.slice(2)}`)
+  }
+}
+
+// Unpacks the published tarball of package `name` into `into`, afresh.
+function unpackPinned(name: string, into: string) {
+  rmSync(into, { recursive: true, force: true })
+  mkdirSync(into, { recursive: true })
+  const tarball = `${parity}plugins/npm/${name.replace("/", "__")}.tgz`
+  // What runs is what was checked against the registry (carbon-6): the pin in `integrity.json`.
+  const pins = JSON.parse(readFileSync(`${parity}plugins/npm/integrity.json`, "utf8"))
+  const digest = `sha512-${new Bun.CryptoHasher("sha512").update(readFileSync(tarball)).digest("base64")}`
+  if (pins[`${name.replace("/", "__")}.tgz`] !== digest) throw new Error(`${tarball} is not the pinned tarball`)
+  const tar = Bun.spawnSync(["tar", "-xzf", tarball, "-C", into, "--strip-components=1"])
+  if (tar.exitCode !== 0) throw new Error(`cannot unpack ${tarball}: ${tar.stderr.toString()}`)
+}
+
+// js-npm: an npm cache in a temporary directory holding each package of `packages` (spec to tarball name) as `Npm.add`
+// leaves it, `<cache>/npm/<key>/<generation>/node_modules/<name>` beside a `package.json` naming it; the Rust replay
+// lays out the same (`cache` in crates/tui/tests/all/app.rs). The TUI's packages resolve there as the TS CLI resolves
+// them (`default.ts:143`), with the real `Npm`: an installed package is found, and nothing is fetched.
+async function npmCache(packages: Record<string, string>) {
+  const cache = await mkdtemp(path.join(tmpdir(), "parity-npm-"))
+  for (const [spec, name] of Object.entries(packages)) {
+    const generation = path.join(cache, "npm", await Npm.cacheKey(spec), String(Date.now()))
+    const version = spec.slice(spec.lastIndexOf("@") + 1)
+    mkdirSync(generation, { recursive: true })
+    await Bun.write(path.join(generation, "package.json"), JSON.stringify({ dependencies: { [name]: version } }))
+    unpackPinned(name, path.join(generation, "node_modules", name))
+  }
+  const layer = AppNodeBuilder.build(Npm.node, [
+    Global.node.replace(Global.layerWith({ cache, state: path.join(cache, "state") })),
+  ])
+  const prepare = (spec: string, install = true) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        return yield* install ? npm.add(spec) : npm.resolve(spec)
+      }).pipe(Effect.provide(layer)),
+    )
+  return { packages: { prepare }, [Symbol.asyncDispose]: () => rm(cache, { recursive: true, force: true }) }
+}
+
+// A fake IDE MCP server (E.5): it answers `initialize`, keeps every message a client sends, and pushes
+// notifications to the clients that finished the handshake.
+function startIde() {
+  const received: unknown[] = []
+  const ready = new Set<ServerWebSocket<unknown>>()
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (request, server) => (server.upgrade(request) ? undefined : new Response("websocket only", { status: 400 })),
+    websocket: {
+      message(socket, data) {
+        const message = JSON.parse(String(data))
+        received.push(message)
+        if (message.method === "initialize")
+          socket.send(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: { protocolVersion: "2025-11-25", serverInfo: { name: "fake-ide", version: "1" } },
+            }),
+          )
+        if (message.method === "notifications/initialized") ready.add(socket)
+      },
+      close(socket) {
+        ready.delete(socket)
+      },
+    },
+  })
+  return {
+    port: server.port,
+    received,
+    async notify(message: { method: string; params?: unknown }) {
+      const deadline = Date.now() + 5_000
+      while (ready.size === 0 && Date.now() < deadline) await Bun.sleep(25)
+      if (ready.size === 0) throw new Error("no IDE client finished the MCP handshake within 5s")
+      ready.forEach((socket) => socket.send(JSON.stringify({ jsonrpc: "2.0", ...message })))
+    },
+    async [Symbol.asyncDispose]() {
+      await server.stop(true)
+    },
+  }
+}
+
+// A Zed database for the scenario in a temporary directory, which is also HOME, so no IDE lock file of the
+// machine is read.
+async function zedDatabase(sql: string) {
+  const home = await mkdtemp(path.join(tmpdir(), "opencode-parity-zed-"))
+  const db = path.join(home, "db.sqlite")
+  const database = new Database(db)
+  database.exec(sql)
+  database.close()
+  return {
+    home,
+    db,
+    async [Symbol.asyncDispose]() {
+      await rm(home, { recursive: true, force: true })
+    },
+  }
+}
+
+// The frame is ready when it contains `until`, no code view is still highlighting, and three polls in a row
+// read the same cells. Colors land after the text, from a worker, so stable cells alone may be unhighlighted.
+async function settle(setup: Setup, until: string | undefined, label: string): Promise<Fixture> {
+  const deadline = Date.now() + 5_000
+  let previous = ""
+  let same = 0
+  while (Date.now() < deadline) {
+    await Bun.sleep(30)
+    const cells = highlighting(setup.renderer.root) ? undefined : read(setup)
+    if (!cells) continue
+    const key = JSON.stringify(cells)
+    same = key === previous ? same + 1 : 0
+    previous = key
+    if (same >= 2 && (!until || setup.captureCharFrame().includes(until))) return cells
+  }
+  throw new Error(
+    `${label}: no settled frame${until ? ` with ${JSON.stringify(until)}` : ""} within 5s:\n${setup.captureCharFrame()}`,
+  )
+}
+
+// A code view draws its plain text and starts highlighting in the same update, and is busy until the result
+// is applied.
+function highlighting(node: Renderable): boolean {
+  if (node instanceof CodeRenderable && node.isHighlighting) return true
+  return node.getChildren().some(highlighting)
+}
+
+// The renderer is started, so a frame in progress holds the buffer lease; that poll is skipped.
+function read(setup: Setup) {
+  try {
+    return readCells(setup.renderer.currentRenderBuffer)
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("OutputBusy")) return undefined
+    throw error
+  }
+}
+
+const NAMED: Record<string, string> = {
+  enter: "RETURN",
+  return: "RETURN",
+  escape: "ESCAPE",
+  esc: "ESCAPE",
+  tab: "TAB",
+  backspace: "BACKSPACE",
+  delete: "DELETE",
+  home: "HOME",
+  end: "END",
+  up: "ARROW_UP",
+  down: "ARROW_DOWN",
+  left: "ARROW_LEFT",
+  right: "ARROW_RIGHT",
+  space: " ",
+  // The mock has no key codes for these; it writes the raw sequences.
+  pageup: "\u001b[5~",
+  pagedown: "\u001b[6~",
+}
+
+function press(setup: Setup, shortcut: string) {
+  const parts = shortcut.split("+")
+  const key = parts.pop()!
+  const modifiers = {
+    ctrl: parts.includes("ctrl"),
+    shift: parts.includes("shift"),
+    meta: parts.includes("alt") || parts.includes("meta"),
+  }
+  const named = NAMED[key.toLowerCase()] ?? (/^f\d+$/i.test(key) ? key.toUpperCase() : undefined)
+  if (!named && [...key].length !== 1) throw new Error(`unknown key ${JSON.stringify(shortcut)}`)
+  setup.mockInput.pressKey(named ?? key, modifiers)
+}
+
+function matches(route: Route, method: string, path: string) {
+  if ((route.method ?? "GET").toUpperCase() !== method) return false
+  const want = route.path.split("/")
+  const have = path.split("/")
+  return want.length === have.length && want.every((part, index) => part.startsWith(":") || part === have[index])
+}
+
+function respond(route: Route) {
+  const status = route.status ?? 200
+  if (route.json !== undefined) return Response.json(route.json, { status, headers: route.headers })
+  if (route.body !== undefined)
+    return new Response(route.body, { status, headers: { "content-type": "text/plain", ...route.headers } })
+  if (route.base64 !== undefined)
+    return new Response(Buffer.from(route.base64, "base64"), {
+      status,
+      headers: { "content-type": "application/octet-stream", ...route.headers },
+    })
+  return new Response(null, { status: route.status ?? 204, headers: route.headers })
+}
+
+function query(url: URL) {
+  return [...new Set(url.searchParams.keys())].toSorted().reduce<Record<string, string[]>>(
+    (all, key) => ({
+      ...all,
+      // The startup probe sends the runner's working directory.
+      [key]: url.searchParams.getAll(key).map((value) => (value === process.cwd() ? "<cwd>" : value)),
+    }),
+    {},
+  )
+}
+
+async function logged(response: Response) {
+  const contentType = response.headers.get("content-type") ?? undefined
+  const text = await response.text()
+  if (contentType?.includes("json") && text) return { status: response.status, json: JSON.parse(text) }
+  return { status: response.status, ...(text ? { text, contentType } : {}) }
+}
+
+function parse(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+// Every ID the client mints, such as `msg_1a849dc25001uU3OEwVPj4ND1G`, as `<msg>`, so a re-record does not
+// change; the same rule `minted` in crates/parity/src/app.rs applies to the writes.
+function minted(value: unknown): unknown {
+  if (typeof value === "string") return value.replace(/^([a-z]+)_[A-Za-z0-9]{20,}$/, "<$1>")
+  if (Array.isArray(value)) return value.map(minted)
+  if (value && typeof value === "object")
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, minted(item)]))
+  return value
+}
+
+// A GET, or a plugin RPC named `get` (the goal footer posts one); the same rule as `is_read` in
+// crates/parity/src/app.rs.
+function isRead(entry: Logged) {
+  return entry.method === "GET" || /^\/api\/rpc\/[^/]+\/get$/.test(entry.path)
+}
+
+function dedupe(entries: Logged[]) {
+  const key = (entry: Logged) => JSON.stringify([entry.method, entry.path, entry.query, entry.body])
+  const seen = new Map<string, Logged>()
+  for (const entry of entries) if (!seen.has(key(entry))) seen.set(key(entry), entry)
+  return [...seen.entries()].toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, entry]) => entry)
+}

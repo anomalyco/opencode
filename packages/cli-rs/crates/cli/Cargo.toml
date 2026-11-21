@@ -1,0 +1,62 @@
+[package]
+name = "opencode-cli"
+description = "The opencode-native binary."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "opencode-native"
+path = "src/main.rs"
+
+# Runs the prompt kit's parity scripts (parity/oracle/C.p-prompts.ts); not shipped.
+[[bin]]
+name = "opencode-prompt-demo"
+path = "src/prompt/demo.rs"
+test = false
+
+[lints]
+workspace = true
+
+[dependencies]
+base64.workspace = true
+futures-util.workspace = true
+indexmap.workspace = true
+log = { workspace = true, features = ["kv"] }
+regex.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+unicode-width.workspace = true
+url.workspace = true
+# The terminal size and raw reads of the prompt kit.
+opentui.workspace = true
+opencode-acp.workspace = true
+opencode-api.workspace = true
+opencode-latex.workspace = true
+opencode-local.workspace = true
+opencode-mermaid.workspace = true
+opencode-mini.workspace = true
+opencode-plugin.workspace = true
+opencode-service.workspace = true
+opencode-store.workspace = true
+opencode-tui.workspace = true
+opencode-ui.workspace = true
+opencode-util.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["termios", "event", "pty"] }
+libc.workspace = true
+
+[features]
+# TypeScript TUI plugins on the JS host: the pipe carrier, the JS host and its embedded `host.ts` and `compat.js`
+# (ts-feature). On by default; `OPENCODE_PLUGIN_JS=0` still turns the host off at run time.
+default = ["ts", "luau"]
+ts = ["opencode-tui/ts", "opencode-plugin/ts"]
+# Luau plugins, in process (O-178). On by default; `OPENCODE_PLUGIN_LUAU=0` turns them off at run time.
+luau = ["opencode-tui/luau"]
+
+[dev-dependencies]
+serde_json.workspace = true

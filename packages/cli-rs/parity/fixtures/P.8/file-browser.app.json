@@ -1,0 +1,66 @@
+{
+ "scenario": "P.8/file-browser",
+ "width": 140,
+ "height": 34,
+ "directory": "/tmp/opencode/packages/tui",
+ "config": {
+  "experimental": {"new-designs":true},
+  "plugins": ["./out/npm/node_modules/opencode-file-browser"],
+  "animations": false,
+  "theme": {"name":"opencode"}
+ },
+ "args": {},
+ "env": {
+  "OPENCODE_PARITY_PLUGIN": "npm"
+ },
+ "routes": [
+  {"path":"/api/fs/list","json":{"location":{"directory":"/tmp/opencode/packages/tui"},"data":[{"path":"src","type":"directory"},{"path":"test","type":"directory"},{"path":"README.md","type":"file"},{"path":"package.json","type":"file"},{"path":"tsconfig.json","type":"file"}]}},
+  {"path":"/api/fs/find","json":{"location":{"directory":"/tmp/opencode/packages/tui"},"data":[{"path":"src/package.ts","type":"file"},{"path":"package.json","type":"file"}]}}
+ ],
+ "steps": [
+  {"checkpoint":"home","until":"ctrl+p commands","masks":[{"x":36,"y":18,"width":70,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"P.8/file-browser/home"},
+  {"type":"/files"},
+  {"checkpoint":"slash","until":"Browse, preview, edit","fixture":"P.8/file-browser/slash"},
+  {"keys":["enter"]},
+  {"checkpoint":"browser","until":"tsconfig.json","deviation":[{"file":"F16-v2-compat-layer","cells":40}],"fixture":"P.8/file-browser/browser"},
+  {"keys":["down"]},
+  {"keys":["j"]},
+  {"checkpoint":"moved","deviation":[{"file":"F16-v2-compat-layer","cells":40}],"fixture":"P.8/file-browser/moved"},
+  {"keys":["ctrl+f"]},
+  {"keys":["down"]},
+  {"checkpoint":"searching","deviation":[{"file":"F16-v2-compat-layer","cells":40}],"fixture":"P.8/file-browser/searching"},
+  {"type":"src"},
+  {"checkpoint":"typed","until":"2 matches","deviation":[{"file":"F16-v2-compat-layer","cells":40}],"fixture":"P.8/file-browser/typed"},
+  {"keys":["escape"]},
+  {"checkpoint":"left","until":"tsconfig.json","deviation":[{"file":"F16-v2-compat-layer","cells":40}],"fixture":"P.8/file-browser/left"},
+  {"keys":["q"]},
+  {"checkpoint":"closed","until":"ctrl+p commands","masks":[{"x":36,"y":18,"width":70,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"P.8/file-browser/closed"}
+ ],
+ "requests": {
+  "writes": [],
+  "reads": [
+   {"method":"GET","path":"/api/agent","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/command","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/config","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":[]},
+   {"method":"GET","path":"/api/experimental/migration/v1","query":{},"status":200,"json":{"status":"completed"}},
+   {"method":"GET","path":"/api/form","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/fs/find","query":{"limit":["200"],"location[directory]":["/tmp/opencode/packages/tui"],"query":["src"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui"},"data":[{"path":"src/package.ts","type":"file"},{"path":"package.json","type":"file"}]}},
+   {"method":"GET","path":"/api/fs/list","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui"},"data":[{"path":"src","type":"directory"},{"path":"test","type":"directory"},{"path":"README.md","type":"file"},{"path":"package.json","type":"file"},{"path":"tsconfig.json","type":"file"}]}},
+   {"method":"GET","path":"/api/fs/list","query":{"location[directory]":["<cwd>"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui"},"data":[{"path":"src","type":"directory"},{"path":"test","type":"directory"},{"path":"README.md","type":"file"},{"path":"package.json","type":"file"},{"path":"tsconfig.json","type":"file"}]}},
+   {"method":"GET","path":"/api/info","query":{},"status":200,"json":{"version":"test","pid":0,"urls":[],"paths":{"tmp":"/tmp"},"capabilities":{"persistentPty":true}}},
+   {"method":"GET","path":"/api/integration","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/location","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}}},
+   {"method":"GET","path":"/api/mcp","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/mcp/resource","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":{"resources":[],"templates":[]}}},
+   {"method":"GET","path":"/api/model","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/plugin","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/project","query":{},"status":200,"json":[]},
+   {"method":"GET","path":"/api/provider","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/reference","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode/packages/tui","canonical":"/tmp/opencode/packages/tui"}},"data":[]}},
+   {"method":"GET","path":"/api/session/active","query":{},"status":200,"json":{"data":{}}},
+   {"method":"GET","path":"/api/shell","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/skill","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
+   {"method":"GET","path":"/api/vcs","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":{"branch":{"current":"main","default":"main"}}}}
+  ]
+ }
+}

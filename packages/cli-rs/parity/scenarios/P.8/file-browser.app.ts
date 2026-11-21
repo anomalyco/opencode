@@ -1,0 +1,80 @@
+// CT-11: `opencode-file-browser@1.0.4`, unmodified from npm: `/files` on the home screen opens its browser route over
+// `client.file.list`. Its keys are commands of layers it registers in setup, each enabled while its search field is not
+// focused; once `/` focused the field, the field hears its text by `onInput` (the search) and its arrows by
+// `onKeyDown`, which the layer did not map, so the search never ran. Since contract 2.x step B the field also takes the
+// host's focus, so what the user types after `ctrl+f` is its text. TS loads the package from node_modules; the Rust
+// client runs the same files on the JS host through the V2 compatibility layer.
+import { defineApp } from "../../lib/app"
+
+const location = { directory: "/tmp/opencode/packages/tui" }
+const entries = [
+  { path: "src", type: "directory" },
+  { path: "test", type: "directory" },
+  { path: "README.md", type: "file" },
+  { path: "package.json", type: "file" },
+  { path: "tsconfig.json", type: "file" },
+]
+// TS's `<scrollbox>` draws its scrollbar beside the list (28 cells) and its field's placeholder in OpenTUI's color (12),
+// where the contract's scroll and field draw the host's.
+const deviation = [{ file: "F16-v2-compat-layer", cells: 40 }]
+
+export default defineApp({
+  width: 140,
+  height: 34,
+  config: {
+    experimental: { "new-designs": true },
+    plugins: ["./out/npm/node_modules/opencode-file-browser"],
+  },
+  env: { OPENCODE_PARITY_PLUGIN: "npm" },
+  routes: [
+    { path: "/api/fs/list", json: { location, data: entries } },
+    {
+      path: "/api/fs/find",
+      json: { location, data: [{ path: "src/package.ts", type: "file" }, { path: "package.json", type: "file" }] },
+    },
+  ],
+  steps: [
+    {
+      checkpoint: "home",
+      until: "ctrl+p commands",
+      masks: [{ x: 36, y: 18, width: 70, height: 1, reason: "the placeholder example: random in TS and Rust" }],
+    },
+    { type: "/files" },
+    // The completion lists the plugin's command before Enter: the plugin loads after the home screen settles, and an
+    // Enter on a list that has not matched its command yet does nothing (file-browser-flake).
+    {
+      checkpoint: "slash",
+      until: "Browse, preview, edit",
+      // The list shows the plugin's slash aliases (`/update-files`) too, as TS's does (contract ergonomics 2.6).
+    },
+    { keys: ["enter"] },
+    { checkpoint: "browser", until: "tsconfig.json", deviation },
+    { keys: ["down"] },
+    { keys: ["j"] },
+    { checkpoint: "moved", deviation },
+    // Its search field takes the plugin's focus, which disables its commands; its `onKeyDown` moves the selection and
+    // takes `down` with `preventDefault`, so the host's field never has it (contract gaps 2).
+    { keys: ["ctrl+f"] },
+    { keys: ["down"] },
+    { checkpoint: "searching", deviation },
+    // The field has the host's focus too (contract 2.x, `focus-input`): what the user types is its text, and its search.
+    { type: "src" },
+    { checkpoint: "typed", until: "2 matches", deviation },
+    // Escape leaves the field and clears its search: its commands, disabled while it had the focus, are enabled again,
+    // so `q` closes the browser (carbon ce-2: read where the layer did not follow it, the field's focus left them
+    // disabled for good).
+    { keys: ["escape"] },
+    // The user types once the field let the focus go: on the JS host it lets go as its `onKeyDown` runs, after the key,
+    // and a key typed before that is still the field's.
+    { checkpoint: "left", until: "tsconfig.json", deviation },
+    // Not a key that moves the selection: escape also starts the plugin's 220 ms debounced search of "", which sets
+    // the selection back to the first row when it runs, on Bun's clock in both clients. A `j` before it was undone
+    // once the replay's checkpoint came after it (fb-flake).
+    { keys: ["q"] },
+    {
+      checkpoint: "closed",
+      until: "ctrl+p commands",
+      masks: [{ x: 36, y: 18, width: 70, height: 1, reason: "the placeholder example: random in TS and Rust" }],
+    },
+  ],
+})
