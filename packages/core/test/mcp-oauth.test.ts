@@ -431,8 +431,15 @@ describe("MCP OAuth", () => {
 
     test("reuses the client registered by an earlier login", async () => {
       const { server, registrations } = authorizationServer({})
+      const reservation = Bun.serve({ port: 0, fetch: () => new Response() })
+      const port = reservation.port
+      reservation.stop(true)
       const previous = credential({ access: "a", refresh: "r", url: server.url.href })
-      const client = { client_id: "registered", issuer: server.url.origin }
+      const client = {
+        client_id: "registered",
+        redirect_uris: [`http://127.0.0.1:${port}/callback`, `http://localhost:${port}/callback`],
+        issuer: server.url.origin,
+      }
       const store = memoryCredentials([
         new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } }),
       ])
@@ -450,6 +457,122 @@ describe("MCP OAuth", () => {
       ).finally(() => server.stop(true))
       expect(url.searchParams.get("client_id")).toBe("registered")
       expect(registrations).toHaveLength(1)
+    })
+
+    test("re-registers dynamically when the stored client redirect URI does not match the callback port", async () => {
+      const { server, registrations } = authorizationServer({})
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const client = {
+        client_id: "stale-client",
+        redirect_uris: ["http://127.0.0.1:1/callback", "http://localhost:1/callback"],
+        issuer: server.url.origin,
+      }
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } }),
+      ])
+      const { url } = await Effect.runPromise(Effect.scoped(start(server, undefined, store))).finally(() =>
+        server.stop(true),
+      )
+      expect(url.searchParams.get("client_id")).toBe("registered")
+      expect(registrations).toHaveLength(1)
+    })
+
+    test("preserves and binds the stored client's loopback port when available", async () => {
+      const { server, registrations } = authorizationServer({})
+      const reservation = Bun.serve({ port: 0, fetch: () => new Response() })
+      const port = reservation.port
+      reservation.stop(true)
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const client = {
+        client_id: "preserved-client",
+        redirect_uris: [`http://127.0.0.1:${port}/callback`, `http://localhost:${port}/callback`],
+        issuer: server.url.origin,
+      }
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } }),
+      ])
+      const { url } = await Effect.runPromise(Effect.scoped(start(server, undefined, store))).finally(() =>
+        server.stop(true),
+      )
+      expect(url.searchParams.get("client_id")).toBe("preserved-client")
+      expect(registrations).toHaveLength(0)
+      expect(new URL(url.searchParams.get("redirect_uri")!).port).toBe(String(port))
+    })
+
+    test("re-registers dynamically when the configured redirect_uri changes between sign-ins", async () => {
+      const { server, registrations } = authorizationServer({})
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const client = {
+        client_id: "stale-client",
+        redirect_uris: ["https://proxy1.example.com/callback"],
+        issuer: server.url.origin,
+      }
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } }),
+      ])
+      const { url } = await Effect.runPromise(
+        Effect.scoped(start(server, { redirect_uri: "https://proxy2.example.com/callback" }, store)),
+      ).finally(() => server.stop(true))
+      expect(url.searchParams.get("client_id")).toBe("registered")
+      expect(registrations).toHaveLength(1)
+      expect(registrations[0]).toMatchObject({
+        redirect_uris: ["https://proxy2.example.com/callback"],
+      })
+    })
+
+    test("does not reuse a stored CIMD client when redirect_uri is configured", async () => {
+      const { server, registrations } = authorizationServer(cimd)
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const client = {
+        client_id: McpOAuth.CLIENT_METADATA_URL,
+        issuer: server.url.origin,
+      }
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } }),
+      ])
+      const { url } = await Effect.runPromise(
+        Effect.scoped(start(server, { redirect_uri: "http://127.0.0.1:0/custom" }, store)),
+      ).finally(() => server.stop(true))
+      expect(url.searchParams.get("client_id")).toBe("registered")
+      expect(registrations).toHaveLength(1)
+    })
+
+    test("uses a configured client_id without registering or reusing a stored client", async () => {
+      const { server, registrations } = authorizationServer({})
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const client = {
+        client_id: "stored-client",
+        redirect_uris: ["http://127.0.0.1:1/callback", "http://localhost:1/callback"],
+        issuer: server.url.origin,
+      }
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } }),
+      ])
+      const { url } = await Effect.runPromise(
+        Effect.scoped(start(server, { client_id: "configured-static-client" }, store)),
+      ).finally(() => server.stop(true))
+      expect(url.searchParams.get("client_id")).toBe("configured-static-client")
+      expect(registrations).toHaveLength(0)
+    })
+
+    test("re-registers and binds an ephemeral port when the stored client only had a non-loopback redirect", async () => {
+      const { server, registrations } = authorizationServer({})
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const client = {
+        client_id: "non-loopback-client",
+        redirect_uris: ["https://example.com:8443/callback"],
+        issuer: server.url.origin,
+      }
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } }),
+      ])
+      const { url } = await Effect.runPromise(Effect.scoped(start(server, undefined, store))).finally(() =>
+        server.stop(true),
+      )
+      expect(url.searchParams.get("client_id")).toBe("registered")
+      expect(registrations).toHaveLength(1)
+      const boundPort = new URL(url.searchParams.get("redirect_uri")!).port
+      expect(boundPort).not.toBe("8443")
     })
   })
 })
