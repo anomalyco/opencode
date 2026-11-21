@@ -145,15 +145,15 @@ describe("MCP events", () => {
         },
         { name: "job.failed", delivery: ["push", "future"], inputSchema: {}, payloadSchema: {} },
       ])
-      expect(server.state.lists).toEqual([{}, { cursor: "page-2" }])
-      // It listens for event list changes, and relists when one arrives.
-      yield* until(() => server.state.listens.length === 1)
+      expect(server.state.lists.slice(0, 2)).toEqual([{}, { cursor: "page-2" }])
+      // It listens for event list changes and relists once the listen opens, again on a change, and again after a
+      // listen the server ended is reopened. Each relist reads both pages.
+      yield* until(() => server.state.listens.length === 1 && server.state.lists.length === 4)
       expect(server.state.listens[0].params).toEqual({ notifications: { eventsListChanged: true } })
       yield* server.notify("list_changed", server.state.listens[0].id)
-      yield* until(() => server.state.lists.length === 4)
-      // A listen the server ends is reopened.
+      yield* until(() => server.state.lists.length === 6)
       yield* server.close(server.state.listens[0].id)
-      yield* until(() => server.state.listens.length === 2)
+      yield* until(() => server.state.listens.length === 2 && server.state.lists.length === 8)
     }),
   )
 

@@ -103,7 +103,11 @@ export const EventType = Schema.Struct({
   payloadSchema: Schema.Record(Schema.String, Schema.Unknown),
 })
 export type EventType = typeof EventType.Type
-const EventError = Schema.Struct({ code: Schema.Int, message: Schema.String, data: Schema.optional(Schema.Json) })
+const EventError = Schema.Struct({
+  code: Schema.Int,
+  message: Schema.String,
+  data: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
+})
 export type EventError = typeof EventError.Type
 // An absent cursor means null: the event type has no replay.
 const Cursor = Schema.optional(Schema.NullOr(Schema.String))
@@ -113,7 +117,14 @@ const EventList = Schema.toStandardSchemaV1(
   Schema.Struct({ events: Schema.Array(Schema.Unknown), nextCursor: Schema.optional(Schema.String) }),
 )
 const decodeEventType = Schema.decodeUnknownOption(EventType)
-const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
+const ISO_8601 = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/
+// The date must exist on the calendar: Date.parse rolls 2026-02-31 over to March.
+const isTimestamp = (text: string) => {
+  const match = ISO_8601.exec(text)
+  if (!match) return false
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+  return date.getUTCMonth() === Number(match[2]) - 1 && date.getUTCDate() === Number(match[3])
+}
 const AnyValue = Schema.toStandardSchemaV1(Schema.Unknown)
 const ActiveNotification = Schema.toStandardSchemaV1(
   Schema.Struct({
@@ -127,7 +138,7 @@ const EventNotification = Schema.toStandardSchemaV1(
   Schema.Struct({
     eventId: Schema.String,
     name: Schema.String,
-    timestamp: Schema.String.check(Schema.makeFilter((text) => ISO_8601.test(text) && !Number.isNaN(Date.parse(text)))),
+    timestamp: Schema.String.check(Schema.makeFilter(isTimestamp)),
     data: Schema.Record(Schema.String, Schema.Json),
     cursor: Cursor,
     ...Subscribed,
@@ -875,24 +886,38 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     // type's mirrored headers current. Open streams keep running.
     const settings = client.getServerCapabilities()?.extensions?.[EVENTS]
     if (connection.events && isRecord(settings) && settings.listChanged === true) {
-      const run = Effect.runForkWith(yield* Effect.context())
+      // One scoped worker relists; changes that arrive while it runs collapse into one more relist.
+      const changed = yield* Queue.sliding<void>(1)
       client.setNotificationHandler("notifications/events/list_changed", { params: AnyValue }, () => {
-        run(listEvents().pipe(Effect.ignore))
+        Queue.offerUnsafe(changed, undefined)
       })
+      yield* Queue.take(changed).pipe(Effect.andThen(listEvents()), Effect.ignore, Effect.forever, Effect.forkScoped)
       // The SDK's filter type predates Events; it sends the filter as given.
       const filter: Record<string, boolean> = { eventsListChanged: true }
-      // Held for the connection's life: a listen the server ends or fails is reopened after a capped, jittered delay.
+      // Held for the connection's life: a listen the server ends or drops is reopened after a capped, jittered delay,
+      // then relisted to catch changes missed while it was closed. A refusal is not retried. Closing never waits on
+      // the server: opening aborts, and the cancellation is sent without waiting.
       yield* Effect.acquireRelease(
-        Effect.tryPromise(() => client.listen(filter, { timeout: catalog.timeout })),
-        (subscription) => Effect.promise(() => subscription.close()),
+        Effect.tryPromise({
+          try: (signal) => client.listen(filter, { timeout: catalog.timeout, signal }),
+          catch: (error) => error,
+        }),
+        (subscription) => Effect.sync(() => void subscription.close().catch(() => {})),
       ).pipe(
+        Effect.tap(() => Queue.offer(changed, undefined)),
         Effect.flatMap((subscription) => Effect.promise(() => subscription.closed)),
         Effect.scoped,
         Effect.andThen(Effect.fail(new Error("the server closed the listen stream"))),
         Effect.tapError((error) =>
           Effect.logWarning("MCP event list change listener stopped", { server, error: describe(error) }),
         ),
-        Effect.retry(LISTEN_REOPEN),
+        Effect.retry(
+          LISTEN_REOPEN.pipe(
+            Schedule.setInputType<unknown>(),
+            Schedule.while(({ input }) => !(input instanceof ProtocolError)),
+          ),
+        ),
+        Effect.ignore,
         Effect.forkScoped,
       )
     }
