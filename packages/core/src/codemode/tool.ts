@@ -48,6 +48,7 @@ const TOOL_CALL_TRACE_LIMIT = 128
 const ExecuteOutput = Schema.Struct({
   output: Schema.String,
   toolCalls: Schema.Array(ExecuteCall),
+  toolCallsOmitted: Schema.optionalKey(Schema.Number),
   error: Schema.optionalKey(Schema.Literal(true)),
   files: Schema.Array(ExecuteFile),
 })
@@ -237,7 +238,7 @@ export const create = (
         const output = formatResult(result)
         const value: typeof ExecuteOutput.Type = {
           output,
-          toolCalls: traceMetadata.toolCalls,
+          ...traceMetadata,
           files: collected,
           ...(result.ok ? {} : { error: true }),
         }
@@ -265,40 +266,36 @@ export const create = (
   } satisfies Info
 }
 
-// Bound the progress and persisted rows, independently of how many calls the program makes.
+// Bound finished rows without dropping calls that are still running.
 function toolCallTrace() {
   const recent = new Map<object, ExecuteCall>()
-  const pending = new WeakMap<object, ExecuteCall>()
+  let finished = 0
   let total = 0
   let earlierError: ExecuteCall | undefined
-  const preserveError = (entry: ExecuteCall) => {
-    if (entry.status === "error") earlierError ??= entry
-  }
   return {
     start(call: object, entry: ExecuteCall) {
-      if (recent.size === TOOL_CALL_TRACE_LIMIT) {
-        const oldest = recent.entries().next()
-        if (!oldest.done) {
-          preserveError(oldest.value[1])
-          recent.delete(oldest.value[0])
-        }
-      }
       recent.set(call, entry)
-      pending.set(call, entry)
       total++
     },
     settle(call: object, result: CodeMode.CallResult) {
-      const entry = pending.get(call)
-      if (!entry) return
-      pending.delete(call)
-      const settled: ExecuteCall = { ...entry, status: result.status === "success" ? "completed" : "error" }
-      if (recent.has(call)) recent.set(call, settled)
-      else preserveError(settled)
+      const entry = recent.get(call)
+      if (entry?.status !== "running") return
+      recent.set(call, { ...entry, status: result.status === "success" ? "completed" : "error" })
+      finished++
+      if (finished <= TOOL_CALL_TRACE_LIMIT) return
+
+      for (const [key, row] of recent) {
+        if (row.status === "running") continue
+        if (row.status === "error") earlierError ??= row
+        recent.delete(key)
+        finished--
+        break
+      }
     },
     metadata() {
       const toolCalls = Array.from(recent.values())
-      // A failure can still explain the script's status after its row leaves the visible tail.
-      if (earlierError) toolCalls[0] = earlierError
+      // Keep an earlier failure without displacing a row from the recent trace.
+      if (earlierError) toolCalls.unshift(earlierError)
       const omitted = total - toolCalls.length
       return { toolCalls, ...(omitted > 0 ? { toolCallsOmitted: omitted } : {}) }
     },

@@ -4,7 +4,7 @@ import type {
   SessionMessageAssistantTool,
   SessionMessageInfo,
 } from "@opencode/client"
-import { canonicalToolName, executeCalls } from "../../util/tool-display"
+import { canonicalToolName, executeCalls, executeCallsOmitted } from "../../util/tool-display"
 import { visitEntries } from "./anchor-view"
 import { instructionPaths, type PartRef, type SessionEntry, type SessionNode } from "./grouping/session"
 import { reasoningContent } from "./message-parts"
@@ -68,15 +68,17 @@ export function activitySummary(items: readonly Item[], instructions: number, cl
     }
     const name = canonicalToolName(item.part.name)
     if (name === "execute") {
-      const calls = executeCalls(
-        item.part.state.status === "streaming" ? undefined : item.part.state.metadata?.toolCalls,
-      ).filter((call) => call.status !== "running")
+      const state = item.part.state
+      const metadata = state.status === "streaming" ? undefined : state.metadata
+      const calls = executeCalls(metadata?.toolCalls).filter((call) => call.status !== "running")
+      const omitted = executeCallsOmitted(metadata?.toolCallsOmitted)
+      counts.tool += omitted
       calls.forEach((call) => {
         if (canonicalToolName(call.tool) === "read") counts.read++
         else counts.tool++
       })
       // With no finished nested calls to count, a finished execute counts as itself.
-      if (calls.length === 0 && !isActive(item, closed)) counts.tool++
+      if (calls.length === 0 && omitted === 0 && !isActive(item, closed)) counts.tool++
       return
     }
     if (isActive(item, closed)) return
