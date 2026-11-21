@@ -14,11 +14,11 @@ type WatcherOps = {
 }
 
 export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
-  const path = ops.normalize(event.data.file)
+  const path = ops.normalize(event.data.file).replaceAll("\\", "/")
 
   if (!path) return
 
-  if (path.startsWith(".git/") || path.startsWith(".git\\")) return
+  if (path.startsWith(".git/")) return
 
   if (ops.hasFile(path) || ops.isOpen?.(path)) {
     ops.loadFile(path)

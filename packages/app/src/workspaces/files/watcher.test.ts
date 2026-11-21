@@ -50,6 +50,28 @@ describe("file watcher invalidation", () => {
     expect(loads).toEqual(["src/open.ts"])
   })
 
+  test("reloads files when watcher event uses Windows backslashes", () => {
+    const loads: string[] = []
+
+    invalidateFromWatcher(filesystemEvent("src\\open.ts", "change"), {
+      normalize: (input) => input,
+      hasFile: () => false,
+      isOpen: (path) => path === "src/open.ts",
+      loadFile: (path) => loads.push(path),
+      node: () => ({
+        path: "src/open.ts",
+        type: "file",
+        name: "open.ts",
+        absolute: "C:\\repo\\src\\open.ts",
+        ignored: false,
+      }),
+      isDirLoaded: () => false,
+      refreshDir: () => {},
+    })
+
+    expect(loads).toEqual(["src/open.ts"])
+  })
+
   test("refreshes only changed loaded directory nodes", () => {
     const refresh: string[] = []
 
