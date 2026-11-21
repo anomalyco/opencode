@@ -374,27 +374,39 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
 }
 
 export const flattenToolRequest = (request: LLMRequest) => {
+  const tools = flattenTools(request.tools)
+  const declared = new Set(tools.map((tool) => tool.name))
+  const flatten = <Part extends ToolCallPart | ToolResultPart>(part: Part) => flattenToolName(part, declared)
   const messages = request.messages.map((message) => {
     if (message.role === "assistant") {
       const content = message.content.map((part) =>
-        part.type === "tool-call" || part.type === "tool-result" ? flattenToolName(part) : part,
+        part.type === "tool-call" || part.type === "tool-result" ? flatten(part) : part,
       )
       return sameParts(content, message.content) ? message : new AssistantMessage({ ...message, content })
     }
     if (message.role !== "tool") return message
-    const content = message.content.map(flattenToolName)
+    const content = message.content.map(flatten)
     return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
   })
   return {
-    tools: flattenTools(request.tools),
+    tools,
     request: messages.every((message, index) => message === request.messages[index])
       ? request
       : { ...request, messages },
   }
 }
 
-const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(part: Part): Part =>
-  part.namespace === undefined ? part : { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
+const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(
+  part: Part,
+  declared: ReadonlySet<string>,
+): Part => {
+  const flat = part.namespace === undefined ? part.name : `${part.namespace}_${part.name}`
+  // Models sometimes call names no tool declares, such as a Code Mode path like `a.b.c`. Several providers (OpenAI
+  // Chat Completions, Bedrock Converse) reject those characters when the call is replayed, so replace them. A
+  // declared name is kept as is, so a provider that accepts it sees calls under the tool's own name.
+  const name = declared.has(flat) ? flat : flat.replace(/[^a-zA-Z0-9_-]/g, "_") || "_"
+  return name === part.name && part.namespace === undefined ? part : { ...part, name, namespace: undefined }
+}
 
 const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
   next.every((part, index) => part === previous[index])
