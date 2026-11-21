@@ -44,7 +44,13 @@ fn help_matches_the_typescript_cli() {
     assert_eq!(paths.len(), 53);
     for path in paths {
         let name = parse::command_path(&path, PROGRAM).join(" ");
-        let expected = std::fs::read_to_string(fixtures().join(format!("help/{name}.txt"))).unwrap();
+        // The writer joins the names below the root with "." (`auth.export.txt`); the root is `opencode.txt`.
+        let file = if path.len() == 1 {
+            PROGRAM.to_string()
+        } else {
+            path[1..].iter().map(|spec| spec.name).collect::<Vec<_>>().join(".")
+        };
+        let expected = std::fs::read_to_string(fixtures().join(format!("help/{file}.txt"))).unwrap();
         let actual = typescript_view(&format!("{}\n", help::render(&path, PROGRAM, true)));
         assert!(actual == expected, "{name} --help:\n{}", lines_diff(&expected, &actual));
         let plain = typescript_view(&format!("{}\n", help::render(&path, PROGRAM, false)));

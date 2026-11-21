@@ -139,9 +139,11 @@ const expectClean = (record: Awaited<ReturnType<typeof run>>) => {
   return record.stdout
 }
 
+// Help pages are named after the command path joined with "." (command names may contain "-"), the root
+// page `opencode.txt`.
 await pool(paths, 6, async (prefix) => {
   const stdout = expectClean(await run([...prefix, "--help"]))
-  await Bun.write(path.join(out, "help", `${["opencode", ...prefix].join(" ")}.txt`), stdout)
+  await Bun.write(path.join(out, "help", `${prefix.length ? prefix.join(".") : "opencode"}.txt`), stdout)
 })
 const failures = [
   ...(await pool(errors, 6, (args) => run(args))),
