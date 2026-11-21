@@ -71,7 +71,7 @@ function managedService(options: EnsureOptions) {
     reconnect: () => Service.ensure(reconnectOptions),
     restart: () =>
       Effect.gen(function* () {
-        yield* Service.stop({ file: options.file, pty: "handoff" })
+        yield* Service.stop({ file: options.file, directories: options.directories, pty: "handoff" })
         yield* Service.ensure(reconnectOptions)
       }),
   }

@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Service } from "@opencode/client/effect/service"
+import { localServiceDirectories, Service } from "@opencode/client/effect/service"
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
@@ -29,6 +29,42 @@ serviceTest(
 
     await settled(home)
     await stopped(home)
+  },
+  120_000,
+)
+
+serviceTest(
+  "a client with different XDG roots cannot adopt a live service registered in shared state",
+  async () => {
+    await using home = await serviceHome()
+    const env = Object.fromEntries(
+      Object.entries(home.env).filter(([key]) => key !== "OPENCODE_CONFIG_DIR" && key !== "OPENCODE_DB"),
+    )
+    const profile = async (name: string) => {
+      const config = path.join(home.root, name, "config")
+      const data = path.join(home.root, name, "data")
+      await fs.mkdir(path.join(config, "opencode"), { recursive: true })
+      await fs.writeFile(path.join(config, "opencode", "service-local.json"), JSON.stringify({ port: home.port }))
+      return { ...home, env: { ...env, XDG_CONFIG_HOME: config, XDG_DATA_HOME: data } }
+    }
+    const [native, foreign] = await Promise.all([profile("native"), profile("foreign")])
+
+    await cli(foreign, "service", "start")
+    const owner = await settled(foreign)
+
+    await expect(cli(native, "service", "start")).rejects.toThrow("different config or data directory")
+    expect((await settled(foreign)).pid).toBe(owner.pid)
+
+    await cli(foreign, "service", "stop")
+    await exited(owner.pid)
+    await cli(native, "service", "start")
+    const next = await settled(native)
+    expect(next.pid).not.toBe(owner.pid)
+    expect(next.directories).toEqual({
+      config: path.join(native.env.XDG_CONFIG_HOME, "opencode"),
+      data: path.join(native.env.XDG_DATA_HOME, "opencode"),
+    })
+    await stopped(native)
   },
   120_000,
 )
@@ -83,12 +119,15 @@ serviceTest(
   "an old-protocol server survives version-agnostic clients and yields to a required version",
   async () => {
     await using home = await serviceHome()
+    const directories = localServiceDirectories(home.env)
     await using old = Bun.spawn(
       [
         process.execPath,
         path.join(import.meta.dir, "fixture/old-protocol-service.ts"),
         home.registration,
         String(home.port),
+        directories.config,
+        directories.data,
       ],
       { stdout: "ignore", stderr: "inherit" },
     )

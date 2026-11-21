@@ -4,17 +4,25 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import {
+  decide,
+  fallback,
+  headers,
+  localServiceDirectories,
+  probeResult,
+  registrationForDirectories,
+  same,
+} from "../service-probe.js"
 
 export * from "../service.js"
-export { headers }
+export { headers, localServiceDirectories }
 /** Contents of the local service registration file. */
 export type Info = typeof Info.Type
 
 // Find, start, and stop the local opencode background service.
 //
 // The service daemon advertises itself through a registration file in the
-// user's state directory: url, pid, version, and the private password, with
+// user's state directory: url, pid, version, directories, and the private password, with
 // 0600 permissions. That file is the complete discovery contract — reading it
 // is all a client needs to connect. The daemon's own configuration (port,
 // persisted password) is CLI-owned and never read here.
@@ -23,7 +31,8 @@ export type Info = typeof Info.Type
 // Never spawns; escalation to ensure() is the caller's policy.
 /** Discover a healthy, compatible local service without starting one. */
 export const discover = Effect.fn("service.discover")(function* (options: DiscoverOptions = {}) {
-  const found = (yield* registered(options.file)).service
+  const info = yield* readScoped(options)
+  const found = (yield* Effect.promise(() => probeResult(info))).service
   if (found?.state !== "ready") return undefined
   if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
@@ -34,7 +43,7 @@ export const discover = Effect.fn("service.discover")(function* (options: Discov
 export const incumbent = Effect.fn("service.incumbent")(function* (
   options: DiscoverOptions & { readonly url: string },
 ) {
-  const info = yield* read(options.file)
+  const info = yield* readScoped(options)
   if (info === undefined) return undefined
   const found = (yield* Effect.promise(() => probeResult({ ...info, url: options.url }))).service
   if (!found?.compatible) return undefined
@@ -69,8 +78,8 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     })
   })
   const found = yield* Effect.gen(function* () {
-    const registration = yield* registered(options.file, timing.requestTimeout)
-    const info = registration.info
+    const info = yield* readScoped(options, timing.requestTimeout)
+    const registration = yield* Effect.promise(() => probeResult(info, timing.requestTimeout))
     const service = registration.service
     if (registration.timedOut && info !== undefined) {
       timeouts = {
@@ -99,7 +108,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* announce("version-mismatch", service.version)
         if (service.state !== "ready")
           yield* Effect.logWarning("Background service is not ready; replacement cannot preserve persistent terminals")
-        yield* stop({ file: options.file, pty: decision.pty }).pipe(Effect.ignore)
+        yield* stop({ file: options.file, pty: decision.pty, directories: options.directories }).pipe(Effect.ignore)
         pool.evict(service.info.pid)
       }
       return Option.none()
@@ -129,9 +138,19 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
   const info = yield* read(options.file)
+  // A deliberate stop can clear an older registration whose directories are unknown.
+  if (info?.directories !== undefined) {
+    const scoped = yield* Effect.promise(() =>
+      registrationForDirectories(info, options.directories, ensureTiming(options).requestTimeout),
+    )
+    if (scoped.error) return yield* Effect.fail(scoped.error)
+    if (scoped.info === undefined) return
+  }
   // Terminal handoff is best-effort; it must never keep the old service running.
   yield* Effect.tryPromise(() =>
-    options.pty === "handoff" && info !== undefined
+    options.pty === "handoff" &&
+    info !== undefined &&
+    (options.directories === undefined || info.directories !== undefined)
       ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
       : PtyHandoff.clear(options.file ?? fallback()),
   ).pipe(Effect.catch((cause) => Effect.logWarning("Failed to prepare persistent terminals for replacement", cause)))
@@ -145,6 +164,7 @@ export const Info = Schema.Struct({
   url: Schema.String,
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
   password: Schema.optional(Schema.String),
+  directories: Schema.optional(Schema.Struct({ config: Schema.String, data: Schema.String })),
 })
 
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
@@ -157,10 +177,11 @@ const read = Effect.fnUntraced(function* (file?: string) {
   return yield* decode(text.value).pipe(Effect.option, Effect.map(Option.getOrUndefined))
 })
 
-const registered = Effect.fnUntraced(function* (file?: string, timeout?: number) {
-  const info = yield* read(file)
-  if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
-  return { info, ...(yield* Effect.promise(() => probeResult(info, timeout))) }
+const readScoped = Effect.fnUntraced(function* (options: DiscoverOptions, timeout?: number) {
+  const info = yield* read(options.file)
+  const scoped = yield* Effect.promise(() => registrationForDirectories(info, options.directories, timeout))
+  if (scoped.error) return yield* Effect.fail(scoped.error)
+  return scoped.info
 })
 
 // 50ms cadence bounded at ~5s, shared by stop escalation and each ensure

@@ -27,7 +27,8 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
     },
   })
   const registration = path.join(root, "state", ServiceConfig.filename())
-  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  const directories = { config: path.join(root, "config"), data: path.join(root, "data") }
+  const layer = Global.layerWith({ ...directories, state: path.join(root, "state") })
   const runPromise = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem | Scope.Scope>) =>
     Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer), Effect.scoped))
 
@@ -40,6 +41,7 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
         version: OPENCODE_VERSION,
         url: server.url.toString(),
         pid: process.pid,
+        directories,
       }),
     )
     const resolved = await runPromise(ServerConnection.resolve())
