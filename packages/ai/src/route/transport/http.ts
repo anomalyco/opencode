@@ -1,11 +1,19 @@
-import { Effect } from "effect"
+import { Duration, Effect, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
 import { Auth } from "../auth.js"
 import { render as renderEndpoint } from "../endpoint.js"
 import { Framing } from "../framing.js"
 import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index.js"
 import * as ProviderShared from "../../protocols/shared.js"
-import { mergeJsonRecords, type LLMRequest } from "../../schema/index.js"
+import {
+  AIError,
+  DEFAULT_CHUNK_TIMEOUT_MS,
+  mergeJsonRecords,
+  timeoutConfig,
+  TransportError,
+  type HttpTimeout,
+  type LLMRequest,
+} from "../../schema/index.js"
 import { RequestExecutor } from "../executor.js"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
@@ -84,18 +92,42 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
     }),
   execute: (prepared, request, runtime) =>
     Effect.gen(function* () {
+      const limits = timeoutConfig(request.timeout)
+      // The executor still bounds headers and the whole request; the chunk limit moves to frames below.
       const response = yield* RequestExecutor.withTimeout(
         RequestExecutor.withTls(runtime.http.execute, request.http?.tls),
-        request.timeout,
+        { ...limits, chunk: false },
       )(prepared.request, prepared.middleware)
+      const http = RequestExecutor.responseHttp(response)
       return {
-        frames: prepared.framing.frame(RequestExecutor.responseStream(response)),
-        http: RequestExecutor.responseHttp(response),
+        // The chunk timeout runs on frames, not bytes, so SSE comments and keepalives don't count as progress.
+        frames: prepared.framing.frame(RequestExecutor.responseStream(response)).pipe(
+          Stream.timeoutOrElse({
+            duration: timeoutDuration(limits.chunk),
+            orElse: () =>
+              Stream.fail(
+                new AIError({
+                  reason: new TransportError({
+                    message: "Timed out waiting for response data",
+                    transport: "http",
+                    operation: "read",
+                    code: "Timeout",
+                    url: prepared.request.url,
+                    http,
+                  }),
+                }),
+              ),
+          }),
+        ),
+        http,
         body: prepared.framing.body,
         raw: prepared.framing.raw,
       }
     }),
 })
+
+const timeoutDuration = (value: HttpTimeout | undefined) =>
+  value === false ? Duration.infinity : Duration.millis(value ?? DEFAULT_CHUNK_TIMEOUT_MS)
 
 export const sseJson = {
   id: "http-json/sse",
