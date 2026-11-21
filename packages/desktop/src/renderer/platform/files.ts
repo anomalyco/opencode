@@ -16,6 +16,7 @@ type DesktopFileAPI = Pick<
   | "resolveAppPath"
   | "openPath"
   | "revealPath"
+  | "startFileDrag"
   | "readClipboardImage"
   | "writeClipboardText"
 >
@@ -89,6 +90,8 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
     async revealPath(path: string) {
       return api.revealPath(path)
     },
+    // Only Windows hands a file row's drag to the system, so macOS and Linux keep the page's own drag.
+    startFileDrag: os === "windows" ? (path: string) => api.startFileDrag(path) : undefined,
     async readClipboardImage() {
       const image = await api.readClipboardImage().catch(() => null)
 
