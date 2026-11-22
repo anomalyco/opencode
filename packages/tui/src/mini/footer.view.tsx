@@ -35,6 +35,7 @@ import { footerStatuslinePolicy } from "./footer.width"
 import { Keymap } from "../context/keymap"
 import type { ClipboardService } from "../context/clipboard"
 import { modelInfo } from "./variant.shared"
+import { descendantActivityModel } from "./session-data"
 import { monoShortcut } from "./mono"
 import { stringWidth } from "../util/string-width"
 import { formatContextUsage } from "../util/session"
@@ -185,7 +186,10 @@ export function RunFooterView(props: RunFooterViewProps) {
     return tabs().findIndex((item) => item.sessionID === sessionID) + 1
   })
   const model = createMemo(() => {
-    const current = props.currentModel()
+    const childModel = descendantActivityModel(subagent())
+    const current = childModel
+      ? { providerID: childModel.providerID, modelID: childModel.modelID }
+      : props.currentModel()
     return current ? modelInfo(props.providers(), current) : undefined
   })
   const detail = createMemo(() => {
