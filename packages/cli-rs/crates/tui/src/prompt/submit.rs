@@ -7,7 +7,7 @@ use opencode_api::generated::{
     SessionPromptInput, SessionRevertCommitInput, SessionShellInput, SessionSwitchAgentInput, SessionSwitchModelInput,
     SessionSyntheticInput,
 };
-use opencode_store::inbox::Gate;
+use opencode_store::Gate;
 use opencode_store::{CreateSession, Error, Prompt};
 
 use super::autocomplete::parts;

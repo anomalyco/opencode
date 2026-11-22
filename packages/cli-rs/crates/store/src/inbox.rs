@@ -1,19 +1,16 @@
 //! Pending inbox items and optimistic prompt and compaction admission.
 
 use std::collections::HashSet;
-use std::future::Future;
 
-use futures_util::FutureExt;
-use futures_util::future::BoxFuture;
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
 use crate::changes::Touched;
-use crate::connection::Follow;
+use crate::core::{Effect, List, Ticket};
 use crate::messages::{MessageExt, from_event};
 use crate::reads::{Read, SessionRead};
 use crate::sessions::Life;
-use crate::state::{Compacting, Data, Error, SessionStatus, State, Task, evict_missing};
+use crate::state::{Compacting, Error, SessionStatus, State};
 
 /// `DataPendingStatus`: where a pending user prompt stands relative to the runner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,24 +56,6 @@ impl InboxExt for SessionInboxInfo {
 
     fn created(&self) -> f64 {
         self.time_created()
-    }
-}
-
-/// A gate an admission waits for before it sends.
-pub type Gate = BoxFuture<'static, Result<(), Error>>;
-
-/// Input of [`Data::prompt`].
-pub struct Prompt {
-    pub input: SessionPromptInput,
-    /// Waited for, with the session's creation and earlier admissions, before sending.
-    pub gate: Option<Gate>,
-    /// Runs after the gates, just before the prompt is sent.
-    pub prepare: Option<Box<dyn FnOnce() -> Gate + Send>>,
-}
-
-impl From<SessionPromptInput> for Prompt {
-    fn from(input: SessionPromptInput) -> Self {
-        Self { input, gate: None, prepare: None }
     }
 }
 
@@ -239,7 +218,7 @@ impl State {
         }
     }
 
-    pub(crate) fn on_inbox_delivered(&mut self, event: &SessionInboxDelivered) -> Vec<Follow> {
+    pub(crate) fn on_inbox_delivered(&mut self, event: &SessionInboxDelivered, effects: &mut Vec<Effect>) {
         let data = &event.data;
         let session = &data.session_id;
         let inbox = data.inbox_id.as_str();
@@ -261,10 +240,10 @@ impl State {
         // transcript reads its head again.
         let read = Read::Session(session.as_str(), SessionRead::Messages);
         if known || !self.has_read(read) {
-            return Vec::new();
+            return;
         }
         self.invalidate(read);
-        vec![Follow::Messages(session.clone())]
+        effects.push(Effect::Messages(session.clone()));
     }
 
     pub(crate) fn on_inbox_delivery_changed(&mut self, data: &SessionInboxDeliveryChangedData) {
@@ -350,312 +329,231 @@ pub(crate) fn now() -> f64 {
     opencode_util::time::now_ms() as f64
 }
 
-impl Data {
-    /// Reads pending inbox items once per invalidation (`pending.sync`), reconciling events that
-    /// overtook the response.
-    pub fn pending_sync(&self, session: &SessionID) -> Task<()> {
-        let session = session.clone();
-        // Events after this call must reach the read's overtake log, so it opens before the read
-        // is spawned.
-        let register = {
-            let session = session.clone();
-            move |state: &mut State, _| {
-                let token = state.token();
-                // Ordered, as the TS `Map`: overtaking enqueues keep their arrival order.
-                state.sessions.get_or_insert(&session).pending_read = Some((token, IndexMap::new()));
-                (state.deletion_epoch, token)
-            }
+impl State {
+    /// Begins a read of the pending inbox items of the session of `ticket`. Events after this must reach the read's overtake
+    /// log, so it opens before the read is fetched.
+    pub(crate) fn begin_pending(&mut self, ticket: Ticket) -> List {
+        let read = self.token();
+        let record = &mut self.sessions[ticket.session()];
+        // Ordered, as the TS `Map`: overtaking enqueues keep their arrival order.
+        record.pending_read = Some((read, IndexMap::new()));
+        List { ticket, session: record.id.clone(), read, started: self.deletion_epoch }
+    }
+
+    /// Publishes the inbox read `read`, reconciling the events that overtook it.
+    pub(crate) fn complete_pending(
+        &mut self,
+        list: List,
+        result: Result<Vec<SessionInboxInfo>, Error>,
+        effects: &mut Vec<Effect>,
+    ) {
+        let session = &list.session;
+        let updates = release_updates(self, session, list.read);
+        let response = match result {
+            Ok(response) => response,
+            Err(error) => return self.evict_missing(&error),
         };
-        self.sync_start(
-            self.keyed(Read::Session(session.as_str(), SessionRead::Pending)),
-            register,
-            move |data, (started, token)| async move {
-                let response =
-                    data.client().session_inbox_list(&SessionInboxListInput { session_id: session.clone() }).await;
-                let response = match response {
-                    Ok(response) => response,
-                    Err(error) => {
-                        data.write(|state| {
-                            release_updates(state, &session, token);
-                        });
-                        return Err(evict_missing(&data, error));
-                    }
-                };
-                let reread = data.write(|state| {
-                    let updates = release_updates(state, &session, token).unwrap_or_default();
-                    if state.deleted_since(&session, started) {
-                        return false;
-                    }
-                    let mut current: IndexMap<String, SessionInboxInfo> =
-                        response.into_iter().map(|item| (item.id().to_owned(), item)).collect();
-                    for (id, update) in updates {
-                        match update {
-                            PendingUpdate::Removed => {
-                                current.shift_remove(&id);
-                            }
-                            PendingUpdate::Delivery(delivery) => {
-                                if let Some(item) = current.get_mut(&id) {
-                                    item.set_delivery(delivery);
-                                }
-                            }
-                            PendingUpdate::Item(item) => {
-                                current.insert(id, *item);
-                            }
-                        }
-                    }
-                    let pending: Vec<_> = current.into_values().collect();
-                    // A positive read acknowledges admission even when its echo is delayed.
-                    for item in &pending {
-                        state.outbox.remove(item.id());
-                    }
-                    // Compactions also coalesce by session, not just by the proposed ID.
-                    if pending.iter().any(|item| matches!(item, SessionInboxInfo::Compaction(_))) {
-                        let local: Vec<String> = state
-                            .pending(&session)
-                            .iter()
-                            .filter(|item| matches!(item, SessionInboxInfo::Compaction(_)))
-                            .map(|item| item.id().to_owned())
-                            .collect();
-                        for id in local {
-                            state.outbox.remove(&id);
-                        }
-                    }
-                    // Keep optimistic rows still awaiting their echo: this read may have raced ahead
-                    // of an admission the server does not know yet.
-                    let inflight: Vec<_> = state
-                        .pending(&session)
-                        .iter()
-                        .filter(|item| state.outbox.contains(item.id()))
-                        .cloned()
-                        .collect();
-                    let mut merged = pending;
-                    merged.extend(inflight);
-                    // An item the read no longer lists was cancelled or delivered by an event this client missed (a
-                    // reconnect loses events): its row goes, and a synced transcript reads again for a delivered one.
-                    let listed: HashSet<&str> = merged.iter().map(SessionInboxInfo::id).collect();
-                    let dropped: Vec<String> = state
-                        .pending(&session)
-                        .iter()
-                        .filter(|item| !listed.contains(item.id()))
-                        .map(|item| item.id().to_owned())
-                        .collect();
-                    let record = state.sessions.get_or_insert(&session);
-                    let mut retracted = false;
-                    if let Some(transcript) = &mut record.transcript {
-                        for id in &dropped {
-                            retracted |= transcript.remove(id).is_some();
-                        }
-                    }
-                    record.pending = merged.clone();
-                    let read = Read::Session(session.as_str(), SessionRead::Messages);
-                    let reread = retracted && state.has_read(read);
-                    if retracted {
-                        state.touch(&session, Touched::SHAPE);
-                    }
-                    if reread {
-                        state.invalidate(read);
-                    }
-                    state.touch(&session, Touched::PENDING);
-                    for item in &merged {
-                        state.materialize(item);
-                    }
-                    reread
-                });
-                if reread {
-                    data.refresh(|data| data.message_sync(&session));
-                }
-                Ok(())
-            },
-        )
-    }
-
-    /// Optimistic prompt admission: renders the prompt at once under a client-minted ID, then
-    /// sends it; the durable `session.inbox.enqueued` echo upserts the same ID. A failure rolls
-    /// back only rows this call admitted and the server has not acknowledged.
-    pub fn prompt(&self, prompt: impl Into<Prompt>) -> Task<SessionInboxUser> {
-        let prompt = prompt.into();
-        let mut request = prompt.input;
-        let session = request.session_id.clone();
-        let id = request.id.clone().flatten().unwrap_or_else(|| SessionMessageID(opencode_api::id::message()));
-        request.id = Some(Some(id.clone()));
-        let fresh = self.write(|state| {
-            // A retry may reuse an ID that is already rendered, and possibly durable.
-            let fresh = !state.transcript(&session).is_some_and(|transcript| transcript.contains(id.as_str()))
-                && !state.pending(&session).iter().any(|item| item.id() == id.as_str());
-            if fresh {
-                state.outbox.insert(id.0.clone());
-                state.admit_local(SessionInboxInfo::User(SessionInboxUser {
-                    id: id.clone(),
-                    session_id: session.clone(),
-                    time: SessionInboxUserTime { created: now() },
-                    r#type: tag::User,
-                    delivery: request.delivery.clone().flatten().unwrap_or(SessionInboxDelivery::Steer),
-                    payload: SessionInboxUserPayload {
-                        text: request.text.clone(),
-                        files: optimistic_files(request.files.as_ref()),
-                        agents: request.agents.clone(),
-                        skills: None,
-                        metadata: request.metadata.clone(),
-                    },
-                }));
-            }
-            fresh
-        });
-        let prepare = prompt.prepare;
-        self.send_admission(
-            &session.clone(),
-            prompt.gate,
-            move |data| async move {
-                if let Some(prepare) = prepare {
-                    prepare().await?;
-                }
-                data.client().session_prompt(&request).await.map_err(Error::new)
-            },
-            move |state, result| {
-                if result.is_err() && fresh && state.outbox.remove(id.as_str()) {
-                    state.retract_local(&session, id.as_str());
-                }
-            },
-            |_, _| {},
-        )
-    }
-
-    /// Admits a compaction (`compact`). A second gesture while one is in flight returns the same
-    /// request. The server may coalesce onto another ID; the response's ID then replaces the
-    /// proposed row.
-    pub fn compact(&self, session: &SessionID, model: Option<ModelRef>) -> Task<SessionInboxCompaction> {
-        let id = SessionMessageID(opencode_api::id::message());
-        let existing = self.write(|state| {
-            if let Some(active) = state.sessions.get(session).and_then(|session| session.compacting.as_ref()) {
-                return Some(active.request.clone());
-            }
-            if !state.pending(session).iter().any(|item| matches!(item, SessionInboxInfo::Compaction(_))) {
-                state.outbox.insert(id.0.clone());
-                state.admit_local(SessionInboxInfo::Compaction(SessionInboxCompaction {
-                    id: id.clone(),
-                    session_id: session.clone(),
-                    time: SessionInboxUserTime { created: now() },
-                    r#type: tag::Compaction,
-                    delivery: SessionInboxDelivery::Steer,
-                    payload: SessionInboxCompactionPayload::default(),
-                }));
-            }
-            None
-        });
-        if let Some(request) = existing {
-            return request;
+        let updates = updates.unwrap_or_default();
+        if self.deleted_since(session, list.started) {
+            return;
         }
-        let input = SessionCompactInput { session_id: session.clone(), id: Some(id.clone()), delivery: None };
-        let target = session.clone();
-        let proposed = id.clone();
-        self.send_admission(
-            session,
-            None,
-            move |data| async move {
-                if let Some(model) = model {
-                    data.client()
-                        .session_switch_model(&SessionSwitchModelInput { session_id: input.session_id.clone(), model })
-                        .await
-                        .map_err(Error::new)?;
+        let mut current: IndexMap<String, SessionInboxInfo> =
+            response.into_iter().map(|item| (item.id().to_owned(), item)).collect();
+        for (id, update) in updates {
+            match update {
+                PendingUpdate::Removed => {
+                    current.shift_remove(&id);
                 }
-                data.client().session_compact(&input).await.map_err(Error::new)
-            },
-            move |state, result| {
-                let active = state.sessions.get_mut(&target).and_then(|session| session.compacting.take());
-                let observed = active.map(|active| active.observed).unwrap_or_default();
-                match result {
-                    Ok(item) => {
-                        state.outbox.remove(proposed.as_str());
-                        if item.id != proposed {
-                            state.remove_pending(&target, proposed.as_str());
-                        }
-                        let shown =
-                            state.transcript(&target).is_some_and(|transcript| transcript.contains(item.id.as_str()));
-                        if !observed.contains(item.id.as_str()) && !shown {
-                            state.admit_local(SessionInboxInfo::Compaction(item.clone()));
-                        }
-                    }
-                    Err(_) => {
-                        if state.outbox.remove(proposed.as_str()) {
-                            state.remove_pending(&target, proposed.as_str());
-                        }
+                PendingUpdate::Delivery(delivery) => {
+                    if let Some(item) = current.get_mut(&id) {
+                        item.set_delivery(delivery);
                     }
                 }
-            },
-            move |state, request| {
-                state.sessions.get_or_insert(session).compacting =
-                    Some(Compacting { id, observed: HashSet::new(), request: request.clone() });
-            },
-        )
+                PendingUpdate::Item(item) => {
+                    current.insert(id, *item);
+                }
+            }
+        }
+        let pending: Vec<_> = current.into_values().collect();
+        // A positive read acknowledges admission even when its echo is delayed.
+        for item in &pending {
+            self.outbox.remove(item.id());
+        }
+        // Compactions also coalesce by session, not just by the proposed ID.
+        if pending.iter().any(|item| matches!(item, SessionInboxInfo::Compaction(_))) {
+            let local: Vec<String> = self
+                .pending(session)
+                .iter()
+                .filter(|item| matches!(item, SessionInboxInfo::Compaction(_)))
+                .map(|item| item.id().to_owned())
+                .collect();
+            for id in local {
+                self.outbox.remove(&id);
+            }
+        }
+        // Keep optimistic rows still awaiting their echo: this read may have raced ahead
+        // of an admission the server does not know yet.
+        let inflight: Vec<_> =
+            self.pending(session).iter().filter(|item| self.outbox.contains(item.id())).cloned().collect();
+        let mut merged = pending;
+        merged.extend(inflight);
+        // An item the read no longer lists was cancelled or delivered by an event this client missed (a
+        // reconnect loses events): its row goes, and a synced transcript reads again for a delivered one.
+        let listed: HashSet<&str> = merged.iter().map(SessionInboxInfo::id).collect();
+        let dropped: Vec<String> = self
+            .pending(session)
+            .iter()
+            .filter(|item| !listed.contains(item.id()))
+            .map(|item| item.id().to_owned())
+            .collect();
+        let record = self.sessions.get_or_insert(session);
+        let mut retracted = false;
+        if let Some(transcript) = &mut record.transcript {
+            for id in &dropped {
+                retracted |= transcript.remove(id).is_some();
+            }
+        }
+        record.pending = merged.clone();
+        let read = Read::Session(session.as_str(), SessionRead::Messages);
+        let reread = retracted && self.has_read(read);
+        if retracted {
+            self.touch(session, Touched::SHAPE);
+        }
+        if reread {
+            self.invalidate(read);
+        }
+        self.touch(session, Touched::PENDING);
+        for item in &merged {
+            self.materialize(item);
+        }
+        if reread {
+            effects.push(Effect::Messages(session.clone()));
+        }
     }
 
-    /// Sends one admission after the session's creation, the previous admission of the session,
-    /// and `gate` (`sendAdmission`). `settle` runs under the store lock with the result; `register`
-    /// runs under the same lock that spawns the request.
-    pub(crate) fn send_admission<T, F, Fut>(
-        &self,
-        session: &SessionID,
-        gate: Option<Gate>,
-        send: F,
-        settle: impl FnOnce(&mut State, &Result<T, Error>) + Send + 'static,
-        register: impl FnOnce(&mut State, &Task<T>),
-    ) -> Task<T>
-    where
-        T: Clone + Send + Sync + 'static,
-        F: FnOnce(Data) -> Fut + Send + 'static,
-        Fut: Future<Output = Result<T, Error>> + Send + 'static,
-    {
-        let mut state = self.lock();
-        let key = state.sessions.entry(session);
-        let created = match &state.sessions[key].life {
-            Life::Creating { gate, .. } => Some(gate.clone()),
+    /// Renders a prompt at once under its client-minted ID, unless that ID is already rendered: a retry may reuse
+    /// it, and it may be durable. True when it rendered it, so a failure may roll it back.
+    pub(crate) fn admit_prompt(&mut self, request: &SessionPromptInput) -> bool {
+        let session = &request.session_id;
+        let Some(Some(id)) = &request.id else { return false };
+        let fresh = !self.transcript(session).is_some_and(|transcript| transcript.contains(id.as_str()))
+            && !self.pending(session).iter().any(|item| item.id() == id.as_str());
+        if fresh {
+            self.outbox.insert(id.0.clone());
+            self.admit_local(SessionInboxInfo::User(SessionInboxUser {
+                id: id.clone(),
+                session_id: session.clone(),
+                time: SessionInboxUserTime { created: now() },
+                r#type: tag::User,
+                delivery: request.delivery.clone().flatten().unwrap_or(SessionInboxDelivery::Steer),
+                payload: SessionInboxUserPayload {
+                    text: request.text.clone(),
+                    files: optimistic_files(request.files.as_ref()),
+                    agents: request.agents.clone(),
+                    skills: None,
+                    metadata: request.metadata.clone(),
+                },
+            }));
+        }
+        fresh
+    }
+
+    /// Renders a compaction under `id` unless one is pending. `Some` with the token of a compaction in flight, which
+    /// a second gesture joins.
+    pub(crate) fn admit_compaction(&mut self, session: &SessionID, id: &SessionMessageID) -> Option<u64> {
+        if let Some(active) = self.sessions.get(session).and_then(|session| session.compacting.as_ref()) {
+            return Some(active.token);
+        }
+        if !self.pending(session).iter().any(|item| matches!(item, SessionInboxInfo::Compaction(_))) {
+            self.outbox.insert(id.0.clone());
+            self.admit_local(SessionInboxInfo::Compaction(SessionInboxCompaction {
+                id: id.clone(),
+                session_id: session.clone(),
+                time: SessionInboxUserTime { created: now() },
+                r#type: tag::Compaction,
+                delivery: SessionInboxDelivery::Steer,
+                payload: SessionInboxCompactionPayload::default(),
+            }));
+        }
+        None
+    }
+
+    /// Begins an admission to `session` (`sendAdmission`): it waits for the session's creation and for the admission
+    /// before it. A compaction is recorded as in flight under the proposed ID `compaction`.
+    pub(crate) fn begin_admission(&mut self, session: &SessionID, compaction: Option<SessionMessageID>) -> Admission {
+        let key = self.sessions.entry(session);
+        let token = self.token();
+        let record = &mut self.sessions[key];
+        let creating = match record.life {
+            Life::Creating { token, .. } => Some(token),
             _ => None,
         };
-        let previous = state.sessions[key].sending.as_ref().map(|(_, task)| task.clone());
-        let token = state.token();
-        let data = self.clone();
-        let id = session.clone();
-        let request = self.spawn(async move {
-            let ready = futures_util::future::try_join3(
-                async move {
-                    match gate {
-                        Some(gate) => gate.await,
-                        None => Ok(()),
-                    }
-                },
-                async move {
-                    match created {
-                        Some(created) => created.await,
-                        None => Ok(()),
-                    }
-                },
-                async move {
-                    // One failure does not block the next admission.
-                    if let Some(previous) = previous {
-                        let _ = previous.await;
-                    }
-                    Ok(())
-                },
-            )
-            .await;
-            let result = match ready {
-                Ok(_) => send(data.clone()).await,
-                Err(error) => Err(error),
-            };
-            data.write(|state| {
-                settle(state, &result);
-                if let Some(session) = state.sessions.get_mut(&id) {
-                    session.sending.take_if(|(current, _)| *current == token);
-                }
-            });
-            result
-        });
-        let chain = request.clone().map(|result| result.map(|_| ())).boxed().shared();
-        state.sessions[key].sending = Some((token, chain));
-        register(&mut state, &request);
-        self.flush(&mut state);
-        request
+        let previous = record.sending.replace(token);
+        if let Some(id) = compaction {
+            record.compacting = Some(Compacting { id, observed: HashSet::new(), token });
+        }
+        Admission { token, creating, previous }
     }
+
+    /// Ends the prompt admission `token`: a failure rolls back the row it rendered (`fresh`) while the server has not
+    /// acknowledged it.
+    pub(crate) fn complete_prompt(
+        &mut self,
+        session: &SessionID,
+        token: u64,
+        id: &SessionMessageID,
+        fresh: bool,
+        failed: bool,
+    ) {
+        if failed && fresh && self.outbox.remove(id.as_str()) {
+            self.retract_local(session, id.as_str());
+        }
+        self.end_admission(session, token);
+    }
+
+    /// Ends the compaction admission `token` that proposed `proposed`. The server may coalesce onto another ID; the
+    /// response's ID then replaces the proposed row.
+    pub(crate) fn complete_compaction(
+        &mut self,
+        session: &SessionID,
+        token: u64,
+        proposed: &SessionMessageID,
+        result: Result<SessionInboxCompaction, Error>,
+    ) {
+        let active = self.sessions.get_mut(session).and_then(|session| session.compacting.take());
+        let observed = active.map(|active| active.observed).unwrap_or_default();
+        match result {
+            Ok(item) => {
+                self.outbox.remove(proposed.as_str());
+                if item.id != *proposed {
+                    self.remove_pending(session, proposed.as_str());
+                }
+                let shown = self.transcript(session).is_some_and(|transcript| transcript.contains(item.id.as_str()));
+                if !observed.contains(item.id.as_str()) && !shown {
+                    self.admit_local(SessionInboxInfo::Compaction(item));
+                }
+            }
+            Err(_) => {
+                if self.outbox.remove(proposed.as_str()) {
+                    self.remove_pending(session, proposed.as_str());
+                }
+            }
+        }
+        self.end_admission(session, token);
+    }
+
+    fn end_admission(&mut self, session: &SessionID, token: u64) {
+        if let Some(session) = self.sessions.get_mut(session) {
+            session.sending.take_if(|current| *current == token);
+        }
+    }
+}
+
+/// An admission to send: its token, and the tokens of the creation and the admission it waits for.
+pub(crate) struct Admission {
+    pub(crate) token: u64,
+    pub(crate) creating: Option<u64>,
+    pub(crate) previous: Option<u64>,
 }
 
 /// Ends the inbox read `token`: the events that overtook it, while that read is still the current one.

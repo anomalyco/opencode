@@ -2,6 +2,8 @@
 
 pub mod changes;
 pub mod connection;
+mod core;
+mod driver;
 pub mod environment;
 pub mod forms;
 pub mod inbox;
@@ -17,10 +19,11 @@ pub mod state;
 pub mod target;
 
 pub use changes::{Changes, Dirty, Selected, Touched};
+pub use driver::{DELTAS, Data, DeltaListening, Gate, Listening, LoadMore, Prompt, Task};
 pub use forms::Form;
-pub use inbox::{InboxExt, PendingStatus, Prompt};
+pub use inbox::{InboxExt, PendingStatus};
 pub use location::{Catalog, Location, LocationData};
-pub use messages::{LoadMore, MessageExt, MessageKey, Transcript};
+pub use messages::{MessageExt, MessageKey, Transcript};
 pub use sessions::CreateSession;
 pub use shells::Shell;
-pub use state::{DELTAS, Data, DeltaListening, Error, Listening, Options, SessionStatus, State, Task};
+pub use state::{Error, Options, SessionStatus, State};
