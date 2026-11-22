@@ -9,6 +9,8 @@ import { Media } from "@opencode/ai/effect"
  */
 export function detect(bytes: Uint8Array, path?: string) {
   const sniffed = Media.detectMediaType(bytes)
+  // `fileMediaType` re-runs the same sniff, so it cannot drop `sniffed` here; the `??` only keeps the branch typed
+  // `string`, because `fileMediaType` is declared `string | undefined`.
   if (sniffed !== undefined) return path === undefined ? sniffed : (Media.fileMediaType(bytes, path) ?? sniffed)
   if (isText(bytes)) return "text/plain"
   if (path === undefined) return "application/octet-stream"

@@ -50,6 +50,7 @@ export const detectMediaType = (bytes: Uint8Array): string | undefined => {
     if (brand === "M4A ") return "audio/mp4"
     return "video/mp4"
   }
+  // WebM's EBML DocType does not mark audio-only files, so a MediaRecorder voice note reports as video here.
   if (startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3])) return "video/webm"
   if (startsWith(bytes, [0x49, 0x44, 0x33])) return "audio/mpeg"
   const frame = frameSyncMediaType(bytes)
@@ -86,7 +87,6 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
   pdf: "application/pdf",
   mp4: "video/mp4",
   mov: "video/quicktime",
-  // WebM's EBML DocType does not mark audio-only files, so a MediaRecorder voice note reports as video here.
   webm: "video/webm",
   mp3: "audio/mpeg",
   m4a: "audio/mp4",

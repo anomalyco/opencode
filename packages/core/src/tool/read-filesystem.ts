@@ -21,7 +21,7 @@ const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 export const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
 
 // `read` covers every media type it attaches; MCP inlining keeps the narrower shared set above.
-export const READ_MEDIA_MIMES = new Set([
+const READ_MEDIA_MIMES = new Set([
   ...MEDIA_MIMES,
   "image/bmp",
   "image/avif",
