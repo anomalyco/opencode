@@ -64,7 +64,7 @@ const end = await widget.done // submit, dismiss, return, stop or error (a StepE
 It stops a program that runs 50 ms without any host call in flight (a lower bound of the spec's "without awaiting",
 which it can't observe exactly: while a view has handlers the prelude keeps a `receive` in flight, so a busy loop then
 goes unnoticed), rejects invalid `render`/`draw` posts and draws over 2,000 commands with an error,
-and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
+and holds `render`/`draw` posts over 240 a second back, keeping the latest of each (the spec's Post rate).
 
 ## ABI for other clients
 

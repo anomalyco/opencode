@@ -282,8 +282,8 @@ psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript r
   has the id takes it.
 - **Live posts.** `__host.post({ type: "render", node })` returns `true` when the view has a handler, else `false`;
   the prelude keeps the run going on that (`widgets-live.md`). The host walks every render posted to it,
-  one it drops over the post rate too. `widget.draw(key, commands)` posts `{ type: "draw", key, commands }` (`key` a
-  string); the host maps the key to the canvas's id from the last render and gives its client
+  one that waits for the post rate too (`widgets-live.md`, Post rate). `widget.draw(key, commands)` posts `{ type: "draw", key, commands }` (`key` a
+  string; a draw post without a string `key` is an invalid post, `widgets-live.md`); the host maps the key to the canvas's id from the last render and gives its client
   `{ type: "draw", id, commands }`. For an unknown key it throws from `post` an `Error`
   `No canvas with key "<key>" in the rendered view`, for a GPU canvas `Canvas "<key>" is drawn by its wgsl; it takes no
   draw commands`; the program can catch either.
@@ -523,8 +523,9 @@ A **program error** is the widget template's own code failing or breaking a cont
 - a parse error or a runtime exception in the program (including a handler, hook, `draw` or `main`);
 - an invalid view or invalid draw output (fails the node or draw command schema, more than 2,000 commands);
 - WGSL that fails validation (naga's or the platform's validator rejects the shader as written);
-- exceeding a program limit: the 250 ms step timeout, the 50 ms slice without awaiting (live), the heap cap, the post
-  rate (240 a second) or the `send` rate (`rate_limited`).
+- exceeding a program limit: the 250 ms step timeout, the 50 ms slice without awaiting (live), the heap cap or the
+  `send` rate (`rate_limited`). (Live `render` and `draw` posts over their rate wait instead; `widgets-live.md`, Post
+  rate.)
 
 Everything else is a **client error**: rendering or translating valid WGSL, a shader too slow on this device (the 50 ms
 frame stop), host internals, transport and RPC failures (a `program` fetch that fails), and client bugs. Clients never

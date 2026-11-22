@@ -101,7 +101,10 @@ export interface LiveOptions {
   readonly clock?: Clock
   /** Stop the program when it runs this long without waiting on the host; default 50 ms (the spec's budget). */
   readonly busyMs?: number
-  /** Posts per second beyond which `render`, `draw` and `frame` posts are dropped with a warning; default 240. */
+  /**
+   * The rate of `render` and `draw` posts, beyond which they wait and coalesce (specs/v2/widgets-live.md, Post rate);
+   * default 240 a second.
+   */
   readonly postsPerSecond?: number
   /** Every valid message the program posts, in order. */
   readonly onMessage?: (message: LiveMessage) => void
@@ -171,7 +174,11 @@ export const LiveWidget = {
       ended: undefined as LiveEnd | undefined,
       pending: 0,
       busy: undefined as ReturnType<typeof setTimeout> | undefined,
-      window: { start: started, posts: 0, warned: false },
+      // The post rate's token bucket, and the `render` and `draw` posts waiting for a token, oldest first; a canvas's
+      // draws coalesce by its key.
+      bucket: { tokens: BURST, at: started },
+      waiting: [] as Array<{ readonly key: string | undefined; readonly message: LiveMessage }>,
+      slot: undefined as (() => void) | undefined,
       fetches: { inFlight: 0, starts: [] as number[] },
       // The last rendered view's tree, for `draw` keys.
       tree: undefined as Tree | undefined,
@@ -185,6 +192,9 @@ export const LiveWidget = {
 
     const end = (result: LiveEnd) => {
       if (current.ended) return
+      // The last view is never lost: whatever waits for the post rate goes out first, unless the client stopped it.
+      if (result.type !== "stop") release()
+      current.slot?.()
       current.ended = result
       clearTimeout(current.busy)
       controller.abort()
@@ -343,7 +353,9 @@ export const LiveWidget = {
     // turned into its canvas's id, no functions. For a render, also whether its view has handlers, which `post`
     // returns, or why the view breaks the rules of views (`failure`; the prelude posts one too deep to cross that way).
     // Throws what the program would have got: an unknown canvas key, a function where none may go.
-    const native = (message: unknown): { message: unknown; handlers?: boolean; failure?: string } => {
+    const native = (
+      message: unknown,
+    ): { message: unknown; handlers?: boolean; failure?: string; invalid?: string; key?: string } => {
       if (isRecord(message) && message.type === "render") {
         const { node, failure, ...rest } = message
         if (typeof failure === "string") return { message, failure }
@@ -359,27 +371,88 @@ export const LiveWidget = {
           return { message, failure: error.message }
         }
       }
-      if (!isRecord(message) || message.type !== "draw" || !("key" in message))
-        return { message: unmark(message, POSTED) }
-      const { key, ...rest } = message
-      const canvas = current.tree?.canvases.get(String(key))
+      if (!isRecord(message) || message.type !== "draw") return { message: unmark(message, POSTED) }
+      const key = message.key
+      if (typeof key !== "string") return { message, invalid: DRAW_KEY }
+      const canvas = current.tree?.canvases.get(key)
       if (canvas === undefined) throw new Error('No canvas with key "' + key + '" in the rendered view')
       if (canvas.wgsl) throw new Error('Canvas "' + key + '" is drawn by its wgsl; it takes no draw commands')
-      return { message: unmark({ type: "draw", id: canvas.id, ...rest }, POSTED) }
+      return { message: unmark({ type: "draw", id: canvas.id, commands: message.commands }, POSTED), key }
     }
 
     const post = (args: ReadonlyArray<unknown>) => {
-      const { message, handlers, failure } = native(args[0])
+      const { message, handlers, failure, invalid, key } = native(args[0])
       checked("post", args, 1)
       if (current.ended) return
       if (failure !== undefined) return void fail("invalid", failure, "view")
-      deliverPost(message)
+      if (invalid !== undefined) return void fail("invalid", invalid)
+      deliverPost(message, key)
       return handlers
     }
 
-    const deliverPost = (message: unknown) => {
+    // Checks a post, then applies it: `render` and `draw` posts under the post rate, the rest at once. A frame request
+    // while one is pending changes nothing; `submit` and `dismiss` first apply what waits for the rate.
+    const deliverPost = (message: unknown, key?: string) => {
       const accepted = accept(message)
       if (!accepted) return
+      if (accepted.type === "render" || accepted.type === "draw") return counted(accepted, key)
+      if (accepted.type === "frame" && current.requested) return
+      if (accepted.type === "submit" || accepted.type === "dismiss") release()
+      apply(accepted)
+    }
+
+    // The post rate (specs/v2/widgets-live.md): a token bucket of `BURST` tokens, refilled at `postsPerSecond`. A
+    // `render` or `draw` post takes a token and goes out at once when nothing waits; otherwise it waits, in place of a
+    // waiting post of its kind (the render, or the draw for its canvas key), and waiting posts go out in order, one per
+    // token, as tokens come.
+    const refill = () => {
+      const at = clock.now()
+      current.bucket.tokens = Math.min(
+        BURST,
+        current.bucket.tokens + ((at - current.bucket.at) * postsPerSecond) / 1000,
+      )
+      current.bucket.at = at
+    }
+    const counted = (message: LiveMessage, key: string | undefined) => {
+      refill()
+      if (current.waiting.length === 0 && current.bucket.tokens >= 1 - EPSILON) {
+        current.bucket.tokens -= 1
+        return apply(message)
+      }
+      const index = current.waiting.findIndex((entry) =>
+        message.type === "render"
+          ? entry.message.type === "render"
+          : entry.message.type === "draw" && entry.key === key,
+      )
+      if (index === -1) current.waiting.push({ key, message })
+      else current.waiting[index] = { key, message }
+      schedule()
+    }
+    const schedule = () => {
+      if (current.slot || current.waiting.length === 0 || current.ended) return
+      refill()
+      const wait = Math.max(0, ((1 - current.bucket.tokens) * 1000) / postsPerSecond)
+      current.slot = clock.schedule(wait, () => {
+        current.slot = undefined
+        refill()
+        while (current.waiting.length > 0 && current.bucket.tokens >= 1 - EPSILON && !current.ended) {
+          current.bucket.tokens -= 1
+          apply(current.waiting.shift()!.message)
+        }
+        schedule()
+      })
+    }
+    // Applies every waiting post at once, in order.
+    const release = () => {
+      current.slot?.()
+      current.slot = undefined
+      current.waiting.splice(0).forEach((entry) => apply(entry.message))
+    }
+
+    const apply = (accepted: LiveMessage) => {
+      if (accepted.type === "render") current.view = accepted.node
+      if (accepted.type === "draw") drawings.set(accepted.id, accepted.commands)
+      if (accepted.type === "frame") current.requested = true
       options?.onMessage?.(accepted)
       if (accepted.type === "submit") return end({ type: "submit", value: accepted.value })
       if (accepted.type === "dismiss") return end({ type: "dismiss" })
@@ -390,29 +463,23 @@ export const LiveWidget = {
       })
     }
 
-    // Validates one post, applies it and returns it; drops it (undefined) over the rate or when it is invalid.
+    // Checks one post and returns it as the client gets it; undefined when it is invalid (the run ends) or ignored.
+    // A draw comes here with the id its key maps to.
     const accept = (message: unknown): LiveMessage | undefined => {
       if (!isRecord(message) || typeof message.type !== "string") return warn(`Ignored a post without a type`)
-      if ((message.type === "render" || message.type === "draw" || message.type === "frame") && !admit()) return
       if (message.type === "render") {
         const found: string[] = []
         const decoded = decodeNode(prune(message.node, found))
         if (Result.isFailure(decoded)) return void fail("invalid", decoded.failure.message)
         found.forEach((warning) => warn(warning))
-        current.view = decoded.success
         return { type: "render", node: decoded.success }
       }
       if (message.type === "draw") {
         const decoded = decodeDraw({ commands: message.commands })
-        if (typeof message.id !== "string") return void fail("invalid", "A draw needs a canvas id")
         if (Result.isFailure(decoded)) return void fail("invalid", decoded.failure.message)
-        drawings.set(message.id, decoded.success.commands)
-        return { type: "draw", id: message.id, commands: decoded.success.commands }
+        return { type: "draw", id: message.id as string, commands: decoded.success.commands }
       }
-      if (message.type === "frame") {
-        current.requested = true
-        return { type: "frame" }
-      }
+      if (message.type === "frame") return { type: "frame" }
       if (message.type === "submit") return { type: "submit", value: message.value ?? null }
       if (message.type === "dismiss") return { type: "dismiss" }
       if (message.type === "send") return { type: "send", value: message.value ?? null, wake: message.wake !== false }
@@ -421,16 +488,6 @@ export const LiveWidget = {
         return { type: "capture", value: message.value }
       }
       return warn(`Ignored a post of unknown type "${message.type}"`)
-    }
-
-    const admit = () => {
-      const now = clock.now()
-      if (now - current.window.start >= 1000) current.window = { start: now, posts: 0, warned: false }
-      current.window.posts++
-      if (current.window.posts <= postsPerSecond) return true
-      if (!current.window.warned) warn(`Dropped posts beyond ${postsPerSecond} per second`)
-      current.window.warned = true
-      return false
     }
 
     const warn = (message: string) => {
@@ -527,6 +584,12 @@ export const LiveWidget = {
     return widget
   },
 }
+
+// The post rate's burst (specs/v2/widgets-live.md, Post rate), the tolerance for its floating-point tokens, and the
+// failure of a draw post without a canvas key.
+const BURST = 8
+const EPSILON = 1e-9
+const DRAW_KEY = "A draw post needs a string key"
 
 // Host calls' arguments cross with markers, for a render's handlers; anywhere else a function fails the call, as
 // it does without `"mark"`. `checked` gives the arguments from `from` on, throwing for a function.

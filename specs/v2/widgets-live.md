@@ -76,8 +76,9 @@ full-screen GPU canvas can drive a game.
 ## Client ↔ program messages
 
 Program → client (`post`): `{ type: "render", node }`, `{ type: "draw", id, commands }` (the program posts
-`{ type: "draw", key, commands }`, which the host turns into the canvas's id; `widgets.md`, Native hosts), `{ type: "frame" }` (one
-frame wanted), `{ type: "submit", value }`, `{ type: "dismiss" }`, `{ type: "send", value, wake }`, `{ type: "capture", value: true |
+`{ type: "draw", key, commands }`, which the host turns into the canvas's id; `widgets.md`, Native hosts; a draw post
+whose `key` isn't a string is an invalid post: the run ends with the program error `A draw post needs a string key`),
+`{ type: "frame" }` (one frame wanted), `{ type: "submit", value }`, `{ type: "dismiss" }`, `{ type: "send", value, wake }`, `{ type: "capture", value: true |
 false }` (`capturePointer` / `releasePointer`; clients without capture ignore it), `{ type: "gpu", ops, bytes }` (a GPU
 canvas batch; a frame request may carry one as `{ type: "frame", gpu }`, `widgets-gpu.md`).
 
@@ -85,6 +86,28 @@ Client → program (`receive`): `{ type: "event", event }` (`{ id, type, value }
 for keys, focus, full screen and capture; the prelude routes it), `{ type: "frame", frame }` (only after a frame request, at
 the next vsync while the widget is visible), `{ type: "resumed", pausedMs }` (after a pause, see below), `{ type: "canvas", key, width, height }` and
 `{ type: "gpu", lost }` (GPU canvases, `widgets-gpu.md`).
+
+## Post rate
+
+Every host applies the same rule to a live run's posts; it never drops a post and never fails the run for its rate.
+
+- **`render` and `draw` posts are counted**, with a token bucket per run: it holds at most 8 tokens, starts full, and
+  refills continuously at 240 tokens a second by the host's monotonic clock (pausing doesn't stop it). A counted post
+  that arrives while no counted post waits and the bucket holds at least one token takes a token and goes to the
+  client at once. Otherwise it waits: it takes the place of the waiting post of its kind (the waiting `render`, or the
+  waiting `draw` for the same canvas key), or joins the end of the queue. The waiting posts go to the client in queue
+  order, each as soon as the bucket holds a token, which it takes: with the bucket empty, one every 1/240 s. (Tokens
+  are fractional; a host may treat 1 − 10⁻⁹ as 1.)
+- **Checks don't wait.** The host walks and checks a post when the program posts it, whether it goes out at once or
+  waits: an invalid post, a view that breaks Keys and depth, an unknown or GPU canvas key fail the run or the call at
+  once, and `post` returns whether the render's view has handlers at once. Only its delivery to the client waits.
+- **The final view is never lost.** When the run ends by `submit`, `dismiss`, `main` returning or a program error,
+  the waiting posts go to the client at once, in order, before the end (before the `submit` or `dismiss` itself). A
+  run the client stops drops them.
+- **`frame` requests** are idempotent: at most one is pending. They are never counted, never wait and are never
+  dropped; a frame request while one is pending changes nothing (a GPU batch it carries still applies).
+- **Not counted:** `submit`, `dismiss`, `capture` and `gpu` batches go to the client at once (ahead of waiting posts).
+  `send` goes at once too; the server limits it (`rate_limited`, `widgets.md`).
 
 ## Capabilities
 
@@ -133,7 +156,7 @@ and hands the actual transfer to the app (URLSession / OkHttp), so system TLS an
   with that program error in phase `view`, like an invalid post. A program built for another protocol isn't started
   (`widgets.md`, Protocol).
 - Budgets: a program that runs more than 50 ms without awaiting is stopped with an error; at most 2,000 draw commands
-  per `draw`; posts beyond 240 per second are dropped with a warning; the heap cap applies as to steps (`widgets.md`, Heap
+  per `draw`; `render` and `draw` posts beyond the post rate wait and coalesce (Post rate); the heap cap applies as to steps (`widgets.md`, Heap
   cap: default 32 MB, phase `main`). One error shows inline with "Restart".
 - A submitted/dismissed widget (from any client) stops its program; its last rendered view stays, read-only.
 - Answers and sends go to the server exactly as in step mode.
@@ -142,7 +165,7 @@ and hands the actual transfer to the app (URLSession / OkHttp), so system TLS an
 
 The server never runs widget template code: the `widget` tool validates `data`, and `widget_template save` parses and lints the
 source (an `async function main`, top-level declarations only; see `widgets.md`, Tools). A client whose live program
-hits a program error (an escaped exception, an invalid post, the 50 ms slice, the heap cap or a rate) reports it with
+hits a program error (an escaped exception, an invalid post, the 50 ms slice or the heap cap) reports it with
 the `report` RPC (`phase: "main"`); see `widgets.md`, Failures.
 `widget_template` `save` takes `mode` and `capabilities`; both are part of the widget template version (see `widgets.md`, Widget template). Step widget templates
 can't declare capabilities. The skill teaches when to use live mode (games, timers, animations,

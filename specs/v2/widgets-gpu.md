@@ -98,7 +98,8 @@ Calls don't touch a GPU in the program. The prelude records them into a **batch*
 and `writeBuffer`/`writeTexture` at the point they are called, a command buffer's commands at the `submit` that takes
 it. The pending batch goes out at the program's next `await` of a `widget` call: with `widget.frame()` it rides in the
 frame request itself, so a game posts once per frame (about 120 posts a second at 120 Hz); before `widget.sleep()` or
-`widget.fetch()` it is a post of its own (an intermediate batch, allowed, counted toward the post rate). The client
+`widget.fetch()` it is a post of its own (an intermediate batch, allowed; batches aren't counted toward the post rate,
+`widgets-live.md`). The client
 replays each batch in order on its device and presents every canvas whose texture a render pass in the batch wrote to.
 It may skip presents beyond one per display frame, never other ops.
 
@@ -162,8 +163,8 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
   samples, mip levels included), and 4,096 live handles.
 - Per batch: at most 4 MB of `bytes` and 20,000 ops; per frame (between two `widget.frame()`), at most 16 render passes
   and 10,000 draws.
-- Shaders: 256 KB of WGSL per module. A batch in a frame request adds no post; intermediate batches count toward the
-  240 posts a second.
+- Shaders: 256 KB of WGSL per module. Batches, in a frame request or on their own, aren't counted toward the post
+  rate (`widgets-live.md`, Post rate).
 
 ## Errors and device loss
 

@@ -280,14 +280,98 @@ test("a program that runs too long without awaiting is stopped", async () => {
   expect(await later.widget.done).toMatchObject(busy)
 })
 
-test("posts beyond the rate are dropped with one warning; answers always get through", async () => {
-  const { widget, messages } = start(
-    `async function main() { for (let i = 0; i < 30; i++) widget.render(ui.text(String(i))); widget.submit(1) }`,
+const rendered = (messages: ReadonlyArray<LiveMessage>) =>
+  messages.flatMap((message) => (message.type === "render" && message.node.type === "text" ? [message.node.text] : []))
+
+test("renders over the post rate wait and coalesce: the latest goes out at the next slot, and before an answer", async () => {
+  // 8 at once (the burst), then the 22 others replace each other until a token comes, a tenth of a second later.
+  const { widget, messages, clock } = start(
+    `async function main() { for (let i = 0; i < 30; i++) widget.render(ui.text(String(i))); await widget.sleep(1000); widget.submit(1) }`,
     { postsPerSecond: 10 },
   )
+  await widget.when(() => rendered(messages).length === 8)
+  await clock.advance(99)
+  expect(rendered(messages)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7"])
+  await clock.advance(1)
+  expect(rendered(messages)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "29"])
+  expect(widget.view).toEqual({ type: "text", text: "29" })
+  await clock.advance(1000)
   expect(await widget.done).toEqual({ type: "submit", value: 1 })
-  expect(messages.filter((message) => message.type === "render")).toHaveLength(10)
-  expect(widget.warnings).toEqual(["Dropped posts beyond 10 per second"])
+  expect(widget.warnings).toEqual([])
+  // Ending, by an answer or by returning, sends what waits first.
+  for (const last of [`widget.submit(1)`, `return`]) {
+    const { widget, messages } = start(
+      `async function main() { for (let i = 0; i < 30; i++) widget.render(ui.text(String(i))); ${last} }`,
+      { postsPerSecond: 10 },
+    )
+    await widget.done
+    expect(rendered(messages)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "29"])
+    expect(messages.map((message) => message.type).slice(9)).toEqual(last === "return" ? [] : ["submit"])
+  }
+})
+
+test("a frame request under load is never counted or lost, and draws coalesce by canvas", async () => {
+  const { widget, messages, clock } = start(
+    `async function main() {
+      widget.render(ui.column([ui.canvas({ key: "a", height: 1 }), ui.canvas({ key: "b", height: 1 })]))
+      for (let i = 0; i < 20; i++) { widget.draw("a", [["alpha", i / 100]]); widget.draw("b", [["alpha", i / 50]]) }
+      const frame = await widget.frame()
+      widget.render(ui.text("frame " + frame.t))
+    }`,
+    { postsPerSecond: 10 },
+  )
+  await widget.when((current) => current.frameRequested)
+  expect(widget.frame({ ...size, t: 1 })).toBe(true)
+  // The frame's render waits behind the draws: one token each, a tenth of a second apart.
+  await clock.advance(300)
+  const draws = messages.flatMap((message) => (message.type === "draw" ? [[message.id, message.commands]] : []))
+  expect(draws.slice(7)).toEqual([
+    ["0/:b", [["alpha", 0.38]]],
+    ["0/:a", [["alpha", 0.19]]],
+  ])
+  expect(await widget.done).toEqual({ type: "return" })
+  expect(widget.view).toEqual({ type: "text", text: "frame 1" })
+})
+
+test("a game at 120 Hz posting three times a frame runs every frame and shows its last one", async () => {
+  // A render and two draws a frame are 360 posts a second, over the 240: frames keep coming, and the view catches up.
+  const { widget, messages, clock } = start(`async function main() {
+    for (let n = 0; n < 120; n++) {
+      const frame = await widget.frame()
+      widget.render(ui.column([ui.text("n " + n), ui.canvas({ key: "a", height: 1 }), ui.canvas({ key: "b", height: 1 })]))
+      widget.draw("a", [["alpha", n / 1000]])
+      widget.draw("b", [["alpha", n / 200]])
+    }
+  }`)
+  for (let n = 0; n < 120; n++) {
+    await widget.when((current) => current.frameRequested)
+    expect(widget.frame({ ...size, t: n / 120 })).toBe(true)
+    await clock.advance(1000 / 120)
+  }
+  const counted = messages.filter((message) => message.type === "render" || message.type === "draw")
+  // A second's tokens and the burst, and the last frame's three posts, which go out at once when the run returns.
+  expect(counted.length).toBeLessThanOrEqual(240 + 8 + 3)
+  expect(counted.length).toBeGreaterThan(200)
+  expect(await widget.done).toEqual({ type: "return" })
+  expect(widget.view && "children" in widget.view ? widget.view.children[0] : undefined).toEqual({
+    type: "text",
+    text: "n 119",
+  })
+  expect(widget.drawings.get("0/:b")).toEqual([["alpha", 0.595]])
+  expect(messages.filter((message) => message.type === "frame")).toHaveLength(120)
+})
+
+test("a draw post without a string key ends the run as an invalid post", async () => {
+  for (const post of [
+    `__host.post({ type: "draw", id: "0", commands: [] })`,
+    `__host.post({ type: "draw", key: 1, commands: [] })`,
+  ]) {
+    const { widget } = start(`async function main() { widget.render(ui.canvas({ key: "c", height: 1 })); ${post} }`)
+    expect(await widget.done).toMatchObject({
+      type: "error",
+      error: { kind: "invalid", message: "A draw post needs a string key" },
+    })
+  }
 })
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => ({
