@@ -1,5 +1,6 @@
-import { Result, Schema } from "effect"
+import { Effect, Result, Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
+import { Host as EffectHost } from "psychoscript/effect"
 import { type Command, DrawOutput, type Frame, Node, type WidgetEvent } from "./node.js"
 import { prune, StepError } from "./session.js"
 import {
@@ -15,6 +16,7 @@ import {
 } from "./fetch.js"
 import type { Capabilities } from "./widget-template.js"
 import { type Tree, tree, unmark } from "./tree.js"
+import { compiled } from "./compiled.js"
 
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
 export type LiveFrame = Omit<Frame, "id">
@@ -475,22 +477,22 @@ export const LiveWidget = {
       globals: () => ({
         __input: Host.fn(() => ({ data })),
         __host: {
-          post: Host.fn((args) => post(args)),
-          receive: Host.fn((args, call) => (checked("receive", args), receive(call.signal)), {
+          post: located((args) => post(args)),
+          receive: located((args, call) => (checked("receive", args), receive(call.signal)), {
             type: "async",
             idempotent: true,
           }),
-          sleep: Host.fn((args, call) => sleep(checked("sleep", args)[0], call.signal), {
+          sleep: located((args, call) => sleep(checked("sleep", args)[0], call.signal), {
             type: "async",
             idempotent: true,
           }),
-          now: Host.fn((args) => (checked("now", args), now())),
-          fetch: Host.fn((args, call) => fetch(checked("fetch", args)[0], call.signal), { type: "async" }),
+          now: located((args) => (checked("now", args), now())),
+          fetch: located((args, call) => fetch(checked("fetch", args)[0], call.signal), { type: "async" }),
         },
       }),
       translate: { functions: "mark" },
     })
-      .execute(program + "\nreturn await __widget_live(__input(), true)", { signal: controller.signal })
+      .execute(compiled(program + "\nreturn await __widget_live(__input(), true)"), { signal: controller.signal })
       .then(
         (result) => {
           if (result.ok) return end({ type: "return" })
@@ -510,6 +512,17 @@ export const LiveWidget = {
 const POSTED = "Argument 1 to __host.post"
 const checked = (name: string, args: ReadonlyArray<unknown>, from = 0) =>
   args.map((arg, index) => (index < from ? arg : unmark(arg, `Argument ${index + 1} to __host.${name}`)))
+
+// A host function whose errors reach the program at the call's line and column, as the interpreter's own errors for
+// an argument do: what it throws becomes an Effect defect, which psychoscript gives the call's location.
+const located = (f: (args: ReadonlyArray<unknown>, call: Host.Call) => unknown, options?: EffectHost.Options) =>
+  EffectHost.fn((args, call) => {
+    try {
+      return f(args, call)
+    } catch (error) {
+      return Effect.die(error)
+    }
+  }, options)
 
 const decodeNode = Schema.decodeUnknownResult(Node)
 const decodeDraw = Schema.decodeUnknownResult(DrawOutput)

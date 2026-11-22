@@ -119,7 +119,9 @@ const scriptedLive = async (source: string, events: ReadonlyArray<unknown>) => {
 
 const nativeLive = async (source: string, events: ReadonlyArray<unknown>) => {
   const messages: unknown[] = []
-  const widget = LiveWidget.start(program(source), null, { onMessage: (message: LiveMessage) => messages.push(message) })
+  const widget = LiveWidget.start(program(source), null, {
+    onMessage: (message: LiveMessage) => messages.push(message),
+  })
   events.forEach((event) => widget.event(event as Parameters<LiveWidget["event"]>[0]))
   const end = await Promise.race([widget.done, Bun.sleep(1000).then(() => undefined)])
   await widget.stop()
@@ -175,4 +177,17 @@ test("a native live run stays while its view has handlers", async () => {
   expect((await nativeLive(source, [])).ended).toBe("waiting")
   expect((await nativeLive(source, [{ id: "0", type: "press" }])).ended).toBe("return")
   expect((await nativeLive(`async function main() { widget.render(ui.button("go")) }`, [])).ended).toBe("return")
+})
+
+test("a function posted where none may go fails a native live run at the same line and column", async () => {
+  for (const post of [`widget.send({ f: () => 1 })`, `widget.render(ui.text("x", { extra: [() => 1] }))`]) {
+    const source = `async function main() {\n  ${post}\n}`
+    const expected = await scriptedLive(source, [])
+    expect(expected.ended).toMatch(
+      /^TypeError: Argument 1 to __host.post contains a function, .* \(line \d+, col \d+\)$/,
+    )
+    expect(await nativeLive(source, [])).toEqual(expected)
+  }
+  const missing = await nativeLive(`async function main() {\n  widget.draw("nope", [])\n}`, [])
+  expect(missing.ended).toMatch(/^Error: No canvas with key "nope" in the rendered view \(line \d+, col \d+\)$/)
 })

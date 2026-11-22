@@ -11,6 +11,7 @@ import {
   types,
 } from "./node.js"
 import { tree, unmark } from "./tree.js"
+import { compiled } from "./compiled.js"
 
 /** The most a step may run; clients may pass a smaller `timeoutMs`. */
 export const TIMEOUT_MS = 250
@@ -47,7 +48,7 @@ export async function step(
 /**
  * Runs the `draw` phase for a canvas: the widget template's `draw(state, data, frame)`, or nothing without one. Rejects with a
  * `StepError` when it throws, times out or returns invalid commands. The timeout defaults to `TIMEOUT_MS`, not the
- * spec's 8 ms frame budget: this interpreter parses the program on every step, which alone takes a few ms.
+ * spec's 8 ms frame budget.
  */
 export async function draw(
   program: string,
@@ -77,7 +78,9 @@ async function run(program: string, input: StepInput, timeoutMs: number, marked 
     limits: { timeoutMs },
     translate: marked ? { functions: "mark" } : undefined,
     globals: () => ({ __input: Host.fn(() => input) }),
-  }).execute(program + (marked ? "\nreturn __widget_step(__input(), true)" : "\nreturn __widget_step(__input())"))
+  }).execute(
+    compiled(program + (marked ? "\nreturn __widget_step(__input(), true)" : "\nreturn __widget_step(__input())")),
+  )
   if (!result.ok)
     throw new StepError({
       kind: result.error.kind === "TimeoutExceeded" ? "timeout" : "error",
