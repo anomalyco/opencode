@@ -257,11 +257,12 @@ function build() {
   return targets.map(([pkg, ...target]) => {
     const command = ["bun", "run", "cargo", "test", "--profile", "perf", "-p", pkg, ...target]
     const output = run([...command, "--no-run", "--message-format=json"], {}, "inherit")
+    // The TUI's integration tests also build its binaries, which cargo may report first.
     const binary = output
       .split("\n")
       .filter((line) => line.startsWith("{"))
       .map((line) => JSON.parse(line))
-      .find((message) => message.reason === "compiler-artifact" && message.executable)
+      .find((message) => message.reason === "compiler-artifact" && message.executable && message.profile.test)
     if (!binary) throw new Error(`cargo built no test binary for ${pkg}`)
     return binary.executable as string
   })
