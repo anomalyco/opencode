@@ -25,7 +25,7 @@ import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import { tempGlobalLayer } from "./fixture/global"
 import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
-import { elsewhere } from "./fixture/target-environment"
+import { elsewhere, machineFacts } from "./fixture/target-environment"
 import { location } from "./fixture/location"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -71,8 +71,13 @@ const run = (id: Environment.ID, workspaceID?: Workspace.ID) =>
       // The host's files, so the working directory exists there, and a spawner that starts no process: a command
       // elsewhere gets none of this machine's variables, which a real shell on Windows may not start without.
       const output = Stream.succeed(Buffer.from("elsewhere"))
+      const host = Context.get(yield* Layer.build(hostEnvironmentLayer), Environment.Service)
       const other = elsewhere(tmp.path, {
-        ...Context.get(yield* Layer.build(hostEnvironmentLayer), Environment.Service),
+        // With the session's id this is the host, which hosts the server only outside a workspace. With any other
+        // id it is a machine.
+        ...(id === Environment.localID
+          ? { ...host, hostsServer: workspaceID === undefined }
+          : { files: host.files, ...machineFacts }),
         id,
         spawner: ChildProcessSpawner.make((command) =>
           Effect.sync(() => {

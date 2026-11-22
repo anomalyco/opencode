@@ -1,4 +1,5 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
+import { posix } from "node:path"
 import { Cause, Deferred, Effect, PlatformError, Queue, Redacted, Schema, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { Environment } from "../environment/index.js"
@@ -451,20 +452,26 @@ export const make = (id: Environment.ID): Interface => {
     close,
     hello: () => link?.hello,
     describe: () => link?.describe?.(),
-    environment: Environment.make(id, {
-      spawner,
-      overrides: {
-        stat: (path) => call<FileInfo, NotFound>(path, { call: "stat", path }),
-        list: (path) => call<ReadonlyArray<DirEntry>, NotFound | WrongKind>(path, { call: "list", path }),
-        read: (path, range) =>
-          call<{ info: FileInfo; bytes: Uint8Array }, NotFound | WrongKind>(path, { call: "read", path, range }),
-        write: (path, bytes) => call<void>(path, { call: "write", path, bytes }),
-        append: (path, bytes) => call<void>(path, { call: "append", path, bytes }),
-        remove: (path) => call<void>(path, { call: "remove", path }),
-        mkdir: (path) => call<void>(path, { call: "mkdir", path }),
-        move: (from, to) => call<void, NotFound>(from, { call: "move", from, to }),
+    environment: Environment.make(
+      id,
+      {
+        spawner,
+        overrides: {
+          stat: (path) => call<FileInfo, NotFound>(path, { call: "stat", path }),
+          list: (path) => call<ReadonlyArray<DirEntry>, NotFound | WrongKind>(path, { call: "list", path }),
+          read: (path, range) =>
+            call<{ info: FileInfo; bytes: Uint8Array }, NotFound | WrongKind>(path, { call: "read", path, range }),
+          write: (path, bytes) => call<void>(path, { call: "write", path, bytes }),
+          append: (path, bytes) => call<void>(path, { call: "append", path, bytes }),
+          remove: (path) => call<void>(path, { call: "remove", path }),
+          mkdir: (path) => call<void>(path, { call: "mkdir", path }),
+          move: (from, to) => call<void, NotFound>(from, { call: "move", from, to }),
+        },
       },
-    }),
+      // A worker is a POSIX machine with none of this server's shell paths, and its driver runs only argv, cwd and
+      // env: `sh -c` is the contract every worker can meet.
+      { path: posix, shell: "sh" },
+    ),
   }
 }
 

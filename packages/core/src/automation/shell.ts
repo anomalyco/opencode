@@ -41,7 +41,6 @@ export const authorize = Effect.fnUntraced(function* (
     command: action.command,
     program,
     target,
-    local: true,
     once: true,
     rules: Effect.succeed(Permission.merge(agent.info?.permissions ?? [], owner.permissions ?? [])),
   }).pipe(Effect.mapError((error) => error.message))
