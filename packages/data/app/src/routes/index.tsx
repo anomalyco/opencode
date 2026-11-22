@@ -26,6 +26,7 @@ import { methodologyItems } from "../lib/methodology"
 import { loadHomePage, type HomePageData } from "../lib/page-data"
 import { homeSummary } from "../lib/summaries"
 import { formatCatalogLabName, isKnownCatalogLab } from "./model-catalog"
+import { NewModelsSection } from "./new-models"
 import { SectionHeading } from "./section-heading"
 import { setStatsPageCacheHeaders } from "./stats-cache"
 import { ComparisonCardsSection, uniqueComparisonPairs, type ComparisonModelRef } from "./compare-cards"
@@ -150,6 +151,7 @@ export default function StatsHome() {
                   leaderboard={stats().leaderboard}
                   catalogLabs={stats().catalogLabs}
                 />
+                <NewModelsSection data={stats().newModels} catalogLabs={stats().catalogLabs} />
                 <UniqueUsersSection data={stats().users} />
                 <RetentionSection data={stats().retention} />
                 <SessionCostSection data={stats().sessionCost} />

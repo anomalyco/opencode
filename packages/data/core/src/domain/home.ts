@@ -32,6 +32,18 @@ export type RetentionEntry = {
   rank: number | null
 }
 export type CountryEntry = { country: string; continent: string; tokens: number; share: number; rank: number }
+export type NewModelDay = { date: string; tokens: number; users: number; sessions: number }
+// A model used in the recent window, with the day it first had usage. The site decides which ones are new.
+export type NewModelCandidate = {
+  model: string
+  provider: string
+  author: string
+  firstSeen: string
+  tokens: number
+  sessions: number
+  peakUsers: number
+  daily: NewModelDay[]
+}
 export type ModelUsagePoint = { date: string; tokens: number; users: number; sessions: number; cost: number }
 export type ModelMixEntry = { label: string; tokens: number; share: number }
 export type ModelPeerEntry = {
@@ -126,6 +138,7 @@ export type StatsHomeData = {
   sessionCost: Record<TokenProduct, SessionCostEntry[]>
   retention: RetentionEntry[]
   country: CountryEntry[]
+  newModels: NewModelCandidate[]
 }
 
 export class StatsDataError extends Error {
@@ -143,6 +156,7 @@ const METRIC_MODEL_LIMIT = 10
 const RETENTION_MODEL_LIMIT = 15
 const RETENTION_MIN_ELIGIBLE_USER_WEEKS = 100
 const RETENTION_COHORT_WEEKS = 7
+const NEW_MODEL_WINDOW_DAYS = 30
 const TOP_MODEL_SEGMENT_LIMIT = 9
 const QUERY_CACHE_TTL_MS = 5 * 60 * 1000
 const QUERY_CACHE_MAX_ENTRIES = 256
@@ -443,7 +457,14 @@ export function buildStatsHomeData(
     ),
     leaderboard: createUsageProductRecord((product) =>
       createRangeRecord((range) =>
-        buildLeaderboard(normalized, product, getWindow(range === "1D" ? "1D" : "1W", earliest, latest)),
+        // Today is still partial, so the one-day leaderboard ranks yesterday.
+        buildLeaderboard(
+          normalized,
+          product,
+          range === "1D"
+            ? getWindow("1D", earliest, Math.max(earliest, latest - DAY_MS))
+            : getWindow("1W", earliest, latest),
+        ),
       ),
     ),
     market: createRangeRecord((range) => buildMarketShare(normalized, "Go", range, getWindow(range, earliest, latest))),
@@ -460,7 +481,50 @@ export function buildStatsHomeData(
       .filter((item) => item.rank !== null)
       .slice(0, RETENTION_MODEL_LIMIT),
     country: buildCountryStats(countryRows),
+    newModels: buildNewModelCandidates(normalized, latest),
   }
+}
+
+function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewModelCandidate[] {
+  const productRows = rowsForProduct(rows, SITE_PRODUCT, -Infinity, latest + DAY_MS).filter(
+    (row) => row.totalTokens > 0,
+  )
+  const firstSeen = productRows.reduce<Map<string, number>>((result, row) => {
+    result.set(row.model, Math.min(result.get(row.model) ?? row.periodStart, row.periodStart))
+    return result
+  }, new Map())
+  const start = latest - (NEW_MODEL_WINDOW_DAYS - 1) * DAY_MS
+  const days = Array.from({ length: NEW_MODEL_WINDOW_DAYS }, (_, index) => start + index * DAY_MS)
+  return aggregateByModelName(productRows.filter((row) => row.periodStart >= start))
+    .map((item) => {
+      const modelRows = productRows.filter((row) => row.model === item.model && row.periodStart >= start)
+      const first = firstSeen.get(item.model) ?? start
+      const daily = days
+        .filter((day) => day >= first)
+        .map((day) => {
+          const aggregate = combineRowsForModel(
+            item.model,
+            modelRows.filter((row) => row.periodStart === day),
+          )
+          return {
+            date: periodKey(day),
+            tokens: aggregate.totalTokens,
+            users: aggregate.uniqueUsers,
+            sessions: aggregate.sessions,
+          }
+        })
+      return {
+        model: item.model,
+        provider: item.provider,
+        author: formatProvider(item.provider),
+        firstSeen: periodKey(first),
+        tokens: item.totalTokens,
+        sessions: item.sessions,
+        peakUsers: Math.max(0, ...daily.map((day) => day.users)),
+        daily,
+      }
+    })
+    .toSorted((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model))
 }
 
 function buildStatsModelData(
@@ -616,6 +680,7 @@ function emptyStatsHomeData(): StatsHomeData {
     sessionCost: createTokenProductRecord(() => []),
     retention: [],
     country: [],
+    newModels: [],
   }
 }
 
