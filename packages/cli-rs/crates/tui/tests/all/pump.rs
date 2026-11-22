@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use opencode_api::generated::EventKind;
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_tui::{Deps, Route};
 use opentui::app::ProxyError;
@@ -49,7 +50,7 @@ fn a_burst_while_the_ui_is_busy_does_not_stop_later_events() {
     // Someone listens to the burst, so it goes through the pump.
     let heard = Rc::new(Cell::new(0));
     let count = heard.clone();
-    let _listening = opencode_tui::features::events::subscribe(&h.tui, ["filesystem.changed"], move |_, _| {
+    let _listening = opencode_tui::features::events::subscribe(&h.tui, [EventKind::FilesystemChanged], move |_, _| {
         count.set(count.get() + 1);
     });
     // The UI thread is busy: nothing drains its queue until it is full.
@@ -74,9 +75,10 @@ fn an_event_nobody_listens_to_stays_in_the_store() {
     h.wait_for("Demo Model");
     let heard = Rc::new(RefCell::new(Vec::new()));
     let record = heard.clone();
-    let _listening = opencode_tui::features::events::subscribe(&h.tui, ["tui.prompt.append"], move |_, event| {
-        record.borrow_mut().push(event.tag().to_owned());
-    });
+    let _listening =
+        opencode_tui::features::events::subscribe(&h.tui, [EventKind::TuiPromptAppend], move |_, event| {
+            record.borrow_mut().push(event.tag().to_owned());
+        });
     memory.emit(&changed(0));
     memory.emit(&append("evt_after", "after"));
     h.wait("the append", || h.text() == "after");

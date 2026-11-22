@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use opencode_api::generated::SessionID;
+use opencode_api::generated::{EventKind, SessionID};
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_plugin::abi::{self, v2};
 use opencode_tui::panel::{Presentation, Target};
@@ -316,7 +316,7 @@ fn a_deletion_lost_in_a_signal_overflow_still_closes_its_tab() {
     h.open("ses_b");
     h.tui.navigate(support::session_route("ses_a"));
     h.wait_for("Write the docs");
-    let _listening = opencode_tui::features::events::subscribe(&h.tui, ["filesystem.changed"], |_, _| {});
+    let _listening = opencode_tui::features::events::subscribe(&h.tui, [EventKind::FilesystemChanged], |_, _| {});
     let deleted = json!({
         "id": "evt_deleted", "created": 3, "type": "session.deleted",
         "durable": { "aggregateID": "ses_b", "seq": 1, "version": 1 },

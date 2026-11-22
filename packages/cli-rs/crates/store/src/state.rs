@@ -12,6 +12,7 @@ use futures_util::future::{BoxFuture, Shared};
 use indexmap::{IndexMap, IndexSet};
 use opencode_api::client::Client;
 use opencode_api::generated::{JobInfo, Project, ProjectID, SessionID, SessionInboxCompaction, SessionMessageID};
+use opencode_api::kinds::EventKinds;
 use opencode_util::lock;
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
@@ -246,8 +247,10 @@ pub(crate) struct Inner {
     revision: watch::Sender<u64>,
     /// The events views act on themselves, sent after their batch is applied.
     pub(crate) signals: broadcast::Sender<Arc<opencode_api::generated::V2Event>>,
-    /// How many [`Listening`]s want each event type on [`Data::signals`].
-    pub(crate) listened: Mutex<HashMap<String, usize>>,
+    /// How many [`Listening`]s want each event kind on [`Data::signals`], by `kind as usize`.
+    pub(crate) listened: [AtomicUsize; opencode_api::generated::EventKind::COUNT],
+    /// How many [`Listening`]s want each name of the kinds a listener names (`EventKind::named`).
+    pub(crate) named: Mutex<HashMap<String, usize>>,
     /// The streaming deltas kept for the [`DeltaListening`]s.
     pub(crate) deltas: Mutex<Deltas>,
     /// How many [`DeltaListening`]s live, as `deltas` counts them: a hint the hot path reads without the lock.
@@ -278,7 +281,8 @@ impl Data {
                 state: Mutex::new(state),
                 revision: watch::channel(0).0,
                 signals: broadcast::channel(SIGNALS).0,
-                listened: Mutex::default(),
+                listened: std::array::from_fn(|_| AtomicUsize::new(0)),
+                named: Mutex::default(),
                 deltas: Mutex::default(),
                 delta_listeners: AtomicUsize::new(0),
                 online: AtomicBool::new(true),
@@ -337,14 +341,17 @@ impl Data {
         self.inner.signals.subscribe()
     }
 
-    /// Sends the events of each type in `tags` on [`Data::signals`] until the returned guard drops.
-    pub fn listen<S: Into<String>>(&self, tags: impl IntoIterator<Item = S>) -> Listening {
-        let tags: Vec<String> = tags.into_iter().map(Into::into).collect();
-        let mut listened = lock(&self.inner.listened);
-        for tag in &tags {
-            *listened.entry(tag.clone()).or_default() += 1;
+    /// Sends the events of each type in `kinds` on [`Data::signals`] until the returned guard drops.
+    pub fn listen(&self, kinds: impl Into<EventKinds>) -> Listening {
+        let kinds = kinds.into();
+        let mut named = lock(&self.inner.named);
+        for name in kinds.names() {
+            *named.entry(name.clone()).or_default() += 1;
         }
-        Listening { inner: Arc::downgrade(&self.inner), tags }
+        for index in kinds.indices() {
+            self.inner.listened[index].fetch_add(1, Ordering::SeqCst);
+        }
+        Listening { inner: Arc::downgrade(&self.inner), kinds }
     }
 
     /// Keeps the streaming deltas (`session.*.delta`), which [`Data::signals`] never sends, for
@@ -673,21 +680,22 @@ impl std::ops::DerefMut for Locked<'_> {
 #[must_use = "the types stop being sent when this drops"]
 pub struct Listening {
     inner: std::sync::Weak<Inner>,
-    tags: Vec<String>,
+    kinds: EventKinds,
 }
 
 impl Drop for Listening {
     fn drop(&mut self) {
         let Some(inner) = self.inner.upgrade() else { return };
-        let mut listened = lock(&inner.listened);
-        for tag in &self.tags {
-            if let Some(count) = listened.get_mut(tag) {
+        let mut named = lock(&inner.named);
+        for index in self.kinds.indices() {
+            inner.listened[index].fetch_sub(1, Ordering::SeqCst);
+        }
+        for name in self.kinds.names() {
+            if let Some(count) = named.get_mut(name) {
                 *count -= 1;
-                if *count == 0 {
-                    listened.remove(tag);
-                }
             }
         }
+        named.retain(|_, count| *count > 0);
     }
 }
 
