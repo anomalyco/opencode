@@ -61,15 +61,18 @@ fn acp_stream() {
     runtime.block_on(tokio::task::yield_now());
     let probe = Probe::start();
     let (terminal, sent) = runtime.block_on(async {
-        let mut events =
-            std::pin::pin!(opencode_api::sse::events::<Value, _, _>(futures_util::stream::iter(chunks), || {}));
+        let mut events = std::pin::pin!(opencode_api::sse::events::<translate::Event, _, _>(
+            futures_util::stream::iter(chunks),
+            || {}
+        ));
         let (mut state, mut terminal, mut sent) = (TurnState::default(), None, 0);
         while let Some(event) = events.next().await {
-            let folded = translate::fold(&mut state, &event.unwrap(), &ctx);
+            let event = event.unwrap();
+            let folded = translate::fold(&mut state, &event, &ctx);
             for output in folded.outputs {
-                if let Output::SessionUpdate { update, diff } = output {
-                    let update = permission::with_completed_diffs(update, diff.as_ref(), &ctx.cwd).await;
-                    connection.session_update(&ctx.session_id, update).unwrap();
+                if let Output::SessionUpdate { mut update, diff } = output {
+                    permission::add_completed_diffs(&mut update, diff.as_ref(), &ctx.cwd).await;
+                    connection.session_update(&ctx.session_id, &update).unwrap();
                     sent += 1;
                 }
             }

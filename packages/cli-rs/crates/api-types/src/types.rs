@@ -164,7 +164,7 @@ impl<'de> Deserialize<'de> for ProviderCompaction {
 }
 
 impl ProviderCompaction {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("summary") => raw.variant().map(Self::Summary),
             Some("native") => raw.variant().map(Self::Native),
@@ -407,7 +407,7 @@ impl<'de> Deserialize<'de> for PluginSource {
 }
 
 impl PluginSource {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("builtin") => raw.variant().map(Self::Builtin),
             Some("package") => raw.variant().map(Self::Package),
@@ -473,7 +473,7 @@ impl<'de> Deserialize<'de> for PluginState {
 }
 
 impl PluginState {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("active") => raw.variant().map(Self::Active),
             Some("failed") => raw.variant().map(Self::Failed),
@@ -608,7 +608,7 @@ impl<'de> Deserialize<'de> for SessionForkBoundary {
 }
 
 impl SessionForkBoundary {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("before") => raw.variant().map(Self::Before),
             Some("through") => raw.variant().map(Self::Through),
@@ -892,7 +892,7 @@ impl<'de> Deserialize<'de> for PromptFileSource {
 }
 
 impl PromptFileSource {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("inline") => raw.variant().map(Self::Inline),
             Some("uri") => raw.variant().map(Self::Uri),
@@ -1388,7 +1388,7 @@ impl<'de> Deserialize<'de> for ToolContent {
 }
 
 impl ToolContent {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("file") => raw.variant().map(Self::File),
@@ -1463,7 +1463,7 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantToolState {
 }
 
 impl SessionMessageAssistantToolState {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("streaming") => raw.variant().map(Self::Streaming),
             Some("running") => raw.variant().map(Self::Running),
@@ -1527,7 +1527,7 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantContentItem {
 }
 
 impl SessionMessageAssistantContentItem {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("reasoning") => raw.variant().map(Self::Reasoning),
@@ -1698,7 +1698,7 @@ impl<'de> Deserialize<'de> for SessionMessageCompaction {
 }
 
 impl SessionMessageCompaction {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("running") => raw.variant().map(Self::Running),
             Some("completed") => raw.variant().map(Self::Completed),
@@ -1847,7 +1847,7 @@ impl<'de> Deserialize<'de> for SessionMessageInfo {
 }
 
 impl SessionMessageInfo {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("agent-switched") => raw.variant().map(Self::AgentSwitched),
             Some("model-switched") => raw.variant().map(Self::ModelSwitched),
@@ -2181,7 +2181,7 @@ impl<'de> Deserialize<'de> for SessionInboxInfo {
 }
 
 impl SessionInboxInfo {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("user") => raw.variant().map(Self::User),
             Some("synthetic") => raw.variant().map(Self::Synthetic),
@@ -2550,7 +2550,7 @@ impl<'de> Deserialize<'de> for FormField {
 }
 
 impl FormField {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("string") => raw.variant().map(Self::String),
             Some("number") => raw.variant().map(Self::Number),
@@ -2792,7 +2792,7 @@ impl<'de> Deserialize<'de> for FormState {
 }
 
 impl FormState {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("pending") => raw.variant().map(Self::Pending),
             Some("answered") => raw.variant().map(Self::Answered),
@@ -2945,7 +2945,7 @@ impl<'de> Deserialize<'de> for SessionStatsTools {
 }
 
 impl SessionStatsTools {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("mode").as_str() {
             Some("none") => raw.variant().map(Self::None),
             Some("summary") => raw.variant().map(Self::Summary),
@@ -3519,7 +3519,7 @@ impl<'de> Deserialize<'de> for SessionInboxItem {
 }
 
 impl SessionInboxItem {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("user") => raw.variant().map(Self::User),
             Some("synthetic") => raw.variant().map(Self::Synthetic),
@@ -4402,7 +4402,7 @@ impl<'de> Deserialize<'de> for SessionMessageAssistantContentEncoded {
 }
 
 impl SessionMessageAssistantContentEncoded {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("reasoning") => raw.variant().map(Self::Reasoning),
@@ -4529,7 +4529,7 @@ impl<'de> Deserialize<'de> for SessionEventDurable {
 }
 
 impl SessionEventDurable {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("session.created") => raw.variant().map(Self::SessionCreated),
             Some("session.agent.selected") => raw.variant().map(Self::SessionAgentSelected),
@@ -5115,7 +5115,7 @@ impl<'de> Deserialize<'de> for SessionLogItem {
 }
 
 impl SessionLogItem {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("session.created")
             | Some("session.agent.selected")
@@ -5608,7 +5608,7 @@ impl<'de> Deserialize<'de> for GenerateVideoJob {
 }
 
 impl GenerateVideoJob {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("running") => raw.variant().map(Self::Running),
             Some("completed") => raw.variant().map(Self::Completed),
@@ -5682,7 +5682,7 @@ impl<'de> Deserialize<'de> for GenerateDecisionPart {
 }
 
 impl GenerateDecisionPart {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("text") => raw.variant().map(Self::Text),
             Some("json") => raw.variant().map(Self::Json),
@@ -5797,7 +5797,7 @@ impl<'de> Deserialize<'de> for GenerateDecisionQuestion {
 }
 
 impl GenerateDecisionQuestion {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("predicate") => raw.variant().map(Self::Predicate),
             Some("choice") => raw.variant().map(Self::Choice),
@@ -5919,7 +5919,7 @@ impl<'de> Deserialize<'de> for GenerateDecisionAnswer {
 }
 
 impl GenerateDecisionAnswer {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("predicate") => raw.variant().map(Self::Predicate),
             Some("choice") => raw.variant().map(Self::Choice),
@@ -6030,7 +6030,7 @@ impl<'de> Deserialize<'de> for VoiceTransportInput {
 }
 
 impl VoiceTransportInput {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("webrtc") => raw.variant().map(Self::Webrtc),
             Some("websocket") => raw.variant().map(Self::Websocket),
@@ -6090,7 +6090,7 @@ impl<'de> Deserialize<'de> for VoiceTransport {
 }
 
 impl VoiceTransport {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("webrtc") => raw.variant().map(Self::Webrtc),
             Some("websocket") => raw.variant().map(Self::Websocket),
@@ -6261,7 +6261,7 @@ impl<'de> Deserialize<'de> for IntegrationMethod {
 }
 
 impl IntegrationMethod {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("oauth") => raw.variant().map(Self::Oauth),
             Some("command") => raw.variant().map(Self::Command),
@@ -6360,7 +6360,7 @@ impl<'de> Deserialize<'de> for ConnectionInfo {
 }
 
 impl ConnectionInfo {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("credential") => raw.variant().map(Self::Credential),
             Some("env") => raw.variant().map(Self::Env),
@@ -6535,7 +6535,7 @@ impl<'de> Deserialize<'de> for IntegrationAttemptStatus {
 }
 
 impl IntegrationAttemptStatus {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("pending") => raw.variant().map(Self::Pending),
             Some("complete") => raw.variant().map(Self::Complete),
@@ -6701,7 +6701,7 @@ impl<'de> Deserialize<'de> for IntegrationCommandAttemptStatus {
 }
 
 impl IntegrationCommandAttemptStatus {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("pending") => raw.variant().map(Self::Pending),
             Some("complete") => raw.variant().map(Self::Complete),
@@ -6831,7 +6831,7 @@ impl<'de> Deserialize<'de> for McpServerStatus {
 }
 
 impl McpServerStatus {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("connected") => raw.variant().map(Self::Connected),
             Some("pending") => raw.variant().map(Self::Pending),
@@ -7041,7 +7041,7 @@ impl<'de> Deserialize<'de> for ExperimentalMcpAddInputConfig {
 }
 
 impl ExperimentalMcpAddInputConfig {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("local") => raw.variant().map(Self::Local),
             Some("remote") => raw.variant().map(Self::Remote),
@@ -7202,7 +7202,7 @@ impl<'de> Deserialize<'de> for CredentialValue {
 }
 
 impl CredentialValue {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("oauth") => raw.variant().map(Self::Oauth),
             Some("key") => raw.variant().map(Self::Key),
@@ -8490,7 +8490,7 @@ impl<'de> Deserialize<'de> for JobInfo {
 }
 
 impl JobInfo {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("kind").as_str() {
             Some("shell") => raw.variant().map(Self::Shell),
             Some("subagent") => raw.variant().map(Self::Subagent),
@@ -8769,7 +8769,7 @@ impl<'de> Deserialize<'de> for SessionStatus {
 }
 
 impl SessionStatus {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("idle") => raw.variant().map(Self::Idle),
             Some("retry") => raw.variant().map(Self::Retry),
@@ -9156,7 +9156,7 @@ impl<'de> Deserialize<'de> for V2Event {
 }
 
 impl V2Event {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("location.shutdown") => raw.variant().map(Self::LocationShutdown),
             Some("models-dev.refreshed") => raw.variant().map(Self::ModelsDevRefreshed),
@@ -10644,7 +10644,7 @@ impl<'de> Deserialize<'de> for AutomationTrigger {
 }
 
 impl AutomationTrigger {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("at") => raw.variant().map(Self::At),
             Some("every") => raw.variant().map(Self::Every),
@@ -10756,7 +10756,7 @@ impl<'de> Deserialize<'de> for AutomationActionInput {
 }
 
 impl AutomationActionInput {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("prompt") => raw.variant().map(Self::Prompt),
             Some("code") => raw.variant().map(Self::Code),
@@ -10830,7 +10830,7 @@ impl<'de> Deserialize<'de> for AutomationAction {
 }
 
 impl AutomationAction {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("prompt") => raw.variant().map(Self::Prompt),
             Some("code") => raw.variant().map(Self::Code),
@@ -11198,7 +11198,7 @@ impl<'de> Deserialize<'de> for MachineInviteReachItem {
 }
 
 impl MachineInviteReachItem {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("url") => raw.variant().map(Self::Url),
             Some("iroh") => raw.variant().map(Self::Iroh),
@@ -11335,7 +11335,7 @@ impl<'de> Deserialize<'de> for ReferenceSource {
 }
 
 impl ReferenceSource {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("local") => raw.variant().map(Self::Local),
             Some("git") => raw.variant().map(Self::Git),
@@ -11640,7 +11640,7 @@ impl<'de> Deserialize<'de> for ExperimentalMigrationV1StatusOutput2 {
 }
 
 impl ExperimentalMigrationV1StatusOutput2 {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("status").as_str() {
             Some("required") | Some("completed") => raw.variant().map(Self::Variant1),
             Some("running") => raw.variant().map(Self::Running),
@@ -12397,7 +12397,7 @@ impl<'de> Deserialize<'de> for ConfigModelReasoning {
 }
 
 impl ConfigModelReasoning {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("supported").as_bool() {
             Some(false) => raw.variant().map(Self::False),
             Some(true) => raw.variant().map(Self::True),
@@ -12730,7 +12730,7 @@ impl<'de> Deserialize<'de> for ConfigEntry {
 }
 
 impl ConfigEntry {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         match raw.field("type").as_str() {
             Some("document") => raw.variant().map(Self::Document),
             Some("directory") => raw.variant().map(Self::Directory),

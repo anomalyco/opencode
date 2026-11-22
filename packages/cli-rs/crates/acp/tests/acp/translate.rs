@@ -1,4 +1,4 @@
-use opencode_acp::translate::{self, Output, StartKind, Terminal, TurnContext, TurnStart, TurnState};
+use opencode_acp::translate::{self, Event, Output, StartKind, Terminal, TurnContext, TurnStart, TurnState};
 use serde_json::{Value, json};
 
 use crate::wire::{
@@ -26,17 +26,25 @@ fn live(events: Vec<Value>) -> Vec<Value> {
 
 struct Run {
     state: TurnState,
-    outputs: Vec<Output>,
+    updates: Vec<Value>,
+    children: Vec<Value>,
     terminal: Option<Terminal>,
 }
 
 fn run(events: &[Value], ctx: &TurnContext) -> Run {
-    let mut result = Run { state: TurnState::default(), outputs: Vec::new(), terminal: None };
+    let mut result = Run { state: TurnState::default(), updates: Vec::new(), children: Vec::new(), terminal: None };
     for (index, event) in events.iter().enumerate() {
         let mut event = event.clone();
         event["id"] = json!(format!("evt_{}", index + 1));
+        let event: Event = serde_json::from_value(event).unwrap();
         let folded = translate::fold(&mut result.state, &event, ctx);
-        result.outputs.extend(folded.outputs);
+        for output in folded.outputs {
+            match output {
+                Output::SessionUpdate { update, .. } => result.updates.push(json!(update)),
+                Output::ChildUpdate { update, .. } => result.children.push(json!(update)),
+                _ => {}
+            }
+        }
         if folded.terminal.is_some() {
             result.terminal = folded.terminal;
         }
@@ -49,7 +57,7 @@ fn updates(outputs: &[Output]) -> Value {
         outputs
             .iter()
             .filter_map(|output| match output {
-                Output::SessionUpdate { update, .. } => Some(update.clone()),
+                Output::SessionUpdate { update, .. } => Some(json!(update)),
                 _ => None,
             })
             .collect::<Vec<_>>()
@@ -73,11 +81,8 @@ fn translated(events: &[Value], ctx: &TurnContext) -> Value {
         })
     });
     json!({
-        "updates": updates(&result.outputs),
-        "children": result.outputs.iter().filter_map(|output| match output {
-            Output::ChildUpdate { update, .. } => Some(update.clone()),
-            _ => None,
-        }).collect::<Vec<_>>(),
+        "updates": result.updates,
+        "children": result.children,
         "terminal": terminal,
         "response": result.terminal.map(|terminal| translate::response(&result.state, ROOT, terminal)),
         "failure": translate::failure(&result.state).map(|failure| failure.tag()),
@@ -391,14 +396,15 @@ fn turn_translation() {
 
 #[test]
 fn reports_a_pending_retry_and_clears_it_when_the_next_step_starts() {
-    let error = json!({ "type": "provider.transport", "message": "lost" });
+    // `provider` stands for a field a newer server adds: the error passes through as it arrived.
+    let error = json!({ "type": "provider.transport", "message": "lost", "provider": { "id": "p" } });
     let retry = durable_event(
         "session.retry.scheduled",
         json!({ "sessionID": ROOT, "assistantMessageID": "msg_1", "attempt": 2, "at": 1_000, "error": error }),
     );
     let pending = run(&live(vec![retry.clone()]), &ctx(false));
     assert_matches(
-        &updates(&pending.outputs),
+        &json!(pending.updates),
         &json!([{ "sessionUpdate": "session_info_update", "_meta": { "opencode/retry": { "attempt": 2, "nextRetryAt": "1970-01-01T00:00:01.000Z", "error": error } } }]),
     );
     assert_eq!(
@@ -409,12 +415,15 @@ fn reports_a_pending_retry_and_clears_it_when_the_next_step_starts() {
     let cleared = run(
         &live(vec![
             retry,
-            durable_event("session.step.started", json!({ "sessionID": ROOT, "assistantMessageID": "msg_2" })),
+            durable_event(
+                "session.step.started",
+                json!({ "sessionID": ROOT, "assistantMessageID": "msg_2", "agent": "build", "model": { "providerID": "p", "id": "m" }, "started": 1 }),
+            ),
         ]),
         &ctx(false),
     );
     assert_eq!(
-        updates(&cleared.outputs)[1],
+        cleared.updates[1],
         json!({ "sessionUpdate": "session_info_update", "_meta": { "opencode/retry": null } })
     );
     assert_eq!(translate::response(&cleared.state, ROOT, Terminal::Succeeded)["_meta"], json!({}));
@@ -730,6 +739,7 @@ fn replay_rows() {
             messages
                 .iter()
                 .flat_map(|message| opencode_acp::replay::updates(message, "/workspace", &capabilities))
+                .map(|(update, _)| json!(update))
                 .collect::<Vec<_>>()
         );
         assert!(crate::wire::matches(&actual, &expected), "{name}\n  actual:   {actual}\n  expected: {expected}");

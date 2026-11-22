@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use futures_util::future::BoxFuture;
 use opencode_util::lock;
+use serde::Serialize;
 use serde_json::{Map, Value, json};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot};
@@ -23,6 +24,10 @@ const CANCEL_REQUEST: &str = "$/cancel_request";
 
 /// How long a closed input waits for queued messages to be written.
 const DRAIN_ON_EOF: Duration = Duration::from_millis(500);
+
+/// Line buffers kept for reuse, and the largest kept.
+const SPARE_LINES: usize = 8;
+const SPARE_LINE_BYTES: usize = 64 * 1024;
 
 /// Why the connection closed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,7 +78,8 @@ impl Responded {
 }
 
 struct Outgoing {
-    message: Value,
+    /// The message as JSON, ending in a newline.
+    line: Vec<u8>,
     response_to: Option<(String, bool)>,
     /// Told once the message is written.
     written: Option<oneshot::Sender<()>>,
@@ -95,6 +101,23 @@ struct Inner {
     /// Messages queued and not yet written.
     unwritten: AtomicUsize,
     written: tokio::sync::Notify,
+    /// Line buffers the writer has emptied.
+    spare: Mutex<Vec<Vec<u8>>>,
+}
+
+/// A JSON-RPC notification.
+#[derive(Serialize)]
+struct Notification<'a, P> {
+    jsonrpc: &'static str,
+    method: &'a str,
+    params: P,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionUpdate<'a, U> {
+    session_id: &'a str,
+    update: U,
 }
 
 fn key(id: &Value) -> String {
@@ -117,6 +140,7 @@ impl Connection {
                 unwritten: AtomicUsize::new(0),
                 written: tokio::sync::Notify::new(),
                 closed: CancellationToken::new(),
+                spare: Mutex::default(),
             }),
         };
         (connection, Writer(receiver))
@@ -127,33 +151,39 @@ impl Connection {
         self.inner.closed.clone()
     }
 
-    fn send(&self, message: Value, response_to: Option<(String, bool)>) -> Result<(), Failure> {
-        self.queue(Outgoing { message, response_to, written: None })
-    }
-
-    fn queue(&self, outgoing: Outgoing) -> Result<(), Failure> {
+    /// Writes `message` to a line buffer and queues it for the writer.
+    fn send(
+        &self,
+        message: &impl Serialize,
+        response_to: Option<(String, bool)>,
+        written: Option<oneshot::Sender<()>>,
+    ) -> Result<(), Failure> {
         if self.inner.closed.is_cancelled() {
             return Err(closed_failure());
         }
+        let mut line = lock(&self.inner.spare).pop().unwrap_or_default();
+        serde_json::to_writer(&mut line, message)
+            .map_err(|error| Failure::Defect { name: Some("Error".to_owned()), detail: error.to_string() })?;
+        line.push(b'\n');
         self.inner.unwritten.fetch_add(1, Ordering::SeqCst);
-        self.inner.out.send(outgoing).map_err(|_| closed_failure())
+        self.inner.out.send(Outgoing { line, response_to, written }).map_err(|_| closed_failure())
     }
 
-    pub fn notify(&self, method: &str, params: Value) -> Result<(), Failure> {
-        self.send(json!({ "jsonrpc": "2.0", "method": method, "params": params }), None)
+    pub fn notify(&self, method: &str, params: &impl Serialize) -> Result<(), Failure> {
+        self.send(&Notification { jsonrpc: "2.0", method, params }, None, None)
     }
 
     /// `session/update`.
-    pub fn session_update(&self, session_id: &str, update: Value) -> Result<(), Failure> {
-        self.notify("session/update", json!({ "sessionId": session_id, "update": update }))
+    pub fn session_update(&self, session_id: &str, update: &impl Serialize) -> Result<(), Failure> {
+        self.notify("session/update", &SessionUpdate { session_id, update })
     }
 
     /// `session/update`, resolving once it is written, as the SDK's `notify` does: a client that stops
     /// reading holds the caller back instead of letting the queue grow.
-    pub async fn session_update_written(&self, session_id: &str, update: Value) -> Result<(), Failure> {
+    pub async fn session_update_written(&self, session_id: &str, update: &impl Serialize) -> Result<(), Failure> {
         let (written, receiver) = oneshot::channel();
-        let message = json!({ "jsonrpc": "2.0", "method": "session/update", "params": { "sessionId": session_id, "update": update } });
-        self.queue(Outgoing { message, response_to: None, written: Some(written) })?;
+        let params = SessionUpdate { session_id, update };
+        self.send(&Notification { jsonrpc: "2.0", method: "session/update", params }, None, Some(written))?;
         tokio::select! {
             biased;
             result = receiver => result.map_err(|_| closed_failure()),
@@ -169,7 +199,7 @@ impl Connection {
         let (sender, receiver) = oneshot::channel();
         lock(&self.inner.pending).insert(id_key.clone(), sender);
         let guard = CancelGuard { connection: self.clone(), id, key: id_key, done: false };
-        self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }), None)?;
+        self.send(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }), None, None)?;
         let mut guard = guard;
         let result = tokio::select! {
             result = receiver => result,
@@ -194,11 +224,11 @@ impl Connection {
         };
         lock(&self.inner.incoming).remove(&key(id));
         // A closed connection drops the response, as the SDK does.
-        let _ = self.send(message, Some((key(id), ok)));
+        let _ = self.send(&message, Some((key(id), ok)), None);
     }
 
     fn protocol_error(&self, error: &RpcError) {
-        let _ = self.send(json!({ "jsonrpc": "2.0", "id": null, "error": error.to_json() }), None);
+        let _ = self.send(&json!({ "jsonrpc": "2.0", "id": null, "error": error.to_json() }), None, None);
     }
 
     fn close(&self) {
@@ -314,7 +344,7 @@ impl Drop for CancelGuard {
             return;
         }
         lock(&self.connection.inner.pending).remove(&self.key);
-        let _ = self.connection.notify(CANCEL_REQUEST, json!({ "requestId": self.id }));
+        let _ = self.connection.notify(CANCEL_REQUEST, &json!({ "requestId": self.id }));
     }
 }
 
@@ -359,26 +389,29 @@ async fn write_loop<W: AsyncWrite + Unpin>(
     mut output: W,
     closed: mpsc::UnboundedSender<Closed>,
 ) {
-    let mut line = Vec::new();
-    while let Some(outgoing) = writer.0.recv().await {
-        line.clear();
-        let written = async {
-            serde_json::to_writer(&mut line, &outgoing.message)?;
-            line.push(b'\n');
+    while let Some(Outgoing { mut line, response_to, written }) = writer.0.recv().await {
+        let result = async {
             output.write_all(&line).await?;
             output.flush().await
         }
         .await;
-        if let Err(error) = written {
+        if let Err(error) = result {
             let _ = closed.send(Closed::Write(error.to_string()));
             return;
         }
         connection.inner.unwritten.fetch_sub(1, Ordering::SeqCst);
         connection.inner.written.notify_waiters();
-        if let Some(written) = outgoing.written {
+        if line.capacity() <= SPARE_LINE_BYTES {
+            let mut spare = lock(&connection.inner.spare);
+            if spare.len() < SPARE_LINES {
+                line.clear();
+                spare.push(line);
+            }
+        }
+        if let Some(written) = written {
             let _ = written.send(());
         }
-        if let Some((id, ok)) = outgoing.response_to
+        if let Some((id, ok)) = response_to
             && let Some(sender) = lock(&connection.inner.responded).remove(&id)
         {
             let _ = sender.send(ok);
@@ -528,7 +561,8 @@ mod tests {
     #[tokio::test]
     async fn a_written_update_waits_for_the_writer() {
         let (connection, writer) = Connection::new();
-        let update = connection.session_update_written("ses", json!({}));
+        let empty = json!({});
+        let update = connection.session_update_written("ses", &empty);
         tokio::pin!(update);
         assert!(tokio::time::timeout(Duration::from_millis(20), &mut update).await.is_err(), "nothing was written");
         let (client, agent) = tokio::io::duplex(1 << 16);
@@ -537,7 +571,7 @@ mod tests {
         update.await.unwrap();
         drop(client);
         served.await.unwrap();
-        assert!(connection.session_update_written("ses", json!({})).await.is_err(), "closed");
+        assert!(connection.session_update_written("ses", &json!({})).await.is_err(), "closed");
     }
 
     #[tokio::test]
