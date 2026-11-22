@@ -273,6 +273,10 @@ pointer capture, `close`, and ids and keys. `fps` defaults to 0 for a 2D canvas 
 
 `draw` is pure: it can't change state. Animate with `frame.t`; keep anything that must persist in state via handlers.
 
+Clients never call `draw`, or render a GPU canvas, while the canvas has a zero width or height (during layout, or
+when entering or leaving full screen); they wait until both are positive. `frame.width` and `frame.height` are always
+greater than 0.
+
 Draw step input / output (same `__widget_step` entry point):
 
 ```ts
