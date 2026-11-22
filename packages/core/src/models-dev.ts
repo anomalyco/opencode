@@ -161,18 +161,16 @@ export type Snapshot = {
   readonly models: readonly Model.Info[]
   readonly voices?: readonly VoiceModel[]
   readonly environment: readonly string[]
-  /** Model IDs (modes included) a sign-in plan on this provider can use, by plan; see `PLANS`. */
-  readonly plans?: Readonly<Record<string, readonly string[]>>
+  /** On `openai` only: the model IDs (modes included) each ChatGPT subscription sign-in can use; see `OPENAI_SUBSCRIPTIONS`. */
+  readonly subscriptions?: Readonly<Record<string, readonly string[]>>
 }
 
-// Temporary, OpenAI-only: the ChatGPT subscription sign-ins (Codex, Sign in with ChatGPT) serve a subset of OpenAI's
-// models. models.dev lists each as a provider it hides unless asked for. They never become providers here: their model
-// IDs are attached to `openai`, for that sign-in's plugin to read (see plugin/provider/openai-subscription-models.ts).
-const PLANS: Readonly<Record<string, Provider.ID>> = {
-  "openai-codex": Provider.ID.openai,
-  "openai-chatgpt": Provider.ID.openai,
-}
-const PlanProvider = Schema.Struct({
+// Temporary stopgap until the official v2 models.dev API, which returns these by default: the ChatGPT subscription
+// sign-ins (Codex, Sign in with ChatGPT) serve a subset of OpenAI's models. models.dev lists each as a provider it hides
+// unless asked for. They never become providers here: their model IDs are attached to `openai`, for that sign-in's
+// plugin to read (see plugin/provider/openai-subscription-models.ts).
+const OPENAI_SUBSCRIPTIONS = ["openai-codex", "openai-chatgpt"]
+const Subscription = Schema.Struct({
   models: Schema.Record(
     Schema.String,
     Schema.Struct({
@@ -183,7 +181,7 @@ const PlanProvider = Schema.Struct({
     }),
   ),
 })
-const decodePlanProvider = Schema.decodeUnknownOption(PlanProvider)
+const decodeSubscription = Schema.decodeUnknownOption(Subscription)
 
 type Route = {
   readonly package: string
@@ -216,21 +214,20 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
   const failed: { readonly model: string; readonly issue: unknown }[] = []
   const unknown = new Set<string>()
   const source = isV1(catalog) ? toV2(catalog) : catalog
-  const plans = Object.entries(PLANS).reduce<Record<string, Record<string, readonly string[]>>>(
-    (result, [planID, parentID]) => {
-      const plan = Option.getOrUndefined(decodePlanProvider(source[planID]))
-      if (!plan) return result
-      const ids = Object.values(plan.models).flatMap((model) => [
+  const subscriptions = Object.fromEntries(
+    OPENAI_SUBSCRIPTIONS.flatMap((id) => {
+      const list = Option.getOrUndefined(decodeSubscription(source[id]))
+      if (!list) return []
+      const ids = Object.values(list.models).flatMap((model) => [
         model.id,
         ...Object.keys(model.experimental?.modes ?? {}).map((mode) => `${model.id}-${mode}`),
       ])
-      return { ...result, [parentID]: { ...result[parentID], [planID]: ids } }
-    },
-    {},
+      return [[id, ids]]
+    }),
   )
   const snapshots = Object.values(source).flatMap((value) => {
     const item = Option.getOrUndefined(decodeProvider(value))
-    if (!item || item.id in PLANS) return []
+    if (!item || OPENAI_SUBSCRIPTIONS.includes(item.id)) return []
     const providerID = Provider.ID.make(item.id)
     // Vertex needs separate handling for location and Express Mode.
     const prefer = recommended && providerID !== Provider.ID.googleVertex
@@ -288,7 +285,7 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
         models,
         ...(voices.length > 0 ? { voices } : {}),
         environment: [...item.env],
-        ...(plans[providerID] ? { plans: plans[providerID] } : {}),
+        ...(providerID === Provider.ID.openai && Object.keys(subscriptions).length > 0 ? { subscriptions } : {}),
       },
     ]
   })
@@ -566,8 +563,8 @@ const CacheMeta = Schema.Struct({
 })
 const defaultSource = "https://models.opencode.ai"
 
-// The experimental v2 API, limited to the model types opencode keeps, with the hidden sign-in plans included.
-export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}&include=${Object.keys(PLANS).join(",")}`
+// The experimental v2 API, limited to the model types opencode keeps, with the hidden OpenAI subscription lists included.
+export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}&include=${OPENAI_SUBSCRIPTIONS.join(",")}`
 
 export const decodeSnapshot = (text: string, recommended = false) =>
   decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended)))

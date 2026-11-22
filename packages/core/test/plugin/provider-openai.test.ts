@@ -34,8 +34,8 @@ const addPlugin = Effect.fn(function* () {
 })
 
 
-// A catalog whose OpenAI entry carries the given sign-in plan lists; `plans.current` can be swapped before a refresh.
-const planCatalog = (plans: { current: Record<string, readonly string[]> }) =>
+// A catalog whose OpenAI entry carries the given subscription model lists; `lists.current` can be swapped before a refresh.
+const subscriptionCatalog = (lists: { current: Record<string, readonly string[]> }) =>
   ModelsDev.Service.of({
     get: () =>
       Effect.sync(() => [
@@ -43,7 +43,7 @@ const planCatalog = (plans: { current: Record<string, readonly string[]> }) =>
           info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
           models: [],
           environment: [],
-          plans: plans.current,
+          subscriptions: lists.current,
         },
       ]),
     refresh: () => Effect.void,
@@ -171,7 +171,7 @@ describe("OpenAIPlugin", () => {
           metadata: { accountID: "acct_123" },
         }),
       })
-      yield* addPlugin().pipe(Effect.provideService(ModelsDev.Service, planCatalog({ current: { "openai-codex": [] } })))
+      yield* addPlugin().pipe(Effect.provideService(ModelsDev.Service, subscriptionCatalog({ current: { "openai-codex": [] } })))
 
       const direct = yield* request(Provider.ID.openai, "https://api.openai.com/v1")
       const custom = yield* request(Provider.ID.make("custom-openai"), "https://custom.example/v1")
@@ -250,10 +250,10 @@ describe("OpenAIPlugin", () => {
           metadata: { accountID: "acct_123" },
         }),
       })
-      const plans = { current: { "openai-codex": ["gpt-5.5", "gpt-6-sol", "gpt-6-sol-fast", "gpt-image-2"] } }
+      const lists = { current: { "openai-codex": ["gpt-5.5", "gpt-6-sol", "gpt-6-sol-fast", "gpt-image-2"] } }
       const plugin = yield* Plugin.Service
       const host = yield* PluginHost.make(plugin, "test")
-      yield* OpenAIPlugin.effect(host).pipe(Effect.provideService(ModelsDev.Service, planCatalog(plans)))
+      yield* OpenAIPlugin.effect(host).pipe(Effect.provideService(ModelsDev.Service, subscriptionCatalog(lists)))
       const enabled = (id: string) =>
         models.get(Provider.ID.openai, Model.ID.make(id)).pipe(Effect.map((model) => required(model).enabled))
 
@@ -266,7 +266,7 @@ describe("OpenAIPlugin", () => {
       expect(images.map((model) => model.id)).toEqual([Model.ID.make("gpt-image-2")])
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-sol"))).cost).toEqual([])
 
-      plans.current = { "openai-codex": ["gpt-7"] }
+      lists.current = { "openai-codex": ["gpt-7"] }
       yield* bus.publish(ModelsDev.Event.Refreshed, {})
       yield* drain
       expect(yield* enabled("gpt-7")).toBe(true)

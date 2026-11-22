@@ -47,8 +47,8 @@ const addPlugin = Effect.fn(function* (http = unavailableModels) {
   yield* ChatGPTPlugin.effect(host).pipe(Effect.provideService(HttpClient.HttpClient, http))
 })
 
-// A catalog whose OpenAI entry carries the given sign-in plan lists; `plans.current` can be swapped before a refresh.
-const planCatalog = (plans: { current: Record<string, readonly string[]> }) =>
+// A catalog whose OpenAI entry carries the given subscription model lists; `lists.current` can be swapped before a refresh.
+const subscriptionCatalog = (lists: { current: Record<string, readonly string[]> }) =>
   ModelsDev.Service.of({
     get: () =>
       Effect.sync(() => [
@@ -56,7 +56,7 @@ const planCatalog = (plans: { current: Record<string, readonly string[]> }) =>
           info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
           models: [],
           environment: [],
-          plans: plans.current,
+          subscriptions: lists.current,
         },
       ]),
     refresh: () => Effect.void,
@@ -966,7 +966,7 @@ describe("ChatGPTPlugin", () => {
         }),
       })
       yield* addPlugin().pipe(
-        Effect.provideService(ModelsDev.Service, planCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } })),
+        Effect.provideService(ModelsDev.Service, subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } })),
       )
       expect(
         (yield* models.available())

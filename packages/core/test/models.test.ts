@@ -453,20 +453,28 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.effect("attaches sign-in plan lists to their provider instead of adding them as providers", () =>
+  it.effect("attaches the OpenAI subscription lists to openai instead of adding them as providers", () =>
     Effect.gen(function* () {
-      const plan = (id: string, models: Record<string, unknown>) => ({ id, name: id, env: ["CHATGPT_ACCESS_TOKEN"], models })
+      const list = (id: string, models: Record<string, unknown>) => ({
+        id,
+        name: id,
+        env: ["CHATGPT_ACCESS_TOKEN"],
+        models,
+      })
       const snapshots = yield* ModelsDev.decodeSnapshot(
         JSON.stringify({
           openai: { id: "openai", name: "OpenAI", env: ["OPENAI_API_KEY"], models: { "gpt-6": sourceModel("gpt-6") } },
-          "openai-codex": plan("openai-codex", {
+          "openai-codex": list("openai-codex", {
             "gpt-6": sourceModel("gpt-6", { experimental: { modes: { fast: {} } } }),
           }),
-          "openai-chatgpt": plan("openai-chatgpt", { "gpt-5.5": sourceModel("gpt-5.5") }),
+          "openai-chatgpt": list("openai-chatgpt", { "gpt-5.5": sourceModel("gpt-5.5") }),
         }),
       )
       expect(snapshots.map((item) => item.info.id)).toEqual([Provider.ID.openai])
-      expect(snapshots[0]?.plans).toEqual({ "openai-codex": ["gpt-6", "gpt-6-fast"], "openai-chatgpt": ["gpt-5.5"] })
+      expect(snapshots[0]?.subscriptions).toEqual({
+        "openai-codex": ["gpt-6", "gpt-6-fast"],
+        "openai-chatgpt": ["gpt-5.5"],
+      })
     }),
   )
 

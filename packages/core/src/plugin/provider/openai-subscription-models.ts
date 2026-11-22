@@ -8,9 +8,10 @@ import { Flag } from "../../flag.js"
 import { Provider } from "../../provider.js"
 import { ModelsDev } from "../../models-dev.js"
 
-// Temporary, OpenAI-only: the Codex and Sign in with ChatGPT sign-ins can use only some OpenAI models, and models.dev
-// lists them as the hidden `openai-codex` and `openai-chatgpt` providers so they can change without a release. Once
-// another provider needs per-sign-in model lists, this should become a general mechanism instead of a special case.
+// Temporary stopgap, OpenAI-only, until opencode moves to the official v2 models.dev API. The Codex and Sign in with
+// ChatGPT sign-ins can use only some OpenAI models, and models.dev lists them as the hidden `openai-codex` and
+// `openai-chatgpt` providers so the lists can change without a release. The v2 API returns them by default, so this
+// special case goes away then, though they'll still need handling so they don't show up as separate providers.
 
 /**
  * Keeps a copy of the model IDs models.dev lists for one OpenAI subscription sign-in, and runs `reload` when a catalog
@@ -29,7 +30,7 @@ export const track = Effect.fnUntraced(function* (
   const read = config.entries().pipe(
     Effect.flatMap((entries) => modelsDev.get(flags.resolve(entries).recommended_api.enabled)),
     Effect.map((data) => {
-      const ids = data.find((provider) => provider.info.id === Provider.ID.openai)?.plans?.[list]
+      const ids = data.find((provider) => provider.info.id === Provider.ID.openai)?.subscriptions?.[list]
       // An empty list is treated as missing, so a bad catalog edit can't hide every model.
       return ids?.length ? new Set(ids) : undefined
     }),
