@@ -27,18 +27,20 @@ export const track = Effect.fnUntraced(function* (providerID: Provider.ID, planI
     }),
   )
   const state: { current: ReadonlySet<string> | undefined } = { current: yield* read }
+  const update = read.pipe(
+    Effect.flatMap((next) => {
+      if (same(next, state.current)) return Effect.void
+      state.current = next
+      return reload
+    }),
+  )
   yield* bus.subscribe([ModelsDev.Event.Refreshed, Event.Updated]).pipe(
-    Stream.runForEach(() =>
-      read.pipe(
-        Effect.flatMap((next) => {
-          if (same(next, state.current)) return Effect.void
-          state.current = next
-          return reload
-        }),
-      ),
-    ),
+    Stream.runForEach(() => update),
     Effect.forkScoped({ startImmediately: true }),
   )
+  // A refresh between the first read and the subscription published to nobody here; on a cold cache that read
+  // served the bundled snapshot, so read again instead of waiting for the next refresh.
+  yield* update
   return state
 })
 
