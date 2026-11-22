@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import { fileURLToPath } from "node:url"
 
-function evaluate(module: "jsonc" | "bun-lock", input?: string, target = { os: "linux", cpu: "x64" }) {
+function evaluate(
+  module: "jsonc" | "bun-lock",
+  input?: string,
+  target: { os: string; cpu: string; workspaces?: string[] } = { os: "linux", cpu: "x64" },
+) {
   const text = input === undefined ? "builtins.readFile ./bun.lock" : 'builtins.getEnv "OPENCODE_NIX_LOCK_TEST_INPUT"'
   const parsed = `import ./nix/jsonc.nix (${text})`
   return Bun.spawnSync(
@@ -123,6 +127,30 @@ assert.deepEqual(fetches(updated), {
   ...expected,
   "@scope/lib@2.0.0": { url: "https://registry.npmjs.org/@scope/lib/-/lib-2.0.0.tgz", hash: otherHash },
 })
+
+const filtered = evaluate(
+  "bun-lock",
+  JSON.stringify({
+    lockfileVersion: 3,
+    workspaces: {
+      "": { dependencies: { site: "workspace:*" } },
+      "packages/site": { name: "site", dependencies: { alias: "npm:@scope/lib@1.2.3" } },
+      "services/unused": { name: "unused", dependencies: { missing: "1.0.0" } },
+    },
+    packages: {
+      site: ["site@workspace:packages/site"],
+      unused: ["unused@workspace:services/unused"],
+      "site/alias": ["@scope/lib@1.2.3", "", { dependencies: { "@scope/helper": "*" }, peerDependencies: { peer: "*" } }, hash],
+      "site/@scope/helper": ["@scope/helper@2.0.0", "", {}, hash],
+      "@scope/helper": ["@scope/helper@1.0.0", "", {}, hash],
+      "elsewhere/peer": ["peer@1.0.0", "", {}, hash],
+      missing: ["missing@1.0.0", "", {}, hash],
+    },
+  }),
+  { os: "linux", cpu: "x64", workspaces: [""] },
+)
+assert.equal(filtered.exitCode, 0, filtered.stderr.toString())
+assert.deepEqual(Object.keys(fetches(filtered)).sort(), ["@scope/helper@2.0.0", "@scope/lib@1.2.3", "peer@1.0.0"])
 
 const platforms = [
   { os: "linux", cpu: "x64" },

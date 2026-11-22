@@ -145,8 +145,7 @@ let
       export XDG_STATE_HOME="$HOME/state" XDG_CACHE_HOME="$HOME/cache"
       export BUN_INSTALL_CACHE_DIR="$TMPDIR/bun-cache"
       mkdir -p "$HOME" "$BUN_INSTALL_CACHE_DIR" project
-      cp -RL ${cache}/share/bun-cache/. "$BUN_INSTALL_CACHE_DIR/"
-      chmod -R u+w "$BUN_INSTALL_CACHE_DIR"
+      bash ${./stage-bun-cache.sh} ${cache}/share/bun-cache "$BUN_INSTALL_CACHE_DIR"
       cd project
       cp ${pkgs.writeText "cache-fixture-${case.name}.json" (builtins.toJSON project)} package.json
       cp ${frozen} bun.lock
@@ -162,4 +161,18 @@ pkgs.linkFarm "opencode-bun-cache-checks" (
     inherit (case) name;
     path = check case;
   }) cases
+  ++ [
+    {
+      name = "cache-links";
+      path = pkgs.runCommand "opencode-bun-cache-links" { } ''
+        mkdir -p cache/@scope payload dest
+        ln -s missing payload/dangling
+        ln -s "$PWD/payload" cache/@scope/package@@@1
+        bash ${./stage-bun-cache.sh} "$PWD/cache" "$PWD/dest"
+        test ! -L dest/@scope/package@@@1
+        test "$(readlink dest/@scope/package@@@1/dangling)" = missing
+        touch "$out"
+      '';
+    }
+  ]
 )

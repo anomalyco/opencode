@@ -1,5 +1,9 @@
 target: lock:
 let
+  entries =
+    if target ? workspaces then import ./bun-reachable.nix lock target.workspaces
+    else builtins.attrValues lock.packages;
+
   sources = builtins.concatMap (
     entry:
     let
@@ -97,7 +101,7 @@ let
             // (if builtins.match ".*[.]tgz" url == null then { name = "package.tgz"; } else { });
         }
       ]
-  ) (builtins.attrValues lock.packages);
+  ) entries;
 
   # Match Bun's Negatable accumulator, including wildcard reset order.
   matches =
