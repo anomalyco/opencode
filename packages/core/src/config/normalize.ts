@@ -469,12 +469,6 @@ function normalizeExperimental(
           message: "Use the top-level automations setting. Automations are enabled by default.",
         })
       }
-      if (own(experimental, "mcp_events"))
-        diagnostics.push({
-          kind: "removed",
-          path: ["experimental", "mcp_events"],
-          message: "MCP Events are always enabled.",
-        })
       // `policies` merges into top-level `policies` in normalizePolicies.
       Object.entries(ConfigExperimental.Info.fields).forEach(([key, schema]) => {
         if (key === "policies" || !own(experimental, key)) return

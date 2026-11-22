@@ -138,6 +138,7 @@ const changes = { tools: McpEvent.ToolsChanged, resources: McpEvent.ResourcesCha
 
 // Event IDs a subscription remembers to skip a duplicate the server replays.
 const SEEN_EVENTS = 100
+const MAX_CURSOR = 4096
 
 const isEnded = (error: Error) =>
   error instanceof EventStreamRejectedError ||
@@ -318,6 +319,11 @@ export const followEvents = (
         Stream.tap((message) => {
           if (message.type === "error")
             return Effect.logWarning("mcp event stream error", { server, name: input.name, code: message.error.code })
+          // A cursor is kept and sent back on every reopen, so a server can't make it arbitrarily large.
+          if ((message.cursor?.length ?? 0) > MAX_CURSOR)
+            return Effect.fail(
+              new EventsUnavailableError({ server, message: "The MCP server sent an oversized event cursor." }),
+            )
           if (message.type === "heartbeat") return move({ ...position, cursor: message.cursor })
           if (message.type === "active") {
             gap ||= message.cursor !== null && message.truncated
