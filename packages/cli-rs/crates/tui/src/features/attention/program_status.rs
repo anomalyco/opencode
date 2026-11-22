@@ -69,7 +69,7 @@ pub fn clear(tui: &Tui) {
 
 /// The open tabs, then the viewed session, each once, that wait on the user or work.
 fn pending(tui: &Tui) -> Vec<Pending> {
-    let viewed = match tui.route() {
+    let viewed = match &*tui.route() {
         Route::Session { id } if id.0 != "dummy" => tui.tabs.current(tui),
         _ => None,
     };

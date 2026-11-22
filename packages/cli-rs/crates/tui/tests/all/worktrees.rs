@@ -136,7 +136,7 @@ fn a_session_moves_to_a_worktree() {
     let moved = setup.wait_request("POST", "/api/session/ses_a/move");
     assert_eq!(moved, vec![(String::new(), json!({ "directory": "/project-spike" }))]);
     assert!(!setup.tui.dialogs.is_open());
-    assert_eq!(setup.tui.route(), support::session_route("ses_a"));
+    assert_eq!(*setup.tui.route(), support::session_route("ses_a"));
 }
 
 #[test]
@@ -146,7 +146,7 @@ fn picking_a_worktree_goes_home_there() {
     setup.open_worktrees();
     setup.app.press("down");
     setup.app.press("return");
-    let home = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Home);
+    let home = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Home);
     assert!(home, "{:?}", setup.tui.route());
     setup.wait_for("/project-spike");
     assert!(setup.requests("POST", "/api/session/ses_a/move").is_empty());
@@ -195,7 +195,7 @@ fn a_new_worktree_is_staged_on_home_and_created_by_the_first_submit() {
         .map(|(method, path, _, _)| format!("{method} {path}"))
         .collect();
     assert_eq!(order[..3], ["POST /api/worktree", "GET /api/location", "POST /api/session"]);
-    let opened = setup.app.wait_until(WAIT, || setup.tui.route() == support::session_route(&id));
+    let opened = setup.app.wait_until(WAIT, || *setup.tui.route() == support::session_route(&id));
     assert!(opened, "{:?}", setup.tui.route());
 }
 
@@ -209,13 +209,13 @@ fn quick_switch_opens_pinned_sessions_and_deletes_drop_pins() {
     // Slot 1 is the first pin.
     setup.app.press("ctrl+x");
     setup.app.press("1");
-    assert_eq!(setup.tui.route(), support::session_route("ses_b"));
+    assert_eq!(*setup.tui.route(), support::session_route("ses_b"));
     setup.app.press("ctrl+x");
     setup.app.press("2");
-    assert_eq!(setup.tui.route(), support::session_route("ses_a"));
+    assert_eq!(*setup.tui.route(), support::session_route("ses_a"));
     setup.app.press("ctrl+x");
     setup.app.press("3");
-    assert_eq!(setup.tui.route(), support::session_route("ses_a"));
+    assert_eq!(*setup.tui.route(), support::session_route("ses_a"));
 
     let deleted: V2Event = serde_json::from_value(json!({
         "id": "evt_1", "created": 1, "type": "session.deleted",

@@ -86,16 +86,16 @@ pub fn session(tui: &Tui, id: &SessionID) {
 
 pub(crate) fn reconnected(tui: &Tui) {
     sync(tui, current(tui));
-    if let Route::Session { id } = tui.route() {
-        session(tui, &id);
+    if let Route::Session { id } = &*tui.route() {
+        session(tui, id);
     }
 }
 
 /// Upload the open session's environment when its connection becomes ready.
 pub(crate) fn connected_again(tui: &Tui) {
     tui.location.uploaded.borrow_mut().take();
-    if let Route::Session { id } = tui.route() {
-        session(tui, &id);
+    if let Route::Session { id } = &*tui.route() {
+        session(tui, id);
     }
 }
 

@@ -66,7 +66,7 @@ impl Inner {
         };
         let slash = |name: &str, arguments: bool| Slash { arguments, ..Slash::new(name) };
         let routed = |tui: &Tui, session: &SessionID, check: fn(&SessionInfo) -> bool| {
-            tui.route() == (Route::Session { id: session.clone() })
+            *tui.route() == (Route::Session { id: session.clone() })
                 && tui.data.read(|state| state.session(session).is_some_and(check))
         };
         let reverted = {

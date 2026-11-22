@@ -267,7 +267,7 @@ impl Inner {
             }
             super::actions::append_prompt(tui, &session, restored.clone());
             tui.dialogs.clear();
-            if tui.route() == (crate::routes::Route::Session { id: session }) {
+            if *tui.route() == (crate::routes::Route::Session { id: session }) {
                 tui.app.focus(&prompt.textarea);
             }
         });

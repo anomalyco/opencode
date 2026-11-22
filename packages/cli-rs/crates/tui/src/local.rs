@@ -33,9 +33,16 @@ impl Selection {
     }
 }
 
-pub struct Routed {
-    pub id: SessionID,
-    pub session: Option<SessionInfo>,
+/// The session route on screen. Its session's agent and model are read from the store where they are needed.
+pub struct Routed(Rc<Route>);
+
+impl Routed {
+    pub fn id(&self) -> &SessionID {
+        match &*self.0 {
+            Route::Session { id } => id,
+            _ => unreachable!("a routed session holds a session route"),
+        }
+    }
 }
 
 const CATALOGS: [Catalog; 5] =
@@ -251,9 +258,8 @@ impl Local {
     }
 
     pub(crate) fn route(&self) -> Option<Routed> {
-        let Route::Session { id } = self.tui.upgrade()?.route() else { return None };
-        let session = self.data.read(|state| state.session(&id).cloned());
-        Some(Routed { id, session })
+        let route = self.tui.upgrade()?.route();
+        matches!(*route, Route::Session { .. }).then(|| Routed(route))
     }
 
     /// `useUsageLimits().load`: loads the current location's limits into the store once, or again with `refresh`,
@@ -453,15 +459,15 @@ impl Local {
             match self.route() {
                 Some(routed) => state
                     .agent_drafts
-                    .get(&routed.id.0)
+                    .get(&routed.id().0)
                     .cloned()
                     .flatten()
                     .or_else(|| {
-                        let draft = state.agent_drafts.contains_key(&routed.id.0);
+                        let draft = state.agent_drafts.contains_key(&routed.id().0);
                         let startup = self.startup_agent.borrow().clone();
                         startup.filter(|_| !draft)
                     })
-                    .or_else(|| routed.session.and_then(|session| session.agent.map(|agent| agent.0)))
+                    .or_else(|| self.data.read(|state| Some(state.session(routed.id())?.agent.as_ref()?.0.clone())))
                     .or_else(|| state.agent.clone()),
                 None => state.agent.clone(),
             }
@@ -486,7 +492,7 @@ impl Local {
             let mut state = self.state.borrow_mut();
             state.agent = Some(id.to_owned());
             if let Some(routed) = &routed {
-                state.agent_drafts.insert(routed.id.0.clone(), Some(id.to_owned()));
+                state.agent_drafts.insert(routed.id().0.clone(), Some(id.to_owned()));
             }
         }
         // Retain both selections while agent and model commits arrive separately.
@@ -581,11 +587,15 @@ impl Local {
 
     fn session_selection(&self, routed: &Routed) -> Option<Selection> {
         let agent = self.agent()?;
-        let session = routed.session.as_ref();
         let drafted =
-            self.state.borrow().selections.get(&routed.id.0).and_then(|drafts| drafts.get(&agent.id.0)).cloned();
-        let own = session.and_then(|session| session.agent.as_ref()).is_none_or(|other| *other == agent.id);
-        let selected = drafted.or_else(|| own.then(|| Self::durable(session)).flatten());
+            self.state.borrow().selections.get(&routed.id().0).and_then(|drafts| drafts.get(&agent.id.0)).cloned();
+        let selected = drafted.or_else(|| {
+            self.data.read(|state| {
+                let session = state.session(routed.id());
+                let own = session.and_then(|session| session.agent.as_ref()).is_none_or(|other| *other == agent.id);
+                own.then(|| Self::durable(session)).flatten()
+            })
+        });
         if let Some(selected) = selected {
             let info = self.model_info(&selected.model);
             let keep =
@@ -621,11 +631,13 @@ impl Local {
 
     fn set_session_draft(&self, routed: &Routed, selection: Selection) {
         let Some(agent) = self.agent() else { return };
-        let session = routed.session.as_ref();
-        let own = session.and_then(|session| session.agent.as_ref()).is_none_or(|other| *other == agent.id);
-        let same = Self::durable(session).is_some_and(|durable| durable.key() == selection.key());
+        let (own, same) = self.data.read(|state| {
+            let session = state.session(routed.id());
+            let own = session.and_then(|session| session.agent.as_ref()).is_none_or(|other| *other == agent.id);
+            (own, Self::durable(session).is_some_and(|durable| durable.key() == selection.key()))
+        });
         let mut state = self.state.borrow_mut();
-        let drafts = state.selections.entry(routed.id.0.clone()).or_default();
+        let drafts = state.selections.entry(routed.id().0.clone()).or_default();
         if own && same {
             drafts.remove(&agent.id.0);
         } else {
@@ -695,7 +707,7 @@ impl Local {
         }
         self.state.borrow_mut().commits.remove(&id.0);
         // Inactive agents keep their remembered choices after another agent commits.
-        let here = self.route().is_some_and(|routed| routed.id == *id);
+        let here = self.route().is_some_and(|routed| routed.id() == id);
         if !here || self.agent().is_none_or(|agent| agent.id.0 != expected_agent) {
             return;
         }
@@ -721,7 +733,7 @@ impl Local {
         let (Some(routed), Some(agent), Some(selection)) = (self.route(), self.agent(), self.selection()) else {
             return;
         };
-        self.state.borrow_mut().selections.entry(routed.id.0).or_default().insert(agent.id.0, selection);
+        self.state.borrow_mut().selections.entry(routed.id().0.clone()).or_default().insert(agent.id.0, selection);
     }
 
     pub fn set(&self, model: &Model, recent: bool) {

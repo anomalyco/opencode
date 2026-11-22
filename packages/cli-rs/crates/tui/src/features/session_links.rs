@@ -162,7 +162,7 @@ fn piece(span: &InlineSpan, text: &str) -> InlineSpan {
 }
 
 fn label_of(tui: &Tui, id: &SessionID) -> Option<String> {
-    if tui.route() == (Route::Session { id: id.clone() }) {
+    if *tui.route() == (Route::Session { id: id.clone() }) {
         return None;
     }
     let label = tui.data.read(|state| match state.session(id) {

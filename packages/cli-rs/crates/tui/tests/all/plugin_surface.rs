@@ -199,7 +199,7 @@ impl Model for Surfaces {
             let work = reconcile::work();
             apply(&harness, *command);
             let calls: Vec<Call> = board(|board| board.calls[seen..].to_vec());
-            let on_route = matches!(harness.tui.route(), Route::Plugin { .. });
+            let on_route = matches!(&*harness.tui.route(), Route::Plugin { .. });
             match command {
                 Command::Open => {
                     // A new mount, unless the route showed already and the TUI mounted it again: a new one either way.

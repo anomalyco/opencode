@@ -640,7 +640,7 @@ fn switch_theme(harness: &impl Mounted, remount: bool) {
     assert!(tui.theme.borrow_mut().set(SWITCHED));
     tui.theme_changed();
     if remount {
-        tui.navigate(tui.route());
+        tui.navigate(Route::clone(&tui.route()));
     }
     harness.app().advance(Duration::from_millis(1));
 }

@@ -126,7 +126,7 @@ impl Open {
             OpenView::Projects => None,
         };
         let open = self.clone();
-        let current = tui.data.read(|state| match tui.route() {
+        let current = tui.data.read(|state| match &*tui.route() {
             Route::Session { id } => Some(Target::Session(state.root(&id).into())),
             _ => None,
         });
