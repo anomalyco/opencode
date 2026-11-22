@@ -68,7 +68,7 @@ const fakeFff = () => {
 
 const buildSearch = (layer: Layer.Layer<FileSystemSearch.Service>) =>
   Effect.gen(function* () {
-    const scope = yield* Scope.make()
+    const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void))
     const context = yield* Layer.buildWithScope(layer, scope)
     return { scope, search: Context.get(context, FileSystemSearch.Service) }
   })
@@ -116,16 +116,20 @@ describe("FileSystemSearch", () => {
           return []
         }),
       )
-      const { scope, search } = yield* buildSearch(layer)
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const { search } = yield* buildSearch(layer)
       const pending = yield* Effect.forkChild(findFiles(search))
       yield* Deferred.await(started)
-      yield* TestClock.adjust("100 millis")
+      yield* TestClock.adjust("50 millis")
+      const concurrent = yield* Effect.forkChild(findFiles(search))
+      yield* TestClock.adjust("50 millis")
       expect(pending.pollUnsafe()).toBeDefined()
+      expect(concurrent.pollUnsafe()).toBeDefined()
       expect(yield* Fiber.join(pending)).toEqual([RelativePath.make("src/first.ts")])
+      expect(yield* Fiber.join(concurrent)).toEqual([RelativePath.make("src/first.ts")])
 
       // Subsequent keystrokes use the live partial index without another wait.
       expect(yield* findFiles(search)).toEqual([RelativePath.make("src/first.ts")])
+      yield* TestClock.adjust("10 seconds")
       yield* Deferred.succeed(release, undefined)
       yield* TestClock.adjust("1 millis")
       expect(yield* findFiles(search)).toEqual([RelativePath.make("src/first.ts"), RelativePath.make("src/second.ts")])
@@ -133,23 +137,25 @@ describe("FileSystemSearch", () => {
     }),
   )
 
-  it.effect("bounds a shared scan after request cancellation and allows another refresh after timeout", () =>
+  it.effect("finishes a slow shared scan after request cancellation without capping git repositories", () =>
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
       let scans = 0
       let finalized = 0
       const layer = ripgrepSearch((input) =>
         Effect.gen(function* () {
           scans++
-          expect(input.limit).toBe(100_000)
+          expect(input.limit).toBe(Number.MAX_SAFE_INTEGER)
           yield* emit(input, scans === 1 ? "src/partial.ts" : "src/refreshed.ts")
           if (scans > 1) return []
           yield* Deferred.succeed(started, undefined)
-          return yield* Effect.never
+          yield* Deferred.await(release)
+          yield* emit(input, "src/late.ts")
+          return []
         }).pipe(Effect.ensuring(Effect.sync(() => finalized++))),
       )
-      const { scope, search } = yield* buildSearch(layer)
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const { search } = yield* buildSearch(layer)
       const cancelled = yield* Effect.forkChild(findFiles(search))
       yield* Deferred.await(started)
       const waiting = yield* Effect.forkChild(findFiles(search))
@@ -160,10 +166,14 @@ describe("FileSystemSearch", () => {
       expect(yield* Fiber.join(waiting)).toEqual([RelativePath.make("src/partial.ts")])
       expect(scans).toBe(1)
 
-      yield* TestClock.adjust("5 seconds")
-      expect(finalized).toBe(1)
+      yield* TestClock.adjust("10 seconds")
+      expect(finalized).toBe(0)
       expect(yield* findFiles(search)).toEqual([RelativePath.make("src/partial.ts")])
       expect(scans).toBe(1)
+      yield* Deferred.succeed(release, undefined)
+      yield* TestClock.adjust("1 millis")
+      expect(finalized).toBe(1)
+      expect(yield* findFiles(search)).toEqual([RelativePath.make("src/late.ts"), RelativePath.make("src/partial.ts")])
       yield* TestClock.adjust("10 seconds")
       yield* findFiles(search)
       yield* TestClock.adjust("1 millis")
@@ -187,7 +197,6 @@ describe("FileSystemSearch", () => {
         ),
       )
       const { scope, search } = yield* buildSearch(layer)
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const pending = yield* Effect.forkChild(findFiles(search))
       yield* Deferred.await(started)
       yield* Scope.close(scope, Exit.void)
@@ -199,6 +208,7 @@ describe("FileSystemSearch", () => {
   it.effect("retains warm ranked results when a refresh times out and replaces them on success", () =>
     Effect.gen(function* () {
       let scans = 0
+      let finalized = 0
       const layer = ripgrepSearch((input) =>
         Effect.gen(function* () {
           scans++
@@ -210,10 +220,9 @@ describe("FileSystemSearch", () => {
           yield* emit(input, "src/search-new.ts")
           if (scans === 2) return yield* Effect.never
           return []
-        }),
+        }).pipe(Effect.ensuring(Effect.sync(() => finalized++))),
       )
-      const { scope, search } = yield* buildSearch(layer)
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const { search } = yield* buildSearch(layer)
       const ranked = () => search.find({ query: "search.ts", type: "file" })
       expect((yield* ranked())[0]?.path).toBe(RelativePath.make("src/search.ts"))
       expect((yield* search.find({ query: "src", type: "directory" })).map((entry) => entry.path)).toEqual([
@@ -224,6 +233,7 @@ describe("FileSystemSearch", () => {
       expect((yield* ranked())[0]?.path).toBe(RelativePath.make("src/search.ts"))
       yield* TestClock.adjust("5 seconds")
       expect(scans).toBe(2)
+      expect(finalized).toBe(2)
       expect((yield* ranked())[0]?.path).toBe(RelativePath.make("src/search.ts"))
 
       yield* TestClock.adjust("10 seconds")

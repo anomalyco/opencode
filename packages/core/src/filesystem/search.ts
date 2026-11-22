@@ -2,7 +2,7 @@ export * as FileSystemSearch from "./search.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
-import { Clock, Context, Deferred, Duration, Effect, Layer, Option, Scope } from "effect"
+import { Clock, Context, Deferred, Duration, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "@opencode/schema/filesystem"
@@ -23,9 +23,8 @@ export interface Options {
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem/Search") {}
 
 const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
-const INITIAL_SCAN_WAIT = Duration.millis(100)
-const SCAN_TIMEOUT = Duration.seconds(5)
-const SCAN_LIMIT = 100_000
+const INITIAL_SCAN_WAIT = Duration.toMillis("100 millis")
+const REFRESH_TIMEOUT = Duration.seconds(5)
 const PREPARE_BATCH_SIZE = 128
 type Prepared = ReturnType<typeof fuzzysort.prepare>
 
@@ -64,56 +63,55 @@ const ripgrepLayer = Layer.effect(
     const clock = yield* Clock.Clock
     const home = Protected.isHome(location.directory)
     let index = emptyIndex()
-    let initialized = false
+    let complete = false
     let settledAt = Number.NEGATIVE_INFINITY
-    let refreshing: Deferred.Deferred<void> | undefined
+    let refreshing: { done: Deferred.Deferred<void>; startedAt: number } | undefined
     const scan = Effect.gen(function* () {
       const next = emptyIndex()
       const previous = index
-      if (!initialized) index = next
+      if (!complete) index = next
       let prepared = 0
-      const result = yield* ripgrep
-        .find({
-          environment,
-          cwd: location.directory,
-          pattern: "*",
-          hidden: true,
-          limit: SCAN_LIMIT,
-          exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
-          onEntry: (entry) =>
-            Effect.gen(function* () {
-              // Yield between bounded batches, including when stdout is already buffered.
-              if (++prepared % PREPARE_BATCH_SIZE === 0) yield* Effect.yieldNow
-              next.files.set(entry.path, previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path))
-              const parts = entry.path.split("/")
-              parts.slice(0, -1).forEach((_, offset) => {
-                const directory = parts.slice(0, offset + 1).join("/") + path.sep
-                if (!next.directories.has(directory))
-                  next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
-              })
-            }),
-        })
-        .pipe(Effect.timeoutOption(SCAN_TIMEOUT))
-      // A cold index is already visible incrementally. A timed-out refresh must
-      // not replace a warm snapshot with just the prefix it managed to visit.
-      if (Option.isSome(result)) index = next
-      initialized = true
+      yield* ripgrep.find({
+        environment,
+        cwd: location.directory,
+        pattern: "*",
+        hidden: true,
+        limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
+        exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
+        onEntry: (entry) =>
+          Effect.gen(function* () {
+            // Yield between bounded batches, including when stdout is already buffered.
+            if (++prepared % PREPARE_BATCH_SIZE === 0) yield* Effect.yieldNow
+            next.files.set(entry.path, previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path))
+            const parts = entry.path.split("/")
+            parts.slice(0, -1).forEach((_, offset) => {
+              const directory = parts.slice(0, offset + 1).join("/") + path.sep
+              if (!next.directories.has(directory))
+                next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
+            })
+          }),
+      })
+      index = next
+      complete = true
     }).pipe(Effect.orDie)
     // Publishing the attempt and forking its owner must be atomic with respect
     // to request cancellation; only waiting for it belongs to the request.
     const refresh = Effect.uninterruptible(
       Effect.suspend(() => {
         if (refreshing) return Effect.succeed(refreshing)
-        if (initialized && clock.currentTimeMillisUnsafe() < settledAt + REFRESH_INTERVAL) return Effect.undefined
+        if (complete && clock.currentTimeMillisUnsafe() < settledAt + REFRESH_INTERVAL) return Effect.undefined
 
-        const attempt = Deferred.makeUnsafe<void>()
+        const attempt = { done: Deferred.makeUnsafe<void>(), startedAt: clock.currentTimeMillisUnsafe() }
         refreshing = attempt
-        return scan.pipe(
+        // Cold scans keep publishing progress until finished or the Location closes.
+        // Only refreshes have a deadline; interruption leaves the complete snapshot intact.
+        return (complete ? scan.pipe(Effect.timeoutOption(REFRESH_TIMEOUT)) : scan).pipe(
+          Effect.asVoid,
           Effect.onExit((exit) =>
             Effect.sync(() => {
               settledAt = clock.currentTimeMillisUnsafe()
-              if (refreshing === attempt) refreshing = undefined
-              Deferred.doneUnsafe(attempt, exit)
+              refreshing = undefined
+              Deferred.doneUnsafe(attempt.done, exit)
             }),
           ),
           Effect.forkIn(scope),
@@ -125,9 +123,9 @@ const ripgrepLayer = Layer.effect(
       find: (input) =>
         Effect.gen(function* () {
           const attempt = yield* refresh
-          if (!initialized && attempt) {
-            yield* Deferred.await(attempt).pipe(Effect.timeoutOption(INITIAL_SCAN_WAIT))
-            initialized = true
+          if (!complete && attempt) {
+            const remaining = attempt.startedAt + INITIAL_SCAN_WAIT - clock.currentTimeMillisUnsafe()
+            if (remaining > 0) yield* Deferred.await(attempt.done).pipe(Effect.timeoutOption(remaining))
           }
           return search(index, input)
         }),
