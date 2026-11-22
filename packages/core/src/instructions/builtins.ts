@@ -5,6 +5,7 @@ import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { Global } from "@opencode/util/global"
 import { Location } from "../location.js"
 import { Instructions } from "./index.js"
+import { TmpRetention } from "../tmp-retention.js"
 
 export interface Interface {
   readonly load: () => Effect.Effect<Instructions.List>
@@ -40,7 +41,7 @@ const layer = Layer.effect(
                   `  Workspace root folder: ${location.project.directory}`,
                   `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
                   `  Platform: ${process.platform}`,
-                  `  Prefer ${global.tmp} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
+                  `  Prefer ${global.tmp} over generic system temporary directories such as /tmp; it is pre-created and approved for external access. Files there untouched for 7 days are deleted automatically.`,
                   "</env>",
                 ].join("\n"),
               ),
@@ -57,4 +58,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Global.node, Location.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Global.node, Location.node, TmpRetention.node] })

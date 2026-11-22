@@ -14,6 +14,7 @@ export function roots(app: string) {
     cache: path.join(cache!, app),
     config: path.join(config!, app),
     state: path.join(state!, app),
-    tmp: path.join(os.tmpdir(), app),
+    // On disk rather than os.tmpdir(), which is often RAM-backed (tmpfs).
+    tmp: path.join(data!, app, "tmp"),
   }
 }
