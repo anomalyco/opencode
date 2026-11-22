@@ -116,7 +116,7 @@ const layer = Layer.effect(
               projectID: project.id,
               location: input.location,
               subpath,
-              cwd: input.data.info.experimental?.cwd,
+              // Drop exported cwd on import: it belongs to the source host and must not bypass locate or permission boundaries here.
               title: input.data.info.title,
               agent: input.data.info.agent,
               model: input.data.info.model,
