@@ -104,10 +104,11 @@ async fn a_coalesced_reconnect_invalidates_reads_and_flushes_everything() {
     driver.await.unwrap();
 }
 
-/// An owner that stops draining (the UI thread runs `$EDITOR` while a reply streams) fills the store's mailbox, and the
-/// connection keeps reading: it holds the batches with adjacent deltas merged, so its own queue never fills and the
-/// stream stays up. Once the owner drains, every listened event arrives, in order, and every delta's text. The hold
-/// is bounded: past `HELD` events the connection stops reading.
+/// An owner that stops draining (the UI thread runs `$EDITOR` while two replies stream) fills the store's mailbox, and
+/// the connection keeps reading: it holds the batches with each part's deltas merged, so its own queue never fills and
+/// the stream stays up. The hold is bounded: past `HELD` events the connection stops reading, and a stream that then
+/// drops, again and again, adds nothing; its queued batches go, as a disconnect's do. Once the owner drains, every
+/// event held arrives, in order, and every delta's text.
 #[tokio::test(flavor = "local")]
 async fn an_owner_that_stops_draining_keeps_the_stream_and_every_event() {
     let client = client(handler(|_req: Req| async { ok(json!({ "data": [] })) }));
@@ -118,21 +119,26 @@ async fn an_owner_that_stops_draining_keeps_the_stream_and_every_event() {
     let append = |n: usize| {
         event(json!({ "id": format!("evt_{n}"), "created": 1, "type": "tui.prompt.append", "data": { "text": "x" } }))
     };
-    let delta = || {
-        let body = json!({ "sessionID": "ses_none", "assistantMessageID": "msg_a", "ordinal": 0, "delta": "y" });
+    let delta = |message: &str| {
+        let body = json!({ "sessionID": "ses_none", "assistantMessageID": message, "ordinal": 0, "delta": "y" });
         event(json!({ "id": "evt_delta", "created": 1, "type": "session.text.delta", "data": body }))
     };
-    // The mailbox's worth of appends, then a stream of deltas with an append every 100, then appends past the hold.
+    // The mailbox's worth of appends, then two replies' deltas in turn with an append every 100 batches.
     let streamed = 2_000;
     let mut sent = Vec::new();
     sent.extend((0..MAILBOX).map(|n| vec![append(n)]));
-    sent.extend((0..streamed).map(|n| match n % 100 {
-        0 => vec![append(MAILBOX + n / 100), delta()],
-        _ => vec![delta()],
+    sent.extend((0..streamed).map(|n| {
+        let delta = delta(if n % 2 == 0 { "msg_a" } else { "msg_b" });
+        match n % 100 {
+            0 => vec![append(MAILBOX + n / 100), delta],
+            _ => vec![delta],
+        }
     }));
     let appended = MAILBOX + streamed / 100;
+    // Held: the appends, and one delta of each reply between two appends.
+    let held = streamed / 100 + 2 * streamed / 100;
     let capacity = sent.len() + HELD;
-    let (_status, watcher) = watch::channel(state(Status::Connected));
+    let (status, watcher) = watch::channel(state(Status::Connected));
     let (batches, receiver) = mpsc::channel(capacity);
     tokio::spawn(opencode_store::connection::run(data.remote(), watcher, receiver));
     for batch in sent {
@@ -140,35 +146,51 @@ async fn an_owner_that_stops_draining_keeps_the_stream_and_every_event() {
     }
     wait(|| batches.capacity() == capacity).await;
 
-    // The hold is bounded: the connection stops reading once it holds `HELD` events.
+    // Past the cap the connection stops reading.
     for n in 0..HELD {
         batches.send(vec![append(appended + n)]).await.unwrap();
     }
     settle().await;
-    let unread = capacity - batches.capacity();
-    assert!(unread > 0 && unread < HELD, "the connection stops reading at the bound ({unread} unread)");
+    assert_eq!(capacity - batches.capacity(), held, "the connection stops reading at the bound");
+    // The stream drops and comes back, again and again: the queued batches go, and the hold does not grow.
+    for cycle in 0..3 {
+        status.send_replace(state(Status::Reconnecting));
+        wait(|| batches.capacity() == capacity).await;
+        status.send_replace(state(Status::Connected));
+        settle().await;
+        for n in 0..100 {
+            batches.send(vec![append(appended + HELD + 100 * cycle + n)]).await.unwrap();
+        }
+    }
+    status.send_replace(state(Status::Reconnecting));
+    wait(|| batches.capacity() == capacity).await;
 
-    let (mut signals, mut taken, mut text) = (Vec::new(), Vec::new(), 0);
-    let total = appended + HELD;
+    let (mut signals, mut taken, mut merged, mut text) = (Vec::new(), Vec::new(), 0, 0);
+    let total = appended + HELD - held;
     let started = std::time::Instant::now();
     while signals.len() < total {
         assert!(started.elapsed() < std::time::Duration::from_secs(10), "{} of {total} events", signals.len());
         data.drain();
         data.take_signals(&mut taken);
         signals.extend(taken.iter().map(|event| event.id().to_owned()));
-        text += deltas.take(|events| {
-            events
+        deltas.take(|events| {
+            merged += events.len();
+            text += events
                 .iter()
                 .map(|event| match event {
                     V2Event::SessionTextDelta(delta) => delta.data.delta.len(),
                     other => panic!("not a text delta: {}", other.tag()),
                 })
-                .sum::<usize>()
+                .sum::<usize>();
         });
         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
     }
+    settle().await;
+    data.drain();
+    data.take_signals(&mut taken);
+    assert!(taken.is_empty(), "past the cap, nothing was held");
     assert_eq!(signals, (0..total).map(|n| format!("evt_{n}")).collect::<Vec<_>>());
-    assert_eq!(text, streamed, "every delta's text arrives");
+    assert_eq!((merged, text), (2 * streamed / 100, streamed), "each part's deltas merge, and all their text arrives");
 }
 
 /// The connection records a declared error by its message, as TS's does.

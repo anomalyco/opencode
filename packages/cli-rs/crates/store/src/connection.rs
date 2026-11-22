@@ -11,16 +11,18 @@ use opencode_api::transport::BoxFuture;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
+use crate::core::Delta;
 use crate::driver::{Data, Mail, Remote};
 
 /// The most events [`run`] holds while the store's mailbox is full. Past that it stops reading the connection, whose
-/// own queue then fills, and the connection drops the stream.
+/// own queue then fills, and the connection drops the stream. The batches queued then are dropped, not held: the
+/// offline transition after them invalidates every read, and the next stream's `server.connected` reads it all again.
 pub const HELD: usize = 65_536;
 
 /// Drives the store from a connection: sends its batches to the store's owner, each with whether it is connected.
 /// Returns when the batch receiver closes or the store is gone. While the owner does not drain (the UI thread runs a
-/// foreground program), the store's mailbox fills; this then keeps reading, and holds the batches with adjacent deltas
-/// merged, so the stream stays up and no event is lost.
+/// foreground program), the store's mailbox fills; this then keeps reading, and holds the batches with each part's
+/// deltas merged, so the stream stays up and no event is lost, up to [`HELD`] events.
 pub async fn run(remote: Remote, mut state: watch::Receiver<events::State>, mut batches: mpsc::Receiver<Vec<V2Event>>) {
     let mut watching = true;
     let mut held = Held::default();
@@ -39,7 +41,9 @@ pub async fn run(remote: Remote, mut state: watch::Receiver<events::State>, mut 
                 // Apply the final queued batch while still online so disconnect invalidation covers it.
                 if !online {
                     while let Ok(batch) = batches.try_recv() {
-                        held.push(Mail::Batch(batch, None));
+                        if held.events < HELD {
+                            held.push(Mail::Batch(batch, None));
+                        }
                     }
                 }
                 held.push(Mail::Online(online));
@@ -73,27 +77,41 @@ struct Held {
 }
 
 impl Held {
-    /// Holds `mail`. A batch joins a held batch before it when the connection status between them is the same, and its
-    /// first delta merges into that batch's last, as the connection merges adjacent deltas within a batch.
+    /// Holds `mail`. A batch joins a held batch before it when the connection status between them is the same, and
+    /// each of its deltas merges into its part's delta in the run of deltas the held batch ends with: appends to
+    /// different parts commute, and an event between them keeps its place. A status the hold ends with already adds
+    /// nothing, and down, up and down again is down once, so a connection that keeps dropping adds nothing either.
     fn push(&mut self, mail: Mail) {
-        let tail = match (self.mail.back_mut(), mail) {
+        if matches!(mail, Mail::Online(false)) && self.ends_down_up() {
+            self.mail.pop_back();
+            return;
+        }
+        let (tail, batch) = match (self.mail.back_mut(), mail) {
             (Some(Mail::Batch(tail, before)), Mail::Batch(batch, online)) if online.is_none() || online == *before => {
                 (tail, batch)
             }
+            (Some(Mail::Online(last)), Mail::Online(online)) if *last == online => return,
             (_, mail) => {
                 self.events += mail.events();
                 self.mail.push_back(mail);
                 return;
             }
         };
-        let (tail, batch) = tail;
         for event in batch {
-            if tail.last_mut().is_some_and(|last| last.merge(&event)) {
-                continue;
+            // Text deltas match by ordinal, as the connection's own merge does: a message has one open text part.
+            let merged = Delta::of(&event).is_some()
+                && tail.iter_mut().rev().take_while(|last| Delta::of(last).is_some()).any(|last| last.merge(&event));
+            if !merged {
+                tail.push(event);
+                self.events += 1;
             }
-            tail.push(event);
-            self.events += 1;
         }
+    }
+
+    /// The hold ends with the connection going down, then up.
+    fn ends_down_up(&self) -> bool {
+        let mut tail = self.mail.iter().rev();
+        matches!((tail.next(), tail.next()), (Some(Mail::Online(true)), Some(Mail::Online(false))))
     }
 
     /// Sends what fits in the mailbox now; false once the store is gone.
