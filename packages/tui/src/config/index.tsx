@@ -4,11 +4,21 @@ import { createBindingLookup } from "@opentui/keymap/extras"
 import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
 import { createContext, createMemo, onCleanup, type JSX, useContext } from "solid-js"
+import { createEffect } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { safeWatch } from "../util/watch"
 import path from "path"
 import { TuiKeybind } from "./keybind"
-import { resolveColorDepth, resolveIconMode, resolveMotion, type ResolvedColorDepth, type ResolvedIconMode, type ResolvedMotion, type UiStyle } from "../ui/design"
+import {
+  resolveColorDepth,
+  resolveIconMode,
+  resolveMotion,
+  setIconMode,
+  type ResolvedColorDepth,
+  type ResolvedIconMode,
+  type ResolvedMotion,
+  type UiStyle,
+} from "../ui/design"
 
 export interface Interface {
   readonly path?: string
@@ -386,6 +396,9 @@ export function ConfigProvider(props: {
   children: JSX.Element
 }) {
   const [config, setConfig] = createStore(props.config)
+  // Pure helpers read the terminal-wide mode; components use the reactive accessor from `useDesign`.
+  setIconMode(config.ui.icons)
+  createEffect(() => setIconMode(config.ui.icons))
   const host = props.service
   const apply = (info: Info) => setConfig(reconcile(resolve(info, props.options ?? { terminalSuspend: true })))
   const update = async (update: (draft: any) => void) => {

@@ -3,10 +3,15 @@ import { RGBA } from "@opentui/core"
 import { parseThemeDocument, resolveThemeDocument } from "@opencode/theme/tui"
 import opencode from "../../src/theme/assets/v2/opencode.json"
 import {
+  activeIconMode,
+  asciiIcons,
   icon,
+  iconCatalog,
+  nerdIcons,
   resolveColorDepth,
   resolveIconMode,
   resolveMotion,
+  setIconMode,
   to256,
   toMonochrome,
 } from "../../src/ui/design"
@@ -30,6 +35,25 @@ describe("design capabilities", () => {
     expect(resolveIconMode("ascii", { NERD_FONT: "1" })).toBe("ascii")
     expect(icon("branch", "ascii")).toBe("git:")
     expect(icon("branch", "nerd")).toBe("\ue725")
+  })
+
+  test("every icon has a portable fallback and a Nerd Font variant", () => {
+    for (const name of Object.keys(iconCatalog) as (keyof typeof iconCatalog)[]) {
+      expect(asciiIcons[name].length).toBeGreaterThan(0)
+      expect(asciiIcons[name]).not.toMatch(/[\ue000-\uf8ff]/)
+      expect(nerdIcons[name].length).toBeGreaterThan(0)
+    }
+    // The portable set is the upstream appearance; only the Nerd variant changes.
+    expect(asciiIcons.check).toBe("✓")
+    expect(nerdIcons.check).toBe("\uf00c")
+  })
+
+  test("the active mode is terminal-wide and defaults to the safe fallback", () => {
+    setIconMode("nerd")
+    expect(activeIconMode()).toBe("nerd")
+    expect(icon("check")).toBe("\uf00c")
+    setIconMode("ascii")
+    expect(icon("check")).toBe("✓")
   })
 
   test("maps reduced motion from an explicit setting or the environment", () => {
