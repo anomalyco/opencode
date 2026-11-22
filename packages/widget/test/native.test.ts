@@ -1,34 +1,30 @@
 import { expect, test } from "bun:test"
+import { Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
-import { FUNCTION } from "../script/conformance.js"
-import { program } from "../src/index.js"
-import { nativeTree } from "./native-tree.js"
+import { DrawOutput, LiveWidget, type LiveMessage, Node, program, step, StepOutput } from "../src/index.js"
+import { prune } from "../src/session.js"
 
-// Native mode (specs/v2/widgets.md, Native hosts) against the prelude's own tree building: the same steps, events and
-// live posts, with `native-tree.ts` as the host. psychoscript 0.2.1 has no `translate.functions: "mark"`, so the
-// program marks functions itself (`__mark`) before they cross.
-const mark = `
-const __mark = (value) =>
-  typeof value === "function"
-    ? ${JSON.stringify(FUNCTION)}
-    : Array.isArray(value)
-      ? value.map(__mark)
-      : value && typeof value === "object"
-        ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, __mark(item)]))
-        : value
-`
+// The TypeScript runtime is a native host (specs/v2/widgets.md, Native hosts). These hold its steps and live runs to
+// the prelude building trees itself, which a host without `translate.functions: "mark"` still gets: the same outputs,
+// events and posts, functions where none may go included.
 
-const isFunction = (value: unknown) => value === FUNCTION
-const wire = (value: unknown) => JSON.stringify(value, (_, item) => (item === FUNCTION ? undefined : item))
-
-const step = async (source: string, input: unknown, native: boolean) => {
+// A step with the prelude building the tree, read as `step` reads one.
+const scripted = async (source: string, input: unknown) => {
   const result = await Runtime.make({ limits: { timeoutMs: 5000 } }).execute(
-    program(source) + mark + `\nreturn JSON.stringify(__mark(__widget_step(${JSON.stringify(input)}, ${native})))`,
+    program(source) + `\nreturn __widget_step(${JSON.stringify(input)})`,
   )
-  if (!result.ok) throw new Error(result.error.message)
-  const output = JSON.parse(result.value as string)
-  return native ? { ...output, view: JSON.parse(wire(nativeTree(output.view, isFunction).view)) } : output
+  if (!result.ok) return { error: result.error.message }
+  const value = result.value as Record<string, unknown>
+  const warnings: string[] = []
+  const output = Schema.decodeUnknownSync(StepOutput)({ ...value, view: prune(value.view, warnings) })
+  return warnings.length === 0 ? output : { ...output, warnings }
 }
+
+const native = (source: string, input: unknown) =>
+  step(program(source), input as Parameters<typeof step>[1], { timeoutMs: 5000 }).then(
+    (output) => output,
+    (error: Error) => ({ error: error.message }),
+  )
 
 const ids = (node: unknown): string[] =>
   !node || typeof node !== "object"
@@ -52,11 +48,12 @@ test("a native step takes every event as the prelude's own table does", async ()
     ui.select(["x", "y"], { onChange: (state, value) => ({ hit: "select " + value }) }),
     ui.canvas({ key: "c", height: 1, onPointer: (state, p) => ({ hit: "pointer " + p.kind }) }),
     ui.card({ key: "c", onPress: () => send("card", { state: { hit: "card" } }) }, [ui.button("done", { onPress: () => submit("bye") })]),
+    ui.button("throws", { onPress: () => { throw new Error("boom") } }),
   ])
 }`
-  const init = await step(source, { phase: "init", data: null }, false)
-  expect(await step(source, { phase: "init", data: null }, true)).toEqual(init)
-  const events = [...ids(init.view), "0/:k~3", "0/9", "", "x"].flatMap((id) =>
+  const init = await scripted(source, { phase: "init", data: null })
+  expect(await native(source, { phase: "init", data: null })).toEqual(init)
+  const events = [...ids("view" in init ? init.view : undefined), "0/:k~3", "0/9", "", "x"].flatMap((id) =>
     [
       { type: "press" },
       { type: "change", value: 1 },
@@ -68,56 +65,65 @@ test("a native step takes every event as the prelude's own table does", async ()
   expect(events.length).toBeGreaterThan(50)
   for (const event of events) {
     const input = { phase: "event", data: null, state: { hit: "none" }, event }
-    expect({ event, output: await step(source, input, true) }).toEqual({
-      event,
-      output: await step(source, input, false),
-    })
+    expect({ event, output: await native(source, input) }).toEqual({ event, output: await scripted(source, input) })
   }
 }, 60_000)
 
-// A live run on a host that records posts: native, it walks renders with `nativeTree`, answers whether they have
-// handlers and maps draw keys to ids; otherwise it takes the prelude's posts as they are.
-const live = async (source: string, events: ReadonlyArray<unknown>, native: boolean, timeoutMs = 5000) => {
-  const posts: unknown[] = []
+test("a native step leaves out functions where no handler goes, as a step output does", async () => {
+  const source = `function init() {
+  return { f: () => 1, list: [1, () => 2], nested: { g: () => 3, n: 4 } }
+}
+function view(state) {
+  return ui.column({ onHover: () => 1 }, [ui.text("t", { extra: { f: () => 1, n: 1 } }), ui.button("b", { onPress: () => send({ f: () => 1, v: 1 }) })])
+}`
+  const init = await native(source, { phase: "init", data: null })
+  expect(init).toEqual(await scripted(source, { phase: "init", data: null }))
+  expect(init).toMatchObject({ state: { list: [1, null], nested: { n: 4 } } })
+  const input = { phase: "event", data: null, state: { n: 1 }, event: { id: "0/1", type: "press" } }
+  const pressed = await native(source, input)
+  expect(pressed).toMatchObject({ send: { value: { v: 1 } } })
+  expect(pressed).toEqual(await scripted(source, input))
+})
+
+// A live run with the prelude building trees, on a host that takes posts as they are, read as `LiveWidget` reads
+// them. Its inbox holds `events`; once they are taken, `receive` never resolves, so a run that keeps waiting times out.
+const scriptedLive = async (source: string, events: ReadonlyArray<unknown>) => {
+  const messages: unknown[] = []
   const inbox = events.map((event) => ({ type: "event", event }))
-  const canvases = { current: {} as ReturnType<typeof nativeTree>["canvases"] }
-  const post = (text: string) => {
-    const message = JSON.parse(text)
-    if (!native) return void posts.push(message)
-    if (message.type === "render") {
-      const tree = nativeTree(message.node, isFunction)
-      canvases.current = tree.canvases
-      posts.push({ type: "render", node: JSON.parse(wire(tree.view)) })
-      return Object.keys(tree.handlers).length > 0
-    }
-    if (message.type === "draw") {
-      const canvas = canvases.current[message.key]
-      if (canvas === undefined) throw new Error('No canvas with key "' + message.key + '" in the rendered view')
-      if (canvas.wgsl) throw new Error('Canvas "' + message.key + '" is drawn by its wgsl; it takes no draw commands')
-      return void posts.push({ type: "draw", id: canvas.id, commands: message.commands })
-    }
-    posts.push(message)
+  const read = (message: Record<string, unknown>): unknown => {
+    if (message.type === "render")
+      return { type: "render", node: Schema.decodeUnknownSync(Node)(prune(message.node, [])) }
+    if (message.type === "draw")
+      return {
+        type: "draw",
+        id: message.id,
+        commands: Schema.decodeUnknownSync(DrawOutput)({ commands: message.commands }).commands,
+      }
+    if (message.type === "send") return { type: "send", value: message.value ?? null, wake: message.wake !== false }
+    return message
   }
   const result = await Runtime.make({
-    limits: { timeoutMs },
+    limits: { timeoutMs: 2000 },
     globals: () => ({
       __input: Host.fn(() => ({ data: null })),
-      __test: {
-        post: Host.fn(([text]) => post(text as string)),
-        // Never resolves once the inbox is empty: the run then times out instead of returning.
+      __host: {
+        post: Host.fn(([message]) => void messages.push(read(message as Record<string, unknown>))),
         receive: Host.fn(() => (inbox.length > 0 ? Promise.resolve(inbox.shift()) : new Promise(() => {})), {
           type: "async",
         }),
       },
     }),
-  }).execute(
-    program(source) +
-      mark +
-      `
-      const __host = { post: (message) => __test.post(JSON.stringify(__mark(message))), receive: () => __test.receive() }
-      return await __widget_live(__input(), ${native})`,
-  )
-  return { ok: result.ok, error: result.ok ? undefined : result.error.message, posts, left: inbox.length }
+  }).execute(program(source) + "\nreturn await __widget_live(__input())")
+  return { messages, ended: result.ok ? "return" : result.error.message }
+}
+
+const nativeLive = async (source: string, events: ReadonlyArray<unknown>) => {
+  const messages: unknown[] = []
+  const widget = LiveWidget.start(program(source), null, { onMessage: (message: LiveMessage) => messages.push(message) })
+  events.forEach((event) => widget.event(event as Parameters<LiveWidget["event"]>[0]))
+  const end = await Promise.race([widget.done, Bun.sleep(1000).then(() => undefined)])
+  await widget.stop()
+  return { messages, ended: end?.type === "error" ? end.error.message : (end?.type ?? "waiting") }
 }
 
 test("a native live run renders, draws, takes events and ends as the prelude's own table does", async () => {
@@ -131,16 +137,20 @@ test("a native live run renders, draws, takes events and ends as the prelude's o
         ui.row({ key: "hud" }, [ui.text("n " + count), ui.button("+", { key: "plus", onPress: press })]),
       ]),
     )
+  const tryTo = (run) => {
+    try {
+      run()
+    } catch (error) {
+      widget.send(error.name + ": " + error.message)
+    }
+  }
   const press = () => {
     count++
-    widget.draw("scene", ui.draw().rect(0, 0, count, 1, "red"))
-    for (const key of ["nope", "gpu", 3]) {
-      try {
-        widget.draw(key, [])
-      } catch (error) {
-        widget.send(error.message)
-      }
-    }
+    widget.draw("scene", ui.draw().rect(0, 0, count, 1, "accent"))
+    for (const key of ["nope", "gpu", 3]) tryTo(() => widget.draw(key, []))
+    tryTo(() => widget.draw("scene", [["rect", 0, 0, 1, 1, { fill: () => 1 }]]))
+    tryTo(() => widget.send({ f: () => 1 }))
+    tryTo(() => widget.render(ui.text("x", { extra: [() => 1] })))
     if (count < 2) return show()
     widget.render(ui.text("done " + count))
   }
@@ -152,19 +162,17 @@ test("a native live run renders, draws, takes events and ends as the prelude's o
     { id: "0/:hud/:nope", type: "press" },
     { id: "0/:hud/:plus", type: "press" },
   ]
-  const expected = await live(source, events, false)
-  expect(expected).toMatchObject({ ok: true, left: 0 })
-  expect(expected.posts.length).toBe(12)
-  expect(await live(source, events, true)).toEqual(expected)
+  const expected = await scriptedLive(source, events)
+  expect(expected.ended).toBe("return")
+  expect(expected.messages.length).toBe(18)
+  expect(await nativeLive(source, events)).toEqual(expected)
 })
 
 test("a native live run stays while its view has handlers", async () => {
   const source = `async function main() {
   widget.render(ui.button("go", { onPress: () => widget.render(ui.text("bye")) }))
 }`
-  const waiting = await live(source, [], true, 500)
-  expect(waiting.ok).toBe(false)
-  expect(waiting.error).toContain("timed out")
-  expect(await live(source, [{ id: "0", type: "press" }], true)).toMatchObject({ ok: true, left: 0 })
-  expect(await live(`async function main() { widget.render(ui.button("go")) }`, [], true)).toMatchObject({ ok: true })
+  expect((await nativeLive(source, [])).ended).toBe("waiting")
+  expect((await nativeLive(source, [{ id: "0", type: "press" }])).ended).toBe("return")
+  expect((await nativeLive(`async function main() { widget.render(ui.button("go")) }`, [])).ended).toBe("return")
 })

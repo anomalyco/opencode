@@ -14,6 +14,7 @@ import {
   type Transport,
 } from "./fetch.js"
 import type { Capabilities } from "./widget-template.js"
+import { type Tree, tree, unmark } from "./tree.js"
 
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
 export type LiveFrame = Omit<Frame, "id">
@@ -110,7 +111,8 @@ export interface LiveOptions {
 
 /**
  * A running live widget (specs/v2/widgets-live.md) on the TypeScript interpreter: the reference host for client authors
- * and the test harness for live widget templates. Feed it client input with `event` and `frame`, `pause` and `resume` it as
+ * and the test harness for live widget templates. It is a native host (specs/v2/widgets.md, Native hosts): it builds
+ * each rendered view's tree and maps `draw` keys to canvas ids itself. Feed it client input with `event` and `frame`, `pause` and `resume` it as
  * the widget leaves and comes back into view, and read the last `view` and canvas `drawings`.
  */
 export interface LiveWidget {
@@ -137,7 +139,7 @@ export interface LiveWidget {
 }
 
 export const LiveWidget = {
-  /** Starts `<program>\nreturn await __widget_live(__input())` with `__input()` = `{ data }`. */
+  /** Starts `<program>\nreturn await __widget_live(__input(), true)` with `__input()` = `{ data }`. */
   start: (program: string, data: unknown, options?: LiveOptions): LiveWidget => {
     const clock = options?.clock ?? realClock
     const busyMs = options?.busyMs ?? 50
@@ -166,6 +168,8 @@ export const LiveWidget = {
       busy: undefined as ReturnType<typeof setTimeout> | undefined,
       window: { start: started, posts: 0, warned: false },
       fetches: { inFlight: 0, starts: [] as number[] },
+      // The last rendered view's tree, for `draw` keys.
+      tree: undefined as Tree | undefined,
     }
     // Inputs and fetch results that arrive while paused, released in order on resume.
     const held: Array<() => void> = []
@@ -330,8 +334,34 @@ export const LiveWidget = {
       }
     }
 
-    const post = (message: unknown) => {
+    // A post as the program made it, as it was when the prelude built trees itself: a render's tree built, a draw's key
+    // turned into its canvas's id, no functions. For a render, also whether its view has handlers, which `post`
+    // returns. Throws what the program would have got: an unknown canvas key, a function where none may go.
+    const native = (message: unknown): { message: unknown; handlers?: boolean } => {
+      if (isRecord(message) && message.type === "render") {
+        const { node, ...rest } = message
+        const built = tree(node, POSTED)
+        current.tree = built
+        return { message: { ...(unmark(rest, POSTED) as object), node: built.view }, handlers: built.handlers.size > 0 }
+      }
+      if (!isRecord(message) || message.type !== "draw" || !("key" in message))
+        return { message: unmark(message, POSTED) }
+      const { key, ...rest } = message
+      const canvas = current.tree?.canvases.get(String(key))
+      if (canvas === undefined) throw new Error('No canvas with key "' + key + '" in the rendered view')
+      if (canvas.wgsl) throw new Error('Canvas "' + key + '" is drawn by its wgsl; it takes no draw commands')
+      return { message: unmark({ type: "draw", id: canvas.id, ...rest }, POSTED) }
+    }
+
+    const post = (args: ReadonlyArray<unknown>) => {
+      const { message, handlers } = native(args[0])
+      checked("post", args, 1)
       if (current.ended) return
+      deliverPost(message)
+      return handlers
+    }
+
+    const deliverPost = (message: unknown) => {
       const accepted = accept(message)
       if (!accepted) return
       options?.onMessage?.(accepted)
@@ -445,15 +475,22 @@ export const LiveWidget = {
       globals: () => ({
         __input: Host.fn(() => ({ data })),
         __host: {
-          post: Host.fn(([message]) => post(message)),
-          receive: Host.fn((_, call) => receive(call.signal), { type: "async", idempotent: true }),
-          sleep: Host.fn(([ms], call) => sleep(ms, call.signal), { type: "async", idempotent: true }),
-          now: Host.fn(() => now()),
-          fetch: Host.fn(([request], call) => fetch(request, call.signal), { type: "async" }),
+          post: Host.fn((args) => post(args)),
+          receive: Host.fn((args, call) => (checked("receive", args), receive(call.signal)), {
+            type: "async",
+            idempotent: true,
+          }),
+          sleep: Host.fn((args, call) => sleep(checked("sleep", args)[0], call.signal), {
+            type: "async",
+            idempotent: true,
+          }),
+          now: Host.fn((args) => (checked("now", args), now())),
+          fetch: Host.fn((args, call) => fetch(checked("fetch", args)[0], call.signal), { type: "async" }),
         },
       }),
+      translate: { functions: "mark" },
     })
-      .execute(program + "\nreturn await __widget_live(__input())", { signal: controller.signal })
+      .execute(program + "\nreturn await __widget_live(__input(), true)", { signal: controller.signal })
       .then(
         (result) => {
           if (result.ok) return end({ type: "return" })
@@ -467,6 +504,12 @@ export const LiveWidget = {
     return widget
   },
 }
+
+// Host calls' arguments cross with markers, for a render's handlers; anywhere else a function fails the call, as
+// it does without `"mark"`. `checked` gives the arguments from `from` on, throwing for a function.
+const POSTED = "Argument 1 to __host.post"
+const checked = (name: string, args: ReadonlyArray<unknown>, from = 0) =>
+  args.map((arg, index) => (index < from ? arg : unmark(arg, `Argument ${index + 1} to __host.${name}`)))
 
 const decodeNode = Schema.decodeUnknownResult(Node)
 const decodeDraw = Schema.decodeUnknownResult(DrawOutput)

@@ -10,6 +10,7 @@ import {
   type WidgetEvent,
   types,
 } from "./node.js"
+import { tree, unmark } from "./tree.js"
 
 /** The most a step may run; clients may pass a smaller `timeoutMs`. */
 export const TIMEOUT_MS = 250
@@ -26,15 +27,16 @@ export class StepError extends Schema.TaggedError<StepError>()("Widget.StepError
 }) {}
 
 /**
- * Runs one step of `program` (see `program()`) on the stock interpreter with `__input` as the only host global.
- * Nodes of unknown types are dropped from the view and reported in `warnings`. Rejects with a `StepError`.
+ * Runs one step of `program` (see `program()`) on the stock interpreter with `__input` as the only host global, as a
+ * native host (specs/v2/widgets.md, Native hosts): it builds the view's tree itself. Nodes of unknown types are dropped
+ * from the view and reported in `warnings`. Rejects with a `StepError`.
  */
 export async function step(
   program: string,
   input: Exclude<StepInput, DrawInput>,
   options?: StepOptions,
 ): Promise<StepOutput> {
-  const value = await run(program, input, options?.timeoutMs ?? TIMEOUT_MS)
+  const value = native(await run(program, input, options?.timeoutMs ?? TIMEOUT_MS, true))
   const warnings: string[] = []
   const decoded = decodeOutput(isRecord(value) ? { ...value, view: prune(value.view, warnings) } : value)
   if (Result.isFailure(decoded)) throw new StepError({ kind: "invalid", message: decoded.failure.message })
@@ -57,11 +59,25 @@ export async function draw(
   return decoded.success
 }
 
-async function run(program: string, input: StepInput, timeoutMs: number) {
+// The step output with the view's tree built and every other function marker gone, as the prelude's own tree
+// building and the interpreter's result would leave it.
+function native(value: unknown) {
+  if (!isRecord(value)) return unmark(value)
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([name, item]) => {
+      const out = name === "view" ? tree(item).view : unmark(item)
+      return out === undefined ? [] : [[name, out]]
+    }),
+  )
+}
+
+// A draw has no handlers, so it runs without markers.
+async function run(program: string, input: StepInput, timeoutMs: number, marked = false) {
   const result = await Runtime.make({
     limits: { timeoutMs },
+    translate: marked ? { functions: "mark" } : undefined,
     globals: () => ({ __input: Host.fn(() => input) }),
-  }).execute(program + "\nreturn __widget_step(__input())")
+  }).execute(program + (marked ? "\nreturn __widget_step(__input(), true)" : "\nreturn __widget_step(__input())"))
   if (!result.ok)
     throw new StepError({
       kind: result.error.kind === "TimeoutExceeded" ? "timeout" : "error",

@@ -170,8 +170,8 @@ error inline. The first `init` step failing shows an error card with the message
 
 Building the tree clients get costs a JavaScript pass over every node of every view, which is slow on the Rust
 interpreter. A **native host** does it instead, natively, while it converts or encodes the output (Rust hosts:
-psychoscript-mobile's encoder, Rune's reader, the web host). Clients see the same views, ids and handler dispatch
-either way; the TypeScript runtime (`@opencode/widget`) is not a native host.
+psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript runtime (`@opencode/widget`'s
+`step`, `WidgetSession` and `LiveWidget`). Clients see the same views, ids and handler dispatch either way.
 
 - **Signal.** A native host passes `true` as the entry's second argument: `return __widget_step(__input(), true)` (or
   `__widget_emit(__widget_step(__input(), true))`, `widgets-binary.md`) and `return await __widget_live(__input(), true)`.
@@ -201,7 +201,11 @@ either way; the TypeScript runtime (`@opencode/widget`) is not a native host.
      (`1.5`, `1e+21`, `0.30000000000000004`, `0` for `-0`, `NaN`, `Infinity`), `true` and `false` as words. A key it
      can't encode (a lone surrogate) is a program error, as in the prelude.
   5. A marker anywhere else, and an `undefined` prop, go as they do in a step output: left out of an object, `null` in
-     an array.
+     an array. So do markers in the rest of a step output (`state`, `submit`, `send`).
+- **Functions where none may go.** In a live post, a marker anywhere but the props 2 leaves out of a node (`key`, `id`,
+  `pointer`, the handler props) fails the call as a function in a host call's argument does without the option: the
+  host throws its runtime's `TypeError` (`Argument 1 to __host.post contains a function, which cannot be passed to the
+  host.`). The same goes for the other `__host` functions' arguments.
 - **Handlers.** An id has a handler when its node's handler prop is a marker. The host keeps, for the last view, the
   canvas ids by key (`String(key)`, the first such canvas) and whether any id has a handler. The prelude finds an
   event's handler by following the id's path through the view as built (the rebuilt view in a step, the last rendered
@@ -219,7 +223,7 @@ either way; the TypeScript runtime (`@opencode/widget`) is not a native host.
   widget template `source`, the step `input`, the `view` clients get (as JSON), the `handlers` (id → event) and the
   `canvases` (key → id), from the prelude's own tree building, and `built`, the native step output's view with each
   function as the string `"$function"`. A native host runs `prelude + "\n" + source` on `input` and must give the same
-  values; `built` tests its walk alone. `packages/widget/test/native-tree.ts` is the walk in TypeScript.
+  values; `built` tests its walk alone. `packages/widget/src/tree.ts` is the walk in TypeScript.
 
 ## Events
 

@@ -2,14 +2,14 @@ import { expect, test } from "bun:test"
 import { Glob } from "bun"
 import path from "node:path"
 import { Runtime } from "psychoscript"
-import { built, FUNCTION, record } from "../script/conformance.js"
+import { native, record, written } from "../script/conformance.js"
 import { program } from "../src/index.js"
-import { nativeTree } from "./native-tree.js"
+import { tree } from "../src/tree.js"
 
 // The wire conformance fixtures: every host that builds view trees must turn each fixture's program and input into
-// exactly its `view`, `handlers` and `canvases`. This checks the TypeScript runtime, which builds them in the prelude,
-// and native mode: the prelude's view as built (`built`), the walk of `native-tree.ts` over it, and the prelude finding
-// handlers by their ids' paths.
+// exactly its `view`, `handlers` and `canvases`. This checks both modes of the TypeScript runtime: the prelude building
+// trees itself, and native mode, where the prelude hands over the view as built (`built`), `src/tree.ts` builds the
+// tree, and the prelude finds handlers by their ids' paths.
 const dir = path.resolve(import.meta.dir, "fixtures/wire")
 const files = [...new Glob("*.json").scanSync(dir)].toSorted()
 
@@ -66,16 +66,12 @@ for (const file of files) {
 
   test(`wire fixture ${file}, native mode`, async () => {
     const fixture = await Bun.file(path.join(dir, file)).json()
-    expect(JSON.stringify(await built(fixture.source, fixture.input))).toBe(JSON.stringify(fixture.built))
-    const tree = nativeTree(fixture.built, (value) => value === FUNCTION)
-    // A marker left anywhere else goes as a function does in a step output: left out, or null in an array.
-    expect(JSON.stringify(tree.view, (_, value) => (value === FUNCTION ? undefined : value))).toBe(
-      JSON.stringify(fixture.view),
-    )
-    expect(tree.handlers).toEqual(fixture.handlers)
-    expect(Object.fromEntries(Object.entries(tree.canvases).map(([key, canvas]) => [key, canvas.id]))).toEqual(
-      fixture.canvases,
-    )
+    const view = await native(fixture.source, fixture.input)
+    expect(JSON.stringify(written(view))).toBe(JSON.stringify(fixture.built))
+    const built = tree(view)
+    expect(JSON.stringify(built.view)).toBe(JSON.stringify(fixture.view))
+    expect([...built.handlers].toSorted()).toEqual(Object.keys(fixture.handlers).toSorted())
+    expect(Object.fromEntries([...built.canvases].map(([key, canvas]) => [key, canvas.id]))).toEqual(fixture.canvases)
     for (const [id, same, table, found] of await handlers(fixture.source, fixture.input)) {
       expect({ id, same }).toEqual({ id, same: true })
       expect({ id, found }).toEqual({ id, found: table })

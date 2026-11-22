@@ -4,7 +4,7 @@
 // against these files. Run `bun run script/conformance.ts` only to regenerate them from a
 // prelude known to be right.
 import path from "node:path"
-import { Runtime } from "psychoscript"
+import { Host, Runtime } from "psychoscript"
 import { builtins, program } from "../src/index.js"
 import { examples } from "../test/fixtures/diagrams.js"
 import { cases } from "../test/fixtures/wire-cases.js"
@@ -61,24 +61,21 @@ export const record = async (source: string, input: { phase: "init"; data: unkno
   }
 }
 
-// The step's output view in native mode, with each function as `FUNCTION` (holes and undefined items become null).
-export const built = async (source: string, input: { phase: "init"; data: unknown }) => {
-  const result = await Runtime.make({ limits: { timeoutMs: 10_000 } }).execute(
-    program(source) +
-      `
-      const __mark = (value) =>
-        typeof value === "function"
-          ? ${JSON.stringify(FUNCTION)}
-          : Array.isArray(value)
-            ? value.map(__mark)
-            : value && typeof value === "object"
-              ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, __mark(item)]))
-              : value
-      return JSON.stringify(__mark(__widget_step(${JSON.stringify(input)}, true).view))`,
+// The step's output view in native mode, as it crosses under `translate: { functions: "mark" }`.
+export const native = async (source: string, input: unknown) => {
+  const result = await Runtime.make({ limits: { timeoutMs: 10_000 }, translate: { functions: "mark" } }).execute(
+    program(source) + `\nreturn __widget_step(${JSON.stringify(input)}, true)`,
   )
   if (!result.ok) throw new Error(result.error.message)
-  return JSON.parse(result.value as string) as unknown
+  return (result.value as { view: unknown }).view
 }
+
+// A view as built with each marker as `FUNCTION`, as JSON (holes and undefined items are null).
+export const written = (view: unknown): unknown =>
+  JSON.parse(JSON.stringify(view, (_, value) => (value === Host.functionMarker ? FUNCTION : value)))
+
+export const built = async (source: string, input: { phase: "init"; data: unknown }) =>
+  written(await native(source, input))
 
 export const fixtures = () => [
   ...builtins

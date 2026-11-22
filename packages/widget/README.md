@@ -38,7 +38,9 @@ A widget template with `mode: "live"` defines `async function main(data)` and ru
 pausing and budgets). The prelude builds the program-facing `widget` object on them; model guidance with examples is
 in `docs/live-guidance.md`.
 
-`LiveWidget` is the reference host on the TypeScript interpreter, used by the tests (the TUI doesn't run live widgets):
+`LiveWidget` is the reference host on the TypeScript interpreter, used by the tests (the TUI doesn't run live widgets).
+Like `step` and `WidgetSession`, it is a native host (the spec's Native hosts): it builds view trees itself, from
+functions crossing as markers.
 
 ```ts
 import { LiveWidget, ManualClock, program } from "@opencode/widget"
