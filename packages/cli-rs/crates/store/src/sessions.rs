@@ -369,34 +369,15 @@ impl State {
     /// before the first one seen twice.
     pub fn root<'a>(&'a self, id: &'a (impl AsRef<str> + ?Sized)) -> &'a str {
         let parent = |id: &str| self.session(id).and_then(|info| info.parent_id.as_ref()).map(SessionID::as_str);
-        // Brent's cycle detection: `hare` walks while `tortoise` waits at each power of two, so a cycle of
-        // length `length` shows as `hare` meeting `tortoise`, with no memory of the walk.
-        let start = id.as_ref();
-        let mut tortoise = start;
-        let Some(mut hare) = parent(start) else { return start };
-        let (mut power, mut length) = (1_usize, 1_usize);
-        while hare != tortoise {
-            if power == length {
-                tortoise = hare;
-                power *= 2;
-                length = 0;
+        // Quadratic in the family's depth, which is the subagent nesting and shallow.
+        let (start, mut current, mut depth) = (id.as_ref(), id.as_ref(), 0);
+        loop {
+            let Some(next) = parent(current) else { return current };
+            if std::iter::successors(Some(start), |&id| parent(id)).take(depth + 1).any(|seen| seen == next) {
+                return current;
             }
-            let Some(next) = parent(hare) else { return hare };
-            hare = next;
-            length += 1;
+            (current, depth) = (next, depth + 1);
         }
-        // Two walkers `length` apart meet at the first repeated session; the leading one's previous step is
-        // the last session before it. Inside the cycle every session has a parent.
-        let step = |id| parent(id).unwrap_or(id);
-        let (mut tortoise, mut hare, mut before) = (start, start, start);
-        for _ in 0..length {
-            (before, hare) = (hare, step(hare));
-        }
-        while tortoise != hare {
-            tortoise = step(tortoise);
-            (before, hare) = (hare, step(hare));
-        }
-        before
     }
 
     /// Every known session of the family of `id`.
