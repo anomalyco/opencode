@@ -194,8 +194,15 @@ impl State {
         self.remove_session(id);
     }
 
+    /// Marks the session of a `SessionNotFoundError` deleted (`evictMissing`).
+    pub(crate) fn evict_missing(&mut self, error: &Error) {
+        if let Some(id) = session_not_found(error) {
+            self.mark_deleted(&id);
+        }
+    }
+
     /// True when `id` was deleted after the epoch a read started at.
-    pub(crate) fn deleted_since(&self, id: &SessionID, started: u64) -> bool {
+    pub(crate) fn deleted_since(&self, id: &(impl AsRef<str> + ?Sized), started: u64) -> bool {
         self.sessions.get(id).and_then(|session| session.life.deleted()).unwrap_or(0) > started
     }
 

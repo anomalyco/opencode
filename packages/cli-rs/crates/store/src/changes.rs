@@ -310,7 +310,11 @@ impl State {
     }
 
     /// Records message `message` of `session` as changed in place.
-    pub(crate) fn message_changed(&mut self, session: &SessionID, message: &(impl AsRef<str> + ?Sized)) {
+    pub(crate) fn message_changed(
+        &mut self,
+        session: &(impl AsRef<str> + ?Sized),
+        message: &(impl AsRef<str> + ?Sized),
+    ) {
         let Some(key) = self.sessions.key(session) else { return };
         let transcript = self.sessions[key].transcript.as_ref();
         if let Some(message) = transcript.and_then(|transcript| transcript.key(message.as_ref())) {
@@ -361,14 +365,5 @@ impl State {
             }
             _ => self.touch(owner, Touched::FORMS),
         }
-    }
-}
-
-impl Data {
-    /// Hands what changed since the last take to the one consumer, in `into`, and returns the revision of the last
-    /// flush. `into`'s earlier changes go: the consumer is done with them. The records the changes name stay marked
-    /// until the take, so the sweep before it frees none the consumer reads.
-    pub fn take_changes(&self, into: &mut Dirty) -> u64 {
-        self.lock().take(into)
     }
 }

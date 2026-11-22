@@ -164,6 +164,11 @@ impl State {
         self.read_locations.get_index(key.0 as usize)
     }
 
+    /// The location of a read's key: interned locations stay.
+    pub(crate) fn read_location(&self, key: LocationKey) -> Location {
+        self.location_at(key).expect("an interned location").clone()
+    }
+
     /// The key of `read`, while anything of it is kept.
     fn find_key(&self, read: Read) -> Option<ReadKey> {
         let location = |location| self.location_key(location);

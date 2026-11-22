@@ -10,15 +10,22 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use futures_util::FutureExt;
 use futures_util::future::{BoxFuture, Shared};
 use opencode_api::client::Client;
-use opencode_api::generated::{SessionID, SessionInboxCompaction};
+use opencode_api::generated::{SessionInboxCompaction, V2Event};
 use opencode_api::kinds::EventKinds;
 use opencode_util::lock;
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
 use tokio::task::AbortHandle;
 
-use crate::reads::{Read, ReadKey, Start};
-use crate::state::{Error, Options, Overlay, State, is_tag, session_not_found};
+use crate::changes::Dirty;
+use crate::core::{Completion, Ticket};
+use crate::reads::{Read, Start};
+use crate::state::{Error, Options, State, is_tag, session_not_found};
+
+mod requests;
+
+use requests::Fetch;
+pub use requests::{Gate, LoadMore, Prompt};
 
 /// How many [`Data::signals`] events a slow receiver may fall behind. One batch may hold hundreds of a listened type
 /// (a burst of `filesystem.changed`).
@@ -44,7 +51,7 @@ pub(crate) struct Inner {
     store: Mutex<Store>,
     revision: watch::Sender<u64>,
     /// The events views act on themselves, sent after their batch is applied.
-    pub(crate) signals: broadcast::Sender<Arc<opencode_api::generated::V2Event>>,
+    pub(crate) signals: broadcast::Sender<Arc<V2Event>>,
     /// How many [`Listening`]s want each event kind on [`Data::signals`], by `kind as usize`.
     pub(crate) listened: [AtomicUsize; opencode_api::generated::EventKind::COUNT],
     /// How many [`Listening`]s want each name of the kinds a listener names (`EventKind::named`).
@@ -98,13 +105,13 @@ impl Data {
     /// Stops follow-up reads, as disposing the TS owner does.
     pub fn dispose(&self) {
         self.inner.disposed.store(true, Ordering::SeqCst);
-        let mut store = self.lock();
-        let Store { state, tasks } = &mut *store.guard;
-        for (_, token) in state.settling.drain() {
-            if let Some(timer) = tasks.timers.remove(&token) {
-                timer.abort();
+        self.write_tasks(|state, tasks| {
+            for (_, token) in state.settling.drain() {
+                if let Some(timer) = tasks.timers.remove(&token) {
+                    timer.abort();
+                }
             }
-        }
+        });
     }
 
     /// Reads the state. Keep `f` short: it holds the store lock. A `read` inside `f` on the same thread reuses the
@@ -141,7 +148,7 @@ impl Data {
     /// Receives the events of each type a [`Listening`] wants, for the views that handle one themselves (`tui.*`,
     /// `session.deleted`) and the plugins' `on_event`, after the store applied their batch. Streaming deltas are never
     /// sent ([`DeltaListening::take`] has them). A receiver that falls behind skips the oldest.
-    pub fn signals(&self) -> broadcast::Receiver<Arc<opencode_api::generated::V2Event>> {
+    pub fn signals(&self) -> broadcast::Receiver<Arc<V2Event>> {
         self.inner.signals.subscribe()
     }
 
@@ -173,7 +180,7 @@ impl Data {
 
     /// Keeps `events`, one batch, for the [`DeltaListening`]s, all under one lock so a take gets all or none of
     /// them; whether it kept any.
-    pub(crate) fn keep_deltas<'a>(&self, events: impl Iterator<Item = &'a opencode_api::generated::V2Event>) -> bool {
+    pub(crate) fn keep_deltas<'a>(&self, events: impl Iterator<Item = &'a V2Event>) -> bool {
         let mut events = events.peekable();
         if self.inner.delta_listeners.load(Ordering::SeqCst) == 0 || events.peek().is_none() {
             return false;
@@ -196,6 +203,13 @@ impl Data {
     /// Wakes [`Data::subscribe`] with the revision it has, for deltas kept without a change.
     pub(crate) fn wake_deltas(&self) {
         self.inner.revision.send_modify(|_| {});
+    }
+
+    /// Hands what changed since the last take to the one consumer, in `into`, and returns the revision of the last
+    /// flush. `into`'s earlier changes go: the consumer is done with them. The records the changes name stay marked
+    /// until the take, so the sweep before it frees none the consumer reads.
+    pub fn take_changes(&self, into: &mut Dirty) -> u64 {
+        self.lock().take(into)
     }
 
     /// Mutates the state and flushes its changes unless a batch is open.
@@ -286,7 +300,7 @@ impl Data {
             return;
         }
         if let Some(id) = session_not_found(error) {
-            self.write(|state| state.mark_deleted(&id));
+            self.complete(Completion::Missing(id), |_| {});
             return;
         }
         if is_tag(error, "MessageNotFoundError") {
@@ -299,130 +313,64 @@ impl Data {
         }
     }
 
-    /// Runs `load` once per key until invalidated (`sync.run`).
-    pub(crate) fn sync_run<F>(&self, read: Keyed, load: impl FnOnce(Data) -> F + Send + 'static) -> Task<()>
-    where
-        F: Future<Output = Result<(), Error>> + Send + 'static,
-    {
-        self.sync_start(read, |_, _| (), move |data, ()| load(data))
-    }
-
-    /// Locks the state and finds the key of `read`, for [`Data::sync_start`].
-    pub(crate) fn keyed(&self, read: Read) -> Keyed<'_> {
-        let mut state = self.lock();
-        let key = state.read_key(read);
-        (state, key)
-    }
-
-    /// [`Data::sync_run`] with a synchronous start, as the part of a TS load before its first
-    /// `await`. `begin` runs under the store lock before this returns, or, for a reload that waits
-    /// for the load it replaces, under the lock right after that wait. So no event after the call
-    /// can miss what it registers (an overtake log, the deletion epoch). `load` builds the read
-    /// from what `begin` returned, outside the lock.
-    pub(crate) fn sync_start<R, F>(
-        &self,
-        (mut store, key): Keyed,
-        begin: impl FnOnce(&mut State, ReadKey) -> R + Send + 'static,
-        load: impl FnOnce(Data, R) -> F + Send + 'static,
-    ) -> Task<()>
-    where
-        R: Send + 'static,
-        F: Future<Output = Result<(), Error>> + Send + 'static,
-    {
+    /// Runs the keyed read `read` once per invalidation (`sync.run`): a caller joins the load in flight, or begins one.
+    /// `begin` runs under the store lock before this returns, or, for a reload that waits for the load it replaces,
+    /// under the lock right after that wait. So no event after the call can miss what it registers (an overtake log,
+    /// the deletion epoch). The fetch runs outside the lock, and its completion settles the load.
+    fn sync<R: Fetch>(&self, read: Read, begin: impl FnOnce(&mut State, Ticket) -> R + Send + 'static) -> Task<()> {
+        let mut store = self.lock();
+        let key = store.read_key(read);
         let (token, wait) = match store.start_read(key) {
             Start::Done => return futures_util::future::ready(Ok(())).boxed().shared(),
             Start::Join(token) => return store.tasks().reads[&token].clone(),
             Start::Run(token) => (token, None),
             Start::After(token, stale) => (token, Some(store.tasks().reads[&stale].clone())),
         };
+        let ticket = Ticket { key, token };
         let start = match wait {
-            None => Begin::Begun(begin(&mut store, key)),
+            None => Begin::Begun(begin(&mut store, ticket)),
             Some(wait) => Begin::After(wait, begin),
         };
         let data = self.clone();
         // Spawned under the lock, so its settlement cannot run before its state exists.
         let task = self.spawn(async move {
-            let begun = match start {
-                Begin::Begun(begun) => begun,
+            let request = match start {
+                Begin::Begun(request) => request,
                 Begin::After(wait, begin) => {
                     let _ = wait.await;
                     data.write(|state| {
                         state.resume_read(key, token);
-                        begin(state, key)
+                        begin(state, ticket)
                     })
                 }
             };
-            let result = load(data.clone(), begun).await;
-            let mut store = data.lock();
-            store.settle_read(key, token, result.is_ok());
-            store.tasks().reads.remove(&token);
-            data.flush(&mut store);
-            result
+            let completion = request.fetch(&data).await;
+            data.finish(completion, |tasks| {
+                tasks.reads.remove(&token);
+            })
         });
         store.tasks().reads.insert(token, task.clone());
         task
     }
 
-    /// Fetches a list and applies its overlay before publishing. Discard superseded reads and reads for deleted
-    /// sessions. An overflow invalidates the read and schedules another.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn overlay_sync<K, V, T, F>(
-        &self,
-        sync: Keyed,
-        session: SessionID,
-        read: K,
-        open: fn(&mut State, &K, Overlay<V>),
-        close: fn(&mut State, &K, u64) -> Option<Overlay<V>>,
-        id: fn(&V) -> &str,
-        fetch: impl FnOnce(Data) -> F + Send + 'static,
-        publish: impl FnOnce(&mut State, &K, Vec<V>, T) + Send + 'static,
-        again: impl FnOnce(Data) -> Task<()> + Send + 'static,
-    ) -> Task<()>
-    where
-        K: Clone + Send + 'static,
-        V: Send + 'static,
-        T: Send + 'static,
-        F: Future<Output = Result<(Vec<V>, T), Error>> + Send + 'static,
-    {
-        let begin = read.clone();
-        self.sync_start(
-            sync,
-            move |state, key| {
-                let ticket = state.token();
-                open(state, &begin, Overlay::new(ticket));
-                (state.deletion_epoch, ticket, key)
-            },
-            move |data, (started, ticket, key)| async move {
-                let (list, extra) = match fetch(data.clone()).await {
-                    Ok(fetched) => fetched,
-                    Err(error) => {
-                        data.write(|state| close(state, &read, ticket));
-                        return Err(error);
-                    }
-                };
-                let reread = data.write(|state| {
-                    let Some(overlay) = close(state, &read, ticket) else { return false };
-                    if state.deleted_since(&session, started) {
-                        return false;
-                    }
-                    let Some(list) = overlay.apply(list, id) else {
-                        state.invalidate_key(key);
-                        return true;
-                    };
-                    publish(state, &read, list, extra);
-                    false
-                });
-                if reread {
-                    data.refresh(again);
-                }
-                Ok(())
-            },
-        )
+    /// Completes `completion` under the lock, where `release` drops the task it ends, then runs the effects it asks
+    /// for.
+    pub(crate) fn complete(&self, completion: Completion, release: impl FnOnce(&mut Tasks)) {
+        let mut effects = Vec::new();
+        self.write_tasks(|state, tasks| {
+            state.complete(completion, &mut effects);
+            release(tasks);
+        });
+        self.run(effects);
+    }
+
+    /// [`Data::complete`], passing on the error the request failed with.
+    fn finish(&self, completion: Completion, release: impl FnOnce(&mut Tasks)) -> Result<(), Error> {
+        let result = completion.error().cloned().map_or(Ok(()), Err);
+        self.complete(completion, release);
+        result
     }
 }
-
-/// The locked state and the key of a read, for [`Data::sync_start`].
-pub(crate) type Keyed<'a> = (Locked<'a>, ReadKey);
 
 /// How a keyed load starts: begun under the caller's lock, or after the load it replaces.
 enum Begin<R, B> {
@@ -494,11 +442,6 @@ impl Locked<'_> {
     pub(crate) fn tasks(&mut self) -> &mut Tasks {
         &mut self.guard.tasks
     }
-
-    pub(crate) fn split(&mut self) -> (&mut State, &mut Tasks) {
-        let Store { state, tasks } = &mut *self.guard;
-        (state, tasks)
-    }
 }
 
 impl std::ops::Deref for Locked<'_> {
@@ -544,7 +487,7 @@ pub(crate) struct Deltas {
     /// The number the next delta kept gets.
     next: u64,
     /// The deltas some listener has not taken, the last numbered `next - 1`.
-    kept: std::collections::VecDeque<opencode_api::generated::V2Event>,
+    kept: std::collections::VecDeque<V2Event>,
     /// Each listener's first delta not taken, by its ID.
     cursors: HashMap<u64, u64>,
     /// The ID of the next listener.
@@ -569,7 +512,7 @@ pub struct DeltaListening {
 
 impl DeltaListening {
     /// The streaming deltas the store applied since this listener last took them, or since it started, oldest first.
-    pub fn take(&self) -> Vec<opencode_api::generated::V2Event> {
+    pub fn take(&self) -> Vec<V2Event> {
         let Some(inner) = self.inner.upgrade() else { return Vec::new() };
         let mut deltas = lock(&inner.deltas);
         let first = deltas.next - deltas.kept.len() as u64;
@@ -589,15 +532,6 @@ impl Drop for DeltaListening {
         inner.delta_listeners.store(deltas.cursors.len(), Ordering::SeqCst);
         deltas.trim();
     }
-}
-
-/// Marks a missing session deleted and passes the error on (`evictMissing`).
-pub(crate) fn evict_missing(data: &Data, error: opencode_api::error::Error) -> Error {
-    let error = Arc::new(error);
-    if let Some(id) = session_not_found(&error) {
-        data.write(|state| state.mark_deleted(&id));
-    }
-    error
 }
 
 #[cfg(test)]
