@@ -16,7 +16,7 @@ pub mod shells;
 pub mod state;
 pub mod target;
 
-pub use changes::{Changes, Selected};
+pub use changes::{Changes, Dirty, Selected, Touched};
 pub use forms::Form;
 pub use inbox::{InboxExt, PendingStatus, Prompt};
 pub use location::{Catalog, Location, LocationData};

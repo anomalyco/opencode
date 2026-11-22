@@ -17,7 +17,7 @@ use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
 use tokio::task::AbortHandle;
 
-use crate::changes::{Changes, Log};
+use crate::changes::{Log, Touched};
 use crate::forms::Form;
 use crate::location::{Location, LocationData};
 use crate::reads::{Phase, Read, ReadKey, ReadState};
@@ -76,7 +76,7 @@ pub struct State {
     pub(crate) connected: bool,
     /// The keyed reads that belong to no session; a session's are in its record.
     pub(crate) reads: HashMap<ReadKey, ReadState>,
-    /// The locations a keyed read names, by [`crate::reads::LocationKey`].
+    /// The locations a keyed read or a change names, by [`crate::reads::LocationKey`].
     pub(crate) read_locations: IndexSet<Location>,
     /// Batches being applied; flushes wait for the outermost.
     pub(crate) batch: u32,
@@ -185,16 +185,10 @@ impl State {
         self.log.revision()
     }
 
-    /// The current revision and what changed after `seen`. Inside [`Data::read`], a view gets
-    /// the changes and the state they describe under one lock, so no flush lands in between.
-    pub fn changes_since(&self, seen: u64) -> (u64, Changes) {
-        (self.log.revision(), self.log.since(seen))
-    }
-
     pub(crate) fn clear_deleted(&mut self, key: SessionKey) {
         if self.sessions[key].life.undelete() {
             self.deleted.shift_remove(&key);
-            self.log.session(&self.sessions[key].id);
+            self.touch_key(key, Touched::INFO);
         }
     }
 
@@ -396,11 +390,6 @@ impl Data {
         self.inner.revision.send_modify(|_| {});
     }
 
-    /// The current revision and what changed after `seen`.
-    pub fn changes_since(&self, seen: u64) -> (u64, Changes) {
-        self.read(|state| state.changes_since(seen))
-    }
-
     /// Mutates the state and flushes its changes unless a batch is open.
     pub(crate) fn write<R>(&self, f: impl FnOnce(&mut State) -> R) -> R {
         let mut state = self.lock();
@@ -425,9 +414,6 @@ impl Data {
         if state.batch > 0 {
             return;
         }
-        // Only a read in flight keeps a key across writes, and its record holds the read: a freed slot can go to the
-        // next session.
-        state.sessions.sweep();
         if let Some(revision) = state.log.flush() {
             self.inner.revision.send_replace(revision);
         }

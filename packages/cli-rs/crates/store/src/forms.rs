@@ -80,7 +80,7 @@ impl State {
             return;
         }
         forms.push(item);
-        self.log.forms(&form.session_id);
+        self.touch_forms(&form.session_id);
     }
 
     /// Removes a form; a global form only at `location`, when given. True when one was removed.
@@ -102,7 +102,7 @@ impl State {
         if forms.len() == before {
             return false;
         }
-        self.log.forms(owner);
+        self.touch_forms(owner);
         true
     }
 
@@ -130,7 +130,7 @@ impl State {
             }
             None => *forms = list,
         }
-        self.log.forms(owner);
+        self.touch_forms(owner);
     }
 }
 

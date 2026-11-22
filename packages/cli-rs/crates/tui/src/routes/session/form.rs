@@ -124,7 +124,7 @@ impl SessionForms {
         });
         let read = (owners, location);
         let session = changes.session(&self.session) || read.0.iter().any(|id| changes.session(&SessionID(id.clone())));
-        if changes.all || session || *self.read.borrow() != read {
+        if changes.all() || session || *self.read.borrow() != read {
             for owner in &read.0 {
                 quiet(tui, tui.data.form_sync(owner, None));
             }

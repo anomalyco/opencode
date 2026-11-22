@@ -7,23 +7,22 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
+use crate::changes::Touched;
 use crate::reads::{Read, SessionRead};
 use crate::state::{Data, Error, MESSAGE_PAGE, OVERLAY_LIMIT, State, Task, evict_missing};
 
-/// One session's loaded messages, oldest first, with an index by ID.
+/// One session's loaded messages, oldest first, with an index by ID. Each message has a key for as long as it stays,
+/// never given to another message of the transcript.
 #[derive(Debug, Clone, Default)]
 pub struct Transcript {
     items: Vec<SessionMessageInfo>,
+    /// The key of each item.
+    keys: Vec<u32>,
+    next: u32,
     index: HashMap<String, usize>,
 }
 
 impl Transcript {
-    pub(crate) fn new(items: Vec<SessionMessageInfo>) -> Self {
-        let mut transcript = Self { items, index: HashMap::new() };
-        transcript.reindex(0);
-        transcript
-    }
-
     pub fn items(&self) -> &[SessionMessageInfo] {
         &self.items
     }
@@ -36,17 +35,65 @@ impl Transcript {
         self.index.contains_key(id)
     }
 
+    /// The key of message `id`.
+    pub(crate) fn key(&self, id: &str) -> Option<u32> {
+        self.index.get(id).map(|&position| self.keys[position])
+    }
+
+    pub(crate) fn key_at(&self, position: usize) -> u32 {
+        self.keys[position]
+    }
+
+    pub(crate) fn by_key(&self, key: u32) -> Option<&SessionMessageInfo> {
+        self.keys.iter().position(|item| *item == key).map(|position| &self.items[position])
+    }
+
+    pub(crate) fn position(&self, id: &str) -> Option<usize> {
+        self.index.get(id).copied()
+    }
+
     pub(crate) fn get_mut(&mut self, id: &str) -> Option<&mut SessionMessageInfo> {
         let position = *self.index.get(id)?;
         self.items.get_mut(position)
     }
 
-    pub(crate) fn items_mut(&mut self) -> &mut Vec<SessionMessageInfo> {
+    /// The items to change in place: their number and order stay.
+    pub(crate) fn items_mut(&mut self) -> &mut [SessionMessageInfo] {
         &mut self.items
     }
 
-    pub(crate) fn into_items(self) -> Vec<SessionMessageInfo> {
-        self.items
+    /// Replaces every item, each under a new key.
+    pub(crate) fn replace(&mut self, items: Vec<SessionMessageInfo>) {
+        self.keys.clear();
+        self.keys.extend((self.next..).take(items.len()));
+        self.next += items.len() as u32;
+        self.items = items;
+        self.index.clear();
+        self.reindex(0);
+    }
+
+    /// Puts `older` before the items, each under a new key.
+    pub(crate) fn prepend(&mut self, mut older: Vec<SessionMessageInfo>) {
+        let mut keys: Vec<u32> = (self.next..).take(older.len()).collect();
+        self.next += older.len() as u32;
+        keys.append(&mut self.keys);
+        older.append(&mut self.items);
+        (self.items, self.keys) = (older, keys);
+        self.reindex(0);
+    }
+
+    /// Keeps only the items `keep` accepts, with their keys, and gives back the room of the rest.
+    pub(crate) fn retain(&mut self, keep: impl Fn(&SessionMessageInfo) -> bool) {
+        let mut position = 0;
+        self.keys.retain(|_| {
+            position += 1;
+            keep(&self.items[position - 1])
+        });
+        self.items.retain(keep);
+        self.index = HashMap::new();
+        self.reindex(0);
+        self.items.shrink_to_fit();
+        self.keys.shrink_to_fit();
     }
 
     /// Appends unless the ID is present; reports whether it did.
@@ -56,6 +103,8 @@ impl Transcript {
         }
         self.index.insert(item.id().to_owned(), self.items.len());
         self.items.push(item);
+        self.keys.push(self.next);
+        self.next += 1;
         true
     }
 
@@ -72,6 +121,7 @@ impl Transcript {
     pub(crate) fn remove(&mut self, id: &str) -> Option<SessionMessageInfo> {
         let position = self.index.remove(id)?;
         let item = self.items.remove(position);
+        self.keys.remove(position);
         self.reindex(position);
         Some(item)
     }
@@ -81,11 +131,14 @@ impl Transcript {
         let Some(position) = self.index.get(id).copied() else { return };
         let item = self.items.remove(position);
         self.items.push(item);
+        let key = self.keys.remove(position);
+        self.keys.push(key);
         self.reindex(position);
     }
 
     /// Drops every item from `position` on.
     pub(crate) fn truncate(&mut self, position: usize) {
+        self.keys.truncate(position);
         for item in self.items.drain(position..) {
             self.index.remove(item.id());
         }
@@ -246,17 +299,14 @@ impl State {
         self.sessions.get_or_insert(session).transcript.get_or_insert_default()
     }
 
-    pub(crate) fn message_changed(&mut self, session: &SessionID, message: &SessionMessageID) {
-        self.log.message(session, message);
-    }
-
     /// Appends `item` unless present (`message.insert`).
     pub(crate) fn insert_message(&mut self, session: &SessionID, item: SessionMessageInfo) {
         // A session the store found missing shows nothing, whatever arrives late (model O9).
         if self.is_missing(session) {
             return;
         }
-        let record = self.sessions.get_or_insert(session);
+        let key = self.sessions.entry(session);
+        let record = &mut self.sessions[key];
         let transcript = record.transcript.get_or_insert_default();
         if !transcript.append(item) {
             return;
@@ -266,7 +316,7 @@ impl State {
         {
             read.record_created(self.event_seq, item.id());
         }
-        self.log.messages(session);
+        self.touch_key(key, Touched::SHAPE);
     }
 
     pub(crate) fn upsert_message(&mut self, session: &SessionID, item: SessionMessageInfo) {
@@ -278,7 +328,7 @@ impl State {
             return;
         }
         transcript.append(item);
-        self.log.messages(session);
+        self.touch(session, Touched::SHAPE);
     }
 
     /// Records a row the current event created, with its `durable.seq`, for the head read in flight.
@@ -365,7 +415,8 @@ impl State {
             self.outbox.remove(id);
             self.remove_pending(session, id);
         }
-        let record = self.sessions.get_or_insert(session);
+        let key = self.sessions.entry(session);
+        let record = &mut self.sessions[key];
         let paged = record.cursor.is_some() == next.is_some();
         record.cursor = next;
         // Like TS `reconcile`: the same IDs in the same order only update the changed messages.
@@ -375,15 +426,20 @@ impl State {
         });
         match current {
             None => {
-                record.transcript = Some(Transcript::new(messages));
-                self.log.messages(session);
+                record.transcript.get_or_insert_default().replace(messages);
+                self.touch_key(key, Touched::SHAPE);
             }
             Some(transcript) => {
-                for (item, message) in transcript.items_mut().iter_mut().zip(messages) {
-                    if *item != message {
-                        self.log.message(session, &SessionMessageID(message.id().to_owned()));
-                        *item = message;
+                let mut changed = false;
+                for (position, message) in messages.into_iter().enumerate() {
+                    if transcript.items()[position] != message {
+                        self.log.message(key, transcript.key_at(position));
+                        transcript.items_mut()[position] = message;
+                        changed = true;
                     }
+                }
+                if changed {
+                    self.touch_key(key, Touched::CONTENT);
                 }
             }
         }
@@ -400,16 +456,13 @@ impl State {
         message: &SessionMessageID,
         f: impl FnOnce(&mut SessionMessageAssistant),
     ) {
-        let Some(SessionMessageInfo::Assistant(assistant)) = self
-            .sessions
-            .get_mut(session)
-            .and_then(|session| session.transcript.as_mut())
-            .and_then(|transcript| transcript.get_mut(&message.0))
-        else {
-            return;
-        };
+        let Some(key) = self.sessions.key(session) else { return };
+        let Some(transcript) = &mut self.sessions[key].transcript else { return };
+        let Some(position) = transcript.position(&message.0) else { return };
+        let SessionMessageInfo::Assistant(assistant) = &mut transcript.items_mut()[position] else { return };
         f(assistant);
-        self.message_changed(session, message);
+        let message = transcript.key_at(position);
+        self.touch_message(key, message);
     }
 
     /// Edits the latest tool part with `tool` (`editTool`).
@@ -821,7 +874,7 @@ impl State {
         let transcript = self.transcript_mut(session);
         let Some(position) = transcript.items().iter().position(|item| item.id() >= to.as_str()) else { return };
         transcript.truncate(position);
-        self.log.messages(session);
+        self.touch(session, Touched::SHAPE);
     }
 
     pub(crate) fn on_compaction_delta(&mut self, data: &SessionCompactionDeltaData) {
@@ -1219,12 +1272,10 @@ async fn load_pages(
             let fetched: Vec<_> = fetched.into_iter().map(|item| state.stored(item)).collect();
             let record = state.sessions.get_or_insert(session);
             let transcript = record.transcript.get_or_insert_default();
-            let mut messages: Vec<_> =
-                fetched.into_iter().rev().filter(|item| !transcript.contains(item.id())).collect();
-            messages.append(transcript.items_mut());
-            *transcript = Transcript::new(messages);
+            let older = fetched.into_iter().rev().filter(|item| !transcript.contains(item.id())).collect();
+            transcript.prepend(older);
             record.cursor = next;
-            state.log.messages(session);
+            state.touch(session, Touched::SHAPE);
             None
         });
         match stale {

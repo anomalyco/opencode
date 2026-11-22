@@ -592,21 +592,24 @@ pub fn changed(tui: &Tui, changes: &Changes, sync: impl FnOnce(Option<&abi::Chan
     }
     // Refilled with each change batch, so a batch like the one before costs no allocation.
     let mut changed = tui.reads.batch.take();
-    changed.all = changes.all;
-    let sessions = changes.session.iter().chain(&changes.status).chain(changes.selected.keys()).chain(&changes.jobs);
-    refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
-    refill(&mut changed.lists, &changes.messages, |into, id| assign(into, &id.0));
-    let messages = changes.message.iter().flat_map(|(session, ids)| ids.iter().map(move |id| (session, id)));
-    refill(&mut changed.messages, messages, |(into_session, into_id), (session, id)| {
-        assign(into_session, &session.0);
-        assign(into_id, &id.0);
-    });
-    refill(&mut changed.locations, &changes.locations, |into, location| {
-        assign(&mut into.directory, &location.directory);
-        match &location.workspace_id {
-            Some(workspace) => assign(into.workspace.get_or_insert_default(), workspace),
-            None => into.workspace = None,
-        }
+    changed.all = changes.all();
+    tui.data.read(|state| {
+        let sessions = [Touched::INFO, Touched::STATUS, Touched::SELECTED, Touched::JOBS]
+            .into_iter()
+            .flat_map(|bits| changes.sessions_with(state, bits));
+        refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
+        refill(&mut changed.lists, changes.sessions_with(state, Touched::SHAPE), |into, id| assign(into, &id.0));
+        refill(&mut changed.messages, changes.changed_messages(state), |(into_session, into_id), (session, id)| {
+            assign(into_session, &session.0);
+            assign(into_id, id);
+        });
+        refill(&mut changed.locations, changes.locations(state), |into, location| {
+            assign(&mut into.directory, &location.directory);
+            match &location.workspace_id {
+                Some(workspace) => assign(into.workspace.get_or_insert_default(), workspace),
+                None => into.workspace = None,
+            }
+        });
     });
     (changed.local, changed.size, changed.woken) = (false, false, false);
     sync(Some(&changed));

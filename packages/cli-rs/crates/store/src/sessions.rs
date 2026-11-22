@@ -5,6 +5,7 @@ use futures_util::FutureExt;
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
+use crate::changes::Touched;
 use crate::connection::Follow;
 use crate::forms::Form;
 use crate::inbox::{PendingUpdate, now};
@@ -28,8 +29,8 @@ pub struct SessionKey {
 
 /// One record per session the store holds anything of, found by ID once.
 ///
-/// A record that holds nothing (see [`Session::is_vacant`]) is freed by [`Sessions::sweep`] and its slot taken by
-/// the next new session, so the slots stay within about twice the records that hold something. Until the sweep it costs
+/// A record that holds nothing (see [`Session::is_vacant`]) is freed by [`Sessions::sweep`] when the consumer takes
+/// the changes, and its slot taken by the next new session, so the slots stay within about twice the records that hold something. Until the sweep it costs
 /// its slot, its ID and its key's entry, and a freed slot its size alone: what a deleted or evicted session held is
 /// dropped when it is deleted or evicted.
 #[derive(Default)]
@@ -74,6 +75,8 @@ pub(crate) struct Session {
     /// The token of the transcript window that ended last, while it is one of the newest that ended; else 0.
     pub(crate) incarnation: u64,
     pub(crate) reads: SessionReads,
+    /// 1 + its place in the changes the consumer has not taken, or 0. A record changes name there cannot be freed.
+    pub(crate) dirty: u32,
     /// The inbox read in flight, by token, with the inbox events that overtook it.
     pub(crate) pending_read: Option<(u64, IndexMap<String, PendingUpdate>)>,
     /// The permission read in flight, with the asks and replies that overtook it.
@@ -187,6 +190,7 @@ impl Session {
             forms,
             incarnation,
             reads,
+            dirty,
             pending_read,
             permission_read,
             head_read,
@@ -208,6 +212,7 @@ impl Session {
             && forms.is_none()
             && *incarnation == 0
             && reads.is_idle()
+            && *dirty == 0
             && pending_read.is_none()
             && permission_read.is_none()
             && head_read.is_none()
@@ -281,6 +286,12 @@ impl Sessions {
         self.slots.iter_mut().filter_map(|slot| slot.session.as_mut())
     }
 
+    pub(crate) fn entries_mut(&mut self) -> impl Iterator<Item = (SessionKey, &mut Session)> {
+        self.slots.iter_mut().enumerate().filter_map(|(index, slot)| {
+            Some((SessionKey { index: index as u32, generation: slot.generation }, slot.session.as_mut()?))
+        })
+    }
+
     /// Every record with its key.
     pub(crate) fn entries(&self) -> impl Iterator<Item = (SessionKey, &Session)> {
         self.slots.iter().enumerate().filter_map(|(index, slot)| {
@@ -288,8 +299,8 @@ impl Sessions {
         })
     }
 
-    /// Frees the records that hold nothing, once the slots have doubled since the last sweep. Run it only where no
-    /// key is held: a freed slot goes to the next new session.
+    /// Frees the records that hold nothing, once the slots have doubled since the last sweep. Run it only as the
+    /// consumer takes the changes: a freed slot goes to the next new session.
     pub(crate) fn sweep(&mut self) {
         if self.slots.len() < self.sweep_at.max(SWEEP_FLOOR) {
             return;
@@ -431,8 +442,9 @@ impl State {
         if let Some((_, updates)) = &mut self.active_updates {
             updates.insert(id.clone(), Some(status));
         }
-        if self.sessions.get_or_insert(id).status.replace(status) != Some(status) {
-            self.log.status(id);
+        let key = self.sessions.entry(id);
+        if self.sessions[key].status.replace(status) != Some(status) {
+            self.touch_key(key, Touched::STATUS);
         }
     }
 
@@ -440,7 +452,7 @@ impl State {
     pub(crate) fn remember(&mut self, info: SessionInfo) {
         let key = self.sessions.entry(&info.id);
         self.clear_deleted(key);
-        self.log.session(&info.id);
+        self.touch_key(key, Touched::INFO);
         let session = &mut self.sessions[key];
         session.reads[SessionRead::Info].complete();
         session.info = Some(info);
@@ -453,8 +465,7 @@ impl State {
         if self.sessions[key].info.is_none() {
             return;
         }
-        let root = SessionID::from(self.root(&self.sessions[key].id));
-        let root_key = self.sessions.entry(&root);
+        let root_key = self.root_key(key);
         if root_key != key {
             let orphans = std::mem::take(&mut self.sessions[key].family);
             let members = &mut self.sessions[root_key].family;
@@ -465,7 +476,7 @@ impl State {
             }
         }
         // The root's family and cost cover this session.
-        self.log.session(&root);
+        self.touch_key(root_key, Touched::INFO);
         let id = &self.sessions[key].id;
         if !self.sessions[root_key].family.contains(id) {
             let id = id.clone();
@@ -494,19 +505,15 @@ impl State {
         session.permissions = None;
         session.forms = None;
         self.remove_job_tree(key);
-        for session in self.sessions.iter_mut() {
+        for (root, session) in self.sessions.entries_mut() {
             if session.family.contains(id) {
                 // The family and cost of its root change.
-                self.log.session(&session.id);
+                self.log.touch(session, root, Touched::INFO);
                 session.family.retain(|member| member != id);
             }
         }
-        self.log.session(id);
-        self.log.status(id);
-        self.log.messages(id);
-        self.log.pending(id);
-        self.log.permissions(id);
-        self.log.forms(&id.0);
+        let gone = Touched::INFO | Touched::STATUS | Touched::SHAPE | Touched::PENDING | Touched::PERMISSIONS;
+        self.touch_key(key, gone | Touched::FORMS);
     }
 
     /// Drops heavy cached data of one session, keeping unacknowledged submissions
@@ -525,21 +532,20 @@ impl State {
         session.loading = false;
         session.pending.retain(|item| self.outbox.contains(item.id()));
         session.pending.shrink_to_fit();
-        let mut messages = session.transcript.take().map(Transcript::into_items).unwrap_or_default();
-        messages.retain(|item| self.outbox.contains(item.id()));
-        if !messages.is_empty() {
-            messages.shrink_to_fit();
-            session.transcript = Some(Transcript::new(messages));
+        if let Some(transcript) = &mut session.transcript {
+            transcript.retain(|item| self.outbox.contains(item.id()));
+            if transcript.items().is_empty() {
+                session.transcript = None;
+            }
         }
-        self.log.messages(&session.id);
-        self.log.pending(&session.id);
+        self.touch_key(key, Touched::SHAPE | Touched::PENDING);
     }
 
     /// Clears heavy cached data of the root and every known descendant (`evict`).
     pub(crate) fn evict(&mut self, id: &SessionID) {
-        let root = SessionID::from(self.root(id));
-        let root = self.sessions.entry(&root);
-        let mut members = vec![root, self.sessions.entry(id)];
+        let key = self.sessions.entry(id);
+        let root = self.root_key(key);
+        let mut members = vec![root, key];
         // A family lists only sessions with info, so each has a record.
         members.extend(self.sessions[root].family.iter().filter_map(|member| self.sessions.key(member)));
         for (index, key) in members.iter().enumerate() {
@@ -549,19 +555,31 @@ impl State {
         }
     }
 
-    fn edit_info(&mut self, id: &SessionID, f: impl FnOnce(&mut SessionInfo)) {
-        if let Some(info) = self.sessions.get_mut(id).and_then(|session| session.info.as_mut()) {
-            f(info);
-            self.log.session(id);
-            // A child's cost is part of its root's.
-            let root = SessionID::from(self.root(id));
-            self.log.session(&root);
+    /// The key of the family root of the session `key`, its record added when missing.
+    fn root_key(&mut self, key: SessionKey) -> SessionKey {
+        match self.sessions.key(self.root(&self.sessions[key].id)) {
+            Some(root) => root,
+            None => {
+                let root = SessionID::from(self.root(&self.sessions[key].id));
+                self.sessions.entry(&root)
+            }
         }
     }
 
+    fn edit_info(&mut self, id: &SessionID, f: impl FnOnce(&mut SessionInfo)) {
+        let Some(key) = self.sessions.key(id) else { return };
+        let Some(info) = &mut self.sessions[key].info else { return };
+        f(info);
+        self.touch_key(key, Touched::INFO);
+        // A child's cost is part of its root's.
+        let root = self.root_key(key);
+        self.touch_key(root, Touched::INFO);
+    }
+
     fn log_selected(&mut self, id: &SessionID) {
-        if let Some(info) = self.sessions.get(id).and_then(|session| session.info.as_ref()) {
-            self.log.selected(id, info.agent.clone(), info.model.clone());
+        if let Some(info) = self.session(id) {
+            let selected = (info.agent.clone(), info.model.clone());
+            self.touch_selected(id, selected);
         }
     }
 
@@ -695,7 +713,7 @@ impl State {
         // cancel event.
         let key = self.sessions.entry(id);
         self.sessions[key].pending.retain(|item| item.id() < data.to.as_str());
-        self.log.pending(id);
+        self.touch_key(key, Touched::PENDING);
         self.end_transcript(key);
         self.revert_messages(id, &data.to);
     }
@@ -879,7 +897,7 @@ impl Data {
                 }
                 if state.sessions.get_mut(&session).is_some_and(|record| record.life.end_creation(token)) {
                     // `is_creating` is part of the session's view.
-                    state.log.session(&session);
+                    state.touch(&session, Touched::INFO);
                 }
             });
             result
@@ -960,18 +978,38 @@ impl Data {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::changes::Dirty;
+
+    fn id(n: usize) -> SessionID {
+        SessionID(format!("ses_{n}"))
+    }
 
     /// The store remembers the newest 512 deletions, and the records of sessions it forgot go to new sessions.
     #[test]
     fn forgotten_deletions_free_their_records() {
-        let mut state = State::default();
-        let id = |n: usize| SessionID(format!("ses_{n}"));
+        let (mut state, mut dirty) = (State::default(), Dirty::default());
         for n in 0..4096 {
             state.mark_deleted(&id(n));
-            state.sessions.sweep();
+            state.take(&mut dirty);
         }
         assert!(state.is_missing(&id(4095)) && state.is_missing(&id(4096 - 512)));
         assert!(!state.is_missing(&id(4095 - 512)));
         assert!(state.sessions.slots.len() <= 3 * 512, "{} slots", state.sessions.slots.len());
+    }
+
+    /// A record the consumer has not taken changes of is not freed: it reads the record after the take.
+    #[test]
+    fn a_record_named_by_untaken_changes_is_kept() {
+        let (mut state, mut dirty) = (State::default(), Dirty::default());
+        // Each take sweeps first; the second has twice the records of the first, so it sweeps again.
+        for round in 0..2 {
+            for n in round * SWEEP_FLOOR..(round + 1) * SWEEP_FLOOR {
+                state.touch(&id(n), Touched::INFO);
+            }
+            state.take(&mut dirty);
+            let last = (round + 1) * SWEEP_FLOOR - 1;
+            assert!(state.sessions.key(&id(last)).is_some(), "freed before the consumer read it");
+        }
+        assert!(state.sessions.key(&id(0)).is_none(), "kept after the consumer read it");
     }
 }
