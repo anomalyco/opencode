@@ -32,6 +32,7 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import { tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
 import type { ComposerState } from "@/composer/persistence"
+import { isAttachment } from "@/composer/prompt-parts"
 import "./titlebar.css"
 import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigger } from "@/shell/mobile-drawer"
 import { sessionTabTitle } from "./tab-title"
@@ -366,7 +367,30 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               }
             }
 
-            const openNewTab = () => openDraft(uuid())
+            // The inbox lists no drafts, so a new one would hide the last and whatever was typed in it. There New session
+            // goes back to the newest draft still holding something instead.
+            const openNewTab = () => {
+              const kept =
+                settings.appearance.tabLayout() === "inbox"
+                  ? tabsStore.findLast((tab) => {
+                      const composer = tab.type === "draft" ? tabs.stateValue<ComposerState>(tab, "prompt") : undefined
+
+                      if (!composer) return false
+
+                      return (
+                        composer.context.items().length > 0 ||
+                        composer
+                          .current()
+                          .some((part) => isAttachment(part) || ("content" in part && part.content.trim()))
+                      )
+                    })
+                  : undefined
+
+              if (!kept) return openDraft(uuid())
+              tabs.select(kept)
+
+              return true
+            }
 
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
