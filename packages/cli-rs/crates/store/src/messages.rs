@@ -425,7 +425,7 @@ impl State {
         let admitted: HashSet<&str> = self
             .pending(session)
             .iter()
-            .filter(|item| matches!(item.tag(), "user" | "synthetic"))
+            .filter(|item| matches!(item, SessionInboxInfo::User(_) | SessionInboxInfo::Synthetic(_)))
             .map(|item| item.id())
             .collect();
         let local: Vec<_> = self
@@ -606,7 +606,7 @@ impl State {
         }
         let assistant = SessionMessageAssistant {
             id: data.assistant_message_id.clone(),
-            r#type: "assistant".into(),
+            r#type: tag::Assistant,
             agent: data.agent.clone(),
             model: data.model.clone(),
             metadata: event.metadata.clone(),
@@ -678,7 +678,7 @@ impl State {
                 return;
             }
             assistant.content.push(SessionMessageAssistantContentItem::Text(SessionMessageAssistantText {
-                r#type: "text".into(),
+                r#type: tag::Text,
                 ..Default::default()
             }));
         });
@@ -704,7 +704,7 @@ impl State {
                 return;
             }
             assistant.content.push(SessionMessageAssistantContentItem::Reasoning(SessionMessageAssistantReasoning {
-                r#type: "reasoning".into(),
+                r#type: tag::Reasoning,
                 text: String::new(),
                 native: data.native.clone(),
                 time: Some(SessionMessageShellTime { created: event.created, completed: None }),
@@ -743,14 +743,14 @@ impl State {
                 return;
             }
             assistant.content.push(SessionMessageAssistantContentItem::Tool(SessionMessageAssistantTool {
-                r#type: "tool".into(),
+                r#type: tag::Tool,
                 id: data.id.clone(),
                 name: data.name.clone(),
                 executed: None,
                 native: None,
                 time: SessionMessageAssistantToolTime { created: event.created, ..Default::default() },
                 state: SessionMessageAssistantToolState::Streaming(SessionMessageToolStateStreaming {
-                    status: "streaming".into(),
+                    status: tag::Streaming,
                     input: String::new(),
                 }),
             }));
@@ -780,7 +780,7 @@ impl State {
             tool.executed = Some(data.executed);
             tool.native = data.native.clone();
             tool.state = SessionMessageAssistantToolState::Running(SessionMessageToolStateRunning {
-                status: "running".into(),
+                status: tag::Running,
                 input: data.input.clone(),
                 metadata: Default::default(),
             });
@@ -805,7 +805,7 @@ impl State {
                 omit_file_data(&mut content);
             }
             tool.state = SessionMessageAssistantToolState::Completed(SessionMessageToolStateCompleted {
-                status: "completed".into(),
+                status: tag::Completed,
                 input: state.input.clone(),
                 metadata: data.metadata.clone(),
                 content,
@@ -830,7 +830,7 @@ impl State {
                 omit_file_data(content);
             }
             tool.state = SessionMessageAssistantToolState::Error(SessionMessageToolStateError {
-                status: "error".into(),
+                status: tag::Error,
                 error: data.error.clone(),
                 input,
                 metadata: data.metadata.clone(),
@@ -886,7 +886,7 @@ impl State {
         }
         let message = SessionMessageShell {
             id: from_event(&event.id),
-            r#type: "shell".into(),
+            r#type: tag::Shell,
             shell_id: shell.id.clone(),
             command: shell.command.clone(),
             status: shell.status.clone(),
@@ -947,11 +947,11 @@ impl State {
         let transcript = self.transcript_mut(session);
         let completed = |id: SessionMessageID, metadata, time| {
             SessionMessageInfo::Compaction(SessionMessageCompaction::Completed(SessionMessageCompactionCompleted {
-                r#type: "compaction".into(),
+                r#type: tag::Compaction,
                 id,
                 metadata,
                 time,
-                status: "completed".into(),
+                status: tag::Completed,
                 reason: data.reason.clone(),
                 model: data.model.clone(),
                 native: data.native.clone(),
@@ -988,11 +988,11 @@ impl State {
         });
         let failed = |id, metadata, time| {
             SessionMessageInfo::Compaction(SessionMessageCompaction::Failed(SessionMessageCompactionFailed {
-                r#type: "compaction".into(),
+                r#type: tag::Compaction,
                 id,
                 metadata,
                 time,
-                status: "failed".into(),
+                status: tag::Failed,
                 reason: data.reason.clone(),
                 error: data.error.clone(),
                 cost: data.cost,

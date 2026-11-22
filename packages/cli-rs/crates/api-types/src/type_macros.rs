@@ -44,6 +44,38 @@ macro_rules! string_type {
     };
 }
 
+macro_rules! tags {
+    ($($name:ident = $wire:literal,)+) => {$(
+        #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+        pub struct $name;
+
+        impl $name {
+            pub const fn as_str(&self) -> &'static str {
+                $wire
+            }
+        }
+
+        // As the `String` it replaces, so a member's `Debug` text stays the same.
+        impl std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                std::fmt::Debug::fmt($wire, f)
+            }
+        }
+
+        impl serde::Serialize for $name {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_str($wire)
+            }
+        }
+
+        impl<'de> serde::Deserialize<'de> for $name {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                crate::de::tag(deserializer).map(|()| Self)
+            }
+        }
+    )+};
+}
+
 macro_rules! literal_enum {
     ($(#[$attr:meta])* $name:ident { $($variant:ident => $wire:literal),+ $(,)? }) => {
         $(#[$attr])*

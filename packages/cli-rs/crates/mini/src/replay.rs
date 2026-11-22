@@ -12,7 +12,7 @@ use opencode_api::generated::{
     SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantToolState,
     SessionMessageAssistantToolState as ToolPartState, SessionMessageAssistantToolTime, SessionMessageCompaction,
     SessionMessageShellExit, SessionMessageShellOutput, SessionMessageToolStateCompleted, SessionMessageToolStateError,
-    SessionMessageToolStateRunning, SessionMessageToolStateStreaming, SessionStructuredError,
+    SessionMessageToolStateRunning, SessionMessageToolStateStreaming, SessionStructuredError, tag,
 };
 use opentui::app::ProxyError;
 use serde::Deserialize;
@@ -1280,7 +1280,7 @@ impl Transcript {
         };
         let tool =
             |id: &str, name: String, state: SessionMessageAssistantToolState, time| SessionMessageAssistantTool {
-                r#type: "tool".into(),
+                r#type: tag::Tool,
                 id: id.to_owned(),
                 name,
                 executed: None,
@@ -1297,7 +1297,7 @@ impl Transcript {
             V2Event::SessionToolInputStarted(started) => {
                 let data = &started.data;
                 let state = ToolPartState::Streaming(SessionMessageToolStateStreaming {
-                    status: "streaming".into(),
+                    status: tag::Streaming,
                     input: String::new(),
                 });
                 tool(&data.id, data.name.clone(), state, time(started.created, None, None))
@@ -1323,7 +1323,7 @@ impl Transcript {
                 }
                 let part = current(&data.id);
                 let state = ToolPartState::Running(SessionMessageToolStateRunning {
-                    status: "running".into(),
+                    status: tag::Running,
                     input: data.input.clone(),
                     metadata: Default::default(),
                 });
@@ -1341,7 +1341,7 @@ impl Transcript {
                 }
                 let part = current(&data.id);
                 let state = ToolPartState::Running(SessionMessageToolStateRunning {
-                    status: "running".into(),
+                    status: tag::Running,
                     input: input_of(&part),
                     metadata: data.metadata.clone(),
                 });
@@ -1357,7 +1357,7 @@ impl Transcript {
                 let data = &success.data;
                 let part = current(&data.id);
                 let state = ToolPartState::Completed(SessionMessageToolStateCompleted {
-                    status: "completed".into(),
+                    status: tag::Completed,
                     input: input_of(&part),
                     content: data.content.clone(),
                     metadata: data.metadata.clone(),
@@ -1369,7 +1369,7 @@ impl Transcript {
                 let data = &failed.data;
                 let part = current(&data.id);
                 let state = ToolPartState::Error(SessionMessageToolStateError {
-                    status: "error".into(),
+                    status: tag::Error,
                     input: input_of(&part),
                     error: data.error.clone(),
                     content: data.content.clone(),
@@ -1402,7 +1402,7 @@ impl Transcript {
             None => previous,
         };
         SessionMessageAssistantTool {
-            r#type: "tool".into(),
+            r#type: tag::Tool,
             id: id.to_owned(),
             name: part.as_ref().map_or("tool".into(), |part| part.name.clone()),
             executed: None,

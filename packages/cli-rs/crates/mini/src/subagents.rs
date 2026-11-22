@@ -8,7 +8,7 @@ use opencode_api::generated::{
     FormInfo, PromptFileAttachment, SessionInboxInfo, SessionInboxItem, SessionInfo,
     SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantToolState as ToolPartState,
     SessionMessageAssistantToolTime, SessionMessageToolStateCompleted, SessionMessageToolStateError,
-    SessionMessageToolStateRunning, SessionMessageToolStateStreaming,
+    SessionMessageToolStateRunning, SessionMessageToolStateStreaming, tag,
 };
 use opencode_ui::tool_info::{ToolKind, titlecase, tool_display_content, tool_output_text};
 
@@ -877,7 +877,7 @@ impl Tracker {
                 let message = data.assistant_message_id.as_str();
                 if !child.finished.contains(&source_key(message, &data.id)) {
                     let state = ToolPartState::Streaming(SessionMessageToolStateStreaming {
-                        status: "streaming".into(),
+                        status: tag::Streaming,
                         input: String::new(),
                     });
                     let part = tool_part(&data.id, data.name.clone(), state, time(started.created, None, None));
@@ -913,7 +913,7 @@ impl Tracker {
                     let name = current.map_or_else(|| "tool".to_owned(), |part| part.name.clone());
                     let created = current.map_or(called.created, |part| part.time.created);
                     let state = ToolPartState::Running(SessionMessageToolStateRunning {
-                        status: "running".into(),
+                        status: tag::Running,
                         input: data.input.clone(),
                         metadata: IndexMap::new(),
                     });
@@ -932,7 +932,7 @@ impl Tracker {
                 if !child.finished.contains(&key) {
                     let current = child.tools.get(&key).cloned();
                     let state = ToolPartState::Running(SessionMessageToolStateRunning {
-                        status: "running".into(),
+                        status: tag::Running,
                         input: input_of(current.as_ref()),
                         metadata: data.metadata.clone(),
                     });
@@ -965,7 +965,7 @@ impl Tracker {
                     let input = input_of(current.as_ref());
                     let state = match event {
                         V2Event::SessionToolFailed(failed) => ToolPartState::Error(SessionMessageToolStateError {
-                            status: "error".into(),
+                            status: tag::Error,
                             input,
                             error: failed.data.error.clone(),
                             content: failed.data.content.clone(),
@@ -973,7 +973,7 @@ impl Tracker {
                         }),
                         V2Event::SessionToolSuccess(success) => {
                             ToolPartState::Completed(SessionMessageToolStateCompleted {
-                                status: "completed".into(),
+                                status: tag::Completed,
                                 input,
                                 content: success.data.content.clone(),
                                 metadata: success.data.metadata.clone(),
@@ -1133,7 +1133,7 @@ fn tool_part(
     time: SessionMessageAssistantToolTime,
 ) -> SessionMessageAssistantTool {
     SessionMessageAssistantTool {
-        r#type: "tool".into(),
+        r#type: tag::Tool,
         id: id.to_owned(),
         name,
         executed: None,

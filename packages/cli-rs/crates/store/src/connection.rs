@@ -216,7 +216,7 @@ impl State {
                     let keys: Vec<&str> = event.data.delta.keys().map(String::as_str).collect();
                     let row = SessionMessageSystem {
                         id: crate::messages::from_event(&event.id),
-                        r#type: "system".into(),
+                        r#type: tag::System,
                         text: text.clone(),
                         description: Some(format!("Instructions updated: {}", keys.join(", "))),
                         metadata: event.metadata.clone(),
@@ -228,7 +228,7 @@ impl State {
             V2Event::SessionSynthetic(event) => {
                 let row = SessionMessageSynthetic {
                     id: crate::messages::from_event(&event.id),
-                    r#type: "synthetic".into(),
+                    r#type: tag::Synthetic,
                     text: event.data.text.clone(),
                     description: event.data.description.clone(),
                     metadata: event.data.metadata.clone(),
