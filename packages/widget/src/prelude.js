@@ -54,7 +54,7 @@ function __widget_tree(root) {
   const used = {}
   const visit = (node, path) => {
     if (!node || typeof node !== "object" || Array.isArray(node)) return node
-    const { key, id, onPress, onChange, onPointer, children, ...out } = node
+    const { key, id, pointer, onPress, onChange, onPointer, children, ...out } = node
     const control = __WIDGET_CONTROLS[node.type]
     if (control) {
       const handler = node[control.handler]
@@ -62,6 +62,8 @@ function __widget_tree(root) {
       if (typeof handler === "function" || control.always || keyed) {
         out.id = path
         if (typeof handler === "function") handlers[path] = { event: control.event, handler, node: out }
+        // Only a canvas with a handler takes input; one with just a key has an id for `widget.draw`.
+        if (node.type === "canvas" && typeof handler === "function") out.pointer = true
         if (keyed && canvases[String(key)] === undefined)
           canvases[String(key)] = { id: path, wgsl: typeof node.wgsl === "string" }
       }

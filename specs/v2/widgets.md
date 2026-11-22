@@ -212,7 +212,8 @@ type Node = (
   | { type: "input"; id: string; label?: string; value: string; placeholder?: string; multiline?: boolean }
   | { type: "divider" }
   | { type: "canvas"; id?: string; height: number; width?: number; fps?: number; duration?: number; alt?: string;
-      poster?: string; wgsl?: string; values?: number[] }   // values only with wgsl
+      poster?: string; wgsl?: string; values?: number[]      // values only with wgsl
+      pointer?: true }   // set by the prelude when it has onPointer: only then does it take input
   | { type: "stack"; children: Node[] }
 ) & {
   // Any node, as a child of a stack (see Stack); ignored elsewhere.
@@ -250,11 +251,13 @@ over a canvas.
   `widgets-fullscreen.md`), unless all its canvas children have `fill: false`, and its `fill` children take its full
   size.
 - **Pointer input:** the topmost child at the point that takes pointer input gets it: an interactive node (`button`,
-  `checkbox`, `slider`, `select`, `input`, a `card` or `carousel` with an `id`, a `canvas` with an `id`), or a container
+  `checkbox`, `slider`, `select`, `input`, a `card` or `carousel` with an `id`, a `canvas` with `pointer: true`), or a container
   through one of its interactive descendants. Everything else lets it through to the layer below: `text`, `markdown`,
-  `image`, `divider`, a canvas without an `id`, and the empty parts of containers (they have no background). Pointer
+  `image`, `divider`, a canvas without `pointer: true`, and the empty parts of containers (they have no background). Pointer
   capture and `close` work as anywhere else; a canvas's coordinates are its own box.
 - **Order:** keyboard focus and screen readers follow the children's order.
+- **Directions are physical:** `left`/`right` in `place` and the `left`/`right` sides of `inset` don't flip in a
+  right-to-left layout.
 - **Clients that can't layer** (the TUI) show the children top to bottom in order, like a column, ignoring `place` and
   `inset`.
 
@@ -272,6 +275,11 @@ ways, never both:
 Everything else is the same for both: size and `width`, `fps` and `duration`, `alt` and `poster` (an image src shown
 where the canvas can't be drawn: the TUI, a shader that fails to compile), `fill` and full screen, `onPointer` and
 pointer capture, `close`, and ids and keys. `fps` defaults to 0 for a 2D canvas and 60 for a GPU one.
+
+A canvas takes input only with `pointer: true`, which the prelude sets when it has an `onPointer` handler. Without it (no
+handler; a canvas with only a `key` has an `id` for live `widget.draw`, but no `pointer`) it sends no `pointer` events,
+and in a stack taps pass through it to the layer below. It still gets `frame.pointer` in `draw` (hover and press visuals
+of its own).
 
 `draw` is pure: it can't change state. Animate with `frame.t`; keep anything that must persist in state via handlers.
 
@@ -321,7 +329,7 @@ type Gradient = { linear: [x1, y1, x2, y2]; stops: [offset: number, color: Color
               | { radial: [cx, cy, r]; stops: [offset: number, color: Color][] }
 ```
 
-Pointer input on a canvas with an `id` goes to its `onPointer` handler: clients send
+Pointer input on a canvas with `pointer: true` goes to its `onPointer` handler: clients send
 `{ id, type: "pointer", value: { kind: "down" | "move" | "up", x, y, width, height } }`, with `move` only while down
 and at most once per frame. `width`/`height` are the canvas's logical size, so the handler can hit-test a layout that
 follows the available width.

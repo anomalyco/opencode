@@ -190,7 +190,7 @@ test("a session draws with its current state and draw never changes it", async (
     null,
   )
   await session.dispatch({ id: ":c", type: "pointer", value: { kind: "down", x: 50, y: 10, width: 200, height: 100 } })
-  expect(session.view).toEqual({ type: "canvas", id: ":c", height: 100, fps: 60 })
+  expect(session.view).toEqual({ type: "canvas", id: ":c", height: 100, fps: 60, pointer: true })
   expect((await session.draw({ ...frame, id: ":c" })).commands).toEqual([["circle", 19800, 50, 4, { fill: "text" }]])
   expect(session.state).toEqual({ x: 0.25, down: true })
 })
@@ -211,7 +211,7 @@ test("a stack layers its children, each placed with place and inset", async () =
   expect(output.view).toEqual({
     type: "stack",
     children: [
-      { type: "canvas", id: "0/:game", height: 200, place: "fill" },
+      { type: "canvas", id: "0/:game", height: 200, place: "fill", pointer: true },
       { type: "text", text: "Score 3", place: "top-left", inset: 8 },
       { type: "button", id: "0/2", label: "Pause", place: "bottom-right", inset: { right: 12, bottom: 12 } },
     ],
@@ -221,4 +221,25 @@ test("a stack layers its children, each placed with place and inset", async () =
   expect(await invalid(`ui.stack([ui.text("x", { place: "middle" })])`)).toMatchObject({ kind: "invalid" })
   expect(await invalid(`ui.stack([ui.text("x", { inset: -1 })])`)).toMatchObject({ kind: "invalid" })
   expect(await invalid(`ui.stack([ui.text("x", { inset: { top: "4" } })])`)).toMatchObject({ kind: "invalid" })
+})
+
+test("only a canvas with onPointer takes input: the prelude marks it pointer: true", async () => {
+  const output = await step(
+    program(`
+      function view() {
+        return ui.stack([
+          ui.canvas({ key: "scene", height: 100 }),
+          ui.canvas({ height: 100, onPointer: (state) => state }),
+          ui.canvas({ height: 100, pointer: true }),
+        ])
+      }
+    `),
+    { phase: "init", data: null },
+  )
+  expect(output.view.type === "stack" && output.view.children).toEqual([
+    // A key gives an id for live widget.draw, not input; an author can't set pointer itself.
+    { type: "canvas", id: "0/:scene", height: 100 },
+    { type: "canvas", id: "0/1", height: 100, pointer: true },
+    { type: "canvas", height: 100 },
+  ])
 })

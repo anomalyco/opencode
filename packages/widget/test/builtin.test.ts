@@ -277,6 +277,7 @@ test("chart: bars grow in, then the canvas stops animating", async () => {
     {
       type: "canvas",
       id: "0/1",
+      pointer: true,
       height: 240,
       fps: 60,
       duration: 0.65,

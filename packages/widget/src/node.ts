@@ -114,6 +114,8 @@ export interface Canvas {
   readonly values?: ReadonlyArray<number>
   /** An image src shown where the canvas can't be drawn (a terminal, a shader that fails to compile). */
   readonly poster?: string
+  /** Set by the prelude when the canvas has an `onPointer` handler: only then does it take pointer input. */
+  readonly pointer?: true
 }
 
 /** Where a child of a `stack` sits in it (widgets.md, Stack); ignored outside a stack. */
@@ -170,7 +172,7 @@ export interface Rect {
   readonly height: number
 }
 
-/** Pointer input on a canvas with an `id`: `move` only while down, at most once per frame. */
+/** Pointer input on a canvas with `pointer: true`: `move` only while down, at most once per frame. */
 export interface Pointer {
   readonly kind: "down" | "move" | "up"
   readonly x: number
@@ -448,6 +450,7 @@ export const Node: Schema.Codec<Node> = Schema.Union([
     ),
     values: optional(Schema.Array(Schema.Finite).check(Schema.isMaxLength(16))),
     poster: optional(Schema.String),
+    pointer: optional(Schema.Literal(true)),
   }).check(
     Schema.makeFilter(
       (canvas: { readonly wgsl?: string; readonly values?: ReadonlyArray<number> }) =>
