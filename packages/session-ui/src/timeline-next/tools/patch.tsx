@@ -8,7 +8,7 @@ import { batch, createMemo, createUniqueId, For, Index, Match, Show, Switch, typ
 import { Dynamic } from "solid-js/web"
 import { patchFileGroups } from "../../components/apply-patch-file"
 import { createDisclosure } from "../../components/disclosure"
-import { displayDirectory, FileAccordionGroup, FileTool, type ToolProps } from "../../tools/tool-renderer"
+import { displayDirectory, FileAccordionGroup, FileDiffFold, FileTool, type ToolProps } from "../../tools/tool-renderer"
 
 // One unchanged line around each change places it without a wall of context.
 const context = 1
@@ -107,12 +107,14 @@ export function PatchTool(props: ToolProps) {
                         </Switch>
                       </div>
                       <div data-slot="apply-patch-trigger-actions">
-                        <Icon name="chevron-grabber-vertical" size="small" />
+                        <Icon name="chevron-grabber-vertical" />
                       </div>
                     </div>
                   }
                 >
-                  <Show when={disclosure.mounted()}>{views()}</Show>
+                  <Show when={disclosure.mounted()}>
+                    <FileDiffFold>{views()}</FileDiffFold>
+                  </Show>
                 </FileAccordionItem>
               )
             }}

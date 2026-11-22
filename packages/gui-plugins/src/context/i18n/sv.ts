@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Användning",
   "usage.cost": "Kostnad",
   "usage.view": "Visa kontextanvändning",
-  "systemPrompt.title": "Systemprompt",
   "rawMessages.title": "Råmeddelanden",
   "export.session": "Exportera session",
   "stats.session": "Session",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sessionen sparades i {{filename}}",
   "export.failed.title": "Det gick inte att exportera sessionen",
   "export.failed.description": "Ett fel uppstod när sessionen exporterades",
+  "usage.toggle": "Växla sessionskontext",
 }

@@ -156,6 +156,18 @@ describe("titlebar history", () => {
     expect(urls(project)).toEqual(["/", "/settings?server=local&project=%2Fwork&tab=extensions"])
   })
 
+  test("Back from Settings replaces a closed source with a survivor, and Forward returns to Settings", () => {
+    const state = replay([visit("/"), visit("/closed"), visit("/settings?tab=appearance")]).state
+
+    const back = transitionTitlebarHistory(state, { type: "back", destination: { url: "/survivor" } })
+
+    expect(back.effects[0]).toMatchObject({ type: "navigate", to: { url: "/survivor" } })
+    const arrived = transitionTitlebarHistory(back.state, visit("/survivor")).state
+
+    expect(step(arrived, "forward").to?.url).toBe("/settings?tab=appearance")
+    expect(step(arrived, "back").to?.url).toBe("/")
+  })
+
   test("an unchanged location keeps the same state object", () => {
     const state = replay([visit("/"), visit("/a")]).state
 

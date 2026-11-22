@@ -54,4 +54,5 @@ export default {
   "error.commandTimeout": "Polecenie {{command}} {{args}} przekroczyło limit czasu {{timeout}}ms",
   "error.failedPort": "Nie udało się uzyskać portu",
   "menu.remove": "Usuń",
+  "error.busy": "{{distro}} wykonuje inne zadanie. Spróbuj ponownie, gdy się zakończy.",
 }

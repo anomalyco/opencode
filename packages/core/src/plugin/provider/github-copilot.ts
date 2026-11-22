@@ -38,6 +38,12 @@ export const GithubCopilotPlugin = define({
     const outbound = yield* FetchHttpClient.Fetch
     yield* ctx.integration.transform((editor) => {
       editor.method.remove("github-copilot", { type: "key" })
+      // models.dev lists GITHUB_TOKEN, which git and Actions usually set without Copilot access. GitHub's Copilot CLI
+      // reads a dedicated token from COPILOT_GITHUB_TOKEN first.
+      editor.method.update({
+        integrationID: Provider.ID.githubCopilot,
+        method: { type: "env", names: ["COPILOT_GITHUB_TOKEN"] },
+      })
       editor.method.update(CopilotOAuth.method(ctx.app, http, flags.enabled("copilot_expiring_tokens")))
     })
     // Each Session keeps the model Copilot's Auto router picked until its token nears expiry, the Session is compacted,

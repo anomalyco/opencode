@@ -21,7 +21,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { GithubCopilotPlugin } from "@opencode/core/plugin/provider/github-copilot"
-import { ChatGPTPlugin, fetchModels, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
+import { ChatGPTPlugin, fetchModels, revoke, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
@@ -161,6 +161,43 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
+  it.live("revokes the refresh token with the issued client ID", () =>
+    Effect.gen(function* () {
+      const forms = new Array<Record<string, string>>()
+      const statuses = [200, 503]
+      const server = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            port: 0,
+            fetch: async (request) => {
+              expect(request.method).toBe("POST")
+              expect(request.headers.get("content-type")).toBe("application/x-www-form-urlencoded")
+              forms.push(Object.fromEntries(new URLSearchParams(await request.text())))
+              return new Response(null, { status: statuses.shift() })
+            },
+          }),
+        ),
+        (server) => Effect.sync(() => server.stop()),
+      )
+      const url = `http://localhost:${server.port}/oauth/revoke`
+      const value = Credential.OAuth.make({
+        type: "oauth",
+        methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+        access: "access",
+        refresh: "refresh-token",
+        expires: 1,
+        metadata: { clientID: "oaiapp_issued" },
+      })
+
+      yield* revoke(value, App.make(), url)
+      const form = { token: "refresh-token", token_type_hint: "refresh_token", client_id: "oaiapp_issued" }
+      expect(forms).toEqual([form])
+
+      expect(yield* Effect.flip(revoke(value, App.make(), url))).toBeInstanceOf(Error)
+      expect(forms).toHaveLength(2)
+    }),
+  )
+
   it.live("verifies a signed ID token against OpenAI's issuer, client ID, expiry, and sign-in nonce", () =>
     Effect.gen(function* () {
       const keys = yield* Effect.promise(() => generateKeyPair("RS256"))
@@ -257,7 +294,11 @@ describe("ChatGPTPlugin", () => {
       yield* addPlugin()
       yield* addLegacyPlugin()
       const integrations = yield* Integration.Service
-      expect((yield* integrations.get(Integration.ID.make("openai")))?.methods.map((method) => method.type === "oauth" && method.id)).toEqual([
+      expect(
+        (yield* integrations.get(Integration.ID.make("openai")))?.methods.map(
+          (method) => method.type === "oauth" && method.id,
+        ),
+      ).toEqual([
         Integration.MethodID.make("chatgpt-token-sharing"),
         Integration.MethodID.make("chatgpt-browser"),
         Integration.MethodID.make("chatgpt-headless"),
@@ -815,7 +856,12 @@ describe("ChatGPTPlugin", () => {
         "gpt-4.99",
       ])
         expect(yield* models.get(Provider.ID.openai, Model.ID.make(id))).toBeUndefined()
-      expect((yield* models.available()).filter((model) => model.providerID === Provider.ID.openai).map((model) => model.id).sort()).toEqual(
+      expect(
+        (yield* models.available())
+          .filter((model) => model.providerID === Provider.ID.openai)
+          .map((model) => model.id)
+          .sort(),
+      ).toEqual(
         [
           "gpt-5.5",
           "gpt-5.5-fast",
@@ -837,6 +883,40 @@ describe("ChatGPTPlugin", () => {
           "gpt-6.1-terra-fast",
         ].map((id) => Model.ID.make(id)),
       )
+    }),
+  )
+
+  it.effect("keeps the token-sharing safeguards when the token cannot be refreshed at load", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, (draft) => {
+          draft.package = "@opencode/ai/providers/openai"
+        })
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6-astra"), () => {})
+      })
+      // An expired token without a registered client ID cannot be refreshed.
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "stale-token",
+          refresh: "refresh",
+          expires: 1,
+        }),
+      })
+      yield* addPlugin()
+      yield* addLegacyPlugin()
+
+      const provider = required(yield* catalog.get(Provider.ID.openai))
+      expect(provider.settings?.transport).toBe("http")
+      expect(provider.settings?.compaction).toEqual({ type: "summary" })
+      const model = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra")))
+      expect(model.compatibility?.supportsEffortUpdates).toBe(false)
+      expect(model.settings?.compaction).toEqual({ type: "summary" })
     }),
   )
 

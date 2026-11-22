@@ -205,6 +205,20 @@ describe("provider error classification", () => {
     ).toEqual(["ContentPolicy", "ContentPolicy", "ContentPolicy"])
   })
 
+  test("classifies OpenAI cyber policy refusals before and during a stream", () => {
+    const message =
+      "This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request."
+    const http = { error: { message, type: "invalid_request_error", param: null, code: "cyber_policy" } }
+    const frame = { type: "error", sequence_number: 1, code: "cyber_policy", message, param: null }
+
+    expect(
+      [
+        classifyProviderFailure({ message, status: 400, rawBody: JSON.stringify(http) }),
+        classifyProviderFailure({ message: `cyber_policy: ${message}`, rawBody: JSON.stringify(frame) }),
+      ].map((failure) => failure._tag),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
+  })
+
   test("classifies Alibaba Model Studio data inspection failures", () => {
     const alibaba = {
       request_id: "1537ecc9-6873-93f7-9865-6fe4eb1d7851",
@@ -259,6 +273,19 @@ describe("provider error classification", () => {
     expect(
       classifyProviderFailure({ message: zen.error.message, status: 400, rawBody: JSON.stringify(zen) })._tag,
     ).toBe("ContentPolicy")
+  })
+
+  test("classifies Gemini terms-of-use refusals as policy rejections, not authentication failures", () => {
+    const message = "Request rejected in accordance with our terms of use and policies."
+    const gemini = { error: { code: 403, message, status: "PERMISSION_DENIED" } }
+    const zen = { error: { type: "server_error", message: `Upstream request failed: [403] ${message}` } }
+
+    expect(
+      [gemini, zen].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 403, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
   })
 
   test("keeps invalid_prompt schema validation failures as invalid requests", () => {

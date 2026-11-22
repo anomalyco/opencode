@@ -38,7 +38,7 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
       server: ServerConnection.key(conn),
       archived: props.archived,
       known: props.archived
-        ? () => ctx.data.session.list().filter((session) => !session.parentID)
+        ? () => ctx.data.session.known().filter((session) => !session.parentID)
         : createKnownServerSessions(() => ctx),
       apply: ctx.data.session.apply,
       projects: ctx.projects.list,
@@ -160,6 +160,7 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
       select={select}
       close={() => dialog.close(layer?.id)}
       busyEntryID={selectSessionRestoreEntryID(searchState())}
+      bare={!props.archived}
       unhide={(entry) => {
         const server = entry.server
         const id = entry.sessionID

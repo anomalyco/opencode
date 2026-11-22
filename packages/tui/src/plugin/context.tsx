@@ -61,7 +61,7 @@ type Value = {
     readonly register: (path: string) => () => void
     readonly resolved: () => ReturnType<typeof resolveSlots<SlotRender>>
   }
-  readonly markdown: () => MarkdownOptions["renderNode"]
+  readonly markdown: () => MarkdownOptions["renderBlock"]
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
 }

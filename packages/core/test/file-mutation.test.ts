@@ -70,6 +70,24 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("appends bytes to a file, creating it when missing", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        const access = yield* FileAccess.Service
+        const files = yield* FileMutation.Service
+        const target = yield* access.resolve({ path: "log.txt" })
+
+        expect(yield* files.append({ target, content: "one\n" })).toMatchObject({ existed: false })
+        expect(yield* files.append({ target, content: new Uint8Array([0xff, 0x0a]) })).toMatchObject({ existed: true })
+        expect([...(yield* Effect.promise(() => fs.readFile(target.absolute)))]).toEqual([
+          ...Buffer.from("one\n"),
+          0xff,
+          0x0a,
+        ])
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("preserves exactly one BOM for text writes and normalizes created text", () =>
     withTempDir(({ path: directory }) =>
       Effect.gen(function* () {

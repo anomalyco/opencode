@@ -1,5 +1,6 @@
 import { createTwoFilesPatch } from "diff"
-import { createMemo, createSignal, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, untrack } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { createStore } from "solid-js/store"
 import type { TurnDiffSource, TurnDiffState } from "../context/data"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
@@ -200,6 +201,22 @@ const WrittenSource = {
   ),
 }
 
+const LongWrittenSource = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Create a long source file"
+      description="A write taller than the fold shows its first lines, and Show more opens the rest."
+      document={storyDocument([
+        storyTool("prt_file_projection_long_write", "write", "completed", {
+          path: "src/long.ts",
+          content: Array.from({ length: 200 }, (_, index) => `export const value${index} = ${index}\n`).join(""),
+        }),
+      ])}
+      editToolDefaultOpen
+    />
+  ),
+}
+
 // A finished turn: the step records which files changed, and the idle marker ends the turn.
 function finishedTurnDocument(files: { file: string; before: string; after: string }[]): SessionDocument {
   const document = storyDocument([
@@ -314,11 +331,15 @@ const fileScenarios = {
   streaming: EditWithStreamedSibling,
   patch: ThreeFilePatch,
   write: WrittenSource,
+  longWrite: LongWrittenSource,
 }
 
 export const AppendingToolCalls = {
-  render: () => {
-    const [state, setState] = createStore({ calls: 0 })
+  args: { calls: 0 },
+  argTypes: { calls: { control: { type: "range", min: 0, max: 12, step: 1 } } },
+  render: (args: { calls: number }) => {
+    const [state, setState] = createStore({ calls: args.calls })
+    createEffect(() => setState("calls", args.calls))
 
     const files = ["src/a.ts", "src/b.ts"].map((file) => ({
       ...storyPatchFile(file),
@@ -367,8 +388,9 @@ export const AppendingToolCalls = {
 export const ChangingFiles = {
   args: { scenario: "streaming" },
   argTypes: { scenario: { control: "select", options: Object.keys(fileScenarios) } },
-  // SAFETY: the scenario control only offers fileScenarios keys.
-  render: (args: { scenario: string }) => fileScenarios[args.scenario as keyof typeof fileScenarios].render(),
+  render: (args: { scenario: keyof typeof fileScenarios }) => (
+    <Dynamic component={fileScenarios[args.scenario]?.render ?? fileScenarios.streaming.render} />
+  ),
 }
 
 export const CreatedANewFile = {
@@ -384,15 +406,16 @@ export const CreatedANewFile = {
 }
 
 export const FileToolFallbacks = {
-  args: { tool: "edit", empty: false, forceOpen: false, controlled: true },
+  args: { tool: "edit", empty: false, forceOpen: false, controlled: true, completed: false },
   argTypes: {
     tool: { control: "select", options: ["edit", "write"] },
     empty: { control: "boolean" },
     forceOpen: { control: "boolean" },
     controlled: { control: "boolean" },
   },
-  render: (args: { tool: string; empty: boolean; forceOpen: boolean; controlled: boolean }) => {
-    const [state, setState] = createStore({ completed: false, open: false })
+  render: (args: { tool: string; empty: boolean; forceOpen: boolean; controlled: boolean; completed: boolean }) => {
+    const [state, setState] = createStore({ completed: args.completed, open: false })
+    createEffect(() => setState("completed", args.completed))
 
     return (
       <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">

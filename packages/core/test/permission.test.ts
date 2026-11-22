@@ -16,6 +16,8 @@ import { Session } from "@opencode/core/session"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { ShellParse } from "@opencode/core/shell/parse"
+import { Tool } from "@opencode/core/tool"
+import { Wildcard } from "@opencode/core/util/wildcard"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -180,6 +182,130 @@ describe("Permission", () => {
     expect(Permission.evaluate("external_directory", "C:/Users/x/other/*", rules).effect).toBe("ask")
   })
 
+  test("matches machine paths with the same rules as local paths", () => {
+    const allow = (resource: string): Permission.Ruleset => [{ action: "read", resource, effect: "allow" }]
+    const files = process.platform === "darwin" || process.platform === "win32"
+    expect(Permission.evaluate("read", "gpu:/work/a", allow("*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "gpu:/work/a", allow("**/work/*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "gpu:/work/a", allow("gpu:/work/*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "gpu:/work/a", allow("gpu:*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "cpu:/work/a", allow("gpu:/work/*")).effect).toBe("ask")
+    expect(Permission.evaluate("read", "/work/a", allow("gpu:/work/*")).effect).toBe("ask")
+    // The machine's name follows the same letter-case rule as the rest of a file rule.
+    expect(Permission.evaluate("read", "gpu:/work/a", allow("GPU:/work/*")).effect).toBe(files ? "allow" : "ask")
+    // A bare deny still reaches every machine.
+    expect(Permission.evaluate("edit", "gpu:/work/a", [{ action: "*", resource: "*", effect: "deny" }]).effect).toBe(
+      "deny",
+    )
+    // Local paths, drive letters included, match as before, and resources that are not files are untouched.
+    expect(Permission.evaluate("read", "/work/a", allow("*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "C:/work/a", allow("*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "C:\\work\\a", allow("C:/work/*")).effect).toBe("allow")
+    expect(Permission.evaluate("read", "C:/work/a", allow("**/work/*")).effect).toBe("allow")
+    expect(
+      Permission.evaluate("shell", "gpu:/bin/x", [{ action: "shell", resource: "*", effect: "allow" }]).effect,
+    ).toBe("allow")
+  })
+
+  test("matches file rules without case where file systems ignore it by default", () => {
+    const rules: Permission.Ruleset = [
+      { action: "*", resource: "*", effect: "allow" },
+      { action: "edit", resource: ".opencode/*", effect: "ask" },
+      { action: "read", resource: "*.env", effect: "deny" },
+      { action: "shell", resource: "git push*", effect: "ask" },
+    ]
+    const files = process.platform === "darwin" || process.platform === "win32"
+    expect(Permission.evaluate("edit", ".OPENCODE/plugins/guard.ts", rules).effect).toBe(files ? "ask" : "allow")
+    expect(Permission.evaluate("read", "Secrets.ENV", rules).effect).toBe(files ? "deny" : "allow")
+    // Commands and other resources keep their case outside Windows.
+    expect(Permission.evaluate("shell", "GIT PUSH origin dev", rules).effect).toBe(
+      process.platform === "win32" ? "ask" : "allow",
+    )
+    expect(Wildcard.match(".OPENCODE/x", ".opencode/*", true)).toBe(true)
+    expect(Wildcard.match(".OPENCODE/x", ".opencode/*")).toBe(process.platform === "win32")
+  })
+
+  for (const action of ["read", "edit", "external_directory"]) {
+    it.effect(`asks for machine-specific ${action} rules`, () =>
+      Effect.gen(function* () {
+        yield* setup([
+          ...Agent.Info.default(Agent.ID.make("test")).permissions,
+          { action, resource: "gpu:*", effect: "ask" },
+        ])
+        const { service, fiber, request } = yield* waitForRequest({ action, resources: ["gpu:/work/a"] })
+        expect(request.resources).toEqual(["gpu:/work/a"])
+        expect(yield* service.list()).toHaveLength(1)
+        yield* service.reply({ requestID: request.id, reply: "once" })
+        yield* Fiber.join(fiber)
+      }),
+    )
+
+    it.effect(`refuses machine-specific ${action} rules`, () =>
+      Effect.gen(function* () {
+        yield* setup([
+          ...Agent.Info.default(Agent.ID.make("test")).permissions,
+          { action, resource: "gpu:*", effect: "deny" },
+        ])
+        const service = yield* Permission.Service
+        expect(
+          yield* service.assert(assertion({ action, resources: ["gpu:/work/a"] })).pipe(Effect.flip),
+        ).toBeInstanceOf(Permission.BlockedError)
+        expect(yield* service.list()).toEqual([])
+      }),
+    )
+  }
+
+  it.effect("applies default environment-file exceptions equally to local and machine paths", () =>
+    Effect.gen(function* () {
+      yield* setup(Agent.Info.default(Agent.ID.make("test")).permissions)
+      const service = yield* Permission.Service
+      for (const prefix of ["", "gpu:/work/"]) {
+        expect(yield* service.ask(assertion({ resources: [`${prefix}.env.production`] }))).toMatchObject({
+          effect: "ask",
+        })
+        yield* service.reply({ requestID: Permission.ID.create("per_test"), reply: "once" })
+        expect(yield* service.ask(assertion({ resources: [`${prefix}.env.example`] }))).toMatchObject({
+          effect: "allow",
+        })
+      }
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  for (const [action, resource] of [
+    ["edit", "gpu:/work/a"],
+    ["shell", "pwd"],
+  ])
+    it.effect(`preserves global ${action} asks and denies`, () =>
+      Effect.gen(function* () {
+        yield* setup([
+          ...Agent.Info.default(Agent.ID.make("test")).permissions,
+          { action, resource: "*", effect: "ask" },
+        ])
+        const { service, fiber, request } = yield* waitForRequest({ action, resources: [resource] })
+        expect(request.action).toBe(action)
+        yield* service.reply({ requestID: request.id, reply: "once" })
+        yield* Fiber.join(fiber)
+        yield* setRules([{ action, resource: "*", effect: "deny" }])
+        expect(yield* service.assert(assertion({ action, resources: [resource] })).pipe(Effect.flip)).toBeInstanceOf(
+          Permission.BlockedError,
+        )
+      }),
+    )
+
+  it.effect("applies saved broad approvals to machine paths with normal configured deny precedence", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "gpu:*", effect: "ask" }])
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({ projectID: Project.ID.global, action: "read", resources: ["*"] })
+      const service = yield* Permission.Service
+      expect(yield* service.ask(assertion({ resources: ["gpu:/work/a"] }))).toMatchObject({ effect: "allow" })
+      yield* setRules([{ action: "read", resource: "gpu:*", effect: "deny" }])
+      expect(yield* service.ask(assertion({ resources: ["gpu:/work/a"] }))).toMatchObject({ effect: "deny" })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
   it.effect("allows managed output reads without granting external directory access", () =>
     Effect.gen(function* () {
       yield* setup([
@@ -320,6 +446,21 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("shows a nested call's request on its parent's row until the scope closes", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* Permission.Service
+      const source = { type: "tool" as const, messageID: "msg_test", id: "call_child" }
+      const ask = (id: string) => service.ask(assertion({ id: Permission.ID.create(id), source }))
+      yield* service
+        .nested(Tool.CallID.make("call_child"), Tool.CallID.make("call_parent"))
+        .pipe(Effect.andThen(ask("per_nested")), Effect.scoped)
+      yield* ask("per_after")
+      expect((yield* service.get(Permission.ID.create("per_nested")))?.source).toEqual({ ...source, id: "call_parent" })
+      expect((yield* service.get(Permission.ID.create("per_after")))?.source).toEqual(source)
+    }),
+  )
+
   it.effect("drops undefined metadata values so pending requests encode as JSON", () =>
     Effect.gen(function* () {
       yield* setup()
@@ -362,6 +503,25 @@ describe("Permission", () => {
           ),
         ).toBe(true)
       expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("rejects sibling requests in the same step and leaves another step's request pending", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* Permission.Service
+      const ask = (call: string, messageID: string) =>
+        service.ask(
+          assertion({
+            id: Permission.ID.create(`per_${call}`),
+            source: { type: "tool", messageID, id: `call_${call}` },
+          }),
+        )
+      const first = yield* ask("first", "msg_one")
+      yield* ask("sibling", "msg_one")
+      const other = yield* ask("other", "msg_two")
+      yield* service.reply({ requestID: first.id, reply: "reject" })
+      expect((yield* service.list()).map((request) => request.id)).toEqual([other.id])
     }),
   )
 
@@ -764,10 +924,7 @@ describe("shell scanner permission impact", () => {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
-      grants: [
-        ["printf *"],
-        ["FOO=bar > *", "printf *"],
-      ],
+      grants: [["printf *"], ["FOO=bar > *", "printf *"]],
       repeat: [
         ["ask", "allow"],
         ["ask", "allow"],
@@ -779,10 +936,7 @@ describe("shell scanner permission impact", () => {
       name: "PowerShell method prefix",
       shell: "pwsh",
       command: '[IO.File]::Delete("C:\\first")',
-      grants: [
-        ["[IO.File]::Delete(*"],
-        ["[IO.File]::Delete(*"],
-      ],
+      grants: [["[IO.File]::Delete(*"], ["[IO.File]::Delete(*"]],
       repeat: [
         ["allow", "allow"],
         ["allow", "allow"],

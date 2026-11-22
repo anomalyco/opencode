@@ -197,6 +197,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(serverSDK.server),
     known: createKnownServerSessions(() => serverCtx),
+    apply: serverCtx.data.session.apply,
     projects: serverCtx.projects.list,
     load: (search, signal) =>
       serverSDK.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
@@ -271,7 +272,7 @@ export function createServerSessionEntries(props: {
   server: ServerConnection.Key
   archived?: boolean
   known?: () => SessionInfo[]
-  /** Hides sessions deleted since they were loaded. */
+  /** Hides sessions deleted since they were loaded and adds a pending send's bump. */
   apply?: (sessions: SessionInfo[]) => SessionInfo[]
   projects: () => Project[]
   load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
@@ -294,12 +295,11 @@ export function createServerSessionEntries(props: {
   >()
 
   // The server's list carries each step's `time.updated` bump. Like Home, keep the cached time until a run ends.
+  // Sort after `apply` so a pending send's bump decides which sessions make the recent group.
   const known = createMemo(() => {
-    const merged = mergeRootSessionIndex(props.known?.() ?? [], sourceState().loaded).toSorted(
-      (a, b) => b.time.updated - a.time.updated,
-    )
+    const merged = mergeRootSessionIndex(props.known?.() ?? [], sourceState().loaded)
 
-    return props.apply?.(merged) ?? merged
+    return (props.apply?.(merged) ?? merged).toSorted((a, b) => b.time.updated - a.time.updated)
   })
 
   const dispatch = (event: SessionSourceEvent) =>
@@ -452,6 +452,7 @@ export function createKnownServerSessions(context: Accessor<ServerCtx | undefine
 
     if (!server) return []
 
-    return server.data.session.list().filter((session) => !session.parentID && !session.time.archived)
+    // Raw records: `apply` adds the send bump after the merge, so a projected time never reaches it as a server time.
+    return server.data.session.known().filter((session) => !session.parentID && !session.time.archived)
   }
 }

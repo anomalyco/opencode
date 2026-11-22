@@ -542,8 +542,10 @@ describe("LocationServiceMap", () => {
           const blockedState = yield* update(blocked.path, blockedID)
           expect(blockedState.providers.some((provider) => provider.id === blockedID)).toBe(true)
           expect(blockedState.providers.some((provider) => provider.id === allowedID)).toBe(false)
+          // Code Mode and image generation depend on the bundled catalog (a usable image model), not the location.
+          const builtIn = (name: string) => name !== "execute" && name !== "experimental_image_generate"
           const blockedTools = blockedState.tools.map((tool) => tool.name)
-          expect(blockedTools.filter((name) => name !== "execute").sort()).toEqual([
+          expect(blockedTools.filter(builtIn).sort()).toEqual([
             "edit",
             "glob",
             "grep",
@@ -562,7 +564,10 @@ describe("LocationServiceMap", () => {
           expect(allowedState.providers.some((provider) => provider.id === blockedID)).toBe(false)
           const allowedTools = allowedState.tools.map((tool) => tool.name)
           expect(blockedTools.includes("execute")).toBe(allowedTools.includes("execute"))
-          expect(allowedTools.filter((name) => name !== "execute").sort()).toEqual([
+          expect(allowedTools.includes("experimental_image_generate")).toBe(
+            blockedTools.includes("experimental_image_generate"),
+          )
+          expect(allowedTools.filter(builtIn).sort()).toEqual([
             "edit",
             "glob",
             "grep",

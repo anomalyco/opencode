@@ -12,4 +12,12 @@ export default {
   noChanges: "Без промени",
   "settings.wrapLines.title": "Пренасяне на редовете",
   "settings.wrapLines.description": "Увийте дълги редове в мобилни разлики, вместо да превъртате хоризонтално",
+  "menu.count.one": "{{count}} променен файл",
+  "menu.count.other": "{{count}} променени файла",
+  "folder.more": "{{count}} · още не са показани",
+  "folder.failed": "Промените не можаха да бъдат заредени",
+  "command.open": "Отваряне на прегледа",
+  "load.failed": "Промените не можаха да бъдат заредени",
+  "load.timeout": "Сървърът отговаря твърде бавно",
+  offline: "Няма връзка с този сървър",
 }

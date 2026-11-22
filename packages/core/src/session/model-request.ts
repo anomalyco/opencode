@@ -24,6 +24,7 @@ import type {
   SessionGenerate,
   SessionRequest,
   SessionRequestKind,
+  SessionRequestMessage,
   SessionTitle,
 } from "@opencode/plugin/effect/session"
 import type { Agent } from "@opencode/schema/agent"
@@ -75,6 +76,11 @@ export interface Prepared<Event = SessionRequest> {
   readonly executeTool: (
     input: Parameters<Tool.Snapshot["execute"]>[0],
   ) => Effect.Effect<Tool.NormalizedResult, ExecuteError>
+  /**
+   * When `name` isn't a tool this request advertised but is one of its Code Mode tools, the expression a program calls
+   * it by, so the call can be recorded and run as the `execute` program it should have been.
+   */
+  readonly codeModeExpression?: (name: string) => string | undefined
 }
 
 export interface Input {
@@ -83,7 +89,7 @@ export interface Input {
   readonly model: SessionRunnerModel.Resolved
   readonly tools?: Tool.Snapshot
   readonly system: Array<SystemPart>
-  readonly messages: Array<Message>
+  readonly messages: Array<SessionRequestMessage>
   readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
@@ -123,7 +129,13 @@ export const baseTranscript = (input: {
         metadata: { experimental: { instructions: input.initial } },
       },
     ].filter((part) => part.text.length > 0),
-    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+    // Hooks read each stored message's metadata on the messages built from it; `prepare` strips it before the request.
+    messages: input.messages.flatMap((message) =>
+      toLLMMessages([message], input.model.ref, providerMetadataKey).map(
+        (item): SessionRequestMessage =>
+          message.metadata === undefined || item.id !== message.id ? item : { ...item, metadata: message.metadata },
+      ),
+    ),
   }
 }
 
@@ -327,7 +339,17 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
+        // Strip the stored metadata hooks could read, so it never reaches the provider.
+        messages: boundImages(
+          unsupportedParts(
+            shaped.messages.map((message) => {
+              const { metadata, ...rest } = message
+              return metadata === undefined ? message : Message.make(rest)
+            }),
+            model.capabilities,
+            model.model.provider,
+          ),
+        ),
         tools: Array.from(hooked, ([name, t]) => ({
           ...t,
           name,
@@ -423,6 +445,8 @@ export const layer = Layer.effect(
         // catch them and turn a "no" into model-visible output. Recover them here as failures,
         // including declines a tool rethrew and its wrapper attached to a Tool.Error, as Promise
         // plugin tools do.
+        codeModeExpression: (name: string) =>
+          hooked.has(name) || !hooked.has("execute") ? undefined : input.tools?.codeModeExpression?.(name),
         executeTool: (call: Parameters<Prepared["executeTool"]>[0]) =>
           tools.execute({ ...call, definitions: hooked }).pipe(
             Effect.catchCauseFilter(

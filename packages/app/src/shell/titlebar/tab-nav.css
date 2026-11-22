@@ -61,6 +61,11 @@
   display: block;
 }
 
+[data-titlebar-tab][data-status="muted"] [data-mark="muted"] {
+  display: block;
+  color: var(--v2-icon-icon-faint);
+}
+
 /* The muted spinner's dim dots vanish against the dark tab, leaving only the head visible. */
 [data-color-scheme="dark"] [data-titlebar-tab] [data-mark="busy"] {
   color: var(--v2-icon-icon-base);
@@ -146,6 +151,11 @@
   --tab-overlay: var(--v2-overlay-simple-overlay-hover);
 }
 
+/* Full-width rows: the ring sits inside, clear of the sidebar's edges. */
+[data-titlebar-tab-action]:focus-visible {
+  outline-offset: -2px;
+}
+
 [data-titlebar-tab-action]:is(:active, [data-state="pressed"]) {
   --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
 }
@@ -174,6 +184,11 @@
   inset-inline-end: calc(-1 * var(--shell-inline-inset, 8px));
   width: calc(var(--sidebar-inset-end) + var(--shell-inline-inset, 8px));
   transform: none;
+}
+
+/* The whole sidebar edge is the hit target, so a pill would point at a spot that isn't special. */
+[data-slot="vertical-tabs-sidebar"] [data-component="resize-handle"]::after {
+  display: none;
 }
 
 /* Only visible trailing controls need room over the title. */
@@ -558,4 +573,8 @@
     ) {
     transition: none;
   }
+}
+[data-slot="sidebar-project-row"]:has(> button:first-child:focus-visible) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
 }

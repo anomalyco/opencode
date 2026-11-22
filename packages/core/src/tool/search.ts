@@ -5,6 +5,12 @@ import { Effect } from "effect"
 import { Environment } from "../environment/index.js"
 import { FileSystem } from "../filesystem.js"
 
+/** Refuses a search where none can run yet: it needs a ripgrep binary the environment's spawner can start. */
+export const available = (environment: Environment.Interface) =>
+  environment.searchable
+    ? Effect.void
+    : Effect.fail(new ToolFailure({ message: `Search is not available on ${environment.id} yet.` }))
+
 export const pathType = (files: Environment.Files, absolute: string, display: string) =>
   Environment.typeFollowing(files, absolute).pipe(
     Effect.catchTag("Environment.NotFound", () =>

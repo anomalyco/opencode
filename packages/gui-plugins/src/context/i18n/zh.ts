@@ -5,7 +5,6 @@ export default {
   "usage.usage": "使用率",
   "usage.cost": "成本",
   "usage.view": "查看上下文用量",
-  "systemPrompt.title": "系统提示词",
   "rawMessages.title": "原始消息",
   "export.session": "导出会话",
   "stats.session": "会话",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "已将会话保存到 {{filename}}",
   "export.failed.title": "导出会话失败",
   "export.failed.description": "导出会话时发生错误",
+  "usage.toggle": "切换会话上下文",
 }

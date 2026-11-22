@@ -59,6 +59,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/azure/messages", () => import("@opencode/ai/providers/azure/messages")],
   ["@opencode/ai/providers/baseten", () => import("@opencode/ai/providers/baseten")],
   ["@opencode/ai/providers/baseten/decisions", () => import("@opencode/ai/providers/baseten/decisions")],
+  ["@opencode/ai/providers/byteplus/videos", () => import("@opencode/ai/providers/byteplus/videos")],
   ["@opencode/ai/providers/cerebras", () => import("@opencode/ai/providers/cerebras")],
   ["@opencode/ai/providers/cloudflare-ai-gateway", () => import("@opencode/ai/providers/cloudflare-ai-gateway")],
   [
@@ -92,6 +93,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/google/interactions", () => import("@opencode/ai/providers/google/interactions")],
   ["@opencode/ai/providers/google/embeddings", () => import("@opencode/ai/providers/google/embeddings")],
   ["@opencode/ai/providers/google/images", () => import("@opencode/ai/providers/google/images")],
+  ["@opencode/ai/providers/google/videos", () => import("@opencode/ai/providers/google/videos")],
   ["@opencode/ai/providers/google-vertex", () => import("@opencode/ai/providers/google-vertex")],
   ["@opencode/ai/providers/google-vertex/chat", () => import("@opencode/ai/providers/google-vertex/chat")],
   ["@opencode/ai/providers/google-vertex/gemini", () => import("@opencode/ai/providers/google-vertex/gemini")],
@@ -116,6 +118,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/minimax/images", () => import("@opencode/ai/providers/minimax/images")],
   ["@opencode/ai/providers/minimax/messages", () => import("@opencode/ai/providers/minimax/messages")],
   ["@opencode/ai/providers/minimax/responses", () => import("@opencode/ai/providers/minimax/responses")],
+  ["@opencode/ai/providers/minimax/videos", () => import("@opencode/ai/providers/minimax/videos")],
   ["@opencode/ai/providers/mistral", () => import("@opencode/ai/providers/mistral")],
   ["@opencode/ai/providers/moonshot", () => import("@opencode/ai/providers/moonshot")],
   ["@opencode/ai/providers/moonshot/chat", () => import("@opencode/ai/providers/moonshot/chat")],
@@ -149,11 +152,13 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/openrouter/decisions", () => import("@opencode/ai/providers/openrouter/decisions")],
   ["@opencode/ai/providers/openrouter/embeddings", () => import("@opencode/ai/providers/openrouter/embeddings")],
   ["@opencode/ai/providers/openrouter/images", () => import("@opencode/ai/providers/openrouter/images")],
+  ["@opencode/ai/providers/openrouter/videos", () => import("@opencode/ai/providers/openrouter/videos")],
   ["@opencode/ai/providers/openrouter/responses", () => import("@opencode/ai/providers/openrouter/responses")],
   ["@opencode/ai/providers/togetherai", () => import("@opencode/ai/providers/togetherai")],
   ["@opencode/ai/providers/typesafe-ai/decisions", () => import("@opencode/ai/providers/typesafe-ai/decisions")],
   ["@opencode/ai/providers/venice", () => import("@opencode/ai/providers/venice")],
   ["@opencode/ai/providers/venice/responses", () => import("@opencode/ai/providers/venice/responses")],
+  ["@opencode/ai/providers/volcengine/videos", () => import("@opencode/ai/providers/volcengine/videos")],
   ["@opencode/ai/providers/vercel-ai-gateway", () => import("@opencode/ai/providers/vercel-ai-gateway")],
   ["@opencode/ai/providers/vercel-ai-gateway/chat", () => import("@opencode/ai/providers/vercel-ai-gateway/chat")],
   [
@@ -175,6 +180,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ],
   ["@opencode/ai/providers/xai", () => import("@opencode/ai/providers/xai")],
   ["@opencode/ai/providers/xai/images", () => import("@opencode/ai/providers/xai/images")],
+  ["@opencode/ai/providers/xai/videos", () => import("@opencode/ai/providers/xai/videos")],
   ["@opencode/ai/providers/zai", () => import("@opencode/ai/providers/zai")],
   ["@opencode/ai/providers/zai/chat", () => import("@opencode/ai/providers/zai/chat")],
   ["@opencode/ai/providers/zai/images", () => import("@opencode/ai/providers/zai/images")],
@@ -263,6 +269,14 @@ const decodeEncoding = Schema.decodeUnknownOption(Provider.Encoding)
 /** Request body encoding from provider or model settings; invalid values are dropped. */
 export function encoding(settings: Readonly<Record<string, unknown>>) {
   return Option.getOrUndefined(decodeEncoding(settings.encoding))
+}
+
+const decodeTls = Schema.decodeUnknownOption(Provider.Tls)
+
+/** Client certificate from provider settings. An empty `cert` or `key`, such as a missing `{file:}`, leaves it unset. */
+export function tls(settings: Readonly<Record<string, unknown>>) {
+  const value = Option.getOrUndefined(decodeTls(settings.tls))
+  return value?.cert && value.key ? value : undefined
 }
 
 export const Request = Provider.Request

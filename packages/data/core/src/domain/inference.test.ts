@@ -311,7 +311,7 @@ describe("inference stat normalization", () => {
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
       expect(query).toContain(
-        "CASE\n      WHEN lower(model) IN ('exo', 'frantic-ferret', 'iceman', 'iceman-contributor', 'omen-alpha', 'pulse-alpha', 'union-alpha') THEN 'unknown'\n",
+        "CASE\n      WHEN lower(model) IN ('exo', 'frantic-ferret', 'iceman', 'iceman-contributor', 'omen-alpha', 'pulse-alpha', 'tidepool-alpha', 'union-alpha') THEN 'unknown'\n",
       )
       expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
@@ -324,7 +324,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]).toContain('FROM "inference"."generation"')
     expect(queries[0]).toContain("event_type = 'generation.completed'")
     expect(queries[0]).toContain(
-      "AND (product IN ('go', 'go-plus', 'go-teams') OR (lower(COALESCE(model_tier, '')) = 'free'",
+      "AND (product IN ('go', 'go-plus', 'go-teams') OR (COALESCE(product, '') <> 'custom' AND (lower(COALESCE(model_tier, '')) = 'free'",
     )
     expect(queries[0]).toContain("COALESCE(NULLIF(lower(model_tier), ''), '') AS raw_tier")
     expect(queries[0]).toContain("WHEN lower(COALESCE(raw_tier, '')) = 'free'")
@@ -401,7 +401,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]?.query).toContain("AND product IN ('go', 'go-plus', 'go-teams')")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
     expect(queries[0]?.query).toContain(
-      "CASE\n      WHEN lower(model) IN ('exo', 'frantic-ferret', 'iceman', 'iceman-contributor', 'omen-alpha', 'pulse-alpha', 'union-alpha') THEN 'unknown'\n",
+      "CASE\n      WHEN lower(model) IN ('exo', 'frantic-ferret', 'iceman', 'iceman-contributor', 'omen-alpha', 'pulse-alpha', 'tidepool-alpha', 'union-alpha') THEN 'unknown'\n",
     )
     expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")

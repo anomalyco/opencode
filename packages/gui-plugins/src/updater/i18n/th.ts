@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "ถัดไป",
   "releaseNotes.action.hideFuture": "ไม่ต้องแสดงสิ่งนี้อีกในอนาคต",
   "releaseNotes.media.alt": "ตัวอย่างรุ่น",
+  "action.reload": "โหลดใหม่เพื่ออัปเดต",
+  "action.reloading": "กำลังโหลดใหม่…",
+  "web.ready.title": "พร้อมอัปเดต",
+  "web.ready.message": "OpenCode เวอร์ชันใหม่พร้อมแล้ว โหลดใหม่เพื่อใช้ในทุกหน้าต่างที่เปิดอยู่",
+  "web.reload": "โหลดใหม่",
+  "web.reset.title": "โหลดใหม่จากเซิร์ฟเวอร์",
+  "web.reset.description": "ล้างสำเนาแอปที่บันทึกไว้และโหลดเวอร์ชันปัจจุบันจากเซิร์ฟเวอร์",
+  "web.reset.action": "โหลดใหม่จากเซิร์ฟเวอร์",
 }

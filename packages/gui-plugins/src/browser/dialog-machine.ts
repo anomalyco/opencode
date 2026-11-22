@@ -2,14 +2,30 @@
 // every running command but a dialog command, and refuses new ones until it is handled. Commands register here before
 // their first await, so a dialog or a cancellation that arrives while one still inspects its target interrupts it too.
 // Each dialog event moves `revision`, and handling a dialog closes only the revision it answered: a dialog the page
-// opens right after stays open.
+// opens right after stays open. The user (in the pane) and the agent (browser.dialog) answer the same dialog: the
+// first to start answering a revision does, and the other finds it closed.
 import type { Browser } from "@opencode/plugin-browser/rpc"
 
 export type DialogInfo = { readonly type: string; readonly message: string; readonly defaultValue: string }
 
 export type ModalDialog =
   | { readonly open: false; readonly revision: number }
-  | { readonly open: true; readonly revision: number; readonly url: string; readonly dialog: DialogInfo }
+  | {
+      readonly open: true
+      readonly revision: number
+      readonly url: string
+      readonly dialog: DialogInfo
+      /** It opened within `REPEAT_DIALOG_MS` of the last one closing, so the user may stop the page's dialogs. */
+      readonly repeat?: boolean
+      /** Who is answering it; the other one finds it closed. */
+      readonly answering?: "user" | "agent"
+    }
+
+/** Chrome offers to stop a page's dialogs when one opens this soon after the last closed. */
+export const REPEAT_DIALOG_MS = 1_000
+
+/** Dialog types the page's script opens; a `beforeunload` dialog is the pane's "Leave site?" instead. */
+const scripted = ["alert", "confirm", "prompt"]
 
 /**
  * Why a command stopped or never started.
@@ -28,6 +44,10 @@ export type DialogGateState =
       readonly modal: ModalDialog
       /** Running commands by run id, with their action type. */
       readonly runs: ReadonlyMap<number, Browser.Method>
+      /** The user stopped this document's dialogs: each one is dismissed at once until the next document. */
+      readonly suppressed?: boolean
+      /** When the last scripted dialog closed, for `repeat`. */
+      readonly lastClosedAt?: number
     }
   | { readonly status: "disposed" }
 
@@ -38,10 +58,19 @@ export type DialogGateEvent =
       readonly dialogType: string
       readonly message: string
       readonly defaultPrompt: string
+      readonly at?: number
     }
-  | { readonly type: "dialog.closed" }
+  | { readonly type: "dialog.closed"; readonly at?: number }
   /** `Page.handleJavaScriptDialog` answered the dialog of `revision`. */
-  | { readonly type: "dialog.handled"; readonly revision: number }
+  | { readonly type: "dialog.handled"; readonly revision: number; readonly at?: number }
+  /** The user or the agent starts answering the dialog of `revision`; only the first one does. */
+  | { readonly type: "dialog.answering"; readonly revision: number; readonly by: "user" | "agent" }
+  /** The answer of `revision` did not reach Chromium; the dialog may be answered again. */
+  | { readonly type: "dialog.answer-failed"; readonly revision: number }
+  /** The user chose to stop this document's dialogs. */
+  | { readonly type: "dialog.suppressed" }
+  /** The main frame committed another document, which may show dialogs again. */
+  | { readonly type: "document.committed" }
   | { readonly type: "run.started"; readonly actionType: Browser.Method; readonly aborted: boolean }
   | { readonly type: "run.cancelled"; readonly runID: number }
   | { readonly type: "run.finished"; readonly runID: number }
@@ -56,6 +85,8 @@ export type DialogGateEffect =
       readonly reason: Exclude<RunStopReason, "dialog-open">
       readonly abort: boolean
     }
+  /** Dismisses a dialog of a document whose dialogs the user stopped. */
+  | { readonly type: "dismiss" }
 
 /** The answer to `run.started`. */
 export type RunReply =
@@ -67,6 +98,8 @@ export type DialogGateTransition = {
   readonly effects: readonly DialogGateEffect[]
   /** Set for `run.started`. */
   readonly reply?: RunReply
+  /** Set for `dialog.answering`: whether this answer may go to Chromium, or another one came first. */
+  readonly answer?: "accepted" | "closed"
 }
 
 const PUBLISH: DialogGateEffect = { type: "publish" }
@@ -87,6 +120,8 @@ export function transitionDialogGate(state: DialogGateState, event: DialogGateEv
 
   switch (event.type) {
     case "dialog.opened": {
+      // The page already got its answer, or gets it now: nothing waits on it, so no command stops.
+      if (state.suppressed && scripted.includes(event.dialogType)) return { state, effects: [{ type: "dismiss" }] }
       // A navigation is left alone: its beforeunload dialog is answered through browser.dialog, and the pending load
       // then proceeds or not. Every other action stops before its next step, so a validation alert on one field stops
       // the rest.
@@ -100,6 +135,11 @@ export function transitionDialogGate(state: DialogGateState, event: DialogGateEv
             revision: state.modal.revision + 1,
             url: event.url,
             dialog: { type: event.dialogType, message: event.message, defaultValue: event.defaultPrompt },
+            repeat:
+              scripted.includes(event.dialogType) &&
+              state.lastClosedAt !== undefined &&
+              event.at !== undefined &&
+              event.at - state.lastClosedAt <= REPEAT_DIALOG_MS,
           },
           runs: interrupted.length
             ? new Map([...state.runs].filter(([, actionType]) => actionType === "dialog"))
@@ -122,11 +162,27 @@ export function transitionDialogGate(state: DialogGateState, event: DialogGateEv
     case "dialog.closed":
       if (!state.modal.open) return { state, effects: [] }
 
-      return { state: { ...state, modal: { open: false, revision: state.modal.revision + 1 } }, effects: [PUBLISH] }
+      return { state: close(state, event.at), effects: [PUBLISH] }
     case "dialog.handled":
       if (!state.modal.open || state.modal.revision !== event.revision) return { state, effects: [] }
 
-      return { state: { ...state, modal: { open: false, revision: state.modal.revision + 1 } }, effects: [PUBLISH] }
+      return { state: close(state, event.at), effects: [PUBLISH] }
+    case "dialog.answering":
+      if (!state.modal.open || state.modal.revision !== event.revision || state.modal.answering)
+        return { state, effects: [], answer: "closed" }
+
+      return { state: { ...state, modal: { ...state.modal, answering: event.by } }, effects: [], answer: "accepted" }
+    case "dialog.answer-failed":
+      if (!state.modal.open || state.modal.revision !== event.revision || !state.modal.answering)
+        return { state, effects: [] }
+
+      return { state: { ...state, modal: { ...state.modal, answering: undefined } }, effects: [] }
+    case "dialog.suppressed":
+      return { state: { ...state, suppressed: true }, effects: [] }
+    case "document.committed":
+      if (!state.suppressed && state.lastClosedAt === undefined) return { state, effects: [] }
+
+      return { state: { ...state, suppressed: false, lastClosedAt: undefined }, effects: [] }
     case "run.started": {
       if (event.aborted) return { state, effects: [], reply: { status: "refused", reason: "cancelled" } }
 
@@ -182,6 +238,28 @@ export function selectDialogTarget(state: DialogGateState, generation: number, p
   return {
     resources: [modal?.open ? modal.url : pageURL],
     key: `${generation}:${modal?.revision ?? 0}:${Boolean(modal?.open)}`,
+  }
+}
+
+/** A scripted dialog the user answers in the pane, with its revision; null while none is open or it is a beforeunload. */
+export function selectUserDialog(state: DialogGateState) {
+  if (state.status !== "active" || !state.modal.open || !scripted.includes(state.modal.dialog.type)) return null
+
+  return state.modal
+}
+
+/** Whether the user stopped this document's dialogs, so a new one is dismissed before anyone sees it. */
+export function selectSuppressed(state: DialogGateState) {
+  return state.status === "active" && !!state.suppressed
+}
+
+function close(state: Extract<DialogGateState, { status: "active" }>, at: number | undefined) {
+  const scriptedDialog = state.modal.open && scripted.includes(state.modal.dialog.type)
+
+  return {
+    ...state,
+    modal: { open: false as const, revision: state.modal.revision + 1 },
+    lastClosedAt: scriptedDialog && at !== undefined ? at : state.lastClosedAt,
   }
 }
 

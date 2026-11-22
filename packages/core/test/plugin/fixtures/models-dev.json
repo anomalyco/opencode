@@ -18,18 +18,26 @@
             "supported": true
           },
           "reasoning": {
-            "supported": false
+            "supported": true,
+            "effort": ["low", "high"]
           }
         },
         "limit": {
           "context": 128000,
           "output": 8192
         },
+        "recommended_api": "interactions",
         "api": {
-          "chat-completions": {
+          "generate-content": {
             "base_url": "https://api.acme.test/v1",
             "sdk": {
-              "aisdk": "@ai-sdk/openai-compatible"
+              "opencodeai": "@opencode/ai/providers/google"
+            }
+          },
+          "interactions": {
+            "base_url": "https://api.acme.test/v1beta",
+            "sdk": {
+              "opencodeai": "@opencode/ai/providers/google/interactions"
             }
           }
         }

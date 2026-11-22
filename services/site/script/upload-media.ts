@@ -1,4 +1,4 @@
-// Uploads the heavy media in public/ (src/lib/media.ts `mediaFile`) to the existing files bucket,
+// Uploads the heavy media in public/ (src/lib/media.ts `inBucket`) to the existing files bucket,
 // which the /files route serves (services/files), under site/2026-11 at the same path, and writes
 // media-manifest.txt. Not part of the build.
 //
@@ -11,7 +11,7 @@
 import { createHash } from "node:crypto"
 import path from "node:path"
 import { Glob } from "bun"
-import { mediaBase, mediaFile } from "../src/lib/media"
+import { inBucket, mediaBase } from "../src/lib/media"
 
 const root = path.resolve(import.meta.dir, "..")
 const publicDir = path.join(root, "public")
@@ -21,9 +21,7 @@ const prefix = mediaBase.replace(/^\/files\//, "")
 const run = process.argv.includes("--run")
 const writeManifest = process.argv.includes("--manifest")
 
-const files = (await Array.fromAsync(new Glob("**/*").scan({ cwd: publicDir })))
-  .filter((file) => mediaFile.test(file))
-  .sort()
+const files = (await Array.fromAsync(new Glob("**/*").scan({ cwd: publicDir }))).filter(inBucket).sort()
 
 const types: Record<string, string> = {
   mp4: "video/mp4",
