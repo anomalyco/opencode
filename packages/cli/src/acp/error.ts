@@ -1,4 +1,5 @@
 import { RequestError } from "@agentclientprotocol/sdk"
+import { NonNegativeInt, optional } from "@opencode/schema"
 import { Schema } from "effect"
 
 export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundError>()("ACPSessionNotFoundError", {
@@ -48,6 +49,8 @@ export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>
   safeMessage: Schema.String,
   service: Schema.optional(Schema.String),
   errorName: Schema.optional(Schema.String),
+  status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })).pipe(optional),
+  retryAfterMs: NonNegativeInt.pipe(optional),
 }) {}
 
 export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailableError>()(
@@ -121,6 +124,8 @@ export function toRequestError(error: Error): RequestError {
         {
           ...(error.service ? { service: error.service } : {}),
           ...(error.errorName ? { errorName: error.errorName } : {}),
+          ...(error.status === undefined ? {} : { status: error.status }),
+          ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
         },
         error.safeMessage,
       )
