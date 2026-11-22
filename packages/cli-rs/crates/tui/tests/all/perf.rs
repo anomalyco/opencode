@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use opencode_api::client::Client;
+use opencode_api::events::Event;
 use opencode_api::generated::{SessionID, V2Event};
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_store::{Data, LoadMore, Options as StoreOptions};
@@ -29,6 +30,7 @@ use crate::support::probe::{LONG, PARTS, Probe, TURNS, long_messages};
 const SHORT: &str = "ses_short";
 const TEXT_DELTAS: usize = 20_000;
 const TOOL_DELTAS: usize = 2_000;
+const TOOL_PROGRESS: usize = 500;
 /// Events per store batch while streaming, each batch one frame.
 const BATCH: usize = 20;
 const SESSIONS: usize = 2_000;
@@ -88,13 +90,13 @@ fn stream() {
     settle(&h.app);
     let events = streamed();
     let count = events.len() as u64;
-    let batches: Vec<Vec<V2Event>> = events.chunks(BATCH).map(<[_]>::to_vec).collect();
+    let batches: Vec<Vec<String>> = events.chunks(BATCH).map(<[_]>::to_vec).collect();
     let probe = Probe::start();
-    for batch in batches {
+    connected(batches, decoded, |batch| {
         tui.data.apply(batch);
         h.app.wait_until(WAIT, || tui.synced());
         frame(&h.app);
-    }
+    });
     settle(&h.app);
     probe.finish("stream", count);
     let screen = h.app.text();
@@ -232,12 +234,12 @@ fn store_stream() {
     let deltas = data.listen_deltas();
     let events = streamed();
     let count = events.len() as u64;
-    let batches: Vec<Vec<V2Event>> = events.chunks(BATCH).map(<[_]>::to_vec).collect();
+    let batches: Vec<Vec<String>> = events.chunks(BATCH).map(<[_]>::to_vec).collect();
     let probe = Probe::start();
-    for batch in batches {
+    connected(batches, decoded, |batch| {
         data.apply(batch);
         deltas.take(|_| ());
-    }
+    });
     probe.finish("store_stream", count);
     let text = data.read(|state| format!("{:?}", state.messages(&id).last()));
     assert!(text.contains("done streaming"), "{text}");
@@ -521,8 +523,38 @@ fn provider(index: usize) -> Value {
     json!({ "id": format!("provider-{index}"), "name": format!("Provider {index}"), "activation": "auto", "package": "@ai-sdk/test" })
 }
 
-/// [`TOOL_DELTAS`] deltas, then the end of the step.
-fn streamed() -> Vec<V2Event> {
+/// A batch of the stream's payloads as the connection hands it to the store: each event's JSON decoded, and adjacent
+/// deltas merged.
+fn decoded(batch: Vec<String>) -> Vec<V2Event> {
+    let mut events: Vec<V2Event> = Vec::with_capacity(batch.len());
+    for payload in batch {
+        let event = serde_json::from_str(&payload).unwrap();
+        if !events.last_mut().is_some_and(|last| last.merge(&event)) {
+            events.push(event);
+        }
+    }
+    events
+}
+
+/// Hands `apply` the stream's batches as the connection sends them to the store, each made by `connection` on a thread
+/// of its own, as the connection's task runs: the probe's measured thread is the store's alone.
+fn connected<T: Send>(batches: Vec<Vec<String>>, connection: impl Fn(Vec<String>) -> T + Send, apply: impl FnMut(T)) {
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    std::thread::scope(|scope| {
+        scope.spawn(move || {
+            for batch in batches {
+                if send.send(connection(batch)).is_err() {
+                    return;
+                }
+            }
+        });
+        receive.iter().for_each(apply);
+    });
+}
+
+/// [`TOOL_DELTAS`] deltas, [`TOOL_PROGRESS`] progress events of the running tool, then the end of the step, as the JSON
+/// the event stream sends.
+fn streamed() -> Vec<String> {
     let words =
         ["The ", "parser ", "now ", "handles ", "**nested** ", "groups ", "and ", "`escapes`", ".\n\n", "- item\n"];
     let message = "msg_live";
@@ -532,7 +564,12 @@ fn streamed() -> Vec<V2Event> {
         let mut data = data;
         data["sessionID"] = json!(SHORT);
         data["assistantMessageID"] = json!(message);
-        support::event(SHORT, kind, seq, data)
+        json!({
+            "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind,
+            "durable": { "aggregateID": SHORT, "seq": seq, "version": 1 },
+            "data": data,
+        })
+        .to_string()
     };
     let mut events = vec![
         event(
@@ -560,6 +597,10 @@ fn streamed() -> Vec<V2Event> {
         "session.tool.called",
         json!({ "id": "call_live", "input": { "content": "lines", "filePath": "/project/out.txt" }, "executed": true }),
     ));
+    for index in 0..TOOL_PROGRESS {
+        let metadata = json!({ "output": format!("wrote line {index}\n"), "description": "Write the file" });
+        events.push(event("session.tool.progress", json!({ "id": "call_live", "metadata": metadata })));
+    }
     events.push(event(
         "session.tool.success",
         json!({ "id": "call_live", "executed": true, "content": [{ "type": "text", "text": "wrote" }] }),
