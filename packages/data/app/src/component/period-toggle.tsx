@@ -4,7 +4,7 @@ import { useI18n } from "../context/i18n"
 export type Period = "weekly" | "daily"
 
 // The period every bar chart opens on.
-export const DEFAULT_PERIOD: Period = "weekly"
+export const DEFAULT_PERIOD: Period = "daily"
 
 export function PeriodToggle(props: { value: Period; onChange: (period: Period) => void; label: string }) {
   const i18n = useI18n()
