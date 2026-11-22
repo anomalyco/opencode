@@ -194,7 +194,7 @@ fn shell_skill_notice_and_switch_messages_render_as_one_line_each() {
 
     h.app.click(8, h.row("Explore finished"));
     assert!(h.app.wait_until(WAIT, || matches!(
-        h.tui.route(),
+        &*h.tui.route(),
         Route::Session { id } if id.0 == "ses_child"
     )));
 }

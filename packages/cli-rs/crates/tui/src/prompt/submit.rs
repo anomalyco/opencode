@@ -103,7 +103,8 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         return false;
     }
     let head = slash_head(&text);
-    let command = head.as_ref().filter(|(name, _)| catalog.commands.iter().any(|command| command == name)).cloned();
+    let command =
+        head.as_ref().filter(|(name, _)| catalog.commands.iter().any(|command| command.name == *name)).cloned();
 
     // Snapshot before starting the request so new typing survives and history records the sent content.
     let entry = prompt.snapshot();
@@ -375,7 +376,7 @@ impl Failure {
             tui.startup.restore_new_session_id(id);
         }
         tui.toasts.show(ToastOptions::new(Variant::Error, error.tui_message()).title(title));
-        let routed = tui.route() == (Route::Session { id: session.clone() });
+        let routed = *tui.route() == (Route::Session { id: session.clone() });
         let active =
             tui.prompt.current.borrow().upgrade().filter(|inner| routed && inner.session.as_ref() == Some(&session));
         let typed = active.as_ref().map(|inner| inner.snapshot()).filter(|prompt| prompt["text"] != "");

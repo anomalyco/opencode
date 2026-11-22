@@ -24,7 +24,8 @@ impl Epilogue {
 
 /// Build the exit text from the current session. An untitled session uses its display label.
 pub fn text(tui: &Tui) -> Option<String> {
-    let session = match tui.route() {
+    let route = tui.route();
+    let session = match &*route {
         Route::Session { id } => {
             let title = tui.data.read(|state| {
                 let session = state.session(&id);

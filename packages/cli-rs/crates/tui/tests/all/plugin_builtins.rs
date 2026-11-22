@@ -267,7 +267,7 @@ fn a_disabled_built_in_holds_nothing_and_draws_as_one_never_enabled() {
         let toggle = |active| {
             let host = opencode_tui::plugins::host::host(&harness.tui);
             assert_eq!(harness.tui.plugins.toggle(&host, id, active), Some(Ok(())), "{id}");
-            harness.tui.navigate(harness.tui.route());
+            harness.tui.navigate((*harness.tui.route()).clone());
             settle(&harness);
         };
         toggle(false);
@@ -409,7 +409,7 @@ fn a_surface_hears_its_mounts_begin_and_end_in_order() {
     ];
     assert_eq!(log, expected);
     // The route mounts again: a mount of equal input, which only the notice's mount tells from the one it replaces.
-    harness.tui.navigate(harness.tui.route());
+    harness.tui.navigate((*harness.tui.route()).clone());
     settle(&harness);
     harness.wait("the reply", || HEARD.with(|heard| heard.borrow().iter().any(|line| line == "reply")));
     let log = mounts_and_first_views();
@@ -426,7 +426,7 @@ fn a_surface_hears_its_mounts_begin_and_end_in_order() {
     assert_eq!(sorted, expected);
     let host = opencode_tui::plugins::host::host(&harness.tui);
     assert_eq!(harness.tui.plugins.toggle(&host, "test.probe", false), Some(Ok(())));
-    harness.tui.navigate(harness.tui.route());
+    harness.tui.navigate((*harness.tui.route()).clone());
     settle(&harness);
     harness.app.type_text("!");
     harness.wait_for("esc exit shell mode");

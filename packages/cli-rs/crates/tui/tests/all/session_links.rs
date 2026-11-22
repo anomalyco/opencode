@@ -88,7 +88,7 @@ fn rename(h: &Harness, session: &str, title: &str) {
 }
 
 fn opened(h: &Harness, session: &str) -> bool {
-    h.tui.route() == support::session_route(session)
+    *h.tui.route() == support::session_route(session)
 }
 
 #[test]

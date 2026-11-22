@@ -185,8 +185,8 @@ fn terminal_for(tui: &Tui, called_by: Option<String>, done: impl FnOnce(&Tui, Re
         }
         let (root, routed) = tui.data.read(|state| {
             let root = state.root(&called_by);
-            let routed = match tui.route() {
-                Route::Session { id } if state.root(&id) == root => Some(id),
+            let routed = match &*tui.route() {
+                Route::Session { id } if state.root(id) == root => Some(id.clone()),
                 _ => None,
             };
             (SessionID::from(root), routed)

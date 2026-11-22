@@ -412,7 +412,7 @@ fn a_tree_of_an_ended_mount_is_dropped_after_a_rebuild_or_a_disable() {
     let host = opencode_tui::plugins::host::host(tui);
     assert_eq!(tui.plugins.toggle(&host, ID, false), Some(Ok(())));
     // As the manager does: the route mounts again without the plugin's renderers.
-    tui.navigate(tui.route());
+    tui.navigate(Route::clone(&tui.route()));
     held();
     fences.pipe.scripts().replay();
     let screen = fences.settled();

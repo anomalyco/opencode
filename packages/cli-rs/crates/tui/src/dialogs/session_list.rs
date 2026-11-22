@@ -1,5 +1,6 @@
 //! Search and manage sessions in the current location or across projects.
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -39,8 +40,8 @@ pub fn show(tui: &Tui) {
         }),
         timer: Cell::new(None),
     });
-    let current = match tui.route() {
-        Route::Session { id } => Some(id),
+    let current = match &*tui.route() {
+        Route::Session { id } => Some(id.clone()),
         _ => None,
     };
     let built = list.clone();
@@ -542,7 +543,7 @@ async fn read(client: &Client, input: &SessionListInput) -> Option<Vec<SessionIn
 }
 
 fn picker_location(tui: &Tui) -> Location {
-    let session = match tui.route() {
+    let session = match &*tui.route() {
         Route::Session { id } => {
             tui.data.read(|state| state.session(&id).map(|session| Location::new(session.location.directory.0.clone())))
         }
@@ -564,11 +565,11 @@ fn footer(session: &SessionInfo, project: Option<&Project>) -> Option<String> {
     let root = match &session.subpath {
         Some(subpath) => {
             let ups = subpath.as_str().split('/').count();
-            resolve_up(Flavor::NATIVE, directory, ups)
+            Cow::Owned(resolve_up(Flavor::NATIVE, directory, ups))
         }
-        None => directory.to_owned(),
+        None => Cow::Borrowed(directory),
     };
-    let from = project.map_or(root.as_str(), |project| project.canonical.as_str());
+    let from = project.map_or(&*root, |project| project.canonical.as_str());
     let relative = relative(from, &root);
     (relative.starts_with("..") || Flavor::NATIVE.is_absolute(&relative))
         .then(|| select::truncate(basename(&relative), 25))
@@ -639,8 +640,8 @@ pub fn basename(path: &str) -> &str {
 }
 
 fn resolve_up(flavor: Flavor, directory: &str, ups: usize) -> String {
-    let root = flavor.sep().to_string();
-    let paths: Vec<&str> = [root.as_str(), directory].into_iter().chain(std::iter::repeat_n("..", ups)).collect();
+    let root = if flavor == Flavor::Windows { "\\" } else { "/" };
+    let paths: Vec<&str> = [root, directory].into_iter().chain(std::iter::repeat_n("..", ups)).collect();
     flavor.resolve(&paths)
 }
 

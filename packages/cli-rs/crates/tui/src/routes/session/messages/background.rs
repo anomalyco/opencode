@@ -54,9 +54,11 @@ impl Hint {
     }
 
     /// `shortcut` is `session.background`'s key; without one there is no hint.
-    pub fn update(&self, messages: &[SessionMessageInfo], shortcut: Option<String>, now: f64) {
-        let running = shortcut.as_ref().and_then(|_| running(messages));
-        *self.0.shortcut.borrow_mut() = shortcut;
+    pub fn update(&self, messages: &[SessionMessageInfo], shortcut: Option<&str>, now: f64) {
+        let running = shortcut.and_then(|_| running(messages));
+        if self.0.shortcut.borrow().as_deref() != shortcut {
+            *self.0.shortcut.borrow_mut() = shortcut.map(str::to_owned);
+        }
         if *self.0.running.borrow() == running {
             self.0.paint();
             return;
@@ -96,15 +98,15 @@ impl Drop for Hint {
 
 impl Inner {
     fn paint(&self) {
-        let shortcut = self.shortcut.borrow().clone();
+        let shortcut = self.shortcut.borrow();
         let visible = self.shown.get() && shortcut.is_some();
         self.root.visible(visible);
-        if let Some(key) = shortcut.filter(|_| visible) {
+        if let Some(key) = shortcut.as_deref().filter(|_| visible) {
             let theme = self.theme.borrow();
             let muted = Style::new().fg(theme.text.muted);
             self.text.set_text(vec![
                 Span::styled("Press ", muted),
-                Span::styled(key, Style::new().fg(theme.text.base)),
+                Span::styled(key.to_owned(), Style::new().fg(theme.text.base)),
                 Span::styled(" to move running work to the background", muted),
             ]);
         }

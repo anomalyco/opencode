@@ -178,7 +178,10 @@ fn a_binding_parses_as_its_layer_registers_it() {
         engine.sort();
         ours.sort();
         assert_eq!(ours, engine, "{key:?}");
+        // The shortcut labels follow each layer in and out.
+        assert_eq!(tui.shortcuts("probe.key").len(), engine.len(), "{key:?}");
         drop(layer);
+        assert_eq!(tui.shortcut("probe.key"), None, "{key:?}");
     }
     let escape = tui.keymap().parse_key("escape").unwrap().stroke;
     let takes_escape =

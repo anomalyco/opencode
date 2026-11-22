@@ -448,7 +448,7 @@ impl World {
     fn enable(&self, on: bool, expected: &mut Expected) {
         let tui = &self.harness.tui;
         let _ = tui.plugins.toggle(&host(tui), "claim.a", on);
-        tui.navigate(tui.route());
+        tui.navigate((*tui.route()).clone());
         expected.a = on;
         expected.off.clear();
     }

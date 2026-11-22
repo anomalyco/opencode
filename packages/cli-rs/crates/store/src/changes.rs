@@ -244,6 +244,11 @@ impl<'a> Changes<'a> {
         self.dirty.all || self.dirty.projects
     }
 
+    /// Some location changed: [`Changes::location`] says which.
+    pub fn any_location(&self) -> bool {
+        self.dirty.all || !self.dirty.locations.is_empty()
+    }
+
     pub fn location(&self, location: &Location) -> bool {
         self.dirty.all
             || self.data.read(|state| {
