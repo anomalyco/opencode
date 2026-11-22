@@ -16,6 +16,15 @@ describe("Mime.detect", () => {
     expect(Mime.detect(bytes)).toBe(mime)
   })
 
+  test("never invents a media type from the path", () => {
+    // Unknown binary keeps the caller's binary handling: `read` raises BinaryFileError rather than sending a corrupt
+    // or mislabelled file to the provider typed as media.
+    const binary = Uint8Array.of(0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07)
+    expect(Mime.detect(binary)).toBe("application/octet-stream")
+    expect(Mime.detect(binary, "garbage.mp4")).toBe("application/octet-stream")
+    expect(Mime.detect(binary, "garbage.gif")).toBe("application/octet-stream")
+  })
+
   test("keeps text ahead of the path's extension", () => {
     // A media extension must not turn text into media: `read` would attach it as base64 in history, where it fails
     // on every later turn. A Git-LFS pointer is the common case.
@@ -82,7 +91,9 @@ describe("Mime.detect with a path", () => {
   it("does not treat a UTF-16LE text file as audio", () => {
     const utf16le = bytes(0xff, 0xfe, 0x68, 0x00, 0x69, 0x00)
     expect(Mime.detect(utf16le)).toBe("application/octet-stream")
-    expect(Mime.detect(utf16le, "note.txt")).toBe("text/plain")
+    // The extension never decides on its own, so a `.txt` name does not make these bytes text; `read` raises
+    // BinaryFileError for them.
+    expect(Mime.detect(utf16le, "note.txt")).toBe("application/octet-stream")
   })
 
   it("uses the extension to disambiguate an audio-only MP4 container", () => {
