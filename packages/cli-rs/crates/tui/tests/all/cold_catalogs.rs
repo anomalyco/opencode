@@ -55,6 +55,10 @@ fn routes() -> Vec<MemoryRoute> {
     let cost = json!([{ "input": 0, "output": 0, "cache": { "read": 0, "write": 0 } }]);
     let free = support::merge(support::model("p", "m", "Model M"), json!({ "cost": cost }));
     let commands = json!([{ "name": "triage", "description": "Triage the issues" }]);
+    let reply = json!({
+        "id": "msg_1", "type": "assistant", "agent": "build", "model": { "providerID": "p", "id": "m" },
+        "time": { "created": 1, "completed": 2 }, "finish": "stop", "content": [{ "type": "text", "text": "Done." }],
+    });
     vec![
         MemoryRoute::json("GET", "/api/location", 200, &support::location(DIRECTORY)),
         MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })),
@@ -63,6 +67,8 @@ fn routes() -> Vec<MemoryRoute> {
         MemoryRoute::json("GET", "/api/provider", 200, &list(json!([]))),
         MemoryRoute::json("GET", "/api/command", 200, &list(commands)),
         MemoryRoute::json("GET", "/api/config", 200, &json!([])),
+        MemoryRoute::json("GET", "/api/session/ses_a", 200, &json!({ "data": support::catalog_session() })),
+        MemoryRoute::json("GET", "/api/session/ses_a/message", 200, &json!({ "data": [reply], "cursor": {} })),
     ]
 }
 
@@ -117,4 +123,15 @@ fn slash_commands_fill_in() {
     assert!(!h.app.text().contains("/triage"), "{}", h.app.text());
     server.warm();
     h.wait_for("/triage");
+}
+
+#[test]
+fn a_transcript_names_its_model_once_the_models_fill_in() {
+    let server = Cold::new();
+    let h = mount(&server);
+    h.tui.navigate(support::session_route("ses_a"));
+    h.wait_for("Build · p/m · ");
+    server.warm();
+    // The row's footer, not the prompt line's.
+    h.wait_for("Build · Model M · ");
 }

@@ -356,7 +356,8 @@ impl State {
             Completion::Shells(read, Ok(response)) => self.complete_shells(read, response, effects),
             Completion::Location(read, Ok(info)) => self.complete_location(read.adopt, info),
             Completion::Websearch(Ok(providers)) => {
-                self.location_mut(&Location::from(&providers.location)).websearch = Some(providers.data);
+                self.location_mut(&Location::from(&providers.location), crate::changes::Parts::WEBSEARCH).websearch =
+                    Some(providers.data);
             }
             Completion::Settled { key, token, catalog, location } => {
                 self.complete_settle(key, token, catalog, location, effects)

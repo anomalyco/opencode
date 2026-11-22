@@ -216,8 +216,11 @@ impl Prompt {
     }
 
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
-        if changes.any_location() && changes.location(&self.inner.location(tui)) {
-            self.inner.read_catalog(tui);
+        let location = changes.any_location().then(|| self.inner.location(tui));
+        if let Some(location) = location.filter(|location| changes.location(location)) {
+            if changes.location_parts(&location, Catalog::READS) {
+                self.inner.read_catalog(tui);
+            }
             if let Some(complete) = self.inner.autocomplete.get() {
                 complete.sync();
             }
@@ -601,7 +604,9 @@ impl Inner {
     fn read_catalog(&self, tui: &Tui) {
         let location = self.location(tui);
         let catalog = tui.data.read(|state| Catalog::read(state, &location));
-        if let Some(catalog) = catalog {
+        // Read again unchanged, it shows nothing new.
+        if let Some(catalog) = catalog.filter(|new| !self.catalog.borrow().as_deref().is_some_and(|old| old.same(new)))
+        {
             *self.catalog.borrow_mut() = Some(Rc::new(catalog));
             self.refresh(tui);
             self.submit_startup(tui);

@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::Event;
 use opencode_api::generated::*;
-use opencode_store::{CreateSession, Data, LoadMore, Options, SessionStatus, Touched};
+use opencode_store::{CreateSession, Data, LoadMore, Options, Payload, SessionStatus, Touched};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -761,33 +761,76 @@ fn messages_decode_by_their_type_tag() {
     assert!(matches!(compaction, SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_))));
 }
 
-#[test]
-fn adjacent_deltas_of_one_part_merge() {
-    let delta = |kind: &str, message: &str, ordinal: i64, text: &str| {
-        event(json!({
-            "id": "evt_1", "created": 1, "type": kind,
-            "data": { "sessionID": SESSION, "assistantMessageID": message, "ordinal": ordinal, "delta": text },
-        }))
+/// Adjacent deltas of one part join before they apply: as JSON a view reads, in the store, and decoded, for a delta
+/// listener, in the connection's batches; the listener gets them joined. Deltas of another session,
+/// message, kind or tool call stay apart.
+#[tokio::test(flavor = "local")]
+async fn adjacent_deltas_of_one_part_join() {
+    let part = |kind: &str, extra: Value| {
+        let mut data = json!({ "sessionID": SESSION, "assistantMessageID": "msg_a" });
+        data.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        durable(kind, "evt_1", 1, data)
     };
-    let mut first = delta("session.text.delta", "msg_a", 0, "Hel");
-    assert!(first.merge(&delta("session.text.delta", "msg_a", 0, "lo")));
-    let V2Event::SessionTextDelta(merged) = &first else {
-        panic!("not a text delta");
+    let text = |delta: &str| part("session.text.delta", json!({ "ordinal": 0, "delta": delta }));
+    let reasoning = |delta: &str| part("session.reasoning.delta", json!({ "ordinal": 0, "delta": delta }));
+    let tool = |call: &str, delta: &str| part("session.tool.input.delta", json!({ "id": call, "delta": delta }));
+    // A delta of another message, or of another session, which neither joins nor shows here.
+    let elsewhere = |session: &str, message: &str| {
+        let data = json!({ "sessionID": session, "assistantMessageID": message, "ordinal": 0, "delta": "X" });
+        durable("session.text.delta", "evt_1", 1, data).to_string()
     };
-    assert_eq!(merged.data.delta, "Hello");
-    assert!(!first.merge(&delta("session.text.delta", "msg_a", 1, "!")));
-    assert!(!first.merge(&delta("session.text.delta", "msg_b", 0, "!")));
-    assert!(!first.merge(&delta("session.reasoning.delta", "msg_a", 0, "!")));
-
-    let tool = |call: &str, text: &str| {
-        event(json!({
-            "id": "evt_2", "created": 1, "type": "session.tool.input.delta",
-            "data": { "sessionID": SESSION, "assistantMessageID": "msg_a", "id": call, "delta": text },
-        }))
-    };
-    let mut input = tool("call_1", "{\"a\"");
-    assert!(input.merge(&tool("call_1", ":1}")));
-    assert!(!input.merge(&tool("call_2", "{}")));
+    let step = json!({ "agent": "build", "model": { "providerID": "p", "id": "m" }, "started": 1 });
+    let starts = [
+        part("session.step.started", step),
+        part("session.text.started", json!({ "ordinal": 0 })),
+        part("session.reasoning.started", json!({ "ordinal": 0 })),
+        part("session.tool.input.started", json!({ "id": "call_1", "name": "bash" })),
+        part("session.tool.input.started", json!({ "id": "call_2", "name": "bash" })),
+    ];
+    // A lone surrogate escape, which `JSON.parse` keeps, reads as U+FFFD.
+    let lone = text("?").to_string().replace('?', "\\ud83d");
+    let deltas = [
+        text("Hel").to_string(),
+        elsewhere(SESSION, "msg_b"),
+        elsewhere("ses_other", "msg_a"),
+        text("lo\n").to_string(),
+        lone,
+        reasoning("th").to_string(),
+        reasoning("ink").to_string(),
+        text("!").to_string(),
+        tool("call_1", "{\"a\"").to_string(),
+        tool("call_1", ":1}").to_string(),
+        tool("call_2", "{}").to_string(),
+    ];
+    for listened in [false, true] {
+        let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
+        data.remember(info(session(0)));
+        let listening = listened.then(|| data.listen_deltas());
+        data.apply(starts.iter().map(|start| event(start.clone())));
+        // As the connection hands them over: read for the store's listeners, decoded deltas joined.
+        let wanted = data.remote().wanted();
+        let mut batch: Vec<Payload> = Vec::new();
+        for delta in &deltas {
+            let payload = Payload::read(delta.clone(), &wanted).unwrap();
+            if !batch.last_mut().is_some_and(|last| last.merge(&payload)) {
+                batch.push(payload);
+            }
+        }
+        data.apply(batch);
+        let content = message(&data, SESSION, "msg_a")["content"].clone();
+        let parts: Vec<&str> = content
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|part| part.get("text").unwrap_or(&part["state"]["input"]).as_str().unwrap())
+            .collect();
+        assert_eq!(parts, ["Hello\n\u{fffd}!", "think", "{\"a\":1}", "{}"], "listened: {listened}");
+        let Some(listening) = listening else { continue };
+        let kept = listening.take(|events| {
+            events.iter().map(|event| serde_json::to_value(event).unwrap()["data"]["delta"].clone()).collect::<Vec<_>>()
+        });
+        assert_eq!(kept, ["Hel", "X", "X", "lo\n\u{fffd}", "think", "!", "{\"a\":1}", "{}"]);
+    }
 }
 
 #[tokio::test(flavor = "local")]

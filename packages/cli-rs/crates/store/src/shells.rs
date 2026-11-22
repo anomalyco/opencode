@@ -3,10 +3,14 @@
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
+use crate::changes::Parts;
 use crate::core::{Effect, Shells, Ticket};
 use crate::location::{Catalog, Location};
 use crate::reads::{Read, ReadKey};
 use crate::state::{Overlay, State};
+
+/// What a change of the shells changes of their location.
+const SHELLS: Parts = Parts::catalogs(&[Catalog::Shell]);
 
 /// A running shell and the location that reported it.
 #[derive(Debug, Clone, PartialEq)]
@@ -47,7 +51,7 @@ impl State {
     pub(crate) fn on_shell_created(&mut self, info: &ShellInfo, location: &Location) {
         let shell = Shell { info: info.clone(), location: location.clone() };
         self.record_shell(location, &info.id, Some(shell.clone()));
-        self.location_mut(location).shell.get_or_insert_default().insert(info.id.clone(), shell);
+        self.location_mut(location, SHELLS).shell.get_or_insert_default().insert(info.id.clone(), shell);
     }
 
     pub(crate) fn remove_shell(&mut self, id: &ShellID, location: &Location) {
@@ -60,7 +64,7 @@ impl State {
         if !present {
             return;
         }
-        if let Some(shells) = self.location_mut(location).shell.as_mut() {
+        if let Some(shells) = self.location_mut(location, SHELLS).shell.as_mut() {
             shells.shift_remove(id);
         }
     }
@@ -115,7 +119,7 @@ impl State {
         if overflowed {
             self.invalidate(Read::Catalog(Catalog::Shell, &location));
         }
-        self.location_mut(&at).shell = Some(shells);
+        self.location_mut(&at, SHELLS).shell = Some(shells);
         if overflowed {
             effects.push(Effect::Catalogs(vec![Catalog::Shell], location));
         }

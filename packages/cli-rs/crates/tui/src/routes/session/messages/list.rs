@@ -16,9 +16,10 @@ use opencode_api::generated::{
 use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
 use opencode_plugin::claim::ToolClaims;
 use opencode_store::location::{Catalog, Location};
-use opencode_store::{LoadMore, MessageKey, State};
+use opencode_store::{LoadMore, MessageKey, Parts, State};
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::ThemeMode;
+use opencode_ui::tool_info::ToolKind;
 use opentui::input::MouseEventKind;
 use opentui::syntax::SyntaxTheme;
 use opentui::widget::ScrollEdge;
@@ -300,7 +301,13 @@ impl Transcript {
             *self.0.groups.expanded.borrow_mut() = tui.tabs.expanded_groups(&session.0);
         }
         self.0.locate(tui, session);
-        let catalogs = self.0.model.borrow().location.as_ref().is_some_and(|location| changes.location(location));
+        // The rows read the location's agents and models, what the local selection reads, and, a shell's rows, its
+        // shells.
+        let catalogs = self.0.model.borrow().location.as_ref().is_some_and(|location| {
+            changes.location_parts(location, crate::local::READS)
+                || changes.location_parts(location, Parts::catalogs(&[Catalog::Shell]))
+                    && tui.data.read(|state| reads_shells(state.messages(session)))
+        });
         let pending = changes.has(session, Touched::PENDING);
         // A tool row waiting on a permission request takes the warning color.
         let permissions = changes.has(session, Touched::PERMISSIONS);
@@ -1823,6 +1830,17 @@ fn thinking_syntax(syntax: &SyntaxTheme, foreground: Color) -> SyntaxTheme {
         }
     }
     thinking
+}
+
+/// Whether a row of `messages` reads the shells the store lists: a shell's, or a shell tool's.
+fn reads_shells(messages: &[SessionMessageInfo]) -> bool {
+    messages.iter().any(|message| match message {
+        SessionMessageInfo::Shell(_) => true,
+        SessionMessageInfo::Assistant(assistant) => assistant.content.iter().any(|item| {
+            matches!(item, SessionMessageAssistantContentItem::Tool(tool) if ToolKind::of(&tool.name) == ToolKind::Shell)
+        }),
+        _ => false,
+    })
 }
 
 #[cfg(test)]

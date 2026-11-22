@@ -6,7 +6,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::{self, Status};
 use opencode_api::generated::*;
-use opencode_store::{Catalog, CreateSession, Data, HELD, LoadMore, MAILBOX, Options, Touched, Unwoken};
+use opencode_store::{
+    Catalog, CreateSession, Data, HELD, LoadMore, MAILBOX, Options, Payload, Touched, Unwoken, Wanted,
+};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 
@@ -85,7 +87,7 @@ async fn a_coalesced_reconnect_invalidates_reads_and_flushes_everything() {
     let (status, watcher) = watch::channel(state(Status::Connected));
     let (batches, receiver) = mpsc::channel(8);
     let driver = tokio::spawn(opencode_store::connection::run(data.remote(), watcher, receiver));
-    batches.send(vec![connected()]).await.unwrap();
+    batches.send(vec![connected().into()]).await.unwrap();
     settle().await;
     let path = "/api/session/ses_a/message";
     data.message_sync(&id("ses_a")).await.unwrap();
@@ -94,7 +96,7 @@ async fn a_coalesced_reconnect_invalidates_reads_and_flushes_everything() {
     taken.take(&data);
 
     // The second `server.connected` arrives with no status change `run` could observe.
-    batches.send(vec![connected()]).await.unwrap();
+    batches.send(vec![connected().into()]).await.unwrap();
     settle().await;
     let (_, changes) = taken.take(&data);
     assert!(changes.all(), "a reconnect wakes every view");
@@ -117,11 +119,15 @@ async fn an_owner_that_stops_draining_keeps_the_stream_and_every_event() {
     let _listening = data.listen([EventKind::TuiPromptAppend]);
     let deltas = data.listen_deltas();
     let append = |n: usize| {
-        event(json!({ "id": format!("evt_{n}"), "created": 1, "type": "tui.prompt.append", "data": { "text": "x" } }))
+        let event =
+            json!({ "id": format!("evt_{n}"), "created": 1, "type": "tui.prompt.append", "data": { "text": "x" } });
+        Payload::read(event.to_string(), &Wanted::default()).unwrap()
     };
     let delta = |message: &str| {
         let body = json!({ "sessionID": "ses_none", "assistantMessageID": message, "ordinal": 0, "delta": "y" });
-        event(json!({ "id": "evt_delta", "created": 1, "type": "session.text.delta", "data": body }))
+        let event = json!({ "id": "evt_delta", "created": 1, "type": "session.text.delta", "data": body });
+        // Read before the connection saw the listener: the hold decodes the delta to merge it.
+        Payload::read(event.to_string(), &Wanted::default()).unwrap()
     };
     // The mailbox's worth of appends, then two replies' deltas in turn with an append every 100 batches.
     let streamed = 2_000;
@@ -204,6 +210,57 @@ async fn the_connection_records_a_declared_error_by_its_message() {
     assert_eq!(connection.history()[1].error.as_deref(), Some("no"));
 }
 
+/// The connection reads each payload as the stream's reader did, a delta only through its view, and one that does not
+/// decode ends its stream with the reader's error: what came before it applies, what came after it never does, and the
+/// next stream's events apply.
+#[tokio::test(flavor = "local")]
+async fn a_payload_that_does_not_decode_ends_its_stream() {
+    let append = |n: &str| json!({ "id": n, "created": 1, "type": "tui.prompt.append", "data": { "text": "x" } });
+    let malformed =
+        json!({ "id": "evt_bad", "created": 1, "type": "session.text.delta", "data": { "sessionID": "s" } });
+    let connected = json!({ "id": "evt_connected", "type": "server.connected", "data": {} });
+    let sse = |events: &[&Value]| events.iter().map(|event| format!("data: {event}\n\n")).collect::<String>();
+    let first = sse(&[&connected, &append("evt_1"), &malformed, &append("evt_2")]);
+    let next = sse(&[&connected, &append("evt_4")]);
+    let opened = Arc::new(AtomicUsize::new(0));
+    let count = opened.clone();
+    let client = client(handler(move |req: Req| {
+        let reply = match (req.path == "/api/event").then(|| count.fetch_add(1, Ordering::SeqCst)) {
+            Some(0) => Reply::Sse(first.clone()),
+            Some(_) => Reply::Sse(next.clone()),
+            None => ok(json!({ "data": [] })),
+        };
+        async move { reply }
+    }));
+    let options = Options { directory: "/project".into(), ..Options::default() };
+    let data = Data::new(client, options, tokio::runtime::Handle::current(), || Ok(()));
+    let _listening = data.listen([EventKind::TuiPromptAppend]);
+    let options = events::Options { reconnect_delay: std::time::Duration::from_millis(10), ..Default::default() };
+    let (connection, _task) = opencode_store::connection::connect(&data, options);
+    let appended = |data: &Data| {
+        let mut taken = Vec::new();
+        data.drain();
+        data.take_signals(&mut taken);
+        taken.iter().map(|event| event.id().to_owned()).collect::<Vec<_>>()
+    };
+
+    let mut seen = Vec::new();
+    wait(|| {
+        seen.extend(appended(&data));
+        seen.len() > 1
+    })
+    .await;
+    assert_eq!(seen, ["evt_1", "evt_4"], "what came before it, then the next stream's events");
+    assert_eq!(opened.load(Ordering::SeqCst), 2);
+    let error = connection.history().into_iter().find_map(|record| record.error);
+    let read = opencode_api::sse::decode::<V2Event>(&malformed.to_string()).unwrap_err();
+    assert_eq!(
+        error,
+        Some(opencode_api::error::Error::from(read).error_message()),
+        "the error the stream's read gives"
+    );
+}
+
 /// The dying stream's last batch is applied before the disconnect invalidates, so a
 /// `session.created` in it cannot keep its reads marked done across the reconnect.
 #[tokio::test(flavor = "local")]
@@ -212,7 +269,7 @@ async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
     let (status, watcher) = watch::channel(state(Status::Connected));
     let (batches, receiver) = mpsc::channel(8);
     let driver = tokio::spawn(opencode_store::connection::run(data.remote(), watcher, receiver));
-    batches.send(vec![connected()]).await.unwrap();
+    batches.send(vec![connected().into()]).await.unwrap();
     settle().await;
 
     let created = durable(
@@ -220,7 +277,7 @@ async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
         "evt_created",
         json!({ "sessionID": "ses_new", "projectID": "project", "location": { "directory": "/project" }, "slug": "s", "version": "1" }),
     );
-    batches.send(vec![event(created)]).await.unwrap();
+    batches.send(vec![event(created).into()]).await.unwrap();
     status.send_replace(state(Status::Reconnecting));
     settle().await;
     status.send_replace(state(Status::Connected));

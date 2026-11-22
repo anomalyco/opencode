@@ -6,7 +6,7 @@ use opencode_api::generated::{
     AgentInfo, CommandInfo, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
 };
 use opencode_store::location::{Catalog as Read, Location};
-use opencode_store::{Data, State, Task};
+use opencode_store::{Data, Parts, State, Task};
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
@@ -53,6 +53,21 @@ pub fn sync(data: &Data, location: &Location) -> Vec<Task<()>> {
 }
 
 impl Catalog {
+    /// What [`Catalog::read`] reads of a location.
+    pub const READS: Parts = Parts::catalogs(&[Read::Agent, Read::Model, Read::Provider, Read::Command, Read::Vcs]);
+
+    /// The same lists and branch as `other`. A list not read yet is a new empty one each time.
+    pub fn same(&self, other: &Self) -> bool {
+        fn same<T>(one: &Arc<[T]>, other: &Arc<[T]>) -> bool {
+            Arc::ptr_eq(one, other) || one.is_empty() && other.is_empty()
+        }
+        same(&self.agents, &other.agents)
+            && same(&self.models, &other.models)
+            && same(&self.providers, &other.providers)
+            && same(&self.commands, &other.commands)
+            && self.branch == other.branch
+    }
+
     /// The catalog of `location` once its agents and models are read (`promptDisplay` waits for
     /// both); the rest only label the selection.
     pub fn read(state: &State, location: &Location) -> Option<Self> {

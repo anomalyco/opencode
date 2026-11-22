@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
+use futures_util::{FutureExt, StreamExt};
 use opencode_api::client::Client;
 use opencode_api::generated::V2Event;
 use opencode_api::transport::{Request, Response, Transport};
@@ -48,6 +48,8 @@ impl Req {
 pub enum Reply {
     Json(u16, Value),
     Text(u16, String),
+    /// An event stream that sends this text, then stays open.
+    Sse(String),
     /// The request fails before a response, as a failed `fetch` does.
     Fail(String),
 }
@@ -76,6 +78,12 @@ impl Transport for Fake {
             let (status, content_type, body) = match reply.await {
                 Reply::Json(status, value) => (status, "application/json", serde_json::to_vec(&value).unwrap()),
                 Reply::Text(status, text) => (status, "text/plain", text.into_bytes()),
+                Reply::Sse(text) => {
+                    let body =
+                        futures_util::stream::iter([Ok(Bytes::from(text))]).chain(futures_util::stream::pending());
+                    let headers = vec![("content-type".to_owned(), "text/event-stream".to_owned())];
+                    return Ok(Response { status: 200, headers, body: Box::pin(body) });
+                }
                 Reply::Fail(message) => return Err(message),
             };
             Ok(Response {

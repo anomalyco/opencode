@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use opencode_api::generated::{EventKind, SessionID};
+use opencode_api::generated::{EventKind, SessionID, V2Event};
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_plugin::abi::{self, v2};
 use opencode_tui::panel::{Presentation, Target};
@@ -329,7 +329,7 @@ fn a_deletion_in_a_burst_of_signals_still_closes_its_tab() {
         })
     });
     let events: Vec<_> =
-        std::iter::once(deleted).chain(burst).map(|event| serde_json::from_value(event).unwrap()).collect();
+        std::iter::once(deleted).chain(burst).map(|event| serde_json::from_value::<V2Event>(event).unwrap()).collect();
     // The UI thread is busy: nothing drains its queue until it is full.
     let proxy = h.app.proxy();
     while proxy.post(|_| {}) != Err(opentui::app::ProxyError::Full) {}
@@ -350,7 +350,7 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
         "durable": { "aggregateID": "ses_a", "seq": 1, "version": 1 },
         "data": { "sessionID": "ses_a" },
     });
-    h.tui.data.apply(vec![serde_json::from_value(event).unwrap()]);
+    h.tui.data.apply(vec![serde_json::from_value::<V2Event>(event).unwrap()]);
     h.app.render();
     h.app.advance(std::time::Duration::from_millis(200));
     assert!(h.app.needs_frame(), "a busy tab pulses");
@@ -377,7 +377,7 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
             "durable": { "aggregateID": "ses_a", "seq": seq, "version": 1 },
             "data": { "sessionID": "ses_a" },
         });
-        serde_json::from_value(event).unwrap()
+        serde_json::from_value::<V2Event>(event).unwrap()
     };
     let vertical = json!({ "tabs": { "layout": "vertical" } });
     for (name, config, compact, busy) in [
