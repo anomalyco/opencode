@@ -107,7 +107,7 @@ impl State {
             || matches!(job, JobInfo::Subagent(job) if self.within_tree(&job.child_session_id, ancestor))
     }
 
-    /// Begins a read of the running jobs of the tree under the session `key`. Job events received during the read
+    /// Begins a read of the running jobs of the tree under the session of `ticket`. Job events received during the read
     /// apply over its answer.
     pub(crate) fn begin_jobs(&mut self, ticket: Ticket) -> Jobs {
         let read = self.token();

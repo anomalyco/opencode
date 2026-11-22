@@ -863,6 +863,6 @@ async fn load(
             let response = client.skill_list(&SkillListInput { location: query }).await?;
             ((&response.location).into(), Loaded::Skill(response.data.into()))
         }
-        Catalog::Shell => unreachable!("Data::shell_read reads shells"),
+        Catalog::Shell => unreachable!("shells have their own request"),
     })
 }

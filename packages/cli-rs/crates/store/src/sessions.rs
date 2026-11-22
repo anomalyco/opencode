@@ -721,7 +721,7 @@ impl State {
         self.revalidate(id, effects);
     }
 
-    /// Begins a read of the session `key`'s info, and of its children for [`SessionRead::Family`].
+    /// Begins a read of the info of the session of `ticket`, and of its children for [`SessionRead::Family`].
     pub(crate) fn begin_session_read(&mut self, ticket: Ticket) -> Info {
         let id = self.sessions[ticket.session()].id.clone();
         let children = matches!(ticket.key, ReadKey::Session(_, SessionRead::Family));

@@ -331,6 +331,7 @@ impl Data {
             None => Begin::Begun(begin(&mut store, ticket)),
             Some(wait) => Begin::After(wait, begin),
         };
+        store.load_read(key, token, matches!(start, Begin::After(..)));
         let data = self.clone();
         // Spawned under the lock, so its settlement cannot run before its state exists.
         let task = self.spawn(async move {

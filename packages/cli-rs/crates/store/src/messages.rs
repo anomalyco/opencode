@@ -1073,7 +1073,7 @@ fn edit_session(event: &V2Event) -> Option<&SessionID> {
 }
 
 impl State {
-    /// Begins a read of the newest transcript page of the session `key`, opening a log of what overtakes it.
+    /// Begins a read of the newest transcript page of the session of `ticket`, opening a log of what overtakes it.
     pub(crate) fn begin_messages(&mut self, ticket: Ticket) -> Head {
         let read = self.token();
         let record = &mut self.sessions[ticket.session()];

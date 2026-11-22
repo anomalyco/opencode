@@ -189,7 +189,7 @@ impl State {
         }
     }
 
-    /// Starts or joins the read `key`, recording a new load as in flight.
+    /// Starts or joins the read `key`: what the caller does, with the token of a new load.
     pub(crate) fn start_read(&mut self, key: ReadKey) -> Start {
         let stale = match self.read_state_mut(key) {
             Some(ReadState::Done) => return Start::Done,
@@ -198,13 +198,17 @@ impl State {
             _ => None,
         };
         let token = self.token();
-        let phase = if stale.is_some() { Phase::Queued } else { Phase::Running };
-        if let Some(read) = self.read_state_mut(key) {
-            *read = ReadState::Loading { token, phase };
-        }
         match stale {
             Some(stale) => Start::After(token, stale),
             None => Start::Run(token),
+        }
+    }
+
+    /// Records the new load `token` of `key` as in flight, once a load that runs now has begun: a begin that fails
+    /// leaves the read to the next caller.
+    pub(crate) fn load_read(&mut self, key: ReadKey, token: u64, queued: bool) {
+        if let Some(read) = self.read_state_mut(key) {
+            *read = ReadState::Loading { token, phase: if queued { Phase::Queued } else { Phase::Running } };
         }
     }
 

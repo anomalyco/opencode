@@ -7,7 +7,6 @@ use opencode_api::generated::*;
 
 use crate::changes::Touched;
 use crate::core::{Effect, List, Ticket};
-pub use crate::driver::{Gate, Prompt};
 use crate::messages::{MessageExt, from_event};
 use crate::reads::{Read, SessionRead};
 use crate::sessions::Life;
@@ -331,7 +330,7 @@ pub(crate) fn now() -> f64 {
 }
 
 impl State {
-    /// Begins a read of the pending inbox items of the session `key`. Events after this must reach the read's overtake
+    /// Begins a read of the pending inbox items of the session of `ticket`. Events after this must reach the read's overtake
     /// log, so it opens before the read is fetched.
     pub(crate) fn begin_pending(&mut self, ticket: Ticket) -> List {
         let read = self.token();

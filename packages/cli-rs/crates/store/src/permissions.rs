@@ -59,7 +59,7 @@ impl State {
         }
     }
 
-    /// Begins a read of the pending permission requests of the session `key`, with an overlay of the requests asked
+    /// Begins a read of the pending permission requests of the session of `ticket`, with an overlay of the requests asked
     /// and replied to meanwhile.
     pub(crate) fn begin_permissions(&mut self, ticket: Ticket) -> List {
         let read = self.token();
