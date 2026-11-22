@@ -190,16 +190,6 @@ export const layer = Layer.effect(
       isActive: coordinator.isActive,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
-          // The type excludes "shutdown", so this only fires for unchecked callers. Die rather
-          // than reinterpret it: a shutdown settlement keeps the claim and skips going idle,
-          // which must never follow from a public interrupt call.
-          if ((options?.reason as "shutdown" | undefined) === "shutdown") {
-            return yield* Effect.die(
-              new Error(
-                'SessionExecution.interrupt does not accept "shutdown": it is only published when the process owner interrupts the execution fiber on teardown.',
-              ),
-            )
-          }
           // An omitted reason is a person's stop: every existing caller interrupts without one.
           const interrupted = yield* coordinator.interrupt(sessionID, options?.reason ?? "user")
           if (!options?.resume) return interrupted

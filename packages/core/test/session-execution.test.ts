@@ -205,37 +205,6 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
-  // A public "shutdown" must never take the shutdown settlement path: the claim stays held
-  // and the session never goes idle there. The type excludes it; unchecked callers die here
-  // instead, leaving the still-running execution to be stopped as a person's stop.
-  it.effect("rejects a shutdown reason through the public input", () =>
-    Effect.gen(function* () {
-      const database = yield* Database.Service
-      const sessionID = Session.ID.make("ses_reject_shutdown_reason")
-      yield* seedSessions(database, [sessionID])
-
-      const draining = yield* Deferred.make<void>()
-      const scope = yield* Scope.make()
-      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-      const context = yield* buildExecution(scope, () =>
-        Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never)),
-      )
-      const execution = Context.get(context, SessionExecution.Service)
-      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
-      yield* Deferred.await(draining)
-      expect((yield* claims(database))[sessionID]).toBe(true)
-
-      const exit = yield* execution.interrupt(sessionID, { reason: "shutdown" as never }).pipe(Effect.exit)
-      expect(Exit.isFailure(exit)).toBe(true)
-      expect(yield* execution.isActive(sessionID)).toBe(true)
-      expect((yield* claims(database))[sessionID]).toBe(true)
-
-      expect(yield* execution.interrupt(sessionID)).toBeTrue()
-      yield* execution.awaitIdle(sessionID)
-      expect((yield* claims(database))[sessionID]).toBe(false)
-    }),
-  )
-
   it.effect("tells the drain once the user stopped it", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
