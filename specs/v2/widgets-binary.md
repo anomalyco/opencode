@@ -41,6 +41,7 @@ clamps, unknown node types dropped).
 | `01 02 str(id) D` | live `draw` |
 | `01 03` | live `frame` request |
 | `01 09 G` | live `frame` request carrying a GPU batch |
+| `01 0A G` | live standalone GPU batch (`{ type: "gpu", … }`, a batch sent before `sleep`/`fetch`) |
 | `01 04 json(value)` | `submit` |
 | `01 05` | `dismiss` |
 | `01 06 u8(wake) json(value)` | `send` |
@@ -166,8 +167,9 @@ encoding above is for a host whose app does the replay.
 
 ## Errors
 
-- **The host can't encode** (a draw rule above, or an over-limit batch): a program error, reported as today
-  (phase `view`, `draw` or `gpu`). The post is dropped, and the previous view or frame stays.
+- **The host can't encode** (a draw rule above, an over-limit batch, an unknown post type): a program error, reported
+  as today (phase `view`, `draw` or `gpu`). A step fails as an invalid step output does (the previous view stays); a
+  live post fails as an invalid post does (`widgets-live.md`: the run ends with the error and can be restarted).
 - **The client gets a malformed message:** a wrong version or kind, a truncated stream or section, a length past the
   end, an unknown kind or GPU arg tag, a draw op or segment verb outside the table, invalid UTF-8, a stream not
   consumed exactly, or a count over the limits (2,000 draw commands, 4 MB of GPU bytes). That is a client error: log
