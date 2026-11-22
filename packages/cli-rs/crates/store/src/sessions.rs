@@ -625,7 +625,7 @@ impl State {
         self.log_selected(&data.session_id);
         let row = SessionMessageAgentSelected {
             id: from_event(&event.id),
-            r#type: "agent-switched".into(),
+            r#type: tag::AgentSwitched,
             agent: data.agent.clone(),
             previous,
             metadata: None,
@@ -648,7 +648,7 @@ impl State {
         let id = from_event(&event.id);
         let row = SessionMessageModelSelected {
             id: id.clone(),
-            r#type: "model-switched".into(),
+            r#type: tag::ModelSwitched,
             model: data.model.clone(),
             previous,
             metadata: None,
@@ -674,7 +674,7 @@ impl State {
         });
         let row = SessionMessageLocationSwitched {
             id: from_event(&event.id),
-            r#type: "location-switched".into(),
+            r#type: tag::LocationSwitched,
             project_id: Some(data.project_id.clone()),
             subpath: data.subpath.clone(),
             location,
@@ -741,7 +741,7 @@ impl State {
         // Mirror the projected idle marker so turn boundaries match before the next read.
         let row = SessionMessageIdle {
             id: from_event(event_id),
-            r#type: "idle".into(),
+            r#type: tag::Idle,
             outcome: match outcome {
                 Outcome::Succeeded => SessionInfoOutcome::Succeeded,
                 Outcome::Failed => SessionInfoOutcome::Failed,

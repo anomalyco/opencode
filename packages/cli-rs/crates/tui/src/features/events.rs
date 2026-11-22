@@ -106,19 +106,12 @@ fn resync(tui: &Tui) {
     let deleted: Vec<SessionID> =
         tui.data.read(|state| open.into_iter().map(SessionID).filter(|id| state.is_missing(id)).collect());
     for id in deleted {
-        let event = SessionDeleted {
-            r#type: "session.deleted".to_owned(),
-            data: SessionArchivedData { session_id: id },
-            ..SessionDeleted::default()
-        };
+        let event = SessionDeleted { data: SessionArchivedData { session_id: id }, ..SessionDeleted::default() };
         handle(tui, &Handled::SessionDeleted(&event));
     }
     tui.resync();
     // Notify subscribers to resync after a missed broadcast, as on reconnect.
-    let event = V2Event::ServerConnected(V2EventServerConnected {
-        r#type: "server.connected".to_owned(),
-        ..V2EventServerConnected::default()
-    });
+    let event = V2Event::ServerConnected(V2EventServerConnected::default());
     let subscribers: Vec<_> =
         tui.events.subscribers.borrow().iter().map(|(_, subscriber)| subscriber.clone()).collect();
     for subscriber in subscribers {

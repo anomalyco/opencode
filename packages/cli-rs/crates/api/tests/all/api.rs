@@ -68,6 +68,10 @@ fn tagged_union_decodes_known_rpc_and_unknown_members() {
         serde_json::from_value(json!({ "id": "evt_1", "type": "server.connected", "data": {} })).unwrap();
     assert!(matches!(connected, V2Event::ServerConnected(_)), "{connected:?}");
     assert_eq!(connected.kind(), "server.connected");
+    // A member decoded on its own takes any tag, since only the union checks it, and writes its own.
+    let member: V2EventServerConnected =
+        serde_json::from_value(json!({ "id": "evt_1", "type": "other", "data": {} })).unwrap();
+    assert_eq!(serde_json::to_value(member).unwrap()["type"], "server.connected");
 
     let rpc = json!({
         "id": "evt_2", "created": 1.5, "type": "rpc.plugin.ping",

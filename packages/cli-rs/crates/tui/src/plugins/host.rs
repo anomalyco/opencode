@@ -1433,9 +1433,7 @@ fn server_name(plugin: &PluginInfo) -> String {
     match &plugin.source {
         PluginSource::Package(package) => package.target.clone(),
         PluginSource::Local(local) => local.path.clone(),
-        PluginSource::Builtin(source) => source.r#type.clone(),
-        PluginSource::Sdk(source) => source.r#type.clone(),
-        PluginSource::Unknown(value) => value.get("type").and_then(Value::as_str).unwrap_or_default().to_owned(),
+        source => source.tag().to_owned(),
     }
 }
 

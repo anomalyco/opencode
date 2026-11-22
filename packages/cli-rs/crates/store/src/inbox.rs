@@ -88,31 +88,35 @@ impl State {
 
     /// Pending user and synthetic inputs (`input.list`); compactions are control items.
     pub fn inputs(&self, session: &SessionID) -> Vec<&str> {
-        self.pending(session).iter().filter(|item| item.tag() != "compaction").map(SessionInboxInfo::id).collect()
+        self.pending(session)
+            .iter()
+            .filter(|item| !matches!(item, SessionInboxInfo::Compaction(_)))
+            .map(SessionInboxInfo::id)
+            .collect()
     }
 
     pub fn has_input(&self, session: &SessionID, inbox: &str) -> bool {
-        self.pending(session).iter().any(|item| item.id() == inbox && item.tag() != "compaction")
+        self.pending(session).iter().any(|item| item.id() == inbox && !matches!(item, SessionInboxInfo::Compaction(_)))
     }
 
     /// `pending.status`: an execution's idle boundary promotes every pending steer at once, so a
     /// steer only waits behind work once the current execution has delivered input.
     pub fn pending_status(&self, session: &SessionID, inbox: &str) -> Option<PendingStatus> {
         let pending = self.pending(session);
-        let item = pending.iter().find(|item| item.id() == inbox && item.tag() == "user")?;
+        let item = pending.iter().find(|item| item.id() == inbox && matches!(item, SessionInboxInfo::User(_)))?;
         if item.delivery() == Some(&SessionInboxDelivery::Queue) {
             return Some(PendingStatus::Queued);
         }
         let messages = self.messages(session);
-        let boundary = messages.iter().rposition(|item| item.tag() == "idle");
+        let boundary = messages.iter().rposition(|item| matches!(item, SessionMessageInfo::Idle(_)));
         if self.status(session) == SessionStatus::Idle {
             let stranded = boundary.is_some_and(|at| item.created() <= messages[at].created());
             return Some(if stranded { PendingStatus::Stranded } else { PendingStatus::Starting });
         }
         let after = boundary.map_or(0, |at| at + 1);
-        let delivered = messages[after..]
-            .iter()
-            .any(|entry| entry.tag() == "user" && !pending.iter().any(|other| other.id() == entry.id()));
+        let delivered = messages[after..].iter().any(|entry| {
+            matches!(entry, SessionMessageInfo::User(_)) && !pending.iter().any(|other| other.id() == entry.id())
+        });
         Some(if delivered { PendingStatus::Steering } else { PendingStatus::Starting })
     }
 
@@ -130,7 +134,7 @@ impl State {
             None => pending.push(item.clone()),
         }
         self.touch_key(key, Touched::PENDING);
-        if item.tag() != "compaction" {
+        if !matches!(item, SessionInboxInfo::Compaction(_)) {
             self.materialize(&item);
         }
     }
@@ -140,7 +144,7 @@ impl State {
         let row = match item {
             SessionInboxInfo::User(item) => SessionMessageInfo::User(SessionMessageUser {
                 id: item.id.clone(),
-                r#type: "user".into(),
+                r#type: tag::User,
                 text: item.payload.text.clone(),
                 files: item.payload.files.clone(),
                 agents: item.payload.agents.clone(),
@@ -150,7 +154,7 @@ impl State {
             }),
             SessionInboxInfo::Synthetic(item) => SessionMessageInfo::Synthetic(SessionMessageSynthetic {
                 id: item.id.clone(),
-                r#type: "synthetic".into(),
+                r#type: tag::Synthetic,
                 text: item.payload.text.clone(),
                 description: item.payload.description.clone(),
                 metadata: item.payload.metadata.clone(),
@@ -222,7 +226,7 @@ impl State {
         if let Some((_, updates)) = self.sessions.get_mut(session).and_then(|session| session.pending_read.as_mut()) {
             updates.insert(item.id().to_owned(), PendingUpdate::Item(Box::new(item.clone())));
         }
-        let compaction = item.tag() == "compaction";
+        let compaction = matches!(item, SessionInboxInfo::Compaction(_));
         self.admit_local(item);
         if !compaction {
             return;
@@ -279,11 +283,11 @@ impl State {
             self.remove_pending(session, input.as_str());
         }
         let row = SessionMessageCompactionRunning {
-            r#type: "compaction".into(),
+            r#type: tag::Compaction,
             id: data.input_id.clone().unwrap_or_else(|| from_event(&event.id)),
             metadata: None,
             time: SessionInboxUserTime { created: event.created },
-            status: "running".into(),
+            status: tag::Running,
             reason: data.reason.clone(),
             summary: String::new(),
         };
@@ -331,7 +335,7 @@ fn optimistic_files(files: Option<&Vec<PromptInputFileAttachment>>) -> Option<Ve
             Some(PromptFileAttachment {
                 data: PromptBase64(data.to_owned()),
                 mime: if mime.is_empty() { "application/octet-stream".into() } else { mime.to_owned() },
-                source: PromptFileSource::Inline(PromptFileSourceInline { r#type: "inline".into() }),
+                source: PromptFileSource::Inline(PromptFileSourceInline { r#type: tag::Inline }),
                 name: file.name.clone(),
                 description: file.description.clone(),
                 mention: file.mention.clone(),
@@ -405,11 +409,11 @@ impl Data {
                         state.outbox.remove(item.id());
                     }
                     // Compactions also coalesce by session, not just by the proposed ID.
-                    if pending.iter().any(|item| item.tag() == "compaction") {
+                    if pending.iter().any(|item| matches!(item, SessionInboxInfo::Compaction(_))) {
                         let local: Vec<String> = state
                             .pending(&session)
                             .iter()
-                            .filter(|item| item.tag() == "compaction")
+                            .filter(|item| matches!(item, SessionInboxInfo::Compaction(_)))
                             .map(|item| item.id().to_owned())
                             .collect();
                         for id in local {
@@ -484,7 +488,7 @@ impl Data {
                     id: id.clone(),
                     session_id: session.clone(),
                     time: SessionInboxUserTime { created: now() },
-                    r#type: "user".into(),
+                    r#type: tag::User,
                     delivery: request.delivery.clone().flatten().unwrap_or(SessionInboxDelivery::Steer),
                     payload: SessionInboxUserPayload {
                         text: request.text.clone(),
@@ -525,13 +529,13 @@ impl Data {
             if let Some(active) = state.sessions.get(session).and_then(|session| session.compacting.as_ref()) {
                 return Some(active.request.clone());
             }
-            if !state.pending(session).iter().any(|item| item.tag() == "compaction") {
+            if !state.pending(session).iter().any(|item| matches!(item, SessionInboxInfo::Compaction(_))) {
                 state.outbox.insert(id.0.clone());
                 state.admit_local(SessionInboxInfo::Compaction(SessionInboxCompaction {
                     id: id.clone(),
                     session_id: session.clone(),
                     time: SessionInboxUserTime { created: now() },
-                    r#type: "compaction".into(),
+                    r#type: tag::Compaction,
                     delivery: SessionInboxDelivery::Steer,
                     payload: SessionInboxCompactionPayload::default(),
                 }));
