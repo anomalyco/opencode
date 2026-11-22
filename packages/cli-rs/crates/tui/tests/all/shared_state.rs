@@ -141,7 +141,7 @@ impl Setup {
                 .unwrap()
             })
             .collect();
-        self.tui.data.apply(&events);
+        self.tui.data.apply(events);
     }
 
     fn file(&self, name: &str) -> String {

@@ -44,7 +44,7 @@ fn durable(kind: &str, event: &str, created: u64, data: Value) -> Value {
     })
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn uses_the_configured_initial_window_and_retains_normal_cursor_page_sizes() {
     let requests = Log::<(Option<String>, Option<String>)>::default();
     let log = requests.clone();
@@ -70,7 +70,7 @@ async fn uses_the_configured_initial_window_and_retains_normal_cursor_page_sizes
     assert_eq!(ids(&data, SESSION), ["msg_1", "msg_2"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn counts_every_subagent_page_in_a_root_sessions_cost() {
     let child = |index: usize| {
         let mut value = session(0);
@@ -117,7 +117,7 @@ async fn counts_every_subagent_page_in_a_root_sessions_cost() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn keeps_the_previous_model_in_a_live_variant_notice_until_the_projected_message_arrives() {
     let projected = Slot::<()>::default();
     let previous = json!({ "providerID": "provider", "id": "model", "variant": "high" });
@@ -160,7 +160,7 @@ async fn keeps_the_previous_model_in_a_live_variant_notice_until_the_projected_m
     wait(|| message(&data, SESSION, "msg_variant")["metadata"]["refetched"] == true).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn reconciles_a_stale_running_tool_when_execution_settles() {
     let completed = Arc::new(AtomicBool::new(false));
     let requests = Arc::new(AtomicUsize::new(0));
@@ -208,7 +208,7 @@ async fn reconciles_a_stale_running_tool_when_execution_settles() {
     assert_eq!(requests.load(Ordering::SeqCst), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn omits_inline_tool_result_file_payloads_from_read_and_live_tool_results_when_asked() {
     let screenshot = format!("data:image/png;base64,{}", "A".repeat(4096));
     let shot = screenshot.clone();
@@ -265,7 +265,7 @@ async fn omits_inline_tool_result_file_payloads_from_read_and_live_tool_results_
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn follows_a_changed_omit_setting_and_restores_dropped_tool_files_from_the_server() {
     let screenshot = format!("data:image/png;base64,{}", "A".repeat(64));
     let shot = screenshot.clone();
@@ -311,7 +311,7 @@ async fn follows_a_changed_omit_setting_and_restores_dropped_tool_files_from_the
     assert_eq!(gets.load(Ordering::SeqCst), 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn refreshes_a_loaded_sessions_execution_start_when_it_starts_running() {
     let data = data(
         handler(|req: Req| async move {
@@ -328,7 +328,7 @@ async fn refreshes_a_loaded_sessions_execution_start_when_it_starts_running() {
     wait(|| data.read(|state| state.session(&id(SESSION)).and_then(|info| info.time.busy)) == Some(3.0)).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn revalidates_after_an_event_overtakes_an_active_session_read() {
     let gate = Slot::<()>::default();
     let requests = Arc::new(AtomicUsize::new(0));
@@ -363,7 +363,7 @@ async fn revalidates_after_an_event_overtakes_an_active_session_read() {
     .await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn preserves_a_live_session_rename_across_concurrent_session_and_family_reads() {
     let family = Slot::<()>::default();
     let renamed = Slot::<()>::default();
@@ -402,7 +402,7 @@ async fn preserves_a_live_session_rename_across_concurrent_session_and_family_re
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn reports_optimistic_sessions_as_creating_until_the_request_settles() {
     let release = Slot::<()>::default();
     let gate = release.clone();
@@ -428,7 +428,7 @@ async fn reports_optimistic_sessions_as_creating_until_the_request_settles() {
     assert!(!data.read(|state| state.is_creating(&created)));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn loads_bounded_message_pages() {
     let requests = Log::<Vec<(String, String)>>::default();
     let log = requests.clone();
@@ -501,14 +501,12 @@ async fn bulk_history(mode: &str) {
     let load = {
         let (data, session) = (data.clone(), session.clone());
         let options = if join { LoadMore::default() } else { LoadMore { all: true, cancel: Some(cancel.clone()) } };
-        tokio::spawn(async move { data.message_load_more(&session, options).await })
+        tokio::spawn(data.message_load_more(&session, options))
     };
     tokio::task::yield_now().await;
     let joined = {
         let (data, session, cancel) = (data.clone(), session.clone(), cancel.clone());
-        tokio::spawn(
-            async move { data.message_load_more(&session, LoadMore { all: true, cancel: Some(cancel) }).await },
-        )
+        tokio::spawn(data.message_load_more(&session, LoadMore { all: true, cancel: Some(cancel) }))
     };
     let limit =
         |query: &Vec<(String, String)>| query.iter().find(|(key, _)| key == "limit").map(|(_, value)| value.clone());
@@ -540,7 +538,7 @@ async fn bulk_history(mode: &str) {
         "cancel-retry" | "cancel-page" => {
             let (data, session) = (data.clone(), session.clone());
             let all = mode == "cancel-retry";
-            Some(tokio::spawn(async move { data.message_load_more(&session, LoadMore { all, cancel: None }).await }))
+            Some(tokio::spawn(data.message_load_more(&session, LoadMore { all, cancel: None })))
         }
         _ => None,
     };
@@ -573,7 +571,7 @@ async fn bulk_history(mode: &str) {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn bulk_reads_settle_all_joiners() {
     for case in ["success", "failure", "cancel", "cancel-retry", "cancel-page", "join-cancel", "join-failure"] {
         bulk_history(case).await;
@@ -660,7 +658,7 @@ async fn preserves_activity(kind: &str) {
     assert_eq!(data.read(|state| state.status(&id(SESSION))), expected);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn late_snapshots_preserve_live_activity() {
     for case in [
         "session.execution.succeeded",
@@ -673,7 +671,7 @@ async fn late_snapshots_preserve_live_activity() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn adds_running_sessions_created_while_disconnected_to_their_family() {
     let mut root = session(0);
     root["id"] = "ses_root".into();
@@ -688,7 +686,7 @@ async fn adds_running_sessions_created_while_disconnected_to_their_family() {
     assert_eq!(data.read(|state| state.status(&id("ses_child"))), SessionStatus::Running);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn ignores_activity_snapshots_from_an_older_connection() {
     let reads = Log::<Slot<Reply>>::default();
     let log = reads.clone();
@@ -712,7 +710,7 @@ async fn ignores_activity_snapshots_from_an_older_connection() {
     assert_eq!(data.read(|state| state.status(&id("ses_old"))), SessionStatus::Idle);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn projects_background_user_shell_metadata_from_durable_shell_data() {
     let data = activity(|| Box::pin(async { ok(json!({ "data": {} })) }), Vec::new());
     emit(
@@ -792,13 +790,15 @@ fn adjacent_deltas_of_one_part_merge() {
     assert!(!input.merge(&tool("call_2", "{}")));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
     let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
-    let notified = data.subscribe();
+    let notified = std::rc::Rc::new(std::cell::Cell::new(false));
+    let notify = notified.clone();
+    data.on_change(move || notify.set(true));
     data.remember(info(session(0)));
     let session = id(SESSION);
-    assert!(notified.has_changed().unwrap());
+    assert!(notified.get());
     let mut taken = Taken::default();
     let (first, changes) = taken.take(&data);
     assert!(changes.sessions() && changes.has(&session, Touched::INFO));
@@ -812,7 +812,7 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
             "model": { "providerID": "p", "id": "m" }, "started": 1,
         }),
     );
-    data.apply(&[
+    data.apply(vec![
         event(step),
         event(durable(
             "session.text.started",
@@ -855,7 +855,7 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
 
 /// A part start applied again (a replay over a snapshot that already holds it) adds no second part, while a start
 /// with the next ordinal or another call ID does (O5).
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn part_starts_are_idempotent() {
     let start = |kind: &str, id: &str, extra: Value| {
         let mut data = json!({ "sessionID": SESSION, "assistantMessageID": "msg_a" });
@@ -879,17 +879,17 @@ async fn part_starts_are_idempotent() {
             "sessionID": SESSION, "assistantMessageID": "msg_a", "agent": "build",
             "model": { "providerID": "p", "id": "m" }, "started": 1,
         });
-        data.apply(&[event(durable("session.step.started", "evt_step", 1, step))]);
-        data.apply(&[start(kind, "evt_1", first.clone()), start(kind, "evt_2", first)]);
+        data.apply(vec![event(durable("session.step.started", "evt_step", 1, step))]);
+        data.apply(vec![start(kind, "evt_1", first.clone()), start(kind, "evt_2", first)]);
         assert_eq!(message(&data, SESSION, "msg_a")["content"].as_array().unwrap().len(), 1, "{name}: replay");
-        data.apply(&[start(kind, "evt_3", next)]);
+        data.apply(vec![start(kind, "evt_3", next)]);
         assert_eq!(message(&data, SESSION, "msg_a")["content"].as_array().unwrap().len(), 2, "{name}: next part");
     }
 }
 
 /// A reload with the same IDs in the same order, and the same "more" state, reports only the
 /// messages that differ (TS `reconcile`); anything else replaces the list.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn message_sync_reconciles_a_reload_with_the_same_ids() {
     let row = |id: &str, text: &str| json!({ "id": id, "type": "user", "text": text, "time": { "created": 1 } });
     let more = json!({ "next": "older" });
@@ -940,7 +940,7 @@ async fn message_sync_reconciles_a_reload_with_the_same_ids() {
 }
 
 /// Only the published page changes the list; the loading flag alone reports nothing.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn message_load_more_reports_only_the_published_page() {
     let release = Slot::<()>::default();
     let gate = release.clone();
@@ -968,7 +968,7 @@ async fn message_load_more_reports_only_the_published_page() {
     let seen = taken.take(&data).0;
     let load = {
         let (data, session) = (data.clone(), session.clone());
-        tokio::spawn(async move { data.message_load_more(&session, LoadMore::default()).await })
+        tokio::spawn(data.message_load_more(&session, LoadMore::default()))
     };
     wait(|| data.read(|state| state.messages_loading(&session))).await;
     assert_eq!(data.revision(), seen, "starting a load changes nothing a view shows");
@@ -983,11 +983,11 @@ async fn message_load_more_reports_only_the_published_page() {
 
 // Expected: each event of a listened type reaches the signals after its batch, a streaming delta never does, and a
 // type stops once its last listener drops.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn signals_carry_the_listened_events_but_no_deltas() {
     let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
     data.remember(info(session(0)));
-    let mut signals = data.signals();
+    let mut signals = Vec::new();
     let _steps = data.listen([EventKind::SessionStepStarted, EventKind::SessionTextDelta]);
     let renamed = data.listen([EventKind::SessionRenamed]);
     let again = data.listen([EventKind::SessionRenamed]);
@@ -995,7 +995,7 @@ async fn signals_carry_the_listened_events_but_no_deltas() {
         "sessionID": SESSION, "assistantMessageID": "msg_a", "agent": "build",
         "model": { "providerID": "p", "id": "m" }, "started": 1,
     });
-    data.apply(&[
+    data.apply(vec![
         event(durable("session.step.started", "evt_step", 1, step)),
         event(durable(
             "session.text.delta",
@@ -1006,28 +1006,29 @@ async fn signals_carry_the_listened_events_but_no_deltas() {
         event(durable("session.renamed", "evt_renamed", 1, json!({ "sessionID": SESSION, "title": "Renamed" }))),
     ]);
     let mut tags = || -> Vec<String> {
-        std::iter::from_fn(|| signals.try_recv().ok()).map(|event| event.tag().to_owned()).collect()
+        data.take_signals(&mut signals);
+        signals.iter().map(|event| event.tag().to_owned()).collect()
     };
     assert_eq!(tags(), ["session.step.started", "session.renamed"]);
 
     let renamed_again =
         || event(durable("session.renamed", "evt_renamed_2", 2, json!({ "sessionID": SESSION, "title": "Again" })));
     drop(renamed);
-    data.apply(&[renamed_again()]);
+    data.apply(vec![renamed_again()]);
     assert_eq!(tags(), ["session.renamed"], "another listener still wants it");
     drop(again);
-    data.apply(&[renamed_again()]);
+    data.apply(vec![renamed_again()]);
     assert_eq!(tags(), Vec::<String>::new());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn deltas_are_kept_while_listened_and_bounded() {
     let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
     let delta = |ordinal: usize| {
         let body = json!({ "sessionID": "ses_none", "assistantMessageID": "msg_a", "ordinal": ordinal, "delta": "x" });
         event(durable("session.text.delta", &format!("evt_{ordinal}"), 1, body))
     };
-    let ordinals = |events: Vec<V2Event>| -> Vec<i64> {
+    let ordinals = |events: &[V2Event]| -> Vec<i64> {
         events
             .iter()
             .map(|event| match event {
@@ -1036,41 +1037,41 @@ async fn deltas_are_kept_while_listened_and_bounded() {
             })
             .collect()
     };
-    data.apply(&[delta(0)]);
+    data.apply(vec![delta(0)]);
     let listening = data.listen_deltas();
-    assert!(listening.take().is_empty(), "kept before anyone listened");
-    let mut revisions = data.subscribe();
-    revisions.mark_unchanged();
+    assert!(listening.take(<[_]>::is_empty), "kept before anyone listened");
+    let woken = std::rc::Rc::new(std::cell::Cell::new(false));
+    let wake = woken.clone();
+    data.on_change(move || wake.set(true));
     let renamed = event(durable("session.renamed", "evt_renamed", 1, json!({ "sessionID": "ses_none", "title": "T" })));
-    data.apply(&[delta(1), renamed.clone(), delta(2)]);
-    assert!(revisions.has_changed().unwrap(), "a kept delta wakes the watchers");
-    assert_eq!(ordinals(listening.take()), [1, 2]);
-    assert!(listening.take().is_empty());
-    revisions.mark_unchanged();
-    data.apply(&[renamed]);
-    assert!(listening.take().is_empty());
+    data.apply(vec![delta(1), renamed.clone(), delta(2)]);
+    assert!(woken.take(), "a kept delta wakes the consumer");
+    assert_eq!(listening.take(ordinals), [1, 2]);
+    assert!(listening.take(<[_]>::is_empty));
+    data.apply(vec![renamed]);
+    assert!(listening.take(<[_]>::is_empty));
     let flood: Vec<V2Event> = (0..opencode_store::DELTAS + 2).map(delta).collect();
-    data.apply(&flood);
-    let kept = ordinals(listening.take());
+    data.apply(flood);
+    let kept = listening.take(ordinals);
     assert_eq!(
         (kept.len(), kept[0], kept[kept.len() - 1]),
         (opencode_store::DELTAS, 2, opencode_store::DELTAS as i64 + 1)
     );
-    data.apply(&[delta(6)]);
+    data.apply(vec![delta(6)]);
     let second = data.listen_deltas();
-    assert!(second.take().is_empty(), "a delta from before it listened");
-    data.apply(&[delta(7)]);
-    assert_eq!(ordinals(second.take()), [7]);
-    assert_eq!(ordinals(listening.take()), [6, 7], "one listener's take takes none from another");
-    data.apply(&[delta(8)]);
+    assert!(second.take(<[_]>::is_empty), "a delta from before it listened");
+    data.apply(vec![delta(7)]);
+    assert_eq!(second.take(ordinals), [7]);
+    assert_eq!(listening.take(ordinals), [6, 7], "one listener's take takes none from another");
+    data.apply(vec![delta(8)]);
     drop(listening);
-    assert_eq!(ordinals(second.take()), [8], "another listener still wants them");
-    data.apply(&[delta(9)]);
+    assert_eq!(second.take(ordinals), [8], "another listener still wants them");
+    data.apply(vec![delta(9)]);
     drop(second);
     let third = data.listen_deltas();
-    assert!(third.take().is_empty(), "the last listener's drop forgets them");
+    assert!(third.take(<[_]>::is_empty), "the last listener's drop forgets them");
     drop(third);
-    data.apply(&[delta(10)]);
+    data.apply(vec![delta(10)]);
     let fourth = data.listen_deltas();
-    assert!(fourth.take().is_empty(), "kept with no listener");
+    assert!(fourth.take(<[_]>::is_empty), "kept with no listener");
 }

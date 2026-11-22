@@ -572,7 +572,7 @@ impl Run {
             }),
             Options { initial_message_limit: Some(PAGE as i64), ..Options::default() },
         );
-        data.apply(&[event(json!({ "id": "evt_connected", "type": "server.connected", "data": {} }))]);
+        data.apply(vec![event(json!({ "id": "evt_connected", "type": "server.connected", "data": {} }))]);
         let mut taken = Taken::default();
         taken.take(&data);
         Run {
@@ -721,7 +721,7 @@ impl Run {
                 for _ in 0..n {
                     let Some(next) = self.server.lock().unwrap().events.pop_front() else { break };
                     self.delivered(&next);
-                    self.data.apply(&[event(next)]);
+                    self.data.apply(vec![event(next)]);
                     self.settle().await?;
                 }
             }
@@ -730,7 +730,7 @@ impl Run {
                 server.events.clear();
                 server.epoch += 1;
                 drop(server);
-                self.data.apply(&[event(json!({ "id": "evt_connected", "type": "server.connected", "data": {} }))]);
+                self.data.apply(vec![event(json!({ "id": "evt_connected", "type": "server.connected", "data": {} }))]);
             }
             Op::ShellCreate | Op::ShellBurst => {
                 let mut server = self.server.lock().unwrap();
@@ -762,7 +762,7 @@ impl Run {
                 }
                 if self.mutant != Mutant::NoOlder {
                     let (data, session) = (self.data.clone(), Self::id(s));
-                    let load = tokio::spawn(async move { data.message_load_more(&session, LoadMore::default()).await });
+                    let load = tokio::spawn(data.message_load_more(&session, LoadMore::default()));
                     self.loads.push((s, load));
                 }
             }
@@ -1124,7 +1124,7 @@ fn name(op: Op) -> &'static str {
 
 /// Runs `ops` against a fresh store; the first failure, if any, and the command counts.
 fn run_counted(ops: &[Op], mutant: Mutant) -> (Option<Failure>, HashMap<&'static str, usize>) {
-    let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread().build_local(Default::default()).unwrap();
     runtime.block_on(async {
         let mut run = Run::new(mutant);
         let mut result = Ok(());
@@ -1254,7 +1254,7 @@ fn shells_converge_to_the_server() {
 /// in the drain; the TUI reads shells only with the whole location.
 #[test]
 fn an_overflowed_shell_read_reads_again() {
-    let runtime = tokio::runtime::Builder::new_current_thread().build().unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread().build_local(Default::default()).unwrap();
     runtime.block_on(async {
         let mut run = Run::new(Mutant::None);
         run.step(Op::SyncShells).await.unwrap();

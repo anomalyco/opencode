@@ -846,10 +846,10 @@ mod model {
         // store takes in what that reply changed.
         for _ in 0..2 {
             let done = Rc::new(Cell::new(false));
-            let data = run.tui.data.clone();
+            let client = run.tui.data.client().clone();
             let input = PermissionListInput { session_id: SessionID(A.to_owned()) };
             let finish = done.clone();
-            run.app.app().spawn(async move { data.client().permission_list(&input).await.is_ok() }, move |_, ok| {
+            run.app.app().spawn(async move { client.permission_list(&input).await.is_ok() }, move |_, ok| {
                 finish.set(ok);
             });
             assert!(run.app.wait_until(WAIT, || done.get()), "seed {seed}: the round trip did not come back");

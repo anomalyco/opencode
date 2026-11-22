@@ -440,7 +440,7 @@ fn output(text: &str) -> serde_json::Value {
 
 fn call_2(harness: &Harness, kind: &str, seq: u64, extra: serde_json::Value) {
     let ids = serde_json::json!({ "sessionID": "ses_p", "assistantMessageID": "msg_3", "id": "call_2" });
-    harness.tui.data.apply(&[support::event("ses_p", kind, seq, support::merge(ids, extra))]);
+    harness.tui.data.apply(vec![support::event("ses_p", kind, seq, support::merge(ids, extra))]);
     settle(harness);
 }
 

@@ -94,7 +94,7 @@ fn prompt(id: &str, text: &str) -> SessionPromptInput {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_idle_send_is_starting_from_optimistic_admission_until_delivery() {
     let setup = fixture();
     // The composer marks the session running in the same task as optimistic admission.
@@ -113,7 +113,7 @@ async fn an_idle_send_is_starting_from_optimistic_admission_until_delivery() {
     assert_eq!(tag.as_deref(), Some("user"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_steer_sent_after_the_execution_delivered_input_is_steering_and_follows_delivery_changes() {
     let setup = fixture();
     setup.enqueue("msg_first", "steer");
@@ -129,7 +129,7 @@ async fn a_steer_sent_after_the_execution_delivered_input_is_steering_and_follow
     assert_eq!(setup.status("msg_steer"), None);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn rapid_follow_ups_join_the_starting_execution_until_it_delivers_without_them() {
     let setup = fixture();
     setup.enqueue("msg_first", "steer");
@@ -160,17 +160,17 @@ async fn stranded(outcome: &str) {
     assert_eq!(setup.status("msg_retry"), Some(PendingStatus::Starting));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_undelivered_steer_is_stranded_after_execution_failed() {
     stranded("failed").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_undelivered_steer_is_stranded_after_execution_interrupted() {
     stranded("interrupted").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_later_execution_starts_fresh_after_an_earlier_turn_delivered_input() {
     let setup = fixture();
     setup.enqueue("msg_first", "steer");
@@ -183,7 +183,7 @@ async fn a_later_execution_starts_fresh_after_an_earlier_turn_delivered_input() 
     assert_eq!(setup.status("msg_next"), Some(PendingStatus::Starting));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_remote_idle_prompt_is_starting() {
     let setup = fixture();
     setup.enqueue("msg_remote", "steer");
@@ -192,7 +192,7 @@ async fn a_remote_idle_prompt_is_starting() {
     assert_eq!(setup.status("msg_remote"), Some(PendingStatus::Starting));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_queued_prompt_is_queued_regardless_of_execution_state() {
     let setup = fixture();
     setup.enqueue("msg_queued", "queue");
@@ -201,7 +201,7 @@ async fn a_queued_prompt_is_queued_regardless_of_execution_state() {
     assert_eq!(setup.status("msg_queued"), Some(PendingStatus::Queued));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn optimistic_prompt_admission_preserves_inline_data_attachments_before_the_server_echo() {
     let gate = Slot::<()>::default();
     let setup = fixture();

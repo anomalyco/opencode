@@ -138,7 +138,7 @@ fn the_environment_is_uploaded_when_the_status_follows_server_connected() {
     let upload = || find(&memory.requests(), "PUT", "/api/session/ses_b/environment").is_some();
     assert!(app.wait_until(support::WAIT, || find(&memory.requests(), "GET", "/api/session/ses_b").is_some()));
     let connected = serde_json::from_value(json!({ "id": "evt_c", "type": "server.connected", "data": {} })).unwrap();
-    tui.data.apply(&[connected]);
+    tui.data.apply(vec![connected]);
     assert!(!app.wait_until(Duration::from_millis(300), upload), "{:?}", writes(&memory));
     let state =
         opencode_api::events::State { status: opencode_api::events::Status::Connected, attempt: 0, error: None };

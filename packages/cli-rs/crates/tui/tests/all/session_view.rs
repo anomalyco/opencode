@@ -184,7 +184,7 @@ impl Harness {
             "data": data,
         }))
         .unwrap();
-        self.tui.data.apply(&[event]);
+        self.tui.data.apply(vec![event]);
     }
 
     fn ended(&self, seq: u64, message: &str, input: u64) {
@@ -470,7 +470,7 @@ fn a_credential_change_reads_the_footer_limits_again() {
         "data": { "integrationID": "opencode", "credentialID": "credential" },
     }))
     .unwrap();
-    h.tui.data.apply(&[event]);
+    h.tui.data.apply(vec![event]);
     h.wait("the limits read again", || h.limits().len() == 2);
 }
 

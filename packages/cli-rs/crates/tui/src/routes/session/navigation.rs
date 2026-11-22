@@ -90,9 +90,8 @@ impl Inner {
                 if next || !tui.data.read(|state| state.has_more_messages(&session)) {
                     return;
                 }
-                let data = tui.data.clone();
                 tui.app.spawn(
-                    async move { data.message_load_more(&session, LoadMore::default()).await },
+                    tui.data.message_load_more(&session, LoadMore::default()),
                     bind!(inner.this, |inner, _, result| {
                         let Some(tui) = inner.tui.upgrade() else { return };
                         match result {

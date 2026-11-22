@@ -1,6 +1,4 @@
-//! Applies event batches and refreshes reads invalidated by events or reconnection.
-
-use std::sync::atomic::Ordering;
+//! Sends a connection's event batches, with its status, to the store's owner.
 
 use futures_util::StreamExt;
 use futures_util::stream::BoxStream;
@@ -11,60 +9,15 @@ use opencode_api::transport::BoxFuture;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
-use crate::core::Delta;
-use crate::driver::Data;
-use crate::state::State;
+use crate::driver::{Data, Mail, Remote};
 
-impl Data {
-    /// Applies one batch of events under one flush.
-    pub fn apply(&self, events: &[V2Event]) {
-        let mut effects = Vec::new();
-        let kept = {
-            let mut state = self.lock();
-            state.batch += 1;
-            for event in events {
-                state.apply(event, &mut effects);
-            }
-            state.batch -= 1;
-            // The batch's deltas, the hot path, are kept only while someone takes them, and all before the revision
-            // that has them, so a sync it wakes takes them all.
-            let kept = self.keep_deltas(events.iter().filter(|event| Delta::of(event).is_some()));
-            self.flush(&mut state);
-            kept
-        };
-        self.run(effects);
-        // Each other event of a type someone listens to: of its kind, and of its name for a named kind.
-        for event in events.iter().filter(|event| Delta::of(event).is_none()) {
-            let kind = event.kind();
-            if self.inner.listened[kind as usize].load(std::sync::atomic::Ordering::SeqCst) > 0
-                && (!kind.named() || opencode_util::lock(&self.inner.named).contains_key(event.tag()))
-            {
-                // No receiver is not an error: views subscribe when they need to.
-                let _ = self.inner.signals.send(std::sync::Arc::new(event.clone()));
-            }
-        }
-        // A delta of a session whose messages are not loaded changes nothing, and is kept all the same.
-        if kept {
-            self.wake_deltas();
-        }
-    }
-
-    /// Marks the connection up or down. Going down invalidates every cached read; the UI decides
-    /// what to read again.
-    pub fn set_online(&self, online: bool) {
-        let was = self.inner.online.swap(online, Ordering::SeqCst);
-        if was && !online {
-            self.write(State::invalidate_all);
-        }
-    }
-}
-
-/// Drives the store from a connection: applies its batches and tracks whether it is connected.
-/// Returns when the batch receiver closes.
-pub async fn run(data: Data, mut state: watch::Receiver<events::State>, mut batches: mpsc::Receiver<Vec<V2Event>>) {
+/// Drives the store from a connection: sends its batches to the store's owner, each with whether it is connected.
+/// Returns when the batch receiver closes or the store is gone. While the owner does not drain, the store's mailbox
+/// fills and this waits, so the connection's own queue fills behind it.
+pub async fn run(remote: Remote, mut state: watch::Receiver<events::State>, mut batches: mpsc::Receiver<Vec<V2Event>>) {
     let mut watching = true;
     loop {
-        tokio::select! {
+        let sent = tokio::select! {
             biased;
             changed = state.changed(), if watching => {
                 if changed.is_err() {
@@ -73,18 +26,22 @@ pub async fn run(data: Data, mut state: watch::Receiver<events::State>, mut batc
                 }
                 let online = state.borrow_and_update().status == Status::Connected;
                 // Apply the final queued batch while still online so disconnect invalidation covers it.
+                let mut sent = true;
                 if !online {
                     while let Ok(batch) = batches.try_recv() {
-                        data.apply(&batch);
+                        sent = sent && remote.send(Mail::Batch(batch, None)).await;
                     }
                 }
-                data.set_online(online);
+                sent && remote.send(Mail::Online(online)).await
             }
             batch = batches.recv() => {
                 let Some(batch) = batch else { return };
-                data.set_online(state.borrow().status == Status::Connected);
-                data.apply(&batch);
+                let online = state.borrow().status == Status::Connected;
+                remote.send(Mail::Batch(batch, Some(online))).await
             }
+        };
+        if !sent {
+            return;
         }
     }
 }
@@ -124,6 +81,6 @@ pub fn connect(data: &Data, options: events::Options) -> (Connection, JoinHandle
     let _runtime = data.runtime().enter();
     data.set_online(false);
     let (connection, batches) = events::connect(Events { client: data.client().clone() }, options);
-    let task = data.runtime().spawn(run(data.clone(), connection.watch(), batches));
+    let task = data.runtime().spawn(run(data.remote(), connection.watch(), batches));
     (connection, task)
 }

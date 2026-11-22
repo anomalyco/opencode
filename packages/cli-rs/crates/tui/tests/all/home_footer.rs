@@ -53,7 +53,7 @@ fn started(h: &Harness, session: &str) {
         "durable": { "aggregateID": session, "seq": 1, "version": 1 }, "data": { "sessionID": session },
     }))
     .unwrap();
-    h.tui.data.apply(&[event]);
+    h.tui.data.apply(vec![event]);
 }
 
 #[test]

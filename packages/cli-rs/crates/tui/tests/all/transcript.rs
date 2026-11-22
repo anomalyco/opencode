@@ -101,7 +101,7 @@ fn open(width: u16, height: u16, id: &str, messages: Vec<Value>, info: Info) -> 
 impl View {
     fn apply(&self, event: Value) {
         let event: V2Event = serde_json::from_value(event).unwrap();
-        self.tui.data.apply(&[event]);
+        self.tui.data.apply(vec![event]);
     }
 
     fn scroll_up(&self) -> String {

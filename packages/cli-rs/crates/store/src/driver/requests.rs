@@ -9,7 +9,7 @@ use opencode_api::client::Client;
 use opencode_api::generated::*;
 use tokio_util::sync::CancellationToken;
 
-use super::{Data, Task, Tasks};
+use super::{Data, Remote, Task, Tasks};
 use crate::core::{
     CatalogRead, Completion, Effect, Forms, Head, Info, Jobs, List, LocationRead, MessageRead, Projects, Restore,
     Shells,
@@ -55,29 +55,30 @@ impl Data {
 
     /// Fetches `request` as a follow-up read, and completes it.
     fn follow(&self, request: impl Fetch) {
-        self.refresh(|data| async move {
-            let completion = request.fetch(&data).await;
-            data.finish(completion, |_| {})
+        let remote = self.remote();
+        self.refresh(|_| async move {
+            let completion = request.fetch(&remote).await;
+            remote.call(move |data| data.finish(completion, |_| {})).await?
         });
     }
 }
 
 /// A request the driver fetches: its I/O, and the completion its answer makes, failed or not.
 pub(super) trait Fetch: Send + 'static {
-    fn fetch(self, data: &Data) -> impl Future<Output = Completion> + Send;
+    fn fetch(self, remote: &Remote) -> impl Future<Output = Completion> + Send;
 }
 
 impl Fetch for Info {
-    async fn fetch(self, data: &Data) -> Completion {
+    async fn fetch(self, remote: &Remote) -> Completion {
         let info = async {
-            let info = data.client().session_get(&SessionGetInput { session_id: self.id.clone() }).await;
+            let info = remote.client().session_get(&SessionGetInput { session_id: self.id.clone() }).await;
             info.map_err(|error| (Arc::new(error), true))
         };
         let family = async {
             if !self.children {
                 return Ok(Vec::new());
             }
-            list_children(data.client(), &self.id).await.map_err(|error| (error, false))
+            list_children(remote.client(), &self.id).await.map_err(|error| (error, false))
         };
         match futures_util::future::try_join(info, family).await {
             Ok(found) => Completion::Session(self, Ok(found), false),
@@ -87,52 +88,52 @@ impl Fetch for Info {
 }
 
 impl Fetch for Head {
-    async fn fetch(self, data: &Data) -> Completion {
+    async fn fetch(self, remote: &Remote) -> Completion {
         let input = MessageListInput {
             session_id: self.session.clone(),
-            limit: Some(data.inner.options.initial_message_limit.unwrap_or(MESSAGE_PAGE)),
+            limit: Some(remote.head()),
             order: Some(MessageListInputOrder::Desc),
             ..Default::default()
         };
-        Completion::Messages(self, data.client().message_list(&input).await.map_err(Error::new))
+        Completion::Messages(self, remote.client().message_list(&input).await.map_err(Error::new))
     }
 }
 
 impl Fetch for MessageRead {
-    async fn fetch(self, data: &Data) -> Completion {
+    async fn fetch(self, remote: &Remote) -> Completion {
         let input = SessionMessageGetInput { session_id: self.session.clone(), message_id: self.message };
-        let result = data.client().session_message_get(&input).await.map_err(Error::new);
+        let result = remote.client().session_message_get(&input).await.map_err(Error::new);
         Completion::Message { session: self.session, incarnation: self.incarnation, result }
     }
 }
 
 impl Fetch for Restore {
-    async fn fetch(self, data: &Data) -> Completion {
+    async fn fetch(self, remote: &Remote) -> Completion {
         let input = SessionMessageGetInput { session_id: self.session.clone(), message_id: self.message.clone() };
-        let result = data.client().session_message_get(&input).await.map_err(Error::new);
+        let result = remote.client().session_message_get(&input).await.map_err(Error::new);
         Completion::Restored { session: self.session, message: self.message, result }
     }
 }
 
 /// Pending inbox items, or pending permission requests, as its key says.
 impl Fetch for List {
-    async fn fetch(self, data: &Data) -> Completion {
+    async fn fetch(self, remote: &Remote) -> Completion {
         let session_id = self.session.clone();
         if matches!(self.ticket.key, ReadKey::Session(_, SessionRead::Pending)) {
-            let result = data.client().session_inbox_list(&SessionInboxListInput { session_id }).await;
+            let result = remote.client().session_inbox_list(&SessionInboxListInput { session_id }).await;
             return Completion::Pending(self, result.map_err(Error::new));
         }
-        let result = data.client().permission_list(&PermissionListInput { session_id }).await;
+        let result = remote.client().permission_list(&PermissionListInput { session_id }).await;
         Completion::Permissions(self, result.map_err(Error::new))
     }
 }
 
 impl Fetch for Forms {
-    async fn fetch(self, data: &Data) -> Completion {
+    async fn fetch(self, remote: &Remote) -> Completion {
         let result = match &self.form {
             (owner, location) if owner == GLOBAL => {
                 let input = FormListInput { location: location.as_ref().and_then(Location::query) };
-                data.client().form_list(&input).await.map(|response| {
+                remote.client().form_list(&input).await.map(|response| {
                     let at = Location::from(&response.location);
                     let list = response
                         .data
@@ -144,7 +145,7 @@ impl Fetch for Forms {
             }
             (owner, _) => {
                 let input = SessionFormListInput { session_id: owner.clone() };
-                let list = data.client().session_form_list(&input).await;
+                let list = remote.client().session_form_list(&input).await;
                 list.map(|list| (list.into_iter().map(|info| Form { info, location: None }).collect(), None))
             }
         };
@@ -153,41 +154,41 @@ impl Fetch for Forms {
 }
 
 impl Fetch for Jobs {
-    async fn fetch(self, data: &Data) -> Completion {
+    async fn fetch(self, remote: &Remote) -> Completion {
         let input = ExperimentalJobListInput {
             session_id: Some(self.root.clone()),
             status: Some(JobStatus::Running),
             descendants: Some(true),
             ..ExperimentalJobListInput::default()
         };
-        Completion::Jobs(self, data.client().experimental_job_list(&input).await.map_err(Error::new))
+        Completion::Jobs(self, remote.client().experimental_job_list(&input).await.map_err(Error::new))
     }
 }
 
 impl Fetch for CatalogRead {
-    async fn fetch(self, data: &Data) -> Completion {
-        let result = load(data.client(), self.catalog, &self.location).await.map_err(Error::new);
+    async fn fetch(self, remote: &Remote) -> Completion {
+        let result = load(remote.client(), self.catalog, &self.location).await.map_err(Error::new);
         Completion::Catalog(self, result)
     }
 }
 
 impl Fetch for Shells {
-    async fn fetch(self, data: &Data) -> Completion {
+    async fn fetch(self, remote: &Remote) -> Completion {
         let input = ShellListInput { location: self.location.query() };
-        Completion::Shells(self, data.client().shell_list(&input).await.map_err(Error::new))
+        Completion::Shells(self, remote.client().shell_list(&input).await.map_err(Error::new))
     }
 }
 
 impl Fetch for LocationRead {
-    async fn fetch(self, data: &Data) -> Completion {
+    async fn fetch(self, remote: &Remote) -> Completion {
         let input = LocationGetInput { location: self.location.query() };
-        Completion::Location(self, data.client().location_get(&input).await.map_err(Error::new))
+        Completion::Location(self, remote.client().location_get(&input).await.map_err(Error::new))
     }
 }
 
 impl Fetch for Projects {
-    async fn fetch(self, data: &Data) -> Completion {
-        let result = data.client().project_list(&ProjectListInput::default()).await.map_err(Error::new);
+    async fn fetch(self, remote: &Remote) -> Completion {
+        let result = remote.client().project_list(&ProjectListInput::default()).await.map_err(Error::new);
         Completion::Projects(self, result)
     }
 }
@@ -230,44 +231,51 @@ impl Data {
     pub fn session_create(&self, input: CreateSession) -> (SessionID, Task<SessionInfo>) {
         let mut store = self.lock();
         let Creation { id, token, fresh, input } = store.begin_creation(input);
-        let data = self.clone();
+        let remote = self.remote();
         let session = id.clone();
         let task = self.spawn(async move {
-            let result = data.client().session_create(&input).await.map_err(Error::new);
+            let result = remote.client().session_create(&input).await.map_err(Error::new);
             let completion = Completion::Created { id: session, token, fresh, result: result.clone() };
-            data.complete(completion, |tasks| {
-                tasks.creations.remove(&token);
-            });
+            remote
+                .call(move |data| {
+                    data.complete(completion, |tasks| {
+                        tasks.creations.remove(&token);
+                    })
+                })
+                .await?;
             result
         });
         if fresh {
             store.tasks().creations.insert(token, task.clone().map(|result| result.map(|_| ())).boxed().shared());
         }
-        self.flush(&mut store);
+        self.flush(store);
         (id, task)
     }
 
     /// Applies a live title after the session's reads, so a racing read cannot overwrite it.
     fn renamed(&self, session: SessionID, title: String) {
-        self.refresh(|data| async move {
+        self.refresh(|data| {
             let family = data.read(|state| state.family_loading(&session));
             let own = data.session_sync(&session, false);
-            if family {
-                futures_util::future::try_join(own, data.session_sync(&session, true)).await?;
-            } else {
-                own.await?;
+            let family = family.then(|| data.session_sync(&session, true));
+            let remote = data.remote();
+            async move {
+                match family {
+                    Some(family) => drop(futures_util::future::try_join(own, family).await?),
+                    None => own.await?,
+                }
+                remote.call(move |data| data.complete(Completion::Renamed { session, title }, |_| {})).await
             }
-            data.complete(Completion::Renamed { session, title }, |_| {});
-            Ok(())
         });
     }
 
     /// Reads the `session.active` snapshot of connection `token`.
     fn rehydrate(&self, token: u64) {
-        self.refresh(move |data| async move {
-            let result = data.client().session_active().await.map_err(Error::new);
+        let remote = self.remote();
+        self.refresh(move |_| async move {
+            let result = remote.client().session_active().await.map_err(Error::new);
             let failed = result.as_ref().err().cloned();
-            data.complete(Completion::Active(token, result), |_| {});
+            remote.call(move |data| data.complete(Completion::Active(token, result), |_| {})).await?;
             failed.map_or(Ok(()), Err)
         });
     }
@@ -315,12 +323,17 @@ impl Data {
     /// at once.
     pub fn restore_files(&self) {
         for (session, ids) in self.read(State::dropped_files) {
-            let data = self.clone();
+            let remote = self.remote();
             self.runtime().spawn(async move {
                 for message in ids {
-                    let completion = Restore { session: session.clone(), message }.fetch(&data).await;
-                    if let Err(error) = data.finish(completion, |_| {}) {
-                        data.refresh_failed(&error);
+                    let completion = Restore { session: session.clone(), message }.fetch(&remote).await;
+                    let finished = remote.call(move |data| {
+                        if let Err(error) = data.finish(completion, |_| {}) {
+                            data.refresh_failed(&error);
+                        }
+                    });
+                    if finished.await.is_err() {
+                        return;
                     }
                 }
             });
@@ -337,62 +350,86 @@ impl Data {
 
     /// Loads older pages (`message.loadMore`). Joins a load in flight; with `all`, it then
     /// continues to the oldest page.
-    pub async fn message_load_more(&self, session: &SessionID, options: LoadMore) -> Result<(), Error> {
-        let cancelled = || options.cancel.as_ref().is_some_and(|token| token.is_cancelled());
-        if cancelled() {
-            return Ok(());
-        }
-        loop {
-            let pending = self.read_tasks(|state, tasks| {
-                let token = state.sessions.get(session)?.message_load?;
-                Some(tasks.loads[&token].clone())
-            });
-            let Some(pending) = pending else { break };
-            let published = match &options.cancel {
-                None => pending.await?,
-                Some(token) => tokio::select! {
-                    result = pending => match result {
-                        Ok(published) => published,
-                        Err(_) if token.is_cancelled() => return Ok(()),
-                        Err(error) => return Err(error),
-                    },
-                    _ = token.cancelled() => return Ok(()),
-                },
-            };
-            if (!options.all && published) || cancelled() {
+    pub fn message_load_more(
+        &self,
+        session: &SessionID,
+        options: LoadMore,
+    ) -> impl Future<Output = Result<(), Error>> + Send + 'static {
+        let (remote, session) = (self.remote(), session.clone());
+        async move {
+            if options.cancelled() {
                 return Ok(());
             }
-        }
-        if cancelled() {
-            return Ok(());
-        }
-        match self.start_load(session, options) {
-            Some(task) => task.await.map(|_| ()),
-            None => Ok(()),
+            loop {
+                // One step on the owner: join the load in flight, or start one, so two callers start one load.
+                let (session, step) = (session.clone(), options.clone());
+                let next =
+                    remote.call(move |data| data.loading(&session).ok_or_else(|| data.start_load(&session, step)));
+                match next.await? {
+                    Ok(pending) => {
+                        if load_joined(pending, &options).await? {
+                            return Ok(());
+                        }
+                    }
+                    Err(Some(task)) => return task.await.map(|_| ()),
+                    Err(None) => return Ok(()),
+                }
+            }
         }
     }
 
-    /// Starts an older-page load from the current cursor, if any, and registers it for joiners.
+    /// The older-page load of `session` in flight.
+    fn loading(&self, session: &SessionID) -> Option<Task<bool>> {
+        self.read_tasks(|state, tasks| {
+            let token = state.sessions.get(session)?.message_load?;
+            Some(tasks.loads[&token].clone())
+        })
+    }
+
+    /// Starts an older-page load from the current cursor, if any and not cancelled, and registers it for joiners.
     fn start_load(&self, session: &SessionID, options: LoadMore) -> Option<Task<bool>> {
+        if options.cancelled() {
+            return None;
+        }
         let mut store = self.lock();
         let (token, page) = store.begin_older(session)?;
-        let data = self.clone();
+        let remote = self.remote();
         let id = session.clone();
         let task = self.spawn(async move {
             let cancel = options.cancel;
-            let result = load_pages(&data, &id, page, options.all, cancel.as_ref()).await;
-            data.complete(Completion::OlderEnded { session: id, token }, |tasks| {
-                tasks.loads.remove(&token);
+            let result = load_pages(&remote, &id, page, options.all, cancel.as_ref()).await;
+            let ended = remote.call(move |data| {
+                data.complete(Completion::OlderEnded { session: id, token }, |tasks| {
+                    tasks.loads.remove(&token);
+                })
             });
+            ended.await?;
             match result {
                 Err(_) if cancel.as_ref().is_some_and(CancellationToken::is_cancelled) => Ok(false),
                 result => result,
             }
         });
         store.tasks().loads.insert(token, task.clone());
-        self.flush(&mut store);
+        self.flush(store);
         Some(task)
     }
+}
+
+/// Waits for a joined older-page load; whether the caller is done: cancelled, or a page was published and it does not
+/// load them all.
+async fn load_joined(pending: Task<bool>, options: &LoadMore) -> Result<bool, Error> {
+    let published = match &options.cancel {
+        None => pending.await?,
+        Some(token) => tokio::select! {
+            result = pending => match result {
+                Ok(published) => published,
+                Err(_) if token.is_cancelled() => return Ok(true),
+                Err(error) => return Err(error),
+            },
+            _ = token.cancelled() => return Ok(true),
+        },
+    };
+    Ok((!options.all && published) || options.cancelled())
 }
 
 /// Options of [`Data::message_load_more`].
@@ -404,10 +441,16 @@ pub struct LoadMore {
     pub cancel: Option<CancellationToken>,
 }
 
+impl LoadMore {
+    fn cancelled(&self) -> bool {
+        self.cancel.as_ref().is_some_and(CancellationToken::is_cancelled)
+    }
+}
+
 /// Publishes older pages once. If a refresh changes the cursor, restart from the new cursor to avoid a gap. Returns
 /// false on cancellation before publication.
 async fn load_pages(
-    data: &Data,
+    remote: &Remote,
     session: &SessionID,
     mut page: Page,
     all: bool,
@@ -423,7 +466,7 @@ async fn load_pages(
                 cursor: Some(cursor),
                 ..Default::default()
             };
-            let request = data.client().message_list(&input);
+            let request = remote.client().message_list(&input);
             let response = match cancel {
                 None => request.await,
                 Some(token) => tokio::select! {
@@ -441,13 +484,15 @@ async fn load_pages(
                 break;
             }
         }
-        let moved = data.write(|state| {
-            let moved = state.page_moved(session, &page);
-            let completion = Completion::Older { session: session.clone(), page, fetched, next };
-            state.complete(completion, &mut Vec::new());
-            moved
+        let session = session.clone();
+        let moved = remote.call(move |data| {
+            data.write(|state| {
+                let moved = state.page_moved(&session, &page);
+                state.complete(Completion::Older { session, page, fetched, next }, &mut Vec::new());
+                moved
+            })
         });
-        match moved {
+        match moved.await? {
             None => return Ok(true),
             Some(None) => return Ok(false),
             Some(Some(current)) => page = current,
@@ -496,11 +541,11 @@ impl Data {
             &session.clone(),
             prompt.gate,
             None,
-            move |data| async move {
+            move |client| async move {
                 if let Some(prepare) = prepare {
                     prepare().await?;
                 }
-                data.client().session_prompt(&request).await.map_err(Error::new)
+                client.session_prompt(&request).await.map_err(Error::new)
             },
             move |token, result| Completion::Prompted { session, token, id, fresh, failed: result.is_err() },
             |_, _, _| {},
@@ -525,14 +570,14 @@ impl Data {
             session,
             None,
             Some(id.clone()),
-            move |data| async move {
+            move |client| async move {
                 if let Some(model) = model {
-                    data.client()
+                    client
                         .session_switch_model(&SessionSwitchModelInput { session_id: input.session_id.clone(), model })
                         .await
                         .map_err(Error::new)?;
                 }
-                data.client().session_compact(&input).await.map_err(Error::new)
+                client.session_compact(&input).await.map_err(Error::new)
             },
             move |token, result| Completion::Compacted { session: target, token, proposed: id, result: result.clone() },
             |tasks, token, request| {
@@ -542,9 +587,8 @@ impl Data {
     }
 
     /// Sends one admission after the session's creation, the previous admission of the session,
-    /// and `gate` (`sendAdmission`); a compaction under its proposed ID `compaction`. The admission begins under the
-    /// lock that spawns the request, where `register` keeps its task, and `complete` turns its result into its
-    /// completion.
+    /// and `gate` (`sendAdmission`); a compaction under its proposed ID `compaction`. The admission begins in the write
+    /// that spawns the request, where `register` keeps its task, and `complete` turns its result into its completion.
     fn send_admission<T, F, Fut>(
         &self,
         session: &SessionID,
@@ -556,14 +600,14 @@ impl Data {
     ) -> Task<T>
     where
         T: Clone + Send + Sync + 'static,
-        F: FnOnce(Data) -> Fut + Send + 'static,
+        F: FnOnce(Client) -> Fut + Send + 'static,
         Fut: Future<Output = Result<T, Error>> + Send + 'static,
     {
         let mut store = self.lock();
         let Admission { token, creating, previous } = store.begin_admission(session, compaction);
         let created = creating.map(|creating| store.tasks().creations[&creating].clone());
         let previous = previous.map(|previous| store.tasks().sends[&previous].clone());
-        let data = self.clone();
+        let remote = self.remote();
         let request = self.spawn(async move {
             let ready = futures_util::future::try_join3(
                 async move {
@@ -588,19 +632,23 @@ impl Data {
             )
             .await;
             let result = match ready {
-                Ok(_) => send(data.clone()).await,
+                Ok(_) => send(remote.client().clone()).await,
                 Err(error) => Err(error),
             };
-            data.complete(complete(token, &result), |tasks| {
-                tasks.sends.remove(&token);
-                tasks.compactions.remove(&token);
+            let completion = complete(token, &result);
+            let completed = remote.call(move |data| {
+                data.complete(completion, |tasks| {
+                    tasks.sends.remove(&token);
+                    tasks.compactions.remove(&token);
+                })
             });
+            completed.await?;
             result
         });
         let chain = request.clone().map(|result| result.map(|_| ())).boxed().shared();
         store.tasks().sends.insert(token, chain);
         register(store.tasks(), token, &request);
-        self.flush(&mut store);
+        self.flush(store);
         request
     }
 }
@@ -640,41 +688,48 @@ impl Data {
 
     /// Reads location info, then every catalog a session view shows (`location.sync`).
     pub fn location_sync(&self, location: Option<&Location>) -> Task<()> {
-        let data = self.clone();
+        let info = self.location_sync_info(location);
+        let remote = self.remote();
         let requested = location.cloned();
         self.spawn(async move {
-            data.location_sync_info(requested.as_ref()).await?;
-            let location = data.resolve(requested.as_ref());
-            let mut reads: Vec<Task<()>> = [
-                Catalog::Vcs,
-                Catalog::Agent,
-                Catalog::Command,
-                Catalog::Integration,
-                Catalog::McpServer,
-                Catalog::McpResource,
-                Catalog::Model,
-                Catalog::Provider,
-                Catalog::Reference,
-                Catalog::Skill,
-                Catalog::Shell,
-            ]
-            .into_iter()
-            .map(|catalog| data.catalog_sync(catalog, Some(&location)))
-            .collect();
-            reads.push(data.form_sync(crate::forms::GLOBAL, Some(&location)));
+            info.await?;
+            let reads = remote.call(move |data| data.location_reads(requested.as_ref())).await?;
             try_join_all(reads).await?;
             Ok(())
         })
     }
 
+    /// Reads every catalog a session view shows, and the global forms, of `requested` or the default location.
+    fn location_reads(&self, requested: Option<&Location>) -> Vec<Task<()>> {
+        let location = self.resolve(requested);
+        let mut reads: Vec<Task<()>> = [
+            Catalog::Vcs,
+            Catalog::Agent,
+            Catalog::Command,
+            Catalog::Integration,
+            Catalog::McpServer,
+            Catalog::McpResource,
+            Catalog::Model,
+            Catalog::Provider,
+            Catalog::Reference,
+            Catalog::Skill,
+            Catalog::Shell,
+        ]
+        .into_iter()
+        .map(|catalog| self.catalog_sync(catalog, Some(&location)))
+        .collect();
+        reads.push(self.form_sync(crate::forms::GLOBAL, Some(&location)));
+        reads
+    }
+
     /// Reads web search providers on every call; there is no cached read.
     pub fn websearch_refresh(&self, location: Option<&Location>) -> Task<()> {
         let location = self.resolve(location);
-        let data = self.clone();
+        let remote = self.remote();
         self.spawn(async move {
             let input = WebsearchProvidersInput { location: location.query() };
-            let result = data.client().websearch_providers(&input).await.map_err(Error::new);
-            data.finish(Completion::Websearch(result), |_| {})
+            let result = remote.client().websearch_providers(&input).await.map_err(Error::new);
+            remote.call(move |data| data.finish(Completion::Websearch(result), |_| {})).await?
         })
     }
 
@@ -693,15 +748,19 @@ impl Data {
 
     /// Reads `catalog` once a burst of events that ask for it goes quiet for [`SETTLE`].
     fn settle(&self, catalog: Catalog, location: Location) {
-        let data = self.clone();
+        let remote = self.remote();
         let mut store = self.lock();
         let (key, token, previous) = store.begin_settle(catalog, &location);
-        // Spawned under the lock, so the timer cannot fire before its entry exists.
+        // A timer that fired before a later one replaced it settles nothing: the state keeps the later token.
         let handle = self.runtime().spawn(async move {
             tokio::time::sleep(SETTLE).await;
-            data.complete(Completion::Settled { key, token, catalog, location }, |tasks| {
-                tasks.timers.remove(&token);
-            });
+            remote
+                .post(move |data| {
+                    data.complete(Completion::Settled { key, token, catalog, location }, |tasks| {
+                        tasks.timers.remove(&token);
+                    })
+                })
+                .await;
         });
         store.tasks().timers.insert(token, handle.abort_handle());
         if let Some(previous) = previous.and_then(|previous| store.tasks().timers.remove(&previous)) {
@@ -719,16 +778,21 @@ impl Data {
     }
 
     /// Replies and drops the request; an already settled request counts as replied.
-    pub async fn permission_reply(&self, input: PermissionReplyInput) -> Result<(), Error> {
-        if let Err(error) = self.client().permission_reply(&input).await {
-            let error = Error::new(error);
-            if !is_tag(&error, "PermissionNotFoundError") {
-                return Err(error);
+    pub fn permission_reply(
+        &self,
+        input: PermissionReplyInput,
+    ) -> impl Future<Output = Result<(), Error>> + Send + 'static {
+        let remote = self.remote();
+        async move {
+            if let Err(error) = remote.client().permission_reply(&input).await {
+                let error = Error::new(error);
+                if !is_tag(&error, "PermissionNotFoundError") {
+                    return Err(error);
+                }
             }
+            let completion = Completion::PermissionReplied { session: input.session_id, request: input.request_id };
+            remote.call(move |data| data.complete(completion, |_| {})).await
         }
-        let completion = Completion::PermissionReplied { session: input.session_id, request: input.request_id };
-        self.complete(completion, |_| {});
-        Ok(())
     }
 
     /// Reads pending forms for a session or location. Forms created or settled during the read take precedence over
@@ -747,36 +811,31 @@ impl Data {
 
     /// Answers a form and drops it. A form that is already settled counts as answered. A global
     /// form needs its location, which the request names in a header.
-    pub async fn form_reply(&self, input: SessionFormReplyInput, location: Option<&Location>) -> Result<(), Error> {
-        let result = form_client(self.client(), &input.session_id, location).session_form_reply(&input).await;
-        self.settle_form(input.session_id, input.form_id, location, result)
+    pub fn form_reply(
+        &self,
+        input: SessionFormReplyInput,
+        location: Option<&Location>,
+    ) -> impl Future<Output = Result<(), Error>> + Send + 'static {
+        let (remote, location) = (self.remote(), location.cloned());
+        async move {
+            let client = form_client(remote.client(), &input.session_id, location.as_ref());
+            let result = client.session_form_reply(&input).await;
+            settle_form(&remote, input.session_id, input.form_id, location, result).await
+        }
     }
 
     /// Cancels a form and drops it; see [`Data::form_reply`].
-    pub async fn form_cancel(&self, input: SessionFormCancelInput, location: Option<&Location>) -> Result<(), Error> {
-        let result = form_client(self.client(), &input.session_id, location).session_form_cancel(&input).await;
-        self.settle_form(input.session_id, input.form_id, location, result)
-    }
-
-    /// Drops a form that a reply or a cancel settled; the owner's other forms are read again.
-    fn settle_form(
+    pub fn form_cancel(
         &self,
-        owner: String,
-        id: FormID,
+        input: SessionFormCancelInput,
         location: Option<&Location>,
-        result: Result<(), opencode_api::error::Error>,
-    ) -> Result<(), Error> {
-        if let Err(error) = result {
-            let settled = error.declared().is_some_and(|declared| {
-                matches!(declared.tag.as_deref(), Some("FormNotFoundError" | "FormAlreadySettledError"))
-                    && declared.body.get("id").and_then(serde_json::Value::as_str) == Some(id.0.as_str())
-            });
-            if !settled {
-                return Err(Error::new(error));
-            }
+    ) -> impl Future<Output = Result<(), Error>> + Send + 'static {
+        let (remote, location) = (self.remote(), location.cloned());
+        async move {
+            let client = form_client(remote.client(), &input.session_id, location.as_ref());
+            let result = client.session_form_cancel(&input).await;
+            settle_form(&remote, input.session_id, input.form_id, location, result).await
         }
-        self.complete(Completion::FormReplied { owner, id, location: location.cloned() }, |_| {});
-        Ok(())
     }
 
     /// Reads the running jobs of the tree under `root` once per invalidation. Job events received during the read
@@ -786,15 +845,35 @@ impl Data {
     }
 
     /// Cancels a running job, interrupting the work it started; a finished job stays finished.
-    pub async fn job_cancel(&self, id: &str) -> Result<(), Error> {
-        let input = ExperimentalJobCancelInput { id: id.to_owned() };
-        self.client().experimental_job_cancel(&input).await.map_err(Error::new)
+    pub fn job_cancel(&self, id: &str) -> impl Future<Output = Result<(), Error>> + Send + 'static {
+        let (client, input) = (self.client().clone(), ExperimentalJobCancelInput { id: id.to_owned() });
+        async move { client.experimental_job_cancel(&input).await.map_err(Error::new) }
     }
 
     /// Reads every project once per invalidation; the read replaces the cached set.
     pub fn project_sync(&self) -> Task<()> {
         self.sync(Read::Projects, |_, ticket| Projects { ticket })
     }
+}
+
+/// Drops a form that a reply or a cancel settled; the owner's other forms are read again.
+async fn settle_form(
+    remote: &Remote,
+    owner: String,
+    id: FormID,
+    location: Option<Location>,
+    result: Result<(), opencode_api::error::Error>,
+) -> Result<(), Error> {
+    if let Err(error) = result {
+        let settled = error.declared().is_some_and(|declared| {
+            matches!(declared.tag.as_deref(), Some("FormNotFoundError" | "FormAlreadySettledError"))
+                && declared.body.get("id").and_then(serde_json::Value::as_str) == Some(id.0.as_str())
+        });
+        if !settled {
+            return Err(Error::new(error));
+        }
+    }
+    remote.call(move |data| data.complete(Completion::FormReplied { owner, id, location }, |_| {})).await
 }
 
 /// Global forms name their location in a header (`formRequestOptions`).

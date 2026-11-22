@@ -16,14 +16,14 @@ fn command(args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test(flavor = "local")]
 async fn live_store_rehydrates_and_reads() {
     if std::env::var("OPENCODE_LIVE").as_deref() != Ok("1") {
         return;
     }
     let server = command(&["service", "status"]);
     let client = Client::new(&server).unwrap().auth(Auth::password(command(&["service", "get", "password"])));
-    let data = Data::new(client.clone(), Options::default());
+    let data = Data::local(client.clone(), Options::default());
     data.on_error(|error| eprintln!("live: refresh failed: {error}"));
 
     let (connection, _task) = opencode_store::connection::connect(&data, events::Options::default());
@@ -34,8 +34,13 @@ async fn live_store_rehydrates_and_reads() {
         .unwrap();
     // `server.connected` starts the `session.active` read; it records running sessions.
     let connected = Instant::now();
-    let mut changes = data.subscribe();
-    let _ = tokio::time::timeout(Duration::from_secs(2), changes.changed()).await;
+    let revision = data.revision();
+    let changed = async {
+        while data.revision() == revision {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    };
+    let _ = tokio::time::timeout(Duration::from_secs(2), changed).await;
     let running = data.read(|state| state.active_sessions().len());
 
     let page = client.session_list(&SessionListInput { limit: Some(20), ..Default::default() }).await.unwrap();

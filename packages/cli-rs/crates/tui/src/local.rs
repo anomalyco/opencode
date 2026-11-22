@@ -237,11 +237,14 @@ impl Local {
         &self,
         catalog: Catalog,
     ) -> impl Future<Output = Result<(), opencode_store::Error>> + Send + use<> {
-        let data = self.data.clone();
+        let remote = self.data.remote();
         let location = self.catalog_location();
         async move {
-            data.catalog_invalidate(catalog, Some(&location));
-            data.catalog_sync(catalog, Some(&location)).await
+            let sync = remote.call(move |data| {
+                data.catalog_invalidate(catalog, Some(&location));
+                data.catalog_sync(catalog, Some(&location))
+            });
+            sync.await?.await
         }
     }
 

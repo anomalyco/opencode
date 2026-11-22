@@ -144,11 +144,7 @@ fn kit_with(width: u16, height: u16, fixture: Arc<Server>) -> Kit {
     let dialogs = Dialogs::new(&app, keymap, theme());
     let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
     let state = state();
-    let data = Data::with_runtime(
-        client,
-        StoreOptions { directory: "/project".into(), ..StoreOptions::default() },
-        app.runtime(),
-    );
+    let data = support::store(&app, client, StoreOptions { directory: "/project".into(), ..StoreOptions::default() });
     let local = Local::new(
         &app,
         data.clone(),

@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::{self, Status};
 use opencode_api::generated::*;
-use opencode_store::{Catalog, CreateSession, Data, LoadMore, Options, Touched};
+use opencode_store::{Catalog, CreateSession, Data, LoadMore, MAILBOX, Options, Touched, Unwoken};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 
@@ -79,12 +79,12 @@ fn reads(paths: &Log<String>, path: &str) -> usize {
 
 /// A reconnect the status watch coalesces (`Connected -> Reconnecting -> Connected` before `run`
 /// polls it) must still invalidate cached reads and wake views.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_coalesced_reconnect_invalidates_reads_and_flushes_everything() {
     let (data, paths) = counting();
     let (status, watcher) = watch::channel(state(Status::Connected));
     let (batches, receiver) = mpsc::channel(8);
-    let driver = tokio::spawn(opencode_store::connection::run(data.clone(), watcher, receiver));
+    let driver = tokio::spawn(opencode_store::connection::run(data.remote(), watcher, receiver));
     batches.send(vec![connected()]).await.unwrap();
     settle().await;
     let path = "/api/session/ses_a/message";
@@ -104,8 +104,44 @@ async fn a_coalesced_reconnect_invalidates_reads_and_flushes_everything() {
     driver.await.unwrap();
 }
 
+/// An owner that stops draining (a suspended terminal) leaves at most `MAILBOX` messages in the store's mailbox: the
+/// connection then waits, so later batches stay in its own queue, where a full queue drops the stream. Once the owner
+/// drains, every batch applies, in order.
+#[tokio::test(flavor = "local")]
+async fn an_owner_that_stops_draining_holds_a_bounded_mailbox() {
+    let client = client(handler(|_req: Req| async { ok(json!({ "data": [] })) }));
+    let options = Options { directory: "/project".into(), ..Options::default() };
+    let data = Data::new(client, options, tokio::runtime::Handle::current(), || Err(Unwoken::Busy));
+    let _listening = data.listen([EventKind::TuiPromptAppend]);
+    let append = |n: usize| {
+        let body =
+            json!({ "id": format!("evt_{n}"), "created": 1, "type": "tui.prompt.append", "data": { "text": "x" } });
+        event(body)
+    };
+    let sent = MAILBOX + 8;
+    let (_status, watcher) = watch::channel(state(Status::Connected));
+    let (batches, receiver) = mpsc::channel(sent);
+    tokio::spawn(opencode_store::connection::run(data.remote(), watcher, receiver));
+    for n in 0..sent {
+        batches.send(vec![append(n)]).await.unwrap();
+    }
+    // What fits, and the one batch the connection waits to send. The free slots are the batches it took.
+    wait(|| batches.capacity() == MAILBOX + 1).await;
+    settle().await;
+    assert_eq!(batches.capacity(), MAILBOX + 1, "the connection waits for room");
+
+    data.drain();
+    wait(|| batches.capacity() == sent).await;
+    settle().await;
+    data.drain();
+    let mut applied = Vec::new();
+    data.take_signals(&mut applied);
+    let ids: Vec<String> = applied.iter().map(|event| event.id().to_owned()).collect();
+    assert_eq!(ids, (0..sent).map(|n| format!("evt_{n}")).collect::<Vec<_>>());
+}
+
 /// The connection records a declared error by its message, as TS's does.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn the_connection_records_a_declared_error_by_its_message() {
     let declared = json!({ "_tag": "Unauthorized", "message": "no" });
     let data =
@@ -117,12 +153,12 @@ async fn the_connection_records_a_declared_error_by_its_message() {
 
 /// The dying stream's last batch is applied before the disconnect invalidates, so a
 /// `session.created` in it cannot keep its reads marked done across the reconnect.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
     let (data, paths) = counting();
     let (status, watcher) = watch::channel(state(Status::Connected));
     let (batches, receiver) = mpsc::channel(8);
-    let driver = tokio::spawn(opencode_store::connection::run(data.clone(), watcher, receiver));
+    let driver = tokio::spawn(opencode_store::connection::run(data.remote(), watcher, receiver));
     batches.send(vec![connected()]).await.unwrap();
     settle().await;
 
@@ -144,7 +180,7 @@ async fn the_dying_streams_tail_batch_applies_before_the_disconnect() {
 }
 
 /// A delivery whose enqueue this client missed in a reconnect reads the synced transcript again.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn the_delivery_of_an_unseen_prompt_reads_the_transcript_again() {
     let (data, paths) = counting();
     data.message_sync(&id("ses_a")).await.unwrap();
@@ -177,14 +213,14 @@ async fn deleted_before_first_poll(read: &str) {
     });
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn inflight_reads_cannot_resurrect_deleted_sessions() {
     for case in ["session", "message", "permission", "form"] {
         deleted_before_first_poll(case).await;
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn overtaking_enqueues_keep_their_order() {
     let release = Slot::<()>::default();
     let gate = release.clone();
@@ -218,7 +254,7 @@ async fn overtaking_enqueues_keep_their_order() {
 }
 
 /// The read of a running session that is not loaded checks the connection when it would start.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn rehydration_reads_nothing_once_offline() {
     let release = Slot::<()>::default();
     let paths = Log::<String>::default();
@@ -237,7 +273,7 @@ async fn rehydration_reads_nothing_once_offline() {
         }),
         Options::default(),
     );
-    data.apply(&[connected()]);
+    data.apply(vec![connected()]);
     wait(|| paths.get().iter().any(|path| path == "/api/session/active")).await;
     data.set_online(false);
     release.resolve(());
@@ -245,7 +281,7 @@ async fn rehydration_reads_nothing_once_offline() {
     assert_eq!(reads(&paths, "/api/session/ses_x"), 0);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
     let (data, _) = counting();
     let root = id("ses_root");
@@ -282,7 +318,7 @@ async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
     assert_eq!(roots, ["ses_d", "ses_d", "ses_b", "ses_c"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_failed_create_after_its_echo_flushes_the_end_of_creating() {
     let release = Slot::<()>::default();
     let gate = release.clone();
@@ -329,36 +365,33 @@ fn connect_works_from_a_thread_outside_the_runtime() {
         count.fetch_add(1, Ordering::SeqCst);
         async { Reply::Text(500, "no stream".into()) }
     }));
-    let data = Data::with_runtime(client, Options::default(), runtime.handle().clone());
-    // The UI thread has no runtime context.
-    let (connection, _task) =
-        std::thread::spawn(move || opencode_store::connection::connect(&data, events::Options::default()))
-            .join()
-            .expect("connect does not panic outside the runtime");
+    let handle = runtime.handle().clone();
+    // The UI thread, which owns the store, has no runtime context.
+    let connection = std::thread::spawn(move || {
+        let data = Data::new(client, Options::default(), handle, || Ok(()));
+        opencode_store::connection::connect(&data, events::Options::default()).0
+    })
+    .join()
+    .expect("connect does not panic outside the runtime");
     runtime.block_on(async {
         wait(|| opened.load(Ordering::SeqCst) > 0).await;
     });
     drop(connection);
 }
 
-/// Nested reads reuse the outer guard. Writing inside a read must panic rather than deadlock.
-#[tokio::test]
+/// Reads nest. Writing inside a read panics.
+#[tokio::test(flavor = "local")]
 async fn a_nested_read_works_and_a_write_inside_a_read_panics() {
     let data = common::data(handler(|_| async { ok(json!({})) }), Options::default());
     let other = common::data(handler(|_| async { ok(json!({})) }), Options::default());
     assert!(data.read(|_| other.read(|_| data.read(|_| true))));
-    let (sender, receiver) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            data.read(|_| data.catalog_invalidate(Catalog::Model, None));
-        }));
-        let _ = sender.send(result.is_err());
-    });
-    let panicked = receiver.recv_timeout(std::time::Duration::from_secs(2));
-    assert_eq!(panicked, Ok(true), "a write inside a read must panic, not hang");
+    let written = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        data.read(|_| data.catalog_invalidate(Catalog::Model, None));
+    }));
+    assert!(written.is_err(), "a write inside a read must panic");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn deleting_a_session_drops_its_forms() {
     let (data, _) = counting();
     emit(
@@ -379,7 +412,7 @@ async fn deleting_a_session_drops_its_forms() {
 }
 
 /// `handleEvent` "session.step.failed": a budget refusal refreshes usage limits that were read.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_budget_refusal_refreshes_usage_limits() {
     let paths = Log::<String>::default();
     let log = paths.clone();
@@ -438,7 +471,7 @@ fn permission(id: &str) -> Value {
 
 /// A permission asked while the list read is in flight survives the older snapshot; one replied
 /// meanwhile does not come back with it.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_permission_list_keeps_asks_and_replies_that_overtook_it() {
     let (data, release) = held("/api/session/ses_p/permission");
     let task = data.permission_sync(&id("ses_p"));
@@ -461,7 +494,7 @@ async fn a_permission_list_keeps_asks_and_replies_that_overtook_it() {
 }
 
 /// An overflow costs another read, never a lost permission request.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_overflowed_permission_read_reads_again() {
     let slot = Slot::<Value>::default();
     let release = slot.clone();
@@ -504,7 +537,7 @@ fn form(id: &str) -> Value {
     json!({ "id": id, "sessionID": "ses_f", "title": "Ask", "fields": [] })
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_form_list_keeps_forms_created_and_settled_while_it_was_read() {
     let (data, release) = held("/api/session/ses_f/form");
     let running = tokio::spawn(data.form_sync("ses_f", None));
@@ -531,7 +564,7 @@ async fn a_form_list_keeps_forms_created_and_settled_while_it_was_read() {
     assert_eq!(ids, ["frm_kept", "frm_new"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_overflowed_form_read_reads_again() {
     let slot = Slot::<Value>::default();
     let release = slot.clone();
@@ -587,7 +620,7 @@ fn text(data: &Data, message: &str) -> Option<String> {
 
 /// A latest-page read that started before a step must not erase the assistant row the step's
 /// events created, with or without an older copy of it in the page.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_transcript_refresh_keeps_the_reply_that_streamed_meanwhile() {
     let user = json!({ "id": "msg_u", "type": "user", "text": "hi", "time": { "created": 1 } });
     let stale = json!({
@@ -621,7 +654,7 @@ async fn a_transcript_refresh_keeps_the_reply_that_streamed_meanwhile() {
 
 /// An older page read from a cursor that a latest-page refresh replaced is not stitched onto the
 /// new list: the load starts again from the new cursor, so no message goes missing.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_older_page_does_not_leave_a_gap_after_a_refresh() {
     let release = Slot::<()>::default();
     let gate = release.clone();
@@ -655,7 +688,7 @@ async fn an_older_page_does_not_leave_a_gap_after_a_refresh() {
     data.message_sync(&session).await.unwrap();
     let load = {
         let (data, session) = (data.clone(), session.clone());
-        tokio::spawn(async move { data.message_load_more(&session, LoadMore::default()).await })
+        tokio::spawn(data.message_load_more(&session, LoadMore::default()))
     };
     settle().await;
     latest.store(3, Ordering::SeqCst);

@@ -118,15 +118,22 @@ fn sync(tui: &Tui, location: Option<Location>) {
     tui.location.generation.set(attempt);
     let target = tui.data.read(|state| (*state.default_location() != location).then(|| location.clone()));
     tui.location.error.borrow_mut().take();
-    let data = tui.data.clone();
+    let remote = tui.data.remote();
     tui.app.spawn(
         async move {
             let mut tries = 0;
             loop {
                 let read = async {
-                    data.location_sync_info(target.as_ref()).await?;
-                    let config = data.catalog_sync(Catalog::Config, target.as_ref());
-                    let (sync, config) = futures_util::future::join(data.location_sync(target.as_ref()), config).await;
+                    let info = target.clone();
+                    remote.call(move |data| data.location_sync_info(info.as_ref())).await?.await?;
+                    let target = target.clone();
+                    let (sync, config) = remote
+                        .call(move |data| {
+                            let config = data.catalog_sync(Catalog::Config, target.as_ref());
+                            (data.location_sync(target.as_ref()), config)
+                        })
+                        .await?;
+                    let (sync, config) = futures_util::future::join(sync, config).await;
                     sync.and(config)
                 };
                 match read.await {

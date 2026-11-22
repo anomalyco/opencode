@@ -223,7 +223,7 @@ fn quick_switch_opens_pinned_sessions_and_deletes_drop_pins() {
         "data": { "sessionID": "ses_b" },
     }))
     .unwrap();
-    setup.tui.data.apply(&[deleted]);
+    setup.tui.data.apply(vec![deleted]);
     let pruned = setup.app.wait_until(WAIT, || setup.pins().contains(r#""ses_a""#) && !setup.pins().contains("ses_b"));
     assert!(pruned, "{}", setup.pins());
 }
