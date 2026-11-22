@@ -1,7 +1,9 @@
-use opencode_api_types::js::truthy;
 use serde_json::{Map, Value};
 
-use crate::tool_info::{canonical_tool_name, finite_number, web_search_provider_label};
+use crate::tool_info::{
+    EditInput, LspInput, SearchInput, ShellInput, SubagentInput, ToolInput, ToolKind, WebFetchInput, WebSearchInput,
+    finite_number, web_search_provider_label,
+};
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Presentation {
@@ -22,8 +24,7 @@ pub fn presentation(
     tool_metadata: &Value,
     format_path: &dyn Fn(&str) -> String,
 ) -> Presentation {
-    let canonical = canonical_tool_name(action);
-    let input = normalize_input(canonical, input);
+    let input = ToolInput::json(input);
     let mut metadata = dict(tool_metadata);
     if let Some(extra) = request_metadata {
         metadata.extend(extra.iter().map(|(key, value)| (key.clone(), value.clone())));
@@ -32,29 +33,30 @@ pub fn presentation(
         map.get(key).and_then(Value::as_str).unwrap_or_default().to_owned()
     };
     let first = resources.first().cloned().unwrap_or_default();
-    let or = |value: String, fallback: &str| {
-        if value.is_empty() { fallback.to_owned() } else { value }
+    let or = |value: &str, fallback: &str| {
+        if value.is_empty() { fallback.to_owned() } else { value.to_owned() }
     };
     let some = |value: String| (!value.is_empty()).then_some(value);
+    let path = input.any_path().unwrap_or_default();
 
-    match canonical {
-        "edit" => {
-            let file = or(text(&input, "path"), &first);
+    match ToolKind::of(action) {
+        ToolKind::Edit => {
+            let file = or(path, &first);
             let files = metadata.get("files").and_then(Value::as_array);
             let changed = dict(files.and_then(|files| files.first()).unwrap_or(&Value::Null));
-            let diff = some(or(or(text(&changed, "patch"), &text(&changed, "diff")), &text(&metadata, "diff")));
+            let diff = some(or(&or(&text(&changed, "patch"), &text(&changed, "diff")), &text(&metadata, "diff")));
             Presentation {
                 icon: "→",
                 title: format!("Edit {}", format_path(&file)),
-                patch: if diff.is_some() { None } else { some(text(&input, "patchText")) },
+                patch: if diff.is_some() { None } else { EditInput(input).patch_text().non_empty().map(str::to_owned) },
                 diff,
                 file: Some(file),
                 ..Presentation::default()
             }
         }
-        "read" | "list" => {
-            let value = or(text(&input, "path"), &first);
-            let title = if canonical == "read" { "Read" } else { "List" };
+        kind @ (ToolKind::Read | ToolKind::List) => {
+            let value = or(path, &first);
+            let title = if kind == ToolKind::Read { "Read" } else { "List" };
             Presentation {
                 icon: "→",
                 title: format!("{title} {}", format_path(&value)),
@@ -62,9 +64,9 @@ pub fn presentation(
                 ..Presentation::default()
             }
         }
-        "glob" | "grep" => {
-            let pattern = or(text(&input, "pattern"), &first);
-            let title = if canonical == "glob" { "Glob" } else { "Grep" };
+        kind @ (ToolKind::Glob | ToolKind::Grep) => {
+            let pattern = or(SearchInput(input).pattern().text(), &first);
+            let title = if kind == ToolKind::Glob { "Glob" } else { "Grep" };
             Presentation {
                 icon: "✱",
                 title: format!("{title} \"{pattern}\""),
@@ -72,31 +74,31 @@ pub fn presentation(
                 ..Presentation::default()
             }
         }
-        "shell" => {
-            let command = text(&input, "command");
+        ToolKind::Shell => Presentation {
+            icon: "#",
+            title: "Shell command".to_owned(),
+            lines: match ShellInput(input).command().non_empty() {
+                Some(command) => vec![format!("$ {command}")],
+                None => resources.iter().map(|item| format!("- {item}")).collect(),
+            },
+            ..Presentation::default()
+        },
+        ToolKind::Subagent => {
+            let input = SubagentInput(input);
+            let agent = input.agent().non_empty().or(input.subagent_type().non_empty()).unwrap_or("general");
             Presentation {
                 icon: "#",
-                title: "Shell command".to_owned(),
-                lines: match some(command) {
-                    Some(command) => vec![format!("$ {command}")],
-                    None => resources.iter().map(|item| format!("- {item}")).collect(),
-                },
-                ..Presentation::default()
-            }
-        }
-        "subagent" => {
-            let agent = or(text(&input, "agent"), "general");
-            Presentation {
-                icon: "#",
-                title: format!("{} Subagent", crate::tool_info::titlecase(&agent)),
-                lines: some(text(&input, "description"))
+                title: format!("{} Subagent", crate::tool_info::titlecase(agent)),
+                lines: input
+                    .description()
+                    .non_empty()
                     .map(|description| vec![format!("◉ {description}")])
                     .unwrap_or_default(),
                 ..Presentation::default()
             }
         }
-        "webfetch" => {
-            let url = or(text(&input, "url"), &text(&metadata, "url"));
+        ToolKind::WebFetch => {
+            let url = or(WebFetchInput(input).url().text(), &text(&metadata, "url"));
             Presentation {
                 icon: "%",
                 title: format!("WebFetch {url}"),
@@ -104,8 +106,8 @@ pub fn presentation(
                 ..Presentation::default()
             }
         }
-        "websearch" => {
-            let query = or(text(&input, "query"), &text(&metadata, "query"));
+        ToolKind::WebSearch => {
+            let query = or(WebSearchInput(input).query().text(), &text(&metadata, "query"));
             let title = web_search_provider_label(metadata.get("provider").unwrap_or(&Value::Null));
             Presentation {
                 icon: "◈",
@@ -114,31 +116,32 @@ pub fn presentation(
                 ..Presentation::default()
             }
         }
-        "lsp" => {
-            let file = text(&input, "path");
-            let operation = or(text(&input, "operation"), "request");
-            let number = |key: &str| input.get(key).and_then(finite_number);
-            let position =
-                number("line").zip(number("character")).map(|(line, character)| format!("{line}:{character}"));
+        ToolKind::Lsp => {
+            let lsp = LspInput(input);
+            let operation = or(lsp.operation().text(), "request");
+            let number = |value: Option<&Value>| value.and_then(finite_number);
+            let position = number(lsp.line().value())
+                .zip(number(lsp.character().value()))
+                .map(|(line, character)| format!("{line}:{character}"));
             let mut title = format!("LSP {operation}");
             let mut lines = Vec::new();
-            if input.get("operation").is_some_and(truthy) {
+            if lsp.operation().truthy() {
                 lines.push(format!("Operation: {operation}"));
             }
-            if !file.is_empty() {
-                title.push_str(&format!(" {}", format_path(&file)));
+            if !path.is_empty() {
+                title.push_str(&format!(" {}", format_path(path)));
                 if let Some(position) = &position {
                     title.push_str(&format!(":{position}"));
                 }
-                lines.push(format!("Path: {}", format_path(&file)));
+                lines.push(format!("Path: {}", format_path(path)));
             }
             if let Some(position) = position {
                 lines.push(format!("Position: {position}"));
             }
             Presentation { icon: "→", title, lines, ..Presentation::default() }
         }
-        "external_directory" => {
-            let raw = or(or(text(&metadata, "parentDir"), &text(&metadata, "filepath")), &first);
+        ToolKind::ExternalDirectory => {
+            let raw = or(&or(&text(&metadata, "parentDir"), &text(&metadata, "filepath")), &first);
             Presentation {
                 icon: "←",
                 title: format!("Access external directory {}", format_path(&wildcard_directory(&raw))),
@@ -146,7 +149,7 @@ pub fn presentation(
                 ..Presentation::default()
             }
         }
-        "doom_loop" => Presentation {
+        ToolKind::DoomLoop => Presentation {
             icon: "⟳",
             title: "Continue after repeated failures".to_owned(),
             lines: vec!["This keeps the session running despite repeated failures.".to_owned()],
@@ -183,20 +186,6 @@ fn wildcard_directory(value: &str) -> String {
         return prefix.to_owned();
     }
     prefix.trim_end_matches(['/', '\\']).to_owned()
-}
-
-fn normalize_input(action: &str, value: &Value) -> Map<String, Value> {
-    let mut input = dict(value);
-    let text = |key: &str| input.get(key).and_then(Value::as_str).filter(|text| !text.is_empty()).map(str::to_owned);
-    let path = text("path").or_else(|| text("filePath")).or_else(|| text("filepath"));
-    let agent = text("agent").or_else(|| text("subagent_type"));
-    if let Some(path) = path.filter(|_| matches!(action, "read" | "edit" | "list" | "lsp")) {
-        input.insert("path".to_owned(), Value::String(path));
-    }
-    if let Some(agent) = agent.filter(|_| action == "subagent") {
-        input.insert("agent".to_owned(), Value::String(agent));
-    }
-    input
 }
 
 fn dict(value: &Value) -> Map<String, Value> {

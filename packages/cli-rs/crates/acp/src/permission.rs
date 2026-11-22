@@ -10,9 +10,9 @@ use crate::child;
 use crate::client::{check, is_declared};
 use crate::connection::Connection;
 use crate::error::Failure;
-use crate::tools::{
-    DiffSource, absolute_path, canonical_name, file_path, locations, patch, patch_hunks, pending_tool_call, text,
-};
+use opencode_api::tool::{ExternalDirectoryInput, SearchInput, ToolInput, ToolKind, WebFetchInput, WebSearchInput};
+
+use crate::tools::{DiffSource, absolute_path, locations, patch, patch_hunks, pending_tool_call, tool_kind};
 use crate::translate::Tool;
 
 pub struct Input {
@@ -139,10 +139,11 @@ pub async fn with_completed_diffs(update: Value, source: Option<&DiffSource>, cw
     }
     // A script lists each change it made, some without a diff, and the same file more than once; rebuilding them from
     // the file on disk would show its final text for every change.
-    if canonical_name(&source.tool_name) == "execute" {
+    let kind = tool_kind(&source.tool_name);
+    if kind == ToolKind::Execute {
         return update;
     }
-    let hunks = if canonical_name(&source.tool_name) == "patch" { patch_hunks(&source.input) } else { Vec::new() };
+    let hunks = if kind == ToolKind::Patch { patch_hunks(&source.input) } else { Vec::new() };
     let mut diffs = Vec::new();
     for file in decode_files(source.metadata.as_ref().and_then(|metadata| metadata.get("files"))) {
         diffs.extend(completed_diff(&file, &hunks, cwd).await);
@@ -199,7 +200,7 @@ async fn completed_diff(file: &FileDiff, hunks: &[patch::Hunk], cwd: &str) -> Op
 // Core trims the patch tool's diffs for display, which breaks `applyPatch`, so its previews come from its own hunks.
 // Any failure drops every preview, as the TS `Effect.forEach` does.
 async fn permission_previews(tool_name: &str, input: &Value, metadata: Option<&Value>, cwd: &str) -> Option<Vec<Diff>> {
-    if canonical_name(tool_name) == "patch" {
+    if tool_kind(tool_name) == ToolKind::Patch {
         return patch_previews(input, cwd).await;
     }
     let mut previews = Vec::new();
@@ -246,18 +247,19 @@ fn permission_title(tool_name: &str, input: &Value, previews: &[Diff]) -> Option
     if previews.len() > 1 {
         return Some(format!("{} files", previews.len()));
     }
-    match canonical_name(tool_name).as_str() {
-        "external_directory" => {
-            text(input, "description").or_else(|| text(input, "command")).or_else(|| text(input, "parentDir"))
-        }
-        "webfetch" => text(input, "url"),
-        "websearch" => text(input, "query"),
-        "grep" | "glob" => text(input, "pattern"),
-        "read" | "edit" | "write" | "patch" => {
-            file_path(input).or_else(|| previews.first().map(|preview| preview.path.clone()))
+    let fields = ToolInput::json(input);
+    let dir = ExternalDirectoryInput(fields);
+    let text = match tool_kind(tool_name) {
+        ToolKind::ExternalDirectory => dir.description().str().or(dir.command().str()).or(dir.parent_dir().str()),
+        ToolKind::WebFetch => WebFetchInput(fields).url().str(),
+        ToolKind::WebSearch => WebSearchInput(fields).query().str(),
+        ToolKind::Grep | ToolKind::Glob => SearchInput(fields).pattern().str(),
+        ToolKind::Read | ToolKind::Edit | ToolKind::Write | ToolKind::Patch => {
+            fields.file_path().or(previews.first().map(|preview| preview.path.as_str()))
         }
         _ => None,
-    }
+    };
+    text.map(str::to_owned)
 }
 
 fn permission_locations(tool_name: &str, tool_input: &Value, input: &Input, cwd: &str) -> Vec<Value> {

@@ -3,6 +3,9 @@ pub mod patch;
 use std::sync::LazyLock;
 
 use indexmap::IndexSet;
+use opencode_api::tool::{
+    ExternalDirectoryInput, Field, PatchInput, ShellInput, ToolInput, ToolKind, read_display_text,
+};
 use opencode_util::json_object;
 use regex::Regex;
 use serde_json::{Value, json};
@@ -52,7 +55,7 @@ pub fn completed_tool_update(
     let first_text =
         content.as_array().into_iter().flatten().find(|part| part.get("type").and_then(Value::as_str) == Some("text"));
     let read = first_text
-        .filter(|_| canonical_name(tool_name) == "read")
+        .filter(|_| tool_kind(tool_name) == ToolKind::Read)
         .and_then(|part| read_display_text(part.get("text").and_then(Value::as_str)?));
     let (images, others): (Vec<Value>, Vec<Value>) =
         normalized.into_iter().partition(|part| part["content"]["type"] == "image");
@@ -96,34 +99,34 @@ pub fn error_tool_update(
     })
 }
 
-pub fn canonical_name(tool_name: &str) -> String {
-    let name = tool_name.to_lowercase();
-    match name.as_str() {
-        "bash" => "shell".to_owned(),
-        "task" => "subagent".to_owned(),
-        "apply_patch" => "patch".to_owned(),
-        _ => name,
-    }
+/// What a tool is: ACP reads its name in any case.
+pub fn tool_kind(tool_name: &str) -> ToolKind {
+    ToolKind::of(&tool_name.to_lowercase())
 }
 
 fn kind(tool_name: &str) -> &'static str {
-    match canonical_name(tool_name).as_str() {
-        "shell" => "execute",
-        "webfetch" => "fetch",
-        "edit" | "patch" | "write" => "edit",
-        "grep" | "glob" | "context" | "context7_resolve_library_id" | "context7_get_library_docs" => "search",
-        "read" => "read",
-        "subagent" => "think",
+    match tool_kind(tool_name) {
+        ToolKind::Shell => "execute",
+        ToolKind::WebFetch => "fetch",
+        ToolKind::Edit | ToolKind::Patch | ToolKind::Write => "edit",
+        ToolKind::Grep | ToolKind::Glob | ToolKind::Context => "search",
+        ToolKind::Read => "read",
+        ToolKind::Subagent => "think",
         _ => "other",
     }
 }
 
 /// `toLocations`: the files and directories a tool call touches, absolute against `cwd`.
 pub fn locations(tool_name: &str, input: &Value, cwd: &str) -> Vec<Value> {
-    let values: Vec<Option<String>> = match canonical_name(tool_name).as_str() {
-        "shell" => vec![Some(text(input, "workdir").or_else(|| text(input, "cwd")).unwrap_or_else(|| cwd.to_owned()))],
-        "read" | "edit" | "write" => vec![file_path(input)],
-        "patch" => patch_hunks(input)
+    let fields = ToolInput::json(input);
+    let owned = |text: Option<&str>| text.map(str::to_owned);
+    let values: Vec<Option<String>> = match tool_kind(tool_name) {
+        ToolKind::Shell => {
+            let shell = ShellInput(fields);
+            vec![Some(shell.workdir().str().or(shell.cwd().str()).unwrap_or(cwd).to_owned())]
+        }
+        ToolKind::Read | ToolKind::Edit | ToolKind::Write => vec![owned(fields.file_path())],
+        ToolKind::Patch => patch_hunks(input)
             .into_iter()
             .flat_map(|hunk| {
                 let target = match &hunk {
@@ -133,10 +136,8 @@ pub fn locations(tool_name: &str, input: &Value, cwd: &str) -> Vec<Value> {
                 [Some(hunk.path().to_owned()), target]
             })
             .collect(),
-        "external_directory" => vec![text(input, "filepath")],
-        "grep" | "glob" | "context" | "context7_resolve_library_id" | "context7_get_library_docs" => {
-            vec![text(input, "path")]
-        }
+        ToolKind::ExternalDirectory => vec![owned(ExternalDirectoryInput(fields).filepath().str())],
+        ToolKind::Grep | ToolKind::Glob | ToolKind::Context => vec![owned(fields.path().str())],
         _ => Vec::new(),
     };
     location_from(cwd, values)
@@ -155,14 +156,9 @@ pub fn location_from(cwd: &str, values: impl IntoIterator<Item = Option<String>>
         .collect()
 }
 
-// Sessions migrated from V1 keep their original `filePath` tool inputs.
-pub fn file_path(input: &Value) -> Option<String> {
-    text(input, "path").or_else(|| text(input, "filePath"))
-}
-
 /// The hunks of a patch tool's `patchText`, empty when it is missing or does not parse.
 pub fn patch_hunks(input: &Value) -> Vec<patch::Hunk> {
-    text(input, "patchText").filter(|text| !text.is_empty()).and_then(|text| patch::parse(&text)).unwrap_or_default()
+    PatchInput(ToolInput::json(input)).patch_text().non_empty().and_then(patch::parse).unwrap_or_default()
 }
 
 /// `absolutePath`: absolute paths stay as they are; relative ones resolve against `cwd`.
@@ -173,28 +169,19 @@ pub fn absolute_path(path: &str, cwd: &str) -> String {
     paths::resolve_from(cwd, path)
 }
 
-fn is_shell(tool_name: &str) -> bool {
-    canonical_name(tool_name) == "shell"
-}
-
-pub fn text(value: &Value, key: &str) -> Option<String> {
-    value.get(key).and_then(Value::as_str).map(str::to_owned)
-}
-
 fn tool_title(tool_name: &str, input: &Value, fallback: Option<&str>) -> String {
-    if is_shell(tool_name) {
-        return text(input, "command")
-            .or_else(|| text(input, "cmd"))
-            .or_else(|| fallback.map(str::to_owned))
-            .unwrap_or_else(|| tool_name.to_owned());
+    if tool_kind(tool_name) == ToolKind::Shell {
+        let shell = ShellInput(ToolInput::json(input));
+        return shell.command().str().or(shell.cmd().str()).or(fallback).unwrap_or(tool_name).to_owned();
     }
     fallback.filter(|title| !title.is_empty()).unwrap_or(tool_name).to_owned()
 }
 
 fn raw_input(tool_name: &str, input: &Value, cwd: &str) -> Value {
-    let truthy =
-        |key: &str| input.get(key).is_some_and(|value| !value.is_null() && value != "" && value != &json!(false));
-    if !is_shell(tool_name) || truthy("cwd") || truthy("workdir") {
+    let shell = ShellInput(ToolInput::json(input));
+    let set =
+        |field: Field| field.value().is_some_and(|value| !value.is_null() && value != "" && value != &json!(false));
+    if tool_kind(tool_name) != ToolKind::Shell || set(shell.cwd()) || set(shell.workdir()) {
         return input.clone();
     }
     json_object! { ..input.clone(), "cwd": cwd }
@@ -233,24 +220,6 @@ fn tool_content(content: &Value) -> Vec<Value> {
         .collect()
 }
 
-/// Extracts the human-readable text from a read tool's JSON page.
-fn read_display_text(text: &str) -> Option<String> {
-    if !text.starts_with('{') {
-        return None;
-    }
-    let envelope = serde_json::from_str::<Value>(text).ok().filter(Value::is_object).unwrap_or_else(|| json!({}));
-    if let Some(content) = envelope.get("content").and_then(Value::as_str)
-        && (envelope.get("type").and_then(Value::as_str) == Some("text-page")
-            || envelope.get("encoding").and_then(Value::as_str) == Some("utf8"))
-    {
-        return Some(content.to_owned());
-    }
-    let entries = envelope.get("entries")?.as_array()?;
-    let lines: Vec<&str> =
-        entries.iter().filter_map(|entry| entry.as_str().or_else(|| entry.get("path")?.as_str())).collect();
-    Some(lines.join("\n"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,8 +240,6 @@ mod tests {
             ])
         );
         assert_eq!(update["locations"], json!([{ "path": paths::resolve_from("/w", "a.ts") }]));
-        assert_eq!(read_display_text("{\"entries\":[\"a\",{\"path\":\"b\"},3]}").as_deref(), Some("a\nb"));
-        assert_eq!(read_display_text("plain"), None);
     }
 
     #[test]
