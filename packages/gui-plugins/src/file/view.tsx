@@ -44,6 +44,8 @@ function selectionFromLines(range: LineRange): FileSelection {
 
 const selectionSide = (range: LineRange) => range.endSide ?? range.side ?? "additions"
 
+const sendLabels = { send: "comment.send", steer: "comment.steer", queue: "comment.queue" } as const
+
 function FileCommentMenu(props: {
   moreLabel: string
   editLabel: string
@@ -236,6 +238,7 @@ function createScrollSync(input: {
 
 export function SessionFileView(props: { session: MountedSession; screen: SessionScreen; id: string }) {
   const ctx = usePlugin()
+  const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
   const layout = ctx.layout
   const shared = useShared()
   const fileComponent = useFileComponent()
@@ -323,6 +326,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     comment: string
     preview?: string
     origin?: "review" | "file"
+    send?: boolean
   }) => {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? buildPreview(input.file, input.selection)
@@ -342,13 +346,23 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       commentOrigin: input.origin,
       preview,
     })
+
+    if (input.send) composer.send(saved.id)
   }
 
-  const updateCommentInContext = (input: { id: string; file: string; selection: LineRange; comment: string }) => {
+  const updateCommentInContext = (input: {
+    id: string
+    file: string
+    selection: LineRange
+    comment: string
+    send?: boolean
+  }) => {
     comment.update(input.id, input.comment)
     const preview = input.file === path() ? buildPreview(input.file, input.selection) : undefined
     // The composer keeps a chip's preview unless the update names a new one.
     composer.update(input.id, preview ? { comment: input.comment, preview } : { comment: input.comment })
+
+    if (input.send) composer.send(input.id)
   }
 
   const removeCommentFromContext = (input: { id: string; file: string }) => {
@@ -380,17 +394,26 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       if (!p) return
       file.selection.set(p, range)
     },
-    onSubmit: ({ comment, selection }) => {
+    onSubmit: ({ comment, selection, send }) => {
       const p = path()
 
       if (!p) return
-      addCommentToContext({ file: p, selection, comment, origin: "file" })
+      addCommentToContext({ file: p, selection, comment, origin: "file", send })
     },
-    onUpdate: ({ id, comment, selection }) => {
+    onUpdate: ({ id, comment, selection, send }) => {
       const p = path()
 
       if (!p) return
-      updateCommentInContext({ id, file: p, selection, comment })
+      updateCommentInContext({ id, file: p, selection, comment, send })
+    },
+    send: () => {
+      const delivery = composer.delivery()
+
+      return {
+        label: ctx.t(sendLabels[delivery ?? "send"]),
+        keys: [mac ? "⌘" : ctx.t("common.key.ctrl"), "⏎"],
+        disabled: delivery === undefined,
+      }
     },
     onDelete: (comment) => {
       const p = path()

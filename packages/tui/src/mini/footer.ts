@@ -233,6 +233,7 @@ export class RunFooter implements FooterApi {
       shellOutput: () => this.miniSettings().shell_output === "show",
       mono: this.miniSettings().mono,
       imagePreview: this.options.tuiConfig.session?.image_preview,
+      markdown: this.options.tuiConfig.session?.markdown,
     })
   }
 

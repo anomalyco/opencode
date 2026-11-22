@@ -1,0 +1,13 @@
+{
+  "info": {
+    "id": "ses_dddddddd0004",
+    "title": "Imported",
+    "projectID": "proj_other",
+    "cost": 0,
+    "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+    "time": { "created": 1, "updated": 2 },
+    "location": { "directory": "/elsewhere" }
+  },
+  "location": { "directory": "/elsewhere" },
+  "messages": []
+}

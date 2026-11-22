@@ -711,6 +711,7 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
           }),
         ),
       ...(refresh ? { refresh: (value: Credential.OAuth) => refresh(value).pipe(Effect.map(credential)) } : {}),
+      ...(input.revoke ? { revoke: input.revoke } : {}),
       ...(input.label ? { label: input.label } : {}),
     }
   }

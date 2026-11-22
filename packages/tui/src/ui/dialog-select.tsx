@@ -2,7 +2,7 @@ import { CliRenderEvents, InputRenderable, RGBA, ScrollBoxRenderable, TextAttrib
 import { Keymap, type KeymapCommand } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
-import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup, onMount } from "solid-js"
+import { batch, createEffect, createMemo, For, Show, type JSX, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -30,6 +30,8 @@ export interface DialogSelectProps<T> {
   description?: string
   /** Blank rows above the footer under the "new-designs" experiment. Defaults to 1. */
   footerGap?: number
+  /** Fill the parent's height, keeping the footer at the bottom. */
+  grow?: boolean
   placeholder?: string
   footer?: JSX.Element
   emptyView?: JSX.Element
@@ -261,21 +263,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const dimensions = useTerminalDimensions()
   const limit = createMemo(() => Math.floor(dimensions().height / 2) - 6)
-  // Under new designs an overflowing list gives its last row to a "…" indicator.
-  const overflows = createMemo(() => newDesigns() && rows() > limit())
   // Computed once here so per-row details do not each call useTerminalDimensions(),
   // which registers one renderer resize listener per mounted row.
   const detailsWidth = createMemo(() =>
     dialogSelectContentWidth(Math.min(dialogWidth(dialog.size), dimensions().width)),
   )
-  const [moreBelow, setMoreBelow] = createSignal(false)
-  // At the bottom of the list the "…" row hands its row back to the list, so the dialog keeps its height.
-  const ellipsis = () => overflows() && moreBelow()
-  const height = createMemo(() => Math.min(rows(), limit()) - (ellipsis() ? 1 : 0))
-  function updateMoreBelow() {
-    if (!scroll || scroll.isDestroyed) return
-    setMoreBelow(scroll.scrollTop + scroll.viewport.height < scroll.scrollHeight)
-  }
+  const height = createMemo(() => Math.min(rows(), limit()))
 
   const selected = createMemo(() => flat()[store.selected])
   const detailView = () => {
@@ -687,6 +680,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   return (
     <DialogLayout
       footerGap={props.footerGap}
+      grow={props.grow}
       header={
         // Rows reserve a gutter, so the header and footer line up with the list's inset rather than the layout's.
         <box paddingLeft={DIALOG_LIST_INSET - DIALOG_INSET} paddingRight={DIALOG_LIST_INSET - DIALOG_INSET}>
@@ -710,16 +704,21 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </Show>
         </box>
       }
-      footer={{
-        inset: DIALOG_LIST_INSET - DIALOG_INSET,
-        actions: {
-          secondary: footerGroup((item) => item.group === "secondary"),
-          primary: footerGroup((item) => item.group === "primary"),
-        },
-        get children() {
-          return props.footer
-        },
-      }}
+      // Without actions or content there is no footer, so the list ends one blank row above the dialog edge.
+      footer={
+        props.footer || visibleActions().length > 0
+          ? {
+              inset: DIALOG_LIST_INSET - DIALOG_INSET,
+              actions: {
+                secondary: footerGroup((item) => item.group === "secondary"),
+                primary: footerGroup((item) => item.group === "primary"),
+              },
+              get children() {
+                return props.footer
+              },
+            }
+          : undefined
+      }
       legacyFooter={
         <Show when={props.footer || visibleActions().length} fallback={<box flexShrink={0} />}>
           <DialogFooter
@@ -765,9 +764,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             scrollAcceleration={scrollAcceleration()}
             ref={(r: ScrollBoxRenderable) => {
               scroll = r
-              r.verticalScrollBar.on("change", updateMoreBelow)
-              r.content.on("resize", updateMoreBelow)
-              r.viewport.on("resize", updateMoreBelow)
             }}
             maxHeight={height()}
           >
@@ -830,11 +826,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               )}
             </For>
           </scrollbox>
-          <Show when={ellipsis()}>
-            <box paddingLeft={DIALOG_LIST_INSET} flexShrink={0}>
-              <text fg={theme.text.muted}>…</text>
-            </box>
-          </Show>
           {/* Reserved whenever any option has a detail, so the dialog does not resize as the selection moves. */}
           <Show when={newDesigns() && flat().some((option) => option.detail !== undefined)}>
             <box paddingTop={1} paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET} flexShrink={0}>
@@ -944,7 +935,6 @@ function DialogSelectRow(props: {
         attributes={props.active && !newDesigns() ? TextAttributes.BOLD : undefined}
         overflow="hidden"
         wrapMode="none"
-        paddingLeft={3}
       >
         {props.titleView ??
           (props.truncateTitle === false
@@ -967,7 +957,8 @@ function DialogSelectRow(props: {
   return (
     <Show when={newDesigns()} fallback={row()}>
       <box flexDirection="row">
-        <text width={1} flexShrink={0} fg={theme.text.formfield.focused}>
+        {/* A row with its own background, like a destructive confirmation, draws its bar in that color. */}
+        <text width={1} flexShrink={0} fg={props.activeBackground ?? theme.text.formfield.focused}>
           {props.active ? "┃" : " "}
         </text>
         {row()}

@@ -246,11 +246,12 @@ tools enforce the permissions they assert.
 
 ### Sessions
 
-The `opencode` Code Mode namespace contains session utilities:
+The `opencode.session` Code Mode namespace contains session utilities. Without Code
+Mode they are listed as `opencode_session_rename` and `opencode_session_move`.
 
-- `session_rename` changes the title of the current session, or another session
+- `rename` changes the title of the current session, or another session
   selected by `sessionID`.
-- `session_move` moves the current session, or another selected session, to a
+- `move` moves the current session, or another selected session, to a
   relative or absolute `directory`. The move takes effect at a safe boundary,
   so destination-dependent work belongs in a later call.
 
@@ -260,7 +261,7 @@ Rename this session to "Timeout cleanup", then move it to the new worktree.
 
 ### Worktrees
 
-The same namespace manages worktrees for the session's project:
+The `opencode` namespace manages worktrees for the session's project:
 
 - `worktree_create` creates a worktree from a `name` and returns its
   `directory`. The project's worktree configuration selects the destination and

@@ -45,12 +45,21 @@ import {
   SessionCompactionMessage,
   SessionCompactionQueued,
 } from "../message/message-content"
-import { taskAgentName, ToolRegistry, type ContextGroupPart } from "../tools/tool-renderer"
+import {
+  FileChangeRuns,
+  fileRuns,
+  runDisclosureKey,
+  ScriptChanges,
+  taskAgentName,
+  ToolRegistry,
+  type ContextGroupPart,
+} from "../tools/tool-renderer"
 import { GenericTool } from "../components/basic-tool"
 import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
-import { timelineCategory, type TimelineDetail } from "./detail"
-import { currentToolFailed } from "../message/current-tool-state"
+import type { TimelineDetail } from "./detail"
+import { scriptFileFact, type FileFact } from "./facts"
+import { diffOpens, placeContent } from "./place"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
 import {
@@ -385,6 +394,29 @@ export function createSessionTimelineRowRenderer(input: {
               },
             ]
 
+          const script =
+            message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
+
+          if (script)
+            return [
+              {
+                type: "file",
+                id: ref.partID,
+                file: script,
+                render: () => (
+                  <ScriptChanges
+                    files={[script]}
+                    render={ToolRegistry.render("patch") ?? GenericTool}
+                    fileOpen={(path) =>
+                      input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
+                    }
+                    onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
+                    onSizeChange={onSizeChange}
+                  />
+                ),
+              },
+            ]
+
           if (ref.messageID !== ref.partID || !message) return []
 
           if (message.type === "shell")
@@ -429,7 +461,7 @@ export function createSessionTimelineRowRenderer(input: {
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
             fileOpen={(path) =>
-              input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
+              input.disclosure.value(`patch:${path}`) ?? (!!input.timelineDetail && diffOpens(input.timelineDetail()))
             }
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
             open={input.disclosure.value(key()) === true}
@@ -493,23 +525,95 @@ export function createSessionTimelineRowRenderer(input: {
         return Option.getOrUndefined(decodeMetadataFile(files[0]))?.file
       })
 
+      // Direct changes and a script's changes in the order they happened.
+      const runs = createMemo(() => {
+        const group = row().group
+
+        if (group.type !== "file") return []
+        const contents = indexGroupContents(group.refs)
+
+        return fileRuns(
+          group.refs.flatMap<Extract<SessionMessageAssistant["content"][number], { type: "tool" }> | FileFact>(
+            (ref) => {
+              const content = contents.get(ref.messageID)?.get(ref.partID)
+
+              if (content?.type === "tool") return [content]
+              const message = input.projection.messageByID().get(ref.messageID)
+
+              const file =
+                message?.type === "assistant" ? scriptFileFact(message.content, ref.messageID, ref.partID) : undefined
+
+              return file ? [file] : []
+            },
+          ),
+        )
+      })
+
       return (
-        <SessionFileToolGroup
-          tools={tools()}
-          fileOpen={(path) => {
-            const open = input.disclosure.value(`${row().group.key}:file:${path}`)
+        <Show
+          when={runs().some((run) => run.type === "script")}
+          fallback={
+            <SessionFileToolGroup
+              tools={tools()}
+              fileOpen={(path) => {
+                const open = input.disclosure.value(`${row().group.key}:file:${path}`)
 
-            if (open !== undefined) return open
+                if (open !== undefined) return open
 
-            if (input.timelineDetail) return input.timelineDetail().edit.details === "expanded"
+                if (input.timelineDetail) return diffOpens(input.timelineDetail())
 
-            if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
+                if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
 
-            return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
-          }}
-          onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
-          onSizeChange={onSizeChange}
-        />
+                return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
+              }}
+              onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+              onSizeChange={onSizeChange}
+            />
+          }
+        >
+          <FileChangeRuns
+            runs={runs()}
+            render={ToolRegistry.render("patch") ?? GenericTool}
+            tools={(run) => (
+              <SessionFileToolGroup
+                tools={run()}
+                fileOpen={(path) => {
+                  const open = input.disclosure.value(
+                    `${runDisclosureKey(row().group.key, run(), tools()[0])}:file:${path}`,
+                  )
+
+                  if (open !== undefined) return open
+
+                  if (input.timelineDetail) return diffOpens(input.timelineDetail())
+
+                  if (run()[0]?.name !== "edit" || path !== firstPath()) return false
+
+                  return (
+                    input.disclosure.value(runDisclosureKey(row().group.key, run(), tools()[0])) ??
+                    input.editToolDefaultOpen()
+                  )
+                }}
+                onFileOpenChange={(path, open) =>
+                  input.disclosure.set(`${runDisclosureKey(row().group.key, run(), tools()[0])}:file:${path}`, open)
+                }
+                onSizeChange={onSizeChange}
+              />
+            )}
+            fileOpen={(path) => {
+              const open = input.disclosure.value(`${row().group.key}:file:${path}`)
+
+              if (open !== undefined) return open
+
+              if (input.timelineDetail) return diffOpens(input.timelineDetail())
+
+              if (tools()[0]?.name !== "edit" || path !== firstPath()) return false
+
+              return input.disclosure.value(row().group.key) ?? input.editToolDefaultOpen()
+            }}
+            onFileOpenChange={(path, open) => input.disclosure.set(`${row().group.key}:file:${path}`, open)}
+            onSizeChange={onSizeChange}
+          />
+        </Show>
       )
     }
 
@@ -600,20 +704,7 @@ export function createSessionTimelineRowRenderer(input: {
   function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
     if (item.type === "tool" && item.name === "execute") return true
 
-    if (input.timelineDetail) {
-      const category = timelineCategory(item)
-
-      if (
-        category &&
-        input.timelineDetail()[category].placement === "hidden" &&
-        item.type === "tool" &&
-        currentToolFailed(item)
-      )
-        return true
-
-      if (category === "shell" || category === "edit" || category === "thinking")
-        return input.timelineDetail()[category].details === "expanded"
-    }
+    if (input.timelineDetail) return placeContent(item, input.timelineDetail(), "current").opens
 
     if (item.type === "reasoning") return input.reasoningMode() === "full"
 
@@ -681,6 +772,19 @@ export function createSessionTimelineRowRenderer(input: {
       return {
         label: i18n.t(outcomeNoticeKey(outcome), { actor }),
         data: message.description,
+        outcome,
+        icon: outcomeNoticeIcon(outcome),
+      }
+    }
+
+    if (source === "codemode") {
+      const state = message.metadata?.state
+      const outcome: Outcome = state === "error" || state === "cancelled" ? state : "completed"
+      const jobID = message.metadata?.jobID
+
+      return {
+        label: i18n.t(outcomeNoticeKey(outcome), { actor: "Script" }),
+        data: Predicate.isString(jobID) ? jobID : undefined,
         outcome,
         icon: outcomeNoticeIcon(outcome),
       }

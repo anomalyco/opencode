@@ -124,7 +124,7 @@ const dark = {
   "v2-border-border-base": ref("v2-alpha-light-10"),
   "v2-border-border-strong": ref("v2-alpha-light-20"),
   "v2-border-border-inverse": ref("v2-grey-100"),
-  "v2-border-border-focus": ref("v2-blue-500"),
+  "v2-border-border-focus": ref("v2-blue-400"),
   "v2-overlay-simple-overlay-hover": ref("v2-alpha-light-6"),
   "v2-overlay-simple-overlay-pressed": ref("v2-alpha-light-10"),
   "v2-overlay-simple-overlay-contrast-hover": ref("v2-alpha-dark-24"),

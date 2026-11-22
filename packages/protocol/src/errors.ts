@@ -369,3 +369,12 @@ export class ArtifactNotFoundError extends Schema.TaggedError<ArtifactNotFoundEr
   },
   { httpApiStatus: 404 },
 ) {}
+
+export class MachineNotFoundError extends Schema.TaggedError<MachineNotFoundError>()(
+  "MachineNotFoundError",
+  {
+    machine: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}

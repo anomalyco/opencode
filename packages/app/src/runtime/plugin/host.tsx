@@ -111,7 +111,7 @@ type Instance = {
 export type PluginInput = { readonly options: PluginOptions; readonly client: () => OpenCodeClient | undefined }
 
 /** The APIs a window context exposes as properties. */
-type HostApis = Omit<BuiltinContext, keyof BaseContext | "provide" | "use" | "main">
+type HostApis = Omit<BuiltinContext, keyof BaseContext | "provide" | "provideFor" | "use" | "main">
 
 /**
  * Creates one HostApi for a plugin instance, on the instance's first read of it. `register` withdraws what it is
@@ -194,7 +194,7 @@ export function PluginHostProvider(props: ParentProps<HostInput>) {
 function createHost(input: HostInput) {
   const language = useLanguage()
   const owner = getOwner()
-  const provided = new Map<string, { live: Live<unknown> & { readonly status: "active" } }>()
+  const provided = new Map<string, (consumer: string, signal: AbortSignal) => Live<unknown>>()
   const generations = new Map<string, number>()
 
   // Entries are indexed by registry and contracts versioned by token, so a change wakes only its own readers.
@@ -274,10 +274,10 @@ function createHost(input: HostInput) {
     return pending
   }
 
-  const contractLive = (token: Contract<unknown>): Live<unknown> => {
+  const contractLive = (token: Contract<unknown>, consumer: string, signal: AbortSignal): Live<unknown> => {
     void state.contracts[token.id]
 
-    return provided.get(token.id)?.live ?? absent(token.id, false)
+    return provided.get(token.id)?.(consumer, signal) ?? absent(token.id, false)
   }
 
   // Reuses each item object while its value is unchanged so keyed renders do not remount.
@@ -695,7 +695,7 @@ function createHost(input: HostInput) {
 
       if (existing) return existing
 
-      const read = liveAccessor(token.kind === "contract" ? () => contractLive(token) : () => ipcLive(token))
+      const read = liveAccessor(token.kind === "contract" ? () => contractLive(token, plugin, controller.signal) : () => ipcLive(token))
 
       lives.set(token.id, read)
 
@@ -858,6 +858,9 @@ function createHost(input: HostInput) {
       provide<T>(token: Contract<T> | Ipc, impl: T) {
         if (token.kind === "ipc") throw new Error("Ipcs are provided by a plugin's main entry")
 
+        return context.provideFor(token, () => impl)
+      },
+      provideFor<T>(token: Contract<T>, bind: (consumer: string, signal: AbortSignal) => T) {
         if (!owns(plugin, token.id)) throw new Error(`${plugin} provides only its own contracts, not "${token.id}"`)
 
         if (late()) return () => {}
@@ -866,7 +869,17 @@ function createHost(input: HostInput) {
 
         generations.set(token.id, generation)
 
-        const entry = { live: { status: "active", value: impl, generation } as const }
+        const clients = new WeakMap<AbortSignal, Live<T>>()
+
+        const entry = (consumer: string, signal: AbortSignal) => {
+          const previous = clients.get(signal)
+
+          if (previous) return previous
+          const live = { status: "active", value: untrack(() => bind(consumer, signal)), generation } as const
+          clients.set(signal, live)
+
+          return live
+        }
 
         provided.set(token.id, entry)
         setState("contracts", token.id, (version = 0) => version + 1)
@@ -1015,6 +1028,8 @@ function createHost(input: HostInput) {
     serversReady: createMemo(() => selectServersReady(startup.state())),
     /** The plugins main lists; empty on the web and until main answers. */
     installed: createMemo(() => selectInstalled(startup.state())),
+    /** Whether the plugin ships with the app. What only built-ins may contribute is read through it. */
+    builtin: (id: string) => input.builtins?.has(id) ?? false,
     /** A plugin's main entry cannot answer. Reactive. */
     mainFailed: (id: string) => selectMainFailed(startup.state(), id),
     /** Reports what the startup gate waits for. */

@@ -4,9 +4,10 @@ import {
   getStatsModelData,
   getStatsModelsComparisonData,
   type MarketDay,
+  type NewModelCandidate,
   type TokenCostEntry,
 } from "@opencode/data-core/domain/home"
-import { statModel } from "@opencode/data-core/domain/model-normalization"
+import { STEALTH_MODELS, statModel } from "@opencode/data-core/domain/model-normalization"
 import { runStatsEffect } from "../stats-runtime"
 import {
   catalogSlug,
@@ -17,6 +18,10 @@ import {
   type ModelCatalog,
 } from "../routes/model-catalog"
 import { resolveComparisonFamily } from "./comparison-pages"
+
+const DAY_MS = 86_400_000
+const NEW_MODEL_DAYS = 30
+const NEW_MODEL_LIMIT = 8
 
 export async function loadHomePage() {
   const [stats, catalog] = await Promise.all([runStatsEffect(getStatsHomeData()), loadModelCatalog()])
@@ -36,6 +41,7 @@ export async function loadHomePage() {
     sessionCost: stats.sessionCost.Go,
     retention: stats.retention.map(link),
     country: stats.country,
+    newModels: newModelsFromCatalog(stats.newModels, catalog).map(link),
     catalogLabs: catalog.labs.map((lab) => lab.id),
     labPaths: authorLabPaths(catalog, stats.market["2M"]),
   }
@@ -141,6 +147,40 @@ function priceTokenCostFromCatalog(data: TokenCostEntry[], catalog: ModelCatalog
       ]
     })
     .toSorted((a, b) => a.total - b.total || a.model.localeCompare(b.model))
+}
+
+// A model is new when it was released in the past 30 days. Stealth models have no catalog entry, so their first day
+// of usage stands in for the release date.
+function newModelsFromCatalog(candidates: NewModelCandidate[], catalog: ModelCatalog) {
+  const latest = candidates
+    .flatMap((item) => item.daily.map((day) => day.date))
+    .toSorted()
+    .at(-1)
+  if (!latest) return []
+  const cutoff = new Date(Date.parse(latest) - (NEW_MODEL_DAYS - 1) * DAY_MS).toISOString().slice(0, 10)
+  return candidates
+    .flatMap((item) => {
+      const entry = findModelCatalogEntry(catalog, item.model, item.provider)
+      const releaseDate = entry?.releaseDate ?? (STEALTH_MODELS.has(item.model) ? item.firstSeen : undefined)
+      if (!releaseDate || releaseDate < cutoff) return []
+      // Count from launch: early access under the same name shows up before the release date.
+      const launch = releaseDate > item.firstSeen ? releaseDate : item.firstSeen
+      const daily = item.daily.filter((day) => day.date >= launch)
+      return [
+        {
+          ...item,
+          releaseDate,
+          daysLive: Math.round((Date.parse(latest) - Date.parse(launch)) / DAY_MS) + 1,
+          tokens: daily.reduce((sum, day) => sum + day.tokens, 0),
+          sessions: daily.reduce((sum, day) => sum + day.sessions, 0),
+          peakUsers: Math.max(0, ...daily.map((day) => day.users)),
+          daily,
+        },
+      ]
+    })
+    .filter((item) => item.tokens > 0)
+    .toSorted((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model))
+    .slice(0, NEW_MODEL_LIMIT)
 }
 
 function authorLabPaths(catalog: ModelCatalog, market: MarketDay[]) {

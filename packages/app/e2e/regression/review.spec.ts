@@ -37,6 +37,48 @@ test("review toggle shows its tooltip with the side panel open or closed", async
   await expect(tooltip).toBeVisible()
 })
 
+test("review rings stay visible on the mode trigger, file tree, and diff", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewModeFocus",
+    vcsDiff: [fileDiff("alpha.ts"), fileDiff("beta.ts")],
+  })
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+
+  const panel = page.getByRole("complementary", { name: "Review and files" })
+
+  await openReviewLauncher(panel)
+
+  const tree = panel.getByRole("button", { name: "Toggle file tree", exact: true })
+
+  const mode = panel.getByRole("button", { name: "Git changes", exact: true })
+
+  await expect(mode).toBeVisible()
+  await tree.press("Tab")
+  await expect(mode).toBeFocused()
+  await expect(mode).toHaveCSS("outline-offset", "-2px")
+
+  const alpha = panel.getByRole("treeitem", { name: "alpha.ts", exact: true })
+
+  const beta = panel.getByRole("treeitem", { name: "beta.ts", exact: true })
+
+  await alpha.press("ArrowDown")
+  await expect(beta).toHaveCSS("outline-style", "solid")
+  await expect(beta).toHaveCSS("outline-offset", "-2px")
+
+  await tree.click()
+  await expect(tree).toHaveAttribute("aria-expanded", "false")
+  await tree.press("Tab")
+  await expect(mode).toBeFocused()
+  await expect(mode).toHaveCSS("outline-offset", "-2px")
+
+  const diff = panel.locator('[data-component="file"][data-mode="diff"]')
+
+  await diff.press("Shift+Tab")
+  await page.keyboard.press("Tab")
+  await expect(diff).toBeFocused()
+  await expect.poll(() => diff.evaluate((element) => getComputedStyle(element, "::after").outlineOffset)).toBe("-2px")
+})
+
 for (const view of ["desktop", "mobile"] as const) {
   test(`offers Git initialization for a project without VCS (${view})`, async ({ page }) => {
     if (view === "mobile") await page.setViewportSize({ width: 390, height: 844 })
@@ -55,6 +97,14 @@ for (const view of ["desktop", "mobile"] as const) {
 
     if (view === "desktop") await openReviewLauncher(panel)
     await expect(panel.getByText("Track, review, and undo changes in this project")).toBeVisible()
+
+    if (view === "desktop") {
+      const toggle = panel.getByRole("button", { name: "Toggle file tree" })
+
+      if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click()
+      await expect(panel.getByText("No changed files. Use Open file to browse the workspace.")).toBeVisible()
+    }
+
     await expect(panel.getByRole("button", { name: "Git changes" })).toHaveCount(0)
     const init = panel.getByRole("button", { name: "Create Git repository" })
     await init.click()
@@ -453,6 +503,12 @@ test("context closes the side region only when its button opened it", async ({ p
   await panel.getByRole("button", { name: /^Review/ }).click()
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
   await context.click()
+  // Under a New tab view Context is not what the region shows, so its button shows it rather than closing it unseen.
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await contextButton.click()
+  await expect(newTab).toHaveCount(0)
+  await expect(context).toHaveAttribute("aria-selected", "true")
   await contextButton.click()
   await expect(context).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
@@ -2215,6 +2271,9 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
     const panel = page.locator("#review-panel")
+    // Once the panel settles open, its strip shows its own copy of the toggle in place of the header's. Actions wait
+    // for that copy: one that starts on the header's copy as they swap keeps waiting for it to show again.
+    const settled = panel.getByRole("button", { name: "Toggle review", exact: true })
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     const closed = (await toggle.boundingBox())!
     const header = (await page.locator("[data-session-title]").boundingBox())!
@@ -2252,6 +2311,7 @@ for (const direction of ["ltr", "rtl"] as const) {
         .toBe(closed.y + closed.height / 2)
     }
 
+    await expect(settled).toBeVisible()
     await toggle.press("Enter")
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     await expect(toggle).toBeFocused()
@@ -2264,7 +2324,10 @@ for (const direction of ["ltr", "rtl"] as const) {
       await expect(toggle).toHaveAttribute("aria-expanded", String(opened))
       await expect(panel).toHaveAttribute("aria-hidden", String(!opened))
 
-      if (opened) await expect(() => expectHeaderClearOfToggle(page, toggle)).toPass()
+      if (opened) {
+        await expect(settled).toBeVisible()
+        await expect(() => expectHeaderClearOfToggle(page, toggle)).toPass()
+      }
     }
 
     await expect(panel).toBeHidden()
@@ -2312,8 +2375,12 @@ async function expectHeaderClearOfToggle(page: Page, toggle: Locator) {
   expect(Math.abs(geometry.row - geometry.panels)).toBeLessThanOrEqual(1)
 
   const clip = (await toggle.boundingBox())!
-  // Header contents must make no difference to the pixels behind the fixed toggle.
+  // Header contents must make no difference to the pixels behind the toggle, which sits in the strip's last slot.
   expect(await page.screenshot({ clip })).toEqual(
-    await page.screenshot({ clip, style: ".session-review-v2-tabs-bar { visibility: hidden !important; }" }),
+    await page.screenshot({
+      clip,
+      style: `.session-review-v2-tabs-bar * { visibility: hidden !important; }
+        .session-review-v2-tabs-bar [data-slot="session-review-panel-toggle"] * { visibility: visible !important; }`,
+    }),
   )
 }

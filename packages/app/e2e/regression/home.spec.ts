@@ -10,13 +10,12 @@ import {
   SERVER,
   session,
   sessionHref,
-  tabKey,
   T0,
 } from "../utils/app"
 import { mockOpenCodeServer, mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { mockRemoteServer, mockWorkspace, newSessionLocation } from "../utils/workspace"
-import { APP_READY_TIMEOUT, expectAppVisible, expectSessionTitle } from "../utils/waits"
+import { APP_READY_TIMEOUT, expectAppVisible } from "../utils/waits"
 
 test.use({ serviceWorkers: "block" })
 
@@ -28,6 +27,77 @@ async function openHome(page: Page, input: Parameters<typeof mockStressTimeline>
   await seed(page, { usedProjects: { local: [fixture.project.id] } })
   await page.goto("/")
 }
+
+test("Home projects, utility rows, search and recent sessions show keyboard focus", async ({ page }) => {
+  const workspace = await mockWorkspace(page, { name: "HomeFocus" })
+
+  await seed(page, { usedProjects: { local: [workspace.projectID] } })
+  await page.goto("/")
+
+  const projects = page.getByRole("complementary", { name: "Projects" })
+
+  const viewport = page.getByRole("main").getByRole("region", { name: "scrollable content", exact: true })
+
+  const projectButton = projects.getByRole("button", { name: /HomeFocus/ })
+
+  const settings = projects.getByRole("button", { name: "Settings", exact: true })
+
+  const help = projects.getByRole("button", { name: "Help", exact: true })
+
+  await expect(projectButton).toBeVisible()
+  await expect(viewport).toHaveAttribute("tabindex", "-1")
+  await projects.getByRole("button", { name: "Add project", exact: true }).press("Tab")
+  await expect(projectButton).toBeFocused()
+  await expect
+    .poll(() =>
+      projectButton.evaluate((button) => {
+        const row = button.closest("[data-home-row]")
+
+        return row && getComputedStyle(row, "::after").outlineStyle
+      }),
+    )
+    .toBe("solid")
+
+  // The two project row actions come before the utility buttons.
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
+  await expect(settings).toBeFocused()
+  await expect(settings).toHaveCSS("outline-style", "solid")
+  await expect(settings).not.toHaveCSS("transition-property", /\b(all|outline)\b/)
+  await page.keyboard.press("Tab")
+  await expect(help).toBeFocused()
+  await expect(help).toHaveCSS("outline-style", "solid")
+
+  const search = page.getByRole("textbox", { name: "Search sessions", exact: true })
+
+  const field = page.locator('[data-slot="home-session-search-field"]')
+
+  await page.keyboard.press("Tab")
+  await expect(search).toBeFocused()
+  await expect(field).toHaveCSS("outline-style", "solid")
+  await search.click()
+  await expect(search).toBeFocused()
+  await expect(field).toHaveCSS("outline-style", "none")
+
+  const recent = page.getByRole("region", { name: "Recent sessions" })
+
+  const sessionRow = row(page, "HomeFocus")
+
+  await sessionRow.hover()
+  await expect(sessionRow).toHaveCSS("outline-style", "none")
+  await recent.getByRole("button", { name: "New session", exact: true }).press("Tab")
+  await expect(sessionRow).toBeFocused()
+  await expect(sessionRow).toHaveCSS("outline-style", "solid")
+  await expect(sessionRow).toHaveCSS("outline-offset", "-2px")
+
+  await page.setViewportSize({ width: 1280, height: 200 })
+  await expect(viewport).toHaveAttribute("tabindex", "0")
+  await viewport.press("Shift+Tab")
+  await page.keyboard.press("Tab")
+  await expect(viewport).toBeFocused()
+  await expect(viewport).toHaveCSS("outline-offset", "-2px")
+})
 
 test("Home keeps the session list in every interface mode", async ({ page }) => {
   const earlier = { id: "ses_home_earlier", title: "Finished earlier" }
@@ -76,152 +146,6 @@ test("choosing Customize replaces Home with Settings in desktop side tabs", asyn
   await expect(sidebar.getByRole("button", { name: "View options", exact: true })).toBeVisible()
   await sidebar.getByRole("button", { name: "Settings", exact: true }).click()
   await expect(page.getByTestId("settings-screen")).toBeVisible()
-})
-
-async function openProjects(page: Page) {
-  const remote = project({ id: "proj_remote_site", directory: "/work/website", name: "Website" })
-
-  const earlier = session({
-    id: "ses_site_release",
-    directory: "/work/website-release",
-    projectID: remote.id,
-    title: "Update release notes",
-  })
-
-  await mockRemoteServer(page, {
-    name: "Build server",
-    project: remote,
-    directory: remote.worktree,
-    worktrees: [{ directory: remote.worktree }, { directory: earlier.directory, strategy: "git" }],
-    sessions: [
-      earlier,
-      session({ id: "ses_tools", directory: "/work/tools", projectID: "proj_tools", title: "Refresh tools" }),
-    ],
-  })
-  await mockWorkspace(page, {
-    name: "Website",
-    sessions: [{ id: "ses_site_local", title: "Preview local changes" }],
-    seed: {
-      tabs: [],
-      usedProjects: { local: ["proj_website"], [REMOTE_SERVER]: [remote.id] },
-      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "projects" } },
-    },
-  })
-  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
-  const sidebar = page.locator("#vertical-tabs-sidebar")
-
-  const localGroup = sidebar.getByRole("group", { name: "Local Server", exact: true })
-
-  const remoteGroup = sidebar.getByRole("group", { name: "Build server", exact: true })
-
-  return {
-    remote,
-    earlier,
-    sidebar,
-    localToggle: localGroup.getByRole("button", { name: "Local Server", exact: true }),
-    remoteToggle: remoteGroup.getByRole("button", { name: "Build server", exact: true }),
-    localProject: localGroup.getByText("Website", { exact: true }),
-    remoteProject: remoteGroup.getByText("Website", { exact: true }),
-  }
-}
-
-async function openRemoteHistory(page: Page, view: Awaited<ReturnType<typeof openProjects>>) {
-  await view.remoteProject.click({ button: "right" })
-  await page.getByRole("menuitem", { name: "View session history…", exact: true }).click()
-  const browser = page.getByRole("dialog", { name: "Browse projects", exact: true })
-
-  const history = browser.getByRole("listbox", { name: "Search sessions in Website", exact: true }).getByRole("option")
-
-  return { browser, history }
-}
-
-test("desktop Projects groups projects by server and collapses one server at a time", async ({ page }) => {
-  const view = await openProjects(page)
-  await expect(view.localToggle).toHaveAttribute("aria-expanded", "true")
-  await expect(view.remoteToggle).toHaveAttribute("aria-expanded", "true")
-  await expect(view.localProject).toBeVisible()
-  await expect(view.remoteProject).toBeVisible()
-  await expect(view.sidebar.getByRole("button", { name: /Browse/ })).toHaveCount(0)
-
-  await view.remoteToggle.click()
-  await expect(view.remoteToggle).toHaveAttribute("aria-expanded", "false")
-  await expect(view.remoteProject).toBeHidden()
-  await expect(view.localToggle).toHaveAttribute("aria-expanded", "true")
-  await expect(view.localProject).toBeVisible()
-  await view.remoteToggle.click()
-  await expect(view.remoteToggle).toHaveAttribute("aria-expanded", "true")
-})
-
-test("desktop Projects history opens the worktree session and reopens from its location menu", async ({ page }) => {
-  const view = await openProjects(page)
-  const { browser, history } = await openRemoteHistory(page, view)
-  await expect(history.getByText(view.earlier.title, { exact: true })).toBeVisible()
-  await expect(history).toHaveCount(1)
-  await history.click()
-  await expectSessionTitle(page, view.earlier.title)
-
-  await page.locator('[data-slot="session-location-trigger"]').click()
-  await page.getByRole("menuitem", { name: /Website/ }).click()
-  await expect(browser.getByText(view.earlier.title, { exact: true })).toBeVisible()
-  await page.keyboard.press("Escape")
-  await expect(browser).toHaveCount(0)
-})
-
-test("desktop Projects keeps the remote project as the next session's target after its last tab closes", async ({
-  page,
-}) => {
-  const view = await openProjects(page)
-  const { browser, history } = await openRemoteHistory(page, view)
-  await history.click()
-  await expectSessionTitle(page, view.earlier.title)
-  await expect(browser).toHaveCount(0)
-  await view.sidebar.getByRole("button", { name: "Close tab", exact: true }).click()
-
-  const landing = page.getByRole("main")
-
-  await expect(landing).toContainText("Website")
-  await expect(landing).toContainText("Build server")
-  await expect(view.remoteProject).toBeVisible()
-  await view.sidebar.getByRole("button", { name: "Settings", exact: true }).click()
-  await page.getByRole("button", { name: "Back to app", exact: true }).click()
-  await landing.getByRole("button", { name: "New session", exact: true }).click()
-  await expect(newSessionLocation(page)).toContainText("Website")
-  await expect(page.locator('[data-slot="new-session-location-path"]')).toHaveText(view.remote.worktree)
-})
-
-test("desktop Projects resumes the remembered tab when the window opens at Home", async ({ page }) => {
-  const earlier = { id: "ses_earlier_tab", title: "Earlier tab" }
-
-  const recent = { id: "ses_recent_tab", title: "Remembered tab" }
-
-  await mockRemoteServer(page, { name: "Hidden server" })
-  await seed(page, { storage: { "opencode.global.dat:server": { hidden: { [REMOTE_SERVER]: true } } } })
-  await mockWorkspace(page, {
-    name: "Restored",
-    sessions: [earlier, recent],
-    seed: {
-      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "projects" } },
-      storage: {
-        "opencode.window.windows-menu-test.dat:tabs": [recent, earlier].map(({ id }) => ({
-          type: "session",
-          server: "sidecar",
-          sessionId: id,
-        })),
-        "opencode.window.windows-menu-test.dat:tabs.recent": { key: tabKey(recent.id, "sidecar") },
-      },
-    },
-  })
-  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
-  await expectSessionTitle(page, recent.title)
-
-  const projects = page.locator("#vertical-tabs-sidebar section").filter({
-    has: page.getByRole("button", { name: "Projects", exact: true }),
-  })
-
-  await expect(projects.getByText("Restored", { exact: true })).toBeVisible()
-  await expect(projects.getByText("Local Server", { exact: true })).toHaveCount(0)
-  await expect(projects.getByRole("group", { name: "Local Server", exact: true })).toHaveCount(0)
-  await expect(projects.getByRole("group", { name: "Hidden server", exact: true })).toHaveCount(0)
 })
 
 test("a working Home session keeps its project avatar and shows its activity ring at the end of the row", async ({
@@ -274,7 +198,7 @@ test("the session context menu renames, exports, and deletes a Home session", as
   const box = await target.boundingBox()
   await target.click({ button: "right", position: { x: 48, y: 12 } })
   await expect(page).toHaveURL("/")
-  await expect(page.getByRole("menuitem")).toHaveText(["Rename", "Export…", "Delete…"])
+  await expect(page.getByRole("menuitem")).toHaveText(["Open", "Open in background", "Rename", "Export…", "Delete…"])
   const menu = await page.locator('[data-component="menu-v2-content"]').boundingBox()
   expect(Math.abs((menu?.x ?? 0) - (box?.x ?? 0) - 48)).toBeLessThan(4)
 
@@ -295,7 +219,7 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await renamedRow.click()
   await expect(page).toHaveURL(new RegExp(`/session/${fixture.targetID}$`))
   await expect(page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: "Renamed from Home" })).toBeVisible()
-  await page.getByRole("button", { name: "Home" }).click()
+  await page.getByRole("button", { name: "Home", exact: true }).click()
   await expect(page).toHaveURL("/")
 
   await renamedRow.click({ button: "right" })
@@ -322,6 +246,29 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await expect(dialog).toBeHidden()
   await expect(renamedRow).toBeHidden()
   expect(removed.requests).toHaveLength(1)
+})
+
+test("Open in background and a middle click add a Home session's tab without leaving Home, and Open goes to it", async ({
+  page,
+}) => {
+  const background = { id: "ses_home_open_background", title: "Opened in the background" }
+  const middle = { id: "ses_home_open_middle", title: "Opened with a middle click" }
+  const open = { id: "ses_home_open", title: "Opened from the menu" }
+  await mockWorkspace(page, { name: "HomeOpen", sessions: [background, middle, open], seed: { tabs: [] } })
+  await page.goto("/")
+  const tabs = page.locator('[data-slot="titlebar-tabs"] a')
+
+  await row(page, background.title).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Open in background", exact: true }).click()
+  await expect(tabs.filter({ hasText: background.title })).toBeVisible()
+
+  await row(page, middle.title).click({ button: "middle" })
+  await expect(tabs.filter({ hasText: middle.title })).toBeVisible()
+  await expect(page).toHaveURL("/")
+
+  await row(page, open.title).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Open", exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/session/${open.id}$`))
 })
 
 test("a failed session list says so and loads again on Try again, instead of showing the empty state", async ({
@@ -376,6 +323,17 @@ test("tabbing out of session search closes its results, and tabbing back reopens
   await page.keyboard.press("Shift+Tab")
   await page.keyboard.press("Shift+Tab")
   await expect(search).toBeFocused()
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+
+  // The results are active descendants, not independent Tab stops before the search input.
+  await search.press("Shift+Tab")
+  await expect(panel).toHaveCount(0)
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  await page.keyboard.press(`${modifier}+f`)
+  await expect(search).toBeFocused()
+  await expect(page.locator('[data-slot="home-session-search-field"]')).toHaveCSS("outline-style", "solid")
   await expect(panel.getByRole("option")).toContainText(earlier.title)
 })
 

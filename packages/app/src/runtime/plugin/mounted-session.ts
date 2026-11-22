@@ -15,6 +15,7 @@ import type {
   BackgroundTask,
   Comments,
   Composer,
+  ComposerDelivery,
   Files,
   LineRange,
   ServerRef,
@@ -50,6 +51,16 @@ type ObjectRoot = { dispose?: () => void }
  * The routed session as plugins see it: one frozen object per routed session, a new one each time the screen
  * routes another session, and the `SessionScreen` that owns the route-following files, comments and composer.
  */
+/** What the session screen's composer view gives plugins' `Composer`. */
+export type ScreenPrompt = {
+  quotable: Accessor<boolean>
+  focus: () => void
+  focused: () => boolean
+  delivery: Accessor<ComposerDelivery | undefined>
+  /** Sends the attached part with this key as its own prompt; does nothing while `delivery` is undefined. */
+  send: (key: string, comment: string) => void
+}
+
 export function createMountedSession(session: SessionModel) {
   const file = useFile()
   const comments = useComments()
@@ -61,8 +72,9 @@ export function createMountedSession(session: SessionModel) {
   const attachment = usePluginAttachment()
   // The composer region owns background tasks and is created after the view.
   const [background, setBackground] = createSignal<Accessor<readonly BackgroundTask[]>>()
-  // The screen's composer view, created after this object, says whether it takes quotes and focuses its prompt.
-  const [prompt, setPrompt] = createSignal<{ quotable: Accessor<boolean>; focus: () => void; focused: () => boolean }>()
+  // The screen's composer view, created after this object, says whether it takes quotes, focuses its prompt and sends
+  // one attached part.
+  const [prompt, setPrompt] = createSignal<ScreenPrompt>()
 
   const serverRef: ServerRef = {
     get id() {
@@ -283,6 +295,17 @@ export function createMountedSession(session: SessionModel) {
     },
     update: (id, patch) => write((draft) => draft.context.updateComment(id, patch)),
     detach: (id) => write((draft) => draft.context.removeComment(id)),
+    delivery: () => (session.data.isChild() ? undefined : prompt()?.delivery()),
+    send(commentID) {
+      if (session.data.isChild()) return
+
+      // Behind the writes still waiting, so it finds a part an `attach` just before it added.
+      write((draft) => {
+        const item = draft.context.items().find((entry) => entry.commentID === commentID)
+
+        if (item) prompt()?.send(item.key, item.comment ?? "")
+      })
+    },
     focused: () => !!prompt()?.focused(),
   }
 
@@ -392,7 +415,6 @@ export function createMountedSession(session: SessionModel) {
     screen,
     view: mounted,
     bindBackground: (tasks: Accessor<readonly BackgroundTask[]>) => setBackground(() => tasks),
-    bindPrompt: (value: { quotable: Accessor<boolean>; focus: () => void; focused: () => boolean }) =>
-      setPrompt(() => value),
+    bindPrompt: (value: ScreenPrompt) => setPrompt(() => value),
   }
 }

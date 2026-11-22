@@ -1,21 +1,23 @@
 import { Effect, Schema } from "effect"
 import { type Extension, isAsync, isConstructible } from "./extension.js"
-import { scanTools } from "./scan.js"
+import { scanProgram, scanTools } from "./scan.js"
 import { hooked, type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
 import {
   fromBytes,
   globalNames,
   Host,
-  Language,
+  // Code Mode exports its own Runtime type.
+  Runtime as Language,
   type Snapshot,
   SnapshotError,
   type SnapshotHeader,
-  SuspendError,
   toBytes,
-} from "../language/index.js"
+} from "psychoscript/effect"
 
-export { fromBytes, scanTools, SnapshotError, SuspendError, toBytes }
+export const SuspendError: typeof Language.SuspendError = Language.SuspendError
+export type SuspendError = Language.SuspendError
+export { fromBytes, scanProgram, scanTools, SnapshotError, toBytes }
 export type { Snapshot, SnapshotHeader }
 
 /** A tool call admitted during an execution. */
@@ -208,10 +210,17 @@ export type Program<R = never, E = never> = {
 }
 
 const resolveExecutionLimits = (limits?: ExecutionLimits): ResolvedExecutionLimits => ({
-  timeoutMs: Language.Runtime.validateLimit("timeoutMs", limits?.timeoutMs, 1),
-  maxToolCalls: Language.Runtime.validateLimit("maxToolCalls", limits?.maxToolCalls, 0),
-  maxOutputBytes: Language.Runtime.validateLimit("maxOutputBytes", limits?.maxOutputBytes, 0),
+  timeoutMs: validateLimit("timeoutMs", limits?.timeoutMs, 1),
+  maxToolCalls: validateLimit("maxToolCalls", limits?.maxToolCalls, 0),
+  maxOutputBytes: validateLimit("maxOutputBytes", limits?.maxOutputBytes, 0),
 })
+
+const validateLimit = (name: string, value: number | undefined, minimum: number) => {
+  if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum)) {
+    throw new RangeError(`${name} must be a safe integer greater than or equal to ${minimum}.`)
+  }
+  return value
+}
 
 /** Executes one Effect-native CodeMode program without constructing a reusable runtime. */
 export const execute = <
@@ -240,7 +249,7 @@ export function make<
     }
   }
   // One language runtime for each set of the runtime's extensions a run picks, made when first picked.
-  const runtimes = new Map<string, Language.Runtime.Runtime<R>>()
+  const runtimes = new Map<string, Language.Runtime<R>>()
   const runtimeFor = (selected: ReadonlyArray<Extension> = extensions) => {
     for (const extension of selected) {
       if (!extensions.includes(extension)) {
@@ -253,7 +262,7 @@ export function make<
     const known = runtimes.get(key)
     if (known !== undefined) return known
     // The tools' and extensions' environment, which the language runtime can't infer through them.
-    const made = Language.Runtime.make({
+    const made = Language.make({
       globals: (run) => ({
         ...ToolRuntime.globals(prepared, hooks, run, limits.maxToolCalls),
         ...Object.fromEntries(
@@ -270,7 +279,7 @@ export function make<
       limits: { timeoutMs: limits.timeoutMs, maxOutputBytes: limits.maxOutputBytes },
       // Arguments cross as JSON would carry them: functions are left out and promises are awaited.
       translate: { functions: "drop", promises: "await" },
-    }) as unknown as Language.Runtime.Runtime<R>
+    }) as unknown as Language.Runtime<R>
     runtimes.set(key, made)
     return made
   }
@@ -365,13 +374,13 @@ const extensionFunction = <R>(
 }
 
 // A language program whose outcomes report the run's tool calls in place of its metadata.
-const reported = <R, E>(program: Language.Runtime.Program<R, E>): Program<R, E> => ({
+const reported = <R, E>(program: Language.Program<R, E>): Program<R, E> => ({
   run: () => Effect.map(program.run(), outcome),
   suspend: (options) => Effect.map(program.suspend(options), outcome),
 })
 
 // A run's outcome as Code Mode reports it: the tool calls in place of the run's metadata.
-const outcome = (ended: Language.Runtime.Outcome): Outcome => {
+const outcome = (ended: Language.Outcome): Outcome => {
   if (ended.ok === "suspended") return ended
   const { metadata, ...result } = ended
   return { ...result, toolCalls: ToolRuntime.toolCalls(metadata) } as Result

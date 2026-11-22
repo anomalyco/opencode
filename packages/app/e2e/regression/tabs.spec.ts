@@ -478,6 +478,24 @@ test("keyboard navigation and numbered shortcuts follow the visible tab order an
   await expectPath(page, sessionHref(c.id))
 })
 
+test("⌘⇧S archives the open session and moves to the next tab", async ({ page }) => {
+  await mockWorkspace(page, { name: "ArchiveShortcut", sessions: [a, b], seed: { tabs: [a.id, b.id] } })
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+
+  const archive = page.waitForRequest(
+    (request) => request.method() === "PATCH" && new URL(request.url()).pathname === `/api/session/${a.id}`,
+  )
+
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+  expect((await archive).postDataJSON()).toMatchObject({ archived: true })
+
+  await expectPath(page, sessionHref(b.id))
+  await expect(page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"])`)).toHaveCount(0)
+  await expect(page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)).toBeVisible()
+})
+
 test("option arrows move to the previous or next tab, and with shift to the next unread one", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Tabs",
@@ -2893,4 +2911,66 @@ test("tab groups reorder without color drift, collapse and auto-expand on naviga
   await expect(lastSlot).toHaveAttribute("data-lane-shift", "out")
   await page.mouse.up()
   await expect(manualGroup.locator("[data-titlebar-tab-slot]")).toHaveCount(2)
+})
+
+test("closing the current tab in server groups selects the next visible row and keeps the group order", async ({
+  page,
+}) => {
+  const dirA = "C:/OpenCode/TabGroupsClose"
+  const dirB = "/srv/tab-groups-close"
+  const localOne = session({ id: "ses_tgc_local_1", directory: dirA, title: "Local first" })
+  const localTwo = session({ id: "ses_tgc_local_2", directory: dirA, title: "Local second" })
+  const remoteOne = session({ id: "ses_tgc_remote_1", directory: dirB, title: "Remote first" })
+
+  await mockServers(page, {
+    [SERVER]: {
+      hostname: "local",
+      directory: dirA,
+      project: project({ id: "proj_tgc_a", directory: dirA, name: "opencode" }),
+      provider: NO_PROVIDER,
+      sessions: [localOne, localTwo],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+    [REMOTE_SERVER]: {
+      hostname: "blade",
+      directory: dirB,
+      project: project({ id: "proj_tgc_b", directory: dirB, name: "blade-repo" }),
+      provider: NO_PROVIDER,
+      sessions: [remoteOne],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+  })
+
+  // The remote tab sits between the two local tabs in tab order, so it is the first local tab's neighbour there.
+  await seed(page, {
+    servers: [{ url: REMOTE_SERVER, name: "blade" }],
+    tabs: [localOne.id, { session: remoteOne.id, server: REMOTE_SERVER }, localTwo.id],
+    settings: {
+      appearance: { tabLayout: "vertical", sidebarOpen: true },
+      general: { tabGroups: true, sidebarOrganize: "list" },
+    },
+  })
+
+  await page.goto(sessionHref(localOne.id))
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const groups = sidebar.locator("[data-tab-group]")
+  const remoteHeader = sidebar.locator(`[data-tab-group-header][data-group-key="server:${REMOTE_SERVER}"]`)
+  // The collapsed header adds its tab count to the button's name.
+  const remoteToggle = remoteHeader.getByRole("button", { name: /^blade/ })
+  const slot = (href: string) => sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${href}"])`)
+
+  await expect(groups).toHaveCount(2)
+  await expect(groups.nth(0)).toHaveAttribute("data-group-key", `server:${SERVER}`)
+  await remoteToggle.click()
+  await expect(remoteToggle).toHaveAttribute("aria-expanded", "false")
+
+  await slot(sessionHref(localOne.id)).click({ button: "middle" })
+
+  await expect(slot(sessionHref(localOne.id))).toHaveCount(0)
+  await expect(page).toHaveURL(sessionHref(localTwo.id))
+  await expect(groups.nth(0)).toHaveAttribute("data-group-key", `server:${SERVER}`)
+  await expect(remoteToggle).toHaveAttribute("aria-expanded", "false")
+  await expect(slot(sessionHref(remoteOne.id, REMOTE_SERVER))).toHaveCount(0)
 })

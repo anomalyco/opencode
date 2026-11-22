@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Izlietojums",
   "usage.cost": "Izmaksas",
   "usage.view": "Skatīt konteksta izlietojumu",
-  "systemPrompt.title": "Sistēmas uzvedne",
   "rawMessages.title": "Neapstrādātas ziņas",
   "export.session": "Eksportēt sesiju",
   "stats.session": "Sesija",

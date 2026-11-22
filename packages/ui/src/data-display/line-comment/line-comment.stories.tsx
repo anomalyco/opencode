@@ -14,6 +14,10 @@ Line comment **display** and **editor** cards aligned with OpenCode line-comment
 - \`LineCommentEditor\`: the card is the text field (\`label\` names it, default “Comment”), footer (optional selection meta + Cancel / Comment).
 - \`Enter\` submits (Shift+Enter newline); \`Escape\` cancels. Controlled via \`value\` / \`onInput\`.
 - Compact editors show a cancel action when empty, unless \`allowEmpty\` enables submitting an optional comment.
+
+### Send with the comment
+- \`alternateSubmit\` adds a second action on Mod+Enter or a modified click, which the app uses to send the comment to the session now. The browser pane, file viewer and review diff label it by the session: **Send comment** while idle, and while it works **Steer comment** or **Queue comment** as the follow-up behavior setting says. (The composer's own quote editor says **Send quote**, **Steer with quote** or **Queue quote**; see Composer/QuoteComment.)
+- The submit button's tooltip lists both actions, and holding the modifier switches the button to the second one. \`disabled\` keeps it listed while nothing can be sent.
 `
 
 export default {
@@ -85,13 +89,22 @@ export const DisplayMultiline = {
   render: Display.render,
 }
 
+// The plugins' copy for the second action, by how the session takes the comment now.
+function sendLabel(delivery: string) {
+  if (delivery === "send") return "Send comment"
+
+  if (delivery === "steer") return "Steer comment"
+
+  if (delivery === "queue") return "Queue comment"
+}
+
 const editor = {
   variant: "default",
   value: "",
   selection: "",
   allowEmpty: false,
-  alternateSubmit: false,
-  alternateDisabled: false,
+  delivery: "none",
+  sendUnavailable: false,
   submitting: false,
   autofocus: true,
   placeholder: "",
@@ -107,9 +120,12 @@ export const Editor = {
   args: editor,
   argTypes: {
     variant: { control: "select", options: ["default", "compact"] },
+    delivery: { control: "select", options: ["none", "send", "steer", "queue"] },
     rows: { control: { type: "range", min: 0, max: 10, step: 1 } },
   },
-  render: (args: Omit<typeof editor, "variant"> & Pick<LineCommentEditorProps, "variant">) => {
+  render: (
+    args: Omit<typeof editor, "variant" | "delivery"> & Pick<LineCommentEditorProps, "variant"> & { delivery: string },
+  ) => {
     const [value, setValue] = createSignal(args.value)
 
     const [result, setResult] = createSignal("")
@@ -143,19 +159,21 @@ export const Editor = {
             if (!args.popover) setValue("")
             setResult(`Submitted: ${comment}`)
           }}
-          alternateSubmit={
-            args.alternateSubmit
-              ? {
-                  label: "Send",
-                  keys: ["Ctrl", "Enter"],
-                  disabled: args.alternateDisabled,
-                  onSubmit: (comment) => {
-                    setValue("")
-                    setResult(`Sent: ${comment}`)
-                  },
-                }
-              : undefined
-          }
+          alternateSubmit={(() => {
+            const label = sendLabel(args.delivery)
+
+            if (!label) return
+
+            return {
+              label,
+              keys: ["⌘", "⏎"],
+              disabled: args.sendUnavailable,
+              onSubmit: (comment: string) => {
+                setValue("")
+                setResult(`${label}: ${comment}`)
+              },
+            }
+          })()}
           mention={
             args.mentions
               ? {
@@ -202,5 +220,69 @@ export const EditorWithMentions = {
 /** An editor inside a popover: Escape in the field cancels the comment, and Escape on its buttons closes the popover. */
 export const EditorInPopover = {
   args: { ...editor, popover: true },
+  render: Editor.render,
+}
+
+const sendDraft = { ...editor, autofocus: false, value: "Tighten this sentence" }
+
+/** The browser pane's compact editor while the session is idle: Mod+Enter sends the comment as its own prompt. */
+export const EditorCompactSend = {
+  args: { ...sendDraft, variant: "compact", delivery: "send", allowEmpty: true },
+  render: Editor.render,
+}
+
+/** While the session works, Mod+Enter steers it with the comment. Hover the button for both actions. */
+export const EditorCompactSteer = {
+  args: { ...EditorCompactSend.args, delivery: "steer" },
+  render: Editor.render,
+}
+
+/** While the session works and Mod+Enter queues, the comment waits until the session goes idle. */
+export const EditorCompactQueue = {
+  args: { ...EditorCompactSend.args, delivery: "queue" },
+  render: Editor.render,
+}
+
+/** Nothing can be sent now, e.g. while another send is in flight: the action stays listed but disabled. */
+export const EditorCompactSendUnavailable = {
+  args: { ...EditorCompactSteer.args, sendUnavailable: true },
+  render: Editor.render,
+}
+
+/** An empty compact draft that may still be attached ("Add to session" in the browser pane). */
+export const EditorCompactEmptySteer = {
+  args: { ...EditorCompactSteer.args, value: "", submitLabel: "Add to session" },
+  render: Editor.render,
+}
+
+export const EditorCompactSubmitting = {
+  args: { ...EditorCompactSteer.args, submitting: true },
+  render: Editor.render,
+}
+
+/** The file viewer's and review diff's editor: the Comment button's tooltip lists both actions. */
+export const EditorDefaultSend = {
+  args: { ...sendDraft, variant: "default", delivery: "send", selection: "Commenting on line 3" },
+  render: Editor.render,
+}
+
+export const EditorDefaultSteer = {
+  args: { ...EditorDefaultSend.args, delivery: "steer" },
+  render: Editor.render,
+}
+
+export const EditorDefaultQueue = {
+  args: { ...EditorDefaultSend.args, delivery: "queue" },
+  render: Editor.render,
+}
+
+export const EditorDefaultSendUnavailable = {
+  args: { ...EditorDefaultSteer.args, sendUnavailable: true },
+  render: Editor.render,
+}
+
+/** Editing a saved comment: Mod+Enter saves it and sends it. */
+export const EditorDefaultEditSteer = {
+  args: { ...EditorDefaultSteer.args, submitLabel: "Save" },
   render: Editor.render,
 }

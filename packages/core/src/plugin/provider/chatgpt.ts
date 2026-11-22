@@ -24,6 +24,7 @@ const registrationClientID = "dynamic_agent_client"
 const agentName = "OpenCode"
 const issuer = "https://auth.openai.com"
 const tokenURL = `${issuer}/api/accounts/oauth/token`
+const revokeURL = `${issuer}/api/accounts/oauth/revoke`
 const resource = "https://api.openai.com/v1"
 const tokenSharingScope = "chatgpt.tokens.use.direct"
 const providerID = Provider.ID.openai
@@ -90,6 +91,9 @@ type RemoteModel = typeof RemoteModel.Type
 const RemoteModels = Schema.Struct({ models: Schema.Array(RemoteModel) })
 const decodeCachedModels = Schema.decodeUnknownOption(Schema.Array(RemoteModel))
 
+const decodeInvalidGrant = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ error: Schema.Literal("invalid_grant") })),
+)
 const decodeMetadata = Schema.decodeUnknownOption(
   Schema.Struct({
     clientID: Schema.String,
@@ -205,6 +209,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
         }
       }),
     refresh: (value) => refresh(value, app),
+    revoke: (value) => revoke(value, app),
   }) satisfies IntegrationOAuthMethodRegistration
 
 function listen(server: Server) {
@@ -397,22 +402,53 @@ function exchange(code: string, clientID: string, redirect: string, pkce: Pkce, 
   })
 }
 
-function refresh(value: Credential.OAuth, app: App.Info) {
+export function refresh(value: Credential.OAuth, app: App.Info, url = tokenURL) {
   return Effect.gen(function* () {
     const metadata = Option.getOrUndefined(decodeMetadata(value.metadata))
     if (!metadata)
       return yield* Effect.fail(new Error("This ChatGPT connection has no registered client ID. Connect again."))
-    const tokens = yield* request<TokenResponse>(tokenURL, {
-      method: "POST",
-      headers: headers(app),
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        client_id: metadata.clientID,
-        refresh_token: value.refresh,
-        resource,
-      }).toString(),
-    })
+    const tokens = yield* request<TokenResponse>(
+      url,
+      {
+        method: "POST",
+        headers: headers(app),
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: metadata.clientID,
+          refresh_token: value.refresh,
+          resource,
+        }).toString(),
+      },
+      "This ChatGPT sign-in has expired or was revoked. Connect again.",
+    )
     return credential(tokens, metadata.clientID, metadata.scopes)
+  })
+}
+
+// Revokes the refresh token so OpenAI ends the session; already-invalid tokens also answer 200.
+export function revoke(value: Credential.OAuth, app: App.Info, url = revokeURL) {
+  return Effect.gen(function* () {
+    const metadata = Option.getOrUndefined(decodeMetadata(value.metadata))
+    if (!metadata) return yield* Effect.fail(new Error("This ChatGPT connection has no registered client ID."))
+    yield* Effect.tryPromise({
+      try: async (signal) => {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: headers(app),
+          body: new URLSearchParams({
+            token: value.refresh,
+            token_type_hint: "refresh_token",
+            client_id: metadata.clientID,
+          }).toString(),
+          signal,
+        })
+        if (!response.ok) throw new Error(`Revocation failed: ${response.status}`)
+      },
+      catch: (cause) => cause,
+    }).pipe(
+      // Logout waits on this, so give up quickly; an unrevoked token just expires unused.
+      Effect.timeout("5 seconds"),
+    )
   })
 }
 
@@ -490,12 +526,14 @@ export function verifyIDToken(
   })
 }
 
-function request<A>(url: string, init: RequestInit) {
+// `rejected` replaces the error when OpenAI answers invalid_grant, which means different things per grant type.
+function request<A>(url: string, init: RequestInit, rejected?: string) {
   return Effect.tryPromise({
     try: async (signal) => {
       const response = await fetch(url, { ...init, signal })
-      if (!response.ok) throw new Error(`Request failed: ${response.status}`)
-      return response.json() as Promise<A>
+      if (response.ok) return response.json() as Promise<A>
+      if (rejected && Option.isSome(decodeInvalidGrant(await response.text()))) throw new Error(rejected)
+      throw new Error(`Request failed: ${response.status}`)
     },
     catch: (cause) => cause,
   })

@@ -1,0 +1,1425 @@
+//! Check plugin resource admission and release of linked plugins. Compare the frame at the limit with the
+//! over-limit placeholder.
+
+use crate::support::{self, Harness};
+
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
+use std::time::Duration;
+
+use opencode_plugin::abi::{self, v2};
+use opencode_plugin::limits::{self, Limits};
+use opencode_plugin::reconcile;
+use opencode_tui::{Deps, Route};
+
+const ID: &str = "test.limits";
+const SIBLING: &str = "test.sibling";
+
+type Subject = Rc<dyn Fn(&mut v2::View) -> v2::Node>;
+
+thread_local! {
+    static SUBJECT: RefCell<Subject> = RefCell::new(Rc::new(|_| v2::Node::text(vec![abi::Span::new("empty")])));
+    static BESIDE: RefCell<Subject> = RefCell::new(Rc::new(|_| v2::Node::text(vec![abi::Span::new("sibling")])));
+    static VIEWS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static HEARD: RefCell<Vec<(&'static str, bool, bool)>> = const { RefCell::new(Vec::new()) };
+}
+
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.surface(v2::Surface::new("tree", v2::Place::Route("tree".into()), |cx| {
+        VIEWS.with(|views| views.set(views.get() + 1));
+        HEARD.with(|heard| heard.borrow_mut().push(("route", cx.input.changed.woken, cx.input.changed.size)));
+        let subject = SUBJECT.with(|subject| subject.borrow().clone());
+        subject(cx)
+    }));
+    WAKE_ROUTE.with(|waker| *waker.borrow_mut() = setup.waker());
+    let view = |cx: &mut v2::View<'_>| {
+        let subject = SUBJECT.with(|subject| subject.borrow().clone());
+        subject(cx)
+    };
+    setup.surface(v2::Surface::new("side", v2::Place::Panel("side".into()), view));
+    setup.surface(v2::Surface::new("pop", v2::Place::Overlay("pop".into()), view));
+    let command = |name: &str| abi::Command::new(name);
+    setup.command(command("limits.panel"), |host, _| {
+        host.open_panel(abi::interact::OpenPanel { surface: "side".into(), session: None, fullscreen: true });
+    });
+    setup.command(command("limits.overlay"), |host, _| {
+        let anchor = abi::interact::Anchor::Point { x: 0, y: 0 };
+        host.overlay(abi::interact::Overlay { surface: "pop".into(), anchor, width: 60, height: 28 });
+    });
+    setup.command(command("limits.close"), |host, _| {
+        host.close_panel("side");
+        host.close_overlay("pop");
+    });
+    setup.command(command("limits.anchors"), |host, _| {
+        let anchors = host.anchors(&v2::Target::node("tree", "l"), "h");
+        ANCHORS.with(|seen| *seen.borrow_mut() = anchors.into_iter().map(|anchor| anchor.id).collect());
+    });
+    Ok(())
+}
+
+thread_local! {
+    /// The anchors of group `h` in the route's list `l`, as `limits.anchors` last asked for them.
+    static ANCHORS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+thread_local! {
+    static WAKER: RefCell<Option<abi::Waker>> = const { RefCell::new(None) };
+}
+
+fn sibling(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.surface(v2::Surface::new("beside", v2::Place::Slot(abi::Placement::append("app")), |cx| {
+        HEARD.with(|heard| heard.borrow_mut().push(("beside", cx.input.changed.woken, cx.input.changed.size)));
+        let beside = BESIDE.with(|beside| beside.borrow().clone());
+        beside(cx)
+    }));
+    WAKER.with(|waker| *waker.borrow_mut() = setup.waker());
+    Ok(())
+}
+
+/// A plugin of ABI 1.x: a route of ten texts, and a panel whose body is 3,001 texts.
+fn old(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.route("old", |_, _| {
+        abi::Render::Show(abi::Node::column(
+            (0..10).map(|index| abi::Node::text([abi::Span::new(format!("old {index}"))])).collect(),
+        ))
+    });
+    let panel = abi::Command::new("old.panel");
+    setup.command(panel, |host, _| {
+        let body = abi::Node::column(
+            (0..3_001).map(|index| abi::Node::text([abi::Span::new(format!("body {index}"))])).collect(),
+        );
+        host.dialog(abi::Dialog::Panel(
+            abi::Panel::new("panel".to_owned(), vec![abi::Span::new("old panel")], body).size(abi::PanelSize::Medium),
+        ));
+    });
+    Ok(())
+}
+
+const OLD: &str = "test.old";
+
+fn open() -> Harness {
+    let deps = Deps {
+        route: Route::Home,
+        builtins: vec![
+            abi::Plugin { id: ID, setup }.into(),
+            abi::Plugin { id: SIBLING, setup: sibling }.into(),
+            abi::Plugin { id: OLD, setup: old }.into(),
+        ],
+        ..support::deps(Arc::new(support::empty()))
+    };
+    let harness = support::mount(100, 30, deps);
+    still(&harness);
+    settle(&harness);
+    harness
+}
+
+/// Stops the plugin monitor's clock: a frame and its twin are compared, and a slow runner's real time could find a
+/// built-in slow between them, whose toast covers one of the two (preview 44303912167, Windows). A row that measures
+/// host time puts the real clock back.
+fn still(harness: &Harness) {
+    let now = std::time::Instant::now();
+    harness.tui.plugins.monitor().set_clock(move || now);
+}
+
+fn settle(harness: &Harness) {
+    harness.app.advance(Duration::from_millis(1));
+    harness.app.render();
+    harness.app.advance(Duration::from_millis(1));
+}
+
+/// Opens the route afresh on `subject`: a new mount, whose first view returns it.
+fn show(harness: &Harness, subject: Subject) -> opentui::native::Capture {
+    SUBJECT.with(|slot| *slot.borrow_mut() = subject);
+    harness.tui.navigate(Route::Home);
+    settle(harness);
+    harness.tui.navigate(Route::Plugin { id: ID.to_owned(), name: "tree".to_owned() });
+    settle(harness);
+    harness.app.render()
+}
+
+fn text(text: &str) -> v2::Node {
+    v2::Node::text(vec![abi::Span::new(text)])
+}
+
+fn framed(middle: v2::Node) -> v2::Node {
+    v2::Node::column(vec![text("head"), middle, text("foot")])
+}
+
+/// The placeholder the contract puts in place of a node over a limit: one muted row that says why, under its id.
+fn placeholder(id: Option<&str>, why: &str) -> v2::Node {
+    let mut node = text(&format!("⋯ {why}"));
+    if let v2::Node::Text { id: own, fg, selectable, .. } = &mut node {
+        *own = id.map(str::to_owned);
+        *fg = Some(abi::Color::from("text.muted"));
+        *selectable = false;
+    }
+    node
+}
+
+fn modified(lines: usize) -> String {
+    let mut patch = format!("--- a/f.rs\n+++ b/f.rs\n@@ -1,{lines} +1,{lines} @@\n");
+    for line in 0..lines {
+        patch.push_str(&format!(" line {line}\n"));
+    }
+    patch
+}
+
+fn hunks(hunks: usize) -> String {
+    let mut patch = "--- a/f.rs\n+++ b/f.rs\n".to_owned();
+    for hunk in 0..hunks {
+        let at = hunk * 10 + 1;
+        patch.push_str(&format!("@@ -{at} +{at} @@\n-old {hunk}\n+new {hunk}\n"));
+    }
+    patch
+}
+
+fn source(text: String) -> v2::Source {
+    v2::Source::Text(text)
+}
+
+/// The limits of the rows: small, so a tree at each of them is quick to build; any limit holds the same way.
+fn small() -> Limits {
+    Limits {
+        nodes: 40,
+        rows: 100,
+        text: 200,
+        hunks: 3,
+        image_bytes: 4096,
+        image_side: 16,
+        plugin_nodes: 1000,
+        all_nodes: 2000,
+        plugin_content: 300,
+        all_content: 1000,
+        plugin_images: 16 * 16 * 4,
+        all_images: 1 << 20,
+        frame_rows: u64::MAX,
+    }
+}
+
+struct Row {
+    name: &'static str,
+    limits: Limits,
+    subject: Subject,
+    shows: Subject,
+    placeholders: u64,
+    parses: u64,
+    /// The nodes the host holds for the plugin.
+    nodes: u64,
+    /// The content bytes it holds for the plugin.
+    content: u64,
+}
+
+fn subject(f: impl Fn(&mut v2::View) -> v2::Node + 'static) -> Subject {
+    Rc::new(f)
+}
+
+fn rows() -> Vec<Row> {
+    let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
+    let mut texts_over = (0..37).map(|index| text(&format!("t{index}"))).collect::<Vec<_>>();
+    texts_over.push(placeholder(None, "too many nodes"));
+    let line = |bytes: usize| text(&"x".repeat(bytes));
+    let code_at_limit = 4 + 2 * 47 + rust_lines(47).len() as u64 / 1024;
+    vec![
+        Row {
+            name: "nodes at the limit",
+            limits: small(),
+            subject: subject(move |_| framed(texts(36))),
+            shows: subject(move |_| framed(texts(36))),
+            placeholders: 0,
+            parses: 0,
+            nodes: 40,
+            content: 0,
+        },
+        Row {
+            name: "nodes one over",
+            limits: small(),
+            subject: subject(move |_| framed(texts(37))),
+            shows: subject(move |_| {
+                v2::Node::column(vec![text("head"), texts(37), placeholder(None, "too many nodes")])
+            }),
+            placeholders: 1,
+            parses: 0,
+            nodes: 40,
+            content: 0,
+        },
+        // Many more: the box is opened and its 38th text crosses, standing for the texts after it; the foot crosses
+        // too, in its own run of siblings.
+        Row {
+            name: "nodes far over",
+            limits: small(),
+            subject: subject(move |_| framed(texts(60))),
+            shows: {
+                let texts_over = texts_over.clone();
+                subject(move |_| {
+                    v2::Node::column(vec![
+                        text("head"),
+                        v2::Node::column(texts_over.clone()),
+                        placeholder(None, "too many nodes"),
+                    ])
+                })
+            },
+            placeholders: 2,
+            parses: 0,
+            nodes: 40,
+            content: 0,
+        },
+        Row {
+            name: "rows at the limit",
+            limits: Limits { text: 1 << 20, ..small() },
+            subject: subject(|_| framed(v2::Node::diff(source(modified(63))))),
+            shows: subject(|_| framed(v2::Node::diff(source(modified(63))))),
+            placeholders: 0,
+            parses: 1,
+            nodes: 4,
+            content: 0,
+        },
+        Row {
+            name: "rows over",
+            limits: Limits { text: 1 << 20, ..small() },
+            subject: subject(|_| framed(v2::Node::diff(source(modified(80))))),
+            shows: subject(|_| framed(placeholder(None, "too large to build at once"))),
+            placeholders: 1,
+            parses: 0,
+            nodes: 3,
+            content: 0,
+        },
+        Row {
+            name: "text at the limit",
+            limits: small(),
+            subject: subject(move |_| framed(line(200))),
+            shows: subject(move |_| framed(line(200))),
+            placeholders: 0,
+            parses: 0,
+            nodes: 4,
+            content: 0,
+        },
+        Row {
+            name: "text over",
+            limits: small(),
+            subject: subject(move |_| framed(line(201).with_id("long"))),
+            shows: subject(|_| framed(placeholder(Some("long"), "too large: 201 bytes"))),
+            placeholders: 1,
+            parses: 0,
+            nodes: 4,
+            content: 0,
+        },
+        Row {
+            name: "hunks at the limit",
+            limits: Limits { rows: 10_000, ..small() },
+            subject: subject(|_| framed(v2::Node::diff(source(hunks(3))))),
+            shows: subject(|_| framed(v2::Node::diff(source(hunks(3))))),
+            placeholders: 0,
+            parses: 1,
+            nodes: 4,
+            content: 0,
+        },
+        Row {
+            name: "hunks over",
+            limits: Limits { rows: 10_000, ..small() },
+            subject: subject(|_| framed(v2::Node::diff(source(hunks(4))))),
+            shows: subject(|_| framed(placeholder(None, "too large: 4 hunks"))),
+            placeholders: 1,
+            parses: 0,
+            nodes: 4,
+            content: 0,
+        },
+        // Content: 300 bytes is the plugin's share; one byte more is not kept, and its node is a placeholder.
+        Row {
+            name: "content at the limit",
+            limits: Limits { text: 1 << 20, ..small() },
+            subject: subject(|cx| {
+                let handle = given(cx, || "y".repeat(300).into_bytes());
+                framed(code(v2::Source::Content(handle)))
+            }),
+            shows: subject(|_| framed(code(source("y".repeat(300))))),
+            placeholders: 0,
+            parses: 1,
+            nodes: 4,
+            content: 300,
+        },
+        Row {
+            name: "content over",
+            limits: Limits { text: 1 << 20, ..small() },
+            subject: subject(|cx| {
+                let handle = given(cx, || "y".repeat(301).into_bytes());
+                framed(code(v2::Source::Content(handle)))
+            }),
+            shows: subject(|_| framed(placeholder(None, "its content is past what the plugin may hold"))),
+            placeholders: 1,
+            parses: 0,
+            nodes: 4,
+            content: 0,
+        },
+        // Code: a line is two rows, and a KiB of its text one. The column, the head, the foot and the code itself are
+        // 4, and 47 lines 94 and a row a KiB: the limit; 48 lines are past it.
+        Row {
+            name: "code at the limit",
+            limits: Limits { text: 1 << 20, rows: code_at_limit, ..small() },
+            subject: subject(|_| framed(code(source(rust_lines(47))))),
+            shows: subject(|_| framed(code(source(rust_lines(47))))),
+            placeholders: 0,
+            parses: 1,
+            nodes: 4,
+            content: 0,
+        },
+        Row {
+            name: "code over",
+            limits: Limits { text: 1 << 20, rows: code_at_limit, ..small() },
+            subject: subject(|_| framed(code(source(rust_lines(49))))),
+            shows: subject(|_| framed(placeholder(None, "too large to build at once"))),
+            placeholders: 1,
+            parses: 0,
+            nodes: 3,
+            content: 0,
+        },
+        Row {
+            name: "markdown at the limit",
+            limits: small(),
+            subject: subject(|_| framed(markdown(96))),
+            shows: subject(|_| framed(markdown(96))),
+            placeholders: 0,
+            parses: 0,
+            nodes: 4,
+            content: 0,
+        },
+        Row {
+            name: "markdown over",
+            limits: small(),
+            subject: subject(|_| framed(markdown(98))),
+            shows: subject(|_| framed(placeholder(None, "too large to build at once"))),
+            placeholders: 1,
+            parses: 0,
+            nodes: 3,
+            content: 0,
+        },
+        // An input's value is its text (CM14): one byte past the text limit is its placeholder, under its id.
+        Row {
+            name: "input over its text",
+            limits: small(),
+            subject: subject(|_| framed(v2::Node::input("x".repeat(201)).with_id("field"))),
+            shows: subject(|_| framed(placeholder(Some("field"), "too large: 201 bytes"))),
+            placeholders: 1,
+            parses: 0,
+            nodes: 4,
+            content: 0,
+        },
+        // Content is admitted in the order of its handles (CM15): of two of 200 bytes in a share of 300, the first
+        // given is held and the second shows the placeholder.
+        Row {
+            name: "content in the order given",
+            limits: Limits { text: 1 << 20, ..small() },
+            subject: subject(|cx| {
+                let first = given_at(cx, 0, || b"first\n".repeat(40));
+                let second = given_at(cx, 1, || b"second\n".repeat(30));
+                v2::Node::column(vec![code(v2::Source::Content(first)), code(v2::Source::Content(second))])
+            }),
+            shows: subject(|_| {
+                let first = code(source("first\n".repeat(40)));
+                v2::Node::column(vec![first, placeholder(None, "its content is past what the plugin may hold")])
+            }),
+            placeholders: 1,
+            parses: 1,
+            nodes: 3,
+            content: 240,
+        },
+        // A list's item data builds no rows: 50 items and 50 texts after them are 54 rows, 104 nodes.
+        Row {
+            name: "list data builds no rows",
+            limits: Limits { nodes: 1_000, ..small() },
+            subject: subject(move |_| {
+                let items = (0..50)
+                    .map(|index| v2::ListItem {
+                        node: text(&format!("i{index}")).with_id(format!("i{index}")),
+                        estimate: 1,
+                    })
+                    .collect();
+                v2::Node::column(vec![text("head"), v2::Node::list(items).with_id("list"), texts(50)])
+            }),
+            shows: subject(move |_| {
+                let items = (0..50)
+                    .map(|index| v2::ListItem {
+                        node: text(&format!("i{index}")).with_id(format!("i{index}")),
+                        estimate: 1,
+                    })
+                    .collect();
+                v2::Node::column(vec![text("head"), v2::Node::list(items).with_id("list"), texts(50)])
+            }),
+            placeholders: 0,
+            parses: 0,
+            nodes: 104,
+            content: 0,
+        },
+    ]
+}
+
+thread_local! {
+    /// Content handle for the current route generation.
+    static GIVEN: RefCell<Option<(u64, v2::ContentRef)>> = const { RefCell::new(None) };
+}
+
+/// The handle of `bytes`, given once a mount.
+fn given(cx: &mut v2::View, bytes: impl FnOnce() -> Vec<u8>) -> v2::ContentRef {
+    let generation = cx.mount.generation;
+    if let Some((mount, handle)) = GIVEN.with(|given| *given.borrow())
+        && mount == generation
+    {
+        return handle;
+    }
+    let handle = cx.content(bytes());
+    GIVEN.with(|given| *given.borrow_mut() = Some((generation, handle)));
+    handle
+}
+
+fn markdown(lines: usize) -> v2::Node {
+    v2::Node::Markdown { id: None, source: source("x\n".repeat(lines)) }
+}
+
+thread_local! {
+    /// Content handles indexed within a route generation.
+    static GIVEN_AT: RefCell<std::collections::HashMap<(u64, usize), v2::ContentRef>> = RefCell::default();
+}
+
+/// The handle of `bytes`, given once a mount as the `index`th of its handles.
+fn given_at(cx: &mut v2::View, index: usize, bytes: impl FnOnce() -> Vec<u8>) -> v2::ContentRef {
+    let key = (cx.mount.generation, index);
+    if let Some(handle) = GIVEN_AT.with(|given| given.borrow().get(&key).copied()) {
+        return handle;
+    }
+    let handle = cx.content(bytes());
+    GIVEN_AT.with(|given| given.borrow_mut().insert(key, handle));
+    handle
+}
+
+fn code(content: v2::Source) -> v2::Node {
+    v2::Node::Code { id: None, content, filetype: None, numbers: false, layout: abi::Layout::default() }
+}
+
+#[test]
+fn a_tree_at_each_limit_shows_and_one_over_shows_its_placeholder() {
+    let harness = open();
+    for row in rows() {
+        let (frame, work, held, views) = {
+            let _limits = limits::set(row.limits);
+            let (before, views) = (reconcile::work(), VIEWS.with(std::cell::Cell::get));
+            let frame = show(&harness, row.subject.clone());
+            (frame, reconcile::work().since(before), limits::held(ID), VIEWS.with(std::cell::Cell::get) - views)
+        };
+        let twin = {
+            let _limits = support::unlimited();
+            show(&harness, row.shows.clone())
+        };
+        let name = &row.name;
+        assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+        // Each view's tree is a revision, which adopts its placeholders; a patch or code is parsed once.
+        assert_eq!(work.placeholders, row.placeholders * views, "{name}: placeholders in {views} views");
+        assert_eq!(work.parses, row.parses, "{name}: parses");
+        assert_eq!((held.nodes, held.content), (row.nodes, row.content), "{name}: held");
+    }
+    // Nothing is held once the route is gone.
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    assert_eq!(limits::held(ID), limits::Held::default(), "held after the route closed");
+}
+
+#[test]
+fn a_list_over_its_nodes_keeps_the_items_that_fit() {
+    let item =
+        |index: usize| v2::ListItem { node: text(&format!("item {index}")).with_id(format!("i{index}")), estimate: 1 };
+    let list = |items: Vec<v2::ListItem>| v2::Node::list(items).with_id("list");
+    let harness = open();
+    let (frame, held) = {
+        let _limits = limits::set(small());
+        let frame = show(&harness, subject(move |_| framed(list((0..60).map(item).collect()))));
+        (frame, limits::held(ID))
+    };
+    let twin = {
+        let _limits = support::unlimited();
+        show(
+            &harness,
+            subject(move |_| {
+                let mut items: Vec<v2::ListItem> = (0..37).map(item).collect();
+                items.push(v2::ListItem { node: placeholder(Some("i37"), "too many nodes"), estimate: 1 });
+                v2::Node::column(vec![text("head"), list(items), placeholder(None, "too many nodes")])
+            }),
+        )
+    };
+    assert!(frame.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+    assert_eq!(held.nodes, 40);
+}
+
+#[test]
+fn a_plugin_spends_its_own_share_of_what_all_plugins_may_hold() {
+    let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
+    let harness = open();
+    // The host's own plugins hold nodes too: all plugins may hold 14 beside what they hold on the page.
+    let others = || limits::total().nodes - limits::held(ID).nodes - limits::held(SIBLING).nodes;
+    let shares = |others: u64| Limits { nodes: 100, plugin_nodes: 10, all_nodes: others + 14, ..small() };
+    for (beside, admitted) in [(1, 9), (6, 6)] {
+        harness.tui.navigate(Route::Home);
+        settle(&harness);
+        let _limits = limits::set(shares(others()));
+        BESIDE.with(|slot| *slot.borrow_mut() = subject(move |_| texts(beside)));
+        WAKER.with(|waker| waker.borrow().as_ref().expect("the sibling's waker").wake());
+        settle(&harness);
+        let screen = harness.app.render().text();
+        assert_eq!(limits::held(SIBLING).nodes, beside as u64 + 1, "the sibling holds its column\n{screen}");
+        // On the route, beside what the host's own plugins hold there.
+        show(&harness, subject(|_| text("route")));
+        let on_route = others();
+        let _limits = limits::set(shares(on_route));
+        let frame = show(&harness, subject(move |_| texts(12)));
+        let held = (limits::held(ID).nodes, limits::total().nodes - on_route);
+        let twin = {
+            let _unlimited = support::unlimited();
+            show(
+                &harness,
+                subject(move |_| {
+                    let mut kept: Vec<v2::Node> = (0..admitted).map(|index| text(&format!("t{index}"))).collect();
+                    kept.push(placeholder(None, "too many nodes"));
+                    v2::Node::column(kept)
+                }),
+            )
+        };
+        let (shown, wanted) = (frame.text(), twin.text());
+        assert!(frame.cells == twin.cells, "{beside}: not the twin's frame\n{shown}\n---\n{wanted}");
+        let own = admitted as u64 + 1;
+        assert_eq!(held, (own, own + beside as u64 + 1), "{beside}: held by the plugin and by all");
+    }
+}
+
+/// A PNG of `width` by `height` pixels of `pixel`, stored without compression.
+pub(crate) fn png(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) -> Vec<u8> {
+    fn chunk(out: &mut Vec<u8>, kind: &[u8], data: &[u8]) {
+        out.extend((data.len() as u32).to_be_bytes());
+        let mut checked = kind.to_vec();
+        checked.extend(data);
+        let mut crc = !0u32;
+        for byte in &checked {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 != 0 { (crc >> 1) ^ 0xedb8_8320 } else { crc >> 1 };
+            }
+        }
+        out.extend(&checked);
+        out.extend((!crc).to_be_bytes());
+    }
+    let mut raw = Vec::new();
+    for y in 0..height {
+        raw.push(0);
+        for x in 0..width {
+            raw.extend(pixel(x, y));
+        }
+    }
+    let mut zlib = vec![0x78, 0x01];
+    let blocks: Vec<&[u8]> = raw.chunks(65_535).collect();
+    for (index, block) in blocks.iter().enumerate() {
+        zlib.push(u8::from(index + 1 == blocks.len()));
+        let length = block.len() as u16;
+        zlib.extend(length.to_le_bytes());
+        zlib.extend((!length).to_le_bytes());
+        zlib.extend(*block);
+    }
+    let (mut a, mut b) = (1u32, 0u32);
+    for byte in &raw {
+        a = (a + u32::from(*byte)) % 65_521;
+        b = (b + a) % 65_521;
+    }
+    zlib.extend(((b << 16) | a).to_be_bytes());
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    let header: Vec<u8> = [width.to_be_bytes(), height.to_be_bytes()].concat();
+    chunk(&mut out, b"IHDR", &[header, vec![8, 6, 0, 0, 0]].concat());
+    chunk(&mut out, b"IDAT", &zlib);
+    chunk(&mut out, b"IEND", &[]);
+    out
+}
+
+fn image(content: v2::Source) -> v2::Node {
+    let size = |cells| Some(abi::Width::Cells(cells));
+    let layout = abi::Layout { width: size(16), height: size(8), ..abi::Layout::default() };
+    v2::Node::Image { id: None, content, fit: v2::Fit::Contain, layout }
+}
+
+/// An image of the content `bytes`, given once a mount, over a foot row.
+fn picture(bytes: Vec<u8>) -> Subject {
+    let bytes = Rc::new(bytes);
+    subject(move |cx| {
+        let bytes = bytes.clone();
+        let content = v2::Source::Content(given(cx, move || (*bytes).clone()));
+        v2::Node::column(vec![image(content), text("foot")])
+    })
+}
+
+/// The cells OpenTUI draws for `bytes` decoded in the frame, in an image view of 16 by 8 cells at the top left.
+fn drawn_in_the_frame(bytes: &[u8]) -> Vec<opentui::native::Cell> {
+    use opentui::prelude::*;
+    let app = opentui::testing::TestApp::new(16, 8);
+    let view = opentui::widget::ImageView::new(&app).load(bytes).unwrap().width(16).height(8);
+    app.root().add(&view);
+    app.render().cells
+}
+
+fn corner(frame: &opentui::native::Capture) -> Vec<opentui::native::Cell> {
+    (0..8).flat_map(|y| (0..16).map(move |x| (x, y))).map(|(x, y)| frame.cell(x, y).unwrap().clone()).collect()
+}
+
+#[test]
+fn images_decode_on_a_worker_within_their_limits() {
+    let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
+    let harness = open();
+    let base = Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() };
+    let _limits = limits::set(base);
+    let bytes = png(16, 16, gradient);
+    let expected = drawn_in_the_frame(&bytes);
+    let before = reconcile::work();
+    show(&harness, picture(bytes));
+    let decoded = harness.app.wait_until(Duration::from_secs(10), || corner(&harness.app.render()) == expected);
+    assert!(decoded, "the image never showed as OpenTUI draws it\n{}", harness.app.render().text());
+    assert_eq!(reconcile::work().since(before).parses, 1, "one decode");
+    assert_eq!(limits::held(ID).images, 16 * 16 * 4, "the decoded bytes are held");
+    // Two images of 16 by 16 are twice what the plugin may hold decoded: the second is over.
+    let (first, second) = (Rc::new(png(16, 16, gradient)), Rc::new(png(16, 16, |x, y| gradient(y, x))));
+    let two: Subject = subject(move |cx| {
+        let (first, second) = (first.clone(), second.clone());
+        let one = given(cx, move || (*first).clone());
+        let other = cx.content((*second).clone());
+        v2::Node::column(vec![image(v2::Source::Content(one)), image(v2::Source::Content(other)), text("foot")])
+    });
+    // Exercise decoded dimensions and encoded byte limits independently.
+    let roomy = Limits { plugin_images: 1 << 20, ..base };
+    let encoded = png(16, 16, gradient);
+    let one_short = Limits { image_bytes: encoded.len() as u64 - 1, ..roomy };
+    // Exceed the global decoded-image limit while staying within the individual plugin limit.
+    let all = Limits { all_images: 16 * 16 * 4, ..roomy };
+    let cases = [
+        ("pixels", picture(png(16, 17, gradient)), 0, roomy),
+        ("a row", picture(png(17, 1, gradient)), 0, roomy),
+        ("bytes", picture(encoded), 0, one_short),
+        ("share", two.clone(), 1, base),
+        ("all", two, 1, all),
+    ];
+    for (name, subject, decodes, case) in cases {
+        // A job holds what it reserved until it ends: the case before gives it back first.
+        let ended = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+        assert!(ended, "{name}: a job of the case before never ended");
+        let _limits = limits::set(case);
+        let before = reconcile::work();
+        let frame = show(&harness, subject);
+        let text = frame.text();
+        let lines: Vec<&str> = text.lines().map(str::trim).collect();
+        assert!(lines.contains(&"⋯ image too large"), "{name}: no placeholder\n{text}");
+        assert!(lines.contains(&"foot"), "{name}: the rest of the tree is gone\n{text}");
+        assert_eq!(reconcile::work().since(before).parses, decodes, "{name}: decodes");
+        if decodes == 0 {
+            let twin = {
+                let _limits = support::unlimited();
+                show(
+                    &harness,
+                    crate::plugin_limits::subject(|_| {
+                        v2::Node::column(vec![placeholder(None, "image too large"), crate::plugin_limits::text("foot")])
+                    }),
+                )
+            };
+            assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{text}\n---\n{}", twin.text());
+        }
+    }
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    // A job holds what it reserved until it ends.
+    assert!(harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0));
+    assert_eq!(limits::held(ID).images, 0, "decoded bytes held after the route closed");
+}
+
+/// Rust-like lines to highlight.
+fn rust_lines(lines: usize) -> String {
+    (0..lines).map(|line| format!("    let value_{line} = compute({line}, \"text\") + {line};\n")).collect()
+}
+
+fn show_in(harness: &Harness, command: &str, subject: Subject) -> opentui::native::Capture {
+    SUBJECT.with(|slot| *slot.borrow_mut() = subject);
+    harness.tui.keymap.dispatch("limits.close", None);
+    settle(harness);
+    harness.tui.keymap.dispatch(command, None);
+    settle(harness);
+    harness.app.render()
+}
+
+#[test]
+fn panels_and_overlays_are_held_to_the_limits() {
+    let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
+    let deps = Deps {
+        builtins: vec![abi::Plugin { id: ID, setup }.into(), abi::Plugin { id: SIBLING, setup: sibling }.into()],
+        ..support::deps(Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY))))
+    };
+    let harness = support::mount(100, 30, deps);
+    still(&harness);
+    settle(&harness);
+    for command in ["limits.panel", "limits.overlay"] {
+        let (frame, held) = {
+            let _limits = limits::set(Limits { nodes: 12, ..small() });
+            let frame = show_in(&harness, command, subject(move |_| framed(texts(9))));
+            (frame, limits::held(ID).nodes)
+        };
+        let twin = {
+            let _limits = support::unlimited();
+            let shows = move |_: &mut v2::View<'_>| {
+                v2::Node::column(vec![text("head"), texts(9), placeholder(None, "too many nodes")])
+            };
+            show_in(&harness, command, subject(shows))
+        };
+        let (shown, wanted) = (frame.text(), twin.text());
+        assert!(frame.cells == twin.cells, "{command}: not the twin's frame\n{shown}\n---\n{wanted}");
+        assert!(shown.contains("⋯ too many nodes"), "{command}: no placeholder\n{shown}");
+        assert_eq!(held, 12, "{command}: held");
+    }
+    harness.tui.keymap.dispatch("limits.close", None);
+    settle(&harness);
+    assert_eq!(limits::held(ID).nodes, 0, "held once they closed");
+}
+
+/// A tree at the client's limits ([`Limits::default`]) with `extra` texts more: a column of a chain of 62 boxes around
+/// a text (64 layout levels, the deepest a tree may nest), a list of 8,500 items of a box and a text, then 2,935 texts
+/// and the extra ones. So it builds 3,000 rows at once and holds 20,000 nodes, and an extra text is the last to cross.
+fn at_the_limits(extra: usize) -> v2::Node {
+    let mut chain = text("deepest");
+    for _ in 0..62 {
+        chain = v2::Node::column(vec![chain]);
+    }
+    let items = (0..8_500)
+        .map(|index| v2::ListItem {
+            node: v2::Node::row(vec![text(&format!("item {index}"))]).with_id(format!("i{index}")),
+            estimate: 1,
+        })
+        .collect();
+    let mut children = vec![chain, v2::Node::list(items).with_id("list")];
+    children.extend((0..2_935 + extra).map(|index| text(&format!("t{index}"))));
+    v2::Node::column(children)
+}
+
+#[test]
+fn a_tree_at_the_clients_limits_renders() {
+    let run = std::thread::Builder::new().stack_size(8 << 20).spawn(|| {
+        let harness = open();
+        let before = reconcile::work();
+        let tree = Rc::new(at_the_limits(0));
+        show(&harness, subject(move |_| (*tree).clone()));
+        assert!(harness.app.try_render().is_ok(), "the frame at the limits failed");
+        assert_eq!(reconcile::work().since(before).placeholders, 0, "a placeholder at the limits");
+        assert_eq!(limits::held(ID).nodes, 20_000);
+        let over = Rc::new(at_the_limits(1));
+        show(&harness, subject(move |_| (*over).clone()));
+        let frame = caught_up(&harness);
+        assert_eq!(limits::held(ID).nodes, 20_000, "held past the limits");
+        let twin = {
+            let _limits = support::unlimited();
+            let mut expected = at_the_limits(0);
+            if let v2::Node::Box { children, .. } = &mut expected {
+                children.push(placeholder(None, "too large to build at once"));
+            }
+            let expected = Rc::new(expected);
+            show(&harness, subject(move |_| (*expected).clone()))
+        };
+        assert!(frame.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+    });
+    run.unwrap().join().unwrap();
+}
+
+/// Paints frames until no revision or list item waits for a frame's rows, and returns the last.
+fn caught_up(harness: &Harness) -> opentui::native::Capture {
+    for _ in 0..100 {
+        let before = reconcile::work().deferred;
+        let frame = harness.app.render();
+        if reconcile::work().deferred == before && !harness.app.needs_frame() {
+            return frame;
+        }
+    }
+    panic!("the host never caught up with the frames' rows");
+}
+
+thread_local! {
+    static WAKE_ROUTE: RefCell<Option<abi::Waker>> = const { RefCell::new(None) };
+    /// Which tree the rows that draw a mount again show: the first, then the second.
+    static PHASE: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+fn next_phase(harness: &Harness) {
+    PHASE.with(|phase| phase.set(1));
+    WAKE_ROUTE.with(|waker| waker.borrow().as_ref().expect("the plugin's waker").wake());
+    settle(harness);
+}
+
+#[test]
+fn a_keep_counts_what_it_keeps_and_a_release_gives_content_back() {
+    let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
+    let harness = open();
+    let (frame, held) = {
+        let _limits = limits::set(Limits { text: 1 << 20, ..small() });
+        PHASE.with(|phase| phase.set(0));
+        show(
+            &harness,
+            subject(move |_| match PHASE.with(std::cell::Cell::get) {
+                0 => v2::Node::column(vec![texts(30).with_id("k")]),
+                _ => v2::Node::column(vec![v2::Node::Keep { key: "k".into() }, texts(15)]),
+            }),
+        );
+        next_phase(&harness);
+        (harness.app.render(), limits::held(ID).nodes)
+    };
+    let twin = {
+        let _limits = support::unlimited();
+        show(
+            &harness,
+            subject(move |_| {
+                let mut added: Vec<v2::Node> = (0..7).map(|index| text(&format!("t{index}"))).collect();
+                added.push(placeholder(None, "too many nodes"));
+                v2::Node::column(vec![texts(30).with_id("k"), v2::Node::column(added)])
+            }),
+        )
+    };
+    let (shown, wanted) = (frame.text(), twin.text());
+    assert!(frame.cells == twin.cells, "not the twin's frame\n{shown}\n---\n{wanted}");
+    assert_eq!(held, 40, "held with the keep");
+    let _limits = limits::set(Limits { text: 1 << 20, ..small() });
+    PHASE.with(|phase| phase.set(0));
+    show(
+        &harness,
+        subject(|cx| {
+            let handle = given(cx, || vec![b'x'; 100]);
+            match PHASE.with(std::cell::Cell::get) {
+                0 => framed(code(v2::Source::Content(handle))),
+                _ => {
+                    cx.release(handle);
+                    framed(text("released"))
+                }
+            }
+        }),
+    );
+    assert_eq!(limits::held(ID).content, 100, "content held");
+    next_phase(&harness);
+    assert!(harness.app.render().text().contains("released"), "the second phase did not draw");
+    assert_eq!(limits::held(ID).content, 0, "content held after its release");
+}
+
+#[test]
+fn a_measure_reads_each_handle_once_and_nothing_past_the_text_limit() {
+    let many = |source: v2::Source| v2::Node::column((0..64).map(|_| code(source.clone())).collect());
+    let harness = open();
+    let _limits = limits::set(Limits {
+        nodes: 1_000,
+        rows: 10_000,
+        text: 1_000,
+        plugin_content: 1 << 20,
+        all_content: 1 << 20,
+        ..small()
+    });
+    // Over the limit, by a handle and inline: nothing is read.
+    let before = reconcile::work();
+    show(&harness, subject(move |cx| many(v2::Source::Content(given(cx, || vec![b'x'; 1_001])))));
+    show(&harness, subject(move |_| many(source("x".repeat(1_001)))));
+    assert_eq!(reconcile::work().since(before).scanned, 0, "read past the limit");
+    // Within it: one handle's 1,000 bytes are read once in the mount, through its views and another revision.
+    let before = reconcile::work();
+    PHASE.with(|phase| phase.set(0));
+    show(&harness, subject(move |cx| many(v2::Source::Content(given(cx, || b"fn f() {}\n".repeat(100))))));
+    next_phase(&harness);
+    assert_eq!(reconcile::work().since(before).scanned, 1_000, "read more than once");
+}
+
+/// A patch that adds a file of `lines` lines; `valid: false` makes its last line context, so it adds no whole file.
+fn added(lines: usize, valid: bool) -> String {
+    let mut patch = format!("--- /dev/null\n+++ b/f.rs\n@@ -0,0 +1,{lines} @@\n");
+    for line in 0..lines {
+        let sign = if valid || line + 1 < lines { '+' } else { ' ' };
+        patch.push_str(&format!("{sign}line {line}\n"));
+    }
+    patch
+}
+
+#[test]
+fn a_patch_is_charged_as_the_renderer_draws_it() {
+    let patch = |text: String| v2::Node::diff(source(text)).view(v2::DiffView::Unified);
+    let harness = open();
+    for (lines, valid, fits) in [(2_999, true, false), (3_000, true, false), (3_001, true, true), (3_001, false, false)]
+    {
+        let text = added(lines, valid);
+        let frame = {
+            let _limits = limits::set(Limits { text: 1 << 20, ..Limits::default() });
+            let text = text.clone();
+            show(&harness, subject(move |_| framed(patch(text.clone()))))
+        };
+        let twin = {
+            let _limits = support::unlimited();
+            match fits {
+                true => show(&harness, subject(move |_| framed(patch(text.clone())))),
+                false => show(&harness, subject(|_| framed(placeholder(None, "too large to build at once")))),
+            }
+        };
+        let name = format!("{lines} lines, valid {valid}");
+        assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+    }
+}
+
+#[test]
+fn an_image_job_holds_its_bytes_until_it_is_done() {
+    let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
+    let harness = open();
+    let _limits = limits::set(Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() });
+    let hold = opencode_plugin::image::hold(ID);
+    show(&harness, picture(png(16, 16, gradient)));
+    assert_eq!((opencode_plugin::image::jobs(ID), limits::held(ID).images), (1, 1024), "a job");
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    assert_eq!((opencode_plugin::image::jobs(ID), limits::held(ID).images), (1, 1024), "closed");
+    let before = reconcile::work();
+    let frame = show(&harness, picture(png(16, 16, |x, y| gradient(y, x))));
+    assert!(frame.text().contains("⋯ image too large"), "another image had room\n{}", frame.text());
+    assert_eq!(reconcile::work().since(before).parses, 0, "another decode");
+    drop(hold);
+    let done = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+    assert!(done, "the job never ended");
+    harness.tui.navigate(Route::Home);
+    settle(&harness);
+    assert_eq!(limits::held(ID).images, 0, "held after the job ended");
+    let mut cut = png(16, 16, gradient);
+    cut.truncate(cut.len() - 40);
+    let good = png(16, 16, |x, y| gradient(y, x));
+    let expected = drawn_in_the_frame(&good);
+    let (cut, good) = (Rc::new(cut), Rc::new(good));
+    PHASE.with(|phase| phase.set(0));
+    show(
+        &harness,
+        subject(move |cx| {
+            let bytes = if PHASE.with(std::cell::Cell::get) == 0 { cut.clone() } else { good.clone() };
+            v2::Node::column(vec![image(v2::Source::Content(cx.content((*bytes).clone()))), text("foot")])
+        }),
+    );
+    let failed = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+    assert!(failed && limits::held(ID).images == 0, "a failed decode kept its bytes");
+    next_phase(&harness);
+    let shown = harness.app.wait_until(Duration::from_secs(10), || corner(&harness.app.render()) == expected);
+    assert!(shown, "the next image never showed\n{}", harness.app.render().text());
+}
+
+#[test]
+fn a_mount_keeps_no_text_a_limit_refused() {
+    let harness = open();
+    let _limits = limits::set(Limits { text: 64, ..small() });
+    let kept = |subject: Subject| {
+        harness.tui.navigate(Route::Home);
+        settle(&harness);
+        let heap = support::heap::measure();
+        show(&harness, subject);
+        heap.kept()
+    };
+    let over = kept(subject(|_| framed(text(&"x".repeat(1 << 20)))));
+    let alone = kept(subject(|_| framed(placeholder(None, "too large: 1048576 bytes"))));
+    assert!(over - alone < 64 << 10, "kept {over} bytes, {alone} for the placeholder alone");
+}
+
+#[test]
+fn a_kept_placeholder_that_fits_now_is_asked_for_again() {
+    let open_file = || text("Open file").with_id("open");
+    let harness = open();
+    let frame = {
+        let _limits = limits::set(Limits { nodes: 4, ..small() });
+        PHASE.with(|phase| phase.set(0));
+        show(
+            &harness,
+            subject(move |cx| match (PHASE.with(std::cell::Cell::get), cx.input.full) {
+                (0, _) => v2::Node::column(vec![text("a"), text("b"), text("c"), open_file()]),
+                (_, true) => v2::Node::column(vec![open_file()]),
+                (_, false) => v2::Node::column(vec![v2::Node::Keep { key: "open".into() }]),
+            }),
+        );
+        let before = harness.app.render();
+        assert!(before.text().contains("⋯ too many nodes"), "no placeholder\n{}", before.text());
+        next_phase(&harness);
+        harness.app.render()
+    };
+    let twin = {
+        let _limits = support::unlimited();
+        show(&harness, subject(move |_| v2::Node::column(vec![open_file()])))
+    };
+    assert!(frame.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+}
+
+fn revisions(harness: &Harness, limits: Limits, phases: Subject) -> (opentui::native::Capture, u64, u64) {
+    let _limits = limits::set(limits);
+    PHASE.with(|phase| phase.set(0));
+    show(harness, phases);
+    let (views, before) = (VIEWS.with(std::cell::Cell::get), reconcile::work());
+    next_phase(harness);
+    let frame = harness.app.render();
+    (frame, VIEWS.with(std::cell::Cell::get) - views, reconcile::work().since(before).placeholders)
+}
+
+fn phase() -> u8 {
+    PHASE.with(std::cell::Cell::get)
+}
+
+fn code_lines(id: &str, lines: usize) -> v2::Node {
+    code(source(rust_lines(lines))).with_id(id)
+}
+
+#[test]
+fn a_keep_is_admitted_as_the_subtree_it_stands_for() {
+    let keyed = |count: usize| (0..count).map(|index| text(&format!("m{index}")).with_id(format!("m{index}")));
+    let harness = open();
+    let twin = |subject: Subject| {
+        let _limits = support::unlimited();
+        show(&harness, subject)
+    };
+    let same = |name: &str, frame: &opentui::native::Capture, twin: opentui::native::Capture| {
+        assert!(frame.cells == twin.cells, "{name}\n{}\n---\n{}", frame.text(), twin.text());
+    };
+    let (frame, views, placeholders) = revisions(
+        &harness,
+        Limits { nodes: 6, ..small() },
+        subject(move |_| match phase() {
+            0 => v2::Node::column([text("h0")].into_iter().chain(keyed(7)).collect()),
+            _ => v2::Node::column(
+                [text("h1")]
+                    .into_iter()
+                    .chain((0..7).map(|index| v2::Node::Keep { key: format!("m{index}") }))
+                    .collect(),
+            ),
+        }),
+    );
+    let mut shown: Vec<v2::Node> = [text("h1")].into_iter().chain(keyed(4)).collect();
+    shown.push(placeholder(Some("m4"), "too many nodes"));
+    same("absorbed keeps", &frame, twin(subject(move |_| v2::Node::column(shown.clone()))));
+    assert_eq!((views, placeholders), (1, 1), "absorbed keeps, views and placeholders");
+    let (frame, _, placeholders) = revisions(
+        &harness,
+        Limits { text: 1 << 20, ..small() },
+        subject(move |_| match phase() {
+            0 => v2::Node::column(vec![code_lines("f", 30), code_lines("b", 30), text("c")]),
+            _ => v2::Node::column(vec![code_lines("f", 20), v2::Node::Keep { key: "b".into() }, code_lines("z", 30)]),
+        }),
+    );
+    let shown = || v2::Node::column(vec![code_lines("f", 20), placeholder(Some("b"), "too large to build at once")]);
+    same("kept placeholder", &frame, twin(subject(move |_| shown())));
+    assert_eq!(placeholders, 1, "kept placeholder, placeholders");
+    let (frame, ..) = revisions(
+        &harness,
+        Limits { text: 1 << 20, ..small() },
+        subject(move |_| match phase() {
+            0 => v2::Node::column(vec![code_lines("k", 30)]),
+            _ => v2::Node::column(vec![v2::Node::Keep { key: "k".into() }, code_lines("z", 30)]),
+        }),
+    );
+    let shown = || v2::Node::column(vec![code_lines("k", 30), placeholder(Some("z"), "too large to build at once")]);
+    same("kept rows", &frame, twin(subject(move |_| shown())));
+    // A box opened in room for five nodes, kept once there is room for it whole: asked for again, and whole.
+    let outer = move || v2::Node::column(keyed(6).collect()).with_id("outer");
+    let phases = subject(move |cx| match (phase(), cx.input.full) {
+        (0, _) | (_, true) => v2::Node::column(vec![outer()]),
+        _ => v2::Node::column(vec![v2::Node::Keep { key: "outer".into() }]),
+    });
+    {
+        let _limits = limits::set(Limits { nodes: 5, ..small() });
+        PHASE.with(|phase| phase.set(0));
+        show(&harness, phases);
+    }
+    let frame = {
+        let _limits = limits::set(small());
+        next_phase(&harness);
+        harness.app.render()
+    };
+    same("opened box", &frame, twin(subject(move |_| v2::Node::column(vec![outer()]))));
+}
+
+#[test]
+fn two_plugins_share_the_rows_of_a_frame() {
+    let both = |phase: u8| [code_lines("r", 10), text(&format!("route {phase}"))];
+    let harness = open();
+    let limits = Limits { text: 1 << 20, frame_rows: 30, ..small() };
+    PHASE.with(|phase| phase.set(0));
+    BESIDE.with(|beside| {
+        *beside.borrow_mut() = subject(move |_| {
+            let phase = PHASE.with(std::cell::Cell::get);
+            v2::Node::column(vec![code_lines("s", 10), text(&format!("beside {phase}"))])
+        })
+    });
+    let (first, second) = {
+        let _limits = limits::set(limits);
+        show(&harness, subject(move |_| v2::Node::column(both(phase()).to_vec())));
+        caught_up(&harness);
+        PHASE.with(|phase| phase.set(1));
+        WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
+        WAKER.with(|waker| waker.borrow().as_ref().unwrap().wake());
+        HEARD.with(|heard| heard.borrow_mut().clear());
+        let before = reconcile::work();
+        let first = harness.app.render().text();
+        let deferred = reconcile::work().since(before).deferred;
+        assert_eq!(deferred, 1, "revisions left for the next frame");
+        // Before the next paint, storage changes, which draws the sibling in the next frame's rows; then the
+        // terminal resizes, which finds none left: its cause joins the revision that waits.
+        opencode_tui::plugins::host::host(&harness.tui).storage_changed();
+        harness.app.advance(Duration::ZERO);
+        harness.app.resize(81, 30);
+        let second = caught_up(&harness);
+        let heard = HEARD.with(|heard| heard.borrow().clone());
+        for surface in ["route", "beside"] {
+            let woke = heard.iter().any(|(name, woke, _)| *name == surface && *woke);
+            assert!(woke, "{surface} never heard it woke: {heard:?}");
+        }
+        let both = heard.iter().any(|(name, woke, size)| *name == "beside" && *woke && *size);
+        assert!(both, "the waiting revision lost a cause: {heard:?}");
+        (first, second)
+    };
+    assert!(first.contains("route 1") != first.contains("beside 1"), "one revision a frame\n{first}");
+    let twin = {
+        let _limits = support::unlimited();
+        show(&harness, subject(move |_| v2::Node::column(both(1).to_vec())))
+    };
+    assert!(second.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", second.text(), twin.text());
+    BESIDE.with(|beside| *beside.borrow_mut() = subject(|_| text("sibling")));
+}
+
+#[test]
+fn a_lists_items_share_the_rows_of_a_frame() {
+    let tabs = || {
+        let items = (0..10).map(|index| v2::ListItem::new(code_lines(&format!("i{index}"), 30), 1)).collect();
+        let mut list = v2::Node::list(items).with_id("tabs");
+        if let v2::Node::List { row, .. } = &mut list {
+            *row = true;
+        }
+        v2::Node::column(vec![list])
+    };
+    let harness = open();
+    let (first, frame) = {
+        let _limits = limits::set(Limits { text: 1 << 20, frame_rows: 100, ..small() });
+        PHASE.with(|phase| phase.set(0));
+        show(&harness, subject(move |_| if phase() == 0 { text("none") } else { tabs() }));
+        let before = reconcile::work();
+        PHASE.with(|phase| phase.set(1));
+        WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
+        harness.app.render();
+        let first = reconcile::work().since(before).parses;
+        (first, caught_up(&harness))
+    };
+    assert!(first <= 2, "{first} items parsed in the paint that showed the list");
+    let twin = {
+        let _limits = support::unlimited();
+        show(&harness, subject(move |_| tabs()))
+    };
+    assert!(frame.cells == twin.cells, "not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+}
+
+#[test]
+fn a_lists_anchors_respect_the_limits_of_a_patch() {
+    let list = |count: usize| {
+        let items = (0..20)
+            .map(|index| {
+                let diff = v2::Node::diff(source(hunks(count)))
+                    .with_id(format!("d{index}"))
+                    .view(v2::DiffView::Unified)
+                    .hunks("h");
+                v2::ListItem::new(diff, 1)
+            })
+            .collect();
+        v2::Node::column(vec![
+            v2::Node::list(items).with_id("l").layout(abi::Layout::default().height(abi::Width::Cells(3))),
+        ])
+    };
+    let harness = open();
+    let _limits = limits::set(Limits { nodes: 1_000, rows: 1_000, text: 1 << 20, ..small() });
+    for (count, anchors) in [(3, 60), (5, 0)] {
+        show(&harness, subject(move |_| list(count)));
+        caught_up(&harness);
+        let _ = harness.tui.keymap.dispatch("limits.anchors", None);
+        let seen = ANCHORS.with(|seen| seen.borrow().len());
+        assert_eq!(seen, anchors, "anchors of patches of {count} hunks");
+    }
+}
+
+#[test]
+fn a_long_line_costs_its_rows() {
+    let harness = open();
+    for (bytes, fits) in [(90 << 10, true), (100 << 10, false)] {
+        let frame = {
+            let _limits = limits::set(Limits { text: 1 << 20, ..small() });
+            show(&harness, subject(move |_| v2::Node::column(vec![text(&"x".repeat(bytes))])))
+        };
+        let twin = {
+            let _limits = support::unlimited();
+            match fits {
+                true => show(&harness, subject(move |_| v2::Node::column(vec![text(&"x".repeat(bytes))]))),
+                false => {
+                    show(&harness, subject(|_| v2::Node::column(vec![placeholder(None, "too large to build at once")])))
+                }
+            }
+        };
+        let name = format!("{bytes} bytes");
+        assert!(frame.cells == twin.cells, "{name}: not the twin's frame\n{}\n---\n{}", frame.text(), twin.text());
+    }
+}
+
+#[test]
+fn trees_of_abi_1_are_held_to_the_limits() {
+    let harness = open();
+    // Host time is measured: the real clock.
+    harness.tui.plugins.monitor().set_clock(std::time::Instant::now);
+    let host_time = harness.tui.plugins.monitor().host_time(OLD);
+    harness.tui.navigate(Route::Plugin { id: OLD.to_owned(), name: "old".to_owned() });
+    settle(&harness);
+    assert!(harness.app.render().text().contains("old 9"), "the route of ABI 1.x");
+    assert_eq!(limits::held(OLD).nodes, 11, "held for a route of ABI 1.x");
+    assert!(harness.tui.plugins.monitor().host_time(OLD) > host_time, "its host time");
+    let _ = harness.tui.keymap.dispatch("old.panel", None);
+    settle(&harness);
+    let screen = harness.app.render().text();
+    assert!(screen.contains("old panel") && screen.contains("⋯ too large to build at once"), "{screen}");
+    assert!(!screen.contains("body 0"), "the body past the rows shows\n{screen}");
+}
+
+/// A route of one image given inline, and a foot: a GIF of one pixel, all of its bytes ASCII, so they are text;
+/// `background` tells two apart.
+fn inline(background: u8) -> v2::Node {
+    let gif = format!(
+        "GIF89a\x01\x00\x01\x00\x00{}\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;",
+        char::from(background)
+    );
+    v2::Node::column(vec![image(source(gif)), text("foot")])
+}
+
+#[test]
+fn images_are_given_back_and_decode_two_at_a_time() {
+    let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
+    let harness = open();
+    let _limits = limits::set(Limits {
+        text: 1 << 20,
+        plugin_content: 1 << 20,
+        all_content: 1 << 20,
+        plugin_images: 1 << 20,
+        ..small()
+    });
+    let done = |harness: &Harness| {
+        let ended = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+        assert!(ended, "a job never ended");
+    };
+    // Past the bytes, whatever they are.
+    let frame = show(
+        &harness,
+        subject(|cx| v2::Node::column(vec![image(v2::Source::Content(given(cx, || vec![b'x'; 4097]))), text("foot")])),
+    );
+    assert!(frame.text().contains("⋯ image too large"), "bytes past the limit\n{}", frame.text());
+    // A revision refused for a keep the host does not hold gives back the image it admitted; the whole tree shows
+    // none.
+    let picture = Rc::new(png(16, 16, gradient));
+    let shown = picture.clone();
+    show(
+        &harness,
+        subject(move |cx| match cx.input.full {
+            true => text("whole"),
+            false => v2::Node::column(vec![
+                image(v2::Source::Content(cx.content((*shown).clone()))),
+                v2::Node::Keep { key: "nowhere".into() },
+            ]),
+        }),
+    );
+    done(&harness);
+    settle(&harness);
+    assert_eq!(limits::held(ID).images, 0, "held after a refused revision");
+    // An image given inline, then another: only the one shown is held.
+    PHASE.with(|phase| phase.set(0));
+    show(&harness, subject(move |_| inline(phase())));
+    done(&harness);
+    assert_eq!(limits::held(ID).images, 4, "held for an inline image");
+    next_phase(&harness);
+    done(&harness);
+    settle(&harness);
+    assert_eq!(limits::held(ID).images, 4, "held after the inline image changed");
+    // Six images held at the workers: two are taken, the others wait.
+    let hold = opencode_plugin::image::hold(ID);
+    let six = picture.clone();
+    show(
+        &harness,
+        subject(move |cx| {
+            let images = (0..6).map(|_| image(v2::Source::Content(cx.content((*six).clone())))).collect();
+            v2::Node::column(images)
+        }),
+    );
+    let taken = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::taken(ID) == 2);
+    std::thread::sleep(Duration::from_millis(20));
+    let (jobs, taken_now) = (opencode_plugin::image::jobs(ID), opencode_plugin::image::taken(ID));
+    drop(hold);
+    assert!(taken, "the workers never took two");
+    assert!(jobs >= 6 && taken_now == 2, "{jobs} jobs, {taken_now} a worker took");
+    done(&harness);
+}
+
+#[test]
+fn what_a_mount_holds_goes_and_its_host_work_is_timed() {
+    let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
+    let harness = open();
+    let _limits = limits::set(Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() });
+    // Host time is measured: the real clock.
+    harness.tui.plugins.monitor().set_clock(std::time::Instant::now);
+    let monitor = harness.tui.plugins.monitor().clone();
+    let decoded = |harness: &Harness| {
+        let done = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
+        assert!(done, "a job never ended");
+        settle(harness);
+    };
+    let hold = opencode_plugin::image::hold(ID);
+    show(&harness, picture(png(16, 16, gradient)));
+    let before = monitor.host_time(ID);
+    drop(hold);
+    decoded(&harness);
+    assert!(monitor.host_time(ID) > before, "the copy in is not host time");
+    PHASE.with(|phase| phase.set(0));
+    let picture_bytes = Rc::new(png(16, 16, gradient));
+    show(
+        &harness,
+        subject(move |cx| {
+            let handle = given(cx, || (*picture_bytes).clone());
+            match phase() {
+                0 => v2::Node::column(vec![image(v2::Source::Content(handle)), text("foot")]),
+                _ => {
+                    cx.release(handle);
+                    text("released")
+                }
+            }
+        }),
+    );
+    decoded(&harness);
+    assert_eq!(limits::held(ID).images, 1024, "held while shown");
+    next_phase(&harness);
+    assert_eq!(limits::held(ID).images, 0, "held after the release");
+    // A failed plugin holds nothing, while its failed mount shows.
+    show(&harness, picture(png(16, 16, gradient)));
+    decoded(&harness);
+    assert_eq!(limits::held(ID).images, 1024, "held before the failure");
+    PHASE.with(|phase| phase.set(0));
+    SUBJECT.with(|slot| *slot.borrow_mut() = subject(|_| panic!("the view failed")));
+    WAKE_ROUTE.with(|waker| waker.borrow().as_ref().unwrap().wake());
+    settle(&harness);
+    assert_eq!(limits::held(ID).images, 0, "held after the plugin failed");
+    harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&harness.tui), ID, false);
+    harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&harness.tui), ID, true);
+    settle(&harness);
+    let items = || {
+        let items = (0..100)
+            .map(|index| v2::ListItem::new(text(&format!("i{index}")).with_id(format!("i{index}")), 1))
+            .collect();
+        v2::Node::column(vec![
+            v2::Node::list(items).with_id("l").layout(abi::Layout::default().height(abi::Width::Cells(5))),
+        ])
+    };
+    show(&harness, subject(move |_| items()));
+    caught_up(&harness);
+    let before = monitor.host_time(ID);
+    let wheel = opentui::prelude::MouseEvent {
+        kind: opentui::prelude::MouseEventKind::ScrollDown,
+        x: 2,
+        y: 2,
+        modifiers: opentui::prelude::Modifiers::NONE,
+    };
+    for _ in 0..10 {
+        harness.app.app().dispatch(opentui::prelude::Event::Mouse(wheel));
+        harness.app.render();
+    }
+    assert!(monitor.host_time(ID) > before, "a list's window is not host time");
+}
