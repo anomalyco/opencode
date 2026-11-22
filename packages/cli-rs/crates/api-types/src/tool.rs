@@ -83,6 +83,10 @@ impl<'a> ToolInput<'a> {
         })
     }
 
+    pub fn map(map: &'a IndexMap<String, Value>) -> Self {
+        Self(Fields::Typed(map))
+    }
+
     /// The input of a JSON object; any other value is an empty input.
     pub fn json(value: &'a Value) -> Self {
         Self(value.as_object().map_or(Fields::Empty, Fields::Json))

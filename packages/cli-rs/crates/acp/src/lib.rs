@@ -23,6 +23,7 @@ pub mod sessions;
 pub mod tools;
 pub mod translate;
 pub mod turn;
+pub mod update;
 
 use std::ffi::OsString;
 use std::path::Path;
