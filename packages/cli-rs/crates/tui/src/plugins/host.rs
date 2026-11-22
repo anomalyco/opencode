@@ -5,9 +5,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use opencode_api::generated::{
-    IntegrationInfo, LocationQueryInput, McpServer, ModelInfo, ModelRef, PluginInfo, PluginListInput, PluginSource,
-    PluginState, ProviderID, ProviderInfo, SessionInboxDelivery, UsageLimitsInfo, V2Event, VcsInfo,
+    EventKind, IntegrationInfo, LocationQueryInput, McpServer, ModelInfo, ModelRef, PluginInfo, PluginListInput,
+    PluginSource, PluginState, ProviderID, ProviderInfo, SessionInboxDelivery, UsageLimitsInfo, V2Event, VcsInfo,
 };
+use opencode_api::kinds::EventKinds;
 use opencode_local::cli_config::AttentionSoundName;
 use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
@@ -248,8 +249,8 @@ impl Host for Tui {
         notify::notify(self, &request);
     }
 
-    fn on_event(&self, types: &[String], run: Rc<dyn Fn(&V2Event)>) -> Option<Disposer> {
-        Some(crate::features::events::subscribe(self, types.iter().cloned(), move |_, event| run(event)))
+    fn on_event(&self, kinds: EventKinds, run: Rc<dyn Fn(&V2Event)>) -> Option<Disposer> {
+        Some(crate::features::events::subscribe(self, kinds, move |_, event| run(event)))
     }
 
     fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount> {
@@ -1233,7 +1234,7 @@ pub fn install(tui: &Rc<Tui>) {
     // Notify plugin keymap readers when pending keys, layers, or focus change.
     let keymap = tui.keymap.keymap().on_state(bind!(tui, |tui| local_changed(&tui)));
     tui.layers.borrow_mut().push(keymap);
-    crate::features::events::subscribe(tui, ["plugin.updated", "server.connected"], |tui, event| {
+    crate::features::events::subscribe(tui, [EventKind::PluginUpdated, EventKind::ServerConnected], |tui, event| {
         if matches!(event, V2Event::PluginUpdated(_) | V2Event::ServerConnected(_)) {
             sync_server_plugins(tui);
         }

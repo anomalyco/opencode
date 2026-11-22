@@ -538,6 +538,7 @@ export class Types {
     this.items.push(
       `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${variants.map((variant, index) => `    ${variant}(${types[index]}),`).join("\n")}\n    /// A member this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        crate::de::union(deserializer, Self::from_raw)\n    }\n}\n\nimpl ${name} {\n    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {\n        match raw.field(${JSON.stringify(tag.key)}).${access}() {\n${ordered.join("\n")}\n            _ => raw.unknown().map(Self::Unknown),\n        }\n    }\n}${tagMethod}`,
     )
+    if (name === "V2Event") this.items.push(eventKind(variants, tag.values))
     return name
   }
 
@@ -779,6 +780,50 @@ function literalType(literal: unknown) {
   if (typeof literal === "boolean") return "bool"
   if (typeof literal === "number") return Number.isInteger(literal) ? "i64" : "f64"
   return "serde_json::Value"
+}
+
+/** `EventKind`: which member of `V2Event` an event is, as a `u8`, so that listeners are counted in an array. */
+function eventKind(variants: Array<string>, values: Array<{ exact: Array<string | boolean>; prefixes: Array<string> }>) {
+  const arms = values.flatMap((value, index) => [
+    ...(value.exact.length === 0 ? [] : [`${value.exact.map((item) => JSON.stringify(item)).join(" | ")}`]),
+    ...value.prefixes.map((prefix) => `tag if tag.starts_with(${JSON.stringify(prefix)})`),
+  ].map((pattern) => `            ${pattern} => Self::${variants[index]},`))
+  const named = variants.filter((_, index) => values[index].prefixes.length > 0 || values[index].exact.length > 1)
+  return `/// Which member of [\`V2Event\`] an event is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum EventKind {
+${variants.map((variant) => `    ${variant},`).join("\n")}
+    Unknown,
+}
+
+impl EventKind {
+    /// How many kinds there are, \`Unknown\` included.
+    pub const COUNT: usize = ${variants.length + 1};
+
+    /// The kind an event whose \`type\` is \`tag\` decodes to.
+    pub fn from_tag(tag: &str) -> Self {
+        match tag {
+${[...arms.filter((arm) => !arm.includes("starts_with")), ...arms.filter((arm) => arm.includes("starts_with"))].join("\n")}
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Whether the events of this kind differ in their \`type\`, so that a listener names the ones it wants.
+    pub fn named(self) -> bool {
+        matches!(self, ${[...named, "Unknown"].map((variant) => `Self::${variant}`).join(" | ")})
+    }
+}
+
+impl V2Event {
+    /// Which member this is.
+    pub fn kind(&self) -> EventKind {
+        match self {
+${variants.map((variant) => `            Self::${variant}(_) => EventKind::${variant},`).join("\n")}
+            Self::Unknown(_) => EventKind::Unknown,
+        }
+    }
+}`
 }
 
 function newtype(name: string, ref: string) {
