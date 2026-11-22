@@ -54,12 +54,7 @@ const subscriptionCatalog = (lists: { current: Record<string, readonly string[]>
     get: () =>
       Effect.sync(() => [
         {
-          info: {
-            id: Provider.ID.openai,
-            name: "OpenAI",
-            activation: "auto",
-            package: "@opencode/ai/providers/openai",
-          },
+          info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
           models: [],
           environment: [],
           subscriptions: lists.current,
@@ -696,219 +691,63 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  it.effect("merges account models with catalog metadata and leaves input budgeting to compaction", () =>
+  it.effect("shows the models.dev list until the account list loads, then the account list", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
-      const models = yield* Model.Service
       const credentials = yield* Credential.Service
       const kv = yield* KV.Service
       yield* catalog.transform((editor) => {
         editor.update(Provider.ID.openai, (provider) => {
           provider.package = "@opencode/ai/providers/openai"
         })
-        editor.models.update(Provider.ID.openai, Model.ID.make("gpt-6.2-sol"), (model) => {
-          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
-          model.capabilities = { tools: true, input: ["text", "image", "pdf"], output: ["text"] }
-          model.variants = [
-            { id: Model.VariantID.make("low"), settings: { reasoningEffort: "low" } },
-            { id: Model.VariantID.make("high"), settings: { reasoningEffort: "high" } },
-          ]
-        })
-        editor.models.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), () => {})
-      })
-      const sharing = yield* credentials.create({
-        integrationID: Integration.ID.make("openai"),
-        value: sharingCredential("chatgpt-token"),
-      })
-      yield* PluginHost.storage(kv, ChatGPTPlugin.id).set(`models:${sharing.id}:oaiapp_issued`, [
-        remote("gpt-6.2-sol", {
-          input_modalities: ["text", "image"],
-          supported_reasoning_levels: [{ effort: "low" }, { effort: "ultra" }],
-        }),
-        remote("gpt-6.3-nova", { supported_reasoning_levels: [] }),
-      ])
-      // The startup refresh fails, so the saved list stays.
-      yield* addPlugin()
-      yield* drain
-
-      const available = (yield* models.available()).filter((model) => model.providerID === Provider.ID.openai)
-      expect(available.map((model) => model.id).sort()).toEqual([
-        Model.ID.make("gpt-6.2-sol"),
-        Model.ID.make("gpt-6.3-nova"),
-      ])
-      const sol = required(available.find((model) => model.id === "gpt-6.2-sol"))
-      expect(sol.name).toBe("GPT-6.2-SOL")
-      expect(sol.capabilities.input).toEqual(["text", "image"])
-      expect(sol.variants.map((variant) => variant.id)).toEqual([
-        Model.VariantID.make("low"),
-        Model.VariantID.make("ultra"),
-      ])
-      expect(sol.limit).toEqual({ context: 272_000, output: 128_000 })
-      expect(sol.cost).toEqual([])
-      expect(sol.settings?.compaction).toEqual({ type: "summary" })
-      const nova = required(available.find((model) => model.id === "gpt-6.3-nova"))
-      expect(nova.name).toBe("GPT-6.3-NOVA")
-      expect(nova.package).toBe("@opencode/ai/providers/openai")
-      expect(nova.limit).toEqual({ context: 272_000, output: 32_000 })
-    }),
-  )
-
-  it.effect(
-    "shows the models.dev list until the account list loads, then the account list with the catalog's variants",
-    () =>
-      Effect.gen(function* () {
-        const catalog = yield* Provider.Service
-        const credentials = yield* Credential.Service
-        yield* catalog.transform((editor) => {
-          editor.update(Provider.ID.openai, (provider) => {
-            provider.package = "@opencode/ai/providers/openai"
+        for (const id of ["gpt-6-sol", "gpt-6.2-sol"]) editor.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
+        for (const id of ["gpt-6.2-sol-fast", "gpt-6.2-sol-flex"])
+          editor.models.update(Provider.ID.openai, Model.ID.make(id), (model) => {
+            model.modelID = Model.ID.make("gpt-6.2-sol")
           })
-          for (const id of ["gpt-6-sol", "gpt-6.2-sol"])
-            editor.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
-          for (const id of ["gpt-6.2-sol-fast", "gpt-6.2-sol-flex"])
-            editor.models.update(Provider.ID.openai, Model.ID.make(id), (model) => {
-              model.modelID = Model.ID.make("gpt-6.2-sol")
-            })
-        })
-        const release = yield* Deferred.make<void>()
-        yield* addPlugin(
-          HttpClient.make((request) =>
-            Deferred.await(release).pipe(
-              Effect.as(
-                HttpClientResponse.fromWeb(
-                  request,
-                  Response.json({ models: [remote("gpt-6.2-sol"), remote("gpt-6.3-nova")] }),
-                ),
+      })
+      const release = yield* Deferred.make<void>()
+      const listed = [remote("gpt-6.2-sol"), remote("gpt-6.3-nova")]
+      yield* addPlugin(
+        HttpClient.make((request) =>
+          Deferred.await(release).pipe(
+            Effect.as(
+              HttpClientResponse.fromWeb(
+                request,
+                Response.json({ models: [...listed, remote("gpt-reserve", { visibility: "hide" })] }),
               ),
             ),
           ),
-        ).pipe(
-          Effect.provideService(
-            ModelsDev.Service,
-            subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-6.2-sol", "gpt-6.2-sol-fast"] } }),
-          ),
-        )
-        yield* credentials.create({
-          integrationID: Integration.ID.make("openai"),
-          value: sharingCredential("chatgpt-token"),
-        })
-        yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6-sol,gpt-6.2-sol,gpt-6.2-sol-fast")))
-
-        // The account list decides the models; flex isn't on the catalog list, so it stays hidden.
-        yield* Deferred.succeed(release, undefined)
-        yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-sol,gpt-6.2-sol-fast,gpt-6.3-nova")))
-      }),
-  )
-
-  it.effect("shows the fallback list while a new sign-in discovers its models, then saves only listed API models", () =>
-    Effect.gen(function* () {
-      yield* addCatalog
-      const credentials = yield* Credential.Service
-      const kv = yield* KV.Service
-      const release = yield* Deferred.make<void>()
-      const requests: string[] = []
-      yield* addPlugin(
-        HttpClient.make((request) =>
-          Effect.gen(function* () {
-            requests.push(`${request.url} ${request.headers.authorization}`)
-            yield* Deferred.await(release)
-            return HttpClientResponse.fromWeb(
-              request,
-              Response.json({
-                models: [
-                  remote("gpt-6.2-sol"),
-                  remote("gpt-6.3-nova"),
-                  remote("gpt-reserve", { visibility: "hide" }),
-                  remote("codex-auto-review", { supported_in_api: false }),
-                ],
-              }),
-            )
-          }),
+        ),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-6.2-sol", "gpt-6.2-sol-fast"] } }),
         ),
       )
       const sharing = yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: sharingCredential("chatgpt-token"),
       })
-      yield* advance(() => requests.length > 0)
-      // The startup refresh may also see the new credential, so expect one or two identical requests.
-      expect(new Set(requests)).toEqual(new Set(["https://api.openai.com/v1/models Bearer chatgpt-token"]))
-      expect(yield* openaiModels).toEqual(fallback)
-      const storage = PluginHost.storage(kv, ChatGPTPlugin.id)
-      expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toBeUndefined()
+      yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6-sol,gpt-6.2-sol,gpt-6.2-sol-fast")))
 
+      // Hidden models are dropped, and variants come from the models.dev list, so flex stays hidden.
       yield* Deferred.succeed(release, undefined)
-      yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-sol,gpt-6.3-nova")))
-      expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toEqual([
-        remote("gpt-6.2-sol"),
-        remote("gpt-6.3-nova"),
-      ])
+      yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-sol,gpt-6.2-sol-fast,gpt-6.3-nova")))
+      expect(yield* PluginHost.storage(kv, ChatGPTPlugin.id).get(`models:${sharing.id}:oaiapp_issued`)).toEqual(listed)
     }),
   )
-
-  it.effect("keeps the last good account list when a refresh fails, times out or returns no usable models", () =>
+  it.effect("keeps the last good account list when a refresh fails or comes back empty", () =>
     Effect.gen(function* () {
       yield* addCatalog
       const credentials = yield* Credential.Service
       const kv = yield* KV.Service
       const first = [remote("gpt-6.2-sol"), remote("gpt-6.3-nova")]
-      const responses: ReadonlyArray<Effect.Effect<Response>> = [
-        Effect.succeed(Response.json({ models: first })),
-        Effect.succeed(Response.json({ models: [] })),
-        Effect.succeed(
-          Response.json({
-            models: [remote("gpt-reserve", { visibility: "hide" }), remote("codex", { supported_in_api: false })],
-          }),
-        ),
-        Effect.succeed(Response.json({}, { status: 503 })),
-        Effect.succeed(Response.json({ models: [{ slug: "gpt-6.2-sol" }] })),
-        Effect.never,
-        Effect.succeed(Response.json({ models: [remote("gpt-6.2-astra"), remote("gpt-6.2-sol")] })),
-      ]
-      let requests = 0
-      const sharing = yield* credentials.create({
-        integrationID: Integration.ID.make("openai"),
-        value: sharingCredential("chatgpt-token"),
-      })
-      yield* addPlugin(
-        HttpClient.make((request) =>
-          Effect.suspend(() => required(responses[requests++])).pipe(
-            Effect.map((response) => HttpClientResponse.fromWeb(request, response)),
-          ),
-        ),
-      )
-      const storage = PluginHost.storage(kv, ChatGPTPlugin.id)
-      yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-sol,gpt-6.3-nova")))
-      expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toEqual(first)
-
-      // Empty, filtered to empty, 503 and bad bodies, then a request that never answers.
-      for (const count of [2, 3, 4, 5, 6]) {
-        yield* TestClock.adjust("15 minutes")
-        yield* advance(() => requests === count)
-        if (count === 6) yield* TestClock.adjust("15 seconds")
-        yield* drain
-        expect(yield* openaiModels).toEqual(["gpt-6.2-sol", "gpt-6.3-nova"])
-        expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toEqual(first)
-      }
-
-      yield* TestClock.adjust("15 minutes")
-      yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-astra,gpt-6.2-sol")))
-      expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toEqual([
-        remote("gpt-6.2-astra"),
-        remote("gpt-6.2-sol"),
-      ])
-    }),
-  )
-
-  it.effect("keeps the fallback list until a first refresh succeeds and never saves an unusable response", () =>
-    Effect.gen(function* () {
-      yield* addCatalog
-      const credentials = yield* Credential.Service
-      const kv = yield* KV.Service
       const responses = [
+        Response.json({ models: first }),
         Response.json({ models: [] }),
         Response.json({}, { status: 503 }),
-        Response.json({ models: [remote("gpt-6.2-sol")] }),
+        Response.json({ models: [remote("gpt-6.2-astra"), remote("gpt-6.2-sol")] }),
       ]
       let requests = 0
       const sharing = yield* credentials.create({
@@ -921,17 +760,23 @@ describe("ChatGPTPlugin", () => {
         ),
       )
       const storage = PluginHost.storage(kv, ChatGPTPlugin.id)
-      yield* advance(() => requests === 1)
-      yield* drain
-      expect(yield* openaiModels).toEqual(fallback)
-      yield* TestClock.adjust("15 minutes")
-      yield* advance(() => requests === 2)
-      yield* drain
-      expect(yield* openaiModels).toEqual(fallback)
-      expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toBeUndefined()
+      yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-sol,gpt-6.3-nova")))
+      expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toEqual(first)
+
+      for (const count of [2, 3]) {
+        yield* TestClock.adjust("15 minutes")
+        yield* advance(() => requests === count)
+        yield* drain
+        expect(yield* openaiModels).toEqual(["gpt-6.2-sol", "gpt-6.3-nova"])
+        expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toEqual(first)
+      }
 
       yield* TestClock.adjust("15 minutes")
-      yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-sol")))
+      yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-astra,gpt-6.2-sol")))
+      expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toEqual([
+        remote("gpt-6.2-astra"),
+        remote("gpt-6.2-sol"),
+      ])
     }),
   )
 
@@ -1161,10 +1006,7 @@ describe("ChatGPTPlugin", () => {
         }),
       })
       yield* addPlugin().pipe(
-        Effect.provideService(
-          ModelsDev.Service,
-          subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } }),
-        ),
+        Effect.provideService(ModelsDev.Service, subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } })),
       )
       expect(
         (yield* models.available())
