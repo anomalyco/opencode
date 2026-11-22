@@ -37,6 +37,7 @@ import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { createModelUsage, ModelUsageTag } from "@/usage/model"
 import {
+  correctFlyoutPosition,
   createDialogFlyoutState,
   createModelDrawerState,
   placeFlyout,
@@ -47,6 +48,7 @@ import {
   selectFlyoutMenu,
   selectFlyoutMenuKeys,
   selectFlyoutOpenId,
+  selectFlyoutPlacement,
   selectFlyoutPosition,
   transitionDialogFlyout,
   transitionModelDrawer,
@@ -736,22 +738,22 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
 
     if (!row?.closest('[data-slot="dialog-container"]')) return undefined
     const rendered = flyoutRef?.isConnected ? flyoutRef : undefined
+    const rect = rendered?.getBoundingClientRect()
 
     const position = placeFlyout(
       row.getBoundingClientRect(),
       row.closest("[data-dialog-layer]")?.getBoundingClientRect(),
       language.direction() === "rtl",
-      rendered?.offsetHeight ?? 0,
+      rect?.height ?? rendered?.offsetHeight ?? 0,
     )
 
-    if (!rendered) return position
-    // A fixed element is placed against the viewport unless an ancestor contains it, as a component preview that holds
-    // its dialogs does. Measured against the position it rendered at.
-    const rect = rendered.getBoundingClientRect()
-    const x = rect.left - parseFloat(rendered.style.left)
-    const y = rect.top - parseFloat(rendered.style.top)
+    if (!rendered || !rect) return position
 
-    return x || y ? { left: position.left - x, top: position.top - y } : position
+    return correctFlyoutPosition(position, rect, {
+      left: parseFloat(rendered.style.left),
+      top: parseFloat(rendered.style.top),
+      width: rendered.offsetWidth,
+    })
   }
 
   const dispatch = (event: DialogFlyoutEvent) => {
@@ -781,13 +783,21 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     dispatch({ type: "placed", attempt: effect.attempt, position: measure(effect.id) })
   }
 
-  // Placed before the flyout renders its content or position, as from the effect that follows the highlight. Once it
-  // has, before it paints, it is placed again with its real height and where it landed. Settles in one more pass.
-  createEffect(() => {
-    const state = flyout()
+  const flyoutPlacement = createMemo(() => selectFlyoutPlacement(flyout()), undefined, {
+    equals: (a, b) => a?.attempt === b?.attempt && a?.id === b?.id,
+  })
 
-    if (state.status !== "open" || !state.position) return
-    dispatch({ type: "placed", attempt: state.attempt, position: measure(state.id) })
+  // Placed before the flyout renders its content or position, as from the effect that follows the highlight. Once it
+  // has, before it paints, place it again with its real height and where it landed. Track only the placement target
+  // and content that changes its height or row position — never `position` — so refining coordinates cannot loop.
+  createEffect(() => {
+    const placement = flyoutPlacement()
+
+    if (!placement) return
+    const item = flyoutItem()
+
+    if (item) usage(item)
+    dispatch({ type: "placed", attempt: placement.attempt, position: measure(placement.id) })
   })
 
   onCleanup(() => {

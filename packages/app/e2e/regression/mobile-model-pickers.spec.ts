@@ -332,6 +332,66 @@ test("model dialog opens Manage models from its search row with Enter", async ({
   await expect(model).toHaveText("Mobile Model A")
 })
 
+test("model dialog flyout places cleanly at fractional zoom levels without recursing", async ({ page }) => {
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+
+  const { model, variant, dialog } = await openDesktopPicker(page, "ltr")
+  const flyout = dialog.locator('[data-slot="model-dialog-flyout"]')
+
+  await page.evaluate(() => {
+    const target = Element.prototype.getBoundingClientRect
+
+    document.documentElement.dataset.flyoutRectReads = "0"
+
+    Element.prototype.getBoundingClientRect = function () {
+      if (this.getAttribute("data-slot") === "model-dialog-flyout")
+        document.documentElement.dataset.flyoutRectReads = String(
+          Number(document.documentElement.dataset.flyoutRectReads ?? "0") + 1,
+        )
+
+      return target.call(this)
+    }
+  })
+
+  const cases = [
+    { zoom: 0.9, targetVariant: "high" },
+    { zoom: 1, targetVariant: "balanced" },
+    { zoom: 1.1, targetVariant: "max" },
+    { zoom: 1.25, targetVariant: "high" },
+  ] as const
+
+  for (const entry of cases) {
+    await page.evaluate((zoom) => {
+      document.documentElement.style.zoom = String(zoom)
+      document.documentElement.dataset.flyoutRectReads = "0"
+    }, entry.zoom)
+
+    await model.click()
+    await expect(flyout).toBeVisible()
+    await dialog.locator('[data-option-key="opencode:mobile-a"]').hover()
+    await expect(flyout.getByRole("menuitemradio", { name: "balanced", exact: true })).toBeVisible()
+    await dialog.locator('[data-option-key="opencode:mobile-c"]').hover()
+    await expect(flyout.getByText("OpenCode · 262K context", { exact: true })).toBeVisible()
+    await dialog.locator('[data-option-key="opencode:mobile-b"]').hover()
+    await expect(flyout.getByRole("menuitemradio", { name: entry.targetVariant, exact: true })).toBeVisible()
+    await flyout.getByRole("menuitemradio", { name: entry.targetVariant, exact: true }).click()
+    await expect(dialog).toBeHidden()
+    await expect(model).toHaveText("Mobile Model B")
+    await expect(variant).toHaveText(entry.targetVariant)
+
+    const reads = await page.evaluate(() => Number(document.documentElement.dataset.flyoutRectReads ?? "0"))
+
+    expect(reads).toBeLessThan(40)
+  }
+
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = ""
+    delete document.documentElement.dataset.flyoutRectReads
+  })
+  expect(errors).toEqual([])
+})
+
 test.describe("touch composer pickers", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 
