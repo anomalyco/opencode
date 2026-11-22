@@ -3,6 +3,7 @@
 use opencode_api::generated::{
     ModelRef, SessionMessageAssistant, SessionMessageAssistantContentItem, SessionMessageAssistantFinish,
 };
+use opencode_store::MessageKey;
 use opencode_ui::locale::{duration, titlecase};
 
 use super::errors::StepError;
@@ -42,7 +43,7 @@ impl Footer {
         let muted = Style::new().fg(theme.text.muted);
         let interrupted = message.error.as_ref().is_some_and(|error| error.message == "Step interrupted");
         self.error.update(cx, message);
-        let index = cx.index.get(message.id.as_str()).copied();
+        let index = cx.index_of(message.id.as_str());
         let duration = turn_duration(cx.messages, message, index, cx.legacy);
         let width = cx.width;
         let agent = if message.error.is_some() { theme.text.muted } else { cx.agent_color(message.agent.as_str()) };
@@ -144,11 +145,11 @@ impl TurnUsage {
         self.0.render();
     }
 
-    pub fn update(&self, cx: &Context<'_>, messages: &[String], previous: Option<&CacheUsage>) {
+    pub fn update(&self, cx: &Context<'_>, messages: &[MessageKey], previous: Option<&CacheUsage>) {
         let mut previous = previous.cloned();
         let steps = messages
             .iter()
-            .filter_map(|id| cx.assistant(id))
+            .filter_map(|key| cx.assistant(*key))
             .filter_map(|message| {
                 let tokens = message.tokens.as_ref()?;
                 let total = total(message);

@@ -162,12 +162,12 @@ impl Queued {
     }
 }
 
-/// Running compactions follow the other rows because they wait for the turn.
-pub fn running_last(messages: &[SessionMessageInfo]) -> impl Iterator<Item = &SessionMessageInfo> {
-    let running = |message: &&SessionMessageInfo| {
+/// Running compactions follow the other rows because they wait for the turn. Each message comes with its position.
+pub fn running_last(messages: &[SessionMessageInfo]) -> impl Iterator<Item = (usize, &SessionMessageInfo)> {
+    let running = |(_, message): &(usize, &SessionMessageInfo)| {
         matches!(message, SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_)))
     };
-    messages.iter().filter(move |message| !running(message)).chain(messages.iter().filter(running))
+    messages.iter().enumerate().filter(move |item| !running(item)).chain(messages.iter().enumerate().filter(running))
 }
 
 fn rule(cx: &Context<'_>) -> (View, View, View) {

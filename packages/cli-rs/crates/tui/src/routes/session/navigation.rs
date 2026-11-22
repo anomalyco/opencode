@@ -78,7 +78,7 @@ impl Inner {
             bind!(weak, |inner, tui| {
                 let Some(session) = inner.transcript.session() else { return };
                 let (_, top) = inner.transcript.scroll().scroll_position();
-                let anchors = inner.transcript.anchors();
+                let anchors = inner.transcript.anchors(tui);
                 let current = inner.navigation.borrow().clone();
                 let target = tui.data.read(|state| {
                     find_boundary(next, &anchors, state.messages(&session), top, current.as_deref(), user_only)
@@ -125,7 +125,7 @@ impl Inner {
             tui,
             bind!(self.this, |inner, tui| {
                 let Some(session) = inner.transcript.session() else { return };
-                let Some(&(_, y)) = inner.transcript.anchors().iter().find(|(message, _)| *message == id) else {
+                let Some(&(_, y)) = inner.transcript.anchors(tui).iter().find(|(message, _)| *message == id) else {
                     return;
                 };
                 let assistant = tui.data.read(|state| {

@@ -12,7 +12,7 @@ use opencode_api::generated::{
 use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
 use opencode_plugin::claim::ToolClaims;
 use opencode_store::location::{Catalog, Location};
-use opencode_store::{LoadMore, State};
+use opencode_store::{LoadMore, MessageKey, State};
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::ThemeMode;
 use opentui::input::MouseEventKind;
@@ -30,8 +30,11 @@ pub const BACKFILL_CHUNK: usize = 60;
 #[derive(Clone)]
 pub struct Transcript(Rc<Inner>);
 
+/// The row a tab keeps while the reader is away from the bottom. Its message is kept by ID: the session may be read
+/// again under new keys before the tab shows it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScrollAnchor {
+    pub message: String,
     pub row: RowKey,
     pub screen_y: f64,
 }
@@ -86,16 +89,15 @@ struct Inner {
     location: RefCell<Option<Location>>,
     specs: RefCell<Vec<Spec>>,
     weights: RefCell<Vec<usize>>,
-    /// Each visible message's position at the last render (`Context::index`).
-    positions: RefCell<HashMap<String, usize>>,
-    /// Each visible message's [`shape`] at the last render, by position.
-    shapes: RefCell<Vec<u64>>,
+    /// Each visible message's key and [`shape`] at the last render, by position.
+    shapes: RefCell<Vec<(MessageKey, u64)>>,
     /// The visible messages have no idle marker (`legacy`), at the last render.
     legacy: Cell<bool>,
     rows: RefCell<HashMap<RowKey, Row>>,
     /// The keys of the scroll box's children, in order.
     mounted: RefCell<Vec<RowKey>>,
-    refs: RefCell<HashMap<String, Vec<usize>>>,
+    /// The rows of each message, by index in the specs.
+    refs: RefCell<HashMap<MessageKey, Vec<usize>>>,
     start: RefCell<Start>,
     /// Where the mounted window ends, by row index, when it stops before the newest row
     /// (`visibleRowsEnd`): `session.first` mounts the head only.
@@ -214,11 +216,11 @@ impl Transcript {
             switched: {
                 let weak = this.clone();
                 Rc::new(move |message: &str| {
-                    if let Some(inner) = weak.upgrade()
-                        && let Some(tui) = inner.tui.upgrade()
-                    {
-                        inner.render(&tui, |shown| shown == message);
-                    }
+                    let Some(inner) = weak.upgrade() else { return };
+                    let Some(tui) = inner.tui.upgrade() else { return };
+                    let Some(session) = inner.session.borrow().clone() else { return };
+                    let key = tui.data.read(|state| state.transcript(&session)?.key(message));
+                    inner.render(&tui, |shown| Some(shown) == key);
                 })
             },
             reflowed: {
@@ -242,7 +244,6 @@ impl Transcript {
             location: RefCell::default(),
             specs: RefCell::default(),
             weights: RefCell::default(),
-            positions: RefCell::default(),
             shapes: RefCell::default(),
             legacy: Cell::new(true),
             rows: RefCell::default(),
@@ -290,7 +291,8 @@ impl Transcript {
         if !force && self.0.patch(tui, session, changes) {
             return;
         }
-        self.0.render(tui, |message| force || changes.message(session, message));
+        let changed: Vec<MessageKey> = tui.data.read(|state| changes.message_keys(state, session).collect());
+        self.0.render(tui, |message| force || changed.contains(&message));
     }
 
     pub fn reveal_older(&self, tui: &Tui) -> bool {
@@ -387,43 +389,59 @@ impl Transcript {
 
     /// Mounted rows with their message and content y, top to bottom (`anchors.messagePositions`
     /// before the per-message dedupe). Footers and token usage do not anchor.
-    pub fn anchors(&self) -> Vec<(String, f64)> {
+    pub fn anchors(&self, tui: &Tui) -> Vec<(String, f64)> {
         let mut out = Vec::new();
         let rows = self.0.rows.borrow();
         for key in self.0.mounted.borrow().iter() {
             let row = &rows[key];
             match (key, &row.body) {
                 (_, Body::Group(group)) => group.anchors(&mut out),
-                (RowKey::Message(id) | RowKey::Part(id, _), _) => out.push((id.clone(), row.wrapper.rect().screen_y)),
+                (RowKey::Message(message) | RowKey::Part(message, _), _) => {
+                    out.push((*message, row.wrapper.rect().screen_y))
+                }
                 _ => {}
             }
         }
         let origin = self.0.scroll.content_view().rect().screen_y;
-        out.iter_mut().for_each(|(_, y)| *y -= origin);
         out.sort_by(|a, b| a.1.total_cmp(&b.1));
-        out
+        let Some(session) = self.session() else { return Vec::new() };
+        tui.data.read(|state| {
+            let transcript = state.transcript(&session);
+            out.iter().filter_map(|(key, y)| Some((transcript?.by_key(*key)?.id().to_owned(), y - origin))).collect()
+        })
     }
 
     /// The row `saveScrollAnchor` keeps: the lowest one that starts at or above the view's top, or one
     /// row below it for a reply part or a group, else the first mounted row. Footers and token usage do not
     /// anchor.
-    pub fn anchor(&self) -> Option<ScrollAnchor> {
-        self.0.anchor()
+    pub fn anchor(&self, tui: &Tui) -> Option<ScrollAnchor> {
+        let (row, screen_y) = self.0.anchor()?;
+        let session = self.session()?;
+        let message =
+            tui.data.read(|state| Some(state.transcript(&session)?.by_key(row.message()?)?.id().to_owned()))?;
+        Some(ScrollAnchor { message, row, screen_y })
     }
 
-    pub fn row_y(&self, key: &RowKey) -> Option<f64> {
-        self.0.row_y(key)
+    /// The row of `anchor` in the messages shown now.
+    fn row(&self, tui: &Tui, anchor: &ScrollAnchor) -> Option<RowKey> {
+        let session = self.session()?;
+        tui.data.read(|state| state.transcript(&session)?.key(&anchor.message)).map(|key| anchor.row.with(key))
     }
 
-    /// Mounts [`BACKFILL_CHUNK`] rows on each side of `key` (`restoreScrollPosition`). Returns whether
+    pub fn row_y(&self, tui: &Tui, anchor: &ScrollAnchor) -> Option<f64> {
+        self.0.row_y(&self.row(tui, anchor)?)
+    }
+
+    /// Mounts [`BACKFILL_CHUNK`] rows on each side of the anchor's row (`restoreScrollPosition`). Returns whether
     /// the row exists.
-    pub fn mount_around(&self, tui: &Tui, key: &RowKey) -> bool {
+    pub fn mount_around(&self, tui: &Tui, anchor: &ScrollAnchor) -> bool {
         // Use the store's rows even if the next sync has yet to paint them.
         self.0.render(tui, |_| false);
+        let Some(key) = self.row(tui, anchor) else { return false };
         let window = {
             let specs = self.0.specs.borrow();
             let weights = self.0.weights.borrow();
-            specs.iter().position(|spec| spec.key() == *key).map(|index| {
+            specs.iter().position(|spec| spec.key() == key).map(|index| {
                 let start = grouping::rows_before(&weights, index, BACKFILL_CHUNK);
                 let end = grouping::rows_after(&weights, index, BACKFILL_CHUNK);
                 let start = if start == 0 { Start::Top } else { Start::Row(specs[start].key()) };
@@ -459,10 +477,11 @@ impl Transcript {
 }
 
 impl Inner {
-    fn anchor(&self) -> Option<ScrollAnchor> {
+    /// The row `saveScrollAnchor` keeps and its distance below the view's top.
+    fn anchor(&self) -> Option<(RowKey, f64)> {
         let (_, top) = self.scroll.scroll_position();
         let mut first = None;
-        let mut anchor: Option<ScrollAnchor> = None;
+        let mut anchor: Option<(RowKey, f64)> = None;
         for key in self.mounted.borrow().iter() {
             let inset = match key {
                 RowKey::Message(_) => 0.0,
@@ -470,19 +489,17 @@ impl Inner {
                 _ => continue,
             };
             let Some(y) = self.row_y(key) else { continue };
-            let item = ScrollAnchor { row: key.clone(), screen_y: y - top };
-            if item.screen_y <= inset && anchor.as_ref().is_none_or(|anchor| item.screen_y > anchor.screen_y) {
-                anchor = Some(item.clone());
+            let item = (*key, y - top);
+            if item.1 <= inset && anchor.is_none_or(|anchor| item.1 > anchor.1) {
+                anchor = Some(item);
             }
             first.get_or_insert(item);
         }
         anchor.or(first)
     }
 
+    /// The row's top in the content, while it is mounted and laid out. The rows map holds the mounted rows only.
     fn row_y(&self, key: &RowKey) -> Option<f64> {
-        if !self.mounted.borrow().contains(key) {
-            return None;
-        }
         let rect = self.rows.borrow().get(key)?.wrapper.rect();
         (rect.height > 0.0).then(|| rect.screen_y - self.scroll.content_view().rect().screen_y)
     }
@@ -562,8 +579,8 @@ impl Inner {
             if top >= f64::from((content - viewport).max(0.0)).floor() {
                 return;
             }
-            let Some(anchor) = inner.anchor() else { return };
-            let above = inner.mounted.borrow().iter().take_while(|key| **key != anchor.row).cloned().collect();
+            let Some((anchor, _)) = inner.anchor() else { return };
+            let above = inner.mounted.borrow().iter().take_while(|key| **key != anchor).copied().collect();
             *inner.pin.borrow_mut() = Some(Pin { height: content, frame, above: Some(above) });
         }))));
         let weak = self.this.clone();
@@ -622,11 +639,49 @@ impl Inner {
     fn viewport(&self) -> opencode_plugin::abi::v2::TranscriptView {
         let origin = self.scroll.content_view().rect().screen_y;
         let rows = self.rows.borrow();
+        let (tui, session) = (self.tui.upgrade(), self.session.borrow().clone());
+        let specs = self.specs.borrow();
+        // The rows leave the process by message and tool call ID; a group by its name, a queued compaction by its
+        // inbox ID.
+        let name = |state: &State, key: &RowKey| -> Option<(String, Option<String>)> {
+            let session = session.as_ref()?;
+            let lookup = Messages { transcript: state.transcript(session), visible: state.messages(session) };
+            match key {
+                RowKey::Group(id) => return Some((id.name(&lookup), None)),
+                RowKey::CompactionQueued(_) => {
+                    let id = specs.iter().find_map(|spec| match spec {
+                        Spec::CompactionQueued(id) if spec.key() == *key => Some(id.clone()),
+                        _ => None,
+                    });
+                    return id.map(|id| (id, None));
+                }
+                _ => {}
+            }
+            let message = lookup.get(key.message()?)?;
+            let tool = match (key, message) {
+                (RowKey::Part(_, part @ Part::Tool(_)), SessionMessageInfo::Assistant(assistant)) => {
+                    match part.resolve(assistant)? {
+                        SessionMessageAssistantContentItem::Tool(tool) => Some(tool.id.clone()),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            Some((message.id().to_owned(), tool))
+        };
+        let names: Vec<(String, Option<String>)> = match &tui {
+            Some(tui) => tui
+                .data
+                .read(|state| self.mounted.borrow().iter().map(|key| name(state, key).unwrap_or_default()).collect()),
+            None => Vec::new(),
+        };
+        drop(specs);
         let published: Vec<opencode_plugin::abi::v2::TranscriptRow> = self
             .mounted
             .borrow()
             .iter()
-            .filter_map(|key| {
+            .zip(names)
+            .filter_map(|(key, (message, part))| {
                 let row = rows.get(key)?;
                 let rect = row.wrapper.rect();
                 let kind = match &row.body {
@@ -636,15 +691,6 @@ impl Inner {
                     Body::Tool(_) | Body::Shell(_) => "tool",
                     Body::Group(_) => "group",
                     _ => "other",
-                };
-                let (message, part) = match key {
-                    RowKey::Part(id, Part::Tool(call)) => (id.clone(), Some(call.clone())),
-                    RowKey::Message(id)
-                    | RowKey::Part(id, _)
-                    | RowKey::Footer(id)
-                    | RowKey::TurnUsage(id)
-                    | RowKey::Group(id)
-                    | RowKey::CompactionQueued(id) => (id.clone(), None),
                 };
                 (rect.height > 0.0).then(|| opencode_plugin::abi::v2::TranscriptRow {
                     kind: kind.to_owned(),
@@ -662,15 +708,12 @@ impl Inner {
             self.above.borrow().as_ref().filter(|(at, from, _)| *at == revision && *from == start).map(|it| it.2);
         let above = cached.unwrap_or_else(|| {
             let specs = self.specs.borrow();
-            let above: HashSet<String> = specs[..self.window_start(&specs)]
+            // A group counts once, apart from its messages.
+            let above: HashSet<RowKey> = specs[..self.window_start(&specs)]
                 .iter()
                 .map(|spec| match spec.key() {
-                    RowKey::Message(id)
-                    | RowKey::Part(id, _)
-                    | RowKey::Footer(id)
-                    | RowKey::TurnUsage(id)
-                    | RowKey::Group(id)
-                    | RowKey::CompactionQueued(id) => id,
+                    RowKey::Part(key, _) | RowKey::Footer(key) | RowKey::TurnUsage(key) => RowKey::Message(key),
+                    key => key,
                 })
                 .collect();
             let above = above.len() as u32;
@@ -711,17 +754,18 @@ impl Inner {
         }
     }
 
-    fn render(&self, tui: &Tui, changed: impl Fn(&str) -> bool) {
+    fn render(&self, tui: &Tui, changed: impl Fn(MessageKey) -> bool) {
         let Some(session) = self.session.borrow().clone() else { return };
         let keys = Keys::read(tui);
         let stops = tui.data.read(|state| {
             let visible = Visible::of(state, &session);
-            let messages = visible.messages;
+            let (messages, lookup) = (visible.messages, visible.lookup);
             // Queued prompts belong to the dock rather than the transcript.
-            let queued: HashSet<&str> = crate::routes::session::queued::ids(state, &session).collect();
-            let mut rows = reduce(messages, self.view.get().turn_tokens.is_some());
-            rows.retain(|spec| !matches!(spec, Spec::Message(id) if queued.contains(id.as_str())));
-            let mut specs = grouping::project(rows, messages, self.groups.verbosity.get());
+            let queued: HashSet<MessageKey> =
+                crate::routes::session::queued::ids(state, &session).filter_map(|id| lookup.key(id)).collect();
+            let mut rows = reduce(lookup, self.view.get().turn_tokens.is_some());
+            rows.retain(|spec| !matches!(spec, Spec::Message(key) if queued.contains(key)));
+            let mut specs = grouping::project(rows, lookup, self.groups.verbosity.get());
             let blocked: HashSet<&str> = state
                 .permissions(&session)
                 .unwrap_or_default()
@@ -729,17 +773,17 @@ impl Inner {
                 .filter_map(|request| request.source.as_ref().filter(|source| source.r#type == "tool"))
                 .map(|source| source.id.as_str())
                 .collect();
-            grouping::partition_pending(&mut specs, &blocked);
+            grouping::partition_pending(&mut specs, &blocked, lookup);
             // Compactions waiting in the inbox go last (`createSessionRows`).
             specs.extend(state.pending(&session).iter().filter_map(|item| match item {
                 SessionInboxInfo::Compaction(compaction) => Some(Spec::CompactionQueued(compaction.id.0.clone())),
                 _ => None,
             }));
-            self.remember(messages);
-            let positions = self.positions.borrow();
+            self.remember(lookup);
             let paint = self.paint.borrow().clone();
-            let cx = self.context(tui, state, &visible, &keys, &positions, &paint);
-            *self.weights.borrow_mut() = specs.iter().map(|spec| self.groups.weight(spec, cx.hide_thinking)).collect();
+            let cx = self.context(tui, state, &visible, &keys, &paint);
+            *self.weights.borrow_mut() =
+                specs.iter().map(|spec| self.groups.weight(spec, cx.hide_thinking, &lookup)).collect();
             self.mount(&cx, &specs, changed);
             *self.specs.borrow_mut() = specs;
             self.specs_revision.set(self.specs_revision.get() + 1);
@@ -760,23 +804,21 @@ impl Inner {
         let keys = Keys::read(tui);
         tui.data.read(|state| {
             let visible = Visible::of(state, session);
-            let messages = visible.messages;
-            let positions = self.positions.borrow();
+            let lookup = visible.lookup;
             let shapes = self.shapes.borrow();
-            let same = positions.len() == messages.len()
-                && changes.messages_of(state, session).all(|id| {
-                    positions.get(id).is_some_and(|&index| {
-                        messages.get(index).map(shape).is_some_and(|shape| shapes.get(index) == Some(&shape))
-                    })
+            // Each changed message is where the last render saw it, in the same shape.
+            let same = shapes.len() == visible.messages.len()
+                && changes.message_keys(state, session).all(|key| {
+                    lookup.position(key).is_some_and(|at| shapes[at] == (key, shape(&visible.messages[at])))
                 });
             if !same {
                 return false;
             }
             let paint = self.paint.borrow().clone();
-            let cx = self.context(tui, state, &visible, &keys, &positions, &paint);
+            let cx = self.context(tui, state, &visible, &keys, &paint);
             let (specs, rows, refs) = (self.specs.borrow(), self.rows.borrow(), self.refs.borrow());
             let mut stale: Vec<usize> =
-                changes.messages_of(state, session).filter_map(|id| refs.get(id)).flatten().copied().collect();
+                changes.message_keys(state, session).filter_map(|key| refs.get(&key)).flatten().copied().collect();
             stale.sort_unstable();
             stale.dedup();
             for index in stale {
@@ -800,10 +842,7 @@ impl Inner {
         let keys = Keys::read(tui);
         tui.data.read(|state| {
             let visible = Visible::of(state, &session);
-            // A stored position can refer to a message removed between renders.
-            let positions =
-                visible.messages.iter().enumerate().map(|(index, message)| (message.id().to_owned(), index)).collect();
-            let cx = self.context(tui, state, &visible, &keys, &positions, &paint);
+            let cx = self.context(tui, state, &visible, &keys, &paint);
             let specs = self.specs.borrow();
             let rows = self.rows.borrow();
             for spec in specs.iter() {
@@ -816,23 +855,11 @@ impl Inner {
         });
     }
 
-    fn remember(&self, messages: &[SessionMessageInfo]) {
-        let mut positions = self.positions.borrow_mut();
-        for (index, message) in messages.iter().enumerate() {
-            match positions.get_mut(message.id()) {
-                Some(position) => *position = index,
-                None => {
-                    positions.insert(message.id().to_owned(), index);
-                }
-            }
-        }
-        if positions.len() > messages.len() {
-            positions.retain(|id, index| messages.get(*index).is_some_and(|message| message.id() == id));
-        }
+    fn remember(&self, messages: Messages<'_>) {
         let mut shapes = self.shapes.borrow_mut();
         shapes.clear();
-        shapes.extend(messages.iter().map(shape));
-        self.legacy.set(legacy(messages));
+        shapes.extend(messages.visible.iter().enumerate().map(|(at, message)| (messages.key_at(at), shape(message))));
+        self.legacy.set(legacy(messages.visible));
     }
 
     /// The background hint and the revert banner after the rows.
@@ -852,7 +879,6 @@ impl Inner {
         state: &'a State,
         visible: &Visible<'a>,
         keys: &'a Keys,
-        index: &'a HashMap<String, usize>,
         paint: &'a Paint,
     ) -> Context<'a> {
         let view = self.view.get();
@@ -889,7 +915,7 @@ impl Inner {
             width: tui.app.size().0,
             content: self.content_width(tui),
             session_agent: info.and_then(|info| info.agent.as_ref()).map(|agent| agent.as_str()),
-            index,
+            lookup: visible.lookup,
             messages: visible.messages,
             legacy: self.legacy.get(),
         }
@@ -926,12 +952,12 @@ impl Inner {
         );
     }
 
-    fn mount(&self, cx: &Context<'_>, specs: &[Spec], changed: impl Fn(&str) -> bool) {
+    fn mount(&self, cx: &Context<'_>, specs: &[Spec], changed: impl Fn(MessageKey) -> bool) {
         let start = self.window_start(specs);
         let end = window_end(self.end.get(), start, specs.len());
         let specs = &specs[..end];
         let keys: Vec<RowKey> = specs[start..].iter().map(Spec::key).collect();
-        let wanted: HashSet<&RowKey> = keys.iter().collect();
+        let wanted: HashSet<RowKey> = keys.iter().copied().collect();
         let mut rows = self.rows.borrow_mut();
         let mut mounted = self.mounted.borrow_mut();
         rows.retain(|key, row| {
@@ -957,23 +983,24 @@ impl Inner {
         refs.values_mut().for_each(Vec::clear);
         for (index, (spec, key)) in specs[start..].iter().zip(&keys).enumerate() {
             let index = start + index;
-            let messages = spec.messages();
-            for id in &messages {
-                match refs.get_mut(*id) {
+            let mut touched = false;
+            spec.messages(&mut |message| {
+                match refs.get_mut(&message) {
                     Some(indices) if indices.last() == Some(&index) => {}
                     Some(indices) => indices.push(index),
                     None => {
-                        refs.insert((*id).to_owned(), vec![index]);
+                        refs.insert(message, vec![index]);
                     }
                 }
-            }
+                touched = touched || changed(message);
+            });
             let fresh = !rows.contains_key(key);
-            let row = rows.entry(key.clone()).or_insert_with(|| {
+            let row = rows.entry(*key).or_insert_with(|| {
                 let row = Row::new(cx, spec);
-                self.hold(&row.wrapper, key.clone());
+                self.hold(&row.wrapper, *key);
                 row
             });
-            if fresh || messages.into_iter().any(&changed) {
+            if fresh || touched {
                 row.update(cx, spec);
             }
         }
@@ -986,7 +1013,7 @@ impl Inner {
                 mounted.remove(position);
             }
             self.scroll.insert(index, &rows[key].wrapper);
-            mounted.insert(index, key.clone());
+            mounted.insert(index, *key);
         }
     }
 
@@ -1154,6 +1181,7 @@ struct Visible<'a> {
     all: &'a [SessionMessageInfo],
     /// Visible messages before the revert boundary.
     messages: &'a [SessionMessageInfo],
+    lookup: Messages<'a>,
 }
 
 impl<'a> Visible<'a> {
@@ -1167,7 +1195,56 @@ impl<'a> Visible<'a> {
             }
             None => all,
         };
-        Self { session, info, all, messages }
+        let lookup = Messages { transcript: state.transcript(session), visible: messages };
+        Self { session, info, all, messages, lookup }
+    }
+}
+
+/// The visible messages, found by key.
+#[derive(Clone, Copy)]
+pub struct Messages<'a> {
+    /// `None` for messages outside the store, whose keys are their positions.
+    transcript: Option<&'a opencode_store::Transcript>,
+    pub visible: &'a [SessionMessageInfo],
+}
+
+impl<'a> Messages<'a> {
+    /// Messages outside the store, keyed by their positions.
+    pub fn of(visible: &'a [SessionMessageInfo]) -> Self {
+        Self { transcript: None, visible }
+    }
+
+    pub fn key_at(&self, position: usize) -> MessageKey {
+        self.transcript.map_or(MessageKey(position as u32), |transcript| transcript.keys()[position])
+    }
+
+    /// Where the message of `key` is, while it is visible.
+    pub fn position(&self, key: MessageKey) -> Option<usize> {
+        let position = match self.transcript {
+            Some(transcript) => transcript.position(key)?,
+            None => key.0 as usize,
+        };
+        (position < self.visible.len()).then_some(position)
+    }
+
+    pub fn get(&self, key: MessageKey) -> Option<&'a SessionMessageInfo> {
+        self.position(key).map(|position| &self.visible[position])
+    }
+
+    pub fn assistant(&self, key: MessageKey) -> Option<&'a SessionMessageAssistant> {
+        match self.get(key)? {
+            SessionMessageInfo::Assistant(assistant) => Some(assistant),
+            _ => None,
+        }
+    }
+
+    /// The key of visible message `id`.
+    pub fn key(&self, id: &str) -> Option<MessageKey> {
+        let key = match self.transcript {
+            Some(transcript) => transcript.key(id)?,
+            None => MessageKey(self.visible.iter().position(|message| message.id() == id)? as u32),
+        };
+        self.position(key).map(|_| key)
     }
 }
 
@@ -1261,9 +1338,9 @@ pub struct Context<'a> {
     pub session_agent: Option<&'a str>,
     pub agents: Vec<&'a AgentInfo>,
     pub models: &'a [ModelInfo],
-    /// The visible messages, oldest first, and each one's position.
+    /// The visible messages, oldest first.
     pub messages: &'a [SessionMessageInfo],
-    pub index: &'a HashMap<String, usize>,
+    pub lookup: Messages<'a>,
     pub legacy: bool,
 }
 
@@ -1272,15 +1349,17 @@ impl Context<'_> {
         usize::from(self.content)
     }
 
-    pub fn message(&self, id: &str) -> Option<&SessionMessageInfo> {
-        self.index.get(id).map(|&index| &self.messages[index])
+    pub fn message(&self, key: MessageKey) -> Option<&SessionMessageInfo> {
+        self.lookup.get(key)
     }
 
-    pub fn assistant(&self, id: &str) -> Option<&SessionMessageAssistant> {
-        match self.message(id)? {
-            SessionMessageInfo::Assistant(assistant) => Some(assistant),
-            _ => None,
-        }
+    pub fn assistant(&self, key: MessageKey) -> Option<&SessionMessageAssistant> {
+        self.lookup.assistant(key)
+    }
+
+    /// Where visible message `id` is.
+    pub fn index_of(&self, id: &str) -> Option<usize> {
+        self.lookup.key(id).and_then(|key| self.lookup.position(key))
     }
 
     /// `local.agent.color`: the agent's own color, else the categorical color at its position among
@@ -1310,21 +1389,23 @@ impl Context<'_> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// A part of an assistant message: a text or a reasoning by its ordinal among its kind, a tool by its place in the
+/// content.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
     Text(usize),
     Reasoning(usize),
-    Tool(String),
+    Tool(usize),
 }
 
 impl Part {
     pub fn resolve<'a>(&self, message: &'a SessionMessageAssistant) -> Option<&'a SessionMessageAssistantContentItem> {
         let (want_text, ordinal) = match self {
-            Self::Tool(id) => {
+            Self::Tool(index) => {
                 return message
                     .content
-                    .iter()
-                    .find(|item| matches!(item, SessionMessageAssistantContentItem::Tool(tool) if tool.id == *id));
+                    .get(*index)
+                    .filter(|item| matches!(item, SessionMessageAssistantContentItem::Tool(_)));
             }
             Self::Text(ordinal) => (true, *ordinal),
             Self::Reasoning(ordinal) => (false, *ordinal),
@@ -1343,14 +1424,14 @@ impl Part {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Spec {
-    Message(String),
+    Message(MessageKey),
     Part {
-        message: String,
+        message: MessageKey,
         part: Part,
     },
-    Footer(String),
+    Footer(MessageKey),
     TurnUsage {
-        messages: Vec<String>,
+        messages: Vec<MessageKey>,
         previous: Option<footer::CacheUsage>,
     },
     Group(grouping::Group),
@@ -1358,57 +1439,94 @@ pub enum Spec {
     CompactionQueued(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// Which row a widget shows: the same key keeps the widget.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RowKey {
-    Message(String),
-    Part(String, Part),
-    Footer(String),
-    TurnUsage(String),
-    Group(String),
-    CompactionQueued(String),
+    Message(MessageKey),
+    Part(MessageKey, Part),
+    Footer(MessageKey),
+    TurnUsage(MessageKey),
+    Group(grouping::GroupId),
+    /// A queued compaction, by a hash of its inbox ID.
+    CompactionQueued(u64),
+}
+
+impl RowKey {
+    /// The message the row shows, or starts with.
+    fn message(self) -> Option<MessageKey> {
+        match self {
+            Self::Message(key) | Self::Part(key, _) | Self::Footer(key) | Self::TurnUsage(key) => Some(key),
+            Self::Group(id) => Some(id.message),
+            Self::CompactionQueued(_) => None,
+        }
+    }
+
+    /// The same row of the message `key`.
+    fn with(self, key: MessageKey) -> Self {
+        match self {
+            Self::Message(_) => Self::Message(key),
+            Self::Part(_, part) => Self::Part(key, part),
+            Self::Footer(_) => Self::Footer(key),
+            Self::TurnUsage(_) => Self::TurnUsage(key),
+            Self::Group(id) => Self::Group(grouping::GroupId { message: key, ..id }),
+            Self::CompactionQueued(_) => self,
+        }
+    }
 }
 
 impl Spec {
     fn key(&self) -> RowKey {
         match self {
-            Self::Message(id) => RowKey::Message(id.clone()),
-            Self::Part { message, part } => RowKey::Part(message.clone(), part.clone()),
-            Self::Footer(id) => RowKey::Footer(id.clone()),
-            Self::TurnUsage { messages, .. } => RowKey::TurnUsage(messages.first().cloned().unwrap_or_default()),
-            Self::Group(group) => RowKey::Group(group.id(0).map(|id| id.to_string()).unwrap_or_default()),
-            Self::CompactionQueued(id) => RowKey::CompactionQueued(id.clone()),
+            Self::Message(key) => RowKey::Message(*key),
+            Self::Part { message, part } => RowKey::Part(*message, *part),
+            Self::Footer(key) => RowKey::Footer(*key),
+            Self::TurnUsage { messages, .. } => RowKey::TurnUsage(messages.first().copied().unwrap_or(NO_MESSAGE)),
+            Self::Group(group) => RowKey::Group(group.id(0).unwrap_or(grouping::GroupId {
+                message: NO_MESSAGE,
+                part: None,
+                kind: group.kind,
+                level: 0,
+            })),
+            Self::CompactionQueued(id) => {
+                let mut hasher = DefaultHasher::new();
+                id.hash(&mut hasher);
+                RowKey::CompactionQueued(hasher.finish())
+            }
         }
     }
 
     /// The messages whose change re-renders the row: a turn's usage follows its last step, and a
     /// group every row in it.
-    fn messages(&self) -> Vec<&str> {
+    fn messages(&self, each: &mut dyn FnMut(MessageKey)) {
         match self {
-            Self::Message(id) | Self::Footer(id) | Self::Part { message: id, .. } | Self::CompactionQueued(id) => {
-                vec![id]
-            }
-            Self::TurnUsage { messages, .. } => messages.last().map(String::as_str).into_iter().collect(),
-            Self::Group(group) => group.entries().into_iter().flat_map(|spec| spec.messages()).collect(),
+            Self::Message(key) | Self::Footer(key) | Self::Part { message: key, .. } => each(*key),
+            Self::TurnUsage { messages, .. } => messages.last().copied().into_iter().for_each(each),
+            Self::Group(group) => group.entries().into_iter().for_each(|spec| spec.messages(each)),
+            // No message: it changes with every row.
+            Self::CompactionQueued(_) => each(NO_MESSAGE),
         }
     }
 }
 
+/// The key of no message, for a row that has none.
+pub const NO_MESSAGE: MessageKey = MessageKey(u32::MAX);
+
 /// `reduceSessionRows` without grouping and pending inputs.
-pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
-    let legacy = legacy(messages);
+pub fn reduce(messages: Messages<'_>, turn_tokens: bool) -> Vec<Spec> {
+    let legacy = legacy(messages.visible);
     let mut rows = Vec::new();
-    let mut steps: Vec<&SessionMessageAssistant> = Vec::new();
+    let mut steps: Vec<(&SessionMessageAssistant, MessageKey)> = Vec::new();
     let mut previous_turn: Option<footer::CacheUsage> = None;
     let flush = |rows: &mut Vec<Spec>,
-                 steps: &mut Vec<&SessionMessageAssistant>,
+                 steps: &mut Vec<(&SessionMessageAssistant, MessageKey)>,
                  previous_turn: &mut Option<footer::CacheUsage>| {
         if !turn_tokens {
             return;
         }
-        let used: Vec<_> = steps.drain(..).filter(|step| footer::total(step) > 0.0).collect();
-        let Some(last) = used.last() else { return };
+        let used: Vec<_> = steps.drain(..).filter(|(step, _)| footer::total(step) > 0.0).collect();
+        let Some((last, _)) = used.last() else { return };
         rows.push(Spec::TurnUsage {
-            messages: used.iter().map(|step| step.id.0.clone()).collect(),
+            messages: used.iter().map(|(_, key)| *key).collect(),
             previous: previous_turn.clone(),
         });
         *previous_turn = Some(footer::CacheUsage::of(last));
@@ -1416,14 +1534,15 @@ pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
     // An execution failure that repeats the error of the turn's last step or compaction is
     // already on screen.
     let mut shown_error: Option<(String, String)> = None;
-    for message in compaction::running_last(messages) {
+    for (position, message) in compaction::running_last(messages.visible) {
+        let key = messages.key_at(position);
         let assistant = match message {
             SessionMessageInfo::Assistant(assistant) => assistant,
             SessionMessageInfo::Idle(idle) => {
                 if let Some(error) = &idle.error
                     && shown_error.as_ref() != Some(&(error.r#type.clone(), error.message.clone()))
                 {
-                    rows.push(Spec::Message(idle.id.0.clone()));
+                    rows.push(Spec::Message(key));
                 }
                 shown_error = None;
                 flush(&mut rows, &mut steps, &mut previous_turn);
@@ -1445,19 +1564,19 @@ pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
                     }
                     _ => {}
                 }
-                rows.push(Spec::Message(message.id().to_owned()));
+                rows.push(Spec::Message(key));
                 continue;
             }
             SessionMessageInfo::Unknown(_) => continue,
-            other => {
-                rows.push(Spec::Message(other.id().to_owned()));
+            _ => {
+                rows.push(Spec::Message(key));
                 continue;
             }
         };
-        steps.push(assistant);
+        steps.push((assistant, key));
         shown_error = assistant.error.as_ref().map(|error| (error.r#type.clone(), error.message.clone()));
         let (mut texts, mut reasonings) = (0, 0);
-        for item in &assistant.content {
+        for (index, item) in assistant.content.iter().enumerate() {
             let part = match item {
                 SessionMessageAssistantContentItem::Text(text) => {
                     texts += 1;
@@ -1473,14 +1592,14 @@ pub fn reduce(messages: &[SessionMessageInfo], turn_tokens: bool) -> Vec<Spec> {
                     }
                     Part::Reasoning(reasonings - 1)
                 }
-                SessionMessageAssistantContentItem::Tool(tool) => Part::Tool(tool.id.clone()),
+                SessionMessageAssistantContentItem::Tool(_) => Part::Tool(index),
                 SessionMessageAssistantContentItem::Unknown(_) => continue,
             };
-            rows.push(Spec::Part { message: assistant.id.0.clone(), part });
+            rows.push(Spec::Part { message: key, part });
         }
         let terminal = terminal(assistant);
         if terminal || assistant.retry.is_some() {
-            rows.push(Spec::Footer(assistant.id.0.clone()));
+            rows.push(Spec::Footer(key));
         }
         if terminal && legacy {
             flush(&mut rows, &mut steps, &mut previous_turn);
@@ -1550,53 +1669,53 @@ impl Row {
         match (&self.body, spec) {
             (Body::Group(view), Spec::Group(group)) => view.update(cx, group, group.completed),
             (Body::User(view), Spec::Message(id)) => {
-                if let Some(SessionMessageInfo::User(message)) = cx.message(id) {
+                if let Some(SessionMessageInfo::User(message)) = cx.message(*id) {
                     view.update(cx, message);
                 }
             }
             (Body::Notice(view), Spec::Message(id)) => {
-                if let Some(message) = cx.message(id) {
+                if let Some(message) = cx.message(*id) {
                     view.update(cx, message);
                 }
             }
             (Body::Shell(view), Spec::Message(id)) => {
-                if let Some(SessionMessageInfo::Shell(message)) = cx.message(id) {
+                if let Some(SessionMessageInfo::Shell(message)) = cx.message(*id) {
                     view.update(cx, message);
                 }
             }
             (Body::Compaction(view), Spec::Message(id)) => {
-                if let Some(SessionMessageInfo::Compaction(message)) = cx.message(id) {
+                if let Some(SessionMessageInfo::Compaction(message)) = cx.message(*id) {
                     view.update(cx, message);
                 }
             }
             (Body::Error(view), Spec::Message(id)) => {
-                if let Some(message) = cx.message(id) {
+                if let Some(message) = cx.message(*id) {
                     view.update(message);
                 }
             }
             (Body::Text(view), Spec::Part { message, part }) => {
-                if let Some(assistant) = cx.assistant(message)
+                if let Some(assistant) = cx.assistant(*message)
                     && let Some(SessionMessageAssistantContentItem::Text(text)) = part.resolve(assistant)
                 {
                     view.update(assistant, text, cx.conceal, cx.content);
                 }
             }
             (Body::Reasoning(view), Spec::Part { message, part }) => {
-                if let Some(assistant) = cx.assistant(message)
+                if let Some(assistant) = cx.assistant(*message)
                     && let Some(SessionMessageAssistantContentItem::Reasoning(reasoning)) = part.resolve(assistant)
                 {
                     view.update(cx, assistant, reasoning);
                 }
             }
             (Body::Tool(view), Spec::Part { message, part }) => {
-                if let Some(assistant) = cx.assistant(message)
+                if let Some(assistant) = cx.assistant(*message)
                     && let Some(SessionMessageAssistantContentItem::Tool(tool)) = part.resolve(assistant)
                 {
                     view.update(cx, assistant, tool);
                 }
             }
             (Body::Footer(view), Spec::Footer(id)) => {
-                if let Some(assistant) = cx.assistant(id) {
+                if let Some(assistant) = cx.assistant(*id) {
                     view.update(cx, assistant);
                 }
             }
@@ -1611,7 +1730,7 @@ impl Row {
 impl Body {
     fn new(cx: &Context<'_>, spec: &Spec) -> Self {
         match spec {
-            Spec::Message(id) => match cx.message(id) {
+            Spec::Message(id) => match cx.message(*id) {
                 Some(SessionMessageInfo::User(_)) => Body::User(user::User::new(cx)),
                 Some(SessionMessageInfo::Shell(_)) => Body::Shell(shell::Shell::new(cx)),
                 Some(SessionMessageInfo::Compaction(_)) => Body::Compaction(compaction::Compaction::new(cx)),
@@ -1693,22 +1812,23 @@ mod tests {
             assistant("msg_3", json!([{ "type": "text", "text": "done" }]), Some("stop")),
             { "id": "msg_4", "type": "synthetic", "text": "hidden", "time": { "created": 1 } },
         ]));
-        let part = |message: &str, part| Spec::Part { message: message.into(), part };
+        // Messages outside the store are keyed by their positions.
+        let part = |message, part| Spec::Part { message: MessageKey(message), part };
         assert_eq!(
-            reduce(&list, false),
+            reduce(Messages::of(&list), false),
             vec![
-                Spec::Message("msg_1".into()),
-                part("msg_2", Part::Reasoning(1)),
-                part("msg_2", Part::Text(0)),
-                part("msg_2", Part::Tool("call_1".into())),
-                part("msg_3", Part::Text(0)),
-                Spec::Footer("msg_3".into()),
+                Spec::Message(MessageKey(0)),
+                part(1, Part::Reasoning(1)),
+                part(1, Part::Text(0)),
+                part(1, Part::Tool(3)),
+                part(2, Part::Text(0)),
+                Spec::Footer(MessageKey(2)),
             ]
         );
-        let usage = reduce(&list, true);
+        let usage = reduce(Messages::of(&list), true);
         assert_eq!(
             usage.last(),
-            Some(&Spec::TurnUsage { messages: vec!["msg_2".into(), "msg_3".into()], previous: None })
+            Some(&Spec::TurnUsage { messages: vec![MessageKey(1), MessageKey(2)], previous: None })
         );
     }
 
@@ -1754,16 +1874,16 @@ mod tests {
 
     #[test]
     fn the_window_follows_the_tail_until_pinned() {
-        let specs: Vec<Spec> = (0..100).map(|index| Spec::Message(format!("msg_{index:03}"))).collect();
+        let specs: Vec<Spec> = (0..100).map(|index| Spec::Message(MessageKey(index))).collect();
         let weights = vec![1; 100];
         assert_eq!(window_start(&Start::Tail, &specs, &weights), 100 - TAIL_ROWS);
         assert_eq!(window_start(&Start::Top, &specs, &weights), 0);
-        let pinned = Start::Row(RowKey::Message("msg_010".into()));
+        let pinned = Start::Row(RowKey::Message(MessageKey(10)));
         assert_eq!(window_start(&pinned, &specs, &weights), 10);
         // A pinned row inside the tail still mounts the whole tail; a vanished one falls back.
-        let late = Start::Row(RowKey::Message("msg_090".into()));
+        let late = Start::Row(RowKey::Message(MessageKey(90)));
         assert_eq!(window_start(&late, &specs, &weights), 100 - TAIL_ROWS);
-        let gone = Start::Row(RowKey::Message("msg_x".into()));
+        let gone = Start::Row(RowKey::Message(MessageKey(1000)));
         assert_eq!(window_start(&gone, &specs, &weights), 100 - TAIL_ROWS);
         assert_eq!(window_start(&Start::Tail, &specs[..5], &weights[..5]), 0);
         let mut heavy = weights.clone();
