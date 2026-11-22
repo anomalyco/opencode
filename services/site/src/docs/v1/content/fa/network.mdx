@@ -12,13 +12,13 @@ description: پراکسی‌ها و گواهی‌های سفارشی را تنظ
 برای تنظیم پراکسی در OpenCode، متغیرهای زیر را در محیط اجرا مقداردهی کنید.
 
 ```bash
-# HTTPS proxy (recommended)
+# پراکسی HTTPS (پیشنهادی)
 export HTTPS_PROXY=https://proxy.example.com:8080
 
-# HTTP proxy (if HTTPS not available)
+# پراکسی HTTP (اگر HTTPS در دسترس نیست)
 export HTTP_PROXY=http://proxy.example.com:8080
 
-# Bypass proxy for local server (required)
+# برای اتصال به سرور محلی از پراکسی استفاده نکنید (ضروری)
 export NO_PROXY=localhost,127.0.0.1
 ```
 

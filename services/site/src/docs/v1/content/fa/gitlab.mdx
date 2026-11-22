@@ -108,20 +108,20 @@ OpenCode در خط لولهٔ معمولی GitLab کار می‌کند. می‌�
       - echo "Running OpenCode"
       - |
         opencode run "
-        You are an AI assistant helping with GitLab operations.
+        شما دستیار هوش مصنوعی برای انجام کارهای GitLab هستید.
 
-        Context: $AI_FLOW_CONTEXT
-        Task: $AI_FLOW_INPUT
-        Event: $AI_FLOW_EVENT
+        زمینه: $AI_FLOW_CONTEXT
+        وظیفه: $AI_FLOW_INPUT
+        رویداد: $AI_FLOW_EVENT
 
-        Please execute the requested task using the available GitLab tools.
-        Be thorough in your analysis and provide clear explanations.
+        وظیفهٔ درخواستی را با ابزارهای در دسترس GitLab انجام دهید.
+        موضوع را کامل بررسی کنید و توضیح روشنی بدهید.
 
         <important>
-        Please use the glab CLI to access data from GitLab. The glab CLI has already been authenticated. You can run the corresponding commands.
+        برای دسترسی به داده‌های GitLab از ابزار خط فرمان glab استفاده کنید. احراز هویت glab از قبل انجام شده و می‌توانید دستورهای مربوط را اجرا کنید.
 
-        If you are asked to summarize an MR or issue or asked to provide more information then please post back a note to the MR/Issue so that the user can see it.
-        You don't need to commit or push up changes, those will be done automatically based on the file changes you make.
+        اگر از شما خواسته شد یک درخواست ادغام یا ایشو را خلاصه کنید یا اطلاعات بیشتری بدهید، پاسخ را به‌صورت یادداشت در همان درخواست ادغام یا ایشو بگذارید تا کاربر بتواند آن را ببیند.
+        خودتان نیازی به کامیت یا پوش ندارید. تغییراتی که در فایل‌ها ایجاد می‌کنید به‌طور خودکار کامیت و پوش می‌شوند.
         </important>
         "
       - echo "Checking for git changes and pushing if any exist"
