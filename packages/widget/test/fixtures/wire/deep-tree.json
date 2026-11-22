@@ -1,0 +1,59 @@
+{
+  "name": "deep-tree",
+  "source": "function view(state, data) {\n  return ui.column([ui.row({ key: \"a\" }, [ui.stack([ui.card({ onPress: (s) => s }, [ui.row([ui.button(\"deep\", { onPress: (s) => s })])])])]), ui.row([[ui.column({ key: \"b\" }, [ui.button(\"in b\")])]])])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "view": {
+    "type": "column",
+    "children": [
+      {
+        "type": "row",
+        "children": [
+          {
+            "type": "stack",
+            "children": [
+              {
+                "type": "card",
+                "id": "0/:a/0/0",
+                "children": [
+                  {
+                    "type": "row",
+                    "children": [
+                      {
+                        "type": "button",
+                        "label": "deep",
+                        "id": "0/:a/0/0/0/0"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "row",
+        "children": [
+          {
+            "type": "column",
+            "children": [
+              {
+                "type": "button",
+                "label": "in b",
+                "id": "0/1/:b/0"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/:a/0/0": "press",
+    "0/:a/0/0/0/0": "press"
+  },
+  "canvases": {}
+}

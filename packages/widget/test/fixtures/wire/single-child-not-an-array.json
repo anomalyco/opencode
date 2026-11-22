@@ -1,0 +1,22 @@
+{
+  "name": "single-child-not-an-array",
+  "source": "function view(state, data) {\n  return ui.card({ onPress: (s) => s }, ui.text(\"only\"))\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "view": {
+    "type": "card",
+    "id": "0",
+    "children": [
+      {
+        "type": "text",
+        "text": "only"
+      }
+    ]
+  },
+  "handlers": {
+    "0": "press"
+  },
+  "canvases": {}
+}

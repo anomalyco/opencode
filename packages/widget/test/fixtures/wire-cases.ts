@@ -1,0 +1,82 @@
+// Edge cases of view tree building (ids, keys, flattening, stripping) for the wire conformance fixtures in
+// `wire/`. Each is a widget template source; `data` is its input (default null).
+const view = (expression: string) => `function view(state, data) {\n  return ${expression}\n}`
+
+export const cases: ReadonlyArray<{ readonly name: string; readonly source: string; readonly data?: unknown }> = [
+  {
+    // Holes keep their index; nested arrays get index.index; deeper nesting index.index.index.
+    name: "holes-and-nested-arrays",
+    source: view(
+      `ui.column({ gap: 1 }, [ui.text("a"), false, null, [ui.button("b", { onPress: (s) => s }), [ui.text("c"), ui.input("", { onChange: (s) => s })]], undefined, ui.button("d")])`,
+    ),
+  },
+  {
+    name: "single-child-not-an-array",
+    source: view(`ui.card({ onPress: (s) => s }, ui.text("only"))`),
+  },
+  {
+    // A keyed root; repeated keys get ~2, ~3; a key that looks like a repeat suffix collides with one (the later
+    // sibling wins the handler); a keyed leaf counts toward repeats; numbers and odd strings as keys (URI-encoded).
+    name: "keys-and-repeats",
+    source: view(
+      `ui.row({ key: "root" }, [ui.button("x", { key: "k", onPress: (s) => s }), ui.text("kk", { key: "k" }), ui.button("y", { key: "k", onPress: (s) => s }), ui.button("z", { key: "k~2", onPress: (s) => s }), ui.text("t", { key: 3 }), ui.card({ key: "a/b c", onPress: (s) => s }, [ui.button("in")]), ui.button("n", { key: 7 })])`,
+    ),
+  },
+  {
+    name: "keyed-leaf-root",
+    source: view(`ui.text("keyed", { key: "k" })`),
+  },
+  {
+    name: "plain-leaf-root",
+    source: view(`ui.text("alone")`),
+  },
+  {
+    // Props the prelude takes off (id, pointer, handlers), on leaves, controls and containers; undefined and null
+    // keys; strings and numbers among children.
+    name: "stray-props-and-null-keys",
+    source: view(
+      `ui.column({ id: "c", pointer: true }, [ui.text("s", { id: "mine", pointer: true, onPress: (s) => s, onChange: undefined }), ui.button("b", { id: "mine", pointer: true }), ui.text("n", { key: null }), ui.text("u", { key: undefined }), "loose", 7, ui.markdown("**m**"), ui.divider(), ui.image("i.png", { alt: "i" })])`,
+    ),
+  },
+  {
+    // Nodes built without `ui`: with handlers and a key, with a stray id, a card without a handler, a bare button.
+    name: "raw-nodes",
+    source: view(
+      `({ type: "column", children: [{ type: "button", label: "raw", onPress: (s) => s, key: "r" }, { type: "text", text: "t", id: "x" }, { type: "card", children: [{ type: "text", text: "in" }] }, { type: "card", onPress: (s) => s, children: [{ type: "text", text: "pressable" }] }, { type: "button", label: "plain" }] })`,
+    ),
+  },
+  {
+    // Canvases: a key only (an id, no input), a handler only (an id and pointer: true), both, a GPU canvas with a
+    // handler, a keyed canvas without a handler repeated; carousels with and without a handler.
+    name: "canvases-and-carousels",
+    source: view(
+      `ui.stack([ui.canvas({ key: "scene", height: 10 }), ui.canvas({ height: 10, onPointer: (s) => s }), ui.canvas({ key: "game", height: 10, onPointer: (s) => s, place: "fill" }), ui.canvas({ key: "gpu", wgsl: "fn shade(p: vec2f) -> vec4f { return vec4f(1.0); }", height: 10, onPointer: (s) => s }), ui.canvas({ key: "scene", height: 5 }), ui.carousel({}, [ui.text("p")]), ui.carousel({ index: 1, onChange: (s) => s }, [ui.text("q"), ui.text("r")])])`,
+    ),
+  },
+  {
+    // Every control type, with and without handlers.
+    name: "controls",
+    source: view(
+      `ui.column([ui.button("b"), ui.button("bh", { onPress: (s) => s, variant: "primary" }), ui.checkbox("c", true), ui.checkbox("ch", false, { onChange: (s) => s }), ui.slider({ value: 1, min: 0, max: 2 }), ui.slider({ value: 1, min: 0, max: 2, onChange: (s) => s }), ui.select(["a", "b"], { value: "a" }), ui.select(["a"], { multiple: true, onChange: (s) => s }), ui.input("v"), ui.input("w", { onChange: (s) => s, multiline: true }), ui.card({ selected: true }, [ui.text("no handler")]), ui.card({ onPress: (s) => s }, [ui.text("handler")])])`,
+    ),
+  },
+  {
+    // One node object used twice in one view: each place gets its own id.
+    name: "shared-node",
+    source: `function view() {\n  const go = ui.button("Go", { onPress: (s) => s })\n  return ui.column([go, ui.text("between"), go])\n}`,
+  },
+  {
+    // Containers inside containers, keyed and not, with handlers deep down.
+    name: "deep-tree",
+    source: view(
+      `ui.column([ui.row({ key: "a" }, [ui.stack([ui.card({ onPress: (s) => s }, [ui.row([ui.button("deep", { onPress: (s) => s })])])])]), ui.row([[ui.column({ key: "b" }, [ui.button("in b")])]])])`,
+    ),
+  },
+  {
+    // The wire benchmark's grid: 200 cards of six nodes.
+    name: "grid-200",
+    source: view(
+      `ui.column({ gap: 1 }, [ui.row({ wrap: true, gap: 1 }, Array.from({ length: 200 }, (_, i) => ui.card({ selected: i === 3, onPress: (s) => s }, [ui.row({ gap: 1 }, [ui.text("Item " + i, { style: "body" }), ui.text(String(i * 7), { tone: "muted" })]), ui.text("Note " + i, { style: "caption" }), ui.button("Go", { onPress: (s) => s })])))])`,
+    ),
+  },
+]
