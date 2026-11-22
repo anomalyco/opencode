@@ -8,6 +8,7 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { State } from "@opencode/core/state"
+import { CodeModeJob } from "@opencode/core/codemode/job"
 import { Tool } from "@opencode/core/tool"
 import type { Info } from "@opencode/schema/tool"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -638,6 +639,17 @@ describe("Tool", () => {
         expect(result.output).toEqual({ text: name })
       }
       expect((yield* snapshot.execute(call("fails")).pipe(Effect.flip)).message).toContain("boom")
+      // In a session drain it can move to the background, like an execute program, without execute's options.
+      const handoffs: Array<CodeModeJob.Options | undefined> = []
+      const handed = yield* snapshot
+        .execute(call("acme.tools.echo"))
+        .pipe(
+          Effect.provideService(CodeModeJob.Current, (context, run, options) =>
+            Effect.sync(() => handoffs.push(options)).pipe(Effect.andThen(run(context))),
+          ),
+        )
+      expect(handed.output).toEqual({ text: "acme.tools.echo" })
+      expect(handoffs).toEqual([undefined])
       // Not without execute, and not for a tool this request doesn't offer.
       const withoutExecute = new Map(
         snapshot.definitions.flatMap((definition) =>
