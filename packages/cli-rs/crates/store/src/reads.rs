@@ -132,23 +132,35 @@ impl<'a> Read<'a> {
 impl State {
     /// The key of `read`, adding its session record or location when missing.
     pub(crate) fn read_key(&mut self, read: Read) -> ReadKey {
-        let mut location = |location: &Location| match self.read_locations.get_index_of(location) {
-            Some(index) => LocationKey(index as u32),
-            None => LocationKey(self.read_locations.insert_full(location.clone()).0 as u32),
-        };
         match read {
             Read::Session(id, read) => ReadKey::Session(self.sessions.entry(id), read),
-            Read::Location(at) => ReadKey::Location(location(at)),
-            Read::Catalog(catalog, at) => ReadKey::Catalog(catalog, location(at)),
-            Read::GlobalForms(at) => ReadKey::GlobalForms(location(at)),
+            Read::Location(at) => ReadKey::Location(self.intern(at)),
+            Read::Catalog(catalog, at) => ReadKey::Catalog(catalog, self.intern(at)),
+            Read::GlobalForms(at) => ReadKey::GlobalForms(self.intern(at)),
             Read::Projects => ReadKey::Projects,
         }
     }
 
+    /// The key of `location`, added when missing.
+    pub(crate) fn intern(&mut self, location: &Location) -> LocationKey {
+        match self.read_locations.get_index_of(location) {
+            Some(index) => LocationKey(index as u32),
+            None => LocationKey(self.read_locations.insert_full(location.clone()).0 as u32),
+        }
+    }
+
+    /// The key of `location`, when a read or a change named it.
+    pub(crate) fn location_key(&self, location: &Location) -> Option<LocationKey> {
+        self.read_locations.get_index_of(location).map(|at| LocationKey(at as u32))
+    }
+
+    pub(crate) fn location_at(&self, key: LocationKey) -> Option<&Location> {
+        self.read_locations.get_index(key.0 as usize)
+    }
+
     /// The key of `read`, while anything of it is kept.
     fn find_key(&self, read: Read) -> Option<ReadKey> {
-        let location =
-            |location: &Location| self.read_locations.get_index_of(location).map(|at| LocationKey(at as u32));
+        let location = |location| self.location_key(location);
         Some(match read {
             Read::Session(id, read) => ReadKey::Session(self.sessions.key(id)?, read),
             Read::Location(at) => ReadKey::Location(location(at)?),

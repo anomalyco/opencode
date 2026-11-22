@@ -311,28 +311,26 @@ async fn follows_a_changed_omit_setting_and_restores_dropped_tool_files_from_the
     assert_eq!(gets.load(Ordering::SeqCst), 1);
 }
 
-/// Each write is one revision. What changed since a revision holds every session a later write touched, and only
-/// those, until that revision leaves the log; then it is everything.
+/// Each write is one revision. A take holds every session written since the previous take, and only those.
 #[tokio::test]
-async fn changes_since_a_revision_hold_every_later_write_or_everything() {
+async fn a_take_holds_every_write_since_the_last() {
     let data = data(handler(|_| async { ok(json!({})) }), Options::default());
-    let base = data.read(|state| state.revision());
     let sessions = [id("ses_0"), id("ses_1"), id("ses_2")];
-    let mut writes = Vec::new();
-    for at in 0..opencode_store::changes::LOG_LIMIT + 20 {
-        let status = if (at / 3) % 2 == 0 { SessionStatus::Running } else { SessionStatus::Idle };
-        data.set_status(&sessions[at % 3], status);
-        writes.push((data.read(|state| state.revision()), at % 3));
-    }
-    let revision = data.read(|state| state.revision());
-    assert_eq!(revision, base + writes.len() as u64);
-    for seen in base..=revision {
-        let (now, changes) = data.changes_since(seen);
-        assert_eq!(now, revision);
-        assert_eq!(changes.all, seen + (opencode_store::changes::LOG_LIMIT as u64) < revision, "since {seen}");
-        let touched: Vec<usize> = writes.iter().filter(|(at, _)| *at > seen).map(|(_, session)| *session).collect();
+    let mut dirty = opencode_store::Dirty::default();
+    let mut revision = data.take_changes(&mut dirty);
+    for round in 0..12 {
+        let touched: Vec<usize> = (0..round % 3).map(|at| (round + at) % 3).collect();
+        for &at in &touched {
+            let running = data.read(|state| state.status(&sessions[at])) == SessionStatus::Running;
+            data.set_status(&sessions[at], if running { SessionStatus::Idle } else { SessionStatus::Running });
+        }
+        let now = data.take_changes(&mut dirty);
+        assert_eq!(now, revision + touched.len() as u64, "round {round}");
+        revision = now;
+        let changes = opencode_store::Changes::new(&dirty, &data);
+        assert!(!changes.all());
         for (index, session) in sessions.iter().enumerate() {
-            assert_eq!(changes.status(session), changes.all || touched.contains(&index), "since {seen}: {index}");
+            assert_eq!(changes.status(session), touched.contains(&index), "round {round}: {index}");
         }
     }
 }
@@ -825,7 +823,8 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
     data.remember(info(session(0)));
     let session = id(SESSION);
     assert!(notified.has_changed().unwrap());
-    let (first, changes) = data.changes_since(0);
+    let mut taken = Taken::default();
+    let (first, changes) = taken.take(&data);
     assert!(changes.sessions() && changes.session(&session));
 
     let step = durable(
@@ -846,7 +845,7 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
             json!({ "sessionID": SESSION, "assistantMessageID": "msg_a", "ordinal": 0 }),
         )),
     ]);
-    let (second, changes) = data.changes_since(first);
+    let (second, changes) = taken.take(&data);
     assert_eq!(second, first + 1, "one batch is one flush");
     assert!(changes.messages(&session));
     assert!(!changes.session(&session));
@@ -860,7 +859,7 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
             json!({ "sessionID": SESSION, "assistantMessageID": "msg_a", "ordinal": 0, "delta": "Hi" }),
         ),
     );
-    let (third, changes) = data.changes_since(second);
+    let (third, changes) = taken.take(&data);
     assert!(!changes.messages(&session), "a delta does not change the list");
     assert!(changes.message(&session, "msg_a"));
     assert!(!changes.message(&session, "msg_b"));
@@ -947,11 +946,13 @@ async fn message_sync_reconciles_a_reload_with_the_same_ids() {
         data.message_sync(&session).await.unwrap();
         replies.push(second.clone());
         data.message_invalidate(&session);
-        let seen = data.revision();
+        let mut taken = Taken::default();
+        taken.take(&data);
         data.message_sync(&session).await.unwrap();
-        let changes = data.changes_since(seen).1;
+        let changes = taken.take(&data).1;
         assert_eq!(changes.messages(&session), reshaped, "{name}");
-        let mut changed: Vec<_> = changes.message.values().flatten().map(SessionMessageID::as_str).collect();
+        let mut changed: Vec<_> =
+            data.read(|state| changes.changed_messages(state).map(|(_, id)| id.to_owned()).collect());
         changed.sort();
         assert_eq!(changed, edited, "{name}");
         let rows = second["data"].as_array().unwrap();
@@ -988,7 +989,8 @@ async fn message_load_more_reports_only_the_published_page() {
     );
     let session = id(SESSION);
     data.message_sync(&session).await.unwrap();
-    let seen = data.revision();
+    let mut taken = Taken::default();
+    let seen = taken.take(&data).0;
     let load = {
         let (data, session) = (data.clone(), session.clone());
         tokio::spawn(async move { data.message_load_more(&session, LoadMore::default()).await })
@@ -997,7 +999,7 @@ async fn message_load_more_reports_only_the_published_page() {
     assert_eq!(data.revision(), seen, "starting a load changes nothing a view shows");
     release.resolve(());
     load.await.unwrap().unwrap();
-    let (revision, changes) = data.changes_since(seen);
+    let (revision, changes) = taken.take(&data);
     assert_eq!(revision, seen + 1, "one flush: the page");
     assert!(changes.messages(&session));
     assert_eq!(ids(&data, SESSION), ["msg_1", "msg_2"]);

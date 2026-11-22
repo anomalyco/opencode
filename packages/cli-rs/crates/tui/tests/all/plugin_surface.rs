@@ -1296,7 +1296,7 @@ fn each_change_of_the_hosts_state_after_a_view_calls_one() {
     settle(&harness);
     assert_eq!(views() - before, 1, "a settings write");
     let before = views();
-    harness.tui.local.sync(&opencode_store::Changes::everything());
+    harness.tui.local.sync(&opencode_store::Changes::everything(&harness.tui.data));
     settle(&harness);
     assert_eq!(views() - before, 1, "a local change");
 }

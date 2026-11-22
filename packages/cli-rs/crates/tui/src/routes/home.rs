@@ -68,7 +68,7 @@ impl Home {
             center.padding_x(padding(width));
             paint_logo(&tui.app, &painted, &tui.page(), width, height);
             let slot = footer_slot.borrow().clone();
-            crate::plugins::host::changed(&tui, &Changes::everything(), |changed| slot.sync(&*tui, changed));
+            crate::plugins::host::changed(&tui, &Changes::everything(&tui.data), |changed| slot.sync(&*tui, changed));
             tui.app.request_redraw();
         }));
         Self { root, logo, prompt, forms, slot, footer }

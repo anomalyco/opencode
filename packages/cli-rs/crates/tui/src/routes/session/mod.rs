@@ -141,7 +141,7 @@ impl RouteView for Session {
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
         // Reconnect invalidates cached reads because the client can miss events while disconnected.
-        if changes.all {
+        if changes.all() {
             form::quiet(tui, tui.data.session_sync(&self.id, true));
             form::quiet(tui, tui.data.message_sync(&self.id));
             form::quiet(tui, tui.data.pending_sync(&self.id));

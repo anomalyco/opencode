@@ -1,5 +1,6 @@
 use opencode_api::generated::*;
 
+use crate::changes::Touched;
 use crate::reads::{Read, SessionRead};
 use crate::state::{Data, Error, State, Task, evict_missing, is_tag};
 
@@ -42,7 +43,7 @@ impl State {
             return;
         }
         requests.push(request);
-        self.log.permissions(&data.session_id);
+        self.touch(&data.session_id, Touched::PERMISSIONS);
     }
 
     pub(crate) fn remove_permission(&mut self, session: &SessionID, request: &PermissionID) {
@@ -54,7 +55,7 @@ impl State {
         let before = requests.len();
         requests.retain(|item| item.id != *request);
         if requests.len() != before {
-            self.log.permissions(session);
+            self.touch(session, Touched::PERMISSIONS);
         }
     }
 }
@@ -79,7 +80,7 @@ impl Data {
             },
             |state, session, list, ()| {
                 state.sessions.get_or_insert(session).permissions = Some(list);
-                state.log.permissions(session);
+                state.touch(session, Touched::PERMISSIONS);
             },
             move |data| data.permission_sync(&again),
         )

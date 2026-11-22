@@ -385,7 +385,7 @@ fn prefetch(tui: &Tui, changes: &Changes) {
     let mut ids: Vec<String> = tui.tabs.tabs(tui).into_iter().map(|tab| tab.session_id).collect();
     ids.sort();
     let signature = ids.join("\n");
-    if signature.is_empty() || (*tui.tabs.fetched.borrow() == signature && !changes.all) {
+    if signature.is_empty() || (*tui.tabs.fetched.borrow() == signature && !changes.all()) {
         return;
     }
     *tui.tabs.fetched.borrow_mut() = signature;
@@ -729,7 +729,7 @@ fn changed(tui: &Tui) {
     crate::features::attention::program_status::sync(tui);
     // Notify plugins of tab changes and fetch the titles and statuses of background tabs.
     crate::plugins::host::local_changed(tui);
-    prefetch(tui, &Changes::default());
+    prefetch(tui, &Changes::nothing(&tui.data));
 }
 
 pub fn status(state: &State, session: &(impl AsRef<str> + ?Sized), prompt_pulse: u32) -> Status {

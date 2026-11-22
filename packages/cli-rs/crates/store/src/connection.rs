@@ -11,6 +11,7 @@ use opencode_api::transport::BoxFuture;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
+use crate::changes::Touched;
 use crate::location::{Catalog, Location};
 use crate::sessions::Outcome;
 use crate::state::{Data, Error, SessionStatus, State};
@@ -127,17 +128,18 @@ impl Data {
                         None => snapshot.remove(&id),
                     };
                 }
-                for session in state.sessions.iter_mut() {
+                for (key, session) in state.sessions.entries_mut() {
                     let status = snapshot.remove(&session.id);
                     if session.status != status {
-                        state.log.status(&session.id);
                         session.status = status;
+                        state.log.touch(session, key, Touched::STATUS);
                     }
                 }
                 // What is left names sessions the store holds nothing of.
                 for (id, status) in snapshot {
-                    state.log.status(&id);
-                    state.sessions.get_or_insert(&id).status = Some(status);
+                    let key = state.sessions.entry(&id);
+                    state.sessions[key].status = Some(status);
+                    state.touch_key(key, Touched::STATUS);
                 }
                 // Sessions created before this connection never delivered `session.created`;
                 // without their info a running child never joins its root's family.

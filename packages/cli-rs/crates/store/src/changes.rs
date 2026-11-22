@@ -1,150 +1,126 @@
-//! Each flush assigns a revision to the store mutations it publishes. Views pass their last rendered revision to
-//! [`crate::Data::changes_since`].
+//! What the store changed since its one consumer last took it ([`crate::Data::take_changes`]): keys of the sessions
+//! and messages touched, recorded without allocating once the buffers are warm. The consumer swaps its own [`Dirty`]
+//! in, so the buffers go back and forth.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::ops::BitOr;
 
-use opencode_api::generated::{AgentID, ModelRef, SessionID, SessionMessageID};
+use opencode_api::generated::{AgentID, ModelRef, SessionID};
 
+use crate::forms::GLOBAL;
 use crate::location::Location;
-
-/// Flushes kept for [`Log::since`]. A view further behind gets [`Changes::all`].
-pub const LOG_LIMIT: usize = 256;
+use crate::reads::LocationKey;
+use crate::sessions::{Session, SessionKey};
+use crate::state::{Data, State};
 
 /// A session's agent and model.
 pub type Selected = (Option<AgentID>, Option<ModelRef>);
 
-/// What changed. The query methods also answer true when a coarser entry covers the question.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Changes {
-    /// Everything may have changed: the view fell out of the log.
-    pub all: bool,
-    /// Session list membership or order (any session info change).
-    pub sessions: bool,
-    /// Sessions whose info changed.
-    pub session: HashSet<SessionID>,
-    /// A session's agent and model after each `session.agent.selected` or `session.model.selected`, in
-    /// order: a batch can hold this client's acknowledgment and then another client's switch.
-    pub selected: HashMap<SessionID, Vec<Selected>>,
-    /// Sessions whose running state changed.
-    pub status: HashSet<SessionID>,
-    /// Sessions whose message list changed shape: insert, remove, reorder, reload, page.
-    pub messages: HashSet<SessionID>,
-    /// Messages whose content changed in place (a delta, a tool update).
-    pub message: HashMap<SessionID, HashSet<SessionMessageID>>,
-    /// Sessions whose pending inbox items changed.
-    pub pending: HashSet<SessionID>,
-    /// Sessions whose pending permissions changed.
-    pub permissions: HashSet<SessionID>,
-    /// Form owners (session IDs or `global`) whose pending forms changed.
-    pub forms: HashSet<String>,
-    /// Projects or saved permissions changed.
-    pub projects: bool,
-    /// Locations whose info, catalogs, or shells changed.
-    pub locations: HashSet<Location>,
-    /// Sessions whose running jobs changed: a job's owner, and the child a subagent job runs.
-    pub jobs: HashSet<SessionID>,
+/// Content changes kept before the consumer gets [`Changes::all`] instead.
+const MESSAGE_LIMIT: usize = 4096;
+
+/// What changed of one session.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Touched(u16);
+
+impl Touched {
+    pub const INFO: Self = Self(1);
+    pub const STATUS: Self = Self(1 << 1);
+    /// The message list changed shape: insert, remove, reorder, reload, page.
+    pub const SHAPE: Self = Self(1 << 2);
+    /// A message changed in place (a delta, a tool update).
+    pub const CONTENT: Self = Self(1 << 3);
+    pub const PENDING: Self = Self(1 << 4);
+    pub const PERMISSIONS: Self = Self(1 << 5);
+    pub const FORMS: Self = Self(1 << 6);
+    /// Running jobs: of their owner, and of the child a subagent job runs.
+    pub const JOBS: Self = Self(1 << 7);
+    /// An agent or model was selected.
+    pub const SELECTED: Self = Self(1 << 8);
+
+    pub fn any(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
 }
 
-impl Changes {
-    pub fn everything() -> Self {
-        Self { all: true, ..Self::default() }
+impl BitOr for Touched {
+    type Output = Self;
+
+    fn bitor(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+}
+
+/// The changes of one or more flushes.
+#[derive(Debug, Default)]
+pub struct Dirty {
+    /// Everything may have changed: a reconnect, or more changes than are kept.
+    all: bool,
+    /// Session list membership or order (any session info change).
+    sessions: bool,
+    /// Projects or saved permissions changed.
+    projects: bool,
+    /// The forms of [`GLOBAL`] changed.
+    global_forms: bool,
+    /// Each touched session once. Its record holds its place here while the store owns this.
+    touched: Vec<(SessionKey, Touched)>,
+    /// Messages changed in place, by their transcript's message key.
+    messages: Vec<(SessionKey, u32)>,
+    /// Each agent or model selection, in order: a batch can hold this client's acknowledgment and then another
+    /// client's switch.
+    selected: Vec<(SessionKey, Selected)>,
+    /// Locations whose info, catalogs, or shells changed.
+    locations: Vec<LocationKey>,
+}
+
+static EVERYTHING: Dirty = Dirty::new(true);
+static NOTHING: Dirty = Dirty::new(false);
+
+impl Dirty {
+    const fn new(all: bool) -> Self {
+        Self {
+            all,
+            sessions: false,
+            projects: false,
+            global_forms: false,
+            touched: Vec::new(),
+            messages: Vec::new(),
+            selected: Vec::new(),
+            locations: Vec::new(),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
         !self.all
             && !self.sessions
-            && self.session.is_empty()
-            && self.selected.is_empty()
-            && self.status.is_empty()
-            && self.messages.is_empty()
-            && self.message.is_empty()
-            && self.pending.is_empty()
-            && self.permissions.is_empty()
-            && self.forms.is_empty()
             && !self.projects
+            && !self.global_forms
+            && self.touched.is_empty()
+            && self.selected.is_empty()
             && self.locations.is_empty()
-            && self.jobs.is_empty()
     }
 
-    pub fn sessions(&self) -> bool {
-        self.all || self.sessions
+    /// Empties it, keeping the buffers.
+    fn clear(&mut self) {
+        (self.all, self.sessions, self.projects, self.global_forms) = (false, false, false, false);
+        self.touched.clear();
+        self.messages.clear();
+        self.selected.clear();
+        self.locations.clear();
     }
 
-    pub fn session(&self, id: &SessionID) -> bool {
-        self.all || self.session.contains(id)
-    }
-
-    pub fn status(&self, id: &SessionID) -> bool {
-        self.all || self.status.contains(id)
-    }
-
-    /// The message list of `id` changed shape.
-    pub fn messages(&self, id: &SessionID) -> bool {
-        self.all || self.messages.contains(id)
-    }
-
-    /// Any message of `id` changed, in place or by shape.
-    pub fn any_message(&self, id: &SessionID) -> bool {
-        self.messages(id) || self.message.contains_key(id)
-    }
-
-    /// The message changed in place, or its list changed shape.
-    pub fn message(&self, session: &SessionID, message: &str) -> bool {
-        self.messages(session) || self.message.get(session).is_some_and(|messages| messages.contains(message))
-    }
-
-    pub fn pending(&self, id: &SessionID) -> bool {
-        self.all || self.pending.contains(id)
-    }
-
-    pub fn permissions(&self, id: &SessionID) -> bool {
-        self.all || self.permissions.contains(id)
-    }
-
-    pub fn forms(&self, owner: &str) -> bool {
-        self.all || self.forms.contains(owner)
-    }
-
-    pub fn projects(&self) -> bool {
-        self.all || self.projects
-    }
-
-    pub fn location(&self, location: &Location) -> bool {
-        self.all || self.locations.contains(location)
-    }
-
-    /// Running jobs owned by `id` may have changed.
-    pub fn jobs(&self, id: &SessionID) -> bool {
-        self.all || self.jobs.contains(id)
-    }
-
-    pub fn extend(&mut self, other: &Changes) {
-        self.all |= other.all;
-        self.sessions |= other.sessions;
-        self.session.extend(other.session.iter().cloned());
-        for (session, selected) in &other.selected {
-            self.selected.entry(session.clone()).or_default().extend(selected.iter().cloned());
-        }
-        self.status.extend(other.status.iter().cloned());
-        self.messages.extend(other.messages.iter().cloned());
-        for (session, messages) in &other.message {
-            self.message.entry(session.clone()).or_default().extend(messages.iter().cloned());
-        }
-        self.pending.extend(other.pending.iter().cloned());
-        self.permissions.extend(other.permissions.iter().cloned());
-        self.forms.extend(other.forms.iter().cloned());
-        self.projects |= other.projects;
-        self.locations.extend(other.locations.iter().cloned());
-        self.jobs.extend(other.jobs.iter().cloned());
+    fn touched(&self, key: Option<SessionKey>) -> Touched {
+        let Some(key) = key else { return Touched::default() };
+        self.touched.iter().find(|(touched, _)| *touched == key).map_or(Touched::default(), |(_, bits)| *bits)
     }
 }
 
-/// The current changes and the log of flushed ones.
+/// The changes the store records until the consumer takes them, and the revision of the last flush.
 #[derive(Debug, Default)]
 pub(crate) struct Log {
     revision: u64,
-    pub(crate) current: Changes,
-    entries: VecDeque<(u64, Changes)>,
+    /// Something changed since the last flush.
+    unflushed: bool,
+    dirty: Dirty,
 }
 
 impl Log {
@@ -152,87 +128,304 @@ impl Log {
         self.revision
     }
 
-    /// Numbers the current changes; returns the new revision, or none when nothing changed.
+    /// Numbers the changes since the last flush; the new revision, or none when nothing changed.
     pub(crate) fn flush(&mut self) -> Option<u64> {
-        if self.current.is_empty() {
+        if !std::mem::take(&mut self.unflushed) {
             return None;
         }
         self.revision += 1;
-        self.entries.push_back((self.revision, std::mem::take(&mut self.current)));
-        if self.entries.len() > LOG_LIMIT {
-            self.entries.pop_front();
-        }
         Some(self.revision)
     }
 
-    /// The union of the flushes after `seen`.
-    pub(crate) fn since(&self, seen: u64) -> Changes {
-        if seen >= self.revision {
-            return Changes::default();
+    /// Hands the changes to the consumer in `into`, whose earlier changes it no longer reads, and unmarks their
+    /// records.
+    pub(crate) fn take(&mut self, sessions: &mut crate::sessions::Sessions, into: &mut Dirty) {
+        into.clear();
+        std::mem::swap(&mut self.dirty, into);
+        for (key, _) in &into.touched {
+            if let Some(session) = sessions.live_mut(*key) {
+                session.dirty = 0;
+            }
         }
-        if self.entries.front().is_none_or(|(oldest, _)| seen + 1 < *oldest) {
-            return Changes::everything();
+    }
+
+    pub(crate) fn touch(&mut self, session: &mut Session, key: SessionKey, bits: Touched) {
+        self.unflushed = true;
+        if bits.any(Touched::INFO) {
+            self.dirty.sessions = true;
         }
-        let mut changes = Changes::default();
-        for (_, entry) in self.entries.iter().filter(|(revision, _)| *revision > seen) {
-            changes.extend(entry);
+        if session.dirty == 0 {
+            self.dirty.touched.push((key, bits));
+            session.dirty = self.dirty.touched.len() as u32;
+            return;
         }
-        changes
+        let touched = &mut self.dirty.touched[session.dirty as usize - 1].1;
+        *touched = *touched | bits;
+    }
+
+    /// Records message `message` of the session `key` as changed in place; the session must be touched.
+    pub(crate) fn message(&mut self, key: SessionKey, message: u32) {
+        let dirty = &mut self.dirty;
+        if dirty.all || dirty.messages.contains(&(key, message)) {
+            return;
+        }
+        if dirty.messages.len() == MESSAGE_LIMIT {
+            dirty.all = true;
+            return;
+        }
+        dirty.messages.push((key, message));
+    }
+
+    pub(crate) fn selected(&mut self, key: SessionKey, selected: Selected) {
+        if self.dirty.selected.len() == MESSAGE_LIMIT {
+            self.dirty.all = true;
+            return;
+        }
+        self.dirty.selected.push((key, selected));
+    }
+
+    pub(crate) fn location(&mut self, location: LocationKey) {
+        self.unflushed = true;
+        if !self.dirty.locations.contains(&location) {
+            self.dirty.locations.push(location);
+        }
+    }
+
+    pub(crate) fn global_forms(&mut self) {
+        self.unflushed = true;
+        self.dirty.global_forms = true;
+    }
+
+    pub(crate) fn projects(&mut self) {
+        self.unflushed = true;
+        self.dirty.projects = true;
     }
 
     /// Everything may have changed (a reconnect): every view looks again.
     pub(crate) fn everything(&mut self) {
-        self.current.all = true;
+        self.unflushed = true;
+        self.dirty.all = true;
+    }
+}
+
+/// [`Dirty`] as the views ask about it, by ID. Each answer reads the store briefly, so no lock is held between them.
+#[derive(Clone, Copy)]
+pub struct Changes<'a> {
+    dirty: &'a Dirty,
+    data: &'a Data,
+}
+
+impl std::fmt::Debug for Changes<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.dirty.fmt(formatter)
+    }
+}
+
+impl<'a> Changes<'a> {
+    pub fn new(dirty: &'a Dirty, data: &'a Data) -> Self {
+        Self { dirty, data }
     }
 
-    pub(crate) fn session(&mut self, id: &SessionID) {
-        self.current.sessions = true;
-        self.current.session.insert(id.clone());
+    /// Everything may have changed.
+    pub fn everything(data: &'a Data) -> Self {
+        Self { dirty: &EVERYTHING, data }
     }
 
-    pub(crate) fn selected(&mut self, id: &SessionID, agent: Option<AgentID>, model: Option<ModelRef>) {
-        self.current.selected.entry(id.clone()).or_default().push((agent, model));
+    pub fn nothing(data: &'a Data) -> Self {
+        Self { dirty: &NOTHING, data }
     }
 
-    pub(crate) fn status(&mut self, id: &SessionID) {
-        self.current.status.insert(id.clone());
+    pub fn is_empty(&self) -> bool {
+        self.dirty.is_empty()
     }
 
-    pub(crate) fn messages(&mut self, id: &SessionID) {
-        self.current.messages.insert(id.clone());
+    /// Everything may have changed: the views look again.
+    pub fn all(&self) -> bool {
+        self.dirty.all
     }
 
-    pub(crate) fn message(&mut self, session: &SessionID, message: &SessionMessageID) {
-        if let Some(messages) = self.current.message.get_mut(session) {
-            if !messages.contains(message) {
-                messages.insert(message.clone());
-            }
-            return;
+    pub fn sessions(&self) -> bool {
+        self.dirty.all || self.dirty.sessions
+    }
+
+    /// What changed of `id`; all of it when everything did.
+    fn of(&self, id: &str, bits: Touched) -> bool {
+        self.dirty.all || self.data.read(|state| self.dirty.touched(state.sessions.key(id)).any(bits))
+    }
+
+    pub fn session(&self, id: &SessionID) -> bool {
+        self.of(id.as_str(), Touched::INFO)
+    }
+
+    pub fn status(&self, id: &SessionID) -> bool {
+        self.of(id.as_str(), Touched::STATUS)
+    }
+
+    /// Some session has any of `bits`.
+    pub fn any(&self, bits: Touched) -> bool {
+        self.dirty.all || self.dirty.touched.iter().any(|(_, touched)| touched.any(bits))
+    }
+
+    /// The message list of `id` changed shape.
+    pub fn messages(&self, id: &SessionID) -> bool {
+        self.of(id.as_str(), Touched::SHAPE)
+    }
+
+    /// Any message of `id` changed, in place or by shape.
+    pub fn any_message(&self, id: &SessionID) -> bool {
+        self.of(id.as_str(), Touched::SHAPE | Touched::CONTENT)
+    }
+
+    /// The message changed in place, or its list changed shape.
+    pub fn message(&self, session: &SessionID, message: &str) -> bool {
+        self.dirty.all
+            || self.data.read(|state| {
+                let Some(key) = state.sessions.key(session) else { return false };
+                let bits = self.dirty.touched(Some(key));
+                bits.any(Touched::SHAPE)
+                    || bits.any(Touched::CONTENT)
+                        && state.sessions[key]
+                            .transcript
+                            .as_ref()
+                            .and_then(|transcript| transcript.key(message))
+                            .is_some_and(|message| self.dirty.messages.contains(&(key, message)))
+            })
+    }
+
+    pub fn pending(&self, id: &SessionID) -> bool {
+        self.of(id.as_str(), Touched::PENDING)
+    }
+
+    pub fn permissions(&self, id: &SessionID) -> bool {
+        self.of(id.as_str(), Touched::PERMISSIONS)
+    }
+
+    /// The forms of `owner`: a session ID or [`GLOBAL`].
+    pub fn forms(&self, owner: &str) -> bool {
+        match owner {
+            GLOBAL => self.dirty.all || self.dirty.global_forms,
+            _ => self.of(owner, Touched::FORMS),
         }
-        self.current.message.insert(session.clone(), HashSet::from([message.clone()]));
     }
 
-    pub(crate) fn pending(&mut self, id: &SessionID) {
-        self.current.pending.insert(id.clone());
+    pub fn projects(&self) -> bool {
+        self.dirty.all || self.dirty.projects
     }
 
-    pub(crate) fn permissions(&mut self, id: &SessionID) {
-        self.current.permissions.insert(id.clone());
+    pub fn location(&self, location: &Location) -> bool {
+        self.dirty.all
+            || self.data.read(|state| {
+                state.location_key(location).is_some_and(|location| self.dirty.locations.contains(&location))
+            })
     }
 
-    pub(crate) fn forms(&mut self, owner: &str) {
-        self.current.forms.insert(owner.to_owned());
+    /// Running jobs owned by `id` may have changed.
+    pub fn jobs(&self, id: &SessionID) -> bool {
+        self.of(id.as_str(), Touched::JOBS)
     }
 
-    pub(crate) fn projects(&mut self) {
-        self.current.projects = true;
+    /// The sessions with any of `bits`, in the order first touched. Not everything: [`Changes::all`] says that.
+    pub fn sessions_with<'s>(
+        &self,
+        state: &'s State,
+        bits: Touched,
+    ) -> impl Iterator<Item = &'s SessionID> + use<'s, 'a> {
+        let dirty = self.dirty;
+        dirty
+            .touched
+            .iter()
+            .filter(move |(_, touched)| touched.any(bits))
+            .filter_map(|(key, _)| state.sessions.live(*key).map(|session| &session.id))
     }
 
-    pub(crate) fn location(&mut self, location: &Location) {
-        self.current.locations.insert(location.clone());
+    /// The messages changed in place, by session and message ID.
+    pub fn changed_messages<'s>(
+        &self,
+        state: &'s State,
+    ) -> impl Iterator<Item = (&'s SessionID, &'s str)> + use<'s, 'a> {
+        self.dirty.messages.iter().filter_map(|(key, message)| {
+            let session = state.sessions.live(*key)?;
+            Some((&session.id, session.transcript.as_ref()?.by_key(*message)?.id()))
+        })
     }
 
-    pub(crate) fn jobs(&mut self, id: &SessionID) {
-        self.current.jobs.insert(id.clone());
+    /// The messages of `session` changed in place.
+    pub fn messages_of<'s, 'i>(
+        &self,
+        state: &'s State,
+        session: &'i SessionID,
+    ) -> impl Iterator<Item = &'s str> + use<'s, 'a, 'i> {
+        self.changed_messages(state).filter(move |(id, _)| *id == session).map(|(_, message)| message)
+    }
+
+    /// The agent and model selections of `id`, in order.
+    pub fn selected<'s>(&self, state: &'s State, id: &SessionID) -> impl Iterator<Item = &'a Selected> + use<'s, 'a> {
+        let key = state.sessions.key(id);
+        self.dirty.selected.iter().filter(move |(selected, _)| Some(*selected) == key).map(|(_, selected)| selected)
+    }
+
+    pub fn locations<'s>(&self, state: &'s State) -> impl Iterator<Item = &'s Location> + use<'s, 'a> {
+        self.dirty.locations.iter().filter_map(|location| state.location_at(*location))
+    }
+}
+
+impl State {
+    pub(crate) fn touch(&mut self, id: &(impl AsRef<str> + ?Sized), bits: Touched) {
+        let key = self.sessions.entry(id);
+        self.touch_key(key, bits);
+    }
+
+    pub(crate) fn touch_key(&mut self, key: SessionKey, bits: Touched) {
+        self.log.touch(&mut self.sessions[key], key, bits);
+    }
+
+    /// Records message `message` of `session` as changed in place.
+    pub(crate) fn message_changed(&mut self, session: &SessionID, message: &(impl AsRef<str> + ?Sized)) {
+        let Some(key) = self.sessions.key(session) else { return };
+        let transcript = self.sessions[key].transcript.as_ref();
+        if let Some(message) = transcript.and_then(|transcript| transcript.key(message.as_ref())) {
+            self.touch_message(key, message);
+        }
+    }
+
+    /// Records message `message` (a transcript key) of the session `key` as changed in place.
+    pub(crate) fn touch_message(&mut self, key: SessionKey, message: u32) {
+        self.touch_key(key, Touched::CONTENT);
+        self.log.message(key, message);
+    }
+
+    pub(crate) fn touch_selected(&mut self, id: &SessionID, selected: Selected) {
+        let key = self.sessions.entry(id);
+        self.touch_key(key, Touched::SELECTED);
+        self.log.selected(key, selected);
+    }
+
+    pub(crate) fn touch_location(&mut self, location: &Location) {
+        let key = self.intern(location);
+        self.log.location(key);
+    }
+
+    /// [`Data::take_changes`]. The records the changes name stay marked until the take, so the sweep before it frees
+    /// none the consumer reads; the consumer is done with what it took before.
+    pub(crate) fn take(&mut self, into: &mut Dirty) -> u64 {
+        self.sessions.sweep();
+        self.log.take(&mut self.sessions, into);
+        self.log.revision()
+    }
+
+    /// The forms of `owner`: a session ID or [`GLOBAL`].
+    pub(crate) fn touch_forms(&mut self, owner: &str) {
+        match owner {
+            GLOBAL => self.log.global_forms(),
+            _ => self.touch(owner, Touched::FORMS),
+        }
+    }
+}
+
+impl Data {
+    /// Hands what changed since the last take to the one consumer, in `into`, and returns the revision of the last
+    /// flush. `into`'s earlier changes go: the consumer no longer reads them.
+    pub fn take_changes(&self, into: &mut Dirty) -> u64 {
+        self.lock().take(into)
     }
 }

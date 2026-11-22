@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
+use crate::changes::Touched;
 use crate::reads::{Read, SessionRead};
 use crate::sessions::SessionKey;
 use crate::state::{Data, Error, Overlay, State, Task, evict_missing};
@@ -68,9 +69,9 @@ impl State {
 
     /// Logs a job's owner, and the child a subagent job runs.
     fn log_job(&mut self, job: &JobInfo) {
-        self.log.jobs(&SessionID(job.session_id().to_owned()));
+        self.touch(job.session_id(), Touched::JOBS);
         if let JobInfo::Subagent(job) = job {
-            self.log.jobs(&job.child_session_id);
+            self.touch(&job.child_session_id, Touched::JOBS);
         }
     }
 
@@ -157,7 +158,7 @@ impl State {
             self.log_job(job);
         }
         self.jobs.extend(next);
-        self.log.jobs(root);
+        self.touch(root, Touched::JOBS);
         false
     }
 }

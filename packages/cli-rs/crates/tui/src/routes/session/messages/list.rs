@@ -6,7 +6,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use opencode_api::generated::{
     AgentInfo, ModelInfo, ModelRef, SessionInboxInfo, SessionInfo, SessionMessageAssistant,
-    SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction, SessionMessageID,
+    SessionMessageAssistantContentItem, SessionMessageAssistantFinish, SessionMessageCompaction,
     SessionStructuredError,
 };
 use opencode_local::cli_config::{Markdown as MarkdownMode, Resolved, TurnTokens, Visibility};
@@ -280,17 +280,14 @@ impl Transcript {
         // A tool row waiting on a permission request takes the warning color.
         let permissions = changes.permissions(session);
         // A subagent row spins while its child session runs.
-        let children = !changes.status.is_empty()
+        let children = changes.any(Touched::STATUS)
             && tui.data.read(|state| state.family(session).iter().any(|id| id != session && changes.status(id)));
         let force =
             changes.messages(session) || changes.session(session) || catalogs || pending || permissions || children;
         if !force && !changes.any_message(session) {
             return;
         }
-        if !force
-            && let Some(messages) = changes.message.get(session)
-            && self.0.patch(tui, session, messages)
-        {
+        if !force && self.0.patch(tui, session, changes) {
             return;
         }
         self.0.render(tui, |message| force || changes.message(session, message));
@@ -755,7 +752,8 @@ impl Inner {
         self.complete_group_boundary(tui);
     }
 
-    fn patch(&self, tui: &Tui, session: &SessionID, changed: &HashSet<SessionMessageID>) -> bool {
+    /// Updates the rows of the messages changed in place; false when the transcript must render.
+    fn patch(&self, tui: &Tui, session: &SessionID, changes: &Changes) -> bool {
         if self.view.get().turn_tokens.is_some() {
             return false;
         }
@@ -766,8 +764,8 @@ impl Inner {
             let positions = self.positions.borrow();
             let shapes = self.shapes.borrow();
             let same = positions.len() == messages.len()
-                && changed.iter().all(|id| {
-                    positions.get(id.as_str()).is_some_and(|&index| {
+                && changes.messages_of(state, session).all(|id| {
+                    positions.get(id).is_some_and(|&index| {
                         messages.get(index).map(shape).is_some_and(|shape| shapes.get(index) == Some(&shape))
                     })
                 });
@@ -778,7 +776,7 @@ impl Inner {
             let cx = self.context(tui, state, &visible, &keys, &positions, &paint);
             let (specs, rows, refs) = (self.specs.borrow(), self.rows.borrow(), self.refs.borrow());
             let mut stale: Vec<usize> =
-                changed.iter().filter_map(|id| refs.get(id.as_str())).flatten().copied().collect();
+                changes.messages_of(state, session).filter_map(|id| refs.get(id)).flatten().copied().collect();
             stale.sort_unstable();
             stale.dedup();
             for index in stale {

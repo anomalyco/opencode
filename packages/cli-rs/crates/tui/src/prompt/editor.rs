@@ -769,7 +769,7 @@ impl Inner {
     /// Repaints after a change outside the store, the terminal size or the settings, which the footer slots read too.
     fn relayout(&self, tui: &Tui) {
         self.refresh(tui);
-        crate::plugins::host::changed(tui, &Changes::everything(), |changed| {
+        crate::plugins::host::changed(tui, &Changes::everything(&tui.data), |changed| {
             self.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, changed));
         });
     }

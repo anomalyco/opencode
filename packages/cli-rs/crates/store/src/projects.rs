@@ -3,6 +3,7 @@ use std::collections::HashSet;
 
 use opencode_api::generated::*;
 
+use crate::changes::Touched;
 use crate::connection::Follow;
 use crate::reads::{Read, SessionRead};
 use crate::state::{Data, Error, State, Task};
@@ -58,7 +59,7 @@ impl State {
     /// cached is read again instead.
     pub(crate) fn on_worktree_resolved(&mut self, data: &WorktreeResolvedData) -> Vec<Follow> {
         let mut follow = Vec::new();
-        for session in self.sessions.iter_mut() {
+        for (key, session) in self.sessions.entries_mut() {
             let Some(info) = &mut session.info else { continue };
             let explicit = data.adopted.as_ref().is_some_and(|adopted| adopted.contains(&info.project_id));
             let directory = if explicit {
@@ -74,7 +75,7 @@ impl State {
             let Some((project, subpath)) = adopt(&info.project_id.0, directory, data) else { continue };
             info.project_id = ProjectID(project);
             info.subpath = subpath.map(RelativePath);
-            self.log.session(&session.id);
+            self.log.touch(session, key, Touched::INFO);
         }
         follow
     }

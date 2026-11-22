@@ -180,7 +180,7 @@ impl State {
     }
 
     pub(crate) fn location_mut(&mut self, location: &Location) -> &mut LocationData {
-        self.log.location(location);
+        self.touch_location(location);
         self.locations.entry(location.clone()).or_default()
     }
 
@@ -320,7 +320,7 @@ impl State {
             changed = true;
         }
         if changed {
-            self.log.location(location);
+            self.touch_location(location);
         }
     }
 }

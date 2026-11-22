@@ -150,7 +150,7 @@ impl Permission {
                 family.iter().flat_map(|id| state.permissions(id).unwrap_or_default()).cloned().collect();
             (requests, family)
         });
-        if changes.all || family.iter().any(|id| changes.session(id)) || *inner.family.borrow() != family {
+        if changes.all() || family.iter().any(|id| changes.session(id)) || *inner.family.borrow() != family {
             for id in &family {
                 super::form::quiet(tui, tui.data.permission_sync(id));
             }

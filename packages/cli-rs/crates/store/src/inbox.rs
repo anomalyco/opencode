@@ -8,6 +8,7 @@ use futures_util::future::BoxFuture;
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
+use crate::changes::Touched;
 use crate::connection::Follow;
 use crate::messages::{MessageExt, from_event};
 use crate::reads::{Read, SessionRead};
@@ -122,13 +123,13 @@ impl State {
         if self.is_missing(item.session_id()) {
             return;
         }
-        let session = self.sessions.get_or_insert(item.session_id());
-        let pending = &mut session.pending;
+        let key = self.sessions.entry(item.session_id());
+        let pending = &mut self.sessions[key].pending;
         match pending.iter().position(|entry| entry.id() == item.id()) {
             Some(at) => pending[at] = item.clone(),
             None => pending.push(item.clone()),
         }
-        self.log.pending(&session.id);
+        self.touch_key(key, Touched::PENDING);
         if item.tag() != "compaction" {
             self.materialize(&item);
         }
@@ -166,24 +167,26 @@ impl State {
         if let Some(transcript) = self.sessions.get_mut(session).and_then(|session| session.transcript.as_mut())
             && transcript.remove(inbox).is_some()
         {
-            self.log.messages(session);
+            self.touch(session, Touched::SHAPE);
         }
     }
 
     pub(crate) fn remove_pending(&mut self, session: &SessionID, inbox: &str) {
-        let Some(record) = self.sessions.get_mut(session) else { return };
+        let Some(key) = self.sessions.key(session) else { return };
+        let record = &mut self.sessions[key];
         if let Some((_, updates)) = &mut record.pending_read {
             updates.insert(inbox.to_owned(), PendingUpdate::Removed);
         }
         let before = record.pending.len();
         record.pending.retain(|item| item.id() != inbox);
         if record.pending.len() != before {
-            self.log.pending(session);
+            self.touch_key(key, Touched::PENDING);
         }
     }
 
     fn update_pending(&mut self, session: &SessionID, inbox: &str, delivery: &SessionInboxDelivery) {
-        let Some(record) = self.sessions.get_mut(session) else { return };
+        let Some(key) = self.sessions.key(session) else { return };
+        let record = &mut self.sessions[key];
         let position = record.pending.iter().position(|item| item.id() == inbox);
         if let Some((_, updates)) = &mut record.pending_read {
             let update = match position {
@@ -202,7 +205,7 @@ impl State {
             return;
         }
         item.set_delivery(delivery.clone());
-        self.log.pending(session);
+        self.touch_key(key, Touched::PENDING);
     }
 
     fn observe(&mut self, session: &SessionID, inbox: &str) {
@@ -248,7 +251,7 @@ impl State {
             item.set_created(event.created);
             transcript.move_last(inbox);
             self.created(session, inbox);
-            self.log.messages(session);
+            self.touch(session, Touched::SHAPE);
         }
         // An item this client never saw admitted (its enqueue was lost in a reconnect) has no row to show: a synced
         // transcript reads its head again.
@@ -443,12 +446,12 @@ impl Data {
                     let read = Read::session(&session, SessionRead::Messages);
                     let reread = retracted && state.has_read(read);
                     if retracted {
-                        state.log.messages(&session);
+                        state.touch(&session, Touched::SHAPE);
                     }
                     if reread {
                         state.invalidate(read);
                     }
-                    state.log.pending(&session);
+                    state.touch(&session, Touched::PENDING);
                     for item in &merged {
                         state.materialize(item);
                     }
