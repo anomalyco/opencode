@@ -1,17 +1,18 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
-import { DrawOutput, LiveWidget, type LiveMessage, Node, program, step, StepOutput } from "../src/index.js"
+import { DrawOutput, LiveWidget, type LiveMessage, Node, prelude, program, step, StepOutput } from "../src/index.js"
 import { prune } from "../src/session.js"
+import { scriptedProgram } from "../script/conformance.js"
 
 // The TypeScript runtime is a native host (specs/v2/widgets.md, Native hosts). These hold its steps and live runs to
-// the prelude building trees itself, which a host without `translate.functions: "mark"` still gets: the same outputs,
-// events and posts, functions where none may go included.
+// the last prelude that built trees itself (`scriptedProgram`, protocol 1's entries, with an id → handler table): the
+// same outputs, events and posts, functions where none may go included.
 
 // A step with the prelude building the tree, read as `step` reads one.
 const scripted = async (source: string, input: unknown) => {
   const result = await Runtime.make({ limits: { timeoutMs: 5000 } }).execute(
-    program(source) + `\nreturn __widget_step(${JSON.stringify(input)})`,
+    scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify(input)})`,
   )
   if (!result.ok) return { error: result.error.message }
   const value = result.value as Record<string, unknown>
@@ -144,7 +145,7 @@ const scriptedLive = async (source: string, events: ReadonlyArray<unknown>) => {
         }),
       },
     }),
-  }).execute(program(source) + "\nreturn await __widget_live(__input())")
+  }).execute(scriptedProgram(source) + "\nreturn await __widget_live(__input())")
   return { messages, ended: result.ok ? "return" : result.error.message }
 }
 
@@ -210,6 +211,12 @@ test("a native live run stays while its view has handlers", async () => {
   expect((await nativeLive(`async function main() { widget.render(ui.button("go")) }`, [])).ended).toBe("return")
 })
 
+const postLine = (() => {
+  const lines = prelude.split("\n")
+  const line = lines.findIndex((text) => text.includes("__host.post(message)"))
+  return { line: line + 1, column: lines[line]!.indexOf("__host.post(message)") + 1 }
+})()
+
 test("a function posted where none may go fails a native live run at the same line and column", async () => {
   for (const post of [`widget.send({ f: () => 1 })`, `widget.render(ui.text("x", { extra: [() => 1] }))`]) {
     const source = `async function main() {\n  ${post}\n}`
@@ -217,7 +224,11 @@ test("a function posted where none may go fails a native live run at the same li
     expect(expected.ended).toMatch(
       /^TypeError: Argument 1 to __host.post contains a function, .* \(line \d+, col \d+\)$/,
     )
-    expect(await nativeLive(source, [])).toEqual(expected)
+    // The call is the prelude's `__host.post(message)`, which has its own line in each prelude.
+    expect(await nativeLive(source, [])).toEqual({
+      ...expected,
+      ended: expected.ended.replace(/\(line \d+, col \d+\)$/, `(line ${postLine.line}, col ${postLine.column})`),
+    })
   }
   const missing = await nativeLive(`async function main() {\n  widget.draw("nope", [])\n}`, [])
   expect(missing.ended).toMatch(/^Error: No canvas with key "nope" in the rendered view \(line \d+, col \d+\)$/)

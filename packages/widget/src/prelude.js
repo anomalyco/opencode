@@ -1,14 +1,13 @@
 const __widget_protocol = 2
 // Widget prelude (specs/v2/widgets.md). A widget program is this prelude, a newline, then the widget template source.
-// The first line is the prelude<->host contract's version, which hosts read before running the program. Native hosts
+// The first line is the prelude<->host contract's version, which hosts read before running the program. Hosts
 // (specs/v2/widgets.md, Native hosts) run `<program>\nreturn __widget_native_step(__input())` with `__input` and
 // `__widget_emit` as host globals, and live programs with `__widget_live(__input(), true)`: they build the tree clients
-// get themselves, so the prelude hands them views as built and finds handlers by their ids' paths. Older hosts run
-// `return __widget_step(__input())`, and the prelude builds the tree.
+// get themselves, so the prelude hands them views as built and finds handlers by their ids' paths.
 
 const ui = (() => {
   // Children may nest arrays and contain null, undefined or false, so widget templates can write `cond && node` and `...list`;
-  // `__widget_tree` flattens them when it turns the view into the tree clients get.
+  // the host flattens them when it turns the view into the tree clients get.
   const container = (type) => (props, nodes) =>
     Array.isArray(props) ? { type, children: props } : { ...props, type, children: nodes ?? [] }
   const option = (item) => (typeof item === "string" ? { value: item, label: item } : item)
@@ -37,43 +36,22 @@ const ui = (() => {
   }
 })()
 
-// Interactive nodes: the event clients send for them and the handler prop that takes it. `always`: the node gets an id
-// even without a handler (clients require one); `keyed`: a `key` alone gives it an id too (canvases drawn by key).
+// Interactive nodes: the event clients send for them and the handler prop that takes it.
 const __WIDGET_CONTROLS = {
-  button: { event: "press", handler: "onPress", always: true },
+  button: { event: "press", handler: "onPress" },
   card: { event: "press", handler: "onPress" },
-  checkbox: { event: "change", handler: "onChange", always: true },
-  slider: { event: "change", handler: "onChange", always: true },
-  select: { event: "change", handler: "onChange", always: true },
-  input: { event: "change", handler: "onChange", always: true },
+  checkbox: { event: "change", handler: "onChange" },
+  slider: { event: "change", handler: "onChange" },
+  select: { event: "change", handler: "onChange" },
+  input: { event: "change", handler: "onChange" },
   carousel: { event: "change", handler: "onChange" },
-  canvas: { event: "pointer", handler: "onPointer", keyed: true },
+  canvas: { event: "pointer", handler: "onPointer" },
 }
 
-// Turns a view as widget templates build it into the tree clients get: children flattened, handler functions and `key`s
-// removed, and each interactive node given an id from its path (child indices, or `:key` where the author set a key),
-// so the same node keeps its id from one view to the next. Returns the tree, the handlers by id and canvas ids by key.
-// It runs for every node of every view, so it copies only the nodes it has to change and builds no closures.
-function __widget_tree(root) {
-  const tree = { view: undefined, handlers: {}, canvases: {} }
-  const named = root && typeof root === "object" && !Array.isArray(root) && __widget_keyed(root.key)
-  tree.view = __widget_node(root, named ? ":" + encodeURIComponent(String(root.key)) : "0", tree, 1)
-  return tree
-}
-
-// A view nests at most 100 levels (specs/v2/widgets.md, Keys and depth): the root is level 1, the items of a node's children one
-// level below it, and the items of an array among them one level below that array.
+// A view nests at most 100 levels (specs/v2/widgets.md, Keys and depth): the root is level 1, the items of a node's
+// children one level below it, and the items of an array among them one level below that array.
 const __WIDGET_LEVELS = 100
 const __WIDGET_DEEP = "The view nests more than 100 levels"
-const __WIDGET_KEY = "A node's key must be a string, a number or a boolean"
-
-// Whether a node has a key: `undefined` and `null` are none; a string, a number or a boolean is one.
-function __widget_keyed(key) {
-  if (key === undefined || key === null) return false
-  const type = typeof key
-  if (type === "string" || type === "number" || type === "boolean") return true
-  throw new TypeError(__WIDGET_KEY)
-}
 
 // Whether `list`, the items at `level`, holds a node or an array below the last level. It runs only for a view that
 // failed to cross to the host, and goes no deeper than that level.
@@ -92,74 +70,9 @@ function __widget_deep(list, level) {
   return false
 }
 
-// A node that goes out as built: not interactive, no container, and none of the props the prelude takes off.
-function __widget_plain(node) {
-  return (
-    node.children === undefined &&
-    __WIDGET_CONTROLS[node.type] === undefined &&
-    node.key === undefined &&
-    node.id === undefined &&
-    node.pointer === undefined &&
-    node.onPress === undefined &&
-    node.onChange === undefined &&
-    node.onPointer === undefined
-  )
-}
-
-function __widget_node(node, path, tree, level) {
-  if (!node || typeof node !== "object" || Array.isArray(node) || __widget_plain(node)) return node
-  const { key, id, pointer, onPress, onChange, onPointer, children, ...out } = node
-  const control = __WIDGET_CONTROLS[node.type]
-  if (control) {
-    const handler = node[control.handler]
-    const keyed = control.keyed && key !== undefined && key !== null
-    if (typeof handler === "function" || control.always || keyed) {
-      out.id = path
-      if (typeof handler === "function") tree.handlers[path] = { event: control.event, handler, node: out }
-      // Only a canvas with a handler takes input; one with just a key has an id for `widget.draw`.
-      if (node.type === "canvas" && typeof handler === "function") out.pointer = true
-      if (keyed && tree.canvases[String(key)] === undefined)
-        tree.canvases[String(key)] = { id: path, wgsl: typeof node.wgsl === "string" }
-    }
-  }
-  if (children === undefined) return out
-  out.children = []
-  __widget_children(Array.isArray(children) ? children : [children], "", path, out.children, tree, null, level + 1)
-  return out
-}
-
-// Appends `list`'s nodes to `into`, flattening nested arrays (their items' segments are `index.index`) and skipping
-// holes, which keep their index. Repeated keys among siblings still get distinct ids, in order (`seen` counts them).
-function __widget_children(list, prefix, path, into, tree, seen, level) {
-  for (let index = 0; index < list.length; index++) {
-    const child = list[index]
-    if (!child) continue
-    if (level > __WIDGET_LEVELS && typeof child === "object") throw new RangeError(__WIDGET_DEEP)
-    if (Array.isArray(child)) {
-      seen = __widget_children(child, prefix + index + ".", path, into, tree, seen, level + 1)
-      continue
-    }
-    // Plain leaves (most text) need no path: building one costs more than the leaf itself.
-    if (typeof child !== "object" || __widget_plain(child)) {
-      into.push(child)
-      continue
-    }
-    let next
-    if (__widget_keyed(child.key)) {
-      next = path + "/:" + encodeURIComponent(String(child.key))
-      if (seen === null) seen = new Map()
-      const count = (seen.get(next) ?? 0) + 1
-      seen.set(next, count)
-      if (count > 1) next = next + "~" + count
-    } else next = path + "/" + prefix + index
-    into.push(__widget_node(child, next, tree, level))
-  }
-  return seen
-}
-
-// The handler of the node with id `id` in the view `root` as built: what `__widget_tree(root).handlers[id]` would be,
-// found by following the id's path instead of building the tree (native hosts assign the ids). Where two siblings
-// share a segment (a key that looks like a repeat, `k~2`), the later one's subtree wins, as in the table.
+// The handler of the node with id `id` in the view `root` as built, found by following the id's path (the host assigns
+// the ids, specs/v2/widgets.md, Native hosts). Where two siblings share a segment (a key that looks like a repeat,
+// `k~2`), the later one's subtree wins.
 function __widget_find(root, id) {
   if (!root || typeof root !== "object" || Array.isArray(root)) return undefined
   const segments = String(id).split("/")
@@ -204,7 +117,7 @@ function __widget_items(list, into) {
   return into
 }
 
-// Pushes onto `into` the children in `list` whose path segment is `segment`, numbering them as `__widget_children`.
+// Pushes onto `into` the children in `list` whose path segment is `segment`, numbering them as hosts do.
 function __widget_segments(list, prefix, segment, into, seen) {
   for (let index = 0; index < list.length; index++) {
     const child = list[index]
@@ -383,27 +296,10 @@ function send(value, options) {
   return new __WidgetResult("send", { value: value ?? null, wake: options?.wake !== false }, options?.state)
 }
 
-// A step for a host that builds the tree itself: the view goes to `__widget_emit` as built, and the run's result is the
+// One step (specs/v2/widgets.md, Native hosts): the view goes to `__widget_emit` as built, and the run's result is the
 // rest of the step output (`state`, `submit`, `dismiss`, `send`) or a draw's `{ commands }`. A view the host can't take
 // because it nests too deep goes as `__widget_emit(null, message)` instead.
 function __widget_native_step(input) {
-  const output = __widget_advance(input, true)
-  if (input.phase === "draw") return output
-  const { view, ...rest } = output
-  try {
-    __widget_emit(view)
-  } catch (error) {
-    if (!__widget_deep([view], 1)) throw error
-    __widget_emit(null, __WIDGET_DEEP)
-  }
-  return rest
-}
-
-function __widget_step(input) {
-  return __widget_advance(input, false)
-}
-
-function __widget_advance(input, native) {
   const data = input.data
   if (input.phase === "draw") {
     const { id, ...frame } = input.frame ?? {}
@@ -412,31 +308,35 @@ function __widget_advance(input, native) {
     const drawn = typeof draw === "function" ? draw(input.state, data, frame) : undefined
     return { commands: (drawn instanceof __WidgetDraw ? drawn.commands : drawn) ?? [] }
   }
-  if (input.phase === "init") {
-    const state = (typeof init === "function" ? init(data) : undefined) ?? {}
-    const root = view(state, data)
-    return { state, view: native === true ? root : __widget_tree(root).view }
+  const output = {}
+  if (input.phase === "init") output.state = (typeof init === "function" ? init(data) : undefined) ?? {}
+  else {
+    const next = __widget_dispatch(input.state, input.event ?? {}, data)
+    const result = next instanceof __WidgetResult ? next : undefined
+    output.state = result
+      ? result.state === undefined
+        ? input.state
+        : result.state
+      : next === undefined
+        ? input.state
+        : next
+    if (result?.kind === "dismiss") output.dismiss = true
+    if (result?.kind === "send") output.send = result.value
+    if (result?.kind === "submit") output.submit = result.value
   }
-  const next = __widget_dispatch(input.state, input.event ?? {}, data, native === true)
-  const result = next instanceof __WidgetResult ? next : undefined
-  const state = result
-    ? result.state === undefined
-      ? input.state
-      : result.state
-    : next === undefined
-      ? input.state
-      : next
-  const root = view(state, data)
-  const output = { state, view: native === true ? root : __widget_tree(root).view }
-  if (result?.kind === "dismiss") output.dismiss = true
-  if (result?.kind === "send") output.send = result.value
-  if (result?.kind === "submit") output.submit = result.value
+  const root = view(output.state, data)
+  try {
+    __widget_emit(root)
+  } catch (error) {
+    if (!__widget_deep([root], 1)) throw error
+    __widget_emit(null, __WIDGET_DEEP)
+  }
   return output
 }
 
 // Routes one client event: system events to the widget template's hooks, control events to the handler of the node with
 // that id in the view of the current state. Nothing else sees either; an event nobody takes changes nothing.
-function __widget_dispatch(state, event, data, native) {
+function __widget_dispatch(state, event, data) {
   if (event.type === "key") {
     const key = __widget_key(event.value)
     return key && typeof onKey === "function" ? onKey(state, key) : undefined
@@ -449,8 +349,7 @@ function __widget_dispatch(state, event, data, native) {
   if (event.type === "capture")
     return typeof onCapture === "function" ? onCapture(state, event.value === true) : undefined
   if (event.type !== "press" && event.type !== "change" && event.type !== "pointer") return undefined
-  const root = view(state, data)
-  const entry = native ? __widget_find(root, event.id) : __widget_tree(root).handlers[event.id]
+  const entry = __widget_find(view(state, data), event.id)
   if (!entry || entry.event !== event.type) return undefined
   const value = __widget_value(entry, event.value)
   if (value === undefined) return undefined
@@ -466,10 +365,7 @@ const widget = (() => {
     frame: null,
     requested: false,
     waiting: [],
-    handlers: {},
-    canvases: {},
-    // Native host: the last rendered view as built, and whether the host found handlers in it.
-    native: false,
+    // The last rendered view as built, and whether the host found handlers in it.
     root: undefined,
     interactive: false,
     pumping: false,
@@ -480,10 +376,7 @@ const widget = (() => {
   const api = {}
   const post = (message) => (live.done ? undefined : __host.post(message))
   const wanted = () =>
-    !live.done &&
-    (live.waiting.length > 0 ||
-      (live.native ? live.interactive : Object.keys(live.handlers).length > 0) ||
-      Object.values(hooks).some((list) => list.length > 0))
+    !live.done && (live.waiting.length > 0 || live.interactive || Object.values(hooks).some((list) => list.length > 0))
   const fail = (error) => live.reject?.(error)
   // Runs a handler or hook; an async one that rejects fails the program like a throw.
   const call = (handler, ...args) => {
@@ -506,7 +399,7 @@ const widget = (() => {
     if (event.type === "fullscreen") return emit("fullscreen", event.value === true, __widget_rect(event.close))
     if (event.type === "capture") return emit("capture", event.value === true)
     if (event.type === "pointer") api.pointer = __widget_pointer(event.value) ?? api.pointer
-    const entry = live.native ? __widget_find(live.root, event.id) : live.handlers[event.id]
+    const entry = __widget_find(live.root, event.id)
     if (!entry || entry.event !== event.type) return
     const value = __widget_value(entry, event.value)
     if (value === undefined) return
@@ -562,36 +455,23 @@ const widget = (() => {
     keys: new Set(),
     pointer: null,
     render: (node) => {
-      if (live.native) {
-        live.root = node
-        try {
-          live.interactive = post({ type: "render", node }) === true
-        } catch (error) {
-          // A view too deep to cross: the host fails the run with the reason.
-          if (!__widget_deep([node], 1)) throw error
-          post({ type: "render", node: null, failure: __WIDGET_DEEP })
-        }
-      } else {
-        const tree = __widget_tree(node)
-        live.handlers = tree.handlers
-        live.canvases = tree.canvases
-        post({ type: "render", node: tree.view })
+      live.root = node
+      try {
+        live.interactive = post({ type: "render", node }) === true
+      } catch (error) {
+        // A view too deep to cross: the host fails the run with the reason.
+        if (!__widget_deep([node], 1)) throw error
+        post({ type: "render", node: null, failure: __WIDGET_DEEP })
       }
       pump()
     },
-    draw: (key, commands) => {
-      // A native host knows the canvases by key and throws these errors itself.
-      if (live.native)
-        return void post({
-          type: "draw",
-          key: String(key),
-          commands: commands instanceof __WidgetDraw ? commands.commands : commands,
-        })
-      const canvas = live.canvases[String(key)]
-      if (canvas === undefined) throw new Error('No canvas with key "' + key + '" in the rendered view')
-      if (canvas.wgsl) throw new Error('Canvas "' + key + '" is drawn by its wgsl; it takes no draw commands')
-      post({ type: "draw", id: canvas.id, commands: commands instanceof __WidgetDraw ? commands.commands : commands })
-    },
+    // The host knows the canvases by key, and throws for an unknown one or a GPU canvas.
+    draw: (key, commands) =>
+      void post({
+        type: "draw",
+        key: String(key),
+        commands: commands instanceof __WidgetDraw ? commands.commands : commands,
+      }),
     frame: async () => {
       request()
       if (live.frame) return take()
@@ -633,8 +513,7 @@ const widget = (() => {
     releasePointer: () => post({ type: "capture", value: false }),
   })
   // Runs `main`, then keeps the widget interactive while its view has handlers or hooks are registered.
-  api.__run = async (data, native) => {
-    live.native = native
+  api.__run = async (data) => {
     const failed = new Promise((_, reject) => (live.reject = reject))
     failed.catch(() => {})
     await Promise.race([main(data), failed])
@@ -644,7 +523,8 @@ const widget = (() => {
   return api
 })()
 
-async function __widget_live(input, native) {
-  await widget.__run(input.data, native === true)
+// Hosts run `return await __widget_live(__input(), true)` (specs/v2/widgets.md, Native hosts).
+async function __widget_live(input) {
+  await widget.__run(input.data)
   return null
 }

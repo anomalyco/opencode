@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { Glob } from "bun"
 import path from "node:path"
-import { Runtime } from "psychoscript"
-import { disagreement, FUNCTION, native, scripted } from "../script/conformance.js"
+import { Host, Runtime } from "psychoscript"
+import { disagreement, FUNCTION, native, scripted, scriptedProgram } from "../script/conformance.js"
 import { program } from "../src/index.js"
 import { marker, tree } from "../src/tree.js"
 
@@ -17,14 +17,39 @@ test("there is a fixture for every built-in and every edge case", () => {
   expect(files.length).toBeGreaterThanOrEqual(53)
 })
 
-// For every id on the view's nodes and some that are on none: what the prelude's handler table holds, and what it
-// finds by the id's path in the view as built, as `[id, event, value checks]` (the same handler or none).
+// For every id on the view's nodes and some that are on none: the handler the last prelude's table holds
+// (`scriptedProgram`), and the one the prelude finds by following the id's path in the view as built, each as
+// `[node, event, value checks]`, where `node` numbers the view's nodes in order (both programs build the same view).
+const shapes = `
+const __data = __input().data
+const __root = view((typeof init === "function" ? init(__data) : undefined) ?? {}, __data)
+let __count = 0
+const __number = (value) => {
+  if (!value || typeof value !== "object") return
+  if (Array.isArray(value)) return value.forEach(__number)
+  value.__node = __count++
+  __number(value.children)
+}
+__number(__root)
+const __values = [true, false, -1, 0, 1, 2, 1.5, 100, "a", "b", ["a"], ["a", "z"], null, { kind: "down", x: 1, y: 2, width: 3, height: 4 }]
+const __shape = (entry) =>
+  entry && typeof entry.event === "string"
+    ? [entry.node.__node, entry.event, JSON.stringify(__values.map((value) => __widget_value(entry, value)))]
+    : null
+`
 const handlers = async (source: string, input: { data: unknown }) => {
-  const result = await Runtime.make({ limits: { timeoutMs: 60_000 } }).execute(
-    program(source) +
+  const run = async (code: string) => {
+    const result = await Runtime.make({
+      limits: { timeoutMs: 60_000 },
+      globals: () => ({ __input: Host.fn(() => input) }),
+    }).execute(code)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value as ReadonlyArray<[string, unknown]>
+  }
+  const table = await run(
+    scriptedProgram(source) +
+      shapes +
       `
-      const __data = ${JSON.stringify(input.data)}
-      const __root = view((typeof init === "function" ? init(__data) : undefined) ?? {}, __data)
       const __tree = __widget_tree(__root)
       const __ids = new Set(Object.keys(__tree.handlers))
       const __collect = (node) => {
@@ -39,20 +64,14 @@ const handlers = async (source: string, input: { data: unknown }) => {
       }
       __collect(__tree.view)
       ;["", "0/", "/0", "1", "x", "constructor", "__proto__", "toString", "0/999", "0/0.0", ":"].forEach((id) => __ids.add(id))
-      const __values = [true, false, -1, 0, 1, 2, 1.5, 100, "a", "b", ["a"], ["a", "z"], null, { kind: "down", x: 1, y: 2, width: 3, height: 4 }]
-      const __shape = (entry) =>
-        entry && typeof entry.event === "string"
-          ? [entry.event, JSON.stringify(__values.map((value) => __widget_value(entry, value)))]
-          : null
-      return [...__ids].map((id) => {
-        const table = __tree.handlers[id]
-        const found = __widget_find(__root, id)
-        const same = table && typeof table.event === "string" ? found !== undefined && found.handler === table.handler : found === undefined
-        return [id, same, __shape(table), __shape(found)]
-      })`,
+      return [...__ids].map((id) => [id, __shape(__tree.handlers[id])])`,
   )
-  if (!result.ok) throw new Error(result.error.message)
-  return result.value as ReadonlyArray<[string, boolean, unknown, unknown]>
+  const found = await run(
+    program(source) +
+      shapes +
+      `\nreturn ${JSON.stringify(table.map(([id]) => id))}.map((id) => [id, __shape(__widget_find(__root, id))])`,
+  )
+  return table.map(([id, shape], index) => [id, shape, found[index]![1]] as const)
 }
 
 // A fixture's `built` as the host gets it: markers and non-finite numbers back in place.
@@ -100,9 +119,8 @@ for (const file of files) {
   test(`wire fixture ${file}, handlers by path`, async () => {
     const fixture = await Bun.file(path.join(dir, file)).json()
     if (fixture.error || fixture.input.phase !== "init") return
-    for (const [id, same, table, found] of await handlers(fixture.source, fixture.input)) {
-      expect({ id, same }).toEqual({ id, same: true })
-      expect({ id, found }).toEqual({ id, found: table })
-    }
+    const checked = await handlers(fixture.source, fixture.input)
+    for (const [id, table, found] of checked) expect({ id, found }).toEqual({ id, found: table })
+    expect(checked.filter(([, table]) => table !== null).length).toBe(Object.keys(fixture.handlers).length)
   }, 60_000)
 }

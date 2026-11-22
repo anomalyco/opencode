@@ -1,11 +1,23 @@
 import { expect, test } from "bun:test"
-import { Runtime } from "psychoscript"
+import { Host, Runtime } from "psychoscript"
 import { builtins, program } from "../src/index.js"
+import { tree } from "../src/tree.js"
 import { examples } from "./fixtures/diagrams.js"
 
-// The tree building as it was before it was made faster (one closure per node, a copy of every node, an id table of
-// every path): views must come out byte-identical, with the same handler ids and canvas keys.
+// The host's tree building (`src/tree.ts`) against the prelude's as it was before it was made faster and then moved to
+// the hosts (one closure per node, a copy of every node, an id table of every path), run on the same view as built:
+// views must come out byte-identical, with the same handler ids and canvas keys.
 const reference = `
+const __REFERENCE_CONTROLS = {
+  button: { event: "press", handler: "onPress", always: true },
+  card: { event: "press", handler: "onPress" },
+  checkbox: { event: "change", handler: "onChange", always: true },
+  slider: { event: "change", handler: "onChange", always: true },
+  select: { event: "change", handler: "onChange", always: true },
+  input: { event: "change", handler: "onChange", always: true },
+  carousel: { event: "change", handler: "onChange" },
+  canvas: { event: "pointer", handler: "onPointer", keyed: true },
+}
 function __reference_tree(root) {
   const handlers = {}
   const canvases = {}
@@ -13,7 +25,7 @@ function __reference_tree(root) {
   const visit = (node, path) => {
     if (!node || typeof node !== "object" || Array.isArray(node)) return node
     const { key, id, pointer, onPress, onChange, onPointer, children, ...out } = node
-    const control = __WIDGET_CONTROLS[node.type]
+    const control = __REFERENCE_CONTROLS[node.type]
     if (control) {
       const handler = node[control.handler]
       const keyed = control.keyed && key !== undefined && key !== null
@@ -50,20 +62,30 @@ function __reference_tree(root) {
 }
 `
 
-// Runs `source`'s view in the prelude and returns both trees' JSON.
+// Runs `source`'s view and returns both trees' JSON: the host's, from the view as it crosses, and the reference's.
 const trees = async (source: string, data: unknown) => {
-  const result = await Runtime.make({ limits: { timeoutMs: 5000 } }).execute(
+  const crossed: { view?: unknown } = {}
+  const result = await Runtime.make({
+    limits: { timeoutMs: 5000 },
+    translate: { functions: "mark" },
+    globals: () => ({ __cross: Host.fn(([view]) => void (crossed.view = view)) }),
+  }).execute(
     program(source) +
       reference +
       `
       const __data = ${JSON.stringify(data)}
       const __state = (typeof init === "function" ? init(__data) : undefined) ?? {}
       const __view = view(__state, __data)
-      const __shape = (tree) => JSON.stringify([tree.view, Object.keys(tree.handlers), tree.canvases])
-      return [__shape(__widget_tree(__view)), __shape(__reference_tree(__view))]`,
+      __cross(__view)
+      const __tree = __reference_tree(__view)
+      return JSON.stringify([__tree.view, Object.keys(__tree.handlers), __tree.canvases])`,
   )
   if (!result.ok) throw new Error(result.error.message)
-  return result.value as [string, string]
+  const host = tree(crossed.view, "Argument 1 to __cross")
+  return [
+    JSON.stringify([host.view, [...host.handlers], Object.fromEntries(host.canvases)]),
+    result.value as string,
+  ] as const
 }
 
 const data: Record<string, unknown> = {

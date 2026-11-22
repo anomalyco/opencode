@@ -2,9 +2,11 @@
 // (specs/v2/widgets.md, Native hosts) must make of the program's step: the view the program emits (`built`, with
 // `FUNCTION` for each function and `$NaN`, `$Infinity`, `$-Infinity` for numbers JSON can't hold), the tree clients get
 // (`view`), the ids with handlers and their events, the canvas ids by key, and the run's result (`result`: `state`,
-// `submit`, `dismiss`, `send`), or how the step fails (`error`). They come from the prelude building the tree itself,
-// and the TypeScript host must agree with it; a step that fails comes from the TypeScript host. Hosts check themselves
+// `submit`, `dismiss`, `send`), or how the step fails (`error`). They come from the last prelude that could build the
+// tree itself (protocol 1's `__widget_step`, kept in `test/fixtures/scripted-prelude.js`), and the TypeScript host must
+// agree with it; a step that fails comes from the TypeScript host. Hosts check themselves
 // against these files. Run `bun run script/conformance.ts` only to regenerate them from a prelude known to be right.
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import { Host, Runtime } from "psychoscript"
 import { builtins, program, type StepInput } from "../src/index.js"
@@ -14,6 +16,13 @@ import { examples } from "../test/fixtures/diagrams.js"
 import { cases } from "../test/fixtures/wire-cases.js"
 
 const dir = path.resolve(import.meta.dir, "../test/fixtures/wire")
+
+/**
+ * A widget template's program on the last prelude that builds the tree itself (`__widget_step`, `__widget_tree`, a
+ * handler table, live posts by canvas id), at 523750c6a: an implementation of the tree independent of the hosts'.
+ */
+const scriptedPrelude = readFileSync(path.resolve(import.meta.dir, "../test/fixtures/scripted-prelude.js"), "utf8")
+export const scriptedProgram = (source: string) => scriptedPrelude + "\n" + source
 
 /** What stands for a function marker in a fixture's `built`. */
 export const FUNCTION = "$function"
@@ -54,11 +63,11 @@ const data: Record<string, unknown> = {
   backdrop: { title: "Hi", preset: "plasma", text: "x" },
 }
 
-// The step with the prelude building the tree, as hosts of protocol 1 ran it: the view, its handlers' events and its
+// The step with the prelude building the tree, as hosts of protocol 1 ran it (on `scriptedProgram`): the view, its handlers' events and its
 // canvas ids by key (from the next state's view), and the rest of the step output, all through the run's result.
 export const scripted = async (source: string, input: Input): Promise<Outcome> => {
   const result = await Runtime.make({ limits: { timeoutMs: 10_000 } }).execute(
-    program(source) +
+    scriptedProgram(source) +
       `
       const __input_ = ${JSON.stringify(input)}
       const { view: __view, ...__result } = __widget_step(__input_)

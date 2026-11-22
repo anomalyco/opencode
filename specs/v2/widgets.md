@@ -102,21 +102,20 @@ The prelude is canonical JavaScript in `packages/widget/src/prelude.js`. It defi
   submit or dismiss later. `state`, when given, becomes the next state. `send(undefined)` sends `null`. `wake: false`
   delivers it without waking the agent: it sees the message on its next turn (use it for background updates).
 - `__widget_protocol`, on the prelude's first line: the version of the prelude↔host contract (Protocol).
-- `__widget_native_step(input)`: runs one step (below) for a native host (Native hosts); `__widget_step(input)` runs
-  one for a host of protocol 1, the prelude building the tree.
+- `__widget_native_step(input)`: runs one step (below; Native hosts).
 
-**Ids.** Before a view reaches the client, the prelude (or a native host, below) turns the tree widget templates build into the tree clients get: it
+**Ids.** Before a view reaches the client, the host (Native hosts) turns the tree widget templates build into the tree clients get: it
 flattens `children`, removes handler functions and `key`s, and gives each interactive node an `id` derived from its
 path: the root is `0` (or `:key`), a child appends `/` and its index among its parent's children (`2`, or `2.1` for
 the second item of a nested array at index 2; a `null`/`false` hole keeps its index) or `:key` when it has a `key`
 (URI-encoded; a repeated key gets `~2`, `~3`, ...). So `0/:alice/1` is the second child of the sibling keyed `alice`.
 `button`, `checkbox`, `slider`, `select` and `input` always get an id; `card` and `carousel` get one with a handler;
 `canvas` with `onPointer` or a `key`. The same node keeps its id from one view to the next as long as its
-path does, which keys make true for lists that change shape. The prelude keeps an id → handler table for the view
-(with a native host, it finds an id's handler by following the id's path).
+path does, which keys make true for lists that change shape. The prelude finds an id's handler by following the id's
+path through the view.
 
-**Keys and depth.** Two rules for every view, checked when it is turned into the tree clients get (by the prelude or
-a native host; lint can't check them, so they are runtime rules):
+**Keys and depth.** Two rules for every view, checked when the host turns it into the tree clients get (lint can't
+check them, so they are runtime rules):
 
 - A node's `key` is a string, a number (finite or not) or a boolean; `undefined` and `null` mean no key. Any other key
   (an object, an array, a function) fails the view with `A node's key must be a string, a number or a boolean`.
@@ -148,16 +147,16 @@ return __widget_native_step(__input())
 ```
 
 with two global sync host functions, `__input` returning the step input and `__widget_emit` taking the view (Native
-hosts), and reruns it per step. No other globals. (Hosts of protocol 1 ran `return __widget_step(__input())` with
-`__input` alone; the prelude still answers that, building the tree itself.)
+hosts), and reruns it per step. No other globals.
 Limits: 250 ms timeout per step; a client may use smaller limits. (`@opencode/widget` compiles each program text once,
 with `Runtime.compile`, and keeps the 32 last used.)
 
 ### Protocol
 
 The prelude↔host contract has a version, `__widget_protocol`, raised whenever that contract changes (the entries,
-the host globals, what crosses between them). Protocol 1 is the prelude building the tree (`__widget_step`); protocol 2
-is native hosts (below). The prelude's first line declares it, so a program's first line is exactly
+the host globals, what crosses between them). History: protocol 1 was the prelude building the tree itself, with
+`return __widget_step(__input())` and no declaration; protocol 2 is native hosts (below), the only one the prelude
+implements now. The prelude's first line declares it, so a program's first line is exactly
 
 ```js
 const __widget_protocol = 2
@@ -173,6 +172,10 @@ without running anything:
   for a live run), reported once like any program error, so the agent can post the widget again.
 - **A newer protocol**: a client error (the app is older than the widget): show `This widget needs a newer version of
   this app`, log it in dev builds, and don't report it.
+
+Either way the client shows the message without a Try again or Restart action: no retry can succeed. An embedder
+without an agent session (Console artifacts) may replace the older-protocol wording with its own, such as `This
+artifact was shared with an older widget runtime; share it again from its widget template.`
 
 Before release, decide whether the server serves stored widget templates (programs saved under older preludes) with
 the current prelude, which would make the older-protocol case one of cached programs only.
@@ -209,9 +212,9 @@ error inline. The first `init` step failing shows an error card with the message
 ### Native hosts
 
 Building the tree clients get costs a JavaScript pass over every node of every view, which is slow on the Rust
-interpreter. A **native host** does it instead, natively, while it converts or encodes the output (Rust hosts:
+interpreter. Every host is a **native host**: it does it natively, while it converts or encodes the output (Rust hosts:
 psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript runtime (`@opencode/widget`'s
-`step`, `WidgetSession` and `LiveWidget`). Clients see the same views, ids and handler dispatch either way.
+`step`, `WidgetSession` and `LiveWidget`).
 
 - **Entries.** Steps (`init`, `event`, `draw`): `return __widget_native_step(__input())`. Live:
   `return await __widget_live(__input(), true)`.
@@ -219,8 +222,8 @@ psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript r
   argument or in the run's result crosses as the function marker, and the boundary value depth (default 32) at
   **202**: the deepest value of a view of 100 levels (Keys and depth). A level takes at most two value levels (a node
   and its `children` array, or an array in `children`), the deepest prop of a valid node three below it (`options` →
-  an option → its `label`), and the widest wrapper one (a live `{ type: "render", node }`, or protocol 1's step output
-  `{ state, view }`): 1 + 2 × 99 + 3 = 202. Values deeper than that (in a prop the node types don't define) fail where
+  an option → its `label`), and the widest wrapper one (a live `{ type: "render", node }`; an
+  emitted view has none): 1 + 2 × 99 + 3 = 202. Values deeper than that (in a prop the node types don't define) fail where
   they cross, with the interpreter's own error. (`@opencode/widget` keeps the default 32 until PsychoScript's TypeScript
   runtime has the option, so its views cross up to 16 levels.)
 - **A step's output, split.** `__widget_native_step` calls `__widget_emit(view)` once per `init` or `event` step with
@@ -231,7 +234,7 @@ psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript r
 - **What it gets.** The emitted view, and a live `render`'s `node`, are the view as built: handler props are markers,
   `key`s are there, `children` are as written (nested arrays, holes, `null`, `undefined`, `false`), and values are as
   a host call's argument carries them (as live renders always were).
-- **What it makes.** Exactly what the prelude's `__widget_tree` makes:
+- **What it makes.** The tree clients get (what protocol 1's prelude made itself):
   1. The root's path is `:` + enc(root `key`) when the root is an object (not an array) with a key (Keys and depth);
      otherwise `0`.
   2. A value that isn't an object, or is an array, goes out as in 5. An object (a node) goes out with its props in their
@@ -273,23 +276,24 @@ psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript r
   canvas ids by key (`String(key)`, the first such canvas) and whether any id has a handler. The prelude finds an
   event's handler by following the id's path through the view as built (the rebuilt view in a step, the last rendered
   node in live mode): where siblings share a segment (a key written like a repeat, `k~2`), the last one whose subtree
-  has the id takes it, as in the table.
+  has the id takes it.
 - **Live posts.** `__host.post({ type: "render", node })` returns `true` when the view has a handler, else `false`;
-  the prelude keeps the run going on that, as before (`widgets-live.md`). The host walks every render posted to it,
+  the prelude keeps the run going on that (`widgets-live.md`). The host walks every render posted to it,
   one it drops over the post rate too. `widget.draw(key, commands)` posts `{ type: "draw", key, commands }` (`key` a
-  string); the host maps the key to the canvas's id from the last render and gives its client that id, as for the
-  prelude's `{ type: "draw", id, commands }`. For an unknown key it throws from `post` an `Error`
+  string); the host maps the key to the canvas's id from the last render and gives its client
+  `{ type: "draw", id, commands }`. For an unknown key it throws from `post` an `Error`
   `No canvas with key "<key>" in the rendered view`, for a GPU canvas `Canvas "<key>" is drawn by its wgsl; it takes no
-  draw commands`; the program can catch either, as before.
-- **Draw steps**: the host passes the canvas's id in `frame.id`, as before.
+  draw commands`; the program can catch either.
+- **Draw steps**: the host passes the canvas's id in `frame.id`.
 - **Conformance.** `packages/widget/test/fixtures/wire/*.json` hold, for every built-in and the edge cases, the
   widget template `source` and the step `input`, and what the host must make of them: `built`, the view as emitted
   (each function as the string `"$function"`, `NaN` and `±Infinity` as `"$NaN"`, `"$Infinity"`, `"$-Infinity"`, holes
   and `undefined` items as `null`), and either the `view` clients get (as JSON), the `handlers` (id → event), the
   `canvases` (key → id) and the run's `result` (as JSON), or the `error`: `{ view: true, message }` for a program error
   in phase `view` with exactly that message, `{ view: false, message }` for the step failing with exactly that message.
-  They come from the prelude's own tree building where it agrees (all but a function the prelude leaves out), and
-  from the TypeScript host for failures. A native host runs `prelude + "\n" + source` on `input` and must give the
+  They come from the last prelude that built the tree itself (protocol 1, kept for this in
+  `packages/widget/test/fixtures/scripted-prelude.js`) where it agrees (all but a function it left out), and from the
+  TypeScript host for failures. A native host runs `prelude + "\n" + source` on `input` and must give the
   same; `built` tests its walk alone. `packages/widget/src/tree.ts` is the walk in TypeScript.
 
 ## Events
@@ -419,7 +423,7 @@ Clients never call `draw`, or render a GPU canvas, while the canvas has a zero w
 when entering or leaving full screen); they wait until both are positive. `frame.width` and `frame.height` are always
 greater than 0.
 
-Draw step input / output (same `__widget_step` entry point):
+Draw step input / output (same `__widget_native_step` entry point):
 
 ```ts
 type StepInput = ... | { phase: "draw"; data: unknown; state: unknown; frame: Frame }
