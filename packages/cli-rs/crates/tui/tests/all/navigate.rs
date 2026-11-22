@@ -748,3 +748,21 @@ fn a_selection_keeps_its_rows_while_the_wheel_moves_away_and_back() {
     let rows = |screen: &str| screen.lines().skip(TOP + 3).map(str::to_owned).collect::<Vec<_>>();
     assert_eq!(rows(&h.idle()), rows(&screen));
 }
+
+#[test]
+fn freed_rows_go_back_to_the_system_once_the_reader_stops() {
+    let runs = opencode_tui::features::release::runs;
+    let h = open(turns(LONG), Info::default());
+    h.press("ctrl+g");
+    h.wait_for("┃  Question 1\n");
+    let start = runs();
+    page_to_end(&h, "pagedown");
+    assert_eq!(runs(), start, "a release while the rows drop");
+    h.app.advance(Duration::from_secs(2));
+    assert_eq!(runs(), start + 1, "no release once the drops stopped");
+    page_to_end(&h, "pageup");
+    h.app.advance(Duration::from_secs(2));
+    assert_eq!(runs(), start + 1, "a second release within 30 s of the first");
+    h.app.advance(Duration::from_secs(30));
+    assert_eq!(runs(), start + 2, "no release 30 s after the first");
+}

@@ -117,6 +117,7 @@ impl Drop for Inner {
             if let Some(id) = hooks.resize.take() {
                 tui.app.remove_handler(id);
             }
+            crate::features::release::dropped(&tui.app, self.rows.get_mut().len());
         }
     }
 }
@@ -1067,6 +1068,7 @@ impl Inner {
     /// messages `changed`, and orders them. `mounted` holds the children's keys before and after.
     fn apply(&self, cx: &Context<'_>, plan: &Plan, changed: impl Fn(MessageKey) -> bool, mounted: &mut Vec<RowKey>) {
         let mut rows = self.rows.borrow_mut();
+        let before = rows.len();
         rows.retain(|key, row| {
             let keep = plan.wanted.contains(key);
             if !keep {
@@ -1074,6 +1076,7 @@ impl Inner {
             }
             keep
         });
+        crate::features::release::dropped(cx.app, before - rows.len());
         mounted.retain(|key| plan.wanted.contains(key));
         let window = &plan.specs[plan.window.clone()];
         for spec in window {
