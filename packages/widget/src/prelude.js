@@ -48,47 +48,76 @@ const __WIDGET_CONTROLS = {
 // Turns a view as widget templates build it into the tree clients get: children flattened, handler functions and `key`s
 // removed, and each interactive node given an id from its path (child indices, or `:key` where the author set a key),
 // so the same node keeps its id from one view to the next. Returns the tree, the handlers by id and canvas ids by key.
+// It runs for every node of every view, so it copies only the nodes it has to change and builds no closures.
 function __widget_tree(root) {
-  const handlers = {}
-  const canvases = {}
-  const used = {}
-  const visit = (node, path) => {
-    if (!node || typeof node !== "object" || Array.isArray(node)) return node
-    const { key, id, pointer, onPress, onChange, onPointer, children, ...out } = node
-    const control = __WIDGET_CONTROLS[node.type]
-    if (control) {
-      const handler = node[control.handler]
-      const keyed = control.keyed && key !== undefined && key !== null
-      if (typeof handler === "function" || control.always || keyed) {
-        out.id = path
-        if (typeof handler === "function") handlers[path] = { event: control.event, handler, node: out }
-        // Only a canvas with a handler takes input; one with just a key has an id for `widget.draw`.
-        if (node.type === "canvas" && typeof handler === "function") out.pointer = true
-        if (keyed && canvases[String(key)] === undefined)
-          canvases[String(key)] = { id: path, wgsl: typeof node.wgsl === "string" }
-      }
-    }
-    if (children === undefined) return out
-    const items = []
-    const collect = (value, at) => {
-      if (Array.isArray(value))
-        value.forEach((item, index) => collect(item, at === "" ? String(index) : at + "." + index))
-      else if (value) items.push([value, at])
-    }
-    collect(Array.isArray(children) ? children : [children], "")
-    out.children = items.map(([child, at]) => {
-      const named = child && typeof child === "object" && child.key !== undefined && child.key !== null
-      let next = path + "/" + (named ? ":" + encodeURIComponent(String(child.key)) : at)
-      // Repeated keys among siblings still get distinct ids, in order.
-      used[next] = (used[next] ?? 0) + 1
-      if (used[next] > 1) next = next + "~" + used[next]
-      return visit(child, next)
-    })
-    return out
-  }
+  const tree = { view: undefined, handlers: {}, canvases: {} }
   const named = root && typeof root === "object" && root.key !== undefined && root.key !== null
-  const view = visit(root, named ? ":" + encodeURIComponent(String(root.key)) : "0")
-  return { view, handlers, canvases }
+  tree.view = __widget_node(root, named ? ":" + encodeURIComponent(String(root.key)) : "0", tree)
+  return tree
+}
+
+// A node that goes out as built: not interactive, no container, and none of the props the prelude takes off.
+function __widget_plain(node) {
+  return (
+    node.children === undefined &&
+    __WIDGET_CONTROLS[node.type] === undefined &&
+    node.key === undefined &&
+    node.id === undefined &&
+    node.pointer === undefined &&
+    node.onPress === undefined &&
+    node.onChange === undefined &&
+    node.onPointer === undefined
+  )
+}
+
+function __widget_node(node, path, tree) {
+  if (!node || typeof node !== "object" || Array.isArray(node) || __widget_plain(node)) return node
+  const { key, id, pointer, onPress, onChange, onPointer, children, ...out } = node
+  const control = __WIDGET_CONTROLS[node.type]
+  if (control) {
+    const handler = node[control.handler]
+    const keyed = control.keyed && key !== undefined && key !== null
+    if (typeof handler === "function" || control.always || keyed) {
+      out.id = path
+      if (typeof handler === "function") tree.handlers[path] = { event: control.event, handler, node: out }
+      // Only a canvas with a handler takes input; one with just a key has an id for `widget.draw`.
+      if (node.type === "canvas" && typeof handler === "function") out.pointer = true
+      if (keyed && tree.canvases[String(key)] === undefined)
+        tree.canvases[String(key)] = { id: path, wgsl: typeof node.wgsl === "string" }
+    }
+  }
+  if (children === undefined) return out
+  out.children = []
+  __widget_children(Array.isArray(children) ? children : [children], "", path, out.children, tree, null)
+  return out
+}
+
+// Appends `list`'s nodes to `into`, flattening nested arrays (their items' segments are `index.index`) and skipping
+// holes, which keep their index. Repeated keys among siblings still get distinct ids, in order (`seen` counts them).
+function __widget_children(list, prefix, path, into, tree, seen) {
+  for (let index = 0; index < list.length; index++) {
+    const child = list[index]
+    if (!child) continue
+    if (Array.isArray(child)) {
+      seen = __widget_children(child, prefix + index + ".", path, into, tree, seen)
+      continue
+    }
+    // Plain leaves (most text) need no path: building one costs more than the leaf itself.
+    if (typeof child !== "object" || __widget_plain(child)) {
+      into.push(child)
+      continue
+    }
+    let next
+    if (child.key !== undefined && child.key !== null) {
+      next = path + "/:" + encodeURIComponent(String(child.key))
+      if (seen === null) seen = new Map()
+      const count = (seen.get(next) ?? 0) + 1
+      seen.set(next, count)
+      if (count > 1) next = next + "~" + count
+    } else next = path + "/" + prefix + index
+    into.push(__widget_node(child, next, tree))
+  }
+  return seen
 }
 
 // The value a handler gets for a client event, checked against the node; undefined drops the event.
