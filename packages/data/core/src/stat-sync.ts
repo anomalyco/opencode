@@ -91,6 +91,8 @@ export const planDataSync = Effect.fn("StatSync.plan")(function* (
   options: { history: boolean; loadCatalog?: typeof loadCatalogIdentity },
 ) {
   const retentionStats = yield* RetentionStatRepo
+  const modelStats = yield* ModelStatRepo
+  const geoStats = yield* GeoStatRepo
   const range = syncRange(startedAt, options.history)
   const identity = yield* Effect.promise(options.loadCatalog ?? loadCatalogIdentity)
   // Without the catalog every period written would attribute models to
@@ -98,6 +100,14 @@ export const planDataSync = Effect.fn("StatSync.plan")(function* (
   if (!identity.catalog) return yield* Effect.fail(new CatalogUnavailableError())
   if (identity.stale) yield* Effect.logWarning("model catalog unavailable; using cached identity")
   const retentionAvailable = yield* retentionStats.available()
+  // Period steps only clean the periods they sync, and the site shows weeks older than any run recomputes.
+  yield* Effect.all(
+    [
+      modelStats.deleteModels(Resource.DataSyncConfig.dataset, hiddenStatModels()),
+      geoStats.deleteModels(Resource.DataSyncConfig.dataset, hiddenStatModels()),
+    ],
+    { concurrency: "unbounded", discard: true },
+  )
   yield* logRuntimeCheck()
 
   const plan: DataSyncPlan = {

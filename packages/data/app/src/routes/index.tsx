@@ -16,9 +16,10 @@ import { getRequestEvent } from "solid-js/web"
 import { FormatLinks, JsonLd, LastModified, openCodeOrganization } from "../component/agent-meta"
 import { ChartDataTable } from "../component/chart-data-table"
 import { LocaleLinks } from "../component/locale-links"
+import { DEFAULT_PERIOD, PeriodToggle, type Period } from "../component/period-toggle"
 import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
-import { isoDay } from "../lib/format"
+import { formatPeriodDate } from "../lib/format"
 import { jsonUrl, localizedUrl, markdownUrl } from "../lib/language"
 import { providerIconId } from "../lib/provider-icon"
 import { dismissChartTooltipOnExit } from "../lib/chart-tooltip"
@@ -63,7 +64,6 @@ const usageColors = [
 ]
 const marketColors = ["#ed6aff", "#a684ff", "#7c86ff", "#51a2ff", "#00d3f2", "#00d5be", "#00bc7d", "#9ae600", "#ffb900"]
 
-type UsageRange = "1D" | "1W" | "2W" | "1M" | "2M"
 type IsoCountryCode = readonly [string, string, string]
 type HomeLeaderboardEntry = HomePageData["leaderboard"]["weekly"][number]
 type HomeRetentionEntry = HomePageData["retention"][number]
@@ -332,8 +332,10 @@ function ChartSection(props: {
   )
 }
 
-function SectionTitle(props: { id: string; title: string; description?: string }) {
-  return <SectionHeading href={`#${props.id}`} title={props.title} description={props.description} />
+function SectionTitle(props: { id: string; title: string; description?: string; action?: JSX.Element }) {
+  return (
+    <SectionHeading href={`#${props.id}`} title={props.title} description={props.description} action={props.action} />
+  )
 }
 
 function SectionBridge(props: { label: string; href: string }) {
@@ -381,12 +383,13 @@ function formatUpdatedAtLabel(value: { date: string; time: string }) {
 }
 
 function TopModelsSection(props: {
-  data: UsagePoint[]
+  data: HomePageData["usage"]
   leaderboard: HomePageData["leaderboard"]
   catalogLabs: readonly string[]
 }) {
   const i18n = useI18n()
   const [activeModel, setActiveModel] = createSignal<string>()
+  const [chartPeriod, setChartPeriod] = createSignal(DEFAULT_PERIOD)
   const [period, setPeriod] = createSignal<"weekly" | "daily">("weekly")
   const leaderboard = createMemo(() => props.leaderboard[period()])
 
@@ -397,12 +400,18 @@ function TopModelsSection(props: {
         href="#top-models"
         title={i18n.t("nav.topModels")}
         description={i18n.t("home.topModelsDescription")}
+        action={<PeriodToggle value={chartPeriod()} onChange={setChartPeriod} label={i18n.t("nav.topModels")} />}
       />
       <Show
-        when={props.data.some((item) => usageTotal(item) > 0)}
+        when={props.data[chartPeriod()].some((item) => usageTotal(item) > 0)}
         fallback={<EmptyState title={i18n.t("home.noUsageTitle")} description={i18n.t("home.noUsageDescription")} />}
       >
-        <TopModelsChart data={props.data} range="2M" activeModel={activeModel()} onActiveModelChange={setActiveModel} />
+        <TopModelsChart
+          data={props.data[chartPeriod()]}
+          period={chartPeriod()}
+          activeModel={activeModel()}
+          onActiveModelChange={setActiveModel}
+        />
       </Show>
       <div data-slot="leaderboard-period" role="group" aria-label={i18n.t("nav.leaderboard")}>
         <div data-component="usage-filter" data-variant="range">
@@ -450,7 +459,7 @@ function TopModelsSection(props: {
 
 function TopModelsChart(props: {
   data: UsagePoint[]
-  range: UsageRange
+  period: Period
   metric?: "tokens" | "users"
   ariaLabel?: string
   activeModel: string | undefined
@@ -464,7 +473,7 @@ function TopModelsChart(props: {
   const activePoint = createMemo(() => props.data[activeIndex() ?? -1])
   const metric = createMemo(() => props.metric ?? "tokens")
 
-  createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
+  createEffect(() => scrollDenseChartToEnd(chartRef, props.data.length))
   dismissChartTooltipOnExit({
     chart: () => chartRef,
     open: () => activeIndex() !== undefined,
@@ -479,9 +488,9 @@ function TopModelsChart(props: {
       <div
         ref={chartRef}
         data-component="top-models-chart"
-        data-range={props.range}
+        data-period={props.period}
         data-metric={metric()}
-        data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
+        data-dense-labels="true"
         role="img"
         aria-label={props.ariaLabel ?? i18n.t("home.stackedUsageChart")}
         style={{ "--top-models-count": props.data.length } as JSX.CSSProperties}
@@ -503,7 +512,7 @@ function TopModelsChart(props: {
                   <span data-slot="axis-total">{formatUsageChartValue(usageTotal(day), metric())}</span>
                   <span data-slot="axis-date">
                     <span data-slot="axis-date-full">{day.date}</span>
-                    <span data-slot="axis-date-mobile">{formatTopModelsMobileDate(day.date, props.range)}</span>
+                    <span data-slot="axis-date-mobile">{formatTopModelsMobileDate(day.date)}</span>
                   </span>
                 </span>
               </div>
@@ -605,7 +614,7 @@ function TopModelsChart(props: {
                       data-component="chart-tooltip"
                       data-placement={dayIndex() > props.data.length * 0.62 ? "left" : "right"}
                     >
-                      <strong>{point().date}</strong>
+                      <strong>{formatPeriodDate(point().start, point().end)}</strong>
                       <Show when={metric() === "tokens"}>
                         <span>
                           {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric(), i18n)}
@@ -661,9 +670,10 @@ function TopModelsChart(props: {
   )
 }
 
-function UniqueUsersSection(props: { data: UsagePoint[] }) {
+function UniqueUsersSection(props: { data: HomePageData["users"] }) {
   const i18n = useI18n()
   const [activeModel, setActiveModel] = createSignal<string>()
+  const [period, setPeriod] = createSignal(DEFAULT_PERIOD)
 
   return (
     <section id="unique-users" data-section="unique-users">
@@ -672,16 +682,17 @@ function UniqueUsersSection(props: { data: UsagePoint[] }) {
         id="unique-users"
         title={i18n.t("home.uniqueUsersTitle")}
         description={i18n.t("home.uniqueUsersDescription")}
+        action={<PeriodToggle value={period()} onChange={setPeriod} label={i18n.t("home.uniqueUsersTitle")} />}
       />
       <Show
-        when={props.data.some((item) => usageTotal(item) > 0)}
+        when={props.data[period()].some((item) => usageTotal(item) > 0)}
         fallback={
           <EmptyState title={i18n.t("home.noUserDataTitle")} description={i18n.t("home.noUserDataDescription")} />
         }
       >
         <TopModelsChart
-          data={props.data}
-          range="2M"
+          data={props.data[period()]}
+          period={period()}
           metric="users"
           ariaLabel={i18n.t("home.uniqueUsersChart")}
           activeModel={activeModel()}
@@ -847,7 +858,7 @@ function getTopModelsSegmentColor(
 }
 
 function isTopModelsMobileAxisHidden(index: number, count: number) {
-  return count > 7 && index % 2 === 1
+  return count > 7 && (count - 1 - index) % 2 === 1
 }
 
 function isColumnLabelHidden(index: number, count: number) {
@@ -856,21 +867,16 @@ function isColumnLabelHidden(index: number, count: number) {
   return index !== count - 1 && index % interval !== 0
 }
 
-function isDenseColumnRange(range: UsageRange) {
-  return range === "1M" || range === "2M"
-}
-
-function scrollDenseChartToEnd(element: HTMLDivElement | undefined, range: UsageRange, count: number) {
-  if (!element || count <= 0 || !isDenseColumnRange(range) || typeof window === "undefined") return
+function scrollDenseChartToEnd(element: HTMLDivElement | undefined, count: number) {
+  if (!element || count <= 0 || typeof window === "undefined") return
   window.requestAnimationFrame(() => {
     // WebKit ignores out-of-range values like Number.MAX_SAFE_INTEGER, so scroll to the real end.
     element.scrollLeft = element.scrollWidth
   })
 }
 
-function formatTopModelsMobileDate(label: string, range: UsageRange) {
-  if (range === "1M" || range === "2M") return label.split(" - ")[0] ?? label
-  return label
+function formatTopModelsMobileDate(label: string) {
+  return label.split(" - ")[0] ?? label
 }
 
 function usageTotal(point: UsagePoint) {
@@ -1030,14 +1036,16 @@ function formatChange(value: number | null, i18n: ReturnType<typeof useI18n>) {
   return `${value}%`
 }
 
-function MarketShareSection(props: { data: MarketDay[]; labPaths: HomePageData["labPaths"] }) {
+function MarketShareSection(props: { data: HomePageData["market"]; labPaths: HomePageData["labPaths"] }) {
   const i18n = useI18n()
+  const [period, setPeriod] = createSignal(DEFAULT_PERIOD)
   const [activeIndex, setActiveIndex] = createSignal(2)
   const [activeAuthor, setActiveAuthor] = createSignal<string>()
   const [inspecting, setInspecting] = createSignal(false)
-  const authorOrder = createMemo(() => getMarketAuthorOrder(props.data))
-  const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(props.data.length - 1, 0)))
-  const today = createMemo(() => props.data[props.data.length - 1])
+  const data = createMemo(() => props.data[period()])
+  const authorOrder = createMemo(() => getMarketAuthorOrder(data()))
+  const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(data().length - 1, 0)))
+  const today = createMemo(() => data()[data().length - 1])
 
   return (
     <section
@@ -1054,6 +1062,7 @@ function MarketShareSection(props: { data: MarketDay[]; labPaths: HomePageData["
         id="market-share"
         title={i18n.t("home.marketShareTitle")}
         description={i18n.t("home.marketShareDescription")}
+        action={<PeriodToggle value={period()} onChange={setPeriod} label={i18n.t("home.marketShareTitle")} />}
       />
       <Show
         when={today()}
@@ -1062,8 +1071,8 @@ function MarketShareSection(props: { data: MarketDay[]; labPaths: HomePageData["
         {(day) => (
           <>
             <MarketShare
-              data={props.data}
-              range="2M"
+              data={data()}
+              period={period()}
               authorOrder={authorOrder()}
               activeIndex={selectedIndex()}
               activeAuthor={activeAuthor()}
@@ -1097,7 +1106,7 @@ function MarketShareSection(props: { data: MarketDay[]; labPaths: HomePageData["
 
 function MarketShare(props: {
   data: MarketDay[]
-  range: UsageRange
+  period: Period
   authorOrder: Map<string, number>
   activeIndex: number
   activeAuthor: string | undefined
@@ -1113,7 +1122,7 @@ function MarketShare(props: {
     props.onActiveAuthorChange(undefined)
   }
 
-  createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
+  createEffect(() => scrollDenseChartToEnd(chartRef, props.data.length))
   dismissChartTooltipOnExit({
     chart: () => chartRef,
     open: () => props.inspecting,
@@ -1128,8 +1137,8 @@ function MarketShare(props: {
       <div
         ref={chartRef}
         data-component="market-share"
-        data-range={props.range}
-        data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
+        data-period={props.period}
+        data-dense-labels="true"
         role="img"
         aria-label={i18n.t("home.marketChart")}
         style={{ "--market-count": props.data.length } as JSX.CSSProperties}
@@ -1235,7 +1244,7 @@ function MarketShare(props: {
                 } as JSX.CSSProperties
               }
             >
-              <strong>{day.date}</strong>
+              <strong>{formatPeriodDate(day.start, day.end)}</strong>
               <span>
                 {formatTrillions(day.total)} {i18n.t("home.total")}
               </span>
@@ -1503,7 +1512,7 @@ function getRankColor(key: string, fallbackIndex: number, order: Map<string, num
 }
 
 function isMarketMobileLabelHidden(index: number, count: number) {
-  return count > 7 && index % 2 === 1
+  return count > 7 && (count - 1 - index) % 2 === 1
 }
 
 function formatMarketMobileDate(label: string) {
@@ -1519,14 +1528,7 @@ function formatTrillions(value: number) {
 
 function formatMarketDate(day: MarketDay | undefined, fallback: string) {
   if (!day) return fallback
-  return formatMarketDateLabel(day.date)
-}
-
-function formatMarketDateLabel(label: string) {
-  const parts = marketDateParts(label)
-  const year = new Date().getFullYear()
-  if (parts.start === parts.end) return `${parts.start} ${year}`
-  return `${parts.start} ${year} → ${parts.end} ${year}`
+  return formatPeriodDate(day.start, day.end)
 }
 
 function marketDateParts(label: string) {
@@ -1826,8 +1828,8 @@ function homeStructuredData(
     localizedUrl: (path: string) => string
   },
 ) {
-  const first = data.usage[0]
-  const last = data.usage.at(-1)
+  const first = data.usage.weekly[0]
+  const last = data.usage.daily.at(-1)
   return {
     "@context": "https://schema.org",
     "@graph": [
@@ -1841,9 +1843,7 @@ function homeStructuredData(
         isAccessibleForFree: true,
         variableMeasured: ["Tokens", "Unique users", "Sessions", "Cost per session", "Cache ratio", "Weekly retention"],
         ...(data.updatedAt ? { dateModified: data.updatedAt } : {}),
-        ...(first && last
-          ? { temporalCoverage: `${isoDay(first.date, data.updatedAt)}/${isoDay(last.date, data.updatedAt)}` }
-          : {}),
+        ...(first && last ? { temporalCoverage: `${first.start}/${last.start}` } : {}),
         distribution: [
           { "@type": "DataDownload", encodingFormat: "application/json", contentUrl: jsonUrl("/data/") },
           { "@type": "DataDownload", encodingFormat: "text/markdown", contentUrl: markdownUrl("/data/") },
