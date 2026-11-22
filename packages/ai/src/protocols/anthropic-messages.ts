@@ -1031,7 +1031,8 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const tools = flattened.tools.length === 0 ? undefined : flattened.tools.map((tool) => lowerTool(breakpoints, tool))
   // Anthropic rejects tool_choice when no tool is declared; "none" is only meaningful with tools present.
   const declared = tools !== undefined || addsTools(request)
-  const toolChoice = !declared || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
+  const toolChoice =
+    !declared || !flattened.request.toolChoice ? undefined : yield* lowerToolChoice(flattened.request.toolChoice)
   const systemParts = request.system.filter((part) => part.text.length > 0)
   const system =
     systemParts.length === 0

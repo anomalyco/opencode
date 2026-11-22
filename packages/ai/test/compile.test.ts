@@ -2,7 +2,17 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ai, Message, ToolCallPart, ToolDefinition, ToolNamespace } from "../src/effect.js"
-import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
+import {
+  AnthropicMessages,
+  BedrockConverse,
+  CohereChat,
+  Gemini,
+  GoogleInteractions,
+  MistralChat,
+  OpenAIChat,
+  OpenAICompatibleResponses,
+  OpenAIResponses,
+} from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { mergeProviderOptions } from "../src/schema/index.js"
@@ -166,6 +176,48 @@ describe("request option precedence", () => {
         },
       ])
     }),
+  )
+
+  it.effect("forces a namespaced tool under its flattened name on flat protocols", () =>
+    Effect.forEach(
+      [
+        AnthropicMessages,
+        BedrockConverse,
+        CohereChat,
+        Gemini,
+        GoogleInteractions,
+        MistralChat,
+        OpenAIChat,
+        OpenAICompatibleResponses,
+      ],
+      (protocol) =>
+        Effect.gen(function* () {
+          const prepared = yield* compileRequest(
+            ai.request({
+              model: protocol.route
+                .with({
+                  provider: protocol.route.provider ?? "custom",
+                  endpoint: { baseURL: protocol.route.endpoint.baseURL ?? "https://example.invalid/v1" },
+                  auth: Auth.bearer("unused"),
+                })
+                .model({ id: "test-model" }),
+              prompt: "Look up a customer",
+              tools: [
+                ToolNamespace.make({
+                  name: "crm",
+                  description: "CRM tools",
+                  tools: [ToolDefinition.make({ name: "lookup", description: "Look up", inputSchema: {} })],
+                }),
+              ],
+              toolChoice: "crm.lookup",
+            }),
+          )
+          const body = JSON.stringify(prepared.body)
+          expect(body).toContain("crm_lookup")
+          expect(body).not.toContain("crm.lookup")
+        }),
+      { discard: true },
+    ),
   )
 
   it.effect("normalizes tool history before protocol lowering", () =>

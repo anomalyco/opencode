@@ -10,6 +10,7 @@ import {
   AssistantMessage,
   type LLMRequest,
   Message,
+  ToolChoice,
   ToolDefinition,
   ToolMessage,
   type ContentPart,
@@ -388,12 +389,21 @@ export const flattenToolRequest = (request: LLMRequest) => {
     const content = message.content.map(flatten)
     return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
   })
+  const toolChoice = flattenToolChoice(request.toolChoice, declared)
   return {
     tools,
-    request: messages.every((message, index) => message === request.messages[index])
-      ? request
-      : { ...request, messages },
+    request:
+      toolChoice === request.toolChoice && messages.every((message, index) => message === request.messages[index])
+        ? request
+        : { ...request, messages, toolChoice },
   }
+}
+
+// A forced choice names a namespaced tool by its qualified path (`crm.lookup`); point it at the flattened definition.
+const flattenToolChoice = (toolChoice: LLMRequest["toolChoice"], declared: ReadonlySet<string>) => {
+  if (toolChoice?.type !== "tool" || toolChoice.name === undefined || declared.has(toolChoice.name)) return toolChoice
+  const name = toolChoice.name.replaceAll(".", "_")
+  return declared.has(name) ? new ToolChoice({ ...toolChoice, name }) : toolChoice
 }
 
 const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(

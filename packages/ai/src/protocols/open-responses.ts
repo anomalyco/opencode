@@ -899,7 +899,9 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
     tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter, custom),
     tool_choice:
       allowedToolChoice(options, custom) ??
-      (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice, custom) : undefined),
+      (projected.request.toolChoice
+        ? yield* lowerToolChoice(adapter.name, projected.request.toolChoice, custom)
+        : undefined),
   }
 })
 
