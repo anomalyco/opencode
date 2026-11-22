@@ -3,6 +3,7 @@ export * as Voice from "./voice.js"
 import { type AIError } from "@opencode/ai/effect"
 import {
   Realtime,
+  type RealtimeEngine,
   type RealtimeSession,
   type RealtimeTransport,
   type RealtimeTransportInput,
@@ -71,7 +72,7 @@ export const layer = Layer.effect(
 
     // Where an engine's sessions start: its provider with the server's key or, for GPT-Live without an OpenAI key,
     // OpenCode's hosted GPT-Live with the server's OpenCode Console connection, whose sign-in works as well as a key.
-    const source = Effect.fnUntraced(function* (engine: (typeof Realtime.engines)[number]) {
+    const source = Effect.fnUntraced(function* (engine: RealtimeEngine) {
       const connection = yield* findConnection(engine.provider)
       if (connection) return { provider: engine.provider, connection }
       if (engine.id !== "openai-live") return undefined
@@ -91,6 +92,7 @@ export const layer = Layer.effect(
               .toSorted((a, b) => b.releaseDate.localeCompare(a.releaseDate))
               .map((voice) => ({
                 engine,
+                found,
                 info: {
                   model: voice.id,
                   name: voice.name,
@@ -114,13 +116,14 @@ export const layer = Layer.effect(
 
     const session = Effect.fn("Voice.session")(function* (input: SessionInput) {
       const list = yield* offered()
-      const engine = list.find((item) => item.info.model === input.model)?.engine
-      if (!engine)
+      const offer = list.find((item) => item.info.model === input.model)
+      if (!offer)
         return yield* new InvalidRequestError({
           message: `Unsupported voice model: ${input.model}. This server lists ${list.map((item) => item.info.model).join(", ") || "none"}.`,
         })
 
-      const found = yield* source(engine)
+      const engine = offer.engine
+      const found = offer.found
       const credential = found
         ? yield* integrations.connection
             .resolve(found.connection)

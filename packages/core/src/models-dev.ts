@@ -137,20 +137,8 @@ const SourceProvider = Schema.Struct({
 // realtime ones as voice models.
 const TYPES: readonly string[] = ["chat", "decision", "image", "video", "realtime"]
 
-const SourceVoice = Schema.Struct({
-  id: Schema.String,
-  type: Schema.Literal("realtime"),
-  name: Schema.String,
-  release_date: Schema.String,
-  status: Schema.optional(Schema.String),
-  modalities: Schema.Struct({ output: Schema.Array(Schema.String) }),
-  capabilities: Schema.Struct({ tools: Schema.Struct({ supported: Schema.Boolean }) }),
-  api: Schema.Record(Schema.String, Schema.Unknown),
-})
-
 const ContextCondition = Schema.Struct({ gt: Schema.optional(Schema.Finite), gte: Schema.optional(Schema.Finite) })
 const decodeModel = Schema.decodeUnknownResult(SourceModel)
-const decodeVoice = Schema.decodeUnknownOption(SourceVoice)
 const decodeApi = Schema.decodeUnknownOption(SourceApi)
 const decodeMode = Schema.decodeUnknownOption(SourceMode)
 const decodeProvider = Schema.decodeUnknownOption(SourceProvider)
@@ -161,7 +149,7 @@ const knownFreeformFormat = Schema.is(FreeformFormat)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
 /** A realtime model that answers in speech and calls tools, by the API it speaks (`live`, `realtime`…). */
-export type Voice = {
+export type VoiceModel = {
   readonly id: string
   readonly name: string
   readonly api: string
@@ -171,7 +159,7 @@ export type Voice = {
 export type Snapshot = {
   readonly info: Provider.Info
   readonly models: readonly Model.Info[]
-  readonly voices?: readonly Voice[]
+  readonly voices?: readonly VoiceModel[]
   readonly environment: readonly string[]
 }
 
@@ -211,10 +199,16 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
     const providerID = Provider.ID.make(item.id)
     // Vertex needs separate handling for location and Express Mode.
     const prefer = recommended && providerID !== Provider.ID.googleVertex
+    const voices: VoiceModel[] = []
     const sources = Object.entries(item.models).flatMap(([key, value]) => {
       const decoded = decodeModel(value)
       if (Result.isFailure(decoded)) failed.push({ model: `${item.id}/${key}`, issue: decoded.failure })
       const model = Result.isSuccess(decoded) ? decoded.success : undefined
+      // Translation and streaming models are realtime too, but don't answer in speech or call tools.
+      const api = model?.type === "realtime" ? Object.keys(model.api)[0] : undefined
+      const speaks = model?.modalities.output.some((output) => output.startsWith("audio"))
+      if (model && api && speaks && model.capabilities.tools.supported && model.status !== "deprecated")
+        voices.push({ id: model.id, name: model.name, api, releaseDate: model.release_date })
       // The fetch already asks for these types, but custom files and v1 catalogs may hold any type.
       const target = model && TYPES.includes(model.type) && route(providerID, model, unknown, prefer)
       return model && target ? [{ model, route: target }] : []
@@ -252,14 +246,6 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
           }),
         ),
       ]
-    })
-    // Translation and streaming models are realtime too, but don't answer in speech or call tools.
-    const voices = Object.values(item.models).flatMap((value) => {
-      const voice = Option.getOrUndefined(decodeVoice(value))
-      const api = voice && Object.keys(voice.api)[0]
-      if (!voice || !api || voice.status === "deprecated" || !voice.capabilities.tools.supported) return []
-      if (!voice.modalities.output.some((output) => output.startsWith("audio"))) return []
-      return [{ id: voice.id, name: voice.name, api, releaseDate: voice.release_date }]
     })
     return [{ info, models, ...(voices.length > 0 ? { voices } : {}), environment: [...item.env] }]
   })
