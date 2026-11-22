@@ -3,7 +3,7 @@ import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream, Tracer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Schedule, Scope, Stream, Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -1746,6 +1746,62 @@ describe("ShellTool", () => {
           const id = ID.make(String(result.metadata?.shellID))
           const shell = yield* Shell.Service
           expect((yield* shell.wait(id)).status).toBe("timeout")
+        }),
+      )
+    }),
+  )
+
+  // An automation's code runs its tools unattended: nobody is in the session to hear about a backgrounded command.
+  const unattended = Effect.provideService(Permission.Unattended, [])
+
+  it.live("stops an unattended command at its timeout instead of moving it to the background", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const result = yield* executeTool(registry, call({ command: idleCommand, timeout: 50 })).pipe(unattended)
+          expect(result.metadata).toMatchObject({ status: "completed", timeout: true })
+          expect(result.metadata).not.toHaveProperty("shellID")
+          expect(result.output).not.toHaveProperty("shellID")
+          expect(result.content?.at(-1)).toEqual({
+            type: "text",
+            text: expect.stringMatching(
+              new RegExp(`^Command timed out after 0\\.05 seconds\\. [^\\n]+\\nExit code: ${timedOutExit}$`),
+            ),
+          })
+          const shell = yield* Shell.Service
+          expect(yield* shell.list()).toEqual([])
+          const jobs = yield* Job.Service
+          expect(yield* jobs.backgroundJobs).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  it.live("keeps an unattended command out of reach of the session's move to the background", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const running = yield* executeTool(
+            registry,
+            call({ command: progressOverflowCommand(0, "release"), timeout: 10_000 }),
+          ).pipe(unattended, Effect.forkScoped({ startImmediately: true }))
+          const shell = yield* Shell.Service
+          const [started] = yield* shell
+            .list()
+            .pipe(
+              Effect.repeat({ until: (shells) => shells.length > 0, schedule: Schedule.spaced("10 millis") }),
+              Effect.timeout("10 seconds"),
+            )
+          const jobs = yield* Job.Service
+          expect(yield* jobs.backgroundAll({ sessionID })).toEqual([])
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+          const result = yield* Fiber.join(running)
+          expect(result.metadata).toMatchObject({ status: "completed", exit: 0 })
+          expect(result.metadata).not.toHaveProperty("shellID")
+          // A finished job stays listed, so this proves the command never had one for the session to take.
+          expect(yield* jobs.get(started!.id)).toBeUndefined()
         }),
       )
     }),

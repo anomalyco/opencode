@@ -197,6 +197,19 @@ const notify = Effect.fnUntraced(function* (
   if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
 })
 
+// Waits for the command to end and reads what it printed.
+const finished = Effect.fnUntraced(function* (shell: Shell.Interface, info: ShellSchema.Info) {
+  const result = yield* shell.result(info)
+  if (!result.capture) return yield* new Shell.NotFoundError({ id: info.id })
+  const completed = result.info.time.completed ?? (yield* Clock.currentTimeMillis)
+  return {
+    ...ShellResult.output(result),
+    status: "completed" as const,
+    wallTimeSeconds: wallTimeSeconds(result.info.time, completed),
+    ...(result.capture.truncated ? { outputPath: result.info.file } : {}),
+  }
+})
+
 // The job that waits on a command for its call (or its session, once backgrounded).
 const startJob = Effect.fnUntraced(function* (
   jobs: Job.Interface,
@@ -225,17 +238,7 @@ const startJob = Effect.fnUntraced(function* (
     },
     ...(input.notificationID ? { notificationID: input.notificationID } : {}),
     background: input.background,
-    run: Effect.gen(function* () {
-      const result = yield* shell.result(info)
-      if (!result.capture) return yield* new Shell.NotFoundError({ id: info.id })
-      const completed = result.info.time.completed ?? (yield* Clock.currentTimeMillis)
-      return {
-        ...ShellResult.output(result),
-        status: "completed" as const,
-        wallTimeSeconds: wallTimeSeconds(result.info.time, completed),
-        ...(result.capture.truncated ? { outputPath: result.info.file } : {}),
-      }
-    }).pipe(
+    run: finished(shell, info).pipe(
       Effect.tap((output) => Deferred.succeed(settled, output)),
       Effect.map((output) => resultMessages(output, input.timeout?.()).join("\n\n")),
       // Interrupting the job (its registry closing) stops the command too, unless the server is handing its daemon
@@ -443,6 +446,10 @@ export const Plugin = {
                     Effect.fail(new ToolFailure({ message: "Command interrupted by the user before it started." })),
                   ),
                 )
+                // An automation's code runs with nobody present to hear how a backgrounded command ends, so there a
+                // timeout stops the command, as it does a background one.
+                const unattended = (yield* Permission.Unattended) !== undefined
+                const timeoutBackgrounds = !background && !unattended
                 return yield* Effect.gen(function* () {
                   // The same default `Shell.create` gives the hooks, so `prepare` can tell whether one moved it.
                   const cwd = input.workdir ?? workingDirectory.absolute
@@ -459,7 +466,7 @@ export const Plugin = {
                       timeout,
                       shell: yield* compatibleShell,
                       metadata: { sessionID: context.sessionID },
-                      waited: !background,
+                      waited: timeoutBackgrounds,
                       toolCall: {
                         sessionID: context.sessionID,
                         assistantMessageID: context.messageID,
@@ -477,10 +484,17 @@ export const Plugin = {
                           Effect.raceFirst(prepare(invocation, context, { cwd, target }), stoppedBeforeStart),
                         )
                         // A foreground timeout moves the command to the background instead of stopping it.
-                        if (!background) invocation.timeout = 0
+                        if (timeoutBackgrounds) invocation.timeout = 0
                       }),
                   )
                   yield* context.progress({ shellID: info.id })
+
+                  // An unattended command gets no job either: a job would let the session move it to the background
+                  // and tell the session how it ended.
+                  if (unattended)
+                    return yield* restore(finished(shell, info)).pipe(
+                      Effect.onInterrupt(() => shell.stop(info.id, "killed").pipe(Effect.ignore)),
+                    )
 
                   const { job, settled } = yield* startJob(jobs, shell, {
                     sessionID: context.sessionID,

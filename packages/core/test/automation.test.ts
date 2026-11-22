@@ -147,6 +147,17 @@ const configureAgent = Layer.effectDiscard(
             ),
       })
       editor.add({
+        name: "unattended",
+        description: "Whether the call runs with nobody present",
+        input: Schema.Struct({}),
+        output: Schema.Boolean,
+        options: { namespace: "probe" },
+        execute: () =>
+          Effect.gen(function* () {
+            return { output: (yield* Permission.Unattended) !== undefined }
+          }),
+      })
+      editor.add({
         name: "post",
         description: "Post a message",
         input: Schema.Struct({ text: Schema.String, channel: Schema.optional(Schema.String) }),
@@ -1234,6 +1245,23 @@ describe("Automation", () => {
           nextDueAt: undefined,
           state: { replies: 4, runs: 1 },
         })
+      }),
+    )
+
+    // Tools rely on this to know nobody is present, e.g. the shell tool stops a timed-out command instead of
+    // moving it to the background.
+    it.effect("runs the program's tools unattended", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const automation = yield* automations.create({
+          sessionID,
+          name: "probe",
+          trigger: every("1 minute"),
+          action: code(`return { state: await tools.probe.unattended({}) }`),
+        })
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(yield* automations.get(automation.id)).toMatchObject({ lastOutcome: "fired", state: true })
       }),
     )
 
