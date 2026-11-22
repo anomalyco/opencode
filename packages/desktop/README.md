@@ -29,6 +29,7 @@ Both read the same environment as every other release package:
 
 For a prebuilt CLI, set `OPENCODE_CHANNEL` explicitly to the channel used to build it. `latest` and `prod` use
 the production app identity but separate service registrations.
+A shared legacy registration only migrates to a channel-specific file when its version identifies that channel.
 
 The CLI is placed outside `app.asar` in the application's resources directory, and packaging fails if it is missing.
 `bun run build` uses `packages/cli/dist` when that holds the target's CLI. Otherwise `dev` (and `local`, unset or unrecognized)

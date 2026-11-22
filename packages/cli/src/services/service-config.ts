@@ -63,13 +63,8 @@ export function legacyFilename(channel = OPENCODE_CHANNEL) {
   return `service-${Hash.fast(channel)}.json`
 }
 
-export function versionBelongsToChannel(
-  version: string | undefined,
-  channel = OPENCODE_CHANNEL,
-  installedVersion = OPENCODE_VERSION,
-) {
+export function versionBelongsToChannel(version: string | undefined, channel = OPENCODE_CHANNEL) {
   if (version === undefined) return false
-  if (version === installedVersion) return true
   const prefix = `0.0.0-${channel}-`
   if (!version.startsWith(prefix)) return false
   return /^\d+(?:\.\d+)?$/.test(version.slice(prefix.length))
@@ -86,7 +81,10 @@ export const migrateRegistration = Effect.fnUntraced(function* (
   if (Option.isNone(text)) return
   const registration = yield* decodeRegistration(text.value).pipe(Effect.option)
   if (Option.isNone(registration)) return
-  if (!versionBelongsToChannel(registration.value.version, channel, installedVersion)) return
+  // Only the hashed filename proves the channel when a version has no channel tag.
+  const fromChannelFile = path.basename(legacy) === legacyFilename(channel)
+  const version = registration.value.version
+  if (!(fromChannelFile && version === installedVersion) && !versionBelongsToChannel(version, channel)) return
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
 })
 
