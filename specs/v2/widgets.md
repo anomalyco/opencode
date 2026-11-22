@@ -18,16 +18,18 @@ This document is the contract between the server, the shared TypeScript runtime 
 | Server plugin: `widget` and `widget_template` tools, `widgets` skill, widget template store, widget states, RPC handlers | `packages/plugin-widgets` (`@opencode/plugin-widgets`), registered by `packages/core/src/plugin/internal.ts` | core |
 | TUI renderer | `packages/tui` | tui |
 | Rune desktop renderer (Rust PsychoScript) | `anomalyco/rune-desktop` (`crates/opencode-widget` runner, `crates/opencode-widget-view` renderer) | rune |
-| Mobile runner bindings (UniFFI: step, draw, WGSL translation via naga) | `anomalyco/rune-desktop` `crates/opencode-widget-ffi` | ffi |
-| iOS renderer (SwiftUI, Metal for GPU canvases) | `anomalyco/opencode-ios` | ios |
-| Android renderer (Jetpack Compose, GLES 3 for GPU canvases) | `anomalyco/opencode-android` | android |
+| Mobile runner (`psychoscript-mobile`: UniFFI wrapper of the Rust PsychoScript with live runs, generic host functions, WGSL translation via naga) | `anomalyco/psychoscript`, `mobile` branch | psychoscript |
+| Web host (the Rust PsychoScript compiled to wasm, and a TypeScript DOM renderer), embedded by Console artifacts (branch `widget-artifacts`) | `anomalyco/psychoscript`, `web` branch | psychoscript |
+| iOS widget glue and renderer (SwiftUI, Metal for GPU canvases) | `anomalyco/opencode-ios` | ios |
+| Android widget glue and renderer (Jetpack Compose, GLES 3 for GPU canvases) | `anomalyco/opencode-android` | android |
 
-Clients in scope: TUI, Rune desktop, native iOS and Android. Web/Electron is out. Mobile apps run no JavaScript: they
-run programs with the Rust PsychoScript through `opencode-widget-ffi` and render natively.
+Clients in scope: TUI, Rune desktop, native iOS and Android, and the web host. Mobile apps run no JavaScript: they run
+programs with the Rust PsychoScript through `psychoscript-mobile` and render natively; the widget glue (the step and
+live calls, rendering, the RPC) lives in each app.
 
-PsychoScript itself (`anomalyco/psychoscript`) does not change: its repo holds only the language. The widget
-"extension" is the prelude and the step ABI below, layered on the stock interpreter, with no host functions besides
-`__input`.
+The widget "extension" is the prelude and the step ABI below, layered on the stock interpreter: a step uses no host
+functions besides `__input`, and live mode adds the generic `__host` functions (`widgets-live.md`). Nothing
+widget-specific goes into PsychoScript (`anomalyco/psychoscript`) or `psychoscript-mobile`.
 
 ## Widget template
 
@@ -357,7 +359,7 @@ seconds since the canvas appeared. Colors are sRGB-encoded: clients write them t
 conversion. With `fps: 0` it renders once, and again when its `values` change.
 `widget.pointer` is `(x, y, down, 0)`; `widget.values` carries the node's `values` (up to 16 floats, row-major, zero
 padded), which the widget template sets from state in `view`. Rune passes WGSL to wgpu as is; iOS gets MSL and Android GLSL
-ES 3.00 translated with naga (`opencode-widget-ffi`). Source is capped at 16 KB. A shader that fails to compile shows
+ES 3.00 translated with naga (`psychoscript-mobile`). Source is capped at 16 KB. A shader that fails to compile shows
 `poster` (an image src) or `alt` with the error inline; one that takes over 50 ms per frame three frames in a row stops
 and shows its last frame. The TUI shows `alt` and `poster` for every canvas.
 
