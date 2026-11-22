@@ -52,7 +52,10 @@ const app = (dir: string, release: Deferred.Deferred<void>) =>
                   : input.prompt === "a crab"
                     ? Effect.never
                     : Deferred.await(release).pipe(
-                        Effect.as({ images: [{ type: "image" as const, data: PNG, mime: "image/png" }] }),
+                        Effect.as({
+                          images: [{ type: "image" as const, data: PNG, mime: "image/png" }],
+                          tokens: { input: 12, output: 34 },
+                        }),
                       ),
               decisions: () => Effect.die("unused"),
               video: {
@@ -108,6 +111,7 @@ it.effect(
         expect(yield* settled(done.id)).toMatchObject({
           status: "completed",
           blobs: [{ mime: "image/png", bytes: Buffer.from(PNG, "base64").length }],
+          tokens: { input: 12, output: 34 },
         })
         return stuck.id
       }).pipe(Effect.provide(app(dir, release)))

@@ -115,6 +115,7 @@ export const ImageCompleted = Schema.Struct({
   blobs: Schema.NonEmptyArray(BlobStore.Info).annotate(
     description("The finished images. Read each with GET /api/experimental/blob/:id"),
   ),
+  tokens: Usage.pipe(optional),
 }).annotate({ identifier: "Generate.ImageCompleted" })
 
 export interface ImageError extends Schema.Schema.Type<typeof ImageError> {}

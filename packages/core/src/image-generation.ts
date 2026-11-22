@@ -10,6 +10,7 @@ import {
   type ImageJob,
   type ImageRequest,
   type ImageRunning,
+  Usage,
 } from "@opencode/schema/generate"
 import { Model } from "@opencode/schema/model"
 import { makeGlobalNode, Node } from "@opencode/util/effect/app-node"
@@ -66,6 +67,7 @@ const Job = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("completed"),
     blobs: Schema.Array(BlobStore.ID),
+    tokens: Usage.pipe(Schema.optionalKey),
     finished: Schema.Finite,
     ...fields,
   }),
@@ -80,7 +82,7 @@ const Job = Schema.Union([
 type Job = typeof Job.Type
 type Running = Extract<Job, { status: "running" }>
 type Outcome =
-  | { readonly status: "completed"; readonly blobs: readonly BlobStore.ID[] }
+  | { readonly status: "completed"; readonly blobs: readonly BlobStore.ID[]; readonly tokens?: Usage }
   | { readonly status: "error"; readonly reason: ImageErrorReason; readonly error: string }
 
 const decode = Schema.decodeUnknownOption(Job)
@@ -159,7 +161,7 @@ const layer = Layer.effect(
           .write(Stream.make(Buffer.from(image.data, "base64")))
           .pipe(Effect.tap((blob) => Effect.sync(() => written.push(blob.id)))),
       ).pipe(Effect.onError(() => Effect.forEach(written, blobs.remove, { discard: true })))
-      return written
+      return { blobs: written, ...(result.tokens ? { tokens: result.tokens } : {}) }
     })
 
     const run = (id: ImageID, job: Running, input: ImageRequest) =>
@@ -169,7 +171,7 @@ const layer = Layer.effect(
           orElse: () =>
             Effect.fail(new Error(`The provider had no result ${Duration.format(DEADLINE)} after the request`)),
         }),
-        Effect.map((written): Outcome => ({ status: "completed", blobs: written })),
+        Effect.map((stored): Outcome => ({ status: "completed", ...stored })),
         Effect.catch((error) => Effect.succeed<Outcome>({ status: "error", reason: "failed", error: error.message })),
         Effect.flatMap((outcome) => finish(id, job, outcome)),
       )
@@ -201,7 +203,7 @@ const layer = Layer.effect(
         Option.isSome(blob) ? [{ id: blob.value.id, mime: blob.value.mime, bytes: blob.value.bytes }] : [],
       )
       if (!isReadonlyArrayNonEmpty(infos)) return yield* missing
-      return { id, status: "completed", blobs: infos } satisfies ImageJob
+      return { id, status: "completed", blobs: infos, ...(job.tokens ? { tokens: job.tokens } : {}) } satisfies ImageJob
     })
 
     // Reads the record, so it works whichever server makes the request; when this one does, it waits for the request.

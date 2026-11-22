@@ -20056,6 +20056,9 @@
               "$ref": "#/components/schemas/Blob.Info"
             },
             "description": "The finished images. Read each with GET /api/experimental/blob/:id"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/Generate.Usage"
           }
         },
         "required": ["id", "status", "blobs"],

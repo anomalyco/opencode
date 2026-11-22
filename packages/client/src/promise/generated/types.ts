@@ -198,6 +198,8 @@ export type GenerateImageID = string
 
 export type BlobID = string
 
+export type GenerateUsage = { input?: number; output?: number }
+
 export type GenerateImageErrorReason = "failed" | "cancelled" | "unknown"
 
 export type GenerateVideoID = string
@@ -217,8 +219,6 @@ export type GenerateScoreAnswer = {
 }
 
 export type GenerateErrorAnswer = { type: "error"; name: string; reason: string; message?: string }
-
-export type GenerateUsage = { input?: number; output?: number }
 
 export type GenerateNative = { [x: string]: JsonValue }
 
@@ -2253,7 +2253,12 @@ export type SessionMessageToolStateError1 = {
 
 export type GenerateImageCreateResponse = { data: GenerateImageRunning }
 
-export type GenerateImageCompleted = { id: GenerateImageID; status: "completed"; blobs: [BlobInfo, ...Array<BlobInfo>] }
+export type GenerateImageCompleted = {
+  id: GenerateImageID
+  status: "completed"
+  blobs: [BlobInfo, ...Array<BlobInfo>]
+  tokens?: GenerateUsage
+}
 
 export type GenerateVideoCompleted = { id: GenerateVideoID; status: "completed"; blobs: Array<BlobInfo> }
 
