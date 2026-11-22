@@ -144,7 +144,10 @@ export function createRequestQueue(input: {
         kind.setup ? setupHeadersTimeoutMs : headersTimeoutMs,
       )
 
-      return base(new Request(request, { signal: controller.signal })).finally(() => {
+      // Native composition keeps body cancellation alive after header cleanup; older WebViews retain the fallback.
+      return base(
+        new Request(request, { signal: AbortSignal.any?.([request.signal, controller.signal]) ?? controller.signal }),
+      ).finally(() => {
         clearTimeout(timer)
         request.signal.removeEventListener("abort", abort)
         controllers.delete(id)

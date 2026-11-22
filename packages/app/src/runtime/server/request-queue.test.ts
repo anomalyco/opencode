@@ -259,6 +259,20 @@ describe("createRequestQueue", () => {
     expect(input.queue.inflight()).toBe(0)
   })
 
+  test("caller aborts still reach the response after its headers arrive", async () => {
+    const input = setup({ limit: 1 })
+    const controller = new AbortController()
+    const response = input.queue.fetch("http://server/api/slow-body", { signal: controller.signal })
+    input.pending[0]!.resolve()
+    await response
+    expect(input.queue.inflight()).toBe(0)
+
+    const reason = new DOMException("Cancelled response body", "AbortError")
+    controller.abort(reason)
+    expect(input.pending[0]!.signal.aborted).toBe(true)
+    expect(input.pending[0]!.signal.reason).toBe(reason)
+  })
+
   test("a burst that drains promptly is not thrashing", async () => {
     const input = setup({ stallMs: 5 })
     const responses = Array.from({ length: 12 }, (_, index) => input.queue.fetch(`http://server/api/${index}`))
