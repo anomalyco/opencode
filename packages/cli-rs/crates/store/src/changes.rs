@@ -8,6 +8,7 @@ use opencode_api::generated::{AgentID, ModelRef, SessionID};
 
 use crate::forms::GLOBAL;
 use crate::location::Location;
+use crate::messages::MessageKey;
 use crate::reads::LocationKey;
 use crate::sessions::{Session, SessionKey};
 use crate::state::{Data, State};
@@ -64,7 +65,7 @@ pub struct Dirty {
     /// Each touched session once. Its record holds its place here while the store owns this.
     touched: Vec<(SessionKey, Touched)>,
     /// Messages changed in place, by their transcript's message key.
-    messages: Vec<(SessionKey, u32)>,
+    messages: Vec<(SessionKey, MessageKey)>,
     /// Each agent or model selection, in order: a batch can hold this client's acknowledgment and then another
     /// client's switch.
     selected: Vec<(SessionKey, Selected)>,
@@ -164,7 +165,7 @@ impl Log {
     }
 
     /// Records message `message` of the session `key` as changed in place; the session must be touched.
-    pub(crate) fn message(&mut self, key: SessionKey, message: u32) {
+    pub(crate) fn message(&mut self, key: SessionKey, message: MessageKey) {
         let dirty = &mut self.dirty;
         if dirty.all || dirty.messages.contains(&(key, message)) {
             return;
@@ -349,13 +350,10 @@ impl<'a> Changes<'a> {
         })
     }
 
-    /// The messages of `session` changed in place.
-    pub fn messages_of<'s, 'i>(
-        &self,
-        state: &'s State,
-        session: &'i SessionID,
-    ) -> impl Iterator<Item = &'s str> + use<'s, 'a, 'i> {
-        self.changed_messages(state).filter(move |(id, _)| *id == session).map(|(_, message)| message)
+    /// The keys of the messages of `session` changed in place.
+    pub fn message_keys(&self, state: &State, session: &SessionID) -> impl Iterator<Item = MessageKey> + use<'a> {
+        let key = state.sessions.key(session);
+        self.dirty.messages.iter().filter(move |(touched, _)| Some(*touched) == key).map(|(_, message)| *message)
     }
 
     /// The agent and model selections of `id`, in order.
@@ -388,8 +386,8 @@ impl State {
         }
     }
 
-    /// Records message `message` (a transcript key) of the session `key` as changed in place.
-    pub(crate) fn touch_message(&mut self, key: SessionKey, message: u32) {
+    /// Records message `message` of the session `key` as changed in place.
+    pub(crate) fn touch_message(&mut self, key: SessionKey, message: MessageKey) {
         self.touch_key(key, Touched::CONTENT);
         self.log.message(key, message);
     }

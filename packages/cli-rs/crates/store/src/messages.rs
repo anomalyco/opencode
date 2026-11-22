@@ -9,22 +9,32 @@ use tokio_util::sync::CancellationToken;
 
 use crate::changes::Touched;
 use crate::reads::{Read, SessionRead};
+use crate::sessions::SessionKey;
 use crate::state::{Data, Error, MESSAGE_PAGE, OVERLAY_LIMIT, State, Task, evict_missing};
 
-/// One session's loaded messages, oldest first, with an index by ID. Each message has a key for as long as it stays,
-/// never given to another message of the transcript.
+/// A message's key in its transcript, never given to another message of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MessageKey(pub u32);
+
+/// One session's loaded messages, oldest first, found by ID or by key.
 #[derive(Debug, Clone, Default)]
 pub struct Transcript {
     items: Vec<SessionMessageInfo>,
     /// The key of each item.
-    keys: Vec<u32>,
-    next: u32,
+    keys: Vec<MessageKey>,
+    /// The position of each key's item, by key; `u32::MAX` once it left. The next key is its length.
+    positions: Vec<u32>,
     index: HashMap<String, usize>,
 }
 
 impl Transcript {
     pub fn items(&self) -> &[SessionMessageInfo] {
         &self.items
+    }
+
+    /// The key of each item.
+    pub fn keys(&self) -> &[MessageKey] {
+        &self.keys
     }
 
     pub fn get(&self, id: &str) -> Option<&SessionMessageInfo> {
@@ -36,19 +46,24 @@ impl Transcript {
     }
 
     /// The key of message `id`.
-    pub(crate) fn key(&self, id: &str) -> Option<u32> {
+    pub fn key(&self, id: &str) -> Option<MessageKey> {
         self.index.get(id).map(|&position| self.keys[position])
     }
 
-    pub(crate) fn key_at(&self, position: usize) -> u32 {
+    /// Where the message of `key` is.
+    pub fn position(&self, key: MessageKey) -> Option<usize> {
+        self.positions.get(key.0 as usize).filter(|position| **position != u32::MAX).map(|position| *position as usize)
+    }
+
+    pub fn by_key(&self, key: MessageKey) -> Option<&SessionMessageInfo> {
+        self.position(key).map(|position| &self.items[position])
+    }
+
+    pub(crate) fn key_at(&self, position: usize) -> MessageKey {
         self.keys[position]
     }
 
-    pub(crate) fn by_key(&self, key: u32) -> Option<&SessionMessageInfo> {
-        self.keys.iter().position(|item| *item == key).map(|position| &self.items[position])
-    }
-
-    pub(crate) fn position(&self, id: &str) -> Option<usize> {
+    pub(crate) fn index_of(&self, id: &str) -> Option<usize> {
         self.index.get(id).copied()
     }
 
@@ -62,20 +77,34 @@ impl Transcript {
         &mut self.items
     }
 
-    /// Replaces every item, each under a new key.
+    fn mint(&mut self) -> MessageKey {
+        self.positions.push(u32::MAX);
+        MessageKey(self.positions.len() as u32 - 1)
+    }
+
+    /// Replaces every item. One that was here by ID keeps its key, so its rows stay.
     pub(crate) fn replace(&mut self, items: Vec<SessionMessageInfo>) {
-        self.keys.clear();
-        self.keys.extend((self.next..).take(items.len()));
-        self.next += items.len() as u32;
-        self.items = items;
+        for key in &self.keys {
+            self.positions[key.0 as usize] = u32::MAX;
+        }
+        let mut keys = Vec::with_capacity(items.len());
+        for (position, item) in items.iter().enumerate() {
+            let kept = self.index.get(item.id()).map(|&old| self.keys[old]);
+            let key = match kept.filter(|key| self.positions[key.0 as usize] == u32::MAX) {
+                Some(key) => key,
+                None => self.mint(),
+            };
+            self.positions[key.0 as usize] = position as u32;
+            keys.push(key);
+        }
+        (self.items, self.keys) = (items, keys);
         self.index.clear();
         self.reindex(0);
     }
 
     /// Puts `older` before the items, each under a new key.
     pub(crate) fn prepend(&mut self, mut older: Vec<SessionMessageInfo>) {
-        let mut keys: Vec<u32> = (self.next..).take(older.len()).collect();
-        self.next += older.len() as u32;
+        let mut keys: Vec<MessageKey> = (0..older.len()).map(|_| self.mint()).collect();
         keys.append(&mut self.keys);
         older.append(&mut self.items);
         (self.items, self.keys) = (older, keys);
@@ -84,11 +113,12 @@ impl Transcript {
 
     /// Keeps only the items `keep` accepts, with their keys, and gives back the room of the rest.
     pub(crate) fn retain(&mut self, keep: impl Fn(&SessionMessageInfo) -> bool) {
-        let mut position = 0;
-        self.keys.retain(|_| {
-            position += 1;
-            keep(&self.items[position - 1])
-        });
+        for (item, key) in self.items.iter().zip(&self.keys) {
+            if !keep(item) {
+                self.positions[key.0 as usize] = u32::MAX;
+            }
+        }
+        self.keys.retain(|key| self.positions[key.0 as usize] != u32::MAX);
         self.items.retain(keep);
         self.index = HashMap::new();
         self.reindex(0);
@@ -101,10 +131,11 @@ impl Transcript {
         if self.index.contains_key(item.id()) {
             return false;
         }
+        let key = self.mint();
+        self.positions[key.0 as usize] = self.items.len() as u32;
         self.index.insert(item.id().to_owned(), self.items.len());
         self.items.push(item);
-        self.keys.push(self.next);
-        self.next += 1;
+        self.keys.push(key);
         true
     }
 
@@ -121,7 +152,8 @@ impl Transcript {
     pub(crate) fn remove(&mut self, id: &str) -> Option<SessionMessageInfo> {
         let position = self.index.remove(id)?;
         let item = self.items.remove(position);
-        self.keys.remove(position);
+        let key = self.keys.remove(position);
+        self.positions[key.0 as usize] = u32::MAX;
         self.reindex(position);
         Some(item)
     }
@@ -138,7 +170,9 @@ impl Transcript {
 
     /// Drops every item from `position` on.
     pub(crate) fn truncate(&mut self, position: usize) {
-        self.keys.truncate(position);
+        for key in self.keys.drain(position..) {
+            self.positions[key.0 as usize] = u32::MAX;
+        }
         for item in self.items.drain(position..) {
             self.index.remove(item.id());
         }
@@ -146,7 +180,13 @@ impl Transcript {
 
     fn reindex(&mut self, start: usize) {
         for (position, item) in self.items.iter().enumerate().skip(start) {
-            self.index.insert(item.id().to_owned(), position);
+            match self.index.get_mut(item.id()) {
+                Some(at) => *at = position,
+                None => {
+                    self.index.insert(item.id().to_owned(), position);
+                }
+            }
+            self.positions[self.keys[position].0 as usize] = position as u32;
         }
     }
 
@@ -456,13 +496,28 @@ impl State {
         message: &SessionMessageID,
         f: impl FnOnce(&mut SessionMessageAssistant),
     ) {
-        let Some(key) = self.sessions.key(session) else { return };
+        let Some((key, position)) = self.edited(session, message) else { return };
         let Some(transcript) = &mut self.sessions[key].transcript else { return };
-        let Some(position) = transcript.position(&message.0) else { return };
         let SessionMessageInfo::Assistant(assistant) = &mut transcript.items_mut()[position] else { return };
         f(assistant);
         let message = transcript.key_at(position);
         self.touch_message(key, message);
+    }
+
+    /// Where `message` of `session` is. A run of deltas edits one message, so the last place found is checked first:
+    /// two ID comparisons in place of two hashes.
+    fn edited(&mut self, session: &SessionID, message: &SessionMessageID) -> Option<(SessionKey, usize)> {
+        if let Some((key, position)) = self.last_edited
+            && let Some(record) = self.sessions.live(key)
+            && record.id == *session
+            && record.transcript.as_ref()?.items().get(position).is_some_and(|item| item.id() == message.as_str())
+        {
+            return Some((key, position));
+        }
+        let key = self.sessions.key(session)?;
+        let position = self.sessions[key].transcript.as_ref()?.index_of(&message.0)?;
+        self.last_edited = Some((key, position));
+        Some((key, position))
     }
 
     /// Edits the latest tool part with `tool` (`editTool`).
@@ -1282,6 +1337,38 @@ async fn load_pages(
             None => return Ok(true),
             Some(None) => return Ok(false),
             Some(Some(current)) => (cursor, incarnation) = current,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn message(id: &str) -> SessionMessageInfo {
+        serde_json::from_value(serde_json::json!({ "id": id, "type": "user", "text": "", "time": { "created": 1 } }))
+            .unwrap()
+    }
+
+    /// A message keeps its key while it stays, also through a reload of its page, so its rows stay; a key that left
+    /// is never given to another message.
+    #[test]
+    fn keys_follow_their_messages() {
+        let mut transcript = Transcript::default();
+        for id in ["a", "b", "c"] {
+            transcript.append(message(id));
+        }
+        let [a, b, c] = ["a", "b", "c"].map(|id| transcript.key(id).unwrap());
+        transcript.remove("a");
+        transcript.prepend(vec![message("z")]);
+        let z = transcript.key("z").unwrap();
+        transcript.replace(vec![message("b"), message("d"), message("c")]);
+        assert_eq!((transcript.key("b"), transcript.key("c")), (Some(b), Some(c)));
+        let d = transcript.key("d").unwrap();
+        assert!(![a, b, c, z].contains(&d));
+        assert_eq!((transcript.position(a), transcript.position(z)), (None, None));
+        for (position, key) in transcript.keys().iter().enumerate() {
+            assert_eq!(transcript.position(*key), Some(position));
         }
     }
 }

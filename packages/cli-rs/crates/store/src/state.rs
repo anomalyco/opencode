@@ -99,6 +99,8 @@ pub struct State {
     pub(crate) form_reads: HashMap<crate::forms::FormRead, Overlay<Form>>,
     /// Running background jobs by ID, of the trees synced and of job events since (`store.job`).
     pub(crate) jobs: IndexMap<String, JobInfo>,
+    /// The session and position of the message an event edited last.
+    pub(crate) last_edited: Option<(SessionKey, usize)>,
     /// The `durable.seq` of the event being applied, for the rows it creates.
     pub(crate) event_seq: Option<i64>,
 }
