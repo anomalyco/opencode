@@ -165,9 +165,9 @@ export type Snapshot = {
   readonly plans?: Readonly<Record<string, readonly string[]>>
 }
 
-// Sign-in plans that serve a subset of a provider's models, such as ChatGPT plans through Codex. models.dev lists
-// each as a provider it hides unless asked for. They never become providers here: their model IDs are attached to
-// the provider they belong to, for that sign-in's plugin to read.
+// Temporary, OpenAI-only: the ChatGPT subscription sign-ins (Codex, Sign in with ChatGPT) serve a subset of OpenAI's
+// models. models.dev lists each as a provider it hides unless asked for. They never become providers here: their model
+// IDs are attached to `openai`, for that sign-in's plugin to read (see plugin/provider/openai-subscription-models.ts).
 const PLANS: Readonly<Record<string, Provider.ID>> = {
   "openai-codex": Provider.ID.openai,
   "openai-chatgpt": Provider.ID.openai,

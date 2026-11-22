@@ -17,7 +17,7 @@ import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
 import { storedCredential } from "./credential-settings.js"
-import { PlanModels } from "./plan-models.js"
+import { OpenAISubscriptionModels } from "./openai-subscription-models.js"
 import { ProviderRefresh } from "./refresh.js"
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
@@ -276,7 +276,8 @@ export const ChatGPTPlugin = define({
       { discard: true },
     )
     yield* load()
-    const plan = yield* PlanModels.track(providerID, "openai-chatgpt", ctx.provider.reload())
+    // Temporary: the Sign in with ChatGPT list from models.dev, see openai-subscription-models.ts.
+    const plan = yield* OpenAISubscriptionModels.track("openai-chatgpt", ctx.provider.reload())
     yield* ctx.session.hook(
       "retry",
       (event) =>

@@ -13,7 +13,7 @@ import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
 import { storedCredential } from "./credential-settings.js"
-import { PlanModels } from "./plan-models.js"
+import { OpenAISubscriptionModels } from "./openai-subscription-models.js"
 import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -261,7 +261,8 @@ export const OpenAIPlugin = define({
       editor.method.update(headless(ctx.app))
     })
     yield* load()
-    const plan = yield* PlanModels.track(Provider.ID.openai, "openai-codex", ctx.provider.reload())
+    // Temporary: the Codex list from models.dev, see openai-subscription-models.ts.
+    const plan = yield* OpenAISubscriptionModels.track("openai-codex", ctx.provider.reload())
     // Config applies after provider plugins, so read it here: a custom baseURL may not decode zstd.
     const configured = yield* configuredSettings(Provider.ID.openai)
     yield* ctx.provider.transform((providers) => {

@@ -1,19 +1,26 @@
-export * as PlanModels from "./plan-models.js"
+export * as OpenAISubscriptionModels from "./openai-subscription-models.js"
 
 import { Event } from "@opencode/schema/config"
 import { Effect, Stream } from "effect"
 import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
 import { Flag } from "../../flag.js"
-import type { Provider } from "../../provider.js"
+import { Provider } from "../../provider.js"
 import { ModelsDev } from "../../models-dev.js"
 
+// Temporary, OpenAI-only: the Codex and Sign in with ChatGPT sign-ins can use only some OpenAI models, and models.dev
+// lists them as the hidden `openai-codex` and `openai-chatgpt` providers so they can change without a release. Once
+// another provider needs per-sign-in model lists, this should become a general mechanism instead of a special case.
+
 /**
- * Keeps a copy of the model IDs models.dev lists for one sign-in plan on a provider, and runs `reload` when a catalog
- * refresh changes them. `current` is undefined when the catalog has no list for the plan (a cache or bundled
- * snapshot from before it was added, or a custom mirror) or empty, so callers fall back to their own rules.
+ * Keeps a copy of the model IDs models.dev lists for one OpenAI subscription sign-in, and runs `reload` when a catalog
+ * refresh changes them. `current` is undefined when the catalog has no list for it (a cache or bundled snapshot from
+ * before it was added, or a custom mirror) or the list is empty, so callers fall back to their own rules.
  */
-export const track = Effect.fnUntraced(function* (providerID: Provider.ID, planID: string, reload: Effect.Effect<void>) {
+export const track = Effect.fnUntraced(function* (
+  list: "openai-codex" | "openai-chatgpt",
+  reload: Effect.Effect<void>,
+) {
   const modelsDev = yield* ModelsDev.Service
   const bus = yield* Bus.Service
   const config = yield* Config.Service
@@ -22,7 +29,7 @@ export const track = Effect.fnUntraced(function* (providerID: Provider.ID, planI
   const read = config.entries().pipe(
     Effect.flatMap((entries) => modelsDev.get(flags.resolve(entries).recommended_api.enabled)),
     Effect.map((data) => {
-      const ids = data.find((provider) => provider.info.id === providerID)?.plans?.[planID]
+      const ids = data.find((provider) => provider.info.id === Provider.ID.openai)?.plans?.[list]
       // An empty list is treated as missing, so a bad catalog edit can't hide every model.
       return ids?.length ? new Set(ids) : undefined
     }),
