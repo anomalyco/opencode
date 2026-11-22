@@ -182,11 +182,6 @@ impl State {
         self.next_token
     }
 
-    /// The revision of the last flush.
-    pub fn revision(&self) -> u64 {
-        self.log.revision()
-    }
-
     pub(crate) fn clear_deleted(&mut self, key: SessionKey) {
         if self.sessions[key].life.undelete() {
             self.deleted.shift_remove(&key);

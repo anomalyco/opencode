@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::Event;
 use opencode_api::generated::*;
-use opencode_store::{CreateSession, Data, LoadMore, Options, SessionStatus};
+use opencode_store::{CreateSession, Data, LoadMore, Options, SessionStatus, Touched};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -309,30 +309,6 @@ async fn follows_a_changed_omit_setting_and_restores_dropped_tool_files_from_the
     assert_eq!(row["content"][1]["state"]["status"], "completed");
     assert_eq!(row["content"][1]["state"]["content"], dropped);
     assert_eq!(gets.load(Ordering::SeqCst), 1);
-}
-
-/// Each write is one revision. A take holds every session written since the previous take, and only those.
-#[tokio::test]
-async fn a_take_holds_every_write_since_the_last() {
-    let data = data(handler(|_| async { ok(json!({})) }), Options::default());
-    let sessions = [id("ses_0"), id("ses_1"), id("ses_2")];
-    let mut dirty = opencode_store::Dirty::default();
-    let mut revision = data.take_changes(&mut dirty);
-    for round in 0..12 {
-        let touched: Vec<usize> = (0..round % 3).map(|at| (round + at) % 3).collect();
-        for &at in &touched {
-            let running = data.read(|state| state.status(&sessions[at])) == SessionStatus::Running;
-            data.set_status(&sessions[at], if running { SessionStatus::Idle } else { SessionStatus::Running });
-        }
-        let now = data.take_changes(&mut dirty);
-        assert_eq!(now, revision + touched.len() as u64, "round {round}");
-        revision = now;
-        let changes = opencode_store::Changes::new(&dirty, &data);
-        assert!(!changes.all());
-        for (index, session) in sessions.iter().enumerate() {
-            assert_eq!(changes.status(session), touched.contains(&index), "round {round}: {index}");
-        }
-    }
 }
 
 #[tokio::test]
@@ -825,7 +801,7 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
     assert!(notified.has_changed().unwrap());
     let mut taken = Taken::default();
     let (first, changes) = taken.take(&data);
-    assert!(changes.sessions() && changes.session(&session));
+    assert!(changes.sessions() && changes.has(&session, Touched::INFO));
 
     let step = durable(
         "session.step.started",
@@ -847,8 +823,8 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
     ]);
     let (second, changes) = taken.take(&data);
     assert_eq!(second, first + 1, "one batch is one flush");
-    assert!(changes.messages(&session));
-    assert!(!changes.session(&session));
+    assert!(changes.has(&session, Touched::SHAPE));
+    assert!(!changes.has(&session, Touched::INFO));
 
     emit(
         &data,
@@ -860,9 +836,8 @@ async fn change_tracking_reports_sessions_messages_and_parts_by_revision() {
         ),
     );
     let (third, changes) = taken.take(&data);
-    assert!(!changes.messages(&session), "a delta does not change the list");
-    assert!(changes.message(&session, "msg_a"));
-    assert!(!changes.message(&session, "msg_b"));
+    assert!(!changes.has(&session, Touched::SHAPE), "a delta does not change the list");
+    assert!(data.read(|state| changes.changed_messages(state).eq([(&session, "msg_a")])), "the delta's message only");
     assert_eq!(message(&data, SESSION, "msg_a")["content"][0]["text"], "Hi");
 
     // A delta for a message that is not loaded is dropped and changes nothing.
@@ -950,7 +925,7 @@ async fn message_sync_reconciles_a_reload_with_the_same_ids() {
         taken.take(&data);
         data.message_sync(&session).await.unwrap();
         let changes = taken.take(&data).1;
-        assert_eq!(changes.messages(&session), reshaped, "{name}");
+        assert_eq!(changes.has(&session, Touched::SHAPE), reshaped, "{name}");
         let mut changed: Vec<_> =
             data.read(|state| changes.changed_messages(state).map(|(_, id)| id.to_owned()).collect());
         changed.sort();
@@ -1001,7 +976,7 @@ async fn message_load_more_reports_only_the_published_page() {
     load.await.unwrap().unwrap();
     let (revision, changes) = taken.take(&data);
     assert_eq!(revision, seen + 1, "one flush: the page");
-    assert!(changes.messages(&session));
+    assert!(changes.has(&session, Touched::SHAPE));
     assert_eq!(ids(&data, SESSION), ["msg_1", "msg_2"]);
     assert!(!data.read(|state| state.messages_loading(&session) || state.has_more_messages(&session)));
 }

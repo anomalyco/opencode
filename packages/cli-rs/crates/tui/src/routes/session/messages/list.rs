@@ -277,15 +277,17 @@ impl Transcript {
         }
         let location = self.0.location(tui);
         let catalogs = location.as_ref().is_some_and(|location| changes.location(location));
-        let pending = changes.pending(session);
+        let pending = changes.has(session, Touched::PENDING);
         // A tool row waiting on a permission request takes the warning color.
-        let permissions = changes.permissions(session);
+        let permissions = changes.has(session, Touched::PERMISSIONS);
         // A subagent row spins while its child session runs.
         let children = changes.any(Touched::STATUS)
-            && tui.data.read(|state| state.family(session).iter().any(|id| id != session && changes.status(id)));
+            && tui
+                .data
+                .read(|state| state.family(session).iter().any(|id| id != session && changes.has(id, Touched::STATUS)));
         let force =
-            changes.messages(session) || changes.session(session) || catalogs || pending || permissions || children;
-        if !force && !changes.any_message(session) {
+            changes.has(session, Touched::SHAPE | Touched::INFO) || catalogs || pending || permissions || children;
+        if !force && !changes.has(session, Touched::SHAPE | Touched::CONTENT) {
             return;
         }
         if !force && self.0.patch(tui, session, changes) {
@@ -759,7 +761,7 @@ impl Inner {
         let keys = Keys::read(tui);
         let stops = tui.data.read(|state| {
             let visible = Visible::of(state, &session);
-            let (messages, lookup) = (visible.messages, visible.lookup);
+            let (messages, lookup) = (visible.lookup.visible, visible.lookup);
             // Queued prompts belong to the dock rather than the transcript.
             let queued: HashSet<MessageKey> =
                 crate::routes::session::queued::ids(state, &session).filter_map(|id| lookup.key(id)).collect();
@@ -807,9 +809,9 @@ impl Inner {
             let lookup = visible.lookup;
             let shapes = self.shapes.borrow();
             // Each changed message is where the last render saw it, in the same shape.
-            let same = shapes.len() == visible.messages.len()
+            let same = shapes.len() == visible.lookup.visible.len()
                 && changes.message_keys(state, session).all(|key| {
-                    lookup.position(key).is_some_and(|at| shapes[at] == (key, shape(&visible.messages[at])))
+                    lookup.position(key).is_some_and(|at| shapes[at] == (key, shape(&visible.lookup.visible[at])))
                 });
             if !same {
                 return false;
@@ -864,7 +866,7 @@ impl Inner {
 
     /// The background hint and the revert banner after the rows.
     fn trailing(&self, tui: &Tui, visible: &Visible<'_>, keys: &Keys) {
-        self.background.update(visible.messages, keys.background.clone(), errors::now());
+        self.background.update(visible.lookup.visible, keys.background.clone(), errors::now());
         let revert = visible
             .info
             .and_then(|info| info.revert.as_ref())
@@ -916,7 +918,6 @@ impl Inner {
             content: self.content_width(tui),
             session_agent: info.and_then(|info| info.agent.as_ref()).map(|agent| agent.as_str()),
             lookup: visible.lookup,
-            messages: visible.messages,
             legacy: self.legacy.get(),
         }
     }
@@ -1180,7 +1181,6 @@ struct Visible<'a> {
     info: Option<&'a SessionInfo>,
     all: &'a [SessionMessageInfo],
     /// Visible messages before the revert boundary.
-    messages: &'a [SessionMessageInfo],
     lookup: Messages<'a>,
 }
 
@@ -1196,7 +1196,7 @@ impl<'a> Visible<'a> {
             None => all,
         };
         let lookup = Messages { transcript: state.transcript(session), visible: messages };
-        Self { session, info, all, messages, lookup }
+        Self { session, info, all, lookup }
     }
 }
 
@@ -1339,7 +1339,6 @@ pub struct Context<'a> {
     pub agents: Vec<&'a AgentInfo>,
     pub models: &'a [ModelInfo],
     /// The visible messages, oldest first.
-    pub messages: &'a [SessionMessageInfo],
     pub lookup: Messages<'a>,
     pub legacy: bool,
 }
@@ -1355,11 +1354,6 @@ impl Context<'_> {
 
     pub fn assistant(&self, key: MessageKey) -> Option<&SessionMessageAssistant> {
         self.lookup.assistant(key)
-    }
-
-    /// Where visible message `id` is.
-    pub fn index_of(&self, id: &str) -> Option<usize> {
-        self.lookup.key(id).and_then(|key| self.lookup.position(key))
     }
 
     /// `local.agent.color`: the agent's own color, else the categorical color at its position among

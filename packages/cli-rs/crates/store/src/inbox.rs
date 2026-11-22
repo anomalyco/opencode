@@ -255,7 +255,7 @@ impl State {
         }
         // An item this client never saw admitted (its enqueue was lost in a reconnect) has no row to show: a synced
         // transcript reads its head again.
-        let read = Read::session(session, SessionRead::Messages);
+        let read = Read::Session(session.as_str(), SessionRead::Messages);
         if known || !self.has_read(read) {
             return Vec::new();
         }
@@ -363,7 +363,7 @@ impl Data {
             }
         };
         self.sync_start(
-            self.keyed(Read::session(&session, SessionRead::Pending)),
+            self.keyed(Read::Session(session.as_str(), SessionRead::Pending)),
             register,
             move |data, (started, token)| async move {
                 let response =
@@ -443,7 +443,7 @@ impl Data {
                         }
                     }
                     record.pending = merged.clone();
-                    let read = Read::session(&session, SessionRead::Messages);
+                    let read = Read::Session(session.as_str(), SessionRead::Messages);
                     let reread = retracted && state.has_read(read);
                     if retracted {
                         state.touch(&session, Touched::SHAPE);

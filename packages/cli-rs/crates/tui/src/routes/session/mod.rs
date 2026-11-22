@@ -146,7 +146,7 @@ impl RouteView for Session {
             form::quiet(tui, tui.data.message_sync(&self.id));
             form::quiet(tui, tui.data.pending_sync(&self.id));
         }
-        if changes.session(&self.id) {
+        if changes.has(&self.id, Touched::INFO) {
             crate::features::location::session(tui, &self.id);
         }
         self.transcript.sync(tui, &self.id, changes);

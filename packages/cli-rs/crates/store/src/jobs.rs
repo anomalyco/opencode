@@ -44,9 +44,9 @@ impl State {
         self.jobs.insert(info.id().to_owned(), info.clone());
         let roots: Vec<SessionKey> = self
             .sessions
-            .entries()
-            .filter(|(_, session)| session.job_tree.is_some() && self.job_within(info, &session.id))
-            .map(|(key, _)| key)
+            .iter()
+            .filter(|session| session.job_tree.is_some() && self.job_within(info, &session.id))
+            .filter_map(|session| self.sessions.key(&session.id))
             .collect();
         for root in roots {
             self.sessions[root].job_tree.get_or_insert_default().insert(info.id().to_owned());
@@ -124,7 +124,7 @@ impl State {
     fn publish_jobs(&mut self, root: &SessionID, ticket: u64, list: Vec<JobInfo>) -> bool {
         let Some(read) = self.end_job_read(root, ticket) else { return false };
         let Some(changes) = read.into_changes() else {
-            self.invalidate(Read::session(root, SessionRead::Jobs));
+            self.invalidate(Read::Session(root.as_str(), SessionRead::Jobs));
             return true;
         };
         let listed: HashSet<String> = list.iter().map(|job| job.id().to_owned()).collect();
@@ -197,7 +197,7 @@ impl Data {
     pub fn job_sync(&self, root: &SessionID) -> Task<()> {
         let (begin, fetched) = (root.clone(), root.clone());
         self.sync_start(
-            self.keyed(Read::session(root, SessionRead::Jobs)),
+            self.keyed(Read::Session(root.as_str(), SessionRead::Jobs)),
             move |state, _| state.begin_job_read(&begin),
             move |data, ticket| async move {
                 let input = ExperimentalJobListInput {

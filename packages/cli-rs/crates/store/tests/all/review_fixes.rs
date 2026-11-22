@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::{self, Status};
 use opencode_api::generated::*;
-use opencode_store::{Catalog, CreateSession, Data, LoadMore, Options};
+use opencode_store::{Catalog, CreateSession, Data, LoadMore, Options, Touched};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 
@@ -254,7 +254,7 @@ async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
     taken.take(&data);
     data.remember(info(session("ses_child", Some("ses_root"), 1.0)));
     let (_, changes) = taken.take(&data);
-    assert!(changes.session(&root), "joining the family changes the root");
+    assert!(changes.has(&root, Touched::INFO), "joining the family changes the root");
     assert_eq!(data.read(|state| state.cost(&root)), 1.5);
 
     emit(
@@ -266,11 +266,11 @@ async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
         ),
     );
     let (_, changes) = taken.take(&data);
-    assert!(changes.session(&root), "child usage changes the root's cost");
+    assert!(changes.has(&root, Touched::INFO), "child usage changes the root's cost");
 
     emit(&data, durable("session.deleted", "evt_deleted", json!({ "sessionID": "ses_child" })));
     let (_, changes) = taken.take(&data);
-    assert!(changes.session(&root), "removing a child changes the root's family");
+    assert!(changes.has(&root, Touched::INFO), "removing a child changes the root's family");
     assert_eq!(data.read(|state| state.family(&root).len()), 1);
 
     // A parent cycle ends the walk at the last session before the first one seen twice.
@@ -317,7 +317,7 @@ async fn a_failed_create_after_its_echo_flushes_the_end_of_creating() {
     assert!(request.await.is_err());
     assert!(!data.read(|state| state.is_creating(&made)));
     let (_, changes) = taken.take(&data);
-    assert!(changes.session(&made), "the end of creating is a change");
+    assert!(changes.has(&made, Touched::INFO), "the end of creating is a change");
 }
 
 #[test]

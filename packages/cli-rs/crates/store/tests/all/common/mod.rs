@@ -109,7 +109,7 @@ pub fn data(handler: Handler, options: Options) -> Data {
 
 /// The one consumer of a test store's changes.
 #[derive(Default)]
-pub struct Taken(Dirty);
+pub struct Taken(pub Dirty);
 
 impl Taken {
     /// What changed since the last take, with the revision of the last flush.
