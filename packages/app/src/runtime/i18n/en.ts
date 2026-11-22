@@ -1238,7 +1238,7 @@ export const dict = {
     "Route network requests through a proxy. Apply to save; the proxy takes effect for the desktop app immediately and for new agent service processes.",
   "settings.general.row.proxy.apply": "Apply proxy settings",
   "settings.general.row.proxy.serviceNote":
-    "Agent requests use this proxy only after the background service restarts. Run \"opencode service restart\" in a terminal to apply it now.",
+    "Agent requests use the proxy only when the background service starts with these settings. OpenCode Desktop does not restart that shared service, so the agent may keep going direct.",
   "settings.general.row.proxy.http.title": "HTTP proxy",
   "settings.general.row.proxy.http.description": "Proxy URL used for HTTP requests.",
   "settings.general.row.proxy.https.title": "HTTPS proxy",
