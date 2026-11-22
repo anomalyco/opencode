@@ -62,6 +62,7 @@ export function createActiveComposerAdapter(input: {
         state.current().every((part) => part.type === "text" && part.content.trim() === "") &&
         state.context.items().length === 0 &&
         data.session.pending.list(id).length === 0
+
       const result = await server.api.session.interrupt({ sessionID: id, resume: true }).catch(() => undefined)
 
       // A repeated Stop finds the execution already stopping and reports nothing interrupted.

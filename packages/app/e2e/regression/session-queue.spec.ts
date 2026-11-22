@@ -360,6 +360,7 @@ for (const [name, draft, expected] of [
         },
       ],
     )
+
     const view = await openQueue(page, mock)
     const requests: string[] = []
     page.on("request", (request) => {

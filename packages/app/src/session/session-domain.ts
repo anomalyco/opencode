@@ -10,6 +10,7 @@ export function selectUnansweredPrompt(messages: SessionMessageInfo[]) {
   const message = messages[index]
 
   if (message?.type !== "user") return
+
   const answered = messages
     .slice(index + 1)
     .some(
