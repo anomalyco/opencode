@@ -50,7 +50,6 @@ export const RETENTION = Duration.days(7)
 export const DIRECTORY = "shell"
 const SPAN_COMMAND_LIMIT = 200
 const STOP_GRACE = Duration.seconds(3)
-const LOST = "Command was killed: the process daemon stopped"
 // Bounds the reads a result needs when the daemon did not report the line count, so stopping a call stays quick.
 const COUNT_NEWLINES_LIMIT = 16 * 1024 * 1024
 const LINE_START_SCAN_LIMIT = 1024 * 1024
@@ -245,11 +244,10 @@ const cleanupNode = makeGlobalNode({
   deps: [FSUtil.node, Global.node, PersistentPty.node],
 })
 
-/** One Location's daemon commands, as `Daemon.at` hands them to its `Shell`. */
-interface Runs {
+/** One Location's commands on a host that fails to create one with `E`, as `Daemon.at` hands them to its `Shell`. */
+interface Runs<E> {
   readonly get: (id: Shell.ID) => Run | undefined
   readonly list: () => Run[]
-  /** Fails with `UnavailableError` only when the daemon could not be reached or started: spawning instead is safe. */
   readonly create: (input: {
     readonly info: Info
     readonly args: readonly string[]
@@ -257,15 +255,21 @@ interface Runs {
     readonly timeout: number
     readonly toolCall: ToolCall | undefined
     readonly waited: boolean
-  }) => Effect.Effect<Info, PersistentPty.UnavailableError | PersistentPty.RequestError>
+  }) => Effect.Effect<Info, E>
   readonly timeout: (run: Run, duration: number) => Effect.Effect<void>
   readonly stop: (run: Run, reason: StopReason) => Effect.Effect<void>
   readonly remove: (id: Shell.ID) => Effect.Effect<void>
 }
 
 export interface DaemonInterface {
-  /** A Location's daemon commands. The first call for a Location in this server takes its commands back from the daemon. */
-  readonly at: (location: Location.Interface) => Effect.Effect<Runs>
+  /**
+   * A Location's daemon commands. The first call for a Location in this server takes its commands back from the daemon.
+   * Creating one fails with `UnavailableError` only when the daemon could not be reached or started: spawning instead
+   * is safe.
+   */
+  readonly at: (
+    location: Location.Interface,
+  ) => Effect.Effect<Runs<PersistentPty.UnavailableError | PersistentPty.RequestError>>
   /** Runs `effect` until it ends or the server stops, outliving the caller's Location (e.g. a job's completion notice). */
   readonly watch: (effect: Effect.Effect<void, unknown>) => Effect.Effect<void>
   readonly handoffPrepared: () => boolean
@@ -275,27 +279,61 @@ export interface DaemonInterface {
 export class Daemon extends Context.Service<Daemon, DaemonInterface>()("@opencode/Shell/Daemon") {}
 
 /** Keeps commands running outside the server and finds them again after it restarts. */
-interface CommandHost {
-  readonly create: (
-    input: PersistentPty.CreatePipeInput,
-  ) => Effect.Effect<CommandProcess, PersistentPty.UnavailableError | PersistentPty.RequestError>
-  readonly list: () => Effect.Effect<CommandProcess[], PersistentPty.UnavailableError | PersistentPty.RequestError>
+interface CommandHost<E> {
+  /** Fails with the host's own error, which the caller of `Runs.create` tells apart. */
+  readonly create: (input: CommandCreate) => Effect.Effect<CommandProcess, E>
+  readonly list: () => Effect.Effect<CommandProcess[], CommandError>
+  /** Why a command was killed, said of one whose process the host no longer has. */
+  readonly lost: string
 }
 
 interface CommandProcess {
-  readonly info: Omit<PersistentPty.PipeInfo, "id" | "groupID" | "outputTail">
-  readonly store: (metadata: Stored) => Effect.Effect<void, PersistentPty.UnavailableError | PersistentPty.RequestError>
-  readonly wait: () => Effect.Effect<
-    PersistentPty.PipeExit,
-    PersistentPty.UnavailableError | PersistentPty.RequestError
-  >
-  readonly signal: (
-    signal: "SIGTERM" | "SIGKILL",
-  ) => Effect.Effect<void, PersistentPty.UnavailableError | PersistentPty.RequestError>
-  readonly remove: () => Effect.Effect<void, PersistentPty.UnavailableError | PersistentPty.RequestError>
+  readonly info: CommandInfo
+  readonly store: (metadata: Stored) => Effect.Effect<void, CommandError>
+  readonly wait: () => Effect.Effect<CommandExit, CommandError>
+  readonly signal: (signal: "SIGTERM" | "SIGKILL") => Effect.Effect<void, CommandError>
+  readonly remove: () => Effect.Effect<void, CommandError>
 }
 
-const commandRuns = (host: CommandHost) =>
+type CommandCreate = {
+  readonly program: string
+  readonly args: readonly string[]
+  readonly cwd: string
+  /** The command's whole environment. */
+  readonly env: Readonly<Record<string, string>>
+  readonly projectID: string
+  readonly outputPath: string
+  readonly metadata: Stored
+}
+
+type CommandInfo = {
+  readonly pid: number | undefined
+  readonly cwd: string
+  readonly lifecycle:
+    | { readonly status: "running" }
+    | { readonly status: "exited"; readonly exitCode: number | undefined; readonly signal: string | undefined }
+    | { readonly status: "failed"; readonly message: string }
+  readonly outputPath: string
+  readonly outputLines: number
+  readonly outputError: string | undefined
+  /** What `create` was given or `store` last kept. */
+  readonly metadata: unknown
+  readonly startedAt: number
+  readonly exitedAt: number | undefined
+}
+
+type CommandExit = {
+  readonly exitCode: number | undefined
+  readonly signal: string | undefined
+  readonly outputLines: number
+  readonly outputError: string | undefined
+  readonly exitedAt: number
+}
+
+/** A host's failure on anything but `create`. The lifecycle only logs it. */
+type CommandError = { readonly message: string }
+
+const commandRuns = <E>(host: CommandHost<E>) =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const scope = yield* Effect.scope
@@ -303,7 +341,7 @@ const commandRuns = (host: CommandHost) =>
     const global = yield* Global.Service
     const { unlink } = yield* Effect.promise(() => import("fs/promises"))
     // Keyed by canonical Location. `recovered` resolves once the Location's commands were taken back.
-    const places = new Map<string, { runs: Runs; recovered: Deferred.Deferred<void> }>()
+    const places = new Map<string, { runs: Runs<E>; recovered: Deferred.Deferred<void> }>()
     // Fibers run with the server's context in its scope, so a Location closing never interrupts them. On shutdown
     // they end without settling anything: the commands keep running for the next server, and the jobs waiting on
     // them are left to the job registry, which keeps their rows for it.
@@ -447,7 +485,7 @@ const commandRuns = (host: CommandHost) =>
               Effect.logWarning("lost a shell command's process", { id: run.info.id, error: error.message }).pipe(
                 Effect.andThen(
                   Effect.sync((): Ended => {
-                    run.killed = LOST
+                    run.killed = host.lost
                     return { status: "killed", completed: Date.now() }
                   }),
                 ),
@@ -466,7 +504,7 @@ const commandRuns = (host: CommandHost) =>
         yield* stop(run, "timeout")
       })
 
-      const create: Runs["create"] = Effect.fnUntraced(function* (input) {
+      const create: Runs<E>["create"] = Effect.fnUntraced(function* (input) {
         const pending = {
           info: input.info,
           toolCall: input.toolCall,
@@ -478,7 +516,7 @@ const commandRuns = (host: CommandHost) =>
           args: input.args,
           cwd: input.info.cwd,
           env: input.env,
-          groupID: location.project.id,
+          projectID: location.project.id,
           outputPath: input.info.file,
           metadata: persisted(pending),
         })
@@ -568,7 +606,7 @@ const commandRuns = (host: CommandHost) =>
         yield* evict()
       })
 
-      const handle: Runs = {
+      const handle: Runs<E> = {
         get: (id) => runs.get(id),
         list: () => Array.from(runs.values()),
         create,
@@ -617,8 +655,9 @@ const daemonLayer = Layer.effect(
       remove: () => pty.terminatePipe(info.id),
     })
     const runs = yield* commandRuns({
-      create: (input) => pty.createPipe(input).pipe(Effect.map(pipe)),
+      create: (input) => pty.createPipe({ ...input, groupID: input.projectID }).pipe(Effect.map(pipe)),
       list: () => pty.listPipes().pipe(Effect.map((items) => items.map(pipe))),
+      lost: "Command was killed: the process daemon stopped",
     })
     return Daemon.of({ ...runs, handoffPrepared: pty.handoffPrepared })
   }),
