@@ -5,6 +5,7 @@ import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { Service } from "@opencode/client/effect/service"
 import { ServerConnection } from "../../../services/server-connection"
+import { waitForPlugins } from "../../../services/plugin-startup"
 import { resolveIntegration } from "./resolve"
 
 const location = { directory: process.cwd() }
@@ -14,6 +15,7 @@ export default Runtime.handler(
   Effect.fn("cli.mcp.logout")(function* (input) {
     const { endpoint } = yield* ServerConnection.resolve()
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+    yield* waitForPlugins(client, location.directory)
 
     const integration = yield* resolveIntegration(client, input.name, location)
     if (!integration) {
