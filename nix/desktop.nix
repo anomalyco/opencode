@@ -111,19 +111,14 @@ stdenv.mkDerivation (finalAttrs: {
 
     cd packages/desktop
 
-    # script/build.ts bundles the CLI from ../cli/dist when the channel's
-    # package is staged there, and fails for prod otherwise. Stage the Nix-built
-    # CLI at that path instead of downloading a published one.
-    cli_package=$(bun -e 'import { getCurrentCli } from "./script/utils.ts"; console.log(getCurrentCli().package.replace("@opencode/", ""))')
-    # copyBuiltCliToResources joins this dist with the npm package name getCurrentCli()
-    # reports, not the Nix build's name. It reads only .version from the manifest and
-    # writes it as opencode-cli.version beside the binary.
-    mkdir -p ../cli/dist/$cli_package/bin
-    cp ${lib.getExe opencode} ../cli/dist/$cli_package/bin/opencode
+    # The bundler locates the CLI by its platform package name.
+    cli_package="../cli/dist/$(bun -e 'import { getCurrentCli } from "./script/utils.ts"; console.log(getCurrentCli().package.replace("@opencode/", ""))')"
+    mkdir -p "$cli_package/bin"
+    cp ${lib.getExe opencode} "$cli_package/bin/opencode"
     # OPENCODE_VERSION is what the bundled CLI prints for --version, so the manifest
     # and the executable cannot drift.
     bun -e 'await Bun.write(process.argv[1], JSON.stringify({ version: process.env.OPENCODE_VERSION }) + "\n")' \
-      ../cli/dist/$cli_package/package.json
+      "$cli_package/package.json"
 
     bun run build
     npx electron-builder --dir \
@@ -173,7 +168,8 @@ stdenv.mkDerivation (finalAttrs: {
     install -Dm644 resources/ai.opencode.desktop.metainfo.xml \
       "$out/share/metainfo/ai.opencode.desktop.metainfo.xml"
     gappsWrapperArgsHook
-    makeWrapper "$desktop_exe" $out/bin/opencode-desktop \
+    # The Wayland flags expand at launch, not when the wrapper is built.
+    makeShellWrapper "$desktop_exe" $out/bin/opencode-desktop \
      "''${gappsWrapperArgs[@]}" \
      --inherit-argv0 \
      --set ELECTRON_FORCE_IS_PACKAGED 1 \
