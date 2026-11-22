@@ -81,10 +81,12 @@ impl Banner {
         session: &SessionID,
         revert: Option<(&str, &[FileDiffInfo])>,
         messages: &[SessionMessageInfo],
-        redo: Option<String>,
+        redo: Option<&str>,
         width: usize,
     ) {
-        *self.0.session.borrow_mut() = Some(session.clone());
+        if self.0.session.borrow().as_ref() != Some(session) {
+            *self.0.session.borrow_mut() = Some(session.clone());
+        }
         let Some((boundary, files)) = revert else {
             self.0.root.visible(false);
             *self.0.rendered.borrow_mut() = None;
@@ -93,7 +95,7 @@ impl Banner {
         let count = messages.iter().position(|message| message.id() == boundary).map_or(0, |start| {
             messages[start..].iter().filter(|message| matches!(message, SessionMessageInfo::User(_))).count()
         });
-        let props = Props { count, files: files.to_vec(), redo, width };
+        let props = Props { count, files: files.to_vec(), redo: redo.map(str::to_owned), width };
         self.0.root.visible(true);
         if self.0.rendered.borrow().as_ref() == Some(&props) {
             return;

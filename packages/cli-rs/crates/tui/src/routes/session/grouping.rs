@@ -13,7 +13,7 @@ use opentui::widget::Markdown;
 
 use opencode_store::MessageKey;
 
-use super::messages::list::{Context, Messages, Part, Row, Spec};
+use super::messages::list::{Context, Events, Messages, Part, Row, RowEvent, Spec};
 use super::messages::reasoning;
 use opencode_ui::locale::duration;
 
@@ -64,16 +64,17 @@ impl Group {
     /// The rows below, depth first (`descendants`).
     pub fn entries(&self) -> Vec<&Spec> {
         let mut entries = Vec::new();
-        visit(&self.children, &mut entries);
+        self.each_entry(&mut |spec| entries.push(spec));
         entries
     }
-}
 
-fn visit<'a>(nodes: &'a [Node], entries: &mut Vec<&'a Spec>) {
-    for node in nodes {
-        match node {
-            Node::Entry(spec) => entries.push(spec),
-            Node::Group(group) => visit(&group.children, entries),
+    /// [`Self::entries`] one at a time.
+    pub fn each_entry<'a>(&'a self, each: &mut dyn FnMut(&'a Spec)) {
+        for node in &self.children {
+            match node {
+                Node::Entry(spec) => each(spec),
+                Node::Group(group) => group.each_entry(each),
+            }
         }
     }
 }
@@ -130,8 +131,6 @@ pub struct Settings {
     pub grouping: Cell<bool>,
     pub verbosity: Cell<Verbosity>,
     pub expanded: RefCell<HashMap<String, bool>>,
-    /// Re-renders the transcript after a header click.
-    pub refresh: RefCell<Option<Rc<dyn Fn()>>>,
 }
 
 impl Settings {
@@ -140,7 +139,6 @@ impl Settings {
             grouping: Cell::new(true),
             verbosity: Cell::new(DEFAULT_VERBOSITY),
             expanded: RefCell::default(),
-            refresh: RefCell::default(),
         });
         settings.read(info);
         settings
@@ -522,6 +520,7 @@ struct Inner {
     app: App,
     theme: Live,
     settings: Rc<Settings>,
+    events: Events,
     root: View,
     header: View,
     body: View,
@@ -585,7 +584,7 @@ enum Child {
 }
 
 impl GroupView {
-    pub fn new(cx: &Context<'_>, settings: &Rc<Settings>, level: usize) -> Self {
+    pub fn new(cx: &Context<'_>, level: usize) -> Self {
         let header = View::new(cx.app).padding_edge(Edge::Left, 3);
         let body = View::new(cx.app).column().shrink(0.0);
         let outside = View::new(cx.app).column().shrink(0.0);
@@ -593,7 +592,8 @@ impl GroupView {
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
             theme: cx.tui.live_theme(),
-            settings: settings.clone(),
+            settings: cx.groups.clone(),
+            events: cx.events.clone(),
             root,
             header,
             body,
@@ -614,10 +614,7 @@ impl GroupView {
             let (Some((_, id)), Some(kind)) = (inner.id.borrow().clone(), inner.kind.get()) else { return };
             let open = inner.settings.expanded(&id, kind);
             inner.settings.expanded.borrow_mut().insert(id, !open);
-            let refresh = inner.settings.refresh.borrow().clone();
-            if let Some(refresh) = refresh {
-                refresh();
-            }
+            inner.events.send(RowEvent::Toggled);
         }));
         inner.header.on_hover(bind!(inner, |inner, _, hovered| {
             inner.hover.set(hovered);
@@ -947,7 +944,7 @@ impl Inner {
                             row.wrapper.margin_edge(Edge::Top, 0);
                             Child::Row(Box::new(row))
                         }
-                        Node::Group(_) => Child::Group(GroupView::new(cx, &self.settings, level)),
+                        Node::Group(_) => Child::Group(GroupView::new(cx, level)),
                     };
                     (key, child)
                 }
