@@ -153,6 +153,9 @@ type PlatformBase = {
   /** Set the proxy used by the desktop app's outbound requests (desktop only) */
   setProxySettings?(value: ProxySettings): Promise<void>
 
+  /** Respawn the local service so it picks up a changed proxy (desktop only) */
+  restartService?(): Promise<void>
+
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
 

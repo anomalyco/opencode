@@ -50,6 +50,9 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
     setSpellcheckEnabled: (enabled) => api.setSpellcheckEnabled(enabled),
     getProxySettings: () => api.getProxySettings(),
     setProxySettings: (value) => api.setProxySettings(value),
+    restartService: async () => {
+      await api.restartService()
+    },
     onDeepLinks,
     onDragCancel: (callback) => {
       window.addEventListener(DragCancelEvent, callback)

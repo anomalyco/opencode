@@ -113,7 +113,10 @@ export function createProxySettingsController() {
     initial: defaultProxySettings,
     initialMeta: undefined,
     load: async (source) => ({ value: await source.get(), meta: undefined }),
-    write: (value, source) => source.set(value),
+    write: async (value, source) => {
+      await source.set(value)
+      await platform.restartService?.()
+    },
   })
 
   return {

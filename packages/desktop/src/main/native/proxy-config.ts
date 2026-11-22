@@ -3,6 +3,15 @@ import { Option, Schema } from "effect"
 
 const loopback = "127.0.0.1,localhost,::1"
 
+export const proxyKeys = [
+  "HTTP_PROXY",
+  "http_proxy",
+  "HTTPS_PROXY",
+  "https_proxy",
+  "NO_PROXY",
+  "no_proxy",
+] as const
+
 const StoredProxySettings = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   http: Schema.optional(Schema.String),
@@ -23,11 +32,11 @@ export function readProxySettings(value: Schema.Json | undefined): ProxySettings
   }
 }
 
-export function proxyBypass(value: ProxySettings) {
+export function proxyBypass(value: ProxySettings, ...extra: (string | undefined)[]) {
   return [
     ...new Set(
-      [value.noProxy, loopback].flatMap((entry) =>
-        entry
+      [value.noProxy, loopback, ...extra].flatMap((entry) =>
+        (entry ?? "")
           .split(",")
           .map((host) => host.trim())
           .filter(Boolean),
@@ -36,21 +45,31 @@ export function proxyBypass(value: ProxySettings) {
   ].join(",")
 }
 
-export function proxyEnvironment(value: ProxySettings) {
+export function proxyEnvironment(value: ProxySettings, existing: Readonly<Record<string, string | undefined>> = {}) {
   if (!value.enabled) return {}
 
+  const environment: Record<string, string> = {}
   const http = value.http.trim()
   const https = value.https.trim()
-  const noProxy = proxyBypass(value)
 
-  return {
-    HTTP_PROXY: http,
-    http_proxy: http,
-    HTTPS_PROXY: https,
-    https_proxy: https,
-    NO_PROXY: noProxy,
-    no_proxy: noProxy,
+  if (http) {
+    environment.HTTP_PROXY = http
+    environment.http_proxy = http
   }
+
+  if (https) {
+    environment.HTTPS_PROXY = https
+    environment.https_proxy = https
+  }
+
+  const noProxy = proxyBypass(value, existing.NO_PROXY, existing.no_proxy)
+
+  if (noProxy) {
+    environment.NO_PROXY = noProxy
+    environment.no_proxy = noProxy
+  }
+
+  return environment
 }
 
 export function proxyRules(value: ProxySettings) {

@@ -26,6 +26,7 @@ export const appHandlers = AppRpcs.toLayer(
     return AppRpcs.of({
       AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
+      AppRestartService: () => background.restart.pipe(Effect.map(SidecarCredentials.ready)),
       AppReadyDeepLinks: (_request, context) =>
         Effect.sync(() => {
           const contents = sender(handoff, context)

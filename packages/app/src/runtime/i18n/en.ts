@@ -1235,7 +1235,7 @@ export const dict = {
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
   "settings.general.row.proxy.enabled.title": "Use a proxy",
   "settings.general.row.proxy.enabled.description":
-    "Route agent network requests through a proxy. Restart OpenCode to apply changes to running agents.",
+    "Route agent network requests through a proxy. Changes apply immediately and running sessions reconnect.",
   "settings.general.row.proxy.http.title": "HTTP proxy",
   "settings.general.row.proxy.http.description": "Proxy URL used for HTTP requests.",
   "settings.general.row.proxy.https.title": "HTTPS proxy",
