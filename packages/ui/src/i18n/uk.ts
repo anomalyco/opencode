@@ -252,7 +252,7 @@ export const dict = {
   "ui.common.moreCount.other": "+ще {{count}}",
   "ui.sessionTimeline.notice.model": "Модель",
   "ui.sessionTimeline.notice.movedTo": "Переміщено до",
-  "ui.sessionTimeline.notice.movedTooltip": "Робочий каталог сеансу змінено",
+  "ui.sessionTimeline.notice.movedTooltip": "Робочий каталог сесії змінено",
   "ui.sessionTimeline.notice.failed": "{{actor}} завершився помилкою",
   "ui.sessionTimeline.notice.cancelled": "{{actor}} скасовано",
   "ui.sessionTimeline.notice.finished": "{{actor}} завершено",
