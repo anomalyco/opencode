@@ -5,7 +5,10 @@ import { CodeModeDiffs } from "@opencode/core/codemode/diffs"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
-import { execute } from "@opencode/core/tool/runtime"
+import { definition, execute } from "@opencode/core/tool/runtime"
+import { ai, type LanguageModel } from "@opencode/ai/effect"
+import { Anthropic, OpenAI } from "@opencode/ai/providers"
+import { compileRequest } from "@opencode/ai/testing"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -47,7 +50,7 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
     ["send", { ...send, freeform: { type: "text" } }],
   ])
   const codeMode = createCodeMode(tools)
-  expect(codeMode.freeform).toEqual({ type: "text" })
+  expect(codeMode.freeform).toEqual({ type: "text", optionsPrefix: "// @exec:" })
   expect(CodeModeTool.catalog({ tools }).tools.map((tool) => "signature" in tool && tool.signature)).toEqual([
     "tools.echo({\n  /** @minLength 1 */\n  text: string,\n}): Promise<string>",
     "tools.send(/** @minLength 1 */ text: string): Promise<string>",
@@ -79,6 +82,46 @@ test("with full_codemode, execute names Bun's file APIs instead of ruling out fi
     "`fetch` is available for HTTP requests, and Bun's file APIs (`Bun.file`, `Bun.write`, `Bun.Glob`) for files, in place of Node's `fs`. Imports and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
   )
   expect(description).not.toContain("direct filesystem access")
+})
+
+test("with full_codemode, execute goes out as raw text with an options line for GPT and as JSON for Claude", async () => {
+  const codeMode = createCodeMode(new Map(), allowAll, codeModeServices(process.cwd()))
+  const tools = [definition(codeMode)]
+  const body = (model: LanguageModel) =>
+    Effect.runPromise(
+      compileRequest(ai.request({ model, prompt: "Run it.", tools })).pipe(Effect.map((prepared) => prepared.body)),
+    )
+  const gpt = await body(OpenAI.model("gpt-6.2-sol", { apiKey: "test" }))
+  expect(gpt.tools).toMatchObject([
+    {
+      type: "custom",
+      name: "execute",
+      format: { type: "grammar", syntax: "lark", definition: expect.stringContaining("\\/\\/ @exec:") },
+    },
+  ])
+  expect(gpt.tools[0].description).toContain("start with the line `// @exec: <JSON object>`")
+  expect(gpt.tools[0].description).toContain("`background` (boolean)")
+  const claude = await body(Anthropic.model("claude-opus-5-5", { apiKey: "test" }))
+  expect(claude.tools).toMatchObject([
+    {
+      name: "execute",
+      description: codeMode.description,
+      input_schema: { properties: { timeout: {}, background: {} } },
+    },
+  ])
+  // Without full_codemode, execute takes only code and goes out as plain text, as before.
+  const plain = await Effect.runPromise(
+    compileRequest(
+      ai.request({
+        model: OpenAI.model("gpt-6.2-sol", { apiKey: "test" }),
+        prompt: "Run it.",
+        tools: [definition(createCodeMode(new Map()))],
+      }),
+    ).pipe(Effect.map((prepared) => prepared.body)),
+  )
+  expect(plain.tools).toEqual([
+    { type: "custom", name: "execute", description: createCodeMode(new Map()).description, format: { type: "text" } },
+  ])
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {

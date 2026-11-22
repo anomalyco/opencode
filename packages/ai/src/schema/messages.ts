@@ -426,13 +426,16 @@ export namespace ToolDefinition {
   /** Normalize tool definition input into the canonical `ToolDefinition` class. */
   export const make = (input: Input) => (input instanceof ToolDefinition ? input : new ToolDefinition(input))
 
-  /** The parameter a freeform call fills: the input schema's only property, when it is a required string. */
-  export const freeformField = (schema: JsonSchema) => {
+  /**
+   * The parameter a freeform call fills: the input schema's only property, when it is a required string. With
+   * `options`, other optional properties may sit beside it.
+   */
+  export const freeformField = (schema: JsonSchema, options = false) => {
     const properties = Object.entries(Schema.is(JsonSchema)(schema.properties) ? schema.properties : {})
-    if (properties.length !== 1) return undefined
-    const [name, property] = properties[0]
-    if (!Schema.is(JsonSchema)(property) || property.type !== "string") return undefined
-    return Array.isArray(schema.required) && schema.required.includes(name) ? name : undefined
+    const required = properties.filter(([name]) => Array.isArray(schema.required) && schema.required.includes(name))
+    if (required.length !== 1 || (!options && properties.length !== 1)) return undefined
+    const [name, property] = required[0]
+    return Schema.is(JsonSchema)(property) && property.type === "string" ? name : undefined
   }
 }
 

@@ -59,12 +59,24 @@ type FreeformField<T> = {
     : never
 }[keyof T]
 
-/** `Freeform` for exactly one required string field or unknown ones (a JSON Schema `input`), otherwise `undefined`. */
+type RequiredKey<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[keyof T]
+
+// The one required field, a string, of an input whose other fields are optional.
+type OptionsField<T> = {
+  [K in RequiredKey<T>]-?: [Exclude<RequiredKey<T>, K>] extends [never] ? (T[K] extends string ? K : never) : never
+}[RequiredKey<T>]
+
+/**
+ * `Freeform` for exactly one required string field or unknown ones (a JSON Schema `input`), a `text` format with an
+ * `optionsPrefix` for one required string field beside optional ones, otherwise `undefined`.
+ */
 export type FreeformOption<Input extends ToolInput> =
   unknown extends ToolInputType<Input>
     ? Freeform
     : [FreeformField<ToolInputType<Input>>] extends [never]
-      ? undefined
+      ? [OptionsField<ToolInputType<Input>>] extends [never]
+        ? undefined
+        : { readonly type: "text"; readonly optionsPrefix: string }
       : Freeform
 
 /**
@@ -240,8 +252,16 @@ export const emptyInputJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema 
 }
 
 const definition = (input: ToolDefinitionInput) => {
-  if (input.freeform !== undefined && ToolDefinition.freeformField(input.inputSchema) === undefined)
-    throw new Error("A freeform tool needs exactly one parameter, a required string")
+  if (
+    input.freeform !== undefined &&
+    ToolDefinition.freeformField(
+      input.inputSchema,
+      input.freeform.type === "text" && input.freeform.optionsPrefix !== undefined,
+    ) === undefined
+  )
+    throw new Error(
+      "A freeform tool needs exactly one parameter, a required string, or optional others beside it with `optionsPrefix`",
+    )
   return new ToolDefinition(input)
 }
 

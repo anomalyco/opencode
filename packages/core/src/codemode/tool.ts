@@ -149,7 +149,8 @@ export const create = (
     name: "execute",
     description: description(services !== undefined),
     input: services ? FullInput : CodeMode.Input,
-    freeform: { type: "text" },
+    // On custom tools, `timeout` and `background` go on an optional first line, as Codex's `exec` takes its options.
+    freeform: { type: "text", optionsPrefix: "// @exec:" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {

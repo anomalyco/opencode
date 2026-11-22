@@ -85,6 +85,23 @@ AI.tool({
   execute: () => undefined,
 })
 
+const withOptions = Schema.Struct({ code: Schema.String, timeout: Schema.optionalKey(Schema.Number) })
+
+tool({
+  name: "run_code",
+  description: "Run JavaScript.",
+  input: withOptions,
+  freeform: { type: "text", optionsPrefix: "// @exec:" },
+})
+
+tool({
+  name: "run_code",
+  description: "Run JavaScript.",
+  input: withOptions,
+  // @ts-expect-error Optional fields beside the string need an options line.
+  freeform: { type: "text" },
+})
+
 AI.tool({
   name: "run_code",
   description: "Run JavaScript.",

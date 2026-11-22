@@ -458,6 +458,8 @@ export interface ParserState {
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<string>
   readonly custom: ReadonlyMap<string, OpenAIFreeform.Custom>
+  /** Streams of open custom calls, by item id. */
+  readonly customCalls: ReadonlyMap<string, OpenAIFreeform.Stream>
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
   readonly outputItems: Readonly<Record<number, string>>
@@ -496,11 +498,11 @@ export const lowerTool = Effect.fnUntraced(function* (protocolName: string, tool
 })
 
 export const lowerCustomTool = (tool: ToolDefinition, custom: OpenAIFreeform.Custom) => {
-  const grammar = OpenAIFreeform.grammar(custom.format)
+  const grammar = OpenAIFreeform.grammar(custom)
   return {
     type: "custom" as const,
     name: tool.name,
-    description: tool.description,
+    description: OpenAIFreeform.description(tool, custom),
     format: grammar ? { type: "grammar" as const, ...grammar } : { type: "text" as const },
   }
 }
@@ -1208,11 +1210,15 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
     input: custom ? "" : (item.arguments ?? ""),
     providerMetadata: metadata,
   })
-  const opened = custom
-    ? ToolStream.append(tools, item.id, OpenAIFreeform.streamStart(state.custom.get(item.name ?? ""), rawInput(item)))
-    : undefined
+  const started = custom ? OpenAIFreeform.streamStart(state.custom.get(item.name ?? ""), rawInput(item)) : undefined
+  const opened = started && ToolStream.append(tools, item.id, started.fragment)
   return [
-    { ...state, lifecycle, tools: opened?.tools ?? tools },
+    {
+      ...state,
+      lifecycle,
+      tools: opened?.tools ?? tools,
+      customCalls: started ? new Map(state.customCalls).set(item.id, started.stream) : state.customCalls,
+    },
     [
       ...events,
       LLMEvent.toolInputStart({
@@ -1338,7 +1344,9 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
     const final = { custom: state.custom.get(item.name), raw: rawInput(item) }
     const input = custom ? OpenAIFreeform.fromRaw(final.custom, final.raw) : item.arguments
     const registered = state.tools[item.id] !== undefined
-    const closed = custom ? OpenAIFreeform.close(state.tools, [item.id], final) : undefined
+    const closed = custom
+      ? OpenAIFreeform.close(state.tools, [[item.id, state.customCalls.get(item.id)]], final)
+      : undefined
     const tools = registered
       ? (closed?.tools ?? state.tools)
       : ToolStream.start(state.tools, item.id, {
@@ -1563,14 +1571,16 @@ export const step = (state: ParserState, event: NormalizedEvent) => {
     return event.item_id !== undefined
       ? onFunctionCallArgumentsDelta(state, event)
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
-  if (event.type === "response.custom_tool_call_input.delta")
-    return event.item_id !== undefined
-      ? onFunctionCallArgumentsDelta(state, {
-          ...event,
-          type: "response.function_call_arguments.delta",
-          delta: OpenAIFreeform.streamDelta(event.delta ?? ""),
-        })
-      : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+  if (event.type === "response.custom_tool_call_input.delta") {
+    if (event.item_id === undefined) return ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+    const stream = state.customCalls.get(event.item_id)
+    if (!stream) return Effect.succeed<StepResult>([state, NO_EVENTS])
+    const next = OpenAIFreeform.streamDelta(stream, event.delta ?? "")
+    return onFunctionCallArgumentsDelta(
+      { ...state, customCalls: new Map(state.customCalls).set(event.item_id, next.stream) },
+      { ...event, type: "response.function_call_arguments.delta", delta: next.fragment },
+    )
+  }
   if (event.type === "response.output_item.done") return onOutputItemDone(state, event.item)
   if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
   if (event.type === "response.failed") return providerFailure(event, `${state.name} response failed`)
@@ -1594,6 +1604,7 @@ export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADA
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
   custom: OpenAIFreeform.tools(request),
+  customCalls: new Map(),
   lifecycle: Lifecycle.initial(),
   outputItems: {},
   message: undefined,

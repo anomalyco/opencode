@@ -8,9 +8,13 @@ import type { SessionMessage } from "./session-message.js"
 
 export type Metadata = Readonly<Record<string, any>>
 
-/** Optional wire encoding of a tool's single required string field. Execution still receives the object. */
+/**
+ * Optional wire encoding of a tool's single required string field. Execution still receives the object. A `text`
+ * tool with `optionsPrefix` may also have optional fields, which the model sets on an optional first line: the
+ * prefix followed by a JSON object, such as `// @exec: {"timeout": 1000}`.
+ */
 export const Freeform = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text") }),
+  Schema.Struct({ type: Schema.Literal("text"), optionsPrefix: Schema.optionalKey(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
   Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
 ]).annotate({ identifier: "Tool.Freeform" })

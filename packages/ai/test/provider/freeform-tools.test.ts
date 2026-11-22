@@ -40,6 +40,29 @@ const tools = (freeform?: Freeform) =>
   ])
 
 const lark = tools({ type: "lark", grammar: GRAMMAR })
+// A tool with an optional field beside its code, set on an options line.
+const withOptions = toDefinitions([
+  tool({
+    name: "run",
+    description: "Run code",
+    input: Schema.Struct({
+      code: Schema.String,
+      timeout: Schema.optionalKey(Schema.Int).annotate({ description: "Milliseconds to wait." }),
+    }),
+    success: Schema.String,
+    freeform: { type: "text", optionsPrefix: "// @exec:" },
+  }),
+])
+const OPTIONS_GRAMMAR = [
+  "start: pragma_source | plain_source",
+  "pragma_source: PRAGMA_LINE NEWLINE SOURCE",
+  "plain_source: SOURCE",
+  "",
+  "PRAGMA_LINE: /[ \\t]*\\/\\/ @exec:[^\\r\\n]*/",
+  "NEWLINE: /\\r?\\n/",
+  "SOURCE: /[\\s\\S]+/",
+  "",
+].join("\n")
 // The same tool without `freeform`, as a caller declares it for a model without custom tools.
 const plain = tools()
 
@@ -294,6 +317,134 @@ describe("freeform tools", () => {
         { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "run", input: { code: "ZZ123" } }] },
         { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1" }] },
       ])
+    }),
+  )
+
+  it.effect("carries optional fields on an options line for OpenAI and as JSON elsewhere", () =>
+    Effect.gen(function* () {
+      const description =
+        "Run code\nTo set other parameters, start with the line `// @exec: <JSON object>` and put the code on the next line. Parameters: `timeout` (integer): Milliseconds to wait."
+      const format = { type: "grammar", syntax: "lark", definition: OPTIONS_GRAMMAR }
+      expect((yield* body(responses, withOptions)).tools).toEqual([
+        { type: "custom", name: "run", description, format },
+      ])
+      expect((yield* body(chat, withOptions)).tools).toEqual([
+        {
+          type: "custom",
+          custom: {
+            name: "run",
+            description,
+            format: { type: "grammar", grammar: { syntax: "lark", definition: OPTIONS_GRAMMAR } },
+          },
+        },
+      ])
+      expect((yield* body(Anthropic.model("claude-sonnet-4-5", { apiKey: "test" }), withOptions)).tools).toMatchObject([
+        { name: "run", description: "Run code", input_schema: { properties: { code: {}, timeout: {} } } },
+      ])
+    }),
+  )
+
+  it.effect("streams a Responses options line as JSON fields and replays it", () =>
+    Effect.gen(function* () {
+      const raw = '// @exec: {"timeout":1000}\nreturn "a"'
+      const item = { type: "custom_tool_call", id: "ctc_1", call_id: "call_1", name: "run", input: "" }
+      const delta = (text: string) => ({
+        type: "response.custom_tool_call_input.delta",
+        output_index: 0,
+        item_id: "ctc_1",
+        delta: text,
+      })
+      const response = yield* LLMClient.generate(
+        ai.request({ model: responses, prompt: "Run it.", tools: withOptions }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item },
+              delta("// @exec: "),
+              delta('{"timeout":1000}'),
+              delta('\nreturn "a"'),
+              { type: "response.output_item.done", output_index: 0, item: { ...item, input: raw } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      const deltas = response.events.filter((event) => event.type === "tool-input-delta").map((event) => event.text)
+      expect(deltas).toEqual(["{", '"timeout":1000,"code":"return \\"a\\"', '"}'])
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", input: { timeout: 1000, code: 'return "a"' } }),
+      ])
+
+      const replay = yield* compileRequest(
+        ai.request({ model: responses, messages: [response.message], tools: withOptions }),
+      )
+      expect(replay.body.input[0]).toEqual({
+        type: "custom_tool_call",
+        id: "ctc_1",
+        call_id: "call_1",
+        name: "run",
+        input: raw,
+      })
+    }),
+  )
+
+  it.effect("streams a Chat options line as JSON fields, with a malformed one kept as code", () =>
+    Effect.gen(function* () {
+      const chunk = (call: Record<string, unknown>) => ({
+        id: "chatcmpl_1",
+        choices: [{ index: 0, delta: { tool_calls: [{ index: 0, ...call }] }, finish_reason: null }],
+      })
+      const run = (...inputs: ReadonlyArray<string>) =>
+        LLMClient.generate(ai.request({ model: chat, prompt: "Run it.", tools: withOptions })).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                chunk({ id: "call_1", type: "custom", custom: { name: "run", input: "" } }),
+                ...inputs.map((input) => chunk({ custom: { input } })),
+                { id: "chatcmpl_1", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+              ),
+            ),
+          ),
+          Effect.map((response) => response.events.filter(LLMEvent.is.toolCall).map((event) => event.input)),
+        )
+      expect(yield* run('// @exec: {"timeout":5}\r', "\nx()")).toEqual([{ timeout: 5, code: "x()" }])
+      expect(yield* run("// @exec: {timeout}", "\nx()")).toEqual([{ code: "// @exec: {timeout}\nx()" }])
+      expect(yield* run("// @exec: ", '{"timeout":5}')).toEqual([{ code: '// @exec: {"timeout":5}' }])
+      expect(yield* run("x(", ")")).toEqual([{ code: "x()" }])
+    }),
+  )
+
+  it.effect("replays calls with options as an options line on each OpenAI route", () =>
+    Effect.gen(function* () {
+      const messages = [
+        Message.user("Run it."),
+        Message.assistant([
+          ToolCallPart.make({
+            id: "call_1",
+            name: "run",
+            input: { code: "x()", timeout: 5 },
+            providerMetadata: { openai: { itemId: "ctc_1", custom: true } },
+          }),
+        ]),
+        Message.tool({ id: "call_1", name: "run", result: "ok" }),
+      ]
+      const raw = '// @exec: {"timeout":5}\nx()'
+      const responsesInput = (yield* compileRequest(ai.request({ model: responses, messages, tools: withOptions })))
+        .body.input
+      expect(responsesInput[1]).toEqual({
+        type: "custom_tool_call",
+        id: "ctc_1",
+        call_id: "call_1",
+        name: "run",
+        input: raw,
+      })
+      const chatMessages = (yield* compileRequest(ai.request({ model: chat, messages, tools: withOptions }))).body
+        .messages
+      expect(chatMessages[1]).toMatchObject({
+        tool_calls: [{ id: "call_1", type: "custom", custom: { name: "run", input: raw } }],
+      })
     }),
   )
 

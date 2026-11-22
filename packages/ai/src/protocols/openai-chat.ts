@@ -361,8 +361,8 @@ export interface ParserState {
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<number>
   readonly custom: ReadonlyMap<string, OpenAIFreeform.Custom>
-  /** Stream indexes of custom tool calls, whose JSON fragment closes when the call finishes. */
-  readonly customCalls: ReadonlySet<number>
+  /** Streams of custom tool calls by stream index, whose JSON fragment closes when the call finishes. */
+  readonly customCalls: ReadonlyMap<number, OpenAIFreeform.Stream>
   readonly pendingTools: Partial<Record<number, PendingToolDelta>>
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
   readonly usage?: Usage
@@ -406,12 +406,12 @@ const lowerTool = (
   custom: OpenAIFreeform.Custom | undefined,
 ): OpenAIChatTool => {
   if (custom) {
-    const grammar = OpenAIFreeform.grammar(custom.format)
+    const grammar = OpenAIFreeform.grammar(custom)
     return {
       type: "custom",
       custom: {
         name: tool.name,
-        description: tool.description,
+        description: OpenAIFreeform.description(tool, custom),
         format: grammar ? { type: "grammar", grammar } : { type: "text" },
       },
       cache_control: options.cacheControl?.(tool.cache),
@@ -1219,14 +1219,15 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const id = current?.id ?? pending?.id ?? (tool.id || undefined)
       const name = current?.name ?? pending?.name ?? (tool.function?.name || tool.custom?.name || undefined)
       // Custom calls stream raw text; re-encode it as JSON arguments for the call's field.
-      const opening = Boolean(tool.custom) && !customCalls.has(index)
-      if (opening) customCalls = new Set([...customCalls, index])
+      const stream = customCalls.get(index)
       const raw = tool.custom?.input ?? ""
-      const fragment = tool.custom
-        ? opening
-          ? OpenAIFreeform.streamStart(state.custom.get(name ?? ""), raw)
-          : OpenAIFreeform.streamDelta(raw)
-        : (tool.function?.arguments ?? "")
+      const streamed = tool.custom
+        ? stream
+          ? OpenAIFreeform.streamDelta(stream, raw)
+          : OpenAIFreeform.streamStart(state.custom.get(name ?? ""), raw)
+        : undefined
+      if (streamed) customCalls = new Map(customCalls).set(index, streamed.stream)
+      const fragment = streamed ? streamed.fragment : (tool.function?.arguments ?? "")
       const text = `${pending?.input ?? ""}${fragment}`
       const extraContent = pending?.extraContent ?? decodeExtraContent(tool.extra_content)
       latestToolIndex = index
@@ -1316,7 +1317,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
   })
 
 // Custom calls close their JSON fragment before every pending call finishes.
-const finishTools = Effect.fnUntraced(function* (tools: ParserState["tools"], customCalls: ReadonlySet<number>) {
+const finishTools = Effect.fnUntraced(function* (tools: ParserState["tools"], customCalls: ParserState["customCalls"]) {
   const closed = OpenAIFreeform.close(tools, customCalls)
   const finished = yield* ToolStream.finishAll(ADAPTER, closed.tools)
   return { tools: finished.tools, events: [...closed.events, ...finished.events] }
@@ -1389,7 +1390,7 @@ export const protocol = Protocol.make({
       providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
       tools: ToolStream.empty<number>(),
       custom: OpenAIFreeform.tools(request),
-      customCalls: new Set<number>(),
+      customCalls: new Map(),
       pendingTools: {},
       toolCallEvents: [],
       lifecycle: Lifecycle.initial(),
