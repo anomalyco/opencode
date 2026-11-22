@@ -124,6 +124,64 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
   }
 })
 
+test("the Inbox Archived shortcut can be hidden in Preferences and stays hidden after reload", async ({ page }) => {
+  const workspace = await mockWorkspace(page, {
+    name: "Archived shortcut",
+    sessions: [
+      { id: "ses_shortcut_recent", title: "Recent result", time: { created: T0, updated: T0 + 10, idle: T0 + 10 } },
+      {
+        id: "ses_shortcut_archived",
+        title: "Archived result",
+        time: { created: T0, updated: T0 + 20, idle: T0 + 20, archived: T0 + 30 },
+      },
+    ],
+    seed: {
+      tabs: [],
+      settings: { appearance: { tabLayout: "inbox" } },
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, recentExpanded: false } },
+    },
+  })
+
+  await page.goto(sessionHref(workspace.sessions[1]!.id))
+  const sidebar = page.locator('[data-slot="sidebar-inbox"]')
+  const recent = sidebar.getByRole("button", { name: /Recent result/ })
+  const archived = sidebar.getByRole("button", { name: /Archived result/ })
+  const archives = sidebar.getByRole("button", { name: "Archived", exact: true })
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await expect(recent).toBeVisible()
+  await expect(archived).toBeVisible()
+  await expect(archives).toBeVisible()
+
+  await page.keyboard.press("Control+,")
+  const settings = page.getByTestId("settings-screen")
+  await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
+  const setting = settings.getByRole("switch", { name: "Show Archived shortcut", exact: true })
+  await expect(setting).toBeChecked()
+  await setting.locator("..").locator('[data-slot="switch-control"]').click()
+  await expect(setting).not.toBeChecked()
+  await settings.getByRole("button", { name: "Back to app", exact: true }).click()
+  await expect(archived).toBeVisible()
+  await expect(archives).toBeHidden()
+  await expect(page).toHaveURL(new RegExp(`/session/${workspace.sessions[1]!.id}$`))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+
+  await page.reload()
+  await expect(recent).toBeVisible()
+  await expect(archived).toBeVisible()
+  await expect(archives).toBeHidden()
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+
+  await page.keyboard.press("Control+,")
+  await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
+  await expect(setting).not.toBeChecked()
+  await setting.locator("..").locator('[data-slot="switch-control"]').click()
+  await expect(setting).toBeChecked()
+  await settings.getByRole("button", { name: "Back to app", exact: true }).click()
+  await expect(archives).toBeVisible()
+  await archives.click()
+  await expect(page.getByRole("dialog").getByText("Archived result", { exact: true })).toBeVisible()
+})
+
 test("choosing Customize replaces Home with Settings in desktop side tabs", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Website",

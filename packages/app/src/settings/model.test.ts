@@ -96,6 +96,7 @@ describe("settings schema", () => {
       general: {
         timelineDetail: timelinePresets[2].value,
         showCustomAgents: true,
+        showArchivedShortcut: true,
         showTurnDiffs: false,
         backgroundActivity: "left",
         timelineWidth: "comfortable",
