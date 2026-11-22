@@ -372,13 +372,20 @@ export const make = Effect.fnUntraced(function* (input: {
       const model = findModel(catalog.models, currentModel(catalog, yield* Ref.get(attached.selection)))
       if (!model?.limit.context) return
       const info = yield* input.client.session.get({ sessionID: attached.id }).pipe(Effect.catch(ACPClient.classify))
+      const cost = yield* treeCost(info).pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.failCause(cause)
+            : Effect.logWarning("ACP subagent cost lookup failed", cause).pipe(Effect.as(info.cost)),
+        ),
+      )
       yield* input.connection.sessionUpdate({
         sessionId: attached.id,
         update: {
           sessionUpdate: "usage_update",
           used,
           size: model.limit.context,
-          cost: { amount: yield* treeCost(info), currency: "USD" },
+          cost: { amount: cost, currency: "USD" },
         },
       })
     },
