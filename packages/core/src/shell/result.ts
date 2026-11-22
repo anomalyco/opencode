@@ -7,10 +7,36 @@ import { BackgroundResult } from "../session/background-result.js"
 export type Result = {
   info: Shell.Info
   // `killed` says why a command was killed when no exit code or signal of its own tells, e.g. the process daemon stopped.
-  capture: { output: string; truncated: boolean; killed?: string } | undefined
+  capture:
+    | {
+        output: string
+        truncated: boolean
+        killed?: string
+        // Truncation facts, set only when `truncated`: where the full output lives and which window was shown.
+        outputPath?: string
+        totalBytes?: number
+        shownBytes?: number
+        totalLines?: number
+        startLine?: number
+        endLine?: number
+      }
+    | undefined
 }
 
-type Output = { output: string; truncated: boolean; exit?: number; signal?: string; timeout?: boolean; killed?: string }
+type Output = {
+  output: string
+  truncated: boolean
+  exit?: number
+  signal?: string
+  timeout?: boolean
+  killed?: string
+  outputPath?: string
+  totalBytes?: number
+  shownBytes?: number
+  totalLines?: number
+  startLine?: number
+  endLine?: number
+}
 
 const missing = "Shell command output is no longer available."
 export const unavailable: Shell.Output = {
@@ -28,6 +54,12 @@ export function output(result: Result): Output {
     ...(result.info.signal !== undefined ? { signal: result.info.signal } : {}),
     ...(result.info.status === "timeout" ? { timeout: true } : {}),
     ...(result.capture?.killed !== undefined ? { killed: result.capture.killed } : {}),
+    ...(result.capture?.outputPath !== undefined ? { outputPath: result.capture.outputPath } : {}),
+    ...(result.capture?.totalBytes !== undefined ? { totalBytes: result.capture.totalBytes } : {}),
+    ...(result.capture?.shownBytes !== undefined ? { shownBytes: result.capture.shownBytes } : {}),
+    ...(result.capture?.totalLines !== undefined ? { totalLines: result.capture.totalLines } : {}),
+    ...(result.capture?.startLine !== undefined ? { startLine: result.capture.startLine } : {}),
+    ...(result.capture?.endLine !== undefined ? { endLine: result.capture.endLine } : {}),
   }
 }
 
@@ -70,6 +102,12 @@ export function metadata(output: Output) {
     ...(output.signal !== undefined ? { signal: output.signal } : {}),
     ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
     ...(output.killed !== undefined ? { killed: true } : {}),
+    ...(output.outputPath !== undefined ? { outputPath: output.outputPath } : {}),
+    ...(output.totalBytes !== undefined ? { totalBytes: output.totalBytes } : {}),
+    ...(output.shownBytes !== undefined ? { shownBytes: output.shownBytes } : {}),
+    ...(output.totalLines !== undefined ? { totalLines: output.totalLines } : {}),
+    ...(output.startLine !== undefined ? { startLine: output.startLine } : {}),
+    ...(output.endLine !== undefined ? { endLine: output.endLine } : {}),
   }
 }
 

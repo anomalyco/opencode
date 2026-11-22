@@ -978,8 +978,8 @@ describe("ShellTool", () => {
           }).pipe(Effect.timeout("3 seconds"))
           expect(result.status).toBe("completed")
           expect(JSON.parse(result.output.output)).toEqual([
-            { output: "one", exitCode: 0, wallTimeSeconds: expect.any(Number) },
-            { output: "two", exitCode: 0, wallTimeSeconds: expect.any(Number) },
+            { output: "one", exitCode: 0, truncated: false, wallTimeSeconds: expect.any(Number) },
+            { output: "two", exitCode: 0, truncated: false, wallTimeSeconds: expect.any(Number) },
           ])
         }),
       )
@@ -1035,6 +1035,7 @@ describe("ShellTool", () => {
           expect(completed).toEqual({
             output: "body",
             exitCode: 7,
+            truncated: false,
             wallTimeSeconds: expect.any(Number),
           })
           expect(running).toEqual({
@@ -1043,6 +1044,7 @@ describe("ShellTool", () => {
             shellID: expect.stringMatching(/^sh_/),
             pid: expect.any(Number),
             outputPath: expect.any(String),
+            truncated: false,
             wallTimeSeconds: expect.any(Number),
           })
           expect(timeouts.toSorted((a, b) => a - b)).toEqual([10, 600_000])
@@ -1521,6 +1523,12 @@ describe("ShellTool", () => {
                 output: expect.stringContaining(`full output saved to ${settled.output.outputPath}]`),
                 outputPath: expect.any(String),
                 exitCode: 3,
+                truncated: true,
+                totalBytes: expect.any(Number),
+                shownBytes: expect.any(Number),
+                totalLines: 1,
+                startLine: 1,
+                endLine: 1,
                 wallTimeSeconds: expect.any(Number),
               })
               expect(settled.content).toEqual([
@@ -1571,6 +1579,7 @@ describe("ShellTool", () => {
             outputPath: info.file,
             exitCode: null,
             output: expect.any(String),
+            truncated: false,
             wallTimeSeconds: expect.any(Number),
           })
           expect(result.output.wallTimeSeconds).toBeGreaterThanOrEqual(0.01)
@@ -1832,6 +1841,38 @@ describe("ShellTool", () => {
           }),
         ),
       )
+    }),
+  )
+
+  it.live("exposes structured truncation counts and output path in the tool result", () =>
+    withTempDir((tmp) => {
+      reset()
+      const lines = Array.from({ length: 2500 }, (_, index) => `line ${index + 1}`)
+      const contents = lines.join("\n") + "\n"
+      const shown = Buffer.byteLength(lines.slice(500).join("\n") + "\n")
+      return Effect.gen(function* () {
+        const file = path.join(tmp.path, "structured.txt")
+        yield* Effect.promise(() => Bun.write(file, contents))
+        const settled = yield* withSession(tmp.path, (registry) =>
+          executeTool(registry, call({ command: catCommand(file) }, "call-structured")),
+        )
+        const savedTo = settled.output.outputPath as string
+        const counts = {
+          truncated: true,
+          outputPath: expect.any(String),
+          totalBytes: Buffer.byteLength(contents),
+          shownBytes: shown,
+          totalLines: 2500,
+          startLine: 501,
+          endLine: 2500,
+        }
+        expect(settled.metadata).toMatchObject({ ...counts, exit: 0 })
+        expect(settled.output).toMatchObject({ ...counts, exitCode: 0 })
+        expect(settled.content?.[0]).toMatchObject({
+          type: "text",
+          text: expect.stringContaining(`full output saved to ${savedTo}]`),
+        })
+      })
     }),
   )
 
