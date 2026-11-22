@@ -17,6 +17,7 @@ import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
 import { storedCredential } from "./credential-settings.js"
+import { PlanModels } from "./plan-models.js"
 import { ProviderRefresh } from "./refresh.js"
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
@@ -31,6 +32,7 @@ const providerID = Provider.ID.openai
 const integrationID = Integration.ID.make("openai")
 const methodID = Integration.MethodID.make("chatgpt-token-sharing")
 const modelCacheKey = (clientID: string) => `models:${clientID}`
+// Used when the catalog has no Sign in with ChatGPT list.
 const fallbackModels = new Set([
   "gpt-5.5",
   "gpt-5.5-fast",
@@ -274,6 +276,7 @@ export const ChatGPTPlugin = define({
       { discard: true },
     )
     yield* load()
+    const plan = yield* PlanModels.track(providerID, "openai-chatgpt", ctx.provider.reload())
     yield* ctx.session.hook(
       "retry",
       (event) =>
@@ -320,7 +323,7 @@ export const ChatGPTPlugin = define({
         // models: available
         //   ? deriveModels(available, Array.from(item.models.values()))
         //   : Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
-        models: Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
+        models: Array.from(item.models.values()).filter((model) => (plan.current ?? fallbackModels).has(model.id)),
         sourceConnection: source,
       })
     })

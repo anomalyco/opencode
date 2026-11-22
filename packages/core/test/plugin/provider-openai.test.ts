@@ -8,6 +8,8 @@ import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
+import { ModelsDev } from "@opencode/core/models-dev"
+import { Bus } from "@opencode/core/bus"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -30,6 +32,22 @@ const addPlugin = Effect.fn(function* () {
   const host = yield* PluginHost.make(plugin, "test")
   yield* OpenAIPlugin.effect(host)
 })
+
+
+// A catalog whose OpenAI entry carries the given sign-in plan lists; `plans.current` can be swapped before a refresh.
+const planCatalog = (plans: { current: Record<string, readonly string[]> }) =>
+  ModelsDev.Service.of({
+    get: () =>
+      Effect.sync(() => [
+        {
+          info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
+          models: [],
+          environment: [],
+          plans: plans.current,
+        },
+      ]),
+    refresh: () => Effect.void,
+  })
 
 const addGithubCopilotPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
@@ -202,6 +220,57 @@ describe("OpenAIPlugin", () => {
       const images = (yield* models.available(["image"])).filter((model) => model.providerID === Provider.ID.openai)
       expect(images.map((model) => model.id)).toEqual([Model.ID.make("gpt-image-2")])
       expect(images[0]?.cost).toEqual([])
+    }),
+  )
+
+  it.effect("offers only the catalog's Codex list under a ChatGPT connection, and follows its refreshes", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      const bus = yield* Bus.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, (draft) => {
+          draft.package = "@opencode/ai/providers/openai"
+        })
+        for (const id of ["gpt-5.5", "gpt-6-sol", "gpt-6-sol-fast", "gpt-6-sol-pro", "gpt-7"])
+          catalog.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-image-2"), (model) => {
+          model.type = "image"
+        })
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-browser"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { accountID: "acct_123" },
+        }),
+      })
+      const plans = { current: { "openai-codex": ["gpt-5.5", "gpt-6-sol", "gpt-6-sol-fast", "gpt-image-2"] } }
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin, "test")
+      yield* OpenAIPlugin.effect(host).pipe(Effect.provideService(ModelsDev.Service, planCatalog(plans)))
+      const enabled = (id: string) =>
+        models.get(Provider.ID.openai, Model.ID.make(id)).pipe(Effect.map((model) => required(model).enabled))
+
+      // The list wins over the version rule: gpt-5.5 is listed and gpt-7 isn't.
+      expect(yield* enabled("gpt-5.5")).toBe(true)
+      expect(yield* enabled("gpt-6-sol-fast")).toBe(true)
+      expect(yield* enabled("gpt-6-sol-pro")).toBe(false)
+      expect(yield* enabled("gpt-7")).toBe(false)
+      const images = (yield* models.available(["image"])).filter((model) => model.providerID === Provider.ID.openai)
+      expect(images.map((model) => model.id)).toEqual([Model.ID.make("gpt-image-2")])
+      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-sol"))).cost).toEqual([])
+
+      plans.current = { "openai-codex": ["gpt-7"] }
+      yield* bus.publish(ModelsDev.Event.Refreshed, {})
+      yield* drain
+      expect(yield* enabled("gpt-7")).toBe(true)
+      expect(yield* enabled("gpt-5.5")).toBe(false)
     }),
   )
 

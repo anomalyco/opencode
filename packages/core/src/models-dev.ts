@@ -161,7 +161,29 @@ export type Snapshot = {
   readonly models: readonly Model.Info[]
   readonly voices?: readonly VoiceModel[]
   readonly environment: readonly string[]
+  /** Model IDs (modes included) a sign-in plan on this provider can use, by plan; see `PLANS`. */
+  readonly plans?: Readonly<Record<string, readonly string[]>>
 }
+
+// Sign-in plans that serve a subset of a provider's models, such as ChatGPT plans through Codex. models.dev lists
+// each as a provider it hides unless asked for. They never become providers here: their model IDs are attached to
+// the provider they belong to, for that sign-in's plugin to read.
+const PLANS: Readonly<Record<string, Provider.ID>> = {
+  "openai-codex": Provider.ID.openai,
+  "openai-chatgpt": Provider.ID.openai,
+}
+const PlanProvider = Schema.Struct({
+  models: Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      id: Schema.String,
+      experimental: Schema.optional(
+        Schema.Struct({ modes: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)) }),
+      ),
+    }),
+  ),
+})
+const decodePlanProvider = Schema.decodeUnknownOption(PlanProvider)
 
 type Route = {
   readonly package: string
@@ -193,9 +215,22 @@ const BUILDS_OWN_URL = new Set([
 const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>, recommended: boolean) {
   const failed: { readonly model: string; readonly issue: unknown }[] = []
   const unknown = new Set<string>()
-  const snapshots = Object.values(isV1(catalog) ? toV2(catalog) : catalog).flatMap((value) => {
+  const source = isV1(catalog) ? toV2(catalog) : catalog
+  const plans = Object.entries(PLANS).reduce<Record<string, Record<string, readonly string[]>>>(
+    (result, [planID, parentID]) => {
+      const plan = Option.getOrUndefined(decodePlanProvider(source[planID]))
+      if (!plan) return result
+      const ids = Object.values(plan.models).flatMap((model) => [
+        model.id,
+        ...Object.keys(model.experimental?.modes ?? {}).map((mode) => `${model.id}-${mode}`),
+      ])
+      return { ...result, [parentID]: { ...result[parentID], [planID]: ids } }
+    },
+    {},
+  )
+  const snapshots = Object.values(source).flatMap((value) => {
     const item = Option.getOrUndefined(decodeProvider(value))
-    if (!item) return []
+    if (!item || item.id in PLANS) return []
     const providerID = Provider.ID.make(item.id)
     // Vertex needs separate handling for location and Express Mode.
     const prefer = recommended && providerID !== Provider.ID.googleVertex
@@ -247,7 +282,15 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
         ),
       ]
     })
-    return [{ info, models, ...(voices.length > 0 ? { voices } : {}), environment: [...item.env] }]
+    return [
+      {
+        info,
+        models,
+        ...(voices.length > 0 ? { voices } : {}),
+        environment: [...item.env],
+        ...(plans[providerID] ? { plans: plans[providerID] } : {}),
+      },
+    ]
   })
   if (failed.length > 0)
     yield* Effect.logWarning("Skipped models.dev models that failed to parse", {
@@ -523,8 +566,8 @@ const CacheMeta = Schema.Struct({
 })
 const defaultSource = "https://models.opencode.ai"
 
-// The experimental v2 API, limited to the model types opencode keeps.
-export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}`
+// The experimental v2 API, limited to the model types opencode keeps, with the hidden sign-in plans included.
+export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}&include=${Object.keys(PLANS).join(",")}`
 
 export const decodeSnapshot = (text: string, recommended = false) =>
   decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended)))

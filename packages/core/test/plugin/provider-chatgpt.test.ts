@@ -16,6 +16,7 @@ import { Integration } from "@opencode/core/integration"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
+import { ModelsDev } from "@opencode/core/models-dev"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -45,6 +46,21 @@ const addPlugin = Effect.fn(function* (http = unavailableModels) {
   const host = yield* PluginHost.make(plugin, ChatGPTPlugin.id)
   yield* ChatGPTPlugin.effect(host).pipe(Effect.provideService(HttpClient.HttpClient, http))
 })
+
+// A catalog whose OpenAI entry carries the given sign-in plan lists; `plans.current` can be swapped before a refresh.
+const planCatalog = (plans: { current: Record<string, readonly string[]> }) =>
+  ModelsDev.Service.of({
+    get: () =>
+      Effect.sync(() => [
+        {
+          info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
+          models: [],
+          environment: [],
+          plans: plans.current,
+        },
+      ]),
+    refresh: () => Effect.void,
+  })
 
 const addLegacyPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
@@ -924,6 +940,40 @@ describe("ChatGPTPlugin", () => {
           "gpt-6.1-terra-fast",
         ].map((id) => Model.ID.make(id)),
       )
+    }),
+  )
+
+  it.effect("offers the catalog's Sign in with ChatGPT list instead of the built-in one", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, (draft) => {
+          draft.package = "@opencode/ai/providers/openai"
+        })
+        for (const id of ["gpt-5.5", "gpt-6-sol", "gpt-7"])
+          catalog.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+        }),
+      })
+      yield* addPlugin().pipe(
+        Effect.provideService(ModelsDev.Service, planCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } })),
+      )
+      expect(
+        (yield* models.available())
+          .filter((model) => model.providerID === Provider.ID.openai)
+          .map((model) => model.id)
+          .sort(),
+      ).toEqual([Model.ID.make("gpt-6-sol"), Model.ID.make("gpt-7")])
     }),
   )
 
