@@ -154,7 +154,7 @@ stdenv.mkDerivation (finalAttrs: {
     # executable besides it, and nixpkgs strips the exec bit from the libraries.
     desktop_exe=$(find "$out/opt/opencode-desktop" -maxdepth 1 -type f -perm -0111 \
       ! -name chrome-sandbox ! -name chrome_crashpad_handler)
-    test "$(wc -l <<<"$desktop_exe")" -eq 1 || {
+    test -n "$desktop_exe" && test "$(wc -l <<<"$desktop_exe")" -eq 1 || {
       echo "expected a single electron-builder executable, found:" "$desktop_exe" >&2
       exit 1
     }
@@ -182,9 +182,18 @@ stdenv.mkDerivation (finalAttrs: {
     runHook postInstall
   '';
 
+  # autoPatchelf rewrites the RUNPATH of every ELF it scans. The Electron binary
+  # keeps the full library path nixpkgs baked into electron.dist, which also
+  # covers DT_NEEDED entries like libnss3 and runtime dlopen()s like libGL and
+  # libsecret that no scan of buildInputs would find. Only the bundled CLI and
+  # the native modules need patching, so scope the pass to resources.
+  dontAutoPatchelf = true;
   autoPatchelfIgnoreMissingDeps = [
     "libc.musl-x86_64.so.1"
   ];
+  postFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
+    autoPatchelf $out/opt/opencode-desktop/resources
+  '';
 
   passthru = {
     # electronVersion is what ships; electronPin is what packages/desktop/package.json
