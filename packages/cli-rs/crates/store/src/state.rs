@@ -9,22 +9,19 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use futures_util::FutureExt;
 use futures_util::future::{BoxFuture, Shared};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use opencode_api::client::Client;
-use opencode_api::generated::{
-    JobInfo, PermissionRequest, Project, ProjectID, SessionID, SessionInboxCompaction, SessionInboxInfo, SessionInfo,
-    SessionMessageID,
-};
+use opencode_api::generated::{JobInfo, Project, ProjectID, SessionID, SessionInboxCompaction, SessionMessageID};
 use opencode_util::lock;
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
 use tokio::task::AbortHandle;
 
-use crate::changes::{Changes, Log};
+use crate::changes::{Log, Touched};
 use crate::forms::Form;
-use crate::inbox::PendingUpdate;
 use crate::location::{Location, LocationData};
-use crate::messages::Transcript;
+use crate::reads::{Phase, Read, ReadKey, ReadState};
+use crate::sessions::{SessionKey, Sessions};
 
 /// How many [`Data::signals`] events a slow receiver may fall behind. One batch may hold hundreds of a listened type
 /// (a burst of `filesystem.changed`).
@@ -65,19 +62,9 @@ pub enum SessionStatus {
 /// The store contents and its bookkeeping. Read it through [`Data::read`].
 #[derive(Default)]
 pub struct State {
-    pub(crate) info: HashMap<SessionID, SessionInfo>,
-    pub(crate) missing: HashSet<SessionID>,
-    /// Family index keyed by a family's root, or by its furthest known ancestor while the root is
-    /// not loaded. Each value lists every session of the family, the key included once loaded.
-    pub(crate) family: HashMap<SessionID, Vec<SessionID>>,
-    pub(crate) active: HashMap<SessionID, SessionStatus>,
-    pub(crate) messages: HashMap<SessionID, Transcript>,
-    pub(crate) cursor: HashMap<SessionID, String>,
-    pub(crate) loading: HashSet<SessionID>,
-    pub(crate) pending: HashMap<SessionID, Vec<SessionInboxInfo>>,
-    pub(crate) permission: HashMap<SessionID, Vec<PermissionRequest>>,
-    /// Pending forms by owner: a session ID or [`crate::forms::GLOBAL`].
-    pub(crate) forms: HashMap<String, Vec<Form>>,
+    pub(crate) sessions: Sessions,
+    /// Pending forms of [`crate::forms::GLOBAL`]; `None` until read or created. A session's own are in its record.
+    pub(crate) global_forms: Option<Vec<Form>>,
     /// In insertion order, as the TS store's keys: projects that sort equal keep it.
     pub(crate) projects: IndexMap<ProjectID, Project>,
     pub(crate) locations: HashMap<Location, LocationData>,
@@ -87,47 +74,33 @@ pub struct State {
     pub(crate) log: Log,
     /// A `server.connected` arrived before; the next one is a reconnect.
     pub(crate) connected: bool,
-    pub(crate) syncs: Syncs,
+    /// The keyed reads that belong to no session; a session's are in its record.
+    pub(crate) reads: HashMap<ReadKey, ReadState>,
+    /// The locations a keyed read or a change names, by [`crate::reads::LocationKey`].
+    pub(crate) read_locations: IndexSet<Location>,
     /// Batches being applied; flushes wait for the outermost.
     pub(crate) batch: u32,
     next_token: u64,
     /// Status events received while a `session.active` snapshot is in flight, by connection.
     pub(crate) active_updates: Option<(u64, StatusUpdates)>,
-    /// Inbox events received while an inbox read is in flight, by read.
-    pub(crate) pending_updates: HashMap<SessionID, (u64, IndexMap<String, PendingUpdate>)>,
     /// Inbox IDs of optimistic admissions the server has not acknowledged.
     pub(crate) outbox: HashSet<String>,
-    /// Session IDs of optimistic creations the server has not acknowledged.
-    pub(crate) session_outbox: HashSet<SessionID>,
-    /// In-flight optimistic creations; prompts to the session wait for them.
-    pub(crate) creating: HashMap<SessionID, (u64, Task<()>)>,
-    /// The per-session admission chain: each admission waits for the previous one to settle.
-    pub(crate) sending: HashMap<SessionID, (u64, Task<()>)>,
-    pub(crate) message_loads: HashMap<SessionID, (u64, Task<bool>)>,
-    pub(crate) compacting: HashMap<SessionID, Compacting>,
     pub(crate) deletion_epoch: u64,
-    /// Deleted sessions by deletion epoch, oldest first.
-    pub(crate) deleted_at: IndexMap<SessionID, u64>,
-    /// The incarnation of each transcript window that ended (deleted, evicted or reverted), a token, oldest first.
-    /// It keeps the newest [`DELETED_LIMIT`]; a window that never ended has incarnation 0.
-    incarnations: IndexMap<SessionID, u64>,
-    /// Trailing refetch timers by key, with the token of the newest.
-    pub(crate) settling: HashMap<String, (u64, AbortHandle)>,
-    /// The permission read in flight per session, with the asks and replies that overtook it.
-    pub(crate) permission_reads: HashMap<SessionID, Overlay<PermissionRequest>>,
+    /// The newest [`DELETED_LIMIT`] deletions, oldest first: the sessions whose [`crate::sessions::Life`] holds a deletion
+    /// epoch.
+    deleted: IndexSet<SessionKey>,
+    /// The sessions whose transcript window ended last (deleted, evicted or reverted), oldest first: the newest
+    /// [`DELETED_LIMIT`], the only ones with an incarnation.
+    ended: IndexSet<SessionKey>,
+    /// Trailing refetch timers by the read they refetch, with the token of the newest.
+    pub(crate) settling: HashMap<ReadKey, (u64, AbortHandle)>,
     /// The form read in flight per owner (and location, for [`crate::forms::GLOBAL`]), with the
     /// forms created and settled that overtook it.
-    pub(crate) form_reads: HashMap<crate::forms::Read, Overlay<Form>>,
-    /// The head read in flight per transcript, with what overtook it.
-    pub(crate) head_reads: HashMap<SessionID, crate::messages::HeadRead>,
+    pub(crate) form_reads: HashMap<crate::forms::FormRead, Overlay<Form>>,
     /// Running background jobs by ID, of the trees synced and of job events since (`store.job`).
     pub(crate) jobs: IndexMap<String, JobInfo>,
-    /// The job IDs the server listed for each synced tree root, plus those events added for owners in the tree
-    /// (`store.jobTree`). Loaded session info only reaches direct children, so parents alone would drop a
-    /// grandchild's jobs.
-    pub(crate) job_trees: HashMap<SessionID, HashSet<String>>,
-    /// The job read in flight per tree root, with the job events that overtook it.
-    pub(crate) job_reads: HashMap<SessionID, Overlay<JobInfo>>,
+    /// The session and position of the message an event edited last.
+    pub(crate) last_edited: Option<(SessionKey, usize)>,
     /// The `durable.seq` of the event being applied, for the rows it creates.
     pub(crate) event_seq: Option<i64>,
 }
@@ -209,133 +182,53 @@ impl State {
         self.next_token
     }
 
-    /// The revision of the last flush.
-    pub fn revision(&self) -> u64 {
-        self.log.revision()
-    }
-
-    /// The current revision and what changed after `seen`. Inside [`Data::read`], a view gets
-    /// the changes and the state they describe under one lock, so no flush lands in between.
-    pub fn changes_since(&self, seen: u64) -> (u64, Changes) {
-        (self.log.revision(), self.log.since(seen))
-    }
-
-    pub(crate) fn clear_deleted(&mut self, id: &SessionID) {
-        self.deleted_at.shift_remove(id);
-        if self.missing.remove(id) {
-            self.log.session(id);
+    pub(crate) fn clear_deleted(&mut self, key: SessionKey) {
+        if self.sessions[key].life.undelete() {
+            self.deleted.shift_remove(&key);
+            self.touch_key(key, Touched::INFO);
         }
     }
 
     pub(crate) fn mark_deleted(&mut self, id: &SessionID) {
-        if self.session_outbox.contains(id) {
+        if self.sessions.get(id).is_some_and(|session| session.life.unacknowledged()) {
             return;
         }
-        self.deleted_at.shift_remove(id);
+        let key = self.sessions.entry(id);
+        self.deleted.shift_remove(&key);
         self.deletion_epoch += 1;
-        self.deleted_at.insert(id.clone(), self.deletion_epoch);
-        if self.deleted_at.len() > DELETED_LIMIT
-            && let Some((oldest, _)) = self.deleted_at.shift_remove_index(0)
+        self.deleted.insert(key);
+        if self.deleted.len() > DELETED_LIMIT
+            && let Some(oldest) = self.deleted.shift_remove_index(0)
         {
-            self.missing.remove(&oldest);
+            self.sessions[oldest].life.undelete();
         }
-        self.missing.insert(id.clone());
+        self.sessions[key].life.delete(self.deletion_epoch);
         self.remove_session(id);
     }
 
     /// True when `id` was deleted after the epoch a read started at.
     pub(crate) fn deleted_since(&self, id: &SessionID, started: u64) -> bool {
-        self.deleted_at.get(id).copied().unwrap_or(0) > started
+        self.sessions.get(id).and_then(|session| session.life.deleted()).unwrap_or(0) > started
     }
 
     /// The incarnation of `id`'s transcript window. A completion publishes into the window only while it is the
     /// incarnation the completion began in (models M2 rule 5, deviation O6-held-message-read).
     pub(crate) fn incarnation(&self, id: &SessionID) -> u64 {
-        self.incarnations.get(id).copied().unwrap_or(0)
+        self.sessions.get(id).map_or(0, |session| session.incarnation)
     }
 
-    /// Ends `id`'s transcript window, so completions that began in it publish nothing. The token counter never
+    /// Ends a transcript window, so completions that began in it publish nothing. The token counter never
     /// repeats, so a later window never matches an earlier incarnation.
-    pub(crate) fn end_transcript(&mut self, id: &SessionID) {
+    pub(crate) fn end_transcript(&mut self, key: SessionKey) {
         let token = self.token();
-        self.incarnations.shift_remove(id);
-        self.incarnations.insert(id.clone(), token);
-        if self.incarnations.len() > DELETED_LIMIT {
-            self.incarnations.shift_remove_index(0);
+        self.ended.shift_remove(&key);
+        self.ended.insert(key);
+        self.sessions[key].incarnation = token;
+        if self.ended.len() > DELETED_LIMIT
+            && let Some(oldest) = self.ended.shift_remove_index(0)
+        {
+            self.sessions[oldest].incarnation = 0;
         }
-    }
-}
-
-/// A keyed read (`createSync`): one spawned load per key shared by every caller, with the TS
-/// invalidation rules.
-#[derive(Default)]
-pub(crate) struct Syncs {
-    entries: HashMap<String, Entry>,
-}
-
-enum Entry {
-    Done,
-    Pending {
-        token: u64,
-        task: Task<()>,
-        invalidated: bool,
-        /// False while a reload waits for the load it replaces; invalidations then are covered.
-        started: Arc<AtomicBool>,
-    },
-}
-
-impl Syncs {
-    pub(crate) fn complete(&mut self, key: &str) {
-        self.entries.entry(key.to_owned()).or_insert(Entry::Done);
-    }
-
-    pub(crate) fn has(&self, key: &str) -> bool {
-        self.entries.contains_key(key)
-    }
-
-    pub(crate) fn pending(&self, key: &str) -> bool {
-        matches!(self.entries.get(key), Some(Entry::Pending { .. }))
-    }
-
-    pub(crate) fn invalidate(&mut self, key: &str) {
-        match self.entries.get_mut(key) {
-            Some(Entry::Done) => {
-                self.entries.remove(key);
-            }
-            Some(Entry::Pending { invalidated, started, .. }) if started.load(Ordering::SeqCst) => *invalidated = true,
-            _ => {}
-        }
-    }
-
-    /// Invalidates every key that starts with `prefix` (every key for `""`).
-    pub(crate) fn invalidate_prefix(&mut self, prefix: &str) {
-        self.entries.retain(|key, entry| {
-            if !key.starts_with(prefix) {
-                return true;
-            }
-            match entry {
-                Entry::Done => false,
-                Entry::Pending { invalidated, started, .. } => {
-                    if started.load(Ordering::SeqCst) {
-                        *invalidated = true;
-                    }
-                    true
-                }
-            }
-        });
-    }
-
-    /// Settles the load `token` of `key`: done when it succeeded and was not invalidated.
-    fn settle(&mut self, key: &str, token: u64, ok: bool) {
-        let Some(Entry::Pending { token: current, invalidated, .. }) = self.entries.get(key) else { return };
-        if *current != token {
-            return;
-        }
-        if ok && !*invalidated {
-            self.entries.insert(key.to_owned(), Entry::Done);
-            return;
-        }
-        self.entries.remove(key);
     }
 }
 
@@ -494,11 +387,6 @@ impl Data {
         self.inner.revision.send_modify(|_| {});
     }
 
-    /// The current revision and what changed after `seen`.
-    pub fn changes_since(&self, seen: u64) -> (u64, Changes) {
-        self.read(|state| state.changes_since(seen))
-    }
-
     /// Mutates the state and flushes its changes unless a batch is open.
     pub(crate) fn write<R>(&self, f: impl FnOnce(&mut State) -> R) -> R {
         let mut state = self.lock();
@@ -592,11 +480,18 @@ impl Data {
     }
 
     /// Runs `load` once per key until invalidated (`sync.run`).
-    pub(crate) fn sync_run<F>(&self, key: String, load: impl FnOnce(Data) -> F + Send + 'static) -> Task<()>
+    pub(crate) fn sync_run<F>(&self, read: Keyed, load: impl FnOnce(Data) -> F + Send + 'static) -> Task<()>
     where
         F: Future<Output = Result<(), Error>> + Send + 'static,
     {
-        self.sync_start(key, |_| (), move |data, ()| load(data))
+        self.sync_start(read, |_, _| (), move |data, ()| load(data))
+    }
+
+    /// Locks the state and finds the key of `read`, for [`Data::sync_start`].
+    pub(crate) fn keyed(&self, read: Read) -> Keyed<'_> {
+        let mut state = self.lock();
+        let key = state.read_key(read);
+        (state, key)
     }
 
     /// [`Data::sync_run`] with a synchronous start, as the part of a TS load before its first
@@ -606,97 +501,101 @@ impl Data {
     /// from what `begin` returned, outside the lock.
     pub(crate) fn sync_start<R, F>(
         &self,
-        key: String,
-        begin: impl FnOnce(&mut State) -> R + Send + 'static,
+        (mut state, key): Keyed,
+        begin: impl FnOnce(&mut State, ReadKey) -> R + Send + 'static,
         load: impl FnOnce(Data, R) -> F + Send + 'static,
     ) -> Task<()>
     where
         R: Send + 'static,
         F: Future<Output = Result<(), Error>> + Send + 'static,
     {
-        let mut state = self.lock();
-        let wait = match state.syncs.entries.get(&key) {
-            Some(Entry::Done) => return futures_util::future::ready(Ok(())).boxed().shared(),
-            Some(Entry::Pending { task, invalidated, .. }) => {
-                if !*invalidated {
-                    return task.clone();
-                }
-                Some(task.clone())
-            }
-            None => None,
+        let wait = match state.read_state_mut(key) {
+            Some(ReadState::Done) => return futures_util::future::ready(Ok(())).boxed().shared(),
+            Some(ReadState::Loading { task, phase: Phase::Stale, .. }) => Some(task.clone()),
+            Some(ReadState::Loading { task, .. }) => return task.clone(),
+            _ => None,
         };
         let token = state.token();
-        let started = Arc::new(AtomicBool::new(wait.is_none()));
+        let phase = if wait.is_some() { Phase::Queued } else { Phase::Running };
         let start = match wait {
-            None => Start::Begun(begin(&mut state)),
+            None => Start::Begun(begin(&mut state, key)),
             Some(wait) => Start::After(wait, begin),
         };
         let data = self.clone();
-        let flag = started.clone();
-        let settle = key.clone();
-        // Spawned under the lock, so its settlement cannot run before the entry exists.
+        // Spawned under the lock, so its settlement cannot run before its state exists.
         let task = self.spawn(async move {
             let begun = match start {
                 Start::Begun(begun) => begun,
                 Start::After(wait, begin) => {
                     let _ = wait.await;
                     data.write(|state| {
-                        flag.store(true, Ordering::SeqCst);
-                        begin(state)
+                        if let Some(ReadState::Loading { token: current, phase, .. }) = state.read_state_mut(key)
+                            && *current == token
+                        {
+                            *phase = Phase::Running;
+                        }
+                        begin(state, key)
                     })
                 }
             };
             let result = load(data.clone(), begun).await;
-            data.write(|state| state.syncs.settle(&settle, token, result.is_ok()));
+            data.write(|state| {
+                if let Some(read) = state.read_state_mut(key) {
+                    read.settle(token, result.is_ok());
+                }
+            });
             result
         });
-        state.syncs.entries.insert(key, Entry::Pending { token, task: task.clone(), invalidated: false, started });
+        if let Some(state) = state.read_state_mut(key) {
+            *state = ReadState::Loading { token, task: task.clone(), phase };
+        }
         task
     }
 
     /// Fetches a list and applies its overlay before publishing. Discard superseded reads and reads for deleted
-    /// sessions. An overflow invalidates the key and schedules another read.
+    /// sessions. An overflow invalidates the read and schedules another.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn overlay_sync<K, V, T, F>(
         &self,
-        key: String,
+        sync: Keyed,
         session: SessionID,
-        reads: fn(&mut State) -> &mut HashMap<K, Overlay<V>>,
         read: K,
+        open: fn(&mut State, &K, Overlay<V>),
+        close: fn(&mut State, &K, u64) -> Option<Overlay<V>>,
         id: fn(&V) -> &str,
         fetch: impl FnOnce(Data) -> F + Send + 'static,
         publish: impl FnOnce(&mut State, &K, Vec<V>, T) + Send + 'static,
         again: impl FnOnce(Data) -> Task<()> + Send + 'static,
     ) -> Task<()>
     where
-        K: Hash + Eq + Clone + Send + 'static,
+        K: Clone + Send + 'static,
         V: Send + 'static,
         T: Send + 'static,
         F: Future<Output = Result<(Vec<V>, T), Error>> + Send + 'static,
     {
         let begin = read.clone();
         self.sync_start(
-            key.clone(),
-            move |state| {
+            sync,
+            move |state, key| {
                 let ticket = state.token();
-                reads(state).insert(begin, Overlay::new(ticket));
-                (state.deletion_epoch, ticket)
+                open(state, &begin, Overlay::new(ticket));
+                (state.deletion_epoch, ticket, key)
             },
-            move |data, (started, ticket)| async move {
+            move |data, (started, ticket, key)| async move {
                 let (list, extra) = match fetch(data.clone()).await {
                     Ok(fetched) => fetched,
                     Err(error) => {
-                        data.write(|state| Overlay::take(reads(state), &read, ticket));
+                        data.write(|state| close(state, &read, ticket));
                         return Err(error);
                     }
                 };
                 let reread = data.write(|state| {
-                    let Some(overlay) = Overlay::take(reads(state), &read, ticket) else { return false };
+                    let Some(overlay) = close(state, &read, ticket) else { return false };
                     if state.deleted_since(&session, started) {
                         return false;
                     }
                     let Some(list) = overlay.apply(list, id) else {
-                        state.syncs.invalidate(&key);
+                        state.invalidate_key(key);
                         return true;
                     };
                     publish(state, &read, list, extra);
@@ -710,6 +609,9 @@ impl Data {
         )
     }
 }
+
+/// The locked state and the key of a read, for [`Data::sync_start`].
+pub(crate) type Keyed<'a> = (Locked<'a>, ReadKey);
 
 /// How a keyed load starts: begun under the caller's lock, or after the load it replaces.
 enum Start<R, B> {

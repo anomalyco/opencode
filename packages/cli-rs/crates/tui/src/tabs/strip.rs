@@ -391,7 +391,7 @@ impl Component for Strip {
                 .iter()
                 .map(|tab| {
                     state
-                        .session(&SessionID(tab.session_id.clone()))
+                        .session(&tab.session_id)
                         .and_then(|session| session.title.clone())
                         .or_else(|| tab.title.clone())
                         .unwrap_or_else(|| "Untitled session".to_owned())

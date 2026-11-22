@@ -173,20 +173,20 @@ impl Local {
         let relocated = self.state.borrow().location.as_ref() != Some(&location);
         if relocated {
             self.relocate(location.clone());
-        } else if changes.all || changes.location(&location) {
+        } else if changes.all() || changes.location(&location) {
             self.notify();
         }
         // A connection can open after these reads: the server does not replay what it sent before the
         // subscription, and the model list it answers before its providers settle is empty with no later event
         // delivered (the model route says so). Every connection marks every change, so read them again, as a
         // reconnect needs too. `relocate` has just read them.
-        if changes.all && !relocated {
+        if changes.all() && !relocated {
             for catalog in CATALOGS {
                 self.data.catalog_invalidate(catalog, Some(&location));
                 self.read(catalog, &location);
             }
         }
-        let sessions: Vec<SessionID> = if changes.all {
+        let sessions: Vec<SessionID> = if changes.all() {
             self.state
                 .borrow()
                 .commits
@@ -196,10 +196,11 @@ impl Local {
                 .map(SessionID)
                 .collect()
         } else {
-            changes.session.iter().cloned().collect()
+            self.data.read(|state| changes.sessions_with(state, Touched::INFO).cloned().collect())
         };
         for id in sessions {
-            self.reconcile(&id, changes.selected.get(&id).map_or(&[], Vec::as_slice));
+            let selected: Vec<Selected> = self.data.read(|state| changes.selected(state, &id).cloned().collect());
+            self.reconcile(&id, &selected);
         }
     }
 

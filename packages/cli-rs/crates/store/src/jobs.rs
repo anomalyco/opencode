@@ -5,13 +5,16 @@ use std::collections::HashSet;
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
+use crate::changes::Touched;
+use crate::reads::{Read, SessionRead};
+use crate::sessions::SessionKey;
 use crate::state::{Data, Error, Overlay, State, Task, evict_missing};
 
 impl State {
     /// Running jobs owned by `session` or any session below it: a synced tree's listed members, plus jobs whose
     /// owner loaded session info places below it. In arrival order.
     pub fn jobs(&self, session: &SessionID) -> Vec<&JobInfo> {
-        let members = self.job_trees.get(session);
+        let members = self.sessions.get(session).and_then(|session| session.job_tree.as_ref());
         self.jobs
             .values()
             .filter(|job| members.is_some_and(|members| members.contains(job.id())) || self.job_within(job, session))
@@ -20,37 +23,43 @@ impl State {
 
     /// `owned_jobs` by the parents in loaded session info.
     pub fn owned_jobs<'a>(&self, jobs: &[&'a JobInfo], session: &SessionID) -> Vec<&'a JobInfo> {
-        owned_jobs(jobs, session, |id| self.info.get(id).and_then(|info| info.parent_id.clone()))
+        owned_jobs(jobs, session, |id| self.session(id).and_then(|info| info.parent_id.clone()))
     }
 
     pub(crate) fn on_job_updated(&mut self, info: &JobInfo) {
         let running = info.status() == Some(&JobStatus::Running);
-        for read in self.job_reads.values_mut() {
+        for read in self.sessions.iter_mut().filter_map(|session| session.job_read.as_mut()) {
             read.record(info.id(), running.then(|| info.clone()));
         }
         if !running {
             if self.jobs.shift_remove(info.id()).is_none() {
                 return;
             }
-            for members in self.job_trees.values_mut() {
+            for members in self.sessions.iter_mut().filter_map(|session| session.job_tree.as_mut()) {
                 members.remove(info.id());
             }
             self.log_job(info);
             return;
         }
         self.jobs.insert(info.id().to_owned(), info.clone());
-        let roots: Vec<SessionID> = self.job_trees.keys().filter(|root| self.job_within(info, root)).cloned().collect();
+        let roots: Vec<SessionKey> = self
+            .sessions
+            .iter()
+            .filter(|session| session.job_tree.is_some() && self.job_within(info, &session.id))
+            .filter_map(|session| self.sessions.key(&session.id))
+            .collect();
         for root in roots {
-            self.job_trees.entry(root).or_default().insert(info.id().to_owned());
+            self.sessions[root].job_tree.get_or_insert_default().insert(info.id().to_owned());
         }
         self.log_job(info);
     }
 
     /// Forgets a tree's jobs (its session was removed).
-    pub(crate) fn remove_job_tree(&mut self, root: &SessionID) {
-        self.job_reads.remove(root);
-        self.syncs.invalidate(&job_key(root));
-        let Some(members) = self.job_trees.remove(root) else { return };
+    pub(crate) fn remove_job_tree(&mut self, root: SessionKey) {
+        let session = &mut self.sessions[root];
+        session.job_read = None;
+        session.reads[SessionRead::Jobs].invalidate();
+        let Some(members) = session.job_tree.take() else { return };
         for id in &members {
             if let Some(job) = self.jobs.shift_remove(id) {
                 self.log_job(&job);
@@ -60,17 +69,18 @@ impl State {
 
     /// Logs a job's owner, and the child a subagent job runs.
     fn log_job(&mut self, job: &JobInfo) {
-        self.log.jobs(&SessionID(job.session_id().to_owned()));
+        self.touch(job.session_id(), Touched::JOBS);
         if let JobInfo::Subagent(job) = job {
-            self.log.jobs(&job.child_session_id);
+            self.touch(&job.child_session_id, Touched::JOBS);
         }
     }
 
     /// The synced trees, read again after `server.connected`.
     pub(crate) fn job_roots(&mut self) -> Vec<SessionID> {
-        let roots: Vec<SessionID> = self.job_trees.keys().cloned().collect();
-        for root in &roots {
-            self.syncs.invalidate(&job_key(root));
+        let mut roots = Vec::new();
+        for session in self.sessions.iter_mut().filter(|session| session.job_tree.is_some()) {
+            session.reads[SessionRead::Jobs].invalidate();
+            roots.push(session.id.clone());
         }
         roots
     }
@@ -86,7 +96,7 @@ impl State {
             if !seen.insert(id) {
                 return false;
             }
-            current = self.info.get(id).and_then(|info| info.parent_id.as_ref());
+            current = self.session(id).and_then(|info| info.parent_id.as_ref());
         }
         false
     }
@@ -100,16 +110,21 @@ impl State {
 
     fn begin_job_read(&mut self, root: &SessionID) -> u64 {
         let ticket = self.token();
-        self.job_reads.insert(root.clone(), Overlay::new(ticket));
+        self.sessions.get_or_insert(root).job_read = Some(Overlay::new(ticket));
         ticket
+    }
+
+    /// Ends the job read `ticket` of `root`: its overlay, while that read is still the current one.
+    fn end_job_read(&mut self, root: &SessionID, ticket: u64) -> Option<Overlay<JobInfo>> {
+        self.sessions.get_mut(root)?.job_read.take_if(|read| read.ticket() == ticket)
     }
 
     /// Publishes the list read `ticket` started, with the events that overtook it. True when the overlay
     /// overflowed: nothing is published and the caller reads again.
     fn publish_jobs(&mut self, root: &SessionID, ticket: u64, list: Vec<JobInfo>) -> bool {
-        let Some(read) = Overlay::take(&mut self.job_reads, root, ticket) else { return false };
+        let Some(read) = self.end_job_read(root, ticket) else { return false };
         let Some(changes) = read.into_changes() else {
-            self.syncs.invalidate(&job_key(root));
+            self.invalidate(Read::Session(root.as_str(), SessionRead::Jobs));
             return true;
         };
         let listed: HashSet<String> = list.iter().map(|job| job.id().to_owned()).collect();
@@ -125,7 +140,8 @@ impl State {
                 Some(_) => {}
             }
         }
-        let previous = self.job_trees.get(root).cloned().unwrap_or_default();
+        // Replaced below, and nothing in between reads it.
+        let previous = self.sessions.get_mut(root).and_then(|session| session.job_tree.take()).unwrap_or_default();
         let stale: Vec<String> = self
             .jobs
             .iter()
@@ -137,12 +153,12 @@ impl State {
                 self.log_job(&job);
             }
         }
-        self.job_trees.insert(root.clone(), next.keys().cloned().collect());
+        self.sessions.get_or_insert(root).job_tree = Some(next.keys().cloned().collect());
         for job in next.values() {
             self.log_job(job);
         }
         self.jobs.extend(next);
-        self.log.jobs(root);
+        self.touch(root, Touched::JOBS);
         false
     }
 }
@@ -175,18 +191,14 @@ pub fn owned_jobs<'a>(
     jobs.iter().copied().filter(|job| owned(job)).collect()
 }
 
-fn job_key(root: &SessionID) -> String {
-    format!("job:{}", root.0)
-}
-
 impl Data {
     /// Reads the running jobs of the tree under `root` once per invalidation. Job events received during the read
     /// apply over its answer.
     pub fn job_sync(&self, root: &SessionID) -> Task<()> {
         let (begin, fetched) = (root.clone(), root.clone());
         self.sync_start(
-            job_key(root),
-            move |state| state.begin_job_read(&begin),
+            self.keyed(Read::Session(root.as_str(), SessionRead::Jobs)),
+            move |state, _| state.begin_job_read(&begin),
             move |data, ticket| async move {
                 let input = ExperimentalJobListInput {
                     session_id: Some(fetched.clone()),
@@ -197,7 +209,7 @@ impl Data {
                 let list = match data.client().experimental_job_list(&input).await {
                     Ok(list) => list,
                     Err(error) => {
-                        data.write(|state| Overlay::take(&mut state.job_reads, &fetched, ticket));
+                        data.write(|state| state.end_job_read(&fetched, ticket));
                         return Err(evict_missing(&data, error));
                     }
                 };

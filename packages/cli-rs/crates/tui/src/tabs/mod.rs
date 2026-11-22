@@ -131,7 +131,7 @@ impl Tabs {
 
     pub fn current(&self, tui: &Tui) -> Option<String> {
         match tui.route() {
-            Route::Session { id } => Some(tui.data.read(|state| state.root(&id)).0),
+            Route::Session { id } => Some(tui.data.read(|state| state.root(&id).to_owned())),
             _ => None,
         }
     }
@@ -146,7 +146,7 @@ impl Tabs {
 
     pub fn status(&self, tui: &Tui, session: &str) -> Status {
         let pulse = self.pulses.borrow().get(session).copied().unwrap_or(0);
-        tui.data.read(|state| status(state, &SessionID(session.to_owned()), pulse))
+        tui.data.read(|state| status(state, session, pulse))
     }
 
     pub fn expanded_groups(&self, session: &str) -> HashMap<String, bool> {
@@ -171,7 +171,7 @@ impl Tabs {
     }
 
     pub(crate) fn is_open(&self, tui: &Tui, session: &str) -> bool {
-        let root = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+        let root = tui.data.read(|state| state.root(session).to_owned());
         self.tabs(tui).iter().any(|tab| tab.session_id == root)
     }
 
@@ -306,7 +306,7 @@ pub fn route_changed(tui: &Tui) {
     };
     let open = tabs.tabs(tui);
     let previous = tabs.new_tab.get();
-    let root = routed.as_ref().map(|id| tui.data.read(|state| state.root(id)).0);
+    let root = routed.as_ref().map(|id| tui.data.read(|state| state.root(id).to_owned()));
     tabs.new_tab.set(match &root {
         None => matches!(tui.route(), Route::Home),
         Some(root) => previous && !open.iter().any(|tab| &tab.session_id == root),
@@ -325,7 +325,7 @@ pub fn route_changed(tui: &Tui) {
         let fallback = tabs.new_tab.get().then(|| NEW_SESSION_TAB_TITLE.to_owned());
         // Prefer the new-tab title to the timestamp fallback.
         let (known, timestamped) = tui.data.read(|state| {
-            let info = state.session(&SessionID(root.clone()));
+            let info = state.session(&root);
             (info.and_then(|info| info.title.clone()), info.map(crate::dialogs::session_list::title))
         });
         let session = root.clone();
@@ -355,7 +355,7 @@ pub fn sync(tui: &Tui, changes: &Changes) {
         let mapping: Vec<(String, Tab)> = open
             .iter()
             .map(|tab| {
-                let root = tui.data.read(|state| state.root(&SessionID(tab.session_id.clone()))).0;
+                let root = tui.data.read(|state| state.root(&tab.session_id).to_owned());
                 let title = title_of(tui, &root, tab.title.clone(), None);
                 (tab.session_id.clone(), Tab::new(root, title))
             })
@@ -385,7 +385,7 @@ fn prefetch(tui: &Tui, changes: &Changes) {
     let mut ids: Vec<String> = tui.tabs.tabs(tui).into_iter().map(|tab| tab.session_id).collect();
     ids.sort();
     let signature = ids.join("\n");
-    if signature.is_empty() || (*tui.tabs.fetched.borrow() == signature && !changes.all) {
+    if signature.is_empty() || (*tui.tabs.fetched.borrow() == signature && !changes.all()) {
         return;
     }
     *tui.tabs.fetched.borrow_mut() = signature;
@@ -442,7 +442,7 @@ fn retain(tui: &Tui) {
     };
     let mut retention = tui.tabs.retention.borrow_mut();
     let (excluded, evict) = tui.data.read(|state| {
-        let root = |id: &str| state.root(&SessionID(id.to_owned())).0;
+        let root = |id: &str| state.root(id).to_owned();
         let current = viewed.as_deref().map(root);
         let keep: HashSet<String> = keep.iter().map(|id| root(id)).collect();
         let advanced = current.clone().filter(|_| viewed != retention.previous);
@@ -486,7 +486,7 @@ fn retain(tui: &Tui) {
 
 /// `title`: the store's title, else the persisted one, else the fallback, else the timestamped default.
 fn title_of(tui: &Tui, session: &str, persisted: Option<String>, fallback: Option<String>) -> Option<String> {
-    let info = tui.data.read(|state| state.session(&SessionID(session.to_owned())).cloned());
+    let info = tui.data.read(|state| state.session(session).cloned());
     info.as_ref()
         .and_then(|info| info.title.clone())
         .or(persisted)
@@ -497,7 +497,7 @@ fn title_of(tui: &Tui, session: &str, persisted: Option<String>, fallback: Optio
 pub(crate) fn event(tui: &Tui, event: &Handled) -> bool {
     match event {
         Handled::SessionDeleted(event) => {
-            let target = tui.data.read(|state| state.root(&event.data.session_id)).0;
+            let target = tui.data.read(|state| state.root(&event.data.session_id).to_owned());
             tui.tabs.closed.borrow_mut().retain(|entry| entry.tab.session_id != target);
             let before = tui.route();
             remove(tui, &event.data.session_id.0, Tabs::enabled(tui));
@@ -507,7 +507,7 @@ pub(crate) fn event(tui: &Tui, event: &Handled) -> bool {
             if !Tabs::enabled(tui) || !matches!(event.data.item, SessionInboxItem::User(_)) {
                 return false;
             }
-            let session = tui.data.read(|state| state.root(&event.data.session_id)).0;
+            let session = tui.data.read(|state| state.root(&event.data.session_id).to_owned());
             if tui.tabs.current(tui).as_ref() == Some(&session)
                 || !tui.tabs.tabs(tui).iter().any(|tab| tab.session_id == session)
             {
@@ -524,11 +524,10 @@ pub(crate) fn event(tui: &Tui, event: &Handled) -> bool {
 /// `remove`: drops the tab, and with `navigate`, leaves it when it is open.
 fn remove(tui: &Tui, session: &str, navigate: bool) {
     let tabs = &tui.tabs;
-    let target = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+    let target = tui.data.read(|state| state.root(session).to_owned());
     tabs.cancelled.borrow_mut().insert(target.clone());
     let family: Vec<String> = tui.data.read(|state| {
-        let root = SessionID(target.clone());
-        std::iter::once(root.0.clone()).chain(state.family(&root).iter().map(|id| id.0.clone())).collect()
+        std::iter::once(target.clone()).chain(state.family(&target).iter().map(|id| id.0.clone())).collect()
     });
     for id in &family {
         tabs.groups.borrow_mut().remove(id);
@@ -569,7 +568,7 @@ pub fn select(tui: &Tui, session: &str) {
     if !Tabs::enabled(tui) {
         return;
     }
-    tui.show_session(tui.data.read(|state| state.root(&SessionID(session.to_owned()))));
+    tui.show_session(tui.data.read(|state| SessionID::from(state.root(session))));
 }
 
 /// `open`: a tab for the session's root, without showing it.
@@ -577,7 +576,7 @@ pub fn open(tui: &Tui, session: &str) {
     if !Tabs::enabled(tui) {
         return;
     }
-    let root = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+    let root = tui.data.read(|state| state.root(session).to_owned());
     if tui.tabs.tabs(tui).iter().any(|tab| tab.session_id == root) {
         return;
     }
@@ -604,7 +603,7 @@ pub fn close(tui: &Tui, session: Option<&str>) {
     }
     let tabs = &tui.tabs;
     let target = match session {
-        Some(session) => Some(tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0),
+        Some(session) => Some(tui.data.read(|state| state.root(session).to_owned())),
         None => tabs.current(tui),
     };
     let open = tabs.tabs(tui);
@@ -637,7 +636,7 @@ pub fn reorder(tui: &Tui, session: &str, index: usize) {
     if !Tabs::enabled(tui) {
         return;
     }
-    let root = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+    let root = tui.data.read(|state| state.root(session).to_owned());
     if model::reorder(&tui.tabs.tabs(tui), &root, index).is_none() {
         return;
     }
@@ -730,20 +729,15 @@ fn changed(tui: &Tui) {
     crate::features::attention::program_status::sync(tui);
     // Notify plugins of tab changes and fetch the titles and statuses of background tabs.
     crate::plugins::host::local_changed(tui);
-    prefetch(tui, &Changes::default());
+    prefetch(tui, &Changes::nothing(&tui.data));
 }
 
-pub fn status(state: &State, session: &SessionID, prompt_pulse: u32) -> Status {
+pub fn status(state: &State, session: &(impl AsRef<str> + ?Sized), prompt_pulse: u32) -> Status {
     let root = state.root(session);
-    let members: Vec<SessionID> = {
-        let family = state.family(&root);
-        if family.contains(&root) {
-            family.to_vec()
-        } else {
-            std::iter::once(root.clone()).chain(family.iter().cloned()).collect()
-        }
-    };
-    let info = state.session(&root);
+    let family = state.family(root);
+    // The root and its family, each once.
+    let members = || std::iter::once(root).chain(family.iter().map(SessionID::as_str).filter(|id| *id != root));
+    let info = state.session(root);
     let unread = info.and_then(|info| {
         let idle = info.time.idle?;
         let viewed = info.time.viewed.is_none_or(|viewed| idle > viewed);
@@ -753,14 +747,14 @@ pub fn status(state: &State, session: &SessionID, prompt_pulse: u32) -> Status {
             Unread::Activity
         })
     });
-    let attention = if members.iter().any(|id| state.permissions(id).is_some_and(|list| !list.is_empty())) {
+    let attention = if members().any(|id| state.permissions(id).is_some_and(|list| !list.is_empty())) {
         Some(Attention::Permission)
-    } else if members.iter().any(|id| state.forms(&id.0, None).is_some_and(|list| !list.is_empty())) {
+    } else if members().any(|id| state.forms(id, None).is_some_and(|list| !list.is_empty())) {
         Some(Attention::Question)
     } else {
         None
     };
-    let busy = members.iter().any(|id| {
+    let busy = members().any(|id| {
         state.status(id) == SessionStatus::Running
             || state.pending(id).iter().any(|item| !matches!(item, SessionInboxInfo::Synthetic(_)))
     });
@@ -775,9 +769,8 @@ fn acknowledge(tui: &Tui) {
         return;
     }
     let Some(session) = tabs.current(tui) else { return };
-    let id = SessionID(session.clone());
     let Some(idle) = tui.data.read(|state| {
-        let info = state.session(&id)?;
+        let info = state.session(&session)?;
         let idle = info.time.idle?;
         info.time.viewed.is_none_or(|viewed| idle > viewed).then_some(idle)
     }) else {
@@ -789,6 +782,7 @@ fn acknowledge(tui: &Tui) {
     // Recorded before the request, so event-driven syncs do not post the same watermark again.
     tabs.acknowledged.borrow_mut().insert(session.clone(), idle);
     let client = tui.data.client().clone();
+    let id = SessionID(session.clone());
     tui.app.spawn(
         async move { client.session_view(&SessionViewInput { session_id: id, idle }).await },
         bind!(tui, |tui, cx, result| {

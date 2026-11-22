@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use common::*;
 use opencode_api::events::{self, Status};
 use opencode_api::generated::*;
-use opencode_store::{Catalog, CreateSession, Data, LoadMore, Options};
+use opencode_store::{Catalog, CreateSession, Data, LoadMore, Options, Touched};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
 
@@ -90,13 +90,14 @@ async fn a_coalesced_reconnect_invalidates_reads_and_flushes_everything() {
     let path = "/api/session/ses_a/message";
     data.message_sync(&id("ses_a")).await.unwrap();
     assert_eq!(reads(&paths, path), 1);
-    let seen = data.revision();
+    let mut taken = Taken::default();
+    taken.take(&data);
 
     // The second `server.connected` arrives with no status change `run` could observe.
     batches.send(vec![connected()]).await.unwrap();
     settle().await;
-    let (_, changes) = data.changes_since(seen);
-    assert!(changes.all, "a reconnect wakes every view");
+    let (_, changes) = taken.take(&data);
+    assert!(changes.all(), "a reconnect wakes every view");
     data.message_sync(&id("ses_a")).await.unwrap();
     assert_eq!(reads(&paths, path), 2, "a reconnect invalidates cached reads");
     drop((status, batches));
@@ -249,13 +250,11 @@ async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
     let (data, _) = counting();
     let root = id("ses_root");
     data.remember(info(session("ses_root", None, 0.5)));
-    let seen = data.revision();
+    let mut taken = Taken::default();
+    taken.take(&data);
     data.remember(info(session("ses_child", Some("ses_root"), 1.0)));
-    let (seen, changes) = {
-        let (revision, changes) = data.changes_since(seen);
-        (revision, changes)
-    };
-    assert!(changes.session(&root), "joining the family changes the root");
+    let (_, changes) = taken.take(&data);
+    assert!(changes.has(&root, Touched::INFO), "joining the family changes the root");
     assert_eq!(data.read(|state| state.cost(&root)), 1.5);
 
     emit(
@@ -266,13 +265,21 @@ async fn child_changes_mark_the_root_whose_family_and_cost_they_change() {
             json!({ "sessionID": "ses_child", "cost": 2.0, "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } }),
         ),
     );
-    let (seen, changes) = data.changes_since(seen);
-    assert!(changes.session(&root), "child usage changes the root's cost");
+    let (_, changes) = taken.take(&data);
+    assert!(changes.has(&root, Touched::INFO), "child usage changes the root's cost");
 
     emit(&data, durable("session.deleted", "evt_deleted", json!({ "sessionID": "ses_child" })));
-    let (_, changes) = data.changes_since(seen);
-    assert!(changes.session(&root), "removing a child changes the root's family");
+    let (_, changes) = taken.take(&data);
+    assert!(changes.has(&root, Touched::INFO), "removing a child changes the root's family");
     assert_eq!(data.read(|state| state.family(&root).len()), 1);
+
+    // A parent cycle ends the walk at the last session before the first one seen twice.
+    data.remember(info(session("ses_b", Some("ses_c"), 0.0)));
+    data.remember(info(session("ses_c", Some("ses_d"), 0.0)));
+    data.remember(info(session("ses_d", Some("ses_b"), 0.0)));
+    data.remember(info(session("ses_a", Some("ses_b"), 0.0)));
+    let roots = data.read(|state| ["ses_a", "ses_b", "ses_c", "ses_d"].map(|id| state.root(id).to_owned()));
+    assert_eq!(roots, ["ses_d", "ses_d", "ses_b", "ses_c"]);
 }
 
 #[tokio::test]
@@ -304,25 +311,13 @@ async fn a_failed_create_after_its_echo_flushes_the_end_of_creating() {
     );
     // Let the echo's own session read land first.
     settle().await;
-    let seen = data.revision();
+    let mut taken = Taken::default();
+    taken.take(&data);
     release.resolve(());
     assert!(request.await.is_err());
     assert!(!data.read(|state| state.is_creating(&made)));
-    let (_, changes) = data.changes_since(seen);
-    assert!(changes.session(&made), "the end of creating is a change");
-}
-
-#[tokio::test]
-async fn views_read_changes_and_state_under_one_lock() {
-    let (data, _) = counting();
-    data.remember(info(session("ses_a", None, 0.0)));
-    let (revision, changes, count) = data.read(|state| {
-        let (revision, changes) = state.changes_since(0);
-        (revision, changes, state.sessions().len())
-    });
-    assert_eq!(revision, data.revision());
-    assert!(changes.session(&id("ses_a")));
-    assert_eq!(count, 1);
+    let (_, changes) = taken.take(&data);
+    assert!(changes.has(&made, Touched::INFO), "the end of creating is a change");
 }
 
 #[test]
@@ -374,9 +369,10 @@ async fn deleting_a_session_drops_its_forms() {
         }),
     );
     assert_eq!(data.read(|state| state.form_sessions().len()), 1);
-    let seen = data.revision();
+    let mut taken = Taken::default();
+    taken.take(&data);
     emit(&data, durable("session.deleted", "evt_deleted", json!({ "sessionID": "ses_form" })));
-    let (_, changes) = data.changes_since(seen);
+    let (_, changes) = taken.take(&data);
     assert!(changes.forms("ses_form"));
     assert!(data.read(|state| state.forms("ses_form", None).is_none()));
     assert!(data.read(|state| state.form_sessions().is_empty()));

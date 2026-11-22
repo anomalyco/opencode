@@ -101,7 +101,7 @@ pub(crate) fn connected_again(tui: &Tui) {
 
 pub(crate) fn set(tui: &Tui, location: Location) {
     *tui.location.reference.borrow_mut() = Some(location.clone());
-    tui.local.sync(&opencode_store::Changes::default());
+    tui.local.sync(&opencode_store::Changes::nothing(&tui.data));
     crate::client_mcp::sync(tui);
     if connected(tui) {
         sync(tui, Some(location));

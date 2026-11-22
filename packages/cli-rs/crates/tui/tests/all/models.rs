@@ -127,6 +127,7 @@ fn state() -> opencode_util::temp::TempDir {
 struct Kit {
     app: TestApp,
     local: Rc<Local>,
+    data: Data,
     fixture: Arc<Server>,
     _state: opencode_util::temp::TempDir,
 }
@@ -150,7 +151,7 @@ fn kit_with(width: u16, height: u16, fixture: Arc<Server>) -> Kit {
     );
     let local = Local::new(
         &app,
-        data,
+        data.clone(),
         dialogs,
         toasts,
         Some(Files { state: state.path().to_owned(), storage: None }),
@@ -167,7 +168,7 @@ fn kit_with(width: u16, height: u16, fixture: Arc<Server>) -> Kit {
             && !local.providers(|providers| providers.is_empty())
     });
     assert!(loaded, "the catalog never loaded: {:?}", fixture.seen());
-    Kit { app, local, fixture, _state: state }
+    Kit { app, local, data, fixture, _state: state }
 }
 
 impl Kit {
@@ -189,7 +190,7 @@ fn a_connection_reads_the_catalogs_again_after_the_server_answered_before_its_pr
     assert!(kit.local.current().is_none());
 
     fixture.models_empty.store(false, std::sync::atomic::Ordering::SeqCst);
-    kit.local.sync(&opencode_store::Changes::everything());
+    kit.local.sync(&opencode_store::Changes::everything(&kit.data));
     let loaded = kit.app.wait_until(WAIT, || !kit.local.models(|models| models.is_empty()));
     assert!(loaded, "the catalogs were not read again: {:?}", fixture.seen());
     let reads =

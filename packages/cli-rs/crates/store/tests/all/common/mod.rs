@@ -11,7 +11,7 @@ use futures_util::future::BoxFuture;
 use opencode_api::client::Client;
 use opencode_api::generated::V2Event;
 use opencode_api::transport::{Request, Response, Transport};
-use opencode_store::{Data, Options};
+use opencode_store::{Changes, Data, Dirty, Options};
 use serde_json::Value;
 use tokio::sync::watch;
 
@@ -105,6 +105,18 @@ pub fn data(handler: Handler, options: Options) -> Data {
         directory => directory.to_owned(),
     };
     Data::new(client, Options { directory, ..options })
+}
+
+/// The one consumer of a test store's changes.
+#[derive(Default)]
+pub struct Taken(pub Dirty);
+
+impl Taken {
+    /// What changed since the last take, with the revision of the last flush.
+    pub fn take<'a>(&'a mut self, data: &'a Data) -> (u64, Changes<'a>) {
+        let revision = data.take_changes(&mut self.0);
+        (revision, Changes::new(&self.0, data))
+    }
 }
 
 pub fn event(value: Value) -> V2Event {

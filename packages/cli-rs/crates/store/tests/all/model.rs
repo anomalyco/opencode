@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex};
 use common::*;
 use futures_util::FutureExt;
 use opencode_api::generated::SessionID;
-use opencode_store::{Data, LoadMore, Location, Options, Task};
+use opencode_store::{Changes, Data, LoadMore, Location, Options, Task, Touched};
 use opencode_util::rng::SplitMix64;
 use serde_json::{Value, json};
 use tokio::sync::oneshot;
@@ -509,7 +509,8 @@ struct Run {
     mutant: Mutant,
     /// Reads the view opened; synced again on `changes.all`.
     viewed: HashSet<(Read, u8)>,
-    seen_revision: u64,
+    /// The store's changes, taken after each command as a view takes them.
+    taken: Taken,
     seen: Vec<Seen>,
     /// Sync tasks and older-page loads started, to check they finish.
     tasks: Vec<(String, Task<()>)>,
@@ -572,13 +573,14 @@ impl Run {
             Options { initial_message_limit: Some(PAGE as i64), ..Options::default() },
         );
         data.apply(&[event(json!({ "id": "evt_connected", "type": "server.connected", "data": {} }))]);
-        let seen_revision = data.revision();
+        let mut taken = Taken::default();
+        taken.take(&data);
         Run {
             data,
             server,
             mutant,
             viewed: HashSet::new(),
-            seen_revision,
+            taken,
             seen: vec![Seen::default(); SESSIONS as usize],
             tasks: Vec::new(),
             loads: Vec::new(),
@@ -884,8 +886,10 @@ impl Run {
 
     /// The safety properties, the change reports, and the view's resync on `changes.all`; true when it resynced.
     fn observed(&mut self) -> Result<bool, Failure> {
-        let (revision, changes) = self.data.changes_since(self.seen_revision);
-        let changes = if self.mutant == Mutant::Silent { Default::default() } else { changes };
+        let revision = self.data.take_changes(&mut self.taken.0);
+        let dirty = &self.taken.0;
+        let changes =
+            if self.mutant == Mutant::Silent { Changes::nothing(&self.data) } else { Changes::new(dirty, &self.data) };
         let server = self.server.lock().unwrap();
         if let Some(request) = server.unexpected.first() {
             fail("unexpected", format!("the model has no answer for {request}"))?;
@@ -895,7 +899,7 @@ impl Run {
         for s in 0..SESSIONS {
             let (before, after) = (&self.seen[s as usize], &now[s as usize]);
             let session = Self::id(s);
-            if before.permissions != after.permissions && !changes.permissions(&session) {
+            if before.permissions != after.permissions && !changes.has(&session, Touched::PERMISSIONS) {
                 fail(format!("changes ses_{s}"), format!("permissions of ses_{s} changed unreported: {after:?}"))?;
             }
             if before.forms != after.forms && !changes.forms(&format!("ses_{s}")) {
@@ -904,15 +908,21 @@ impl Run {
             let shape = |seen: &Seen| {
                 seen.messages.as_ref().map(|rows| rows.iter().map(|row| row.0.clone()).collect::<Vec<_>>())
             };
-            if std::env::var("MODEL_TRACE").is_ok() && changes != Default::default() {
-                eprintln!("  changes {}..{revision}: {changes:?}", self.seen_revision);
+            if std::env::var("MODEL_TRACE").is_ok() && !changes.is_empty() {
+                eprintln!("  changes at {revision}: {dirty:?}");
             }
-            if (shape(before) != shape(after) || before.more != after.more) && !changes.messages(&session) {
+            if (shape(before) != shape(after) || before.more != after.more) && !changes.has(&session, Touched::SHAPE) {
                 fail(format!("changes ses_{s}"), format!("transcript of ses_{s} changed shape unreported"))?;
             }
             for row in after.messages.iter().flatten() {
                 let old = before.messages.iter().flatten().find(|old| old.0 == row.0);
-                if old.is_some_and(|old| old != row) && !changes.message(&session, &row.0) {
+                let changed = || {
+                    changes.has(&session, Touched::SHAPE)
+                        || self.data.read(|state| {
+                            changes.changed_messages(state).any(|(id, message)| *id == session && message == row.0)
+                        })
+                };
+                if old.is_some_and(|old| old != row) && !changed() {
                     fail(format!("changes ses_{s}"), format!("message {} of ses_{s} changed unreported", row.0))?;
                 }
             }
@@ -958,12 +968,11 @@ impl Run {
             fail("settled shells", format!("{id} shows after its shell.exited arrived"))?;
         }
         self.shells = shells;
-        self.seen_revision = revision;
         if std::env::var("MODEL_TRACE").is_ok() {
             eprintln!("  seen {:?}", now.iter().map(|seen| (&seen.messages, seen.more)).collect::<Vec<_>>());
         }
         self.seen = now;
-        if !changes.all {
+        if !changes.all() {
             return Ok(false);
         }
         let viewed: Vec<(Read, u8)> = self.viewed.iter().copied().collect();

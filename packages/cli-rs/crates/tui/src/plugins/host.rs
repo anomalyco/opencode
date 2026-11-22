@@ -137,18 +137,18 @@ impl Host for Tui {
         let mut options = ToastOptions::new(variant, toast.message.clone());
         options.title = toast.title.clone();
         // Only offer to open a session outside the visible family. Queue plugin toasts behind host failure notices.
-        let Some(session) = toast.session.as_ref().map(|id| SessionID(id.clone())) else {
+        let Some(session) = toast.session.as_deref() else {
             return self.toasts.show_behind_kept(options);
         };
         let here = match self.route() {
-            Route::Session { id: open } => self.data.read(|state| state.root(&open) == state.root(&session)),
+            Route::Session { id: open } => self.data.read(|state| state.root(&open) == state.root(session)),
             _ => false,
         };
         if !here {
             if options.title.is_none() {
-                options.title = self.data.read(|state| state.session(&session).and_then(|info| info.title.clone()));
+                options.title = self.data.read(|state| state.session(session).and_then(|info| info.title.clone()));
             }
-            let route = Route::Session { id: session };
+            let route = Route::Session { id: SessionID::from(session) };
             options = options.action("Open", bind!(self, |tui| tui.navigate(route.clone())));
         }
         self.toasts.show_behind_kept(options);
@@ -351,7 +351,7 @@ impl Host for Tui {
         if !crate::tabs::Tabs::enabled(self) {
             return false;
         }
-        let root = |session: &str| self.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+        let root = |session: &str| self.data.read(|state| state.root(session).to_owned());
         // Apply tab edits in call order.
         let (mut open, mut current) = (self.tabs.open_ids(self), self.tabs.current(self));
         for edit in staged {
@@ -592,21 +592,24 @@ pub fn changed(tui: &Tui, changes: &Changes, sync: impl FnOnce(Option<&abi::Chan
     }
     // Refilled with each change batch, so a batch like the one before costs no allocation.
     let mut changed = tui.reads.batch.take();
-    changed.all = changes.all;
-    let sessions = changes.session.iter().chain(&changes.status).chain(changes.selected.keys()).chain(&changes.jobs);
-    refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
-    refill(&mut changed.lists, &changes.messages, |into, id| assign(into, &id.0));
-    let messages = changes.message.iter().flat_map(|(session, ids)| ids.iter().map(move |id| (session, id)));
-    refill(&mut changed.messages, messages, |(into_session, into_id), (session, id)| {
-        assign(into_session, &session.0);
-        assign(into_id, &id.0);
-    });
-    refill(&mut changed.locations, &changes.locations, |into, location| {
-        assign(&mut into.directory, &location.directory);
-        match &location.workspace_id {
-            Some(workspace) => assign(into.workspace.get_or_insert_default(), workspace),
-            None => into.workspace = None,
-        }
+    changed.all = changes.all();
+    tui.data.read(|state| {
+        let sessions = [Touched::INFO, Touched::STATUS, Touched::SELECTED, Touched::JOBS]
+            .into_iter()
+            .flat_map(|bits| changes.sessions_with(state, bits));
+        refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
+        refill(&mut changed.lists, changes.sessions_with(state, Touched::SHAPE), |into, id| assign(into, &id.0));
+        refill(&mut changed.messages, changes.changed_messages(state), |(into_session, into_id), (session, id)| {
+            assign(into_session, &session.0);
+            assign(into_id, id);
+        });
+        refill(&mut changed.locations, changes.locations(state), |into, location| {
+            assign(&mut into.directory, &location.directory);
+            match &location.workspace_id {
+                Some(workspace) => assign(into.workspace.get_or_insert_default(), workspace),
+                None => into.workspace = None,
+            }
+        });
     });
     (changed.local, changed.size, changed.woken) = (false, false, false);
     sync(Some(&changed));

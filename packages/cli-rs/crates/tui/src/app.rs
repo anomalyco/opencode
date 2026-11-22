@@ -98,6 +98,8 @@ pub struct Tui {
     /// Defer the theme remount until the pending key sequence ends.
     restyle: Cell<bool>,
     seen: Cell<u64>,
+    /// The store's changes this sync took, kept for their buffers.
+    dirty: Cell<opencode_store::Dirty>,
     /// [`Tui::hold_sync`].
     held: Cell<bool>,
     followers: RefCell<Vec<Follower>>,
@@ -227,7 +229,7 @@ impl Tui {
         let view = routes::mount(self, &route);
         drop(old);
         self.frame.main().add(&view.root());
-        view.sync(self, &opencode_store::Changes::everything());
+        view.sync(self, &opencode_store::Changes::everything(&self.data));
         crate::frame::mount_app(self, remount);
         // A remount under an open dialog (a theme change, a plugin toggled in `/plugins`) must not take the dialog's
         // focus; the new view takes it once the dialog closes, as the old one would have.
@@ -292,31 +294,37 @@ impl Tui {
         if self.held.get() {
             return;
         }
-        let (revision, changes) = self.data.changes_since(self.seen.get());
-        self.seen.set(revision);
+        // Taken out of its cell, so a sync that runs inside this one takes its own.
+        let mut dirty = self.dirty.take();
+        self.seen.set(self.data.take_changes(&mut dirty));
         crate::features::events::deltas(self);
-        if changes.is_empty() {
-            return;
+        let changes = Changes::new(&dirty, &self.data);
+        if !changes.is_empty() {
+            self.sync_changes(&changes);
         }
+        self.dirty.set(dirty);
+    }
+
+    fn sync_changes(&self, changes: &Changes) {
         if let Some(view) = self.view.borrow().as_ref() {
-            view.sync(self, &changes);
+            view.sync(self, changes);
         }
         let followers = self.followers.borrow().clone();
         for follower in followers {
             // One closed by an earlier one is skipped; one whose target is gone is dropped.
             let open = self.followers.borrow().iter().any(|open| Rc::ptr_eq(open, &follower));
-            if open && !follower(self, &changes) {
+            if open && !follower(self, changes) {
                 self.followers.borrow_mut().retain(|open| !Rc::ptr_eq(open, &follower));
             }
         }
         // After the view, whose new text records the labels it draws.
-        crate::features::session_links::sync(self, &changes);
-        crate::frame::sync_app(self, &changes);
-        crate::features::title::sync(self, &changes);
-        crate::features::events::sync(self, &changes);
+        crate::features::session_links::sync(self, changes);
+        crate::frame::sync_app(self, changes);
+        crate::features::title::sync(self, changes);
+        crate::features::events::sync(self, changes);
         crate::plugins::host::sync(self);
-        self.local.sync(&changes);
-        crate::tabs::sync(self, &changes);
+        self.local.sync(changes);
+        crate::tabs::sync(self, changes);
         crate::frame::refresh(self);
         crate::frame::observe_markers(self);
         crate::features::attention::program_status::sync(self);
@@ -339,18 +347,18 @@ impl Tui {
     /// Syncs the route view with everything, after state outside the store changed.
     pub(crate) fn resync(&self) {
         if let Some(view) = self.view.borrow().as_ref() {
-            view.sync(self, &opencode_store::Changes::everything());
+            view.sync(self, &opencode_store::Changes::everything(&self.data));
         }
-        crate::frame::sync_app(self, &opencode_store::Changes::everything());
+        crate::frame::sync_app(self, &opencode_store::Changes::everything(&self.data));
         self.app.request_redraw();
     }
 
     /// Refresh the route for a view change outside the store.
     pub(crate) fn sync_view(&self) {
         if let Some(view) = self.view.borrow().as_ref() {
-            view.sync(self, &opencode_store::Changes::default());
+            view.sync(self, &opencode_store::Changes::nothing(&self.data));
         }
-        crate::frame::sync_app(self, &opencode_store::Changes::default());
+        crate::frame::sync_app(self, &opencode_store::Changes::nothing(&self.data));
         self.app.request_redraw();
     }
 
@@ -547,6 +555,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
         painted: Live::new(page),
         restyle: Cell::new(false),
         seen: Cell::new(0),
+        dirty: Cell::default(),
         held: Cell::new(false),
         followers: RefCell::default(),
         connection: RefCell::new(None),
@@ -750,7 +759,7 @@ fn install_keys(tui: &Rc<Tui>) {
             .title("Switch session")
             .group("Session")
             .palette()
-            .suggested(Condition::when(bind!(tui, |tui| tui.data.read(|state| !state.sessions().is_empty()))))
+            .suggested(Condition::when(bind!(tui, |tui| tui.data.read(|state| state.has_sessions()))))
             .slash(slash("sessions", &["resume", "continue"])),
         command("session.new", |tui| crate::features::clear::clear(tui, false))
             .title("New session")

@@ -226,11 +226,11 @@ impl Prompt {
             self.inner.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, changed));
         });
         let Some(session) = &self.inner.session else { return };
-        if changes.session(session) {
+        if changes.has(session, Touched::INFO) {
             self.inner.follow_directory(tui);
         }
-        if changes.session(session) || changes.status(session) {
-            if changes.status(session) && !self.inner.running(tui) {
+        if changes.has(session, Touched::INFO | Touched::STATUS) {
+            if changes.has(session, Touched::STATUS) && !self.inner.running(tui) {
                 self.inner.interrupt.set(0);
             }
             self.inner.refresh(tui);
@@ -769,7 +769,7 @@ impl Inner {
     /// Repaints after a change outside the store, the terminal size or the settings, which the footer slots read too.
     fn relayout(&self, tui: &Tui) {
         self.refresh(tui);
-        crate::plugins::host::changed(tui, &Changes::everything(), |changed| {
+        crate::plugins::host::changed(tui, &Changes::everything(&tui.data), |changed| {
             self.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, changed));
         });
     }

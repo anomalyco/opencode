@@ -98,7 +98,7 @@ impl Session {
             synced.0.clone(),
             bind!(tui, |tui, _, session: Result<(), opencode_store::Error>| {
                 if session.is_ok() {
-                    let root = tui.data.read(|state| state.root(&read));
+                    let root = tui.data.read(|state| SessionID::from(state.root(&read)));
                     drop(tui.data.job_sync(&root));
                 }
             }),
@@ -141,12 +141,12 @@ impl RouteView for Session {
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
         // Reconnect invalidates cached reads because the client can miss events while disconnected.
-        if changes.all {
+        if changes.all() {
             form::quiet(tui, tui.data.session_sync(&self.id, true));
             form::quiet(tui, tui.data.message_sync(&self.id));
             form::quiet(tui, tui.data.pending_sync(&self.id));
         }
-        if changes.session(&self.id) {
+        if changes.has(&self.id, Touched::INFO) {
             crate::features::location::session(tui, &self.id);
         }
         self.transcript.sync(tui, &self.id, changes);

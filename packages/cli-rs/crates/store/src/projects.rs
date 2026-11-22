@@ -3,7 +3,9 @@ use std::collections::HashSet;
 
 use opencode_api::generated::*;
 
+use crate::changes::Touched;
 use crate::connection::Follow;
+use crate::reads::{Read, SessionRead};
 use crate::state::{Data, Error, State, Task};
 
 /// The project of sessions outside any repository (`Project.ID.global`).
@@ -57,26 +59,23 @@ impl State {
     /// cached is read again instead.
     pub(crate) fn on_worktree_resolved(&mut self, data: &WorktreeResolvedData) -> Vec<Follow> {
         let mut follow = Vec::new();
-        let ids: Vec<SessionID> = self.info.keys().cloned().collect();
-        for id in ids {
-            let Some(info) = self.info.get(&id) else { continue };
+        for (key, session) in self.sessions.entries_mut() {
+            let Some(info) = &mut session.info else { continue };
             let explicit = data.adopted.as_ref().is_some_and(|adopted| adopted.contains(&info.project_id));
             let directory = if explicit {
-                self.projects.get(&info.project_id).map(|project| project.canonical.0.clone())
+                self.projects.get(&info.project_id).map(|project| project.canonical.as_str())
             } else {
-                Some(info.location.directory.0.clone())
+                Some(info.location.directory.as_str())
             };
             let Some(directory) = directory else {
-                self.syncs.invalidate(&format!("session:{}", id.0));
-                follow.push(Follow::Session(id));
+                session.reads[SessionRead::Info].invalidate();
+                follow.push(Follow::Session(session.id.clone()));
                 continue;
             };
-            let Some((project, subpath)) = adopt(&info.project_id.0, &directory, data) else { continue };
-            if let Some(info) = self.info.get_mut(&id) {
-                info.project_id = ProjectID(project);
-                info.subpath = subpath.map(RelativePath);
-            }
-            self.log.session(&id);
+            let Some((project, subpath)) = adopt(&info.project_id.0, directory, data) else { continue };
+            info.project_id = ProjectID(project);
+            info.subpath = subpath.map(RelativePath);
+            self.log.touch(session, key, Touched::INFO);
         }
         follow
     }
@@ -137,7 +136,7 @@ fn is_windows_root(root: &str) -> bool {
 impl Data {
     /// Reads every project once per invalidation; the read replaces the cached set.
     pub fn project_sync(&self) -> Task<()> {
-        self.sync_run("project".to_owned(), |data| async move {
+        self.sync_run(self.keyed(Read::Projects), |data| async move {
             let projects = data.client().project_list(&ProjectListInput::default()).await.map_err(Error::new)?;
             data.write(|state| state.replace_projects(projects));
             Ok(())

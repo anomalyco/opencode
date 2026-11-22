@@ -158,7 +158,7 @@ pub fn mount_app(tui: &Tui, remount: bool) {
     let slot = crate::plugins::host::slot(tui, &holder, slot::APP, &SlotInput::default(), |_| {});
     tui.frame.column.add(&holder);
     *tui.frame.app.borrow_mut() = Some((holder, Rc::new(slot)));
-    sync_app(tui, &opencode_store::Changes::everything());
+    sync_app(tui, &opencode_store::Changes::everything(&tui.data));
 }
 
 /// Restyles the `app` slot's claims in place, or mounts the slot again when one cannot.

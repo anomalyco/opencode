@@ -52,7 +52,7 @@ pub fn attach(tui: &Tui, markdown: &Markdown, renderers: &CodeBlockRenderers) ->
 }
 
 pub fn sync(tui: &Tui, changes: &Changes) {
-    if !changes.all && changes.session.is_empty() {
+    if !changes.any(Touched::INFO) {
         return;
     }
     let live: Vec<Rc<Links>> = tui.session_links.links.borrow().iter().filter_map(Weak::upgrade).collect();
@@ -61,7 +61,7 @@ pub fn sync(tui: &Tui, changes: &Changes) {
             .used
             .borrow_mut()
             .iter_mut()
-            .filter(|(id, _)| changes.all || changes.session.contains(*id))
+            .filter(|(id, _)| changes.has(id, Touched::INFO))
             .filter_map(|(id, used)| {
                 let label = label_of(tui, id);
                 (*used != label).then(|| {
