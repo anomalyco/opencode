@@ -416,6 +416,14 @@ export function RunFooterView(props: RunFooterViewProps) {
     if (!footerDetails()) return shell() ? "Shell" : ""
     if (busy()) {
       if (stateStatus() === "reconnecting") return "reconnecting"
+      const s = stateStatus()
+      if (s.startsWith("task:")) {
+        const childModel = descendantActivityModel(subagent())
+        const info = childModel ? modelInfo(props.providers(), childModel) : undefined
+        if (info?.model) return `${s.split(" · ")[0]} · ${info.model}`
+        return s
+      }
+      if (s.startsWith("waiting_")) return s
       return interruptLabel() ? `${interruptLabel()} stop` : "Running"
     }
     return stateStatus() || (shell() ? "Shell" : "")
