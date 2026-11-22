@@ -1,7 +1,9 @@
 //! Agent, model, variant, and usage labels below the prompt.
 
+use std::sync::Arc;
+
 use opencode_api::generated::{
-    AgentInfo, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
+    AgentInfo, CommandInfo, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
 };
 use opencode_store::location::{Catalog as Read, Location};
 use opencode_store::{Data, State, Task};
@@ -15,11 +17,11 @@ const READS: [Read; 6] = [Read::Agent, Read::Model, Read::Provider, Read::Config
 
 #[derive(Debug, Default)]
 pub struct Catalog {
-    pub agents: Vec<AgentInfo>,
-    pub models: Vec<ModelInfo>,
-    pub providers: Vec<ProviderInfo>,
-    /// Server command names, for `/name args` submits.
-    pub commands: Vec<String>,
+    pub agents: Arc<[AgentInfo]>,
+    pub models: Arc<[ModelInfo]>,
+    pub providers: Arc<[ProviderInfo]>,
+    /// Server commands, for `/name args` submits.
+    pub commands: Arc<[CommandInfo]>,
     pub branch: Option<String>,
 }
 
@@ -59,7 +61,7 @@ impl Catalog {
             agents: data.agent.clone()?,
             models: data.model.clone()?,
             providers: data.provider.clone().unwrap_or_default(),
-            commands: data.command.iter().flatten().map(|command| command.name.clone()).collect(),
+            commands: data.command.clone().unwrap_or_default(),
             branch: data.vcs.as_ref().and_then(|vcs| vcs.branch.current.clone()),
         })
     }

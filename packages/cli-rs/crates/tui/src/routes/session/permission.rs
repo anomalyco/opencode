@@ -144,6 +144,18 @@ impl Permission {
 
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
         let inner = &self.0;
+        // The family's info and requests, the asked request's messages, and a request no prompt shows yet.
+        let autoaccept = tui.config().permissions == Permissions::Autoaccept;
+        let content = Touched::SHAPE | Touched::CONTENT;
+        let asked = inner.prompt.borrow().request().map(|request| changes.has(&request.session_id, content));
+        let waiting = || {
+            let family = inner.family.borrow();
+            tui.data.read(|state| family.iter().any(|id| state.permissions(id).is_some_and(|list| !list.is_empty())))
+        };
+        let members = inner.family.borrow().iter().any(|id| changes.has(id, Touched::INFO | Touched::PERMISSIONS));
+        if !(autoaccept || members || changes.all() || asked.unwrap_or_else(waiting)) {
+            return;
+        }
         let (requests, family) = tui.data.read(|state| {
             let family = family(state, &inner.session);
             let requests: Vec<PermissionRequest> =
@@ -156,7 +168,7 @@ impl Permission {
             }
             *inner.family.borrow_mut() = family;
         }
-        if tui.config().permissions == Permissions::Autoaccept {
+        if autoaccept {
             // Hide any existing prompt when entering auto-accept mode.
             if inner.shown() {
                 inner.show(tui, Prompt::Hidden);
@@ -171,9 +183,7 @@ impl Permission {
             return;
         }
         let refreshed = match (head, &mut *inner.prompt.borrow_mut()) {
-            (Some(head), Prompt::Asking { request, .. })
-                if changes.has(&head.session_id, Touched::SHAPE | Touched::CONTENT) =>
-            {
+            (Some(head), Prompt::Asking { request, .. }) if changes.has(&head.session_id, content) => {
                 *request = head;
                 true
             }

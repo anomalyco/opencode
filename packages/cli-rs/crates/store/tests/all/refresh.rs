@@ -91,7 +91,7 @@ async fn config_reads_and_update_refreshes_are_opt_in() {
     assert_eq!(config_reads(), 2);
     let config = data.read(|state| state.location(None).unwrap().config.clone().unwrap());
     assert_eq!(
-        serde_json::to_value(config).unwrap(),
+        serde_json::to_value(&*config).unwrap(),
         json!([{ "type": "document", "info": { "model": "provider/second" } }])
     );
 }

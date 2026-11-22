@@ -330,7 +330,10 @@ impl Tui {
         crate::tabs::sync(self, changes);
         crate::frame::refresh(self);
         crate::frame::observe_markers(self, changes);
-        crate::features::attention::program_status::sync(self);
+        // The status records read the sessions' titles and families, their status and inbox, and what waits on the user.
+        if changes.any(Touched::INFO | Touched::STATUS | Touched::PENDING | Touched::PERMISSIONS | Touched::FORMS) {
+            crate::features::attention::program_status::sync(self);
+        }
     }
 
     /// Sync `target` after the route view on each store flush, until the disposer runs or the target drops.

@@ -180,16 +180,16 @@ fn location_json(state: &State, location: &Location) -> Value {
         };
         put("info", data.info.as_ref().map(|value| json!(value)));
         put("vcs", data.vcs.as_ref().map(|value| json!(value)));
-        put("agent", data.agent.as_ref().map(|value| json!(value)));
-        put("command", data.command.as_ref().map(|value| json!(value)));
-        put("config", data.config.as_ref().map(|value| json!(value)));
-        put("integration", data.integration.as_ref().map(|value| json!(value)));
-        put("mcpServer", data.mcp_server.as_ref().map(|value| json!(value)));
-        put("mcpResource", data.mcp_resource.as_ref().map(|value| json!(value)));
-        put("model", data.model.as_ref().map(|value| json!(value)));
-        put("provider", data.provider.as_ref().map(|value| json!(value)));
-        put("reference", data.reference.as_ref().map(|value| json!(value)));
-        put("skill", data.skill.as_ref().map(|value| json!(value)));
+        put("agent", data.agent.as_deref().map(|value| json!(value)));
+        put("command", data.command.as_deref().map(|value| json!(value)));
+        put("config", data.config.as_deref().map(|value| json!(value)));
+        put("integration", data.integration.as_deref().map(|value| json!(value)));
+        put("mcpServer", data.mcp_server.as_deref().map(|value| json!(value)));
+        put("mcpResource", data.mcp_resource.as_deref().map(|value| json!(value)));
+        put("model", data.model.as_deref().map(|value| json!(value)));
+        put("provider", data.provider.as_deref().map(|value| json!(value)));
+        put("reference", data.reference.as_deref().map(|value| json!(value)));
+        put("skill", data.skill.as_deref().map(|value| json!(value)));
         put("websearch", data.websearch.as_ref().map(|value| json!(value)));
         put("usageLimits", data.usage_limits.as_ref().map(|value| json!(value)));
     }

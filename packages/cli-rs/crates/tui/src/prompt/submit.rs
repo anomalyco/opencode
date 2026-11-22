@@ -103,7 +103,8 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         return false;
     }
     let head = slash_head(&text);
-    let command = head.as_ref().filter(|(name, _)| catalog.commands.iter().any(|command| command == name)).cloned();
+    let command =
+        head.as_ref().filter(|(name, _)| catalog.commands.iter().any(|command| command.name == *name)).cloned();
 
     // Snapshot before starting the request so new typing survives and history records the sent content.
     let entry = prompt.snapshot();

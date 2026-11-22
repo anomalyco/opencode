@@ -1353,13 +1353,13 @@ impl abi::Read for Scoped<'_> {
         family(id: &str) -> abi::Family;
         messages(id: &str, visit: &mut dyn FnMut(&[abi::types::SessionMessageInfo]));
         pending(id: &str) -> Vec<abi::types::SessionInboxInfo>;
-        models(location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::ModelInfo>>;
+        models(location: Option<&abi::LocationRef>) -> Option<std::sync::Arc<[abi::types::ModelInfo]>>;
         model() -> Option<abi::types::ModelRef>;
         limits() -> Option<abi::types::UsageLimitsInfo>;
-        providers() -> Option<Vec<abi::types::ProviderInfo>>;
+        providers() -> Option<std::sync::Arc<[abi::types::ProviderInfo]>>;
         info() -> abi::Info;
-        mcp_servers(location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::McpServer>>;
-        integrations(location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::IntegrationInfo>>;
+        mcp_servers(location: Option<&abi::LocationRef>) -> Option<std::sync::Arc<[abi::types::McpServer]>>;
+        integrations(location: Option<&abi::LocationRef>) -> Option<std::sync::Arc<[abi::types::IntegrationInfo]>>;
         vcs(location: Option<&abi::LocationRef>) -> Option<abi::types::VcsInfo>;
         route() -> abi::Route;
         interactive() -> bool;
@@ -1722,7 +1722,7 @@ impl Staged {
 /// Model `model` of provider `provider`, when the host lists it.
 fn listed(read: &dyn abi::Read, provider: &str, model: &str) -> Option<abi::types::ModelInfo> {
     let models = read.models(None)?;
-    models.into_iter().find(|info| info.provider_id.0 == provider && info.id == model)
+    models.iter().find(|info| info.provider_id.0 == provider && info.id == model).cloned()
 }
 
 /// Whether a theme name is safe as a file name in a themes directory: no path, and no hidden file.
@@ -3356,7 +3356,9 @@ impl Nested {
 pub(crate) fn settle(host: &dyn Host, live: &slot::Live) {
     for _ in 0..=slot::PATHS.len() {
         let version = live.version();
-        for follower in live.followers() {
+        // Only one behind the live paths has anything to do.
+        let behind = |follower: &dyn Any| follower.downcast_ref::<Nested>().is_some_and(|it| it.seen.get() != version);
+        for follower in live.followers(behind) {
             if let Ok(nested) = follower.downcast::<Nested>() {
                 nested.refresh(host);
             }

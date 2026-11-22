@@ -886,7 +886,7 @@ impl abi::Read for Reader<'_> {
         self.session(id, |state, id| state.pending(id).to_vec())
     }
 
-    fn models(&self, location: Option<&abi::LocationRef>) -> Option<Vec<ModelInfo>> {
+    fn models(&self, location: Option<&abi::LocationRef>) -> Option<Arc<[ModelInfo]>> {
         self.catalog(location, Catalog::Model, |data| data.model.clone())
     }
 
@@ -903,7 +903,7 @@ impl abi::Read for Reader<'_> {
         self.tui.local.usage().flatten()
     }
 
-    fn providers(&self) -> Option<Vec<ProviderInfo>> {
+    fn providers(&self) -> Option<Arc<[ProviderInfo]>> {
         self.catalog(None, Catalog::Provider, |data| data.provider.clone())
     }
 
@@ -920,11 +920,11 @@ impl abi::Read for Reader<'_> {
         }
     }
 
-    fn mcp_servers(&self, location: Option<&abi::LocationRef>) -> Option<Vec<McpServer>> {
+    fn mcp_servers(&self, location: Option<&abi::LocationRef>) -> Option<Arc<[McpServer]>> {
         self.catalog(location, Catalog::McpServer, |data| data.mcp_server.clone())
     }
 
-    fn integrations(&self, location: Option<&abi::LocationRef>) -> Option<Vec<IntegrationInfo>> {
+    fn integrations(&self, location: Option<&abi::LocationRef>) -> Option<Arc<[IntegrationInfo]>> {
         self.catalog(location, Catalog::Integration, |data| data.integration.clone())
     }
 
@@ -1245,8 +1245,7 @@ pub fn install(tui: &Rc<Tui>) {
 
 /// Reads the server plugins again once the default location changed.
 pub fn sync(tui: &Tui) {
-    let default = tui.data.read(|state| state.default_location().clone());
-    if tui.reads.server.borrow().0.as_ref() != Some(&default) {
+    if tui.data.read(|state| tui.reads.server.borrow().0.as_ref() != Some(state.default_location())) {
         sync_server_plugins(tui);
     }
 }

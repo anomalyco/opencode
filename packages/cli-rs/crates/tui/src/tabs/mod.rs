@@ -737,15 +737,18 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
 /// one keeps showing the session; closing it here then still moves to a neighbour. Runs whenever the route, the
 /// roots or the tabs change, as the memo does.
 fn track(tui: &Tui) {
-    let current = tui.tabs.current(tui);
-    let index =
-        current.as_ref().and_then(|session| tui.tabs.tabs(tui).iter().position(|tab| tab.session_id == *session));
-    let mut viewed = tui.tabs.viewed.borrow_mut();
-    *viewed = match (current, index) {
-        (Some(session), Some(index)) => Some((session, index)),
-        (Some(session), None) => viewed.take().filter(|(previous, _)| *previous == session),
-        (None, _) => None,
-    };
+    let route = tui.route();
+    let Route::Session { id } = &*route else { return drop(tui.tabs.viewed.take()) };
+    let tabs = tui.tabs.tabs(tui);
+    tui.data.read(|state| {
+        let session = state.root(id);
+        let index = tabs.iter().position(|tab| tab.session_id == session);
+        let mut viewed = tui.tabs.viewed.borrow_mut();
+        let kept = viewed.as_ref().is_some_and(|(previous, at)| previous == session && index.is_none_or(|i| i == *at));
+        if !kept {
+            *viewed = index.map(|index| (session.to_owned(), index));
+        }
+    });
 }
 
 fn changed(tui: &Tui) {
@@ -793,17 +796,18 @@ fn acknowledge(tui: &Tui) {
     if tabs.focused.get() != Some(true) {
         return;
     }
-    let Some(session) = tabs.current(tui) else { return };
-    let Some(idle) = tui.data.read(|state| {
-        let info = state.session(&session)?;
+    let route = tui.route();
+    let Route::Session { id } = &*route else { return };
+    let Some((session, idle)) = tui.data.read(|state| {
+        let session = state.root(id);
+        let info = state.session(session)?;
         let idle = info.time.idle?;
-        info.time.viewed.is_none_or(|viewed| idle > viewed).then_some(idle)
+        let unseen = info.time.viewed.is_none_or(|viewed| idle > viewed);
+        let acknowledged = tabs.acknowledged.borrow().get(session) == Some(&idle);
+        (unseen && !acknowledged).then(|| (session.to_owned(), idle))
     }) else {
         return;
     };
-    if tabs.acknowledged.borrow().get(&session) == Some(&idle) {
-        return;
-    }
     // Recorded before the request, so event-driven syncs do not post the same watermark again.
     tabs.acknowledged.borrow_mut().insert(session.clone(), idle);
     let client = tui.data.client().clone();
