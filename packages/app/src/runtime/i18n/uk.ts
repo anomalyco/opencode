@@ -750,7 +750,7 @@ export const dict = {
   "settings.about.otherContributor.one": "{{count}} інший",
   "settings.about.otherContributor.other": "{{count}} іншого",
   "settings.about.firstPublished": "Уперше видано в Міссурі, США",
-  "settings.about.firstIllustrated": "Вперше проілюстровано в Лондоні, Англія",
+  "settings.about.firstIllustrated": "Уперше проілюстровано в Лондоні, Англія",
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, агент кодування з відкритим кодом",
   "settings.about.trademark": "OpenCode є зареєстрованою торговою маркою Anomaly Innovations, Inc.",
