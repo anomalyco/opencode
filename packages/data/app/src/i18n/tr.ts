@@ -56,6 +56,8 @@ export const dict = {
   "range.2M": "2 Ay",
   "chart.weekly": "7 gün",
   "chart.daily": "Dün",
+  "chart.period.daily": "Günlük",
+  "chart.period.weekly": "Haftalık",
   "chart.input": "Girdi",
   "chart.output": "Çıktı",
   "chart.cached": "Önbellekte",

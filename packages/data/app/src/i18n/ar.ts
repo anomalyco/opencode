@@ -56,6 +56,8 @@ export const dict = {
   "range.2M": "شهران",
   "chart.weekly": "7 أيام",
   "chart.daily": "أمس",
+  "chart.period.daily": "يومي",
+  "chart.period.weekly": "أسبوعي",
   "chart.input": "الإدخال",
   "chart.output": "الإخراج",
   "chart.cached": "مخزّن مؤقتًا",

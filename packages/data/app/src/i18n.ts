@@ -77,6 +77,8 @@ const en = {
   "range.2M": "2 Months",
   "chart.weekly": "7 Days",
   "chart.daily": "Yesterday",
+  "chart.period.daily": "Daily",
+  "chart.period.weekly": "Weekly",
   "chart.input": "Input",
   "chart.output": "Output",
   "chart.cached": "Cached",

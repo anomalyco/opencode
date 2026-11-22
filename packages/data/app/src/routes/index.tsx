@@ -389,7 +389,8 @@ function TopModelsSection(props: {
 }) {
   const i18n = useI18n()
   const [activeModel, setActiveModel] = createSignal<string>()
-  const [period, setPeriod] = createSignal(DEFAULT_PERIOD)
+  const [chartPeriod, setChartPeriod] = createSignal(DEFAULT_PERIOD)
+  const [period, setPeriod] = createSignal<"weekly" | "daily">("weekly")
   const leaderboard = createMemo(() => props.leaderboard[period()])
 
   return (
@@ -399,28 +400,45 @@ function TopModelsSection(props: {
         href="#top-models"
         title={i18n.t("nav.topModels")}
         description={i18n.t("home.topModelsDescription")}
-        action={
-          <PeriodToggle
-            value={period()}
-            onChange={(value) => {
-              setPeriod(value)
-              setActiveModel(undefined)
-            }}
-            label={i18n.t("nav.topModels")}
-          />
-        }
+        action={<PeriodToggle value={chartPeriod()} onChange={setChartPeriod} label={i18n.t("nav.topModels")} />}
       />
       <Show
-        when={props.data[period()].some((item) => usageTotal(item) > 0)}
+        when={props.data[chartPeriod()].some((item) => usageTotal(item) > 0)}
         fallback={<EmptyState title={i18n.t("home.noUsageTitle")} description={i18n.t("home.noUsageDescription")} />}
       >
         <TopModelsChart
-          data={props.data[period()]}
-          period={period()}
+          data={props.data[chartPeriod()]}
+          period={chartPeriod()}
           activeModel={activeModel()}
           onActiveModelChange={setActiveModel}
         />
       </Show>
+      <div data-slot="leaderboard-period" role="group" aria-label={i18n.t("nav.leaderboard")}>
+        <div data-component="usage-filter" data-variant="range">
+          <button
+            type="button"
+            data-active={period() === "weekly" ? "true" : undefined}
+            aria-pressed={period() === "weekly"}
+            onClick={() => {
+              setPeriod("weekly")
+              setActiveModel(undefined)
+            }}
+          >
+            {i18n.t("chart.weekly")}
+          </button>
+          <button
+            type="button"
+            data-active={period() === "daily" ? "true" : undefined}
+            aria-pressed={period() === "daily"}
+            onClick={() => {
+              setPeriod("daily")
+              setActiveModel(undefined)
+            }}
+          >
+            {i18n.t("chart.daily")}
+          </button>
+        </div>
+      </div>
       <Show
         when={leaderboard().length > 0}
         fallback={

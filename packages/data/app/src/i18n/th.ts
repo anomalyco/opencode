@@ -58,6 +58,8 @@ export const dict = {
   "range.2M": "2 เดือน",
   "chart.weekly": "7 วัน",
   "chart.daily": "เมื่อวาน",
+  "chart.period.daily": "รายวัน",
+  "chart.period.weekly": "รายสัปดาห์",
   "chart.input": "อินพุต",
   "chart.output": "เอาต์พุต",
   "chart.cached": "แคชแล้ว",

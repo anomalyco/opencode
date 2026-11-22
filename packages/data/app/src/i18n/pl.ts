@@ -56,6 +56,8 @@ export const dict = {
   "range.2M": "2 miesiące",
   "chart.weekly": "7 dni",
   "chart.daily": "Wczoraj",
+  "chart.period.daily": "Dziennie",
+  "chart.period.weekly": "Tygodniowo",
   "chart.input": "Wejście",
   "chart.output": "Wyjście",
   "chart.cached": "Z cache",

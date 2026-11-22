@@ -18,7 +18,7 @@ export function PeriodToggle(props: { value: Period; onChange: (period: Period) 
             aria-pressed={props.value === period}
             onClick={() => props.onChange(period)}
           >
-            {i18n.t(period === "weekly" ? "chart.weekly" : "chart.daily")}
+            {i18n.t(period === "weekly" ? "chart.period.weekly" : "chart.period.daily")}
           </button>
         )}
       </For>
