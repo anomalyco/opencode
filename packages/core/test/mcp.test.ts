@@ -399,6 +399,7 @@ function resourceMcpLayer(
     Layer.provideMerge(Flag.layer),
     Layer.provide(
       Layer.mergeAll(
+        Layer.succeed(Global.Service, Global.make()),
         overrides?.pool ?? poolLayer,
         overrides?.entries
           ? Layer.succeed(
@@ -3335,6 +3336,7 @@ describe("MCP pool", () => {
       name?: string
       credentials?: Partial<Credential.Interface>
       bus?: Layer.Layer<Bus.Service>
+      entries?: Config.Interface["entries"]
     } = {},
   ) =>
     Effect.gen(function* () {
@@ -3349,6 +3351,7 @@ describe("MCP pool", () => {
           name: overrides.name,
           credentials: overrides.credentials,
           bus: overrides.bus,
+          entries: overrides.entries,
         }),
         scope,
       )
@@ -3836,6 +3839,62 @@ describe("MCP pool", () => {
       expect(error.message).toContain("roots/list")
     }),
   )
+
+  for (const variant of ["global", "home", "relative", "direct", "dot-opencode", "private"] as const)
+    live(`scopes configured local MCP processes: ${variant}`, () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        const pids = path.join(tmp.path, "pids")
+        const config = new ConfigMCP.Local({
+          type: "local",
+          command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-modern-stdio.ts")],
+          environment: { MCP_PID_FILE: pids },
+          ...(variant === "home" ? { cwd: "~" } : {}),
+          ...(variant === "relative" ? { cwd: "." } : {}),
+          ...(variant === "private" ? { pool: false } : {}),
+        })
+        const document = (file: string) =>
+          new Document({
+            type: "document",
+            path: AbsolutePath.make(file),
+            info: new Info({ mcp: new ConfigMCP.Info({ servers: { resources: config } }) }),
+          })
+        const spawns: Array<ChildProcess.Command> = []
+        const pool = yield* recordingPool(spawns)
+        const locations = yield* Effect.forEach(
+          directories,
+          (directory) =>
+            open(config, pool, directory, {
+              environment: recordingEnvironmentLayer(spawns),
+              entries: () =>
+                Effect.succeed([
+                  document(path.join(Global.Path.config, "opencode.json")),
+                  ...(variant === "direct" ? [document(path.join(directory, "opencode.json"))] : []),
+                  ...(variant === "dot-opencode" ? [document(path.join(directory, ".opencode", "opencode.json"))] : []),
+                ]),
+            }),
+          { concurrency: "unbounded" },
+        )
+        for (const { mcp } of locations) expect(yield* status(mcp)).toEqual({ status: "connected" })
+        const shared = variant === "global" || variant === "home"
+        expect((yield* Effect.promise(() => fs.readFile(pids, "utf8"))).trim().split("\n")).toHaveLength(shared ? 1 : 2)
+        expect(spawns).toHaveLength(shared ? 1 : 2)
+        expect(
+          spawns
+            .map((command) => {
+              if (command._tag !== "StandardCommand") throw new Error("expected a standard command")
+              return command.options.cwd
+            })
+            .sort(),
+        ).toEqual(
+          (shared ? [Global.Path.home] : variant === "private" ? [Global.Path.home, Global.Path.home] : directories)
+            .slice()
+            .sort(),
+        )
+        const tools = yield* Effect.forEach(locations, ({ mcp }) => mcp.tools())
+        expect(tools[0]?.[0]?.inputSchema === tools[1]?.[0]?.inputSchema).toBe(shared)
+      }),
+    )
 
   live("shares a local server across directories only when its cwd is fixed", () => {
     const captured = poolLogs()
