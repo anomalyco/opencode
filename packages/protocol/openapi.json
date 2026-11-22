@@ -26859,6 +26859,12 @@
           "model": {
             "type": "string"
           },
+          "name": {
+            "type": "string"
+          },
+          "engine": {
+            "type": "string"
+          },
           "provider": {
             "type": "string"
           },
@@ -26872,7 +26878,7 @@
             "type": "boolean"
           }
         },
-        "required": ["model", "provider", "transports", "available"],
+        "required": ["model", "name", "engine", "provider", "transports", "available"],
         "additionalProperties": false
       },
       "VoiceModelsResponse": {

@@ -1565,6 +1565,8 @@ export interface ExperimentalGenerateApi<E = never> {
 export type ExperimentalVoiceModelsOutput = {
   readonly models: ReadonlyArray<{
     readonly model: string
+    readonly name: string
+    readonly engine: string
     readonly provider: string
     readonly transports: ReadonlyArray<"webrtc" | "websocket">
     readonly available: boolean

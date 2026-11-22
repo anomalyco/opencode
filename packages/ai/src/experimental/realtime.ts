@@ -21,6 +21,7 @@ export type RealtimeTransport =
 export type RealtimeSession = Readonly<Record<string, unknown>>
 
 export interface RealtimeConnectInput {
+  readonly engine: RealtimeEngine
   readonly model: string
   readonly apiKey: Redacted.Redacted
   /** Where a GPT-Live session starts, OpenAI by default: another host of its API, such as OpenCode's. */
@@ -32,32 +33,18 @@ export interface RealtimeConnectInput {
   readonly transport: RealtimeTransportInput
 }
 
+// The voice APIs this package speaks, by provider and models.dev API. Which models they start comes from models.dev.
 export const engines = [
-  { family: "gpt-live", model: "gpt-live-1", id: "openai-live", provider: "openai", transports: ["webrtc"] },
-  {
-    family: "gpt-realtime",
-    model: "gpt-realtime-2.1",
-    id: "openai-realtime",
-    provider: "openai",
-    transports: ["webrtc", "websocket"],
-  },
-  { family: "grok-voice", model: "grok-voice-3.0", id: "xai-realtime", provider: "xai", transports: ["websocket"] },
-  {
-    family: "gemini-3.8-live",
-    model: "gemini-3.8-live",
-    id: "gemini-live",
-    provider: "google",
-    transports: ["websocket"],
-  },
+  { id: "openai-live", provider: "openai", api: "live", transports: ["webrtc"] },
+  { id: "openai-realtime", provider: "openai", api: "realtime", transports: ["webrtc", "websocket"] },
+  { id: "xai-realtime", provider: "xai", api: "realtime", transports: ["websocket"] },
+  { id: "gemini-live", provider: "google", api: "bidi-generate-content", transports: ["websocket"] },
 ] as const
 
-// Matches the bare family name (`gpt-realtime`) and its versions (`gpt-realtime-2.1`, `gpt-realtime-mini`).
-export const engine = (model: string) =>
-  engines.find((item) => model === item.family || model.startsWith(`${item.family}-`))
+export type RealtimeEngine = (typeof engines)[number]
 
 export const connect = Effect.fn("Realtime.connect")(function* (input: RealtimeConnectInput) {
-  const resolved = engine(input.model)
-  if (!resolved) return yield* invalidRequest(`Unsupported voice model: ${input.model}`)
+  const resolved = input.engine
   if (!resolved.transports.some((type) => type === input.transport.type))
     return yield* invalidRequest(`${input.model} only supports ${resolved.transports.join(", ")} transport`)
   const session = { ...input.session, model: input.model }
@@ -140,7 +127,6 @@ export const connect = Effect.fn("Realtime.connect")(function* (input: RealtimeC
 
 export const Realtime = {
   engines,
-  engine,
   connect,
 } as const
 
