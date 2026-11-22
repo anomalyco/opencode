@@ -548,6 +548,20 @@ test("spells Google Interactions variants as thinking levels", () => {
     ])
 })
 
+test("only adds Google Interactions thinking toggles for toggle-only models", () => {
+  const packageName = "@opencode/ai/providers/google/interactions"
+  expect(resolve(model(packageName, "gemma-4-31b-it"), Variant.supports({ supported: true, toggle: true }))).toEqual([
+    { id: "none", settings: { thinkingLevel: "minimal" } },
+    { id: "thinking", settings: { thinkingLevel: "high", thinkingSummaries: "auto" } },
+  ])
+  expect(
+    resolve(
+      model(packageName, "gemini-2.5-flash"),
+      Variant.supports({ supported: true, toggle: true, budget: { min: 0, max: 24_576 } }),
+    ),
+  ).toEqual([])
+})
+
 test("reads models.dev v2 reasoning as variant support", () => {
   expect(Variant.supports({ supported: false })).toEqual([])
   expect(Variant.supports({ supported: true })).toEqual([])

@@ -17,6 +17,7 @@ import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
 import { storedCredential } from "./credential-settings.js"
+import { OpenAISubscriptionModels } from "./openai-subscription-models.js"
 import { ProviderRefresh } from "./refresh.js"
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
@@ -24,15 +25,15 @@ const registrationClientID = "dynamic_agent_client"
 const agentName = "OpenCode"
 const issuer = "https://auth.openai.com"
 const tokenURL = `${issuer}/api/accounts/oauth/token`
+const revokeURL = `${issuer}/api/accounts/oauth/revoke`
 const resource = "https://api.openai.com/v1"
 const tokenSharingScope = "chatgpt.tokens.use.direct"
 const providerID = Provider.ID.openai
 const integrationID = Integration.ID.make("openai")
 const methodID = Integration.MethodID.make("chatgpt-token-sharing")
 const modelCacheKey = (clientID: string) => `models:${clientID}`
+// Used when the catalog has no Sign in with ChatGPT list. gpt-5.5 is rejected there.
 const fallbackModels = new Set([
-  "gpt-5.5",
-  "gpt-5.5-fast",
   "gpt-5.6-luna",
   "gpt-5.6-luna-fast",
   "gpt-5.6-sol",
@@ -90,6 +91,9 @@ type RemoteModel = typeof RemoteModel.Type
 const RemoteModels = Schema.Struct({ models: Schema.Array(RemoteModel) })
 const decodeCachedModels = Schema.decodeUnknownOption(Schema.Array(RemoteModel))
 
+const decodeInvalidGrant = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ error: Schema.Literal("invalid_grant") })),
+)
 const decodeMetadata = Schema.decodeUnknownOption(
   Schema.Struct({
     clientID: Schema.String,
@@ -205,6 +209,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
         }
       }),
     refresh: (value) => refresh(value, app),
+    revoke: (value) => revoke(value, app),
   }) satisfies IntegrationOAuthMethodRegistration
 
 function listen(server: Server) {
@@ -269,6 +274,8 @@ export const ChatGPTPlugin = define({
       { discard: true },
     )
     yield* load()
+    // Temporary: the Sign in with ChatGPT list from models.dev, see openai-subscription-models.ts.
+    const plan = yield* OpenAISubscriptionModels.track("openai-chatgpt", ctx.provider.reload())
     yield* ctx.session.hook(
       "retry",
       (event) =>
@@ -315,7 +322,7 @@ export const ChatGPTPlugin = define({
         // models: available
         //   ? deriveModels(available, Array.from(item.models.values()))
         //   : Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
-        models: Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
+        models: Array.from(item.models.values()).filter((model) => (plan.current ?? fallbackModels).has(model.id)),
         sourceConnection: source,
       })
     })
@@ -397,22 +404,53 @@ function exchange(code: string, clientID: string, redirect: string, pkce: Pkce, 
   })
 }
 
-function refresh(value: Credential.OAuth, app: App.Info) {
+export function refresh(value: Credential.OAuth, app: App.Info, url = tokenURL) {
   return Effect.gen(function* () {
     const metadata = Option.getOrUndefined(decodeMetadata(value.metadata))
     if (!metadata)
       return yield* Effect.fail(new Error("This ChatGPT connection has no registered client ID. Connect again."))
-    const tokens = yield* request<TokenResponse>(tokenURL, {
-      method: "POST",
-      headers: headers(app),
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        client_id: metadata.clientID,
-        refresh_token: value.refresh,
-        resource,
-      }).toString(),
-    })
+    const tokens = yield* request<TokenResponse>(
+      url,
+      {
+        method: "POST",
+        headers: headers(app),
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: metadata.clientID,
+          refresh_token: value.refresh,
+          resource,
+        }).toString(),
+      },
+      "This ChatGPT sign-in has expired or was revoked. Connect again.",
+    )
     return credential(tokens, metadata.clientID, metadata.scopes)
+  })
+}
+
+// Revokes the refresh token so OpenAI ends the session; already-invalid tokens also answer 200.
+export function revoke(value: Credential.OAuth, app: App.Info, url = revokeURL) {
+  return Effect.gen(function* () {
+    const metadata = Option.getOrUndefined(decodeMetadata(value.metadata))
+    if (!metadata) return yield* Effect.fail(new Error("This ChatGPT connection has no registered client ID."))
+    yield* Effect.tryPromise({
+      try: async (signal) => {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: headers(app),
+          body: new URLSearchParams({
+            token: value.refresh,
+            token_type_hint: "refresh_token",
+            client_id: metadata.clientID,
+          }).toString(),
+          signal,
+        })
+        if (!response.ok) throw new Error(`Revocation failed: ${response.status}`)
+      },
+      catch: (cause) => cause,
+    }).pipe(
+      // Logout waits on this, so give up quickly; an unrevoked token just expires unused.
+      Effect.timeout("5 seconds"),
+    )
   })
 }
 
@@ -490,12 +528,14 @@ export function verifyIDToken(
   })
 }
 
-function request<A>(url: string, init: RequestInit) {
+// `rejected` replaces the error when OpenAI answers invalid_grant, which means different things per grant type.
+function request<A>(url: string, init: RequestInit, rejected?: string) {
   return Effect.tryPromise({
     try: async (signal) => {
       const response = await fetch(url, { ...init, signal })
-      if (!response.ok) throw new Error(`Request failed: ${response.status}`)
-      return response.json() as Promise<A>
+      if (response.ok) return response.json() as Promise<A>
+      if (rejected && Option.isSome(decodeInvalidGrant(await response.text()))) throw new Error(rejected)
+      throw new Error(`Request failed: ${response.status}`)
     },
     catch: (cause) => cause,
   })

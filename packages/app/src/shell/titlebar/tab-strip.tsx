@@ -34,7 +34,7 @@ import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { sessionMayHoldRequests, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { sessionTitle } from "@/session/title"
 import { errorMessage } from "@/shell/layout/helpers"
 import { notifySessionTabsRemoved } from "./session-events"
@@ -513,16 +513,19 @@ export function createSessionRowNavigation(input: {
 
 /** Loads what an unselected session row shows: metadata, and the inbox and requests that keep it busy or waiting. */
 export function syncInactiveSession(ctx: ServerCtx, id: string) {
-  const running = [id, ...ctx.data.session.family(id)].some(
-    (sessionID) => ctx.data.session.status(sessionID) === "running",
+  const requestIDs = [...new Set([id, ...ctx.data.session.family(id)])].filter((sessionID) =>
+    sessionMayHoldRequests(ctx.data, sessionID),
   )
 
   void Promise.allSettled([
     ctx.data.session.sync(id, { children: true }),
     // The selected timeline loads the transcript; inactive tabs need metadata and the inbox,
-    // whose waiting work keeps the tab busy. Only a running session can wait on a permission
-    // or form, and reading either boots the session's location on the server.
-    ...(running ? [ctx.data.session.permission.sync(id), ctx.data.session.form.sync(id)] : []),
+    // whose waiting work keeps the tab busy. Reading a permission or form boots the session's
+    // location on the server, so only sessions that may hold one are read.
+    ...requestIDs.flatMap((sessionID) => [
+      ctx.data.session.permission.sync(sessionID),
+      ctx.data.session.form.sync(sessionID),
+    ]),
     ctx.data.session.pending.sync(id),
   ])
 }
@@ -669,8 +672,10 @@ export function TitlebarTabStrip(props: {
   tabMenu?: (tab: SessionTab) => JSX.Element
   /** Vertical only: whether a session tab is muted, which swaps its unread dot for a muted mark. */
   tabMuted?: (tab: SessionTab) => boolean
-  /** Vertical only: rows rendered above the tabs that share their shortcuts, numbered first (e.g. pinned sessions). */
+  /** Rows that share the tabs' shortcuts and are numbered first (e.g. pinned sessions). Side tabs only render `content`. */
   leading?: TabStripLeading
+  /** Open tabs shown elsewhere (e.g. pinned), kept in the tab order but not rendered here. */
+  hidden?: (tab: Tab) => boolean
   currentTab: Tab | undefined
   onNavigate: (tab: Tab, el?: HTMLDivElement) => void
   onClose: (tab: Tab) => void
@@ -684,7 +689,11 @@ export function TitlebarTabStrip(props: {
   const sections = () => (vertical() ? props.sections : undefined)
   const customDrag = () => (vertical() ? props.customVerticalDrag : undefined)
 
-  const displayTabs = createMemo(() => sections()?.flatMap((section) => section.tabs) ?? props.tabs)
+  const displayTabs = createMemo(
+    () =>
+      sections()?.flatMap((section) => section.tabs) ??
+      (props.hidden ? props.tabs.filter((tab) => !props.hidden?.(tab)) : props.tabs),
+  )
 
   const sectionOf = createMemo(
     () => new Map(sections()?.flatMap((section) => section.tabs.map((tab) => [tabKey(tab), section.key] as const))),
@@ -821,7 +830,7 @@ export function TitlebarTabStrip(props: {
 
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
-  const leading = () => (vertical() ? props.leading : undefined)
+  const leading = () => props.leading
 
   const leadingKeys = () => leading()?.keys ?? []
 
@@ -967,6 +976,7 @@ export function TitlebarTabStrip(props: {
   const renderList = () => (
     <div
       data-titlebar-tab-list
+      data-focus-scope
       data-orientation={vertical() ? "vertical" : "horizontal"}
       data-dragging={customDrag()?.isDraggingStrip() ? "true" : undefined}
       class="relative flex w-full min-w-0"
@@ -976,7 +986,7 @@ export function TitlebarTabStrip(props: {
         customDrag()?.onPointerDown(event, listRef, scrollRef)
       }}
     >
-      <Show when={sections()} fallback={<For each={props.tabs}>{(tab) => renderTab(tab)}</For>}>
+      <Show when={sections()} fallback={<For each={displayTabs()}>{(tab) => renderTab(tab)}</For>}>
         {(list) => (
           <Key each={list()} by={(section) => section.key}>
             {(section) => (
@@ -1069,7 +1079,7 @@ export function TitlebarTabStrip(props: {
           }
         }}
       >
-        {leading()?.content}
+        {vertical() ? leading()?.content : undefined}
         <Show
           when={!customDrag()}
           fallback={renderList()}

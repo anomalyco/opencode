@@ -16,12 +16,13 @@ import { Integration } from "@opencode/core/integration"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
+import { ModelsDev } from "@opencode/core/models-dev"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { GithubCopilotPlugin } from "@opencode/core/plugin/provider/github-copilot"
-import { ChatGPTPlugin, fetchModels, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
+import { ChatGPTPlugin, fetchModels, refresh, revoke, verifyIDToken } from "@opencode/core/plugin/provider/chatgpt"
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
@@ -45,6 +46,21 @@ const addPlugin = Effect.fn(function* (http = unavailableModels) {
   const host = yield* PluginHost.make(plugin, ChatGPTPlugin.id)
   yield* ChatGPTPlugin.effect(host).pipe(Effect.provideService(HttpClient.HttpClient, http))
 })
+
+// A catalog whose OpenAI entry carries the given subscription model lists; `lists.current` can be swapped before a refresh.
+const subscriptionCatalog = (lists: { current: Record<string, readonly string[]> }) =>
+  ModelsDev.Service.of({
+    get: () =>
+      Effect.sync(() => [
+        {
+          info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
+          models: [],
+          environment: [],
+          subscriptions: lists.current,
+        },
+      ]),
+    refresh: () => Effect.void,
+  })
 
 const addLegacyPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
@@ -161,6 +177,84 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
+  it.live("revokes the refresh token with the issued client ID", () =>
+    Effect.gen(function* () {
+      const forms = new Array<Record<string, string>>()
+      const statuses = [200, 503]
+      const server = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            port: 0,
+            fetch: async (request) => {
+              expect(request.method).toBe("POST")
+              expect(request.headers.get("content-type")).toBe("application/x-www-form-urlencoded")
+              forms.push(Object.fromEntries(new URLSearchParams(await request.text())))
+              return new Response(null, { status: statuses.shift() })
+            },
+          }),
+        ),
+        (server) => Effect.sync(() => server.stop()),
+      )
+      const url = `http://localhost:${server.port}/oauth/revoke`
+      const value = Credential.OAuth.make({
+        type: "oauth",
+        methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+        access: "access",
+        refresh: "refresh-token",
+        expires: 1,
+        metadata: { clientID: "oaiapp_issued" },
+      })
+
+      yield* revoke(value, App.make(), url)
+      const form = { token: "refresh-token", token_type_hint: "refresh_token", client_id: "oaiapp_issued" }
+      expect(forms).toEqual([form])
+
+      expect(yield* Effect.flip(revoke(value, App.make(), url))).toBeInstanceOf(Error)
+      expect(forms).toHaveLength(2)
+    }),
+  )
+
+  it.live("asks to connect again only when OpenAI rejects the refresh token", () =>
+    Effect.gen(function* () {
+      const server = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            port: 0,
+            routes: {
+              "/expired": Response.json({ error: "invalid_grant" }, { status: 400 }),
+              "/invalid": Response.json({ error: "invalid_request" }, { status: 400 }),
+              "/error": new Response("unavailable", { status: 500 }),
+            },
+            fetch: () => new Response(null, { status: 404 }),
+          }),
+        ),
+        (server) => Effect.sync(() => server.stop()),
+      )
+      const baseURL = `http://localhost:${server.port}`
+      const value = Credential.OAuth.make({
+        type: "oauth",
+        methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+        access: "access",
+        refresh: "refresh-token",
+        expires: 1,
+        metadata: { clientID: "oaiapp_issued" },
+      })
+
+      expect(yield* Effect.flip(refresh(value, App.make(), `${baseURL}/expired`))).toHaveProperty(
+        "message",
+        "This ChatGPT sign-in has expired or was revoked. Connect again.",
+      )
+      expect(yield* Effect.flip(refresh(value, App.make(), `${baseURL}/invalid`))).toHaveProperty(
+        "message",
+        "Request failed: 400",
+      )
+      expect(yield* Effect.flip(refresh(value, App.make(), `${baseURL}/error`))).toHaveProperty(
+        "message",
+        "Request failed: 500",
+      )
+    }),
+  )
+
   it.live("verifies a signed ID token against OpenAI's issuer, client ID, expiry, and sign-in nonce", () =>
     Effect.gen(function* () {
       const keys = yield* Effect.promise(() => generateKeyPair("RS256"))
@@ -257,7 +351,11 @@ describe("ChatGPTPlugin", () => {
       yield* addPlugin()
       yield* addLegacyPlugin()
       const integrations = yield* Integration.Service
-      expect((yield* integrations.get(Integration.ID.make("openai")))?.methods.map((method) => method.type === "oauth" && method.id)).toEqual([
+      expect(
+        (yield* integrations.get(Integration.ID.make("openai")))?.methods.map(
+          (method) => method.type === "oauth" && method.id,
+        ),
+      ).toEqual([
         Integration.MethodID.make("chatgpt-token-sharing"),
         Integration.MethodID.make("chatgpt-browser"),
         Integration.MethodID.make("chatgpt-headless"),
@@ -704,7 +802,7 @@ describe("ChatGPTPlugin", () => {
           draft.package = "@opencode/ai/providers/openai"
           draft.settings = { transport: "websocket" }
         })
-        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), (model) => {
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6.2-sol"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
           model.cost = [
             {
@@ -740,6 +838,7 @@ describe("ChatGPTPlugin", () => {
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-4.99"), () => {})
         for (const id of [
+          "gpt-5.5",
           "gpt-5.5-fast",
           "gpt-5.6-luna",
           "gpt-5.6-luna-fast",
@@ -793,7 +892,7 @@ describe("ChatGPTPlugin", () => {
         "thread-id": child.id,
         "x-client-request-id": child.id,
       })
-      const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
+      const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6.2-sol")))
       expect(eligible.package).toBe("@opencode/ai/providers/openai")
       expect(eligible.headers).not.toHaveProperty("x-openai-chatpass-test")
       expect(eligible.cost).toEqual([])
@@ -804,6 +903,8 @@ describe("ChatGPTPlugin", () => {
       expect(gpt56.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).enabled).toBe(true)
       for (const id of [
+        "gpt-5.5",
+        "gpt-5.5-fast",
         "gpt-5.5-pro",
         "gpt-5.4-pro",
         "gpt-5.4",
@@ -815,10 +916,13 @@ describe("ChatGPTPlugin", () => {
         "gpt-4.99",
       ])
         expect(yield* models.get(Provider.ID.openai, Model.ID.make(id))).toBeUndefined()
-      expect((yield* models.available()).filter((model) => model.providerID === Provider.ID.openai).map((model) => model.id).sort()).toEqual(
+      expect(
+        (yield* models.available())
+          .filter((model) => model.providerID === Provider.ID.openai)
+          .map((model) => model.id)
+          .sort(),
+      ).toEqual(
         [
-          "gpt-5.5",
-          "gpt-5.5-fast",
           "gpt-5.6-luna",
           "gpt-5.6-luna-fast",
           "gpt-5.6-sol",
@@ -835,8 +939,43 @@ describe("ChatGPTPlugin", () => {
           "gpt-6.1-sol-fast",
           "gpt-6.1-terra",
           "gpt-6.1-terra-fast",
+          "gpt-6.2-sol",
         ].map((id) => Model.ID.make(id)),
       )
+    }),
+  )
+
+  it.effect("offers the catalog's Sign in with ChatGPT list instead of the built-in one", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, (draft) => {
+          draft.package = "@opencode/ai/providers/openai"
+        })
+        for (const id of ["gpt-5.5", "gpt-6-sol", "gpt-7"])
+          catalog.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+        }),
+      })
+      yield* addPlugin().pipe(
+        Effect.provideService(ModelsDev.Service, subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } })),
+      )
+      expect(
+        (yield* models.available())
+          .filter((model) => model.providerID === Provider.ID.openai)
+          .map((model) => model.id)
+          .sort(),
+      ).toEqual([Model.ID.make("gpt-6-sol"), Model.ID.make("gpt-7")])
     }),
   )
 
@@ -1015,7 +1154,7 @@ describe("ChatGPTPlugin", () => {
         const models = yield* Model.Service
         const credentials = yield* Credential.Service
         const providerID = Provider.ID.openai
-        const baseID = Model.ID.make("gpt-5.5")
+        const baseID = Model.ID.make("gpt-6-sol")
         const modelID = Model.ID.make("gpt-5.6-sol")
         const variantID = Model.ID.make("gpt-6-astra")
         // const kv = yield* KV.Service

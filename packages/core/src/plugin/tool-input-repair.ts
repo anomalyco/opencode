@@ -30,20 +30,19 @@ export const Plugin = define({
       const aliased = new Map<string, string>()
       yield* ctx.tool.hook("execute.before", (event) =>
         Effect.gen(function* () {
-          // The outer Code Mode tool is built per snapshot rather than registered, so it cannot be
-          // looked up here. Its `{ code }` input is trivial; the tools it calls are repaired normally.
+          // The outer Code Mode tool is built per snapshot rather than registered; its `{ code }`
+          // input is trivial, and the tools it calls are repaired normally.
           if (event.tool === "execute") return
-          const tools = yield* ctx.tool.list()
-          const alias = aliases.get(event.tool)
-          const tool =
-            tools.find((tool) => tool.id === event.tool) ??
-            (alias === undefined ? undefined : tools.find((tool) => tool.id === alias))
+          const alias = event.info ? undefined : aliases.get(event.tool)
+          const aliasedTool =
+            alias === undefined ? undefined : (yield* ctx.tool.list()).find((tool) => tool.id === alias)
+          const tool = event.info ?? aliasedTool
           if (!tool) return
-          if (tool.id !== event.tool) {
+          if (aliasedTool) {
             aliased.set(event.id, event.tool)
-            event.tool = tool.id
+            event.tool = aliasedTool.id
           }
-          const schema = definition(tool).inputSchema
+          const schema = definition(tool, event.codemode).inputSchema
           if (schema.type !== "object") return
           event.input = repair(event.input, schema, schema, 0)
         }),

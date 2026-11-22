@@ -13,13 +13,12 @@
   --preview-ink-strong: var(--v2-background-bg-layer-04);
   position: relative;
   display: flex;
-  overflow: hidden;
   /* A fixed size keeps the row from resizing when the chosen layout changes the panel width. */
   width: 120px;
   min-width: 0;
   flex-direction: column;
   box-sizing: border-box;
-  border: 1px solid var(--v2-border-border-base);
+  border: 1px solid var(--v2-border-border-muted);
   border-radius: 8px;
   background-color: var(--v2-background-bg-layer-02);
   cursor: pointer;
@@ -29,19 +28,13 @@
     border-color: var(--v2-border-border-strong);
   }
 
+  &:not([data-checked]) [data-slot="interface-mode-sketch"] {
+    opacity: 0.45;
+  }
+
   &[data-checked] {
     --preview-ink-strong: color-mix(in srgb, var(--v2-background-bg-accent) 70%, transparent);
-    border-color: var(--v2-border-border-focus);
-
-    /* An inset shadow on the card paints under the opaque name row, so the inner ring sits on top instead. */
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: 7px;
-      box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
-      pointer-events: none;
-    }
+    border-color: var(--v2-border-border-strong);
   }
 
   &:has(input:focus-visible) {
@@ -187,10 +180,200 @@
   text-overflow: ellipsis;
   color: var(--v2-text-text-muted);
   background-color: var(--v2-background-bg-base);
+  /* The card doesn't clip, so its check can sit outside the corner. */
+  border-radius: 0 0 7px 7px;
   transition: color 120ms ease;
 
   [data-slot="interface-mode-option"]:hover &,
   [data-checked] & {
     color: var(--v2-text-text-base);
+  }
+}
+
+/* The navigation prototype's Tabs and List cards: a window that shows only its navigation, fading into the name. */
+[data-component="navigation-mode"] {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+[data-slot="navigation-mode-option"] {
+  position: relative;
+  display: flex;
+  width: 120px;
+  flex-direction: column;
+  box-sizing: border-box;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 8px;
+  background-color: var(--v2-background-bg-base);
+  cursor: pointer;
+  transition: border-color 120ms ease;
+
+  &:hover {
+    border-color: var(--v2-border-border-strong);
+  }
+
+  &:not([data-checked]) [data-slot="navigation-mode-sketch"] {
+    opacity: 0.45;
+  }
+
+  &[data-checked] {
+    border-color: var(--v2-border-border-strong);
+  }
+
+  &:has(input:focus-visible) {
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
+  }
+
+  input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  span {
+    display: block;
+    flex-shrink: 0;
+  }
+}
+
+/* Color gives the structure: the window on a lighter layer, its navigation lighter again, the chosen tab or row
+   brightest. Hairlines only finish the edges. */
+[data-slot="navigation-mode-sketch"] {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  height: 56px;
+  margin: 10px 10px 0;
+  border-radius: 5px 5px 0 0;
+  background-color: var(--v2-background-bg-layer-01);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent 95%);
+
+  &[data-mode="tabs"] {
+    flex-direction: column;
+  }
+
+  [data-slot="sketch-tabs"] {
+    display: flex;
+    gap: 3px;
+    padding: 5px;
+    background-color: var(--v2-background-bg-layer-02);
+    box-shadow: inset 0 -0.5px 0 var(--v2-border-border-muted);
+  }
+
+  [data-slot="sketch-tab"] {
+    width: 24px;
+    height: 8px;
+    border-radius: 2.5px;
+    background-color: var(--v2-background-bg-layer-03);
+
+    &[data-active] {
+      background-color: var(--v2-text-text-faint);
+      box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+    }
+  }
+
+  [data-slot="sketch-list"] {
+    display: flex;
+    width: 44px;
+    flex-direction: column;
+    gap: 3px;
+    padding: 5px 4px;
+    background-color: var(--v2-background-bg-layer-02);
+    box-shadow: inset -0.5px 0 0 var(--v2-border-border-muted);
+  }
+
+  /* Even sizes keep the square and the line on the same center line. */
+  [data-slot="sketch-row"] {
+    display: flex;
+    height: 8px;
+    align-items: center;
+    gap: 3px;
+    padding-inline: 2px;
+    border-radius: 2px;
+
+    &::before {
+      content: "";
+      width: 4px;
+      height: 4px;
+      flex-shrink: 0;
+      border-radius: 1px;
+      background-color: var(--v2-background-bg-layer-04);
+    }
+
+    &::after {
+      content: "";
+      height: 2px;
+      flex: 1;
+      border-radius: 1px;
+      background-color: var(--v2-background-bg-layer-04);
+    }
+
+    &[data-active] {
+      background-color: var(--v2-background-bg-layer-04);
+      box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+
+      &::before,
+      &::after {
+        display: none;
+      }
+    }
+  }
+}
+
+[data-slot="navigation-mode-name"] {
+  margin-top: -14px;
+  padding: 0 10px 8px;
+  position: relative;
+  text-align: center;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-compact);
+  color: var(--v2-text-text-muted);
+  transition: color 120ms ease;
+
+  [data-slot="navigation-mode-option"]:hover &,
+  [data-checked] & {
+    color: var(--v2-text-text-base);
+  }
+}
+
+/* Selection is a 2px neutral border and a check outside the corner, so it never reads as the blue keyboard ring. The
+   second pixel is an overlay, because an inset shadow would sit under the name's background. */
+:is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"])[data-checked]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-strong);
+  pointer-events: none;
+}
+
+:is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]) > [data-slot="mode-option-check"] {
+  position: absolute;
+  z-index: 1;
+  top: -7px;
+  inset-inline-end: -7px;
+  display: flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--v2-icon-icon-muted);
+  color: var(--v2-background-bg-base);
+  box-shadow: 0 0 0 2px var(--v2-background-bg-layer-01);
+}
+
+@media (forced-colors: active) {
+  :is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]) > [data-slot="mode-option-check"] {
+    border: 1px solid CanvasText;
   }
 }

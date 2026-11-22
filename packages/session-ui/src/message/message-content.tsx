@@ -313,7 +313,8 @@ export function CurrentUserMessageDisplay(props: {
   })
 
   // The menu names the day relatively: Today and Yesterday, then the date this year, then the date with its year.
-  const sent = createMemo(() => {
+  // A plain function, not a memo, so each menu open compares against the current day.
+  const sent = () => {
     const created = new Date(props.message.time.created)
     const now = new Date()
     const midnight = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
@@ -335,7 +336,7 @@ export function CurrentUserMessageDisplay(props: {
       }).format(created)
 
     return new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(created)
-  })
+  }
 
   // A waiting steer reads agent · model · Pending; mobile shows the agent and model in the composer instead.
   const metaLabels = createMemo(() => (mobile() ? [] : [...agentItems(), ...modelItems(data, props.model)]))
@@ -1138,6 +1139,7 @@ export function AssistantTextContent(props: {
   text: string
   message: SessionMessageAssistant
   showCopy: boolean
+  keepCopyVisible?: boolean
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
   /** The finished turn's web searches and fetches, shown as a chip in its footer. */
@@ -1232,7 +1234,11 @@ export function AssistantTextContent(props: {
 
   function copyFooter() {
     return (
-      <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+      <div
+        data-slot="text-part-copy-wrapper"
+        data-keep-copy-visible={props.keepCopyVisible ? "" : undefined}
+        data-interrupted={interrupted() ? "" : undefined}
+      >
         <MessageActionButton
           copied={copy.copied()}
           size="small"

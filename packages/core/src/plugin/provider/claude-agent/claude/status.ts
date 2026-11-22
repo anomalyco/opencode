@@ -9,7 +9,12 @@ export type State =
   | { readonly type: "checking" }
   | { readonly type: "missing" }
   | { readonly type: "failed"; readonly message: string }
-  | { readonly type: "ready"; readonly probe: ClaudeProbe.Result; readonly fromChat?: boolean }
+  | {
+      readonly type: "ready"
+      readonly probe: ClaudeProbe.Result
+      readonly configDir?: string
+      readonly fromChat?: boolean
+    }
 
 export interface Interface {
   readonly state: SubscriptionRef.SubscriptionRef<State>
@@ -21,6 +26,7 @@ export interface Interface {
 export const make = Effect.fn("ClaudeStatus.make")(function* (
   io: ClaudeIO.Interface,
   connection: () => Effect.Effect<Record<string, string>>,
+  configDirs: () => Effect.Effect<readonly string[]> = () => Effect.succeed([]),
 ) {
   const state = yield* SubscriptionRef.make<State>({ type: "checking" })
   const lock = yield* Semaphore.make(1)
@@ -29,9 +35,9 @@ export const make = Effect.fn("ClaudeStatus.make")(function* (
   const refresh = Effect.fn("ClaudeStatus.refresh")(function* () {
     const executable = io.which()
     if (!executable) return yield* SubscriptionRef.set(state, { type: "missing" })
-    const env = yield* connection()
+    const env = ClaudeQueryOptions.withoutDefaultFolder(yield* connection(), io)
     const next = yield* ClaudeProbe.run(ClaudeQueryOptions.base({ executable, io, connection: env })).pipe(
-      Effect.map((probe): State => ({ type: "ready", probe })),
+      Effect.map((probe): State => ({ type: "ready", probe, configDir: env.CLAUDE_CONFIG_DIR })),
       Effect.catch((error) =>
         Effect.logWarning("Claude Code login check failed", { cause: error.cause }).pipe(
           Effect.as<State>({
@@ -44,7 +50,17 @@ export const make = Effect.fn("ClaudeStatus.make")(function* (
     yield* SubscriptionRef.set(state, next)
   }, lock.withPermit)
 
-  const report = (next: State) => SubscriptionRef.set(state, next)
+  // A model with its own configDir runs another account, which must not replace the provider's login, prices and models.
+  // Every folder in the provider's list is its own, so those follow the folder a chat last started on.
+  const report = Effect.fn("ClaudeStatus.report")(function* (next: State) {
+    if (next.type === "ready") {
+      const own = [yield* connection(), ...(yield* configDirs()).map((dir) => ({ CLAUDE_CONFIG_DIR: dir }))].map(
+        (env) => ClaudeQueryOptions.withoutDefaultFolder(env, io).CLAUDE_CONFIG_DIR,
+      )
+      if (!own.some((dir) => dir === next.configDir)) return
+    }
+    yield* SubscriptionRef.set(state, next)
+  })
 
   return { state, refresh, report } satisfies Interface
 })

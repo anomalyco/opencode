@@ -46,6 +46,7 @@ import {
   nextManualGroupNumber,
   pruneEmptyManualGroups,
   reconcileManualAssignments,
+  rememberAutoGroups,
   TAB_GROUP_MODES,
   TabGroupsStateSchema,
   type ComputedTabGroup,
@@ -210,6 +211,19 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
         },
       }),
     )
+
+    createEffect(() => {
+      if (!tabs.ready() || !stateReady() || !settings.general.tabGroups() || local.query.trim()) return
+      const remembered = rememberAutoGroups(groups(), state)
+
+      if (!remembered) return
+      setState(
+        produce((draft) => {
+          draft.groupOrder = remembered.groupOrder
+          draft.colors = remembered.colors
+        }),
+      )
+    })
 
     // Navigating into a session inside a collapsed group auto-expands that group so the active tab is visible.
     createEffect(
@@ -377,6 +391,28 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       indices.forEach((idx) => tabs.closeTab(idx))
 
       if (group.kind === "manual" && group.manualId) ungroupManual(group.manualId)
+    }
+
+    // Closing the current tab selects the next visible row, as browsers do. Its neighbour in tab order can sit in another
+    // group, and selecting a tab in a collapsed group expands it.
+    const closeTab = (tab: Tab) => {
+      const key = tabKey(tab)
+      const current = props.currentTab()
+      const visible = groups()?.flatMap((group) => group.visibleTabs) ?? []
+      const index = visible.findIndex((item) => tabKey(item) === key)
+
+      const keep =
+        current && tabKey(current) === key && index !== -1 ? (visible[index + 1] ?? visible[index - 1]) : undefined
+
+      if (keep) {
+        tabs.closeTabs([key], keep)
+
+        return
+      }
+
+      const storeIndex = tabs.store.findIndex((item) => tabKey(item) === key)
+
+      if (storeIndex !== -1) tabs.closeTab(storeIndex)
     }
 
     const groupByKey = createMemo(() => new Map((groups() ?? []).map((group) => [group.key, group])))
@@ -885,6 +921,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       assignTabToManualGroup,
       ungroupManual,
       closeGroup,
+      closeTab,
     }
   },
 })
@@ -943,7 +980,7 @@ function GroupEditorMenuItems(props: { group: ComputedTabGroup }) {
                   aria-label={language.t(`tabs.groups.color.${color}`)}
                   title={language.t(`tabs.groups.color.${color}`)}
                   data-group-color={color}
-                  class="flex size-5 items-center justify-center rounded-full transition-transform hover:scale-110 focus-visible:outline-none"
+                  class="flex size-5 items-center justify-center rounded-full transition-transform hover:scale-110"
                   classList={{
                     "ring-2 ring-v2-text-text-base ring-offset-1 ring-offset-v2-background-bg-base": selected(),
                   }}
@@ -1006,7 +1043,7 @@ export function TabGroupHeader(props: { group: ComputedTabGroup }) {
         type="button"
         aria-expanded={!props.group.collapsed}
         onClick={() => tabGroups.toggleCollapsed(props.group.key)}
-        class="flex h-full min-w-0 flex-1 items-center gap-1.5 text-start focus-visible:outline-none"
+        class="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-[6px] text-start focus-visible:-outline-offset-2"
       >
         <span data-tab-group-chip data-group-color={props.group.color} class="max-w-full min-w-0">
           <span class="min-w-0 truncate" dir="auto">
@@ -1114,7 +1151,7 @@ export function TabGroupingMenu() {
         aria-label={language.t("tabs.groups.menu")}
         title={language.t("tabs.groups.menu")}
         data-action="tab-groups-menu"
-        class="my-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:outline-none [app-region:no-drag]"
+        class="my-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:-outline-offset-2 [app-region:no-drag]"
       >
         <Icon name="sliders" />
       </Menu.Trigger>

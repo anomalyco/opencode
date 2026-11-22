@@ -11,12 +11,13 @@ import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX 
 import { getRequestEvent } from "solid-js/web"
 import { breadcrumbList, FormatLinks, JsonLd, LastModified } from "../../component/agent-meta"
 import { ChartDataTable } from "../../component/chart-data-table"
+import { DEFAULT_PERIOD, PeriodToggle } from "../../component/period-toggle"
 import { LocaleLinks } from "../../component/locale-links"
 import { NotFoundMeta } from "../../component/not-found-meta"
 import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
 import { dismissChartTooltipOnExit } from "../../lib/chart-tooltip"
-import { fromFirstUsage } from "../../lib/format"
+import { formatPeriodDate, fromFirstUsage } from "../../lib/format"
 import { providerIconId } from "../../lib/provider-icon"
 import { localizedUrl } from "../../lib/language"
 import { loadLabPage, type LabPageData } from "../../lib/page-data"
@@ -339,13 +340,14 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
   const activeLineClipId = createUniqueId()
   const activeLineMaskId = createUniqueId()
   const [activeIndex, setActiveIndex] = createSignal<number>()
+  const [period, setPeriod] = createSignal(DEFAULT_PERIOD)
   let chartRef: HTMLDivElement | undefined
   dismissChartTooltipOnExit({
     chart: () => chartRef,
     open: () => activeIndex() !== undefined,
     dismiss: () => setActiveIndex(undefined),
   })
-  const usage = createMemo(() => props.data?.usage ?? [])
+  const usage = createMemo(() => (period() === "weekly" ? props.data?.weeklyUsage : props.data?.usage) ?? [])
   const tokenMax = createMemo(() => Math.max(0, ...usage().map((item) => item.tokens)) || 1)
   const userMax = createMemo(() => Math.max(0, ...usage().map((item) => item.users)) || 1)
   const linePoints = createMemo(() =>
@@ -355,7 +357,8 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
       y: usageLineY(point.users, userMax()),
     })),
   )
-  const userLinePath = createMemo(() => usageLinePath(linePoints()))
+  // The line stops at the last complete bucket; the one still filling in would plunge.
+  const userLinePath = createMemo(() => usageLinePath(linePoints().slice(0, -1)))
   const activeLineBreak = createMemo(() => {
     const index = activeIndex()
     if (index === undefined) return undefined
@@ -391,7 +394,12 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
 
   return (
     <section id="usage" data-section="model-panel">
-      <SectionHeading href="#usage" title={i18n.t("nav.usage")} description={i18n.t("lab.usageDescription")} />
+      <SectionHeading
+        href="#usage"
+        title={i18n.t("nav.usage")}
+        description={i18n.t("lab.usageDescription")}
+        action={<PeriodToggle value={period()} onChange={setPeriod} label={i18n.t("nav.usage")} />}
+      />
       <Show
         when={usage().some((item) => item.tokens > 0)}
         fallback={<LabEmptyState title={i18n.t("lab.noUsageTitle")} description={i18n.t("lab.noUsageDescription")} />}
@@ -400,9 +408,10 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
           ref={chartRef}
           data-component="model-usage-chart"
           data-variant="lab-usage"
+          data-period={period()}
           data-dense-labels={isLabUsageDense(usage().length) ? "true" : undefined}
           role="img"
-          aria-label={`${props.lab.name} daily token volume and unique active user chart`}
+          aria-label={i18n.t("lab.dailyTokenChart", { lab: props.lab.name })}
           style={{ "--model-usage-count": usage().length } as JSX.CSSProperties}
           onPointerLeave={(event) => {
             if (event.pointerType === "touch") return
@@ -508,10 +517,7 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
                       } as JSX.CSSProperties
                     }
                   >
-                    <strong>{formatUsageTooltipDate(active.point.date)}</strong>
-                    <span>
-                      {formatTokens(active.point.tokens)} {i18n.t("lab.tokens")}
-                    </span>
+                    <strong>{formatPeriodDate(active.point.start, active.point.end)}</strong>
                     <div data-slot="tooltip-divider" />
                     <p>
                       <span data-slot="tooltip-label">
@@ -928,30 +934,6 @@ function formatUsers(value: number) {
   if (value >= 1_000_000) return `${trimNumber(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`
   if (value >= 1_000) return `${trimNumber(value / 1_000, value >= 10_000 ? 0 : 1)}K`
   return new Intl.NumberFormat("en").format(Math.round(value))
-}
-
-function formatUsageTooltipDate(value: string) {
-  const match = /^([A-Z]{3})\s+(\d{1,2})$/.exec(value)
-  if (!match) return value
-  return `${monthName(match[1])} ${Number(match[2])} ${new Date().getFullYear()}`
-}
-
-function monthName(value: string) {
-  const names: Record<string, string> = {
-    JAN: "Jan",
-    FEB: "Feb",
-    MAR: "Mar",
-    APR: "Apr",
-    MAY: "May",
-    JUN: "Jun",
-    JUL: "Jul",
-    AUG: "Aug",
-    SEP: "Sep",
-    OCT: "Oct",
-    NOV: "Nov",
-    DEC: "Dec",
-  }
-  return names[value] ?? value
 }
 
 function trimNumber(value: number, digits: number) {

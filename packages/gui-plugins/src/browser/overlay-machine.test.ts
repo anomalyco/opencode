@@ -173,9 +173,14 @@ describe("comments", () => {
         element,
         live: true,
         comment: "Primary colour",
+        send: false,
       },
       { type: "clear-highlight", sessionKey: "Alpha", tabID: alpha },
     ])
+    expect(
+      transitionOverlay(commenting(), { type: "overlay.submitted", value: "Ship it", context: context(), send: true })
+        .effects[0],
+    ).toMatchObject({ type: "attach-comment", comment: "Ship it", send: true })
   })
 
   test("keep the draft through a reload but drop the ref", () => {

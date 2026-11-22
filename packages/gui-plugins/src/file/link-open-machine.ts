@@ -10,7 +10,7 @@ export type LinkResolution =
   /** Several workspace files end with the link's path. */
   | { readonly kind: "picker"; readonly query: string }
   /** An HTML file the browser pane can load. */
-  | { readonly kind: "browser"; readonly url: string }
+  | { readonly kind: "browser"; readonly path: string }
   | { readonly kind: "file"; readonly path: string; readonly selection?: LineRange }
 
 /**
@@ -49,6 +49,7 @@ export type LinkOpenEvent =
   /** A known workspace file (the palette, a file comment) opens at once. `path` is empty when it resolves to none. */
   | {
       readonly type: "link.exact"
+      readonly origin?: string
       readonly href: string
       readonly path: string
       readonly background: boolean
@@ -99,6 +100,7 @@ export type LinkOpenEffect =
   /** Ends the attempt's controller and timeout. */
   | { readonly type: "abort"; readonly attempt: number }
   | { readonly type: "open-exact"; readonly path: string; readonly background: boolean }
+  | { readonly type: "open-source"; readonly path: string; readonly background: boolean }
   | {
       readonly type: "open-file"
       readonly path: string
@@ -106,7 +108,7 @@ export type LinkOpenEffect =
       readonly background: boolean
     }
   | { readonly type: "open-picker"; readonly query: string; readonly background: boolean }
-  | { readonly type: "open-browser"; readonly url: string }
+  | { readonly type: "open-browser"; readonly path: string }
   | { readonly type: "toast-failed"; readonly path: string; readonly error?: string }
   | { readonly type: "toast-timeout"; readonly path: string }
 
@@ -133,7 +135,7 @@ export function transitionLinkOpen(state: LinkOpenState, event: LinkOpenEvent): 
       effects: [
         ...abortActive(state),
         event.path
-          ? { type: "open-exact", path: event.path, background: event.background }
+          ? { type: event.origin === "file" ? "open-source" : "open-exact", path: event.path, background: event.background }
           : { type: "toast-failed", path: event.href },
       ],
     }
@@ -207,7 +209,7 @@ function resolved(state: Extract<LinkOpenState, { status: "resolving" }>, resolu
   if (resolution.kind === "picker")
     return finish(state, [{ type: "open-picker", query: resolution.query, background: state.background }])
 
-  if (resolution.kind === "browser") return finish(state, [{ type: "open-browser", url: resolution.url }])
+  if (resolution.kind === "browser") return finish(state, [{ type: "open-browser", path: resolution.path }])
 
   return {
     state: {
