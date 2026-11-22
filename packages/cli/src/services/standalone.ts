@@ -14,6 +14,9 @@ type Options = {
 
 const startupDirectory = process.cwd()
 
+// The readiness error embeds only the tail of what the child wrote.
+const STDERR_TAIL = 8192
+
 function command(password: string, options: Options) {
   const [executable, ...args] = options.command ?? [...selfCommand(), "serve"]
   if (!executable) throw new Error("Failed to resolve standalone server command")
@@ -26,7 +29,8 @@ function command(password: string, options: Options) {
     // The server treats EOF on this pipe as the end of its ownership lease.
     // The OS closes it even when the TUI is killed before Effect finalizers run.
     stdin: "pipe",
-    stderr: process.env.OPENCODE_PRINT_LOGS === "1" ? "inherit" : "ignore",
+    // Always piped so the launcher can show the tail when the child dies before readiness.
+    stderr: "pipe",
     killSignal: "SIGTERM",
     forceKillAfter: "3 seconds",
   })
@@ -38,12 +42,46 @@ const makeEndpoint = Effect.fn("cli.standalone.endpoint")(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const proc = yield* spawner.spawn(command(password, options))
     const readyLine = yield* Deferred.make<string, Error>()
+    // Drains finish on their own fibers, so the readiness failure waits on this to be sure the tail is complete.
+    const stderrDone = yield* Deferred.make<void>()
+    // Keep the bounded tail of stderr for the readiness failure below; a chatty child cannot grow it.
+    let stderrTail = ""
+    yield* proc.stderr.pipe(
+      Stream.decodeText(),
+      Stream.tap((chunk) =>
+        Effect.sync(() => {
+          stderrTail = (stderrTail + chunk).slice(-STDERR_TAIL)
+          if (process.env.OPENCODE_PRINT_LOGS === "1") process.stderr.write(chunk)
+        }),
+      ),
+      Stream.runDrain,
+      Effect.ignore,
+      Effect.ensuring(Deferred.succeed(stderrDone, undefined)),
+      Effect.forkScoped,
+    )
     // Keep draining stdout after readiness so later server writes cannot hit EPIPE.
     yield* proc.stdout.pipe(
       Stream.decodeText(),
       Stream.splitLines,
       Stream.runForEach((line) => Deferred.succeed(readyLine, line)),
-      Effect.ensuring(Deferred.fail(readyLine, new Error("Standalone server exited before reporting readiness"))),
+      // stdout EOF means the child is gone; the stderr drain may still be pulling its last chunks, so
+      // wait for it before deciding the tail is complete. The wait stays in the interruptible region:
+      // an ensuring cannot await it on scope close, where finalizers run sequentially and the stderr
+      // drain's own finalizer has not run yet.
+      Effect.andThen(Deferred.await(stderrDone)),
+      Effect.ensuring(
+        Effect.gen(function* () {
+          if (yield* Deferred.isDone(readyLine)) return
+          yield* Deferred.fail(
+            readyLine,
+            stderrTail.trim() === ""
+              ? new Error("Standalone server exited before reporting readiness")
+              : new Error(
+                  `Standalone server exited before reporting readiness. Last stderr output:\n${stderrTail.trimEnd()}`,
+                ),
+          )
+        }),
+      ),
       Effect.forkScoped,
     )
     const output = yield* Deferred.await(readyLine)
