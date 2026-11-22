@@ -200,9 +200,9 @@ export default function SessionFileList(props: {
                       </svg>
                       <span data-slot="file-tree-v2-label" class="flex flex-1 shrink-0 items-center whitespace-nowrap">
                         <Show when={directory()}>
-                          {(value) => <span class="text-12-medium text-text-muted shrink-0">{value()}</span>}
+                          {(value) => <span class="text-12-medium text-v2-text-text-muted shrink-0">{value()}</span>}
                         </Show>
-                        <span class="text-12-medium text-text-base shrink-0">{filename()}</span>
+                        <span class="text-12-medium text-v2-text-text-base shrink-0">{filename()}</span>
                       </span>
                       <Show when={kind()} fallback={<span data-slot="file-tree-v2-end" />}>
                         {(value) => (
