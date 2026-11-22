@@ -1,4 +1,4 @@
-//! The store contents as plain data. [`crate::Data`] owns them behind a lock and runs their requests.
+//! The store contents as plain data. [`crate::Data`] owns them on its thread and runs their requests.
 
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;

@@ -15,7 +15,7 @@ const DEVIATIONS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../parity/devi
 const SESSIONS: [&str; 2] = ["ses_a", "ses_b"];
 const DIRECTORY: &str = "/project";
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn every_event_folds_as_in_typescript() {
     let fixture: Value = serde_json::from_str(FIXTURE).unwrap();
     let allowed: BTreeMap<(String, String), String> = fixture["allow"]
@@ -89,7 +89,7 @@ async fn fold(routes: &Value, event: V2Event, loaded: bool) -> Value {
     );
     data.on_error(|_| {});
     if loaded {
-        data.apply(&[common::event(json!({ "id": "evt_connected", "type": "server.connected", "data": {} }))]);
+        data.apply(vec![common::event(json!({ "id": "evt_connected", "type": "server.connected", "data": {} }))]);
         quiet(&data, &requests).await;
         let session = SessionID("ses_a".into());
         // The reads start at once and run together, as the TS ones do.
@@ -109,7 +109,7 @@ async fn fold(routes: &Value, event: V2Event, loaded: bool) -> Value {
     }
     let before = requests.len();
     let mcp = matches!(event, V2Event::McpStatusChanged(_));
-    data.apply(&[event]);
+    data.apply(vec![event]);
     quiet(&data, &requests).await;
     // `mcp.status.changed` reads once its burst has been quiet for `SETTLE`.
     if mcp {

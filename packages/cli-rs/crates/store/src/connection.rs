@@ -1,69 +1,35 @@
-//! Applies event batches and refreshes reads invalidated by events or reconnection.
+//! Sends a connection's event batches, with its status, to the store's owner.
 
-use std::sync::atomic::Ordering;
+use std::collections::VecDeque;
 
 use futures_util::StreamExt;
 use futures_util::stream::BoxStream;
 use opencode_api::client::Client;
-use opencode_api::events::{self, Activity, Connection, Source, Status};
+use opencode_api::events::{self, Activity, Connection, Event, Source, Status};
 use opencode_api::generated::*;
 use opencode_api::transport::BoxFuture;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
 use crate::core::Delta;
-use crate::driver::Data;
-use crate::state::State;
+use crate::driver::{Data, Mail, Remote};
 
-impl Data {
-    /// Applies one batch of events under one flush.
-    pub fn apply(&self, events: &[V2Event]) {
-        let mut effects = Vec::new();
-        let kept = {
-            let mut state = self.lock();
-            state.batch += 1;
-            for event in events {
-                state.apply(event, &mut effects);
-            }
-            state.batch -= 1;
-            // The batch's deltas, the hot path, are kept only while someone takes them, and all before the revision
-            // that has them, so a sync it wakes takes them all.
-            let kept = self.keep_deltas(events.iter().filter(|event| Delta::of(event).is_some()));
-            self.flush(&mut state);
-            kept
-        };
-        self.run(effects);
-        // Each other event of a type someone listens to: of its kind, and of its name for a named kind.
-        for event in events.iter().filter(|event| Delta::of(event).is_none()) {
-            let kind = event.kind();
-            if self.inner.listened[kind as usize].load(std::sync::atomic::Ordering::SeqCst) > 0
-                && (!kind.named() || opencode_util::lock(&self.inner.named).contains_key(event.tag()))
-            {
-                // No receiver is not an error: views subscribe when they need to.
-                let _ = self.inner.signals.send(std::sync::Arc::new(event.clone()));
-            }
-        }
-        // A delta of a session whose messages are not loaded changes nothing, and is kept all the same.
-        if kept {
-            self.wake_deltas();
-        }
-    }
+/// The most events [`run`] holds while the store's mailbox is full. Past that it stops reading the connection, whose
+/// own queue then fills, and the connection drops the stream. The batches queued then are dropped, not held: the
+/// offline transition after them invalidates every read, and the next stream's `server.connected` reads it all again.
+pub const HELD: usize = 65_536;
 
-    /// Marks the connection up or down. Going down invalidates every cached read; the UI decides
-    /// what to read again.
-    pub fn set_online(&self, online: bool) {
-        let was = self.inner.online.swap(online, Ordering::SeqCst);
-        if was && !online {
-            self.write(State::invalidate_all);
-        }
-    }
-}
-
-/// Drives the store from a connection: applies its batches and tracks whether it is connected.
-/// Returns when the batch receiver closes.
-pub async fn run(data: Data, mut state: watch::Receiver<events::State>, mut batches: mpsc::Receiver<Vec<V2Event>>) {
+/// Drives the store from a connection: sends its batches to the store's owner, each with whether it is connected.
+/// Returns when the batch receiver closes or the store is gone. While the owner does not drain (the UI thread runs a
+/// foreground program), the store's mailbox fills; this then keeps reading, and holds the batches with each part's
+/// deltas merged, so the stream stays up and no event is lost, up to [`HELD`] events.
+pub async fn run(remote: Remote, mut state: watch::Receiver<events::State>, mut batches: mpsc::Receiver<Vec<V2Event>>) {
     let mut watching = true;
+    let mut held = Held::default();
     loop {
+        if !held.send(&remote) {
+            return;
+        }
         tokio::select! {
             biased;
             changed = state.changed(), if watching => {
@@ -75,17 +41,93 @@ pub async fn run(data: Data, mut state: watch::Receiver<events::State>, mut batc
                 // Apply the final queued batch while still online so disconnect invalidation covers it.
                 if !online {
                     while let Ok(batch) = batches.try_recv() {
-                        data.apply(&batch);
+                        if held.events < HELD {
+                            held.push(Mail::Batch(batch, None));
+                        }
                     }
                 }
-                data.set_online(online);
+                held.push(Mail::Online(online));
             }
-            batch = batches.recv() => {
-                let Some(batch) = batch else { return };
-                data.set_online(state.borrow().status == Status::Connected);
-                data.apply(&batch);
+            room = remote.room(), if !held.mail.is_empty() => {
+                if !room {
+                    return;
+                }
+            }
+            batch = batches.recv(), if held.events < HELD => {
+                let Some(batch) = batch else {
+                    for mail in held.mail {
+                        if !remote.send(mail).await {
+                            return;
+                        }
+                    }
+                    return;
+                };
+                let online = state.borrow().status == Status::Connected;
+                held.push(Mail::Batch(batch, Some(online)));
             }
         }
+    }
+}
+
+/// The mail [`run`] has not sent yet, in order, and how many events it holds.
+#[derive(Default)]
+struct Held {
+    mail: VecDeque<Mail>,
+    events: usize,
+}
+
+impl Held {
+    /// Holds `mail`. A batch joins a held batch before it when the connection status between them is the same, and
+    /// each of its deltas merges into its part's delta in the run of deltas the held batch ends with: appends to
+    /// different parts commute, and an event between them keeps its place. A status the hold ends with already adds
+    /// nothing, and down, up and down again is down once, so a connection that keeps dropping adds nothing either.
+    fn push(&mut self, mail: Mail) {
+        if matches!(mail, Mail::Online(false)) && self.ends_down_up() {
+            self.mail.pop_back();
+            return;
+        }
+        let (tail, batch) = match (self.mail.back_mut(), mail) {
+            (Some(Mail::Batch(tail, before)), Mail::Batch(batch, online)) if online.is_none() || online == *before => {
+                (tail, batch)
+            }
+            (Some(Mail::Online(last)), Mail::Online(online)) if *last == online => return,
+            (_, mail) => {
+                self.events += mail.events();
+                self.mail.push_back(mail);
+                return;
+            }
+        };
+        for event in batch {
+            // Text deltas match by ordinal, as the connection's own merge does: a message has one open text part.
+            let merged = Delta::of(&event).is_some()
+                && tail.iter_mut().rev().take_while(|last| Delta::of(last).is_some()).any(|last| last.merge(&event));
+            if !merged {
+                tail.push(event);
+                self.events += 1;
+            }
+        }
+    }
+
+    /// The hold ends with the connection going down, then up.
+    fn ends_down_up(&self) -> bool {
+        let mut tail = self.mail.iter().rev();
+        matches!((tail.next(), tail.next()), (Some(Mail::Online(true)), Some(Mail::Online(false))))
+    }
+
+    /// Sends what fits in the mailbox now; false once the store is gone.
+    fn send(&mut self, remote: &Remote) -> bool {
+        while let Some(mail) = self.mail.pop_front() {
+            let events = mail.events();
+            match remote.try_send(mail) {
+                Ok(()) => self.events -= events,
+                Err(Some(mail)) => {
+                    self.mail.push_front(mail);
+                    return true;
+                }
+                Err(None) => return false,
+            }
+        }
+        true
     }
 }
 
@@ -124,6 +166,6 @@ pub fn connect(data: &Data, options: events::Options) -> (Connection, JoinHandle
     let _runtime = data.runtime().enter();
     data.set_online(false);
     let (connection, batches) = events::connect(Events { client: data.client().clone() }, options);
-    let task = data.runtime().spawn(run(data.clone(), connection.watch(), batches));
+    let task = data.runtime().spawn(run(data.remote(), connection.watch(), batches));
     (connection, task)
 }

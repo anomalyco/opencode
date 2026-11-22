@@ -134,7 +134,7 @@ impl Nav {
     fn deliver(&self, seq: u64, text: &str) {
         let ids = json!({ "sessionID": "ses_n", "inboxID": format!("msg_new{seq}") });
         let item = json!({ "item": { "type": "user", "delivery": "steer", "payload": { "text": text } } });
-        self.tui.data.apply(&[
+        self.tui.data.apply(vec![
             support::event("ses_n", "session.inbox.enqueued", seq, support::merge(ids.clone(), item)),
             support::event("ses_n", "session.inbox.delivered", seq + 1, ids),
         ]);

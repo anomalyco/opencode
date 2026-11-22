@@ -62,7 +62,7 @@ fn name<T: serde::Serialize>(items: Option<&std::sync::Arc<[T]>>) -> Option<Stri
     value["name"].as_str().map(str::to_owned)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn updates_authoritative_cached_project_metadata_from_live_events() {
     let project = |id: &str, canonical: &str, name: Option<&str>, updated: u64| {
         let mut value = json!({
@@ -121,7 +121,7 @@ async fn updates_authoritative_cached_project_metadata_from_live_events() {
 /// Most recently active first. Projects that sort equal keep TS's `Object.values` order: array-index IDs ascending,
 /// then the rest in the order Solid's `reconcile` leaves them, where a re-read keeps a kept project in place and adds a
 /// new one last.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn projects_list_by_activity_then_in_first_read_order() {
     let reads = Arc::new(Mutex::new(vec![
         vec![("p", 1), ("c", 1), ("x", 1), ("a", 1), ("m", 1)],
@@ -153,7 +153,7 @@ async fn projects_list_by_activity_then_in_first_read_order() {
     assert_eq!(order(), ["2", "10", "4294967294", "local", "02", "4294967295", "+1"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn adopts_cached_directory_project_sessions_when_their_repository_is_resolved() {
     let data = data(
         handler(|req: Req| async move {
@@ -218,7 +218,7 @@ async fn adopts_cached_directory_project_sessions_when_their_repository_is_resol
     assert_eq!(get("ses_uncached"), adopted(Some("app")));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn refreshes_global_credential_events_across_every_loaded_location() {
     let requests = Requests::default();
     let log = requests.clone();
@@ -321,17 +321,17 @@ async fn refreshes_only_the_named_location(resource: &str) {
     assert_eq!(names(&other), (before.clone(), before));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn refreshes_provider_values_only_at_the_location_named_by_provider_updated() {
     refreshes_only_the_named_location("provider").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn refreshes_model_values_only_at_the_location_named_by_model_updated() {
     refreshes_only_the_named_location("model").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn ignores_catalog_updates_for_unloaded_locations_while_refreshing_loaded_locations() {
     let requests = Requests::default();
     let version = Arc::new(Mutex::new("v1".to_owned()));
@@ -402,7 +402,7 @@ async fn ignores_catalog_updates_for_unloaded_locations_while_refreshing_loaded_
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn revalidates_model_discovery_when_an_update_overtakes_an_in_flight_model_list() {
     let started = Slot::<()>::default();
     let release = Slot::<()>::default();
@@ -437,7 +437,7 @@ async fn revalidates_model_discovery_when_an_update_overtakes_an_in_flight_model
     assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_first_connection_reads_the_catalogs_read_before_it_again() {
     // The route reads start before the event stream, and the server does not replay what it sent before the
     // subscription: a model list answered before the first connection (empty until its providers settle) would
@@ -475,7 +475,7 @@ async fn a_first_connection_reads_the_catalogs_read_before_it_again() {
     assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn refreshes_references_for_the_location_an_update_names() {
     let requests = Requests::default();
     let log = requests.clone();
@@ -495,7 +495,7 @@ async fn refreshes_references_for_the_location_an_update_names() {
     assert_eq!(requests.get(), [pair("/api/reference", "/other")]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn reloads_vcs_info_when_the_branch_changes() {
     // A location's first read can land before its VCS provider loads, and so has no branches.
     let responses = Arc::new(Mutex::new(vec![
@@ -527,7 +527,7 @@ async fn reloads_vcs_info_when_the_branch_changes() {
     assert_eq!(vcs(), Some(json!({ "provider": "git", "branch": { "current": "feature", "default": "dev" } })));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn preserves_sibling_catalogs_through_location_preload_branch_shell_and_websearch_updates() {
     let requests = Log::<String>::default();
     let branch = Arc::new(Mutex::new("main".to_owned()));
@@ -638,7 +638,7 @@ async fn preserves_sibling_catalogs_through_location_preload_branch_shell_and_we
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn keeps_global_forms_per_location_and_settles_them_with_the_location_header() {
     let requests = Log::<(String, Option<String>)>::default();
     let log = requests.clone();
@@ -694,7 +694,7 @@ async fn keeps_global_forms_per_location_and_settles_them_with_the_location_head
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_optimistic_session_takes_the_project_of_its_location() {
     let data = data(
         handler(|req: Req| async move {

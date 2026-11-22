@@ -55,20 +55,20 @@ fn event(kind: &str, seq: u64, data: Value) -> V2Event {
 /// Starts a reply in `ses_a` and streams `count` text deltas into it, a frame after each.
 fn stream(harness: &Harness, count: u64) {
     let id = "msg_live";
-    harness.tui.data.apply(&[event(
+    harness.tui.data.apply(vec![event(
         "session.step.started",
         1,
         json!({ "sessionID": "ses_a", "assistantMessageID": id, "agent": "build",
                 "model": { "providerID": "p", "id": "m" }, "started": 1 }),
     )]);
     let started = json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0 });
-    harness.tui.data.apply(&[event("session.text.started", 2, started)]);
+    harness.tui.data.apply(vec![event("session.text.started", 2, started)]);
     settle(harness);
     let (before, adopted) = (reconcile::work(), surface::adopted());
     for index in 0..count {
         let delta =
             json!({ "sessionID": "ses_a", "assistantMessageID": id, "ordinal": 0, "delta": format!("w{index} ") });
-        harness.tui.data.apply(&[event("session.text.delta", 3 + index, delta)]);
+        harness.tui.data.apply(vec![event("session.text.delta", 3 + index, delta)]);
         settle(harness);
     }
     let work = reconcile::work().since(before);
@@ -222,15 +222,15 @@ fn a_todo_list_written_in_a_streaming_reply_shows_in_the_sidebar() {
     let harness = session(&[], Vec::new());
     let started = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "agent": "build",
                           "model": { "providerID": "p", "id": "m" }, "started": 1 });
-    harness.tui.data.apply(&[event("session.step.started", 1, started)]);
+    harness.tui.data.apply(vec![event("session.step.started", 1, started)]);
     settle(&harness);
     let ids = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "id": "call_t" });
     let with = |extra: Value| support::merge(ids.clone(), extra);
     let todos = json!({ "todos": [{ "content": "Write the parser", "status": "in_progress" }] });
-    harness.tui.data.apply(&[event("session.tool.input.started", 2, with(json!({ "name": "todowrite" })))]);
-    harness.tui.data.apply(&[event("session.tool.called", 3, with(json!({ "input": todos, "executed": true })))]);
+    harness.tui.data.apply(vec![event("session.tool.input.started", 2, with(json!({ "name": "todowrite" })))]);
+    harness.tui.data.apply(vec![event("session.tool.called", 3, with(json!({ "input": todos, "executed": true })))]);
     let output = json!({ "content": [{ "type": "text", "text": "ok" }], "executed": true });
-    harness.tui.data.apply(&[event("session.tool.success", 4, with(output))]);
+    harness.tui.data.apply(vec![event("session.tool.success", 4, with(output))]);
     let sidebar =
         || harness.app.text().lines().any(|line| line.chars().skip(120).collect::<String>().contains("Write"));
     harness.wait("the list in the sidebar", sidebar);
@@ -440,18 +440,18 @@ fn a_view_hears_what_changed_since_the_last() {
     let probe = abi::Plugin { id: "test.probe", setup: probe }.into();
     let harness = session(&[], vec![probe]);
     heard();
-    harness.tui.data.apply(&[event(
+    harness.tui.data.apply(vec![event(
         "session.step.started",
         1,
         json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "agent": "build",
                 "model": { "providerID": "p", "id": "m" }, "started": 1 }),
     )]);
     let started = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "ordinal": 0 });
-    harness.tui.data.apply(&[event("session.text.started", 2, started)]);
+    harness.tui.data.apply(vec![event("session.text.started", 2, started)]);
     settle(&harness);
     heard();
     let delta = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "ordinal": 0, "delta": "x" });
-    harness.tui.data.apply(&[event("session.text.delta", 3, delta)]);
+    harness.tui.data.apply(vec![event("session.text.delta", 3, delta)]);
     settle(&harness);
     let deltas: Vec<String> = heard().into_iter().filter(|line| line.contains("msg_live")).collect();
     assert_eq!(deltas.len(), 1, "{deltas:?}");
@@ -484,9 +484,9 @@ fn a_change_of_the_hosts_state_is_local_once() {
     let harness = session(&[], probes);
     let started = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "agent": "build",
                           "model": { "providerID": "p", "id": "m" }, "started": 1 });
-    harness.tui.data.apply(&[event("session.step.started", 1, started)]);
+    harness.tui.data.apply(vec![event("session.step.started", 1, started)]);
     let text = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "ordinal": 0 });
-    harness.tui.data.apply(&[event("session.text.started", 2, text)]);
+    harness.tui.data.apply(vec![event("session.text.started", 2, text)]);
     settle(&harness);
     heard();
     harness.tui.local.set_variant(Some("high"));
@@ -494,7 +494,7 @@ fn a_change_of_the_hosts_state_is_local_once() {
     let changed = heard();
     assert!(changed.len() >= 2 && changed.iter().all(|line| line.ends_with(" local")), "{changed:?}");
     let delta = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "ordinal": 0, "delta": "x" });
-    harness.tui.data.apply(&[event("session.text.delta", 3, delta)]);
+    harness.tui.data.apply(vec![event("session.text.delta", 3, delta)]);
     settle(&harness);
     let deltas = heard();
     assert!(deltas.len() == 2 && deltas.iter().all(|line| line.ends_with("shell false ses_a/msg_live")), "{deltas:?}");

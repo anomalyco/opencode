@@ -58,7 +58,7 @@ fn root() -> SessionID {
     SessionID("ses_root".into())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn lists_a_trees_running_jobs_and_follows_job_events() {
     let (data, lists) = setup();
     update(&data, running("job_stale"));
@@ -78,7 +78,7 @@ async fn lists_a_trees_running_jobs_and_follows_job_events() {
 
 /// A subagent job belongs to the session that started it, that session's ancestors, and the child it runs, also while
 /// the child's own info, and so its parent, is not loaded.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_subagent_job_is_owned_up_its_tree_and_by_the_child_it_runs() {
     let (data, lists) = setup();
     let child = json!({
@@ -106,7 +106,7 @@ async fn a_subagent_job_is_owned_up_its_tree_and_by_the_child_it_runs() {
     assert_eq!(owned("ses_grandchild"), ["job_grandchild", "job_subagent"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn applies_job_events_that_arrive_while_the_list_is_in_flight() {
     let (data, lists) = setup();
     let synced = data.job_sync(&root());
@@ -118,7 +118,7 @@ async fn applies_job_events_that_arrive_while_the_list_is_in_flight() {
     assert_eq!(ids(&data), ["job_started"]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn relists_on_reconnect_and_forgets_a_deleted_tree() {
     let (data, lists) = setup();
     let synced = data.job_sync(&root());

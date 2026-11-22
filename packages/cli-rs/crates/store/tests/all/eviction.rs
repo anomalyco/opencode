@@ -76,7 +76,7 @@ fn messages(data: &Data, session: &str) -> Vec<String> {
     data.read(|state| state.messages(&id(session)).iter().map(|item| item.id().to_owned()).collect())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn evicts_a_whole_family_while_preserving_metadata_and_attention() {
     let data = fixture(None);
     for session in ["ses_parent", "ses_child", "ses_grandchild", "ses_other"] {
@@ -128,7 +128,7 @@ async fn evicts_a_whole_family_while_preserving_metadata_and_attention() {
     assert!(messages(&data, "ses_child").is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn evicting_an_in_flight_read_leaves_the_next_sync_invalidated() {
     let requested = Slot::<()>::default();
     let release = Slot::<()>::default();
@@ -203,12 +203,12 @@ async fn preserves_optimistic(mode: &'static str) {
     assert_eq!(data.read(|state| state.pending(&id("ses_child")).len()), expected);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn eviction_preserves_optimistic_submissions_until_echo() {
     preserves_optimistic("echo").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn eviction_preserves_optimistic_submissions_until_reject() {
     preserves_optimistic("reject").await;
 }

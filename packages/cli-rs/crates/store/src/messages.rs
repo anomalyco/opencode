@@ -304,6 +304,12 @@ impl State {
         self.sessions.get(session).is_some_and(|session| session.cursor.is_some())
     }
 
+    /// The newest page of `session` is read, and no invalidation came after.
+    pub fn messages_read(&self, session: &SessionID) -> bool {
+        let read = crate::reads::Read::Session(session.as_str(), crate::reads::SessionRead::Messages);
+        matches!(self.read_state(read), Some(crate::reads::ReadState::Done))
+    }
+
     pub fn messages_loading(&self, session: &SessionID) -> bool {
         self.sessions.get(session).is_some_and(|session| session.loading)
     }

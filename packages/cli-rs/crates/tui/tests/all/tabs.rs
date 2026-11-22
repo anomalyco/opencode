@@ -308,10 +308,9 @@ fn a_reload_keeps_the_writes_held_behind_the_lock() {
     h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
 }
 
-// A burst that overflows the store's signal channel while the UI is busy skips the `session.deleted` in it; the
-// skip resyncs as a reconnect does, and the store saw the deletion, so the tab still closes.
+// A `session.deleted` in a burst of signals the store passes on while the UI is busy still closes its tab.
 #[test]
-fn a_deletion_lost_in_a_signal_overflow_still_closes_its_tab() {
+fn a_deletion_in_a_burst_of_signals_still_closes_its_tab() {
     let h = mount(100, json!({ "animations": false }));
     h.open("ses_b");
     h.tui.navigate(support::session_route("ses_a"));
@@ -334,7 +333,7 @@ fn a_deletion_lost_in_a_signal_overflow_still_closes_its_tab() {
     // The UI thread is busy: nothing drains its queue until it is full.
     let proxy = h.app.proxy();
     while proxy.post(|_| {}) != Err(opentui::app::ProxyError::Full) {}
-    h.tui.data.apply(&events);
+    h.tui.data.apply(events);
     h.wait_tabs(&["ses_a"], Some("ses_a"));
 }
 
@@ -351,7 +350,7 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
         "durable": { "aggregateID": "ses_a", "seq": 1, "version": 1 },
         "data": { "sessionID": "ses_a" },
     });
-    h.tui.data.apply(&[serde_json::from_value(event).unwrap()]);
+    h.tui.data.apply(vec![serde_json::from_value(event).unwrap()]);
     h.app.render();
     h.app.advance(std::time::Duration::from_millis(200));
     assert!(h.app.needs_frame(), "a busy tab pulses");
@@ -402,7 +401,7 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
         // The app's other timers, which wake `App::run`'s loop without a frame.
         let rest = h.app.idle(std::time::Duration::from_secs(8));
         h.app.advance(std::time::Duration::from_millis(30));
-        h.tui.data.apply(&[execution("started", 1)]);
+        h.tui.data.apply(vec![execution("started", 1)]);
         if compact && busy > 0 {
             // The change lands before the spinner first paints, so only that paint can ask for the next step.
             assert!(h.app.wait_until(WAIT, || h.tui.tabs.status(&h.tui, "ses_a").busy), "{name}: not busy");
@@ -449,7 +448,7 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
             }
         }
         h.app.resize(60, 30);
-        h.tui.data.apply(&[execution("succeeded", 2)]);
+        h.tui.data.apply(vec![execution("succeeded", 2)]);
         frames(&h);
         assert!(frames(&h).len() <= 1, "{name}: idle again");
         let again = h.app.idle(std::time::Duration::from_secs(8));

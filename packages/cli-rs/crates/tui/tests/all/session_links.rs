@@ -84,7 +84,7 @@ fn rename(h: &Harness, session: &str, title: &str) {
         "durable": { "aggregateID": session, "seq": 1, "version": 1 },
         "data": { "sessionID": session, "title": title },
     });
-    h.tui.data.apply(&[serde_json::from_value::<V2Event>(event).unwrap()]);
+    h.tui.data.apply(vec![serde_json::from_value::<V2Event>(event).unwrap()]);
 }
 
 fn opened(h: &Harness, session: &str) -> bool {

@@ -104,7 +104,7 @@ pub fn data(handler: Handler, options: Options) -> Data {
         "" => "/project".to_owned(),
         directory => directory.to_owned(),
     };
-    Data::new(client, Options { directory, ..options })
+    Data::local(client, Options { directory, ..options })
 }
 
 /// The one consumer of a test store's changes.
@@ -125,7 +125,7 @@ pub fn event(value: Value) -> V2Event {
 
 /// Applies one event as its own batch.
 pub fn emit(data: &Data, value: Value) {
-    data.apply(&[event(value)]);
+    data.apply(vec![event(value)]);
 }
 
 /// Yields to spawned tasks until `check` holds (2 s at most).

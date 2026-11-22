@@ -189,7 +189,7 @@ impl Log {
     }
 }
 
-/// [`Dirty`] as the views ask about it, by ID. Each answer reads the store briefly, so no lock is held between them.
+/// [`Dirty`] as the views ask about it, by ID. Each answer borrows the store briefly, so views may write between them.
 #[derive(Clone, Copy)]
 pub struct Changes<'a> {
     dirty: &'a Dirty,

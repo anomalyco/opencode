@@ -124,9 +124,9 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
                 state.running.get(state.selected).map(|job| job.id().to_owned())
             };
             let Some(job) = job else { return };
-            let data = tui.data.clone();
+            let cancel = tui.data.job_cancel(&job);
             tui.app.runtime().spawn(async move {
-                if let Err(error) = data.job_cancel(&job).await {
+                if let Err(error) = cancel.await {
                     log::warn!("failed to cancel the script: {error}");
                 }
             });

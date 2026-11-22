@@ -538,9 +538,8 @@ impl Transcript {
     /// mounts the head; a failure reaches it as the error's message alone (`toast.error`).
     pub fn load_all(&self, tui: &Tui, done: impl FnOnce(&Tui, Result<(), String>) + 'static) {
         let Some(session) = self.session() else { return };
-        let data = tui.data.clone();
         tui.app.spawn(
-            async move { data.message_load_more(&session, LoadMore { all: true, ..LoadMore::default() }).await },
+            tui.data.message_load_more(&session, LoadMore { all: true, ..LoadMore::default() }),
             bind!(self.0.this, |inner, _, result| {
                 let Some(tui) = inner.tui.upgrade() else { return };
                 done(&tui, result.map_err(|error| error.tui_message()));
@@ -1147,9 +1146,8 @@ impl Inner {
         let mut model = self.model.borrow_mut();
         (model.boundary, model.loading) = (Some(count), true);
         drop(model);
-        let data = tui.data.clone();
         tui.app.spawn(
-            async move { data.message_load_more(&session, LoadMore::default()).await },
+            tui.data.message_load_more(&session, LoadMore::default()),
             bind!(self.this, |inner, _, result| {
                 inner.model.borrow_mut().loading = false;
                 if let Err(error) = result {
@@ -1191,9 +1189,8 @@ impl Inner {
         (model.loading, model.start) = (true, Start::Top);
         drop(model);
         self.hint.visible(true);
-        let data = tui.data.clone();
         tui.app.spawn(
-            async move { data.message_load_more(&session, LoadMore::default()).await },
+            tui.data.message_load_more(&session, LoadMore::default()),
             bind!(self.this, |inner, _, result| {
                 inner.model.borrow_mut().loading = false;
                 inner.hint.visible(false);

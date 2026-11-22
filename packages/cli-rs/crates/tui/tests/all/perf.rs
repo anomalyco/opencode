@@ -87,14 +87,16 @@ fn stream() {
     wait_tail(&h, SHORT, 20);
     settle(&h.app);
     let events = streamed();
+    let count = events.len() as u64;
+    let batches: Vec<Vec<V2Event>> = events.chunks(BATCH).map(<[_]>::to_vec).collect();
     let probe = Probe::start();
-    for batch in events.chunks(BATCH) {
+    for batch in batches {
         tui.data.apply(batch);
         h.app.wait_until(WAIT, || tui.synced());
         frame(&h.app);
     }
     settle(&h.app);
-    probe.finish("stream", events.len() as u64);
+    probe.finish("stream", count);
     let screen = h.app.text();
     assert!(screen.contains("done streaming"), "the reply never finished:\n{screen}");
 }
@@ -201,16 +203,13 @@ fn model_picker() {
 #[test]
 #[ignore = "performance scenario; run with `bun run perf`"]
 fn store_open() {
-    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build_local(Default::default()).unwrap();
     let server = Arc::new(Server::new().long());
     let client = Client::with_transport("http://opencode.local", server).unwrap();
     let id = SessionID(LONG.into());
     let probe = Probe::start();
-    let data = Data::with_runtime(
-        client,
-        StoreOptions { directory: support::DIRECTORY.into(), ..StoreOptions::default() },
-        runtime.handle().clone(),
-    );
+    let options = StoreOptions { directory: support::DIRECTORY.into(), ..StoreOptions::default() };
+    let data = runtime.block_on(async { Data::local(client, options) });
     runtime.block_on(async {
         data.message_sync(&id).await.unwrap();
         while data.read(|state| state.has_more_messages(&id)) {
@@ -224,23 +223,22 @@ fn store_open() {
 #[test]
 #[ignore = "performance scenario; run with `bun run perf`"]
 fn store_stream() {
-    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build_local(Default::default()).unwrap();
     let client = Client::with_transport("http://opencode.local", Arc::new(Server::new().short())).unwrap();
     let id = SessionID(SHORT.into());
-    let data = Data::with_runtime(
-        client,
-        StoreOptions { directory: support::DIRECTORY.into(), ..StoreOptions::default() },
-        runtime.handle().clone(),
-    );
+    let options = StoreOptions { directory: support::DIRECTORY.into(), ..StoreOptions::default() };
+    let data = runtime.block_on(async { Data::local(client, options) });
     runtime.block_on(async { data.message_sync(&id).await.unwrap() });
     let deltas = data.listen_deltas();
     let events = streamed();
+    let count = events.len() as u64;
+    let batches: Vec<Vec<V2Event>> = events.chunks(BATCH).map(<[_]>::to_vec).collect();
     let probe = Probe::start();
-    for batch in events.chunks(BATCH) {
+    for batch in batches {
         data.apply(batch);
-        drop(deltas.take());
+        deltas.take(|_| ());
     }
-    probe.finish("store_stream", events.len() as u64);
+    probe.finish("store_stream", count);
     let text = data.read(|state| format!("{:?}", state.messages(&id).last()));
     assert!(text.contains("done streaming"), "{text}");
 }

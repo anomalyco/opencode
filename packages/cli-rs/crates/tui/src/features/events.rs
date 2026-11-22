@@ -1,11 +1,8 @@
-//! Dispatch store signals to the TUI, then subscribers in registration order. A missed broadcast sends `Lagged` so
-//! consumers can resync.
+//! Dispatch store signals to the TUI, then subscribers in registration order.
 
 use std::sync::Arc;
 
-use opencode_api::generated::{
-    EventKind, McpServerStatus, SessionArchivedData, SessionDeleted, V2Event, V2EventServerConnected,
-};
+use opencode_api::generated::{EventKind, McpServerStatus, V2Event};
 use opencode_api::kinds::EventKinds;
 
 use crate::prelude::*;
@@ -21,16 +18,15 @@ pub struct Events {
     deltas: DeltaSubscribers,
     /// The deltas are handed over before the next frame.
     deltas_due: Cell<bool>,
+    /// The signals a sync took, kept for their buffer.
+    signals: Cell<Vec<V2Event>>,
     next: Cell<u64>,
     /// The route the usage alerts last looked at.
     alerted_route: RefCell<Option<Rc<Route>>>,
 }
 
-#[derive(Clone)]
-pub(crate) struct Signal(pub Arc<V2Event>);
-
-#[derive(Clone)]
-pub(crate) struct Lagged;
+/// One signal posted to the UI, as a test sends it.
+struct Signal(Arc<V2Event>);
 
 /// Declares [`Handled`], the events [`handle`] and the handlers it calls act on, and [`HANDLED`], their kinds, which
 /// the store passes on. The handlers match on [`Handled`], so acting on a type means adding it here.
@@ -71,19 +67,7 @@ handled! {
 
 pub fn install(tui: &Tui) {
     std::mem::forget(tui.data.listen(HANDLED));
-    tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
-        // Flush the previous signal's plugin actions before the next signal can navigate.
-        opencode_plugin::flush();
-        if let Some(event) = Handled::of(event) {
-            handle(&tui, &event);
-        }
-        let subscribers: Vec<_> =
-            tui.events.subscribers.borrow().iter().map(|(_, subscriber)| subscriber.clone()).collect();
-        for subscriber in subscribers {
-            subscriber(&tui, event);
-        }
-    }));
-    tui.app.on_message(bind!(tui, |tui, _, _: &Lagged| resync(&tui)));
+    tui.app.on_message(bind!(tui, |tui, _, Signal(event)| signal(&tui, event)));
 }
 
 #[doc(hidden)]
@@ -93,34 +77,30 @@ pub mod testing {
     pub fn signal(tui: &Tui, event: V2Event) {
         let _ = tui.app.proxy().send(Signal(Arc::new(event)));
     }
-
-    /// Posts that the UI skipped signals, as the event pump does when it falls behind the store.
-    pub fn lagged(tui: &Tui) {
-        let _ = tui.app.proxy().send(Lagged);
-    }
 }
 
-/// After skipped signals, as after a reconnect: reads the location again and syncs every view. The store applied
-/// the skipped events, so the open tabs and the open session it saw deleted close as `session.deleted` closes them.
-fn resync(tui: &Tui) {
-    crate::features::location::reconnected(tui);
-    let mut open = tui.tabs.open_ids(tui);
-    if let Route::Session { id } = &*tui.route() {
-        open.push(id.0.clone());
+/// Hands the events the store passed on since the last sync to the TUI and the subscribers, in order.
+pub(crate) fn signals(tui: &Tui) {
+    // Taken out of its cell, so a sync a handler runs takes its own.
+    let mut events = tui.events.signals.take();
+    tui.data.take_signals(&mut events);
+    for event in &events {
+        signal(tui, event);
     }
-    let deleted: Vec<SessionID> =
-        tui.data.read(|state| open.into_iter().map(SessionID).filter(|id| state.is_missing(id)).collect());
-    for id in deleted {
-        let event = SessionDeleted { data: SessionArchivedData { session_id: id }, ..SessionDeleted::default() };
-        handle(tui, &Handled::SessionDeleted(&event));
+    events.clear();
+    tui.events.signals.set(events);
+}
+
+fn signal(tui: &Tui, event: &V2Event) {
+    // Flush the previous signal's plugin actions before the next signal can navigate.
+    opencode_plugin::flush();
+    if let Some(event) = Handled::of(event) {
+        handle(tui, &event);
     }
-    tui.resync();
-    // Notify subscribers to resync after a missed broadcast, as on reconnect.
-    let event = V2Event::ServerConnected(V2EventServerConnected::default());
     let subscribers: Vec<_> =
         tui.events.subscribers.borrow().iter().map(|(_, subscriber)| subscriber.clone()).collect();
     for subscriber in subscribers {
-        subscriber(tui, &event);
+        subscriber(tui, event);
     }
 }
 
@@ -168,10 +148,11 @@ pub fn deltas(tui: &Tui) {
             if !tui.events.deltas.borrow().iter().any(|(other, ..)| *other == id) {
                 continue;
             }
-            let events = listening.take();
-            if !events.is_empty() {
-                subscriber(&events);
-            }
+            listening.take(|events| {
+                if !events.is_empty() {
+                    subscriber(events);
+                }
+            });
         }
     }));
     tui.app.request_redraw();

@@ -336,7 +336,7 @@ impl World {
         self.seq.set(seq);
         let ids = json!({ "sessionID": SESSION, "assistantMessageID": "msg_2" });
         let tui = &self.harness.tui;
-        tui.data.apply(&[support::event(SESSION, kind, seq, support::merge(ids, data))]);
+        tui.data.apply(vec![support::event(SESSION, kind, seq, support::merge(ids, data))]);
         assert!(self.harness.app.wait_until(support::WAIT, || tui.synced()), "the views never took the event");
     }
 
@@ -1205,7 +1205,7 @@ impl World {
         self.seq.set(seq);
         let event = json!({ "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind, "data": data });
         let tui = &self.harness.tui;
-        tui.data.apply(&[serde_json::from_value::<V2Event>(event).unwrap()]);
+        tui.data.apply(vec![serde_json::from_value::<V2Event>(event).unwrap()]);
         assert!(self.harness.app.wait_until(support::WAIT, || tui.synced()), "the views never took the event");
     }
 
