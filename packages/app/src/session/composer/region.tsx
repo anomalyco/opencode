@@ -41,7 +41,7 @@ import { createSessionComposerController, type SessionComposerController } from 
 import { SessionQueuePanel } from "./queue-panel"
 import { SessionGoLimitTray } from "./go-limit-tray"
 import { SessionFreeLimitPanel, useFreeLimit } from "./free-limit-panel"
-import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
+import { reuseActivityItems, SessionActivityChips, type SessionActivityItem } from "./activity-chips"
 import { SessionComposerLane, useComposerLaneAlignment } from "./composer-lane"
 import { SessionTodoPill } from "./todo-pill"
 import { sessionTodos, todoFinished } from "./todos"
@@ -462,26 +462,35 @@ export function ActiveSessionComposerRegion(props: {
     },
   )
 
-  const subagents = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background
-      .tasks()
-      .filter((task) => task.type === "subagent")
-      .map((task) => ({
-        ...task,
-        agent: task.agent ?? data.session.get(task.sessionID)?.agent,
-        key: task.id,
-        target: task.id,
-      })),
+  const subagents = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background
+        .tasks()
+        .filter((task) => task.type === "subagent")
+        .map((task) => ({
+          ...task,
+          agent: task.agent ?? data.session.get(task.sessionID)?.agent,
+          key: task.id,
+          target: task.id,
+        })),
+    ),
   )
 
-  const shells = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background
-      .tasks()
-      .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
+  const shells = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background
+        .tasks()
+        .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
+    ),
   )
 
-  const scripts = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background.scripts().map((task) => ({ ...task, key: task.id, target: task.id })),
+  const scripts = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background.scripts().map((task) => ({ ...task, key: task.id, target: task.id })),
+    ),
   )
 
   const alignment = useComposerLaneAlignment()

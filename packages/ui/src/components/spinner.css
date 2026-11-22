@@ -6,6 +6,7 @@
   width: var(--spinner-width, 18px);
   height: var(--spinner-height, auto);
   aspect-ratio: 1;
+  overflow: clip;
 }
 
 [data-component="spinner"] {
@@ -13,22 +14,30 @@
   flex-shrink: 0;
 }
 
-/* Each dot rests at its frozen pose, so reduced motion only has to stop the animation. */
-[data-slot="spinner-dots"] > svg {
-  position: absolute;
-  inset: 0;
+[data-slot="spinner-dots"] > [data-slot="spinner-strip"] {
+  display: block;
   width: 100%;
-  height: 100%;
-  overflow: visible;
-  opacity: var(--still);
+  background: currentColor;
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  forced-color-adjust: none;
 }
 
-/* syncSpinPhase marks spinners out of view; `!important` beats the inline animation each dot carries. */
-[data-slot="spinner-dots"][data-offscreen] > svg {
-  animation-play-state: paused !important;
+/* syncSpinPhase marks spinners out of view so they pause cleanly without inline animation overrides. */
+[data-slot="spinner-dots"][data-offscreen] > [data-slot="spinner-strip"] {
+  animation-play-state: paused;
 }
 
-:root[data-motion="reduce"] [data-slot="spinner-dots"] > svg {
-  /* Beats the inline animation each dot carries. */
-  animation: none !important;
+:root[data-motion="reduce"] [data-slot="spinner-dots"] > [data-slot="spinner-strip"] {
+  animation: none;
+  transform: var(--spinner-still);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="spinner-dots"] > [data-slot="spinner-strip"] {
+    animation: none;
+    transform: var(--spinner-still);
+  }
 }
