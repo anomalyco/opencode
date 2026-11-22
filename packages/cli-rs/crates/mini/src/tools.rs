@@ -42,7 +42,8 @@ struct Frame<'a> {
     kind: ToolKind,
     input: ToolInput<'a>,
     meta: Map<String, Value>,
-    status: String,
+    /// `None` for no part; streaming counts as running.
+    status: Option<ToolState>,
     error: String,
     output: String,
     start: Option<f64>,
@@ -59,7 +60,7 @@ fn frame<'a>(part: &'a SessionMessageAssistantTool, directory: Option<&str>) -> 
             raw: state.input.clone(),
             name,
             kind,
-            status: "streaming".into(),
+            status: Some(ToolState::Running),
             start: Some(part.time.created),
             ..Frame::default()
         };
@@ -71,7 +72,7 @@ fn frame<'a>(part: &'a SessionMessageAssistantTool, directory: Option<&str>) -> 
         kind,
         input: ToolInput::of(&part.state),
         meta: normalize_metadata(kind, tool_display_metadata(&part.state)),
-        status: part.state.tag().to_owned(),
+        status: state_of(&part.state),
         error: match &part.state {
             State::Error(state) => state.error.message.clone(),
             _ => String::new(),
@@ -90,10 +91,6 @@ fn tool_frame<'a>(commit: &'a Commit, raw: &str) -> Frame<'a> {
         "" => "tool",
         name => name,
     });
-    let status = match commit.tool_state {
-        Some(state) => state_name(state).to_owned(),
-        None => current.status.clone(),
-    };
     let error = commit.tool_error.clone().unwrap_or(current.error.clone()).trim().to_owned();
     Frame {
         directory: commit.directory.clone(),
@@ -101,17 +98,19 @@ fn tool_frame<'a>(commit: &'a Commit, raw: &str) -> Frame<'a> {
         name: canonical_tool_name(name).to_owned(),
         kind: ToolKind::of(name),
         output: if commit.part.is_some() { current.output.clone() } else { raw.to_owned() },
-        status,
+        status: commit.tool_state.or(current.status),
         error,
         ..current
     }
 }
 
-fn state_name(state: ToolState) -> &'static str {
-    match state {
-        ToolState::Running => "running",
-        ToolState::Completed => "completed",
-        ToolState::Error => "error",
+/// A part's state by its tag: streaming, and any state this client does not know, counts as running.
+fn state_of(state: &State) -> Option<ToolState> {
+    match state.tag() {
+        "" => None,
+        "completed" => Some(ToolState::Completed),
+        "error" => Some(ToolState::Error),
+        _ => Some(ToolState::Running),
     }
 }
 
@@ -235,10 +234,10 @@ fn tool_error(frame: &Frame) -> String {
 }
 
 fn fallback_final(frame: &Frame) -> String {
-    if frame.status == "error" {
+    if frame.status == Some(ToolState::Error) {
         return fail(frame);
     }
-    if !frame.status.is_empty() && frame.status != "completed" {
+    if frame.status == Some(ToolState::Running) {
         return frame.raw.trim().to_owned();
     }
     match frame.span() {
@@ -290,7 +289,7 @@ fn shell_progress(frame: &Frame) -> String {
 }
 
 fn shell_final(frame: &Frame) -> String {
-    if frame.status == "error" {
+    if frame.status == Some(ToolState::Error) {
         return fail(frame);
     }
     let time = frame.span();
@@ -326,7 +325,7 @@ fn patch_title(file: &Map<String, Value>, frame: &Frame) -> String {
 }
 
 fn patch_final(frame: &Frame) -> String {
-    if frame.status == "error" {
+    if frame.status == Some(ToolState::Error) {
         return fail(frame);
     }
     let files = frame.files();
@@ -357,7 +356,7 @@ fn agent_kind(frame: &Frame, fallback: &str) -> String {
 }
 
 fn task_final(frame: &Frame) -> String {
-    if frame.status == "error" {
+    if frame.status == Some(ToolState::Error) {
         return fail(frame);
     }
     let kind = agent_kind(frame, "general");
@@ -554,7 +553,7 @@ pub fn entry_body(commit: &Commit, raw: &str, options: BodyOptions) -> Option<Bo
         }
         // A launch completes while its child keeps running: its output is instructions, so the card shows.
         if commit.phase == Phase::Final
-            && frame.status == "completed"
+            && frame.status == Some(ToolState::Completed)
             && frame.meta.get("status").and_then(Value::as_str) != Some("running")
             && let Some(result) = task_result(&frame.output)
         {
@@ -565,13 +564,13 @@ pub fn entry_body(commit: &Commit, raw: &str, options: BodyOptions) -> Option<Bo
         return None;
     }
     if commit.phase == Phase::Final {
-        if frame.status == "error" {
+        if frame.status == Some(ToolState::Error) {
             return text_body(scroll(Phase::Final, &frame));
         }
         if !view.final_ {
             return None;
         }
-        if !frame.status.is_empty() && frame.status != "completed" {
+        if frame.status == Some(ToolState::Running) {
             return text_body(frame.raw.trim().to_owned());
         }
         if structured_final(commit) {
@@ -621,11 +620,11 @@ pub fn mono_body(body: Body) -> Body {
 
 /// `toolStructuredFinal`: whether a final tool commit draws a structured body, which groups on its own.
 pub fn structured_final(commit: &Commit) -> bool {
-    let state = commit.tool_state.map(state_name).or_else(|| commit.part.as_ref().map(|part| part.state.tag()));
+    let state = commit.tool_state.or_else(|| commit.part.as_ref().and_then(|part| state_of(&part.state)));
     let name = commit.tool.as_deref().or(commit.part.as_ref().map(|part| part.name.as_str()));
     commit.kind == EntryKind::Tool
         && commit.phase == Phase::Final
-        && state == Some("completed")
+        && state == Some(ToolState::Completed)
         && name.and_then(|name| rule(ToolKind::of(name))).is_some_and(|rule| rule.snap)
 }
 

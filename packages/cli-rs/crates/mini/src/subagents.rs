@@ -14,7 +14,7 @@ use opencode_ui::tool_info::{ToolKind, titlecase, tool_display_content, tool_out
 
 use crate::footers::permission::Request;
 use crate::prelude::*;
-use crate::replay::{Fragment, Fragments, session_of, user_image_commits};
+use crate::replay::{Fragments, PartRef, reasoning_commit, session_of, text_commit, user_image_commits};
 use crate::scrollback::{EntryKind, Phase, Source};
 
 /// `CHILD_MESSAGE_LIMIT`: the messages a child's transcript lists.
@@ -247,17 +247,17 @@ impl Child {
             for item in &assistant.content {
                 match item {
                     ContentItem::Text(part) => {
-                        let fragment = Fragment::new(id, "text", text_ordinal);
+                        let fragment = PartRef::Text(text_ordinal);
                         text_ordinal += 1;
-                        self.fragments.project(&fragment, &part.text, true);
-                        self.set_frame(fragment_key(&fragment), text_commit(&fragment, part.text.clone()));
+                        self.fragments.project(id, fragment, &part.text, true);
+                        self.set_frame(fragment_key(id, fragment), text_commit(id, fragment, part.text.clone()));
                     }
                     ContentItem::Reasoning(part) => {
-                        let fragment = Fragment::new(id, "reasoning", reasoning_ordinal);
+                        let fragment = PartRef::Reasoning(reasoning_ordinal);
                         reasoning_ordinal += 1;
-                        self.fragments.project(&fragment, &part.text, true);
+                        self.fragments.project(id, fragment, &part.text, true);
                         if thinking {
-                            self.set_frame(fragment_key(&fragment), reasoning_commit(&fragment, &part.text));
+                            self.set_frame(fragment_key(id, fragment), thinking_commit(id, fragment, &part.text));
                         }
                     }
                     ContentItem::Tool(tool) => self.tool(tool.clone(), id, directory),
@@ -838,37 +838,38 @@ impl Tracker {
             }
             V2Event::SessionTextDelta(delta) => {
                 let data = &delta.data;
-                let fragment = Fragment::new(data.assistant_message_id.as_str(), "text", data.ordinal as u64);
-                if child.fragments.delta(&fragment, &data.delta).is_some() {
-                    let text = child.fragments.value(&fragment).unwrap_or_default().to_owned();
-                    child.set_frame(fragment_key(&fragment), text_commit(&fragment, text));
+                let (message, fragment) = (data.assistant_message_id.as_str(), PartRef::Text(data.ordinal as u32));
+                if child.fragments.delta(message, fragment, &data.delta).is_some() {
+                    let text = child.fragments.value(message, fragment).unwrap_or_default().to_owned();
+                    child.set_frame(fragment_key(message, fragment), text_commit(message, fragment, text));
                     child.touch(delta.created);
                     detail = true;
                 }
             }
             V2Event::SessionTextEnded(ended) => {
                 let data = &ended.data;
-                let fragment = Fragment::new(data.assistant_message_id.as_str(), "text", data.ordinal as u64);
-                child.fragments.end(&fragment, &data.text);
-                child.set_frame(fragment_key(&fragment), text_commit(&fragment, data.text.clone()));
+                let (message, fragment) = (data.assistant_message_id.as_str(), PartRef::Text(data.ordinal as u32));
+                child.fragments.end(message, fragment, &data.text);
+                child.set_frame(fragment_key(message, fragment), text_commit(message, fragment, data.text.clone()));
                 child.touch(ended.created);
                 detail = true;
             }
             V2Event::SessionReasoningDelta(delta) => {
                 let data = &delta.data;
-                let fragment = Fragment::new(data.assistant_message_id.as_str(), "reasoning", data.ordinal as u64);
-                if child.fragments.delta(&fragment, &data.delta).is_some() && thinking {
-                    let text = child.fragments.value(&fragment).unwrap_or_default().to_owned();
-                    child.set_frame(fragment_key(&fragment), reasoning_commit(&fragment, &text));
+                let (message, fragment) = (data.assistant_message_id.as_str(), PartRef::Reasoning(data.ordinal as u32));
+                if child.fragments.delta(message, fragment, &data.delta).is_some() && thinking {
+                    let text = child.fragments.value(message, fragment).unwrap_or_default();
+                    let commit = thinking_commit(message, fragment, text);
+                    child.set_frame(fragment_key(message, fragment), commit);
                     detail = true;
                 }
             }
             V2Event::SessionReasoningEnded(ended) => {
                 let data = &ended.data;
-                let fragment = Fragment::new(data.assistant_message_id.as_str(), "reasoning", data.ordinal as u64);
-                child.fragments.end(&fragment, &data.text);
+                let (message, fragment) = (data.assistant_message_id.as_str(), PartRef::Reasoning(data.ordinal as u32));
+                child.fragments.end(message, fragment, &data.text);
                 if thinking {
-                    child.set_frame(fragment_key(&fragment), reasoning_commit(&fragment, &data.text));
+                    child.set_frame(fragment_key(message, fragment), thinking_commit(message, fragment, &data.text));
                     detail = true;
                 }
             }
@@ -1093,24 +1094,16 @@ fn source_key(message: &str, id: &str) -> String {
     format!("{message}\u{0}{id}")
 }
 
-fn fragment_key(fragment: &Fragment) -> String {
-    source_key(&fragment.message_id, &fragment.part_id)
+fn fragment_key(message: &str, part: PartRef) -> String {
+    format!("{message}\u{0}{part}")
 }
 
 fn prompt(text: &str, files: Option<&[PromptFileAttachment]>) -> Prompt {
     Prompt { text: text.to_owned(), files: files.unwrap_or_default().to_vec() }
 }
 
-fn text_commit(fragment: &Fragment, text: String) -> Commit {
-    Commit::new(EntryKind::Assistant, Source::Assistant, Phase::Progress, text)
-        .message(&fragment.message_id)
-        .part_id(&fragment.part_id)
-}
-
-fn reasoning_commit(fragment: &Fragment, text: &str) -> Commit {
-    Commit::new(EntryKind::Reasoning, Source::Reasoning, Phase::Progress, format!("Thinking: {text}"))
-        .message(&fragment.message_id)
-        .part_id(&fragment.part_id)
+fn thinking_commit(message: &str, part: PartRef, text: &str) -> Commit {
+    reasoning_commit(message, part, format!("Thinking: {text}"))
 }
 
 fn to_value(value: &impl serde::Serialize) -> Value {
