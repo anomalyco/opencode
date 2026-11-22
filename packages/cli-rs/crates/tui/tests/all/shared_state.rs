@@ -222,8 +222,7 @@ fn acknowledged_commits_clear_the_drafts() {
         json!({ "sessionID": "ses_b", "model": { "providerID": "openai", "id": "gpt-5" } }),
     );
     // The tab takes the new title in the sync that carries the acknowledgments. Another notification can come
-    // first, and a switch applied before that sync would join the acknowledgments' batch. The strip paints the
-    // store's title on any frame, so the screen can show the rename before that sync.
+    // first, and a switch applied before that sync would join the acknowledgments' batch.
     setup.emit("session.renamed", json!({ "sessionID": "ses_b", "title": "Acknowledged" }));
     setup.wait("the rename's sync", || {
         setup.tui.tabs.tabs(&setup.tui).iter().any(|tab| tab.title.as_deref() == Some("Acknowledged"))

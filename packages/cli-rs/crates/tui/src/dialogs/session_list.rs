@@ -40,8 +40,8 @@ pub fn show(tui: &Tui) {
         }),
         timer: Cell::new(None),
     });
-    let current = match tui.route() {
-        Route::Session { id } => Some(id),
+    let current = match &*tui.route() {
+        Route::Session { id } => Some(id.clone()),
         _ => None,
     };
     let built = list.clone();
@@ -543,7 +543,7 @@ async fn read(client: &Client, input: &SessionListInput) -> Option<Vec<SessionIn
 }
 
 fn picker_location(tui: &Tui) -> Location {
-    let session = match tui.route() {
+    let session = match &*tui.route() {
         Route::Session { id } => {
             tui.data.read(|state| state.session(&id).map(|session| Location::new(session.location.directory.0.clone())))
         }

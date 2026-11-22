@@ -588,7 +588,7 @@ fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
     pipe.retired();
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
     let screen = pipe.harness.app.text();
-    assert_eq!(pipe.harness.tui.route(), Route::Plugin { id: PROBE.to_owned(), name: "page".to_owned() });
+    assert_eq!(*pipe.harness.tui.route(), Route::Plugin { id: PROBE.to_owned(), name: "page".to_owned() });
     assert!(screen.contains("╭─Page") && screen.contains("data n=3"), "{screen}");
     assert!(screen.contains("line 4") && !screen.contains("line 9"), "{screen}");
     let (x, y) = pipe.harness.find("line 2");
@@ -815,7 +815,7 @@ fn a_session_panel_stays_open_across_a_reload() {
     let pipe = crate::plugin_pipe::open_on(&[("v2probe", Some(options))], config, (120, 30), Vec::new(), server);
     pipe.active(PROBE);
     pipe.harness.tui.navigate(Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) });
-    pipe.until("the session shows", || matches!(pipe.harness.tui.route(), Route::Session { .. }));
+    pipe.until("the session shows", || matches!(&*pipe.harness.tui.route(), Route::Session { .. }));
     pipe.settle();
     pipe.harness.tui.keymap.dispatch("v2probe.panel", None);
     assert_eq!(logged(&pipe, &log, 1), [json!({ "opened": true })]);
@@ -835,7 +835,7 @@ fn a_session_panel_toggles_focuses_and_closes_itself() {
     let pipe = crate::plugin_pipe::open_on(&[("v2probe", Some(options))], config, (120, 30), Vec::new(), server);
     pipe.active(PROBE);
     pipe.harness.tui.navigate(Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) });
-    pipe.until("the session shows", || matches!(pipe.harness.tui.route(), Route::Session { .. }));
+    pipe.until("the session shows", || matches!(&*pipe.harness.tui.route(), Route::Session { .. }));
     pipe.settle();
     pipe.harness.tui.keymap.dispatch("v2probe.panel", None);
     assert_eq!(logged(&pipe, &log, 1), [json!({ "opened": true })]);

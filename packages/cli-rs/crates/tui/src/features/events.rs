@@ -100,8 +100,8 @@ pub mod testing {
 fn resync(tui: &Tui) {
     crate::features::location::reconnected(tui);
     let mut open = tui.tabs.open_ids(tui);
-    if let Route::Session { id } = tui.route() {
-        open.push(id.0);
+    if let Route::Session { id } = &*tui.route() {
+        open.push(id.0.clone());
     }
     let deleted: Vec<SessionID> =
         tui.data.read(|state| open.into_iter().map(SessionID).filter(|id| state.is_missing(id)).collect());
@@ -220,7 +220,7 @@ fn handle(tui: &Tui, event: &Handled) {
             }
         }
         Handled::SessionExecutionSucceeded(event)
-            if tui.route() == (Route::Session { id: event.data.session_id.clone() })
+            if *tui.route() == (Route::Session { id: event.data.session_id.clone() })
                 && matches!(tui.local.usage(), Some(Some(_))) =>
         {
             tui.local.load_usage(true);
@@ -229,12 +229,13 @@ fn handle(tui: &Tui, event: &Handled) {
             tui.show_session(event.data.session_id.clone());
         }
         Handled::SessionDeleted(event) => {
-            let Route::Session { id } = tui.route() else { return };
-            if id != event.data.session_id {
+            let route = tui.route();
+            let Route::Session { id } = &*route else { return };
+            if *id != event.data.session_id {
                 return;
             }
             // The store already dropped the session; the title is the one last shown (`active`).
-            let title = tui.title.active(&id);
+            let title = tui.title.active(id);
             tui.navigate(Route::Home);
             tui.toasts.show(ToastOptions::new(
                 Variant::Info,

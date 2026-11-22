@@ -468,7 +468,7 @@ fn home_prompt_creates_a_session_and_opens_it() {
     let id = created[0]["id"].as_str().unwrap().to_owned();
     let prompts = setup.wait_request("POST", &format!("/api/session/{id}/prompt"), 1);
     assert_eq!(prompts[0]["text"], "Reply with ok");
-    let opened = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Session { id: SessionID(id.clone()) });
+    let opened = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Session { id: SessionID(id.clone()) });
     assert!(opened, "{:?}", setup.tui.route());
     setup.wait_for("Reply with ok");
     // The new session reads nothing before its create lands, so no "Session not found" toast.
@@ -485,13 +485,13 @@ fn a_failed_create_goes_home_with_the_newer_text_and_closes_its_tab() {
     setup.app.press("return");
     let created = setup.wait_request("POST", "/api/session", 1);
     let id = SessionID(created[0]["id"].as_str().unwrap().to_owned());
-    let opened = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Session { id: id.clone() });
+    let opened = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Session { id: id.clone() });
     assert!(opened, "{:?}", setup.tui.route());
     setup.app.type_text("follow up");
     // Release the failure only after the session becomes visible.
     setup.reject.store(false, Ordering::SeqCst);
     setup.wait_for("Creating a session failed");
-    let home = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Home);
+    let home = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Home);
     assert!(home, "{:?}", setup.tui.route());
     let text = || setup.tui.textarea.borrow().as_ref().map(|textarea| textarea.text()).unwrap_or_default();
     assert!(setup.app.wait_until(WAIT, || text() == "follow up"), "{:?}", text());
@@ -503,7 +503,7 @@ fn a_failed_create_goes_home_with_the_newer_text_and_closes_its_tab() {
 fn a_missing_session_closes_its_tab() {
     let setup = Setup::new(support::session_route("ses_gone"));
     setup.wait_for("Session not found: ses_gone");
-    let home = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Home);
+    let home = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Home);
     assert!(home, "{:?}", setup.tui.route());
     let tabs = setup.tui.tabs.tabs(&setup.tui);
     assert!(tabs.iter().all(|tab| tab.session_id != "ses_gone"), "{tabs:?}");
@@ -557,7 +557,7 @@ fn enter_before_the_catalog_loads_submits_once_it_has() {
     let id = created[0]["id"].as_str().unwrap().to_owned();
     let prompts = setup.wait_request("POST", &format!("/api/session/{id}/prompt"), 1);
     assert_eq!(prompts[0]["text"], "Reply with ok");
-    let opened = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Session { id: SessionID(id.clone()) });
+    let opened = setup.app.wait_until(WAIT, || *setup.tui.route() == Route::Session { id: SessionID(id.clone()) });
     assert!(opened, "{:?}", setup.tui.route());
 }
 

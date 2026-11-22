@@ -277,7 +277,7 @@ fn tabs_open_move_and_close_as_ts_does() {
     h.tui.keymap.dispatch("p0b.open", Some("ses_a"));
     h.wait_for("p0b open true");
     h.wait_for("[ses_a]");
-    assert!(matches!(h.tui.route(), Route::Home), "open showed the tab");
+    assert!(matches!(&*h.tui.route(), Route::Home), "open showed the tab");
     h.tui.keymap.dispatch("p0b.open", Some("ses_b"));
     h.wait_for("[ses_a,ses_b]");
     opencode_tui::tabs::reorder(&h.tui, "ses_b", 0);
@@ -286,7 +286,7 @@ fn tabs_open_move_and_close_as_ts_does() {
     h.wait_for("[ses_a,ses_b]");
     h.tui.keymap.dispatch("p0b.focus", Some("ses_b"));
     h.wait_for("[ses_a,ses_b*]");
-    assert!(matches!(h.tui.route(), Route::Session { id } if id.0 == "ses_b"), "focus did not show the tab");
+    assert!(matches!(&*h.tui.route(), Route::Session { id } if id.0 == "ses_b"), "focus did not show the tab");
     h.tui.keymap.dispatch("p0b.close", Some("ses_b"));
     h.wait_for("[ses_a*]");
     h.tui.keymap.dispatch("p0b.move", Some("ses_b"));
@@ -424,7 +424,7 @@ fn a_claim_hears_of_tabs_keymap_and_theme_changes() {
     assert!(written);
     // Under the storage lock, as another client writes, so a write of the TUI's in flight cannot undo it.
     h.tui.storage().unwrap().update("tabs", &json!({}), reverse_tabs).unwrap();
-    let ids = || h.tui.tabs.tabs(&h.tui).into_iter().map(|tab| tab.session_id).collect::<Vec<_>>();
+    let ids = || h.tui.tabs.tabs(&h.tui).iter().map(|tab| tab.session_id.clone()).collect::<Vec<_>>();
     assert!(h.app.wait_until(WAIT, || ids() == ["ses_b", "ses_a"]), "{:?}", ids());
     let first = h.app.render().text();
     assert!(first.contains("[ses_b,ses_a]"), "{first}");

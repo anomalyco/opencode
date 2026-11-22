@@ -266,7 +266,7 @@ fn missing(tui: &Tui, id: &SessionID, task: Task<()>) {
                 }
                 Ok(()) => return,
             };
-            if tui.route() != (crate::routes::Route::Session { id: id.clone() }) {
+            if *tui.route() != (crate::routes::Route::Session { id: id.clone() }) {
                 return;
             }
             if let Some(message) = message {

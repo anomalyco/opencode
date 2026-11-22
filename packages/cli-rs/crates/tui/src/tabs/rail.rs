@@ -141,8 +141,8 @@ impl Rail {
     fn items(&self, tui: &Tui) -> Vec<Item> {
         let tabs = tui.tabs.tabs(tui);
         let tabs = match &self.preview {
-            Some((session, index)) => model::reorder(&tabs, session, *index).unwrap_or(tabs),
-            None => tabs,
+            Some((session, index)) => model::reorder(&tabs, session, *index).unwrap_or_else(|| tabs.to_vec()),
+            None => tabs.to_vec(),
         };
         let active = if tui.tabs.new_tab() { None } else { tui.tabs.current(tui) };
         let statuses: Vec<Status> = tabs.iter().map(|tab| tui.tabs.status(tui, &tab.session_id)).collect();

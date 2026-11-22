@@ -656,7 +656,7 @@ fn a_subagent_row_opens_its_child_session() {
     assert!(!screen.contains("Background"), "{screen}");
 
     h.click("Check the docs");
-    let found = h.app.wait_until(WAIT, || h.tui.route() == Route::Session { id: SessionID("ses_child".into()) });
+    let found = h.app.wait_until(WAIT, || *h.tui.route() == Route::Session { id: SessionID("ses_child".into()) });
     assert!(found, "still on {:?}", h.tui.route());
     h.wait_for("Child work");
     let read = h

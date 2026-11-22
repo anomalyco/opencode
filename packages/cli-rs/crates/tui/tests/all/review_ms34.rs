@@ -303,7 +303,7 @@ fn session_new_keeps_the_location_agent_and_model_and_closes_dialogs() {
     h.wait("the help dialog", || h.tui.dialogs.is_open());
 
     h.tui.keymap.dispatch("session.new", None);
-    h.wait("home", || h.tui.route() == Route::Home);
+    h.wait("home", || *h.tui.route() == Route::Home);
     assert!(!h.tui.dialogs.is_open(), "the dialog stayed open");
     assert_eq!(
         opencode_tui::features::location::current(&h.tui).map(|location| location.directory),
