@@ -14,6 +14,16 @@ type Truncation = {
   endLine?: number
 }
 
+// Pick only the truncation keys: callers pass wider outputs (status, wall time, shell ID, pid) that must not leak.
+const truncation = ({ outputPath, totalBytes, shownBytes, totalLines, startLine, endLine }: Truncation): Truncation => ({
+  ...(outputPath !== undefined ? { outputPath } : {}),
+  ...(totalBytes !== undefined ? { totalBytes } : {}),
+  ...(shownBytes !== undefined ? { shownBytes } : {}),
+  ...(totalLines !== undefined ? { totalLines } : {}),
+  ...(startLine !== undefined ? { startLine } : {}),
+  ...(endLine !== undefined ? { endLine } : {}),
+})
+
 export type Result = {
   info: Shell.Info
   // `killed` says why a command was killed when no exit code or signal of its own tells, e.g. the process daemon stopped.
@@ -38,15 +48,15 @@ export const unavailable: Shell.Output = {
 }
 
 export function output(result: Result): Output {
-  const { output, truncated, killed, ...truncation } = result.capture ?? {}
+  const capture = result.capture
   return {
-    output: output ?? unavailable.output,
-    truncated: truncated ?? false,
+    output: capture?.output ?? unavailable.output,
+    truncated: capture?.truncated ?? false,
     ...(result.info.exit !== undefined ? { exit: result.info.exit } : {}),
     ...(result.info.signal !== undefined ? { signal: result.info.signal } : {}),
     ...(result.info.status === "timeout" ? { timeout: true } : {}),
-    ...(killed !== undefined ? { killed } : {}),
-    ...truncation,
+    ...(capture?.killed !== undefined ? { killed: capture.killed } : {}),
+    ...truncation(capture ?? {}),
   }
 }
 
@@ -83,14 +93,13 @@ function exitCode(output: Pick<Output, "exit" | "signal">) {
 }
 
 export function metadata(output: Output) {
-  const { output: _output, truncated, exit, signal, timeout, killed, ...truncation } = output
   return {
-    truncated,
-    ...(exit !== undefined ? { exit } : {}),
-    ...(signal !== undefined ? { signal } : {}),
-    ...(timeout !== undefined ? { timeout } : {}),
-    ...(killed !== undefined ? { killed: true } : {}),
-    ...truncation,
+    truncated: output.truncated,
+    ...(output.exit !== undefined ? { exit: output.exit } : {}),
+    ...(output.signal !== undefined ? { signal: output.signal } : {}),
+    ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
+    ...(output.killed !== undefined ? { killed: true } : {}),
+    ...truncation(output),
   }
 }
 

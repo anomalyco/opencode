@@ -253,7 +253,6 @@ const startJob = Effect.fnUntraced(function* (
         ...ShellResult.output(result),
         status: "completed" as const,
         wallTimeSeconds: wallTimeSeconds(result.info.time, completed),
-        ...(result.capture.truncated ? { outputPath: result.info.file } : {}),
       }
     }).pipe(
       Effect.tap((output) => Deferred.succeed(settled, output)),

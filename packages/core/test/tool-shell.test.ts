@@ -1876,6 +1876,36 @@ describe("ShellTool", () => {
     }),
   )
 
+  it.live("keeps shell metadata limited to truncation fields when callers pass a wider output", () =>
+    Effect.sync(() => {
+      const output = {
+        output: "x",
+        truncated: true,
+        exit: 0,
+        outputPath: "/tmp/f",
+        totalBytes: 10,
+        shownBytes: 2,
+        totalLines: 3,
+        startLine: 1,
+        endLine: 2,
+        status: "completed",
+        wallTimeSeconds: 1.2,
+        shellID: "sh_1",
+        pid: 42,
+      }
+      expect(ShellResult.metadata(output)).toEqual({
+        truncated: true,
+        exit: 0,
+        outputPath: "/tmp/f",
+        totalBytes: 10,
+        shownBytes: 2,
+        totalLines: 3,
+        startLine: 1,
+        endLine: 2,
+      })
+    }),
+  )
+
   it.live(
     "reports the shell ID for a running command",
     () =>
