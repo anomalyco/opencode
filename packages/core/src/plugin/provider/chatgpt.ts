@@ -1,7 +1,7 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { define } from "@opencode/plugin/effect/plugin"
-import { Clock, Deferred, Duration, Effect, Equal, Option, Schema, Semaphore } from "effect"
+import { Deferred, Effect, Equal, Option, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server, ServerResponse } from "node:http"
 import { App } from "../../app.js"
@@ -13,9 +13,10 @@ import { OauthCallbackPage } from "../../oauth/page.js"
 import { OauthRedirect } from "../../oauth/redirect.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
+import { SharedCache } from "../../shared-cache.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
-import { storedCredential } from "./credential-settings.js"
+import { activeCredential, storedCredential } from "./credential-settings.js"
 import { OpenAISubscriptionModels } from "./openai-subscription-models.js"
 import { ProviderRefresh } from "./refresh.js"
 
@@ -30,9 +31,6 @@ const tokenSharingScope = "chatgpt.tokens.use.direct"
 const providerID = Provider.ID.openai
 const integrationID = Integration.ID.make("openai")
 const methodID = Integration.MethodID.make("chatgpt-token-sharing")
-// Scoped to the credential so another account never sees this list. Lists saved under the old
-// `models:<clientID>` key date from when OpenAI's endpoint omitted models, so they are not read.
-const modelCacheKey = (credentialID: string, clientID: string) => `models:${credentialID}:${clientID}`
 // Used when neither the account's list nor the catalog's list is available. gpt-5.5 is rejected there.
 const fallbackModels = new Set([
   "gpt-5.6-luna",
@@ -90,7 +88,6 @@ const RemoteModel = Schema.Struct({
 })
 type RemoteModel = typeof RemoteModel.Type
 const RemoteModels = Schema.Struct({ models: Schema.Array(RemoteModel) })
-const decodeCachedModels = Schema.decodeUnknownOption(Schema.Array(RemoteModel))
 
 const decodeInvalidGrant = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ error: Schema.Literal("invalid_grant") })),
@@ -229,10 +226,10 @@ export const ChatGPTPlugin = define({
   id: "opencode.provider.chatgpt",
   effect: Effect.fn(function* (ctx) {
     const credentials = yield* Credential.Service
+    const cache = yield* SharedCache.Service
+    const http = yield* HttpClient.HttpClient
     const loading = Semaphore.makeUnsafe(1)
     let chatgpt: Credential.OAuth | undefined
-    let available: ReadonlyArray<RemoteModel> | undefined
-    let cacheKey: string | undefined
     let source: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
 
     const load = Effect.fn("ChatGPTPlugin.load")(function* () {
@@ -240,13 +237,6 @@ export const ChatGPTPlugin = define({
       chatgpt = credential?.type === "oauth" && credential.methodID === methodID ? credential : undefined
       const previous = source
       source = chatgpt ? connection : undefined
-      const metadata = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))
-      const nextKey =
-        source?.type === "credential" && metadata ? modelCacheKey(source.id, metadata.clientID) : undefined
-      if (nextKey !== cacheKey) {
-        cacheKey = nextKey
-        available = Option.getOrUndefined(decodeCachedModels(nextKey ? yield* ctx.storage.get(nextKey) : undefined))
-      }
       return !Equal.equals(previous, source)
     })
 
@@ -272,6 +262,30 @@ export const ChatGPTPlugin = define({
     yield* load()
     // Temporary: the Sign in with ChatGPT list from models.dev, see openai-subscription-models.ts.
     const plan = yield* OpenAISubscriptionModels.track("openai-chatgpt", ctx.provider.reload())
+    // The account's own model list, loaded and refreshed like GitHub Copilot's and shared across Locations. A failed or
+    // empty load keeps the last good list; with none yet, the models.dev list stands in.
+    const discovered = yield* ProviderRefresh.start({
+      integrationID,
+      initial: undefined as ReadonlyArray<RemoteModel> | undefined,
+      active: ctx.integration.connection.active(integrationID),
+      reload: ctx.provider.reload(),
+      load: Effect.fn("ChatGPTPlugin.loadModels")(function* (_, options) {
+        const { connection, credential } = yield* activeCredential(ctx, integrationID)
+        if (!connection || credential?.type !== "oauth" || credential.methodID !== methodID)
+          return { connection, value: undefined }
+        const models = yield* cache
+          .get({
+            key: `chatgpt-models:${IntegrationConnection.key(connection)}`,
+            ...options,
+            load: fetchModels(credential.access, ctx.app).pipe(
+              Effect.timeout("15 seconds"),
+              Effect.provideService(HttpClient.HttpClient, http),
+            ),
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        return { connection, value: models }
+      }),
+    })
     yield* ctx.session.hook(
       "retry",
       (event) =>
@@ -318,9 +332,9 @@ export const ChatGPTPlugin = define({
         // The account's live list decides which models show, like GitHub Copilot's; the models.dev list, then the
         // built-in one, stand in until it loads or when it fails. Variants (fast, pro, ...) come from the catalog list:
         // the live list only names base models, and this route rejects some service tiers (flex).
-        models: available
+        models: discovered.current
           ? deriveModels(
-              available,
+              discovered.current,
               Array.from(item.models.values()).filter(
                 (model) => (model.modelID ?? model.id) === model.id || (plan.current ?? fallbackModels).has(model.id),
               ),
@@ -344,48 +358,10 @@ export const ChatGPTPlugin = define({
         })
       }
     })
-    const refreshModels = Effect.fn("ChatGPTPlugin.refreshModels")(function* () {
-      const connection = source
-      const key = cacheKey
-      if (connection?.type !== "credential" || !key) return
-      const credential = (yield* credentials.get(Credential.ID.make(connection.id)))?.value
-      // Uses the stored token and never refreshes it: requests refresh it, and the next poll picks it up.
-      if (
-        credential?.type !== "oauth" ||
-        credential.methodID !== methodID ||
-        Credential.expiring(credential, yield* Clock.currentTimeMillis, Duration.minutes(1))
-      )
-        return
-      // A failure, timeout, bad body or empty list keeps the current list; only a usable list is saved.
-      const models = yield* fetchModels(credential.access, ctx.app).pipe(
-        Effect.timeout(Duration.seconds(15)),
-        Effect.catch(() => Effect.logWarning("failed to refresh ChatGPT models").pipe(Effect.as(undefined))),
-      )
-      if (!models) return
-      yield* loading.withPermit(
-        Effect.gen(function* () {
-          if (
-            key !== cacheKey ||
-            IntegrationConnection.key(connection) !== IntegrationConnection.key(source) ||
-            IntegrationConnection.key(connection) !==
-              IntegrationConnection.key(yield* ctx.integration.connection.active(integrationID))
-          )
-            return
-          if (JSON.stringify(models) === JSON.stringify(available)) return
-          yield* ctx.storage.set(key, models)
-          available = models
-          yield* ctx.provider.reload()
-        }),
-      )
-    })
     yield* ProviderRefresh.onSwitch(
       integrationID,
-      loading
-        .withPermit(ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload()))
-        .pipe(Effect.andThen(refreshModels().pipe(Effect.forkScoped, Effect.asVoid))),
+      loading.withPermit(ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload())),
     )
-    yield* refreshModels().pipe(Effect.forkScoped)
-    yield* Effect.sleep(Duration.minutes(15)).pipe(Effect.andThen(refreshModels), Effect.forever, Effect.forkScoped)
   }),
 } satisfies PluginInternal.InternalPlugin)
 

@@ -26,6 +26,7 @@ import { ChatGPTPlugin, fetchModels, refresh, revoke, verifyIDToken } from "@ope
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
+import { SharedCache } from "@opencode/core/shared-cache"
 import { AbsolutePath } from "@opencode/core/schema"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
@@ -654,7 +655,6 @@ describe("ChatGPTPlugin", () => {
   it.effect("moves only token-sharing credentials to the new method ID without keeping their saved models", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
-      const kv = yield* KV.Service
       const legacy = yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: Credential.OAuth.make({
@@ -687,7 +687,6 @@ describe("ChatGPTPlugin", () => {
         metadata: { clientID: "oaiapp_issued" },
       })
       expect(migrated?.type === "oauth" ? migrated.metadata : undefined).not.toHaveProperty("models")
-      expect(yield* PluginHost.storage(kv, ChatGPTPlugin.id).get(`models:${sharing.id}:oaiapp_issued`)).toBeUndefined()
     }),
   )
 
@@ -695,7 +694,6 @@ describe("ChatGPTPlugin", () => {
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
       const credentials = yield* Credential.Service
-      const kv = yield* KV.Service
       yield* catalog.transform((editor) => {
         editor.update(Provider.ID.openai, (provider) => {
           provider.package = "@opencode/ai/providers/openai"
@@ -725,7 +723,7 @@ describe("ChatGPTPlugin", () => {
           subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-6.2-sol", "gpt-6.2-sol-fast"] } }),
         ),
       )
-      const sharing = yield* credentials.create({
+      yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: sharingCredential("chatgpt-token"),
       })
@@ -734,23 +732,23 @@ describe("ChatGPTPlugin", () => {
       // Hidden models are dropped, and variants come from the models.dev list, so flex stays hidden.
       yield* Deferred.succeed(release, undefined)
       yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-sol,gpt-6.2-sol-fast,gpt-6.3-nova")))
-      expect(yield* PluginHost.storage(kv, ChatGPTPlugin.id).get(`models:${sharing.id}:oaiapp_issued`)).toEqual(listed)
     }),
   )
+
   it.effect("keeps the last good account list when a refresh fails or comes back empty", () =>
     Effect.gen(function* () {
       yield* addCatalog
       const credentials = yield* Credential.Service
-      const kv = yield* KV.Service
       const first = [remote("gpt-6.2-sol"), remote("gpt-6.3-nova")]
       const responses = [
         Response.json({ models: first }),
         Response.json({ models: [] }),
-        Response.json({}, { status: 503 }),
+        // Not a transient status, so the shared cache doesn't retry it.
+        Response.json({}, { status: 401 }),
         Response.json({ models: [remote("gpt-6.2-astra"), remote("gpt-6.2-sol")] }),
       ]
       let requests = 0
-      const sharing = yield* credentials.create({
+      yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: sharingCredential("chatgpt-token"),
       })
@@ -759,24 +757,17 @@ describe("ChatGPTPlugin", () => {
           Effect.sync(() => HttpClientResponse.fromWeb(request, required(responses[requests++]))),
         ),
       )
-      const storage = PluginHost.storage(kv, ChatGPTPlugin.id)
       yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-sol,gpt-6.3-nova")))
-      expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toEqual(first)
 
       for (const count of [2, 3]) {
-        yield* TestClock.adjust("15 minutes")
+        yield* TestClock.adjust(SharedCache.interval)
         yield* advance(() => requests === count)
         yield* drain
         expect(yield* openaiModels).toEqual(["gpt-6.2-sol", "gpt-6.3-nova"])
-        expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toEqual(first)
       }
 
-      yield* TestClock.adjust("15 minutes")
+      yield* TestClock.adjust(SharedCache.interval)
       yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-astra,gpt-6.2-sol")))
-      expect(yield* storage.get(`models:${sharing.id}:oaiapp_issued`)).toEqual([
-        remote("gpt-6.2-astra"),
-        remote("gpt-6.2-sol"),
-      ])
     }),
   )
 
@@ -784,7 +775,6 @@ describe("ChatGPTPlugin", () => {
     Effect.gen(function* () {
       yield* addCatalog
       const credentials = yield* Credential.Service
-      const kv = yield* KV.Service
       const gate = yield* Deferred.make<void>()
       const requests: string[] = []
       const first = yield* credentials.create({
@@ -817,14 +807,10 @@ describe("ChatGPTPlugin", () => {
       yield* Deferred.succeed(gate, undefined)
       yield* drain
       expect(yield* openaiModels).toEqual(["gpt-6.2-astra"])
-      const storage = PluginHost.storage(kv, ChatGPTPlugin.id)
-      expect(yield* storage.get(`models:${first.id}:oaiapp_issued`)).toBeUndefined()
-      expect(yield* storage.get(`models:${second.id}:oaiapp_issued`)).toEqual([remote("gpt-6.2-astra")])
 
+      // Switching back shows the first account's own list, never the second's.
       yield* credentials.activate(first.id)
-      yield* advance(() => requests.filter((token) => token === "Bearer first-token").length === 2)
-      yield* drain
-      expect(yield* openaiModels).toEqual(fallback)
+      yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.3-nova")))
       yield* credentials.activate(second.id)
       yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-astra")))
     }),
