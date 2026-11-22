@@ -1,6 +1,6 @@
 //! File-read status and loaded paths.
 
-use super::dispatch::{Inline, InlineTool, Props, Status, finite, format_path, number, truthy};
+use super::dispatch::{Inline, InlineTool, Props, Status, finite, format_path, number};
 use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
@@ -29,13 +29,14 @@ impl Read {
     }
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
-        let path = props.input_str("path");
+        let path = props.input.path().str();
+        let input = opencode_ui::tool_info::ReadInput(props.input);
         let mut text = format!("Read {}", format_path(cx, path));
-        if props.input.contains_key("offset") || props.input.contains_key("limit") {
-            let offset = finite(props.input.get("offset")).unwrap_or(1.0);
+        if input.offset().value().is_some() || input.limit().value().is_some() {
+            let offset = finite(input.offset().value()).unwrap_or(1.0);
             text.push_str(&format!(":{}-", number(offset)));
-            if truthy(props.input.get("limit")) {
-                let limit = finite(props.input.get("limit")).unwrap_or(0.0);
+            if input.limit().truthy() {
+                let limit = finite(input.limit().value()).unwrap_or(0.0);
                 text.push_str(&number(offset + limit - 1.0));
             }
         }

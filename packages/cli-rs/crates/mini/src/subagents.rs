@@ -10,7 +10,7 @@ use opencode_api::generated::{
     SessionMessageAssistantToolTime, SessionMessageToolStateCompleted, SessionMessageToolStateError,
     SessionMessageToolStateRunning, SessionMessageToolStateStreaming,
 };
-use opencode_ui::tool_info::{canonical_tool_name, titlecase, tool_display_content, tool_output_text};
+use opencode_ui::tool_info::{ToolKind, titlecase, tool_display_content, tool_output_text};
 
 use crate::footers::permission::Request;
 use crate::prelude::*;
@@ -187,16 +187,15 @@ impl Child {
             self.tools.insert(key, part);
             return;
         }
-        let name = canonical_tool_name(&part.name).to_owned();
-        let output = tool_output_text(&name, &tool_display_content(&part.state));
+        let output = tool_output_text(&part.name, &tool_display_content(&part.state));
         let commit = |phase, value: Option<&str>| crate::tools::commit(&part, message, phase, value, directory, 0);
         if let ToolPartState::Running(state) = &part.state {
             let provider =
                 |state: &SessionMessageToolStateRunning| state.metadata.get("provider").is_some_and(Value::is_string);
-            let ready = name != "websearch" || provider(state);
+            let ready = ToolKind::of(&part.name) != ToolKind::WebSearch || provider(state);
             let current = self.tools.get(&key);
             let awaiting = current.is_some_and(|current| {
-                canonical_tool_name(&current.name) == "websearch"
+                ToolKind::of(&current.name) == ToolKind::WebSearch
                     && matches!(&current.state, ToolPartState::Running(state) if !provider(state))
             });
             let fresh = current.is_none_or(|current| matches!(current.state, ToolPartState::Streaming(_)));
@@ -480,7 +479,7 @@ impl Tracker {
     pub fn main(&mut self, event: &V2Event) -> Vec<Fetch> {
         let (message, id, metadata, created, success) = match event {
             V2Event::SessionToolInputStarted(started) => {
-                if canonical_tool_name(&started.data.name) == "subagent" {
+                if ToolKind::of(&started.data.name) == ToolKind::Subagent {
                     let key = source_key(started.data.assistant_message_id.as_str(), &started.data.id);
                     self.calls.insert(key, None);
                 }
@@ -732,7 +731,7 @@ impl Tracker {
 
     /// `mainTool`: a listed subagent call of the parent.
     fn main_tool(&mut self, tool: &SessionMessageAssistantTool) {
-        if canonical_tool_name(&tool.name) != "subagent" {
+        if ToolKind::of(&tool.name) != ToolKind::Subagent {
             return;
         }
         let (input, metadata) = match &tool.state {

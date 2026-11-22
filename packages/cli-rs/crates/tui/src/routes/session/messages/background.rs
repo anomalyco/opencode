@@ -1,7 +1,7 @@
 //! Offer to background a running shell after three seconds. Subagents already run in the background.
 
 use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageAssistantToolState};
-use opencode_ui::tool_info::canonical_tool_name;
+use opencode_ui::tool_info::ToolKind;
 
 use crate::prelude::*;
 
@@ -119,7 +119,7 @@ fn running(messages: &[SessionMessageInfo]) -> Option<(String, f64)> {
     current.content.iter().find_map(|item| match item {
         SessionMessageAssistantContentItem::Tool(tool)
             if matches!(tool.state, SessionMessageAssistantToolState::Running(_))
-                && canonical_tool_name(&tool.name) == "shell" =>
+                && ToolKind::of(&tool.name) == ToolKind::Shell =>
         {
             Some((format!("{}:{}", current.id.as_str(), tool.id), tool.time.ran.unwrap_or(tool.time.created)))
         }

@@ -8,7 +8,7 @@ use opencode_api::generated::{
 };
 use opencode_local::cli_config::{Grouping, Info, Verbosity};
 use opencode_ui::motion::Spinner;
-use opencode_ui::tool_info::{canonical_tool_name, tool_display_metadata};
+use opencode_ui::tool_info::{ToolKind, canonical_tool_name, tool_display_metadata};
 use opentui::widget::Markdown;
 
 use super::messages::list::{Context, Part, Row, Spec};
@@ -226,8 +226,6 @@ pub fn rows_after(weights: &[usize], start: usize, budget: usize) -> usize {
     index
 }
 
-const EXPLORATION_TOOLS: [&str; 5] = ["read", "glob", "grep", "webfetch", "websearch"];
-
 pub fn project(rows: Vec<Spec>, messages: &[SessionMessageInfo], verbosity: Verbosity) -> Vec<Spec> {
     let index: HashMap<&str, &SessionMessageInfo> = messages.iter().map(|message| (message.id(), message)).collect();
     let mut nodes: Vec<(Node, bool)> = Vec::new();
@@ -328,14 +326,17 @@ fn path(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>, verbosity: Verb
             (path, !running)
         }
         Spec::Part { message, part } => {
-            let name = match part {
-                Part::Tool(_) => tool(index, message, part).map_or("", |tool| tool.name.as_str()),
-                _ => "",
+            let kind = match part {
+                Part::Tool(_) => tool(index, message, part).map(|tool| ToolKind::of_ignore_ascii_case(&tool.name)),
+                _ => None,
             };
-            let exploration = EXPLORATION_TOOLS.iter().any(|tool| name.eq_ignore_ascii_case(tool));
+            let exploration = matches!(
+                kind,
+                Some(ToolKind::Read | ToolKind::Glob | ToolKind::Grep | ToolKind::WebFetch | ToolKind::WebSearch)
+            );
             let path: &[Kind] = match part {
                 Part::Text(_) => &[],
-                Part::Tool(_) if name.eq_ignore_ascii_case("question") => &[],
+                Part::Tool(_) if kind == Some(ToolKind::Question) => &[],
                 Part::Reasoning(_) if low => &[Kind::Activity, Kind::Reasoning],
                 Part::Reasoning(_) => &[Kind::Reasoning],
                 Part::Tool(_) if exploration && low => &[Kind::Activity, Kind::Exploration],
@@ -394,10 +395,11 @@ pub fn instruction_paths(message: Option<&SessionMessageInfo>) -> Vec<String> {
 pub fn exploration_label(tools: &[&SessionMessageAssistantTool], completed: bool) -> String {
     let mut counts: Vec<(&str, usize)> = Vec::new();
     for tool in tools {
-        let name = match canonical_tool_name(&tool.name) {
-            "grep" | "glob" | "websearch" => "search",
-            "webfetch" => "fetch",
-            name @ ("shell" | "read") => name,
+        let name = match ToolKind::of(&tool.name) {
+            ToolKind::Grep | ToolKind::Glob | ToolKind::WebSearch => "search",
+            ToolKind::WebFetch => "fetch",
+            ToolKind::Shell => "shell",
+            ToolKind::Read => "read",
             _ => "generic",
         };
         match counts.iter_mut().find(|(other, _)| *other == name) {
@@ -456,11 +458,11 @@ pub fn activity_summary(items: &[Activity<'_>], instructions: usize, closed: boo
                 }
             }
             Activity::Tool(tool) => {
-                let name = canonical_tool_name(&tool.name);
-                if name == "execute" {
+                let kind = ToolKind::of(&tool.name);
+                if kind == ToolKind::Execute {
                     let calls = execute_calls(tool);
                     for call in &calls {
-                        add(if canonical_tool_name(call) == "read" { "read" } else { "tool" });
+                        add(if ToolKind::of(call) == ToolKind::Read { "read" } else { "tool" });
                     }
                     if calls.is_empty() && !active {
                         add("tool");
@@ -470,10 +472,10 @@ pub fn activity_summary(items: &[Activity<'_>], instructions: usize, closed: boo
                 if active {
                     continue;
                 }
-                add(match name {
-                    "shell" => "command",
-                    "read" => "read",
-                    "edit" | "write" | "patch" => "edit",
+                add(match kind {
+                    ToolKind::Shell => "command",
+                    ToolKind::Read => "read",
+                    ToolKind::Edit | ToolKind::Write | ToolKind::Patch => "edit",
                     _ => "tool",
                 });
             }
@@ -495,11 +497,10 @@ pub fn activity_summary(items: &[Activity<'_>], instructions: usize, closed: boo
 
 fn busy_label(item: &Activity<'_>) -> String {
     let Activity::Tool(tool) = item else { return "Thinking…".to_owned() };
-    let name = canonical_tool_name(&tool.name);
-    let noun = match name {
-        "shell" => "command",
-        "execute" => "code",
-        name => name,
+    let noun = match ToolKind::of(&tool.name) {
+        ToolKind::Shell => "command",
+        ToolKind::Execute => "code",
+        _ => canonical_tool_name(&tool.name),
     };
     let verb = match tool.state {
         SessionMessageAssistantToolState::Streaming(_) => "Preparing",

@@ -1,6 +1,6 @@
 //! Fallback view for unrecognized tools.
 
-use opencode_ui::tool_info::primitive_input_summary;
+use opencode_ui::tool_info::call_summary;
 
 use super::dispatch::{ICON_WIDTH, Inline, InlineTool, Props, Status};
 use crate::prelude::*;
@@ -69,7 +69,7 @@ impl Generic {
         let tool = props.part.name.as_str();
         inner.inline.set(Inline {
             spinner: matches!(status, Status::Streaming | Status::Running),
-            text: summary(tool, &props.input),
+            text: call_summary(tool, props.input.iter()),
             clickable: !entries.is_empty() || !output.is_empty(),
             ..Inline::new(props, if status == Status::Error { "✗" } else { "✓" }, tool, status == Status::Completed)
         });
@@ -104,12 +104,4 @@ impl Inner {
             );
         }
     }
-}
-
-pub fn summary(tool: &str, input: &serde_json::Map<String, Value>) -> String {
-    let args = primitive_input_summary(input, &[]).split_whitespace().collect::<Vec<_>>().join(" ");
-    if args.is_empty() {
-        return tool.to_owned();
-    }
-    format!("{tool} {args}")
 }
