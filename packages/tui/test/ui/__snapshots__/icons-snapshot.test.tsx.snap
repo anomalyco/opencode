@@ -1,0 +1,76 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`opencode statusline 1`] = `
+"1 shell · ◎ goal                                                                
+ commands"
+`;
+
+exports[`opencode tool rows 1`] = `
+"   ✱ Glob "**/*.ts" in packages/tui                                     
+   → Read packages/tui/src/ui/design.ts                                 
+   ✗ Shell bun test"
+`;
+
+exports[`opencode sidebar 1`] = `
+"                                      
+  ⬖ Getting started                ✕  
+                                      
+    OpenCode includes free models so  
+    you can start immediately.        
+                                      
+    Connect from 75+ providers to     
+    use other models, including       
+    Claude, GPT, Gemini etc           
+                                      
+    Connect provider        /connect"
+`;
+
+exports[`fork+nerd statusline 1`] = `
+"1 shell │  goal                                                                
+ commands"
+`;
+
+exports[`fork+nerd tool rows 1`] = `
+"    Glob "**/*.ts" in packages/tui                                     
+    Read packages/tui/src/ui/design.ts                                 
+    Shell bun test"
+`;
+
+exports[`fork+nerd sidebar 1`] = `
+"                                      
+   Getting started                  
+                                      
+    OpenCode includes free models so  
+    you can start immediately.        
+                                      
+    Connect from 75+ providers to     
+    use other models, including       
+    Claude, GPT, Gemini etc           
+                                      
+    Connect provider        /connect"
+`;
+
+exports[`fork+ascii statusline 1`] = `
+"1 shell · ◎ goal                                                                
+ commands"
+`;
+
+exports[`fork+ascii tool rows 1`] = `
+"   ✱ Glob "**/*.ts" in packages/tui                                     
+   → Read packages/tui/src/ui/design.ts                                 
+   ✗ Shell bun test"
+`;
+
+exports[`fork+ascii sidebar 1`] = `
+"                                      
+  ⬖ Getting started                ✕  
+                                      
+    OpenCode includes free models so  
+    you can start immediately.        
+                                      
+    Connect from 75+ providers to     
+    use other models, including       
+    Claude, GPT, Gemini etc           
+                                      
+    Connect provider        /connect"
+`;
