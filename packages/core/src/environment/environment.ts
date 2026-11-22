@@ -1,7 +1,5 @@
-import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Effect, Layer, Schema } from "effect"
-import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
+import { Context, Effect, Schema } from "effect"
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import type { PlatformPath } from "node:path"
 import type { Driver } from "./driver.js"
 import type { Files } from "./files.js"
@@ -9,7 +7,6 @@ import { makeFiles } from "./exec-defaults.js"
 import { makeLocalDriver } from "./local.js"
 import { Location } from "../location.js"
 import { AbsolutePath } from "../schema.js"
-import { Workspace } from "../workspace.js"
 
 // An environment's name: what a path will later use to say where it lives.
 export const ID = Schema.String.pipe(Schema.brand("Environment.ID"))
@@ -65,31 +62,6 @@ export const workingDirectory = Effect.gen(function* () {
   const location = yield* Location.Service
   const environment = yield* Service
   return { absolute: location.directory, environment }
-})
-
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner
-    const location = yield* Location.Service
-    const workspace = yield* Workspace.Service
-    if (!location.workspaceID) return Service.of(local(spawner))
-    const driver = yield* workspace.connect(location.workspaceID).pipe(
-      // Environment has no error channel; an unknown or destroyed placement is a configuration defect by design.
-      Effect.mapError(
-        (cause) => new Error(`Failed to bind Environment to workspace ${location.workspaceID}`, { cause }),
-      ),
-      Effect.orDie,
-    )
-    // A workspace runs ripgrep through its own spawner. Nothing of the server's reaches it otherwise.
-    return Service.of(make(ID.make(location.workspaceID), driver, { searchable: true }))
-  }),
-)
-
-export const node = makeLocationNode({
-  service: Service,
-  layer,
-  deps: [CrossSpawnSpawner.node, Location.node, Workspace.node],
 })
 
 export * as EnvironmentService from "./environment.js"

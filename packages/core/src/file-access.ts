@@ -6,6 +6,7 @@ import { Global } from "@opencode/util/global"
 import { Array, Context, Effect, Layer, Schema } from "effect"
 import path from "path"
 import { Environment } from "./environment/index.js"
+import { Environments } from "./environments.js"
 import { Flag } from "./flag.js"
 import { Location } from "./location.js"
 import { Machines } from "./machine/machines.js"
@@ -132,6 +133,7 @@ const layer = Layer.effect(
     const permission = yield* Permission.Service
     const flags = yield* Flag.Service
     const machines = yield* Machines.Service
+    const environments = yield* Environments.Service
 
     // The flag is read once per operation by `locate` and `resolve`, which both call this.
     const place = Effect.fnUntraced(function* (text: string, base: Environment.Place | undefined, enabled: boolean) {
@@ -154,14 +156,22 @@ const layer = Layer.effect(
       // that machine's home, never this server's. Only `~` and `~/` are read: another user's home or a shell's `~+` is
       // not known here. With the flag off no home is asked for, so a base on another machine refuses every `~`.
       const target = enabled
-        ? yield* machines.get(id).pipe(Effect.catchTag("Machines.NotFound", () => Effect.undefined))
+        ? yield* environments.get(id).pipe(
+            Effect.catchTags({
+              "Machines.NotFound": () => Effect.undefined,
+              "Workspace.NotFound": () => Effect.undefined,
+            }),
+            Effect.mapError((cause) => new Environment.Failed({ path: text, cause })),
+          )
         : undefined
       const rules = target ? (target.path ?? path) : path.posix
       const written = machine?.path ?? text
       const rooted =
         enabled && (written === "~" || written.startsWith("~/"))
           ? rules.join(
-              yield* machines.home(id).pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause }))),
+              yield* environments
+                .home(id)
+                .pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause }))),
               written.slice(1),
             )
           : written
@@ -220,7 +230,7 @@ const layer = Layer.effect(
     // path's. Type detection runs over the machine's own files; a saved rule is the directory's own glob, which is
     // what was shown, rather than a search upward from this server's platform.
     const machineTarget = Effect.fnUntraced(function* (place: Environment.Place, kind: Kind | undefined) {
-      const machineEnvironment = yield* machines
+      const machineEnvironment = yield* environments
         .get(place.environment.id)
         .pipe(Effect.mapError((cause) => new Environment.Failed({ path: place.absolute, cause })))
       const rules = machineEnvironment.path ?? path
@@ -293,5 +303,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Environment.node, Flag.node, Location.node, Machines.node, Permission.node],
+  deps: [Environment.node, Environments.node, Flag.node, Location.node, Machines.node, Permission.node],
 })

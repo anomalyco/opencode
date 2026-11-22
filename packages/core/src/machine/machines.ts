@@ -6,7 +6,8 @@ import { eq } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
-import { Environment } from "../environment/index.js"
+// The leaf, not the Environment barrel: the barrel's Location node stands on Environments, which stands on machines.
+import { EnvironmentService } from "../environment/environment.js"
 import { Identity } from "./identity.js"
 import { Machine } from "./index.js"
 import { Join } from "./join.js"
@@ -19,11 +20,11 @@ import { MachineTable } from "./sql.js"
  */
 export const Name = Schema.String.check(
   Schema.isPattern(/^[a-z][a-z0-9-]{1,62}$/),
-  Schema.makeFilter((name) => name !== Environment.localID, { expected: "a name other than local" }),
+  Schema.makeFilter((name) => name !== EnvironmentService.localID, { expected: "a name other than local" }),
 )
 
 export class Info extends Schema.Class<Info>("Machines.Info")({
-  id: Environment.ID,
+  id: EnvironmentService.ID,
   online: Schema.Boolean,
   /** Whether the machine has joined with its key. Until then it is known by name only. */
   paired: Schema.Boolean,
@@ -34,7 +35,7 @@ export class Info extends Schema.Class<Info>("Machines.Info")({
 }) {}
 
 export class NotFound extends Schema.TaggedError<NotFound>()("Machines.NotFound", {
-  machine: Environment.ID,
+  machine: EnvironmentService.ID,
 }) {
   override get message() {
     return `No machine named ${JSON.stringify(this.machine)}.`
@@ -50,7 +51,7 @@ export class InvalidName extends Schema.TaggedError<InvalidName>()("Machines.Inv
 }
 
 export class AlreadyExists extends Schema.TaggedError<AlreadyExists>()("Machines.AlreadyExists", {
-  machine: Environment.ID,
+  machine: EnvironmentService.ID,
 }) {
   override get message() {
     return `${JSON.stringify(this.machine)} is already a machine.`
@@ -58,7 +59,7 @@ export class AlreadyExists extends Schema.TaggedError<AlreadyExists>()("Machines
 }
 
 export class AlreadyPaired extends Schema.TaggedError<AlreadyPaired>()("Machines.AlreadyPaired", {
-  machine: Environment.ID,
+  machine: EnvironmentService.ID,
 }) {
   override get message() {
     return `${JSON.stringify(this.machine)} is already paired. Use replace to pair it again.`
@@ -86,34 +87,34 @@ export interface InviteOptions {
 
 export interface Interface {
   /** Makes the machine known for good, returning its validated ID. Its live state is whatever its next connection reports. */
-  readonly add: (name: string) => Effect.Effect<Environment.ID, InvalidName | AlreadyExists>
+  readonly add: (name: string) => Effect.Effect<EnvironmentService.ID, InvalidName | AlreadyExists>
   /**
    * Forgets the machine and ends it, failing what waits on it as `NotFound` and its processes at once. False when there
    * was no such machine.
    */
-  readonly remove: (id: Environment.ID) => Effect.Effect<boolean>
+  readonly remove: (id: EnvironmentService.ID) => Effect.Effect<boolean>
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
   /** The machine's environment, connected or not: calls on an offline machine fail with `NotSent`. */
-  readonly get: (id: Environment.ID) => Effect.Effect<Environment.Interface, NotFound>
+  readonly get: (id: EnvironmentService.ID) => Effect.Effect<EnvironmentService.Interface, NotFound>
   /** The home directory in the hello of the machine's connection, failing with `NotSent` while it is offline. */
-  readonly home: (id: Environment.ID) => Effect.Effect<string, NotFound | Machine.NotSent>
+  readonly home: (id: EnvironmentService.ID) => Effect.Effect<string, NotFound | Machine.NotSent>
   /**
    * Serves one worker's connection as the machine `id` until it is lost or replaced. `id` is the one the link's handshake
    * proved, never one the worker named.
    */
-  readonly connect: (id: Environment.ID, connection: Machine.Connection) => Effect.Effect<void, NotFound>
+  readonly connect: (id: EnvironmentService.ID, connection: Machine.Connection) => Effect.Effect<void, NotFound>
   /** Prints one join string for this machine, good once and for five minutes. A second invite replaces the first. */
   readonly invite: (
-    id: Environment.ID,
+    id: EnvironmentService.ID,
     options: InviteOptions,
   ) => Effect.Effect<string, NotFound | AlreadyPaired | Identity.InvalidKey>
   /** Pairs the machine holding the secret's join string with `key` and returns its id. The secret is spent either way. */
   readonly join: (input: {
     readonly secret: Uint8Array
     readonly key: Uint8Array
-  }) => Effect.Effect<Environment.ID, InvalidJoin>
+  }) => Effect.Effect<EnvironmentService.ID, InvalidJoin>
   /** The machine a paired worker's key belongs to, for its next connection. */
-  readonly identify: (key: Uint8Array) => Effect.Effect<Environment.ID, UnknownKey>
+  readonly identify: (key: Uint8Array) => Effect.Effect<EnvironmentService.ID, UnknownKey>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Machines") {}
@@ -131,7 +132,7 @@ const layer = Layer.effect(
     const identity = yield* Identity.Service
     // The work under each name's lock is uninterruptible, so an interruption, such as a dropped connection mid-join,
     // never leaves a row written without memory updated to match; waiting for the lock stays interruptible.
-    const locks = KeyedMutex.makeUnsafe<Environment.ID>()
+    const locks = KeyedMutex.makeUnsafe<EnvironmentService.ID>()
     // Known names are read once per process; a machine another process adds or removes in the shared database shows up
     // here on restart, as with process-local session execution until clustering. Live connections stay in the dialling process.
     const rows = yield* db
@@ -140,22 +141,24 @@ const layer = Layer.effect(
       .all()
       .pipe(Effect.orDie)
     // One instance per known id for the life of the process: its running processes must survive reconnects.
-    const instances = new Map<Environment.ID, Machine.Interface>(rows.map((row) => [row.id, Machine.make(row.id)]))
+    const instances = new Map<EnvironmentService.ID, Machine.Interface>(
+      rows.map((row) => [row.id, Machine.make(row.id)]),
+    )
     // Keys are the one durable part of pairing, read here and written by `join`, so `identify` answers from memory.
-    const keys = new Map<Environment.ID, string>(
+    const keys = new Map<EnvironmentService.ID, string>(
       rows.flatMap((row) => (row.key === null ? [] : [[row.id, row.key] as const])),
     )
     // Pending invitations are per process, like live connections: the home that printed a join string is the one that
     // receives the worker, until clustering. One per name, holding only the secret's hash, never the secret.
     const invitations = new Map<
-      Environment.ID,
+      EnvironmentService.ID,
       { readonly hash: string; readonly expires: number; readonly replace: boolean }
     >()
 
     return Service.of({
       add: Effect.fn("Machines.add")(function* (name) {
         if (!Schema.is(Name)(name)) return yield* new InvalidName({ name })
-        const id = Environment.ID.make(name)
+        const id = EnvironmentService.ID.make(name)
         yield* locks.withLock(id)(
           Effect.gen(function* () {
             if (instances.has(id)) return yield* new AlreadyExists({ machine: id })

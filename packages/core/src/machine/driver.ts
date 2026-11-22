@@ -2,7 +2,8 @@ import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { posix } from "node:path"
 import { Cause, Deferred, Effect, PlatformError, Queue, Redacted, Schema, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { Environment } from "../environment/index.js"
+// The leaf, not the Environment barrel: the barrel's Location node stands on Environments, which stands on machines.
+import { EnvironmentService } from "../environment/environment.js"
 import { Failed, NotFound, WrongKind, type DirEntry, type FileInfo } from "../environment/files.js"
 import { ProcessID, Signal, type FileCall, type FromWorker, type Hello, type Instance, type ToWorker } from "./wire.js"
 
@@ -11,13 +12,13 @@ const START_GRACE = "15 seconds"
 /** The worker refuses a stdin write larger than 64 KiB. */
 const MAX_STDIN_CHUNK_SIZE = 64 * 1024
 
-export class NotSent extends Schema.TaggedError<NotSent>()("Machine.NotSent", { machine: Environment.ID }) {
+export class NotSent extends Schema.TaggedError<NotSent>()("Machine.NotSent", { machine: EnvironmentService.ID }) {
   override get message() {
     return `${this.machine} is offline, command not sent`
   }
 }
 
-export class Unknown extends Schema.TaggedError<Unknown>()("Machine.Unknown", { machine: Environment.ID }) {
+export class Unknown extends Schema.TaggedError<Unknown>()("Machine.Unknown", { machine: EnvironmentService.ID }) {
   override get message() {
     return `Lost connection to ${this.machine}. The command may or may not have started.`
   }
@@ -25,7 +26,7 @@ export class Unknown extends Schema.TaggedError<Unknown>()("Machine.Unknown", { 
 
 /** The worker no longer has a process: it restarted, or it forgot the process. */
 export class ProcessLost extends Schema.TaggedError<ProcessLost>()("Machine.ProcessLost", {
-  machine: Environment.ID,
+  machine: EnvironmentService.ID,
   restarted: Schema.Boolean,
 }) {
   override get message() {
@@ -53,7 +54,7 @@ export interface Connection {
 }
 
 export interface Interface {
-  readonly environment: Environment.Interface
+  readonly environment: EnvironmentService.Interface
   /**
    * Serves one connection until it is lost. A newer connection replaces it: the one being served counts as lost the
    * moment the newer one arrives, and its end changes nothing after that.
@@ -100,7 +101,7 @@ interface Process {
 type Call<M = FileCall> = M extends unknown ? Omit<M, "type" | "req"> : never
 
 /** A machine reached through a worker that dials in: its environment, and where the worker's connections arrive. */
-export const make = (id: Environment.ID): Interface => {
+export const make = (id: EnvironmentService.ID): Interface => {
   // Each change to this state, with the messages it sends, is one synchronous step: nothing else runs and nothing is
   // interrupted half-way through one, so a command is never reported unsent after it was sent. Hence the plain
   // variables and the `Unsafe` calls.
@@ -452,7 +453,7 @@ export const make = (id: Environment.ID): Interface => {
     close,
     hello: () => link?.hello,
     describe: () => link?.describe?.(),
-    environment: Environment.make(
+    environment: EnvironmentService.make(
       id,
       {
         spawner,
