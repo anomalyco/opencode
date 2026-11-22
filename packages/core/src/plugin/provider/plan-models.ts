@@ -11,7 +11,7 @@ import { ModelsDev } from "../../models-dev.js"
 /**
  * Keeps a copy of the model IDs models.dev lists for one sign-in plan on a provider, and runs `reload` when a catalog
  * refresh changes them. `current` is undefined when the catalog has no list for the plan (a cache or bundled
- * snapshot from before it was added, or a custom mirror), so callers fall back to their own rules.
+ * snapshot from before it was added, or a custom mirror) or empty, so callers fall back to their own rules.
  */
 export const track = Effect.fnUntraced(function* (providerID: Provider.ID, planID: string, reload: Effect.Effect<void>) {
   const modelsDev = yield* ModelsDev.Service
@@ -23,7 +23,8 @@ export const track = Effect.fnUntraced(function* (providerID: Provider.ID, planI
     Effect.flatMap((entries) => modelsDev.get(flags.resolve(entries).recommended_api.enabled)),
     Effect.map((data) => {
       const ids = data.find((provider) => provider.info.id === providerID)?.plans?.[planID]
-      return ids && new Set(ids)
+      // An empty list is treated as missing, so a bad catalog edit can't hide every model.
+      return ids?.length ? new Set(ids) : undefined
     }),
   )
   const state: { current: ReadonlySet<string> | undefined } = { current: yield* read }

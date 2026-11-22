@@ -103,7 +103,7 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("filters the OpenAI catalog to codex-eligible models under a ChatGPT connection when the catalog has no Codex list", () =>
+  it.effect("filters the OpenAI catalog to codex-eligible models under a ChatGPT connection when the catalog's Codex list is empty", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
       const models = yield* Model.Service
@@ -171,7 +171,7 @@ describe("OpenAIPlugin", () => {
           metadata: { accountID: "acct_123" },
         }),
       })
-      yield* addPlugin().pipe(Effect.provideService(ModelsDev.Service, planCatalog({ current: {} })))
+      yield* addPlugin().pipe(Effect.provideService(ModelsDev.Service, planCatalog({ current: { "openai-codex": [] } })))
 
       const direct = yield* request(Provider.ID.openai, "https://api.openai.com/v1")
       const custom = yield* request(Provider.ID.make("custom-openai"), "https://custom.example/v1")
