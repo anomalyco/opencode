@@ -1,4 +1,4 @@
-﻿export const providerApiKeyUrls: Record<string, string> = {
+export const providerApiKeyUrls: Record<string, string> = {
   "opencode-go": "https://opencode.ai/console",
   "opencode": "https://opencode.ai/console",
   "openai": "https://platform.openai.com/api-keys",
