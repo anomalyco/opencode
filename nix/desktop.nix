@@ -111,17 +111,19 @@ stdenv.mkDerivation (finalAttrs: {
 
     cd packages/desktop
 
-    export OPENCODE_CLI_DIST="$TMPDIR/desktop-cli"
+    # script/build.ts bundles the CLI from ../cli/dist when the channel's
+    # package is staged there, and fails for prod otherwise. Stage the Nix-built
+    # CLI at that path instead of downloading a published one.
     cli_package=$(bun -e 'import { getCurrentCli } from "./script/utils.ts"; console.log(getCurrentCli().package.replace("@opencode/", ""))')
     # copyBuiltCliToResources joins this dist with the npm package name getCurrentCli()
     # reports, not the Nix build's name. It reads only .version from the manifest and
     # writes it as opencode-cli.version beside the binary.
-    mkdir -p "$OPENCODE_CLI_DIST/$cli_package/bin"
-    cp ${lib.getExe opencode} "$OPENCODE_CLI_DIST/$cli_package/bin/opencode"
+    mkdir -p ../cli/dist/$cli_package/bin
+    cp ${lib.getExe opencode} ../cli/dist/$cli_package/bin/opencode
     # OPENCODE_VERSION is what the bundled CLI prints for --version, so the manifest
     # and the executable cannot drift.
     bun -e 'await Bun.write(process.argv[1], JSON.stringify({ version: process.env.OPENCODE_VERSION }) + "\n")' \
-      "$OPENCODE_CLI_DIST/$cli_package/package.json"
+      ../cli/dist/$cli_package/package.json
 
     bun run build
     npx electron-builder --dir \
@@ -191,6 +193,15 @@ stdenv.mkDerivation (finalAttrs: {
   autoPatchelfIgnoreMissingDeps = [
     "libc.musl-x86_64.so.1"
   ];
+
+  # patchelf's setup hook shrinks the RUNPATH of every ELF in $out, trimming
+  # entries no DT_NEEDED references and dropping the libraries Electron
+  # dlopen()s at runtime (libGL, vulkan, pipewire, pulseaudio, libsecret for
+  # the keyring). The Electron tree ships with the RUNPATH nixpkgs baked into
+  # electron.dist; keep it whole. autoPatchelf in postFixup still adds what
+  # the bundled CLI and native modules need.
+  dontPatchELF = true;
+
   postFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
     autoPatchelf $out/opt/opencode-desktop/resources
   '';
