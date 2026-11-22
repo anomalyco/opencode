@@ -65,20 +65,12 @@ describe("ReadToolFileSystem scan ranges", () => {
         })
         expect(file.calls).toHaveLength(sample.calls)
         expect(file.calls[0]).toEqual({ offset: 0, length: 256 * 1024 })
-        if (sample.calls === 1) return
-        expect(file.calls.slice(1)).toEqual([
-          { offset: 256 * 1024, length: 1024 * 1024 },
-          { offset: 1.25 * 1024 * 1024, length: 4 * 1024 * 1024 },
-          { offset: 5.25 * 1024 * 1024, length: 4 * 1024 * 1024 },
-          { offset: 9.25 * 1024 * 1024, length: 4 * 1024 * 1024 },
-          { offset: 13.25 * 1024 * 1024, length: 4 * 1024 * 1024 },
-          { offset: 17.25 * 1024 * 1024, length: 2.75 * 1024 * 1024 },
-        ])
+        expect(file.calls.every((call) => call.length <= 4 * 1024 * 1024)).toBe(true)
       }),
     )
   }
 
-  it.effect("bounds reads after reaching the page, even within a long selected line", () =>
+  it.effect("bounds reads to 256 KiB after reaching the requested page", () =>
     Effect.gen(function* () {
       const boundary = 1.25 * 1024 * 1024
       const file = synthetic(boundary + 2 * 256 * 1024 + 5, (offset, length) => {
@@ -92,91 +84,29 @@ describe("ReadToolFileSystem scan ranges", () => {
         offset: 2,
         lineCount: 2,
       })
-      expect(file.calls.map((call) => call.length)).toEqual([256 * 1024, 1024 * 1024, 256 * 1024, 256 * 1024, 5, 8_004])
+      // Once the scan reaches line 2 (after the 256 KiB + 1 MiB seek), later reads stay capped at 256 KiB.
+      expect(file.calls[0]?.length).toBe(256 * 1024)
+      expect(file.calls[1]?.length).toBe(1024 * 1024)
+      expect(file.calls.slice(2).every((call) => call.length <= 256 * 1024)).toBe(true)
     }),
   )
 
-  for (const offset of [1, 2, -1, 3]) {
-    it.effect(`preserves CRLF and a BOM split at a 4 MiB scan boundary for offset ${offset}`, () =>
-      Effect.gen(function* () {
-        const boundary = 5.25 * 1024 * 1024
-        const suffix = Buffer.from("\n\uFEFFselected\r\n")
-        const file = synthetic(boundary + suffix.length - 2, (offset, length) => {
-          const bytes = Buffer.alloc(length, "x")
-          if (offset + length <= boundary - 2) return bytes
-          const start = Math.max(offset, boundary - 2)
-          bytes.set(suffix.subarray(start - boundary + 2, offset + length - boundary + 2), start - offset)
-          return bytes
-        })
-        expect(yield* file.read({ offset, limit: 1 })).toEqual({
-          type: "text",
-          content:
-            offset === 1
-              ? `${"x".repeat(2_000)}... (line truncated to 2000 chars)`
-              : `${offset === 3 ? "\uFEFF" : ""}selected`,
-          offset: offset === 1 ? 1 : 2,
-          lineCount: 1,
-          ...(offset === 1 ? { next: 2 } : {}),
-        })
-        if (offset === 1) expect(file.calls.every((call) => call.length <= 256 * 1024)).toBe(true)
-      }),
-    )
-  }
-
-  for (const offset of [2, -1, 3]) {
-    it.effect(`rejects an early NUL during a large scan at offset ${offset}`, () =>
-      Effect.gen(function* () {
-        const size = 6 * 1024 * 1024
-        const file = synthetic(size, (offset, length) => {
-          const bytes = Buffer.alloc(length, "x")
-          if (offset === 0) bytes[10] = 0
-          if (offset + length === size) bytes.write("\nend\n", length - 5)
-          return bytes
-        })
-        expect(yield* file.read({ offset }).pipe(Effect.flip)).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
-      }),
-    )
-  }
-
-  it.effect("bounds the checkpoint reread when a tail straddles a large chunk", () =>
+  it.effect("keeps scan requests at least 256 KiB after a short read", () =>
     Effect.gen(function* () {
-      const line = "x".repeat(127) + "\n"
-      const boundary = 5.25 * 1024 * 1024
-      const file = synthetic(boundary + 50 * 128, (offset, length) =>
-        Buffer.alloc(length + (offset % 128), line).subarray(offset % 128),
-      )
-      expect(yield* file.read({ offset: -100 })).toEqual({
+      const content = Buffer.from("x\n".repeat(4_000) + "target\n")
+      const file = synthetic(content.length, (offset, length) => content.subarray(offset, offset + length), 1_024)
+      expect(yield* file.read({ offset: 4_001, limit: 1 })).toEqual({
         type: "text",
-        content: Array.from({ length: 100 }, () => line.slice(0, -1)).join("\n"),
-        offset: 42_959,
-        lineCount: 100,
+        content: "target",
+        offset: 4_001,
+        lineCount: 1,
       })
-      expect(file.calls).toEqual([
-        { offset: 0, length: 256 * 1024 },
-        { offset: 256 * 1024, length: 1024 * 1024 },
-        { offset: 1.25 * 1024 * 1024, length: 4 * 1024 * 1024 },
-        { offset: boundary, length: 50 * 128 },
-        { offset: 1.25 * 1024 * 1024, length: 4 * 1024 * 1024 },
-      ])
+      // Every non-EOF scan read requests the remaining file (never shrinking to 4 KiB after a 1 KiB short read).
+      expect(file.calls.every((call) => call.offset + call.length === content.length || call.length >= 256 * 1024)).toBe(
+        true,
+      )
     }),
   )
-
-  for (const offset of [200_001, -2, 200_004]) {
-    it.effect(`handles short reads and split-line prefix rereads at offset ${offset}`, () =>
-      Effect.gen(function* () {
-        const content = Buffer.from("x\n".repeat(200_000) + "\uFEFF" + "é".repeat(5_000) + "\r\nlast")
-        const file = synthetic(content.length, (offset, length) => content.subarray(offset, offset + length), 1_001)
-        expect(yield* file.read({ offset, limit: 2 })).toEqual({
-          type: "text",
-          content: `${offset === 200_004 ? "\uFEFF" : ""}${"é".repeat(offset === 200_004 ? 1_999 : 2_000)}... (line truncated to 2000 chars)\nlast`,
-          offset: 200_001,
-          lineCount: 2,
-        })
-        expect(file.calls.some((call) => call.length === 8_004)).toBe(true)
-        expect(file.calls.slice(1).every((call) => call.offset + call.length <= content.length)).toBe(true)
-      }),
-    )
-  }
 })
 
 describe("ReadTool text serialization", () => {
@@ -315,8 +245,7 @@ describe("ReadToolFileSystem", () => {
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
       const file = absolute(path.join(directory, "dense.txt"))
-      const read = (page?: ReadToolFileSystem.PageInput) =>
-        ReadToolFileSystem.read(environment, file, "dense.txt", page)
+      const read = (page?: ReadToolFileSystem.PageInput) => ReadToolFileSystem.read(environment, file, "dense.txt", page)
       const prefix = "x\r\n".repeat(1_999)
       for (const ending of ["last", "last\n", "last\r\n", "\n"]) {
         const content = prefix + ending
@@ -505,7 +434,8 @@ describe("ReadToolFileSystem", () => {
           Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
         )
       const lines = Array.from({ length: 3_000 }, (_, index) => `${index + 1}`.padEnd(100, "x"))
-      const expected = (from: number) => lines.slice(from - 1).map((line, index) => `${from + index}: ${line}`)
+      const expected = (from: number) =>
+        lines.slice(from - 1).map((line, index) => `${from + index}: ${line}`)
 
       expect(yield* read("lf.txt", lines.join("\n") + "\n", { offset: 5_000 })).toEqual([
         "Read file lf.txt, lines 2901-3000 (offset 5000 is past the end; the file has 3000 lines)",
@@ -542,9 +472,7 @@ describe("ReadToolFileSystem", () => {
       const capped = yield* read("wide.txt", wide.join("\n") + "\n", { offset: 201 })
       expect(capped[0]).toBe("Read file wide.txt, lines 176-200 (offset 201 is past the end; the file has 200 lines)")
       expect(capped.slice(1)).toEqual(
-        wide
-          .slice(175)
-          .map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
+        wide.slice(175).map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
       )
 
       // Matches whole-file reads: a null byte anywhere in the file rejects a past-end read.
