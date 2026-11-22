@@ -81,8 +81,7 @@ function track(event: FocusEvent) {
     attributeFilter: ["disabled", "contenteditable", "tabindex", "hidden", "inert"],
   })
 
-  // Once focus lands on a live element, earlier lost entries are superseded and would only retain detached subtrees.
-  history.filter((item) => item.element === element || item.spot !== undefined).forEach(forget)
+  history.filter((item) => item.element === element).forEach(forget)
 
   // Moving within one list or menu replaces its entry, so arrowing through a long menu keeps the control that opened it.
   const last = history.at(-1)
@@ -105,14 +104,6 @@ function forget(entry: Entry) {
 function lose(entry: Entry, records: MutationRecord[]) {
   if (entry.spot) return
   const element = entry.element
-
-  // Ignore childList mutations that did not remove the element (for example mounting a portal onto document.body),
-  // so checkVisibility() does not force a full style recalc on every unrelated DOM insertion.
-  const relevant = records.some(
-    (item) => item.type === "attributes" || Array.from(item.removedNodes).some((node) => node.contains(element)),
-  )
-
-  if (!relevant) return
 
   // A panel or popover focused as a whole (tabindex -1) keeps focus when its page changes around it.
   if (usable(element) || holds(element)) return
@@ -215,7 +206,7 @@ function usable(element: HTMLElement) {
 function holds(element: HTMLElement) {
   return (
     element === document.activeElement &&
-    element.matches("[tabindex]:not(:disabled)") &&
+    element.matches('[tabindex]:not(:disabled)') &&
     element.checkVisibility() &&
     !element.closest("[inert]")
   )

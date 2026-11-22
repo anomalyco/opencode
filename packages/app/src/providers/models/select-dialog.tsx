@@ -867,12 +867,16 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     if (!viewport) return undefined
     viewportEl = viewport
 
-    // At scrollTop === 0 before any header styles have been mutated, only the first header sits at the top with
-    // fade 0; avoid forcing offsetTop/offsetHeight layout reads across all headers until the list scrolls.
+    // At the top, before any scroll has faded a label, the first header is the stuck one and nothing is faded. Marking
+    // it needs no layout read, so opening the dialog or changing its rows does not measure every header.
     if (!headerMetrics && !headersDirty && viewport.scrollTop === 0) {
       const first = viewport.querySelector<HTMLElement>('[data-slot="search-list-header"]')
 
-      if (first && !first.hasAttribute("data-stuck")) first.setAttribute("data-stuck", "")
+      // A header keeps its element while sections come and go above it, such as Favorites.
+      viewport
+        .querySelectorAll<HTMLElement>('[data-slot="search-list-header"][data-stuck]')
+        .forEach((header) => header.toggleAttribute("data-stuck", header === first))
+      first?.toggleAttribute("data-stuck", true)
 
       return undefined
     }

@@ -175,6 +175,11 @@ function init(container: () => HTMLElement | undefined) {
     let ref: HTMLDivElement | undefined
     let dispose = () => {}
 
+    // Kobalte's scroll lock stays on touch devices, where it also stops a touch from scrolling the page behind the
+    // dialog. With a mouse or trackpad the shell's own lock is enough (its body does not scroll), and Kobalte's reads
+    // layout as the dialog opens and puts a non-passive wheel listener on the document.
+    const touch = window.matchMedia("(hover: none) and (pointer: coarse)").matches
+
     const node = runWithOwner(effect.request.owner, () =>
       createRoot((d: () => void) => {
         dispose = d
@@ -183,9 +188,7 @@ function init(container: () => HTMLElement | undefined) {
         return (
           <Kobalte
             modal={modal()}
-            // The app shell already locks document scroll; Kobalte's preventScroll forces layout on open and installs a
-            // non-passive document wheel listener that runs ancestor scroll checks on every wheel tick.
-            preventScroll={false}
+            preventScroll={touch}
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (!open) dispatch({ type: "layer.dismiss", attempt })
