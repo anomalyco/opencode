@@ -146,7 +146,7 @@ export const create = (
   permission: Permission.Interface,
   /** With `full_codemode`, the session's services, which turn on the experimental `path` and `Bun` globals. */
   services?: Context.Context<Services>,
-  /** With `full_codemode`, where the full result is saved when a long string in it is cut. */
+  /** With `full_codemode`, cuts and saves a result whose long strings were cut. */
   toolOutput?: ToolOutput.Interface,
 ) => {
   return {
@@ -239,15 +239,11 @@ export const create = (
         const output = formatResult(result)
         // Only a result over the limits has its long strings cut, so one that fits is sent as it is.
         const limits = toolOutput === undefined ? undefined : yield* toolOutput.limits
-        const shown =
+        const text =
           limits === undefined ||
           (ToolOutput.countLines(output) <= limits.maxLines && Buffer.byteLength(output, "utf-8") <= limits.maxBytes)
             ? output
             : formatResult(cutStrings(result))
-        const text =
-          shown === output || toolOutput === undefined
-            ? shown
-            : `${shown}\n\n[full output saved to ${yield* toolOutput.save(new TextEncoder().encode(output), "")}]`
         const value: typeof ExecuteOutput.Type = {
           output,
           toolCalls,
@@ -269,11 +265,10 @@ export const create = (
           ...(value.error ? { error: true } : {}),
           ...(changed.length > 0 ? { files: changed } : {}),
         }
-        return {
-          output: value,
-          content,
-          metadata,
-        }
+        // Cut and marked here, so the one saved file holds the output before its strings were cut.
+        if (text === output || toolOutput === undefined) return { output: value, content, metadata }
+        const bounded = yield* toolOutput.truncate({ content, metadata }, { full: output })
+        return { output: value, content: bounded.content, metadata: bounded.metadata ?? metadata }
       }).pipe(Effect.scoped),
   } satisfies Info
 }

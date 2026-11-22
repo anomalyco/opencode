@@ -27,6 +27,15 @@ type Result = Tool.NormalizedResult
  */
 export type Strategy = "head" | "head-tail"
 
+export type TruncateOptions = {
+  readonly strategy?: Strategy
+  /**
+   * The full output when the result's text is already a shortened form of it. It is saved in place of the text, and
+   * even when the text fits, so the result's one marker and `outputPath` point to everything.
+   */
+  readonly full?: string
+}
+
 export type Limits = {
   maxLines: number
   maxBytes: number
@@ -39,7 +48,7 @@ export type Editor = {
 export interface Interface extends State.Transformable<Editor> {
   /** The configured `tool_output` limits a result is cut to. */
   readonly limits: Effect.Effect<Limits>
-  readonly truncate: (result: Result, options?: { readonly strategy?: Strategy }) => Effect.Effect<Result>
+  readonly truncate: (result: Result, options?: TruncateOptions) => Effect.Effect<Result>
   /** Writes bytes the model cannot receive inline to a retained file and returns its path. */
   readonly save: (bytes: Uint8Array, extension: string) => Effect.Effect<string>
   readonly cleanup: () => Effect.Effect<void>
@@ -99,7 +108,7 @@ const layer = Layer.effect(
       }
     })
 
-    const truncate = Effect.fnUntraced(function* (result: Result, options?: { readonly strategy?: Strategy }) {
+    const truncate = Effect.fnUntraced(function* (result: Result, options?: TruncateOptions) {
       if (result.metadata?.truncated !== undefined) return result
       const content = result.content
       // A line break joins text parts unless the text before already ends in one.
@@ -114,12 +123,19 @@ const layer = Layer.effect(
       )
       const limits = state.get()
       const totalLines = countLines(text)
-      if (totalLines <= limits.maxLines && Buffer.byteLength(text, "utf-8") <= limits.maxBytes)
-        return { ...result, metadata: { ...result.metadata, truncated: false } }
+      const fits = totalLines <= limits.maxLines && Buffer.byteLength(text, "utf-8") <= limits.maxBytes
+      if (fits && options?.full === undefined) return { ...result, metadata: { ...result.metadata, truncated: false } }
+      const saved = yield* write(options?.full ?? text)
+      const metadata = {
+        ...result.metadata,
+        truncated: true,
+        ...(saved.failure === undefined && { outputPath: saved.file }),
+      }
+      if (fits)
+        return { ...result, content: [...content, { type: "text" as const, text: `[${saved.saved}]` }], metadata }
 
       if ((options?.strategy ?? limits.strategy) === "head-tail") {
         const cut = headTail(text, limits)
-        const saved = yield* write(text)
         const marker = `[… ${cut.lines} ${cut.lines === 1 ? "line" : "lines"} (${formatSize(cut.bytes)}) cut from the middle; ${saved.saved}]`
         const shown = `${cut.head}${cut.head === "" || cut.head.endsWith("\n") ? "" : "\n"}${marker}${cut.tail === "" ? "" : `\n${cut.tail}`}`
         // The text parts become one, where the first was; files keep their places.
@@ -129,11 +145,7 @@ const layer = Layer.effect(
           content: content.flatMap((item, index): Tool.Content[] =>
             item.type !== "text" ? [item] : index === first ? [{ ...item, text: shown }] : [],
           ),
-          metadata: {
-            ...result.metadata,
-            truncated: true,
-            ...(saved.failure === undefined && { outputPath: saved.file }),
-          },
+          metadata,
         }
       }
 
@@ -141,7 +153,6 @@ const layer = Layer.effect(
       // start. The preview never ends on a line break.
       const end = Math.min(afterLines(text, limits.maxLines), byteBoundary(text, limits.maxBytes))
       const shown = text.slice(0, text.endsWith("\r\n", end) ? end - 2 : text.endsWith("\n", end) ? end - 1 : end)
-      const saved = yield* write(text)
       // Counted before the final line break is stripped, so a blank last line still counts.
       const shownLines = countLines(text.slice(0, end))
       const lastLineCut =
@@ -176,11 +187,7 @@ const layer = Layer.effect(
       return {
         ...result,
         content: bounded,
-        metadata: {
-          ...result.metadata,
-          truncated: true,
-          ...(saved.failure === undefined && { outputPath: saved.file }),
-        },
+        metadata,
       }
     })
 

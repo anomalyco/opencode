@@ -517,16 +517,31 @@ describe("full Code Mode output", () => {
   it.live("a huge string keeps its start and end, and the keys after it", () =>
     run(`return { output: "start\\n" + "x".repeat(200 * 1024) + "\\nend of output", exitCode: 3 }`, (text, metadata) =>
       Effect.gen(function* () {
-        const value = JSON.parse(text.slice(0, text.indexOf("\n\n[full output saved to ")))
+        const value = JSON.parse(text.slice(0, text.indexOf("\n[full output saved to ")))
         expect(value.exitCode).toBe(3)
         expect(value.output.startsWith("start\n")).toBe(true)
         expect(value.output.endsWith("x\nend of output")).toBe(true)
         expect(value.output).toMatch(/\[… \d+ chars cut …\]/)
-        expect(metadata?.truncated).toBe(false)
-        const saved = /\[full output saved to (.+)\]$/.exec(text)?.[1]
-        if (saved === undefined) throw new Error("expected a saved output path")
-        const full = JSON.parse(yield* Effect.promise(() => Bun.file(saved).text()))
-        expect(full.output.length).toBe(200 * 1024 + 20)
+        const outputPath = metadata?.outputPath
+        if (typeof outputPath !== "string") throw new Error("expected a saved output path")
+        expect(metadata?.truncated).toBe(true)
+        expect(text.endsWith(`\n[full output saved to ${outputPath}]`)).toBe(true)
+        const full = JSON.parse(yield* Effect.promise(() => Bun.file(outputPath).text()))
+        expect(full).toEqual({ output: "start\n" + "x".repeat(200 * 1024) + "\nend of output", exitCode: 3 })
+      }),
+    ),
+  )
+
+  it.live("a result still over the limits once its strings are cut has one marker and the full output saved", () =>
+    run(`for (let i = 1; i <= 5000; i++) console.log("log " + i)\nreturn "y".repeat(200 * 1024)`, (text, metadata) =>
+      Effect.gen(function* () {
+        const outputPath = metadata?.outputPath
+        if (typeof outputPath !== "string") throw new Error("expected a saved output path")
+        expect(text.match(/full output saved to/g)).toHaveLength(1)
+        expect(text).toContain(`cut from the middle; full output saved to ${outputPath}]`)
+        expect(text.endsWith("\nlog 5000")).toBe(true)
+        const full = yield* Effect.promise(() => Bun.file(outputPath).text())
+        expect(full.startsWith("y".repeat(200 * 1024) + "\n\nLogs:\nlog 1\n")).toBe(true)
       }),
     ),
   )
