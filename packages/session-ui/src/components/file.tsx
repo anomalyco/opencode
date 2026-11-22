@@ -574,7 +574,11 @@ function useViewerRender<I extends RenderTarget, O>(config: ViewerRenderConfig<I
 
     if (effect.type === "refresh-find") return viewer.find.refresh({ reset: true })
 
-    if (effect.type === "notify-rendered") return config.onRendered()
+    if (effect.type === "notify-rendered") {
+      viewer.wrapper?.setAttribute("data-file-ready", "")
+
+      return config.onRendered()
+    }
 
     instance?.cleanUp()
     instance = undefined
@@ -649,6 +653,8 @@ function useViewerRender<I extends RenderTarget, O>(config: ViewerRenderConfig<I
 }
 
 function preserve(viewer: Viewer) {
+  if (!viewer.container.firstElementChild) return () => {}
+
   const root = scrollParent(viewer.wrapper)
 
   if (!root) return () => {}
