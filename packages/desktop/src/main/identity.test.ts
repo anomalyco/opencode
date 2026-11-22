@@ -45,6 +45,7 @@ test.each([
 )
 
 const installedExe = "C:\\Users\\user\\AppData\\Local\\Programs\\ai.opencode.desktop.dev\\OpenCode Dev.exe"
+
 const devElectron = "D:\\repo\\node_modules\\electron\\dist\\electron.exe"
 
 test.each([

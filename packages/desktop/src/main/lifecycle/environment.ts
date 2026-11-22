@@ -81,6 +81,7 @@ const removeCollidingDevShortcut = Effect.gen(function* () {
   if (process.platform !== "win32" || !app.isPackaged) return
 
   const path = yield* Path.Path
+
   const shortcutPath = path.join(
     app.getPath("appData"),
     "Microsoft",
@@ -92,13 +93,13 @@ const removeCollidingDevShortcut = Effect.gen(function* () {
 
   const exists = yield* Effect.tryPromise(() => access(shortcutPath)).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
   )
 
   if (!exists) return
 
   const shortcut = yield* Effect.try(() => shell.readShortcutLink(shortcutPath)).pipe(
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   )
 
   if (!shortcut || !isCollidingDevShortcut(shortcut, APP_USER_MODEL_ID, process.execPath)) return
