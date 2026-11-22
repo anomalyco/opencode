@@ -29,9 +29,10 @@ afterEach(() => {
   Map.groupBy = native.groupBy
   Promise.withResolvers = native.withResolvers
   Promise.try = native.try
-  arrays.toSorted = native.toSorted
-  arrays.toReversed = native.toReversed
-  arrays.toSpliced = native.toSpliced
+  // Restored with defineProperty so the methods stay non-enumerable for later tests, like the shims and the natives.
+  Object.defineProperty(Array.prototype, "toSorted", { value: native.toSorted, writable: true, configurable: true })
+  Object.defineProperty(Array.prototype, "toReversed", { value: native.toReversed, writable: true, configurable: true })
+  Object.defineProperty(Array.prototype, "toSpliced", { value: native.toSpliced, writable: true, configurable: true })
 })
 
 test("Map.groupBy keeps first-seen key order and passes the index", () => {
@@ -108,4 +109,10 @@ test("Array.prototype.toSpliced matches native on the argument-count edge cases"
   expect(spliced(2, undefined)).toEqual(["a", "b", "c", "d"])
   expect(spliced(1, undefined, "z")).toEqual(["a", "z", "b", "c", "d"])
   expect(items).toEqual(["a", "b", "c", "d"])
+})
+
+test("prototype shims are non-enumerable, like the native methods", () => {
+  expect(Array.prototype.propertyIsEnumerable("toSorted")).toBe(false)
+  expect(Array.prototype.propertyIsEnumerable("toReversed")).toBe(false)
+  expect(Array.prototype.propertyIsEnumerable("toSpliced")).toBe(false)
 })

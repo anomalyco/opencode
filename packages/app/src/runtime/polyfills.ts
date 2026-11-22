@@ -41,28 +41,43 @@ if (!Promise.try) {
 
 if (!Array.prototype.toSorted) {
   // SAFETY: the comparator's types flow through the copy unchanged, which is all toSorted promises.
-  Array.prototype.toSorted = function toSorted<T>(this: T[], compareFn?: (a: T, b: T) => number): T[] {
-    return [...this].sort(compareFn)
-  }
+  // defineProperty keeps the shim non-enumerable on Array.prototype, like the native method.
+  Object.defineProperty(Array.prototype, "toSorted", {
+    value: function toSorted<T>(this: T[], compareFn?: (a: T, b: T) => number): T[] {
+      return [...this].sort(compareFn)
+    },
+    writable: true,
+    configurable: true,
+  })
 }
 
 if (!Array.prototype.toReversed) {
-  Array.prototype.toReversed = function toReversed<T>(this: T[]): T[] {
-    return [...this].reverse()
-  }
+  // defineProperty keeps the shim non-enumerable on Array.prototype, like the native method.
+  Object.defineProperty(Array.prototype, "toReversed", {
+    value: function toReversed<T>(this: T[]): T[] {
+      return [...this].reverse()
+    },
+    writable: true,
+    configurable: true,
+  })
 }
 
 if (!Array.prototype.toSpliced) {
   // SAFETY: splice deletes to the end of the array only when deleteCount is an absent argument, and toSpliced skips
   // nothing when start itself is absent, so the shim mirrors those argument-count distinctions. A present-but-
-  // undefined deleteCount deletes nothing, which the 0 fallback matches.
-  Array.prototype.toSpliced = function toSpliced<T>(this: T[], ...args: [start?: number, deleteCount?: number, ...items: T[]]): T[] {
-    const [start, deleteCount, ...items] = args
-    const copy = [...this]
+  // undefined deleteCount deletes nothing, which the 0 fallback matches. defineProperty keeps the shim
+  // non-enumerable on Array.prototype, like the native method.
+  Object.defineProperty(Array.prototype, "toSpliced", {
+    value: function toSpliced<T>(this: T[], ...args: [start?: number, deleteCount?: number, ...items: T[]]): T[] {
+      const [start, deleteCount, ...items] = args
+      const copy = [...this]
 
-    if (args.length > 1) copy.splice(start ?? 0, deleteCount ?? 0, ...items)
-    else if (args.length === 1) copy.splice(start ?? 0)
+      if (args.length > 1) copy.splice(start ?? 0, deleteCount ?? 0, ...items)
+      else if (args.length === 1) copy.splice(start ?? 0)
 
-    return copy
-  }
+      return copy
+    },
+    writable: true,
+    configurable: true,
+  })
 }
