@@ -5,6 +5,7 @@ import { ProjectTable } from "../project/sql.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionInbox } from "./inbox.js"
 import type { Agent } from "@opencode/schema/agent"
+import type { Environment } from "@opencode/schema/environment"
 import type { FileDiff } from "@opencode/schema/file-diff"
 import type { Permission } from "@opencode/schema/permission"
 import type { Project } from "@opencode/schema/project"
@@ -40,6 +41,8 @@ export const SessionTable = sqliteTable(
     slug: text().notNull(),
     directory: directoryColumn().notNull(),
     path: pathColumn(),
+    /** Experimental: a working directory for bare paths and commands, independent of the location. */
+    cwd: text({ mode: "json" }).$type<Environment.Place>(),
     title: text(),
     version: text().notNull(),
     share_url: text(),

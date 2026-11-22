@@ -67,6 +67,7 @@ import type { EventLog } from "@opencode/schema/event-log"
 import type { FileDiff } from "@opencode/schema/file-diff"
 import { Job } from "./job.js"
 import type { Command } from "./command.js"
+import type { Environment } from "@opencode/schema/environment"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 
@@ -93,6 +94,8 @@ type CreateBaseInput = {
   model?: Model.Ref
   metadata?: SessionSchema.Metadata
   permissions?: Permission.Ruleset
+  /** Experimental: a working directory for bare paths and commands; a child inherits its parent's when omitted. */
+  cwd?: Environment.Place
 }
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
@@ -208,6 +211,11 @@ export interface Interface {
     sessionID: SessionSchema.ID
     permissions: Permission.Ruleset
   }) => Effect.Effect<void, NotFoundError>
+  /** Experimental: set or clear the Session's working directory; undefined clears it. */
+  readonly setCwd: (input: {
+    sessionID: SessionSchema.ID
+    cwd: Environment.Place | undefined
+  }) => Effect.Effect<void, NotFoundError>
   readonly move: SessionMove.Interface["move"]
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
@@ -310,6 +318,7 @@ const layer = Layer.effect(
               parentID: input.parentID,
               location,
               subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
+              cwd: input.cwd ?? parent?.experimental?.cwd,
               title: input.title,
               agent: input.agent,
               // Children inherit metadata and permissions the way they inherit
@@ -519,6 +528,7 @@ const layer = Layer.effect(
       unarchive: (sessionID) => sessions.forSession(sessionID).unarchive(),
       setMetadata: (input) => sessions.forSession(input.sessionID).setMetadata(input),
       setPermissions: (input) => sessions.forSession(input.sessionID).setPermissions(input),
+      setCwd: (input) => sessions.forSession(input.sessionID).setCwd({ cwd: input.cwd }),
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),

@@ -19,6 +19,7 @@ import {
   CommandNotFoundError,
   FormAlreadySettledError,
   FormInvalidAnswerError,
+  ForbiddenError,
   FormNotFoundError,
   InvalidCursorError,
   InvalidRequestError,
@@ -177,9 +178,15 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           location: Location.PublicRef.pipe(Schema.optional),
           metadata: Session.Metadata.pipe(Schema.optional),
           permissions: Permission.Ruleset.pipe(Schema.optional),
+          experimental: Schema.Struct({
+            cwd: Schema.String.pipe(Schema.optional).annotate({
+              description:
+                "Working directory for the session's bare paths and commands, independent of its location, such as /work/app or gpu:/work/app. Requires the machines flag. A child session without one inherits its parent's.",
+            }),
+          }).pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: PublicSessionInfo }),
-        error: SessionNotFoundError,
+        error: [SessionNotFoundError, ForbiddenError, InvalidRequestError, LocationNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.create",
@@ -299,6 +306,26 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.switchModel",
           summary: "Switch session model",
           description: "Switch the model used by subsequent provider turns.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("experimental.session.cwd", "/api/experimental/session/:sessionID/cwd", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          cwd: Schema.NullOr(Schema.String).annotate({
+            description:
+              "Working directory for the session's bare paths and commands, such as /work/app or gpu:/work/app. Null clears it.",
+          }),
+        }),
+        success: Schema.Struct({ data: PublicSessionInfo }),
+        error: [SessionNotFoundError, ForbiddenError, InvalidRequestError, LocationNotFoundError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.session.cwd",
+          summary: "Set session working directory",
+          description:
+            "Experimental: may change without compatibility guarantees. Set or clear a session's working directory for its bare paths and commands.",
         }),
       ),
     )

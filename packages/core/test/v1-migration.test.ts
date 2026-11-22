@@ -46,6 +46,7 @@ const session = (
   slug: "test",
   directory: "/tmp/test",
   path: null,
+  cwd: null,
   title: "Test",
   version: "1",
   share_url: null,

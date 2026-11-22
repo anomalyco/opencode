@@ -2,6 +2,7 @@ export * as Session from "./session.js"
 
 import { DateTime, Effect, Fiber, Scope } from "effect"
 import type { Agent } from "@opencode/schema/agent"
+import type { Environment } from "@opencode/schema/environment"
 import type { Model } from "@opencode/schema/model"
 import type { Permission } from "@opencode/schema/permission"
 import { Event } from "@opencode/schema/event"
@@ -90,6 +91,15 @@ export const make = Effect.fn("Session.make")(function* () {
     yield* get(sessionID)
     yield* bus.publish(SessionEvent.Permissions, { sessionID, permissions: input.permissions })
   })
+  const setCwd = Effect.fn("Session.setCwd")(function* (
+    sessionID: SessionSchema.ID,
+    input: { cwd: Environment.Place | undefined },
+  ) {
+    const session = yield* get(sessionID)
+    const current = session.experimental?.cwd
+    if (current?.absolute === input.cwd?.absolute && current?.environment.id === input.cwd?.environment.id) return
+    yield* bus.publish(SessionEvent.CwdUpdated, { sessionID, cwd: input.cwd ?? null })
+  })
   const switchAgent = Effect.fn("Session.switchAgent")(function* (
     sessionID: SessionSchema.ID,
     input: { agent: Agent.ID },
@@ -97,7 +107,8 @@ export const make = Effect.fn("Session.make")(function* () {
     const session = yield* get(sessionID)
     // Without a stored agent the Session runs as its Location's default, which its last step records.
     const current =
-      session.agent ?? (yield* store.lastAssistantAfter({ sessionID }).pipe(Effect.orElseSucceed(() => undefined)))?.agent
+      session.agent ??
+      (yield* store.lastAssistantAfter({ sessionID }).pipe(Effect.orElseSucceed(() => undefined)))?.agent
     if (current === input.agent) return
     yield* bus.publish(SessionEvent.AgentSelected, { sessionID, agent: input.agent, previous: session.agent })
   })
@@ -327,6 +338,7 @@ export const make = Effect.fn("Session.make")(function* () {
     unarchive,
     setMetadata,
     setPermissions,
+    setCwd,
     switchAgent,
     switchModel,
     inbox,
@@ -353,6 +365,7 @@ export const make = Effect.fn("Session.make")(function* () {
     const unarchive = operations.unarchive.bind(undefined, sessionID)
     const setMetadata = operations.setMetadata.bind(undefined, sessionID)
     const setPermissions = operations.setPermissions.bind(undefined, sessionID)
+    const setCwd = operations.setCwd.bind(undefined, sessionID)
     const switchAgent = operations.switchAgent.bind(undefined, sessionID)
     const switchModel = operations.switchModel.bind(undefined, sessionID)
     const inbox = operations.inbox.bind(undefined, sessionID)
@@ -382,6 +395,7 @@ export const make = Effect.fn("Session.make")(function* () {
       unarchive,
       setMetadata,
       setPermissions,
+      setCwd,
       switchAgent,
       switchModel,
       inbox,

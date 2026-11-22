@@ -1,5 +1,7 @@
 import { Instance } from "@opencode/core/instance/service"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Session } from "@opencode/core/session"
+import { SessionCwd } from "@opencode/core/session/cwd"
 import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
@@ -16,6 +18,7 @@ import {
   ConflictError,
   CommandExecutionError,
   CommandNotFoundError,
+  ForbiddenError,
   FormAlreadySettledError,
   FormInvalidAnswerError,
   FormNotFoundError,
@@ -28,6 +31,7 @@ import {
 } from "@opencode/protocol/errors"
 import { AbsolutePath } from "@opencode/core/schema"
 import { locationErrors } from "../location"
+import { machinesEnabled } from "./machine"
 import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
 
 function missingForm(id: Form.ID) {
@@ -40,6 +44,24 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
     const transfer = yield* SessionTransfer.Service
     const instructions = yield* InstructionEntry.Service
     const instances = yield* Instance.Service
+    const locations = yield* LocationServiceMap.Service
+    const machines = yield* machinesEnabled
+    // Experimental: any session cwd, local or on a paired machine, needs the machines flag.
+    const requireMachines = Effect.gen(function* () {
+      if (yield* machines) return
+      return yield* new ForbiddenError({ message: "Machines are disabled; enable experimental.machines" })
+    })
+    // A cwd is text someone typed: resolve it in the session's own Location, which may name a machine.
+    const sessionCwd = (ref: Session.Info["location"], text: string) =>
+      SessionCwd.locate(text).pipe(
+        Effect.provide(locations.get(LocationServiceMap.canonical(ref))),
+        locationErrors,
+        Effect.catchTag("Session.CwdError", (error) => new InvalidRequestError({ message: error.message })),
+        Effect.catchTag(
+          "Environment.Failed",
+          (error) => new InvalidRequestError({ message: `Unable to resolve working directory ${text}: ${error.path}` }),
+        ),
+      )
     const requireSession = (sessionID: Session.ID) =>
       session.get(sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
     const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
@@ -101,6 +123,15 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.create",
         Effect.fn(function* (ctx) {
+          const location =
+            ctx.payload.parentID === undefined
+              ? (ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) })
+              : (yield* session
+                  .get(ctx.payload.parentID)
+                  .pipe(Effect.catchTag("Session.NotFoundError", missingSession))).location
+          const requested = ctx.payload.experimental?.cwd
+          if (requested !== undefined) yield* requireMachines
+          const cwd = requested === undefined ? undefined : yield* sessionCwd(location, requested)
           return {
             data: yield* session
               .create({
@@ -110,12 +141,23 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 model: ctx.payload.model,
                 metadata: ctx.payload.metadata,
                 permissions: ctx.payload.permissions,
-                ...(ctx.payload.parentID === undefined
-                  ? { location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) } }
-                  : { parentID: ctx.payload.parentID }),
+                ...(cwd ? { cwd } : {}),
+                ...(ctx.payload.parentID === undefined ? { location } : { parentID: ctx.payload.parentID }),
               })
               .pipe(Effect.catchTag("Session.NotFoundError", missingSession)),
           }
+        }),
+      )
+      .handle(
+        "experimental.session.cwd",
+        Effect.fn(function* (ctx) {
+          yield* requireMachines
+          const info = yield* requireSession(ctx.params.sessionID)
+          const cwd = ctx.payload.cwd === null ? undefined : yield* sessionCwd(info.location, ctx.payload.cwd)
+          yield* session
+            .setCwd({ sessionID: info.id, cwd })
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return { data: yield* requireSession(info.id) }
         }),
       )
       .handle(

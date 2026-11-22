@@ -9,6 +9,7 @@ import { Model } from "./model.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { SessionID } from "./session-id.js"
 import { SessionMetadata } from "./session-metadata.js"
+import { Environment } from "./environment.js"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session-message.js"
 import { Revert } from "./session-revert.js"
@@ -44,6 +45,8 @@ export const Created = Event.durable({
     projectID: Project.ID,
     location: Location.Ref,
     subpath: RelativePath.pipe(optional),
+    /** Experimental: the working directory the session was created with. */
+    cwd: Environment.Place.pipe(optional),
     parentID: SessionID.pipe(optional),
     slug: Schema.String,
     title: Schema.String.pipe(optional),
@@ -108,6 +111,16 @@ export const MetadataUpdated = Event.durable({
   },
 })
 export type MetadataUpdated = typeof MetadataUpdated.Type
+
+export const CwdUpdated = Event.durable({
+  type: "session.cwd.updated",
+  ...options,
+  schema: {
+    ...Base,
+    cwd: Schema.NullOr(Environment.Place),
+  },
+})
+export type CwdUpdated = typeof CwdUpdated.Type
 
 export const Permissions = Event.durable({
   type: "session.permissions",
@@ -669,6 +682,7 @@ export const Definitions = Event.inventory(
   Moved,
   Renamed,
   MetadataUpdated,
+  CwdUpdated,
   Permissions,
   Viewed,
   Archived,

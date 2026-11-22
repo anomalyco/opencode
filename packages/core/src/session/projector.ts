@@ -171,6 +171,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       slug: Slug.create(),
       directory: parent.directory,
       path: parent.path,
+      cwd: parent.cwd,
       title: forkTitle(parent.title ?? undefined),
       agent: parent.agent,
       model: parent.model,
@@ -880,6 +881,7 @@ const layer = Layer.effectDiscard(
             slug: event.data.slug,
             directory: event.data.location.directory,
             path: event.data.subpath,
+            cwd: event.data.cwd,
             title: event.data.title,
             agent: event.data.agent,
             model: event.data.model,
@@ -986,6 +988,9 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.MetadataUpdated, (event) =>
       setSession(db, event.data.sessionID, { metadata: event.data.metadata, time_updated: event.created }),
+    )
+    yield* bus.project(SessionEvent.CwdUpdated, (event) =>
+      setSession(db, event.data.sessionID, { cwd: event.data.cwd, time_updated: event.created }),
     )
     yield* bus.project(SessionEvent.Permissions, (event) =>
       setSession(db, event.data.sessionID, { permission: event.data.permissions, time_updated: event.created }),

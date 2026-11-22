@@ -115,6 +115,7 @@ const layer = Layer.effect(
               projectID: project.id,
               location: input.location,
               subpath,
+              cwd: input.data.info.experimental?.cwd,
               title: input.data.info.title,
               agent: input.data.info.agent,
               model: input.data.info.model,

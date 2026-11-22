@@ -3,6 +3,7 @@ export * as Session from "./session.js"
 import { Effect, Result, Schema, SchemaGetter, SchemaParser } from "effect"
 import { Base64Url } from "effect/encoding"
 import { Agent } from "./agent.js"
+import { Environment } from "./environment.js"
 import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
@@ -56,6 +57,13 @@ export const Info = Schema.Struct({
   title: Schema.String.pipe(optional),
   location: Location.Ref,
   subpath: RelativePath.pipe(optional),
+  /**
+   * Experimental: a working directory for the session's bare paths and commands, independent of its location.
+   * Omitted entirely when the session has none.
+   */
+  experimental: Schema.Struct({
+    cwd: Environment.Place.pipe(optional),
+  }).pipe(optional),
   metadata: Metadata.pipe(optional),
   /** Evaluated after the agent's rules; the last matching rule wins. */
   permissions: Permission.Ruleset.pipe(optional),

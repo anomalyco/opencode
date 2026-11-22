@@ -97,6 +97,8 @@ import type {
   ExperimentalSessionImportOutput,
   ExperimentalSessionExportInput,
   ExperimentalSessionExportOutput,
+  ExperimentalSessionCwdInput,
+  ExperimentalSessionCwdOutput,
   ExperimentalSessionSkillInput,
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
@@ -467,6 +469,7 @@ const EndpointSessionCreate = (raw: RawClient["server.session"]) => (input?: Ses
         location: input?.["location"],
         metadata: input?.["metadata"],
         permissions: input?.["permissions"],
+        experimental: input?.["experimental"],
       },
     }).pipe(
       Effect.mapError(mapClientError),
@@ -839,6 +842,14 @@ const EndpointExperimentalSessionExport =
       ),
     )
 
+const EndpointExperimentalSessionCwd = (raw: RawClient["server.session"]) => (input: ExperimentalSessionCwdInput) =>
+  preserveEffect<ExperimentalSessionCwdOutput>()(
+    raw["experimental.session.cwd"]({ params: { sessionID: input["sessionID"] }, payload: { cwd: input["cwd"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointExperimentalSessionSkill = (raw: RawClient["server.session"]) => (input: ExperimentalSessionSkillInput) =>
   preserveEffect<ExperimentalSessionSkillOutput>()(
     raw["session.skill"]({
@@ -895,6 +906,7 @@ const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
   stats: EndpointExperimentalSessionStats(raw),
   import: EndpointExperimentalSessionImport(raw),
   export: EndpointExperimentalSessionExport(raw),
+  cwd: EndpointExperimentalSessionCwd(raw),
   skill: EndpointExperimentalSessionSkill(raw),
   wait: EndpointExperimentalSessionWait(raw),
   instructions: {
