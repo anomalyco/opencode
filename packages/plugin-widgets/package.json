@@ -30,7 +30,7 @@
     "@opencode/plugin": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/widget": "workspace:*",
-    "psychoscript": "0.2.1",
+    "psychoscript": "github:anomalyco/psychoscript#fdea142cf03ddbbc2c2518aa2f5293a9ffedb08a",
     "effect": "catalog:"
   },
   "devDependencies": {

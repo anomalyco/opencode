@@ -141,7 +141,8 @@
     "esbuild",
     "node-pty",
     "protobufjs",
-    "electron"
+    "electron",
+    "psychoscript"
   ],
   "overrides": {
     "@opentui/core": "catalog:",
