@@ -97,6 +97,215 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Top endpoints"
+      },
+      {
+        "gap": 1,
+        "align": "center",
+        "wrap": true,
+        "type": "row",
+        "children": [
+          {
+            "style": "caption",
+            "tone": "muted",
+            "type": "text",
+            "text": "Sort by"
+          },
+          [
+            {
+              "variant": "secondary",
+              "onPress": "$function",
+              "type": "button",
+              "label": "Endpoint"
+            },
+            {
+              "variant": "secondary",
+              "onPress": "$function",
+              "type": "button",
+              "label": "Requests"
+            },
+            {
+              "variant": "secondary",
+              "onPress": "$function",
+              "type": "button",
+              "label": "p95"
+            },
+            {
+              "variant": "secondary",
+              "onPress": "$function",
+              "type": "button",
+              "label": "Errors"
+            }
+          ]
+        ]
+      },
+      {
+        "key": "header",
+        "gap": 1,
+        "align": "center",
+        "wrap": true,
+        "type": "row",
+        "children": [
+          {
+            "style": "code",
+            "tone": "muted",
+            "type": "text",
+            "text": "Endpoint      Requests     p95  Errors"
+          },
+          {
+            "style": "caption",
+            "tone": "muted",
+            "type": "text",
+            "text": "7d requests"
+          }
+        ]
+      },
+      false,
+      [
+        {
+          "key": 0,
+          "selected": false,
+          "onPress": "$function",
+          "type": "card",
+          "children": [
+            {
+              "gap": 1,
+              "align": "center",
+              "wrap": true,
+              "type": "row",
+              "children": [
+                {
+                  "style": "code",
+                  "type": "text",
+                  "text": "GET /users     182,400  120 ms   0.12%"
+                },
+                {
+                  "key": "spark0",
+                  "width": 96,
+                  "height": 22,
+                  "fps": 60,
+                  "duration": 0.6,
+                  "alt": "7d requests: 20, 22, 25, 24, 27, 30, 34",
+                  "type": "canvas"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": 1,
+          "selected": false,
+          "onPress": "$function",
+          "type": "card",
+          "children": [
+            {
+              "gap": 1,
+              "align": "center",
+              "wrap": true,
+              "type": "row",
+              "children": [
+                {
+                  "style": "code",
+                  "type": "text",
+                  "text": "POST /orders    64,200  340 ms   1.40%"
+                },
+                {
+                  "key": "spark1",
+                  "width": 96,
+                  "height": 22,
+                  "fps": 60,
+                  "duration": 0.6,
+                  "alt": "7d requests: 12, 11, 13, 9, 8, 10, 7",
+                  "type": "canvas"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": 2,
+          "selected": false,
+          "onPress": "$function",
+          "type": "card",
+          "children": [
+            {
+              "gap": 1,
+              "align": "center",
+              "wrap": true,
+              "type": "row",
+              "children": [
+                {
+                  "style": "code",
+                  "type": "text",
+                  "text": "GET /search    120,900  210 ms   0.30%"
+                },
+                {
+                  "key": "spark2",
+                  "width": 96,
+                  "height": 22,
+                  "fps": 60,
+                  "duration": 0.6,
+                  "alt": "7d requests: 15, 18, 16, 19, 21, 18, 23",
+                  "type": "canvas"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": 3,
+          "selected": false,
+          "onPress": "$function",
+          "type": "card",
+          "children": [
+            {
+              "gap": 1,
+              "align": "center",
+              "wrap": true,
+              "type": "row",
+              "children": [
+                {
+                  "style": "code",
+                  "type": "text",
+                  "text": "PUT /profile     8,800   95 ms   0.05%"
+                },
+                {
+                  "key": "spark3",
+                  "width": 96,
+                  "height": 22,
+                  "fps": 60,
+                  "duration": 0.6,
+                  "alt": "7d requests: 3, 3, 4, 3, 2, 3, 3",
+                  "type": "canvas"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "onPress": "$function",
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

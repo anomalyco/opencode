@@ -25,6 +25,129 @@
       ]
     }
   },
+  "built": {
+    "gap": 2,
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Pick"
+      },
+      {
+        "gap": 2,
+        "align": "start",
+        "wrap": true,
+        "type": "row",
+        "children": [
+          {
+            "selected": false,
+            "onPress": "$function",
+            "type": "card",
+            "children": [
+              {
+                "type": "carousel",
+                "children": [
+                  {
+                    "alt": "A (1/2)",
+                    "aspect": 1.3333333333333333,
+                    "type": "image",
+                    "src": "a.png"
+                  },
+                  {
+                    "alt": "A (2/2)",
+                    "aspect": 1.3333333333333333,
+                    "type": "image",
+                    "src": "b.png"
+                  }
+                ]
+              },
+              {
+                "gap": 1,
+                "align": "center",
+                "wrap": true,
+                "type": "row",
+                "children": [
+                  {
+                    "style": "body",
+                    "type": "text",
+                    "text": "A"
+                  },
+                  {
+                    "style": "caption",
+                    "tone": "accent",
+                    "type": "text",
+                    "text": "(Recommended)"
+                  }
+                ]
+              },
+              {
+                "style": "caption",
+                "tone": "muted",
+                "type": "text",
+                "text": "n"
+              }
+            ]
+          },
+          {
+            "selected": false,
+            "onPress": "$function",
+            "type": "card",
+            "children": [
+              {
+                "alt": "B",
+                "aspect": 1.3333333333333333,
+                "type": "image",
+                "src": "b.png"
+              },
+              {
+                "gap": 1,
+                "align": "center",
+                "wrap": true,
+                "type": "row",
+                "children": [
+                  {
+                    "style": "body",
+                    "type": "text",
+                    "text": "B"
+                  },
+                  null
+                ]
+              },
+              null
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Note",
+        "placeholder": "Add a note (optional)",
+        "onChange": "$function",
+        "type": "input",
+        "value": ""
+      },
+      {
+        "gap": 1,
+        "align": "center",
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "onPress": "$function",
+            "type": "button",
+            "label": "Choose"
+          },
+          {
+            "variant": "secondary",
+            "onPress": "$function",
+            "type": "button",
+            "label": "Dismiss"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 2,
     "type": "column",

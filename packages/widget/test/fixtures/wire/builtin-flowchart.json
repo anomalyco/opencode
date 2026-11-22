@@ -91,6 +91,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Deploy pipeline"
+      },
+      {
+        "onPointer": "$function",
+        "height": 568,
+        "fps": 60,
+        "duration": 1.35,
+        "alt": "Flowchart. Push to main → Build and test; Build and test → Tests pass?; Tests pass? → [yes] Deploy to staging; Tests pass? → [no] Notify author; Notify author → [retry] Build and test; Deploy to staging → Smoke tests pass?; Smoke tests pass? → [yes] Deploy to production; Smoke tests pass? → [no] Notify author; Deploy to production → Done",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a step to follow its edges"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose step"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

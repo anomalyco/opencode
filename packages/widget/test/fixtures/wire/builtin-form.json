@@ -39,6 +39,71 @@
       ]
     }
   },
+  "built": {
+    "gap": 2,
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Form"
+      },
+      null,
+      {
+        "gap": 2,
+        "align": "stretch",
+        "type": "column",
+        "children": [
+          {
+            "label": "Name",
+            "multiline": false,
+            "onChange": "$function",
+            "type": "input",
+            "value": ""
+          },
+          {
+            "label": "Size",
+            "value": 1,
+            "min": 1,
+            "max": 9,
+            "onChange": "$function",
+            "type": "slider"
+          },
+          {
+            "onChange": "$function",
+            "type": "checkbox",
+            "label": "On",
+            "checked": false
+          },
+          {
+            "label": "Pick",
+            "value": [],
+            "multiple": true,
+            "onChange": "$function",
+            "type": "select",
+            "options": [
+              {
+                "value": "a",
+                "label": "A"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "onPress": "$function",
+            "type": "button",
+            "label": "Submit"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 2,
     "type": "column",

@@ -62,6 +62,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Login"
+      },
+      {
+        "onPointer": "$function",
+        "height": 344,
+        "fps": 60,
+        "duration": 1.46,
+        "alt": "Sequence diagram between Browser, API, Auth, DB. 1. Browser → API: POST /login; 2. API → Auth: verify(credentials); 3. Auth → DB: SELECT user; 4. DB → Auth: row (reply); 5. Auth → Auth: check hash; 6. Auth → API: token (reply); 7. API → DB: INSERT session (async); 8. API → Browser: 200 + cookie (reply)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a message to select it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose message"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

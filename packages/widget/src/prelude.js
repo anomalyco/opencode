@@ -1,5 +1,7 @@
 // Widget prelude (specs/v2/widgets.md). A widget program is this prelude, a newline, then the widget template source.
-// Hosts run `<program>\nreturn __widget_step(__input())` with `__input` as the only host global.
+// Hosts run `<program>\nreturn __widget_step(__input())` with `__input` as the only host global. A native host
+// (specs/v2/widgets.md, Native hosts) passes `true` as a second argument, here and to `__widget_live`: it builds the
+// tree clients get itself, so the prelude hands it views as built and finds handlers by their ids' paths.
 
 const ui = (() => {
   // Children may nest arrays and contain null, undefined or false, so widget templates can write `cond && node` and `...list`;
@@ -116,6 +118,75 @@ function __widget_children(list, prefix, path, into, tree, seen) {
       if (count > 1) next = next + "~" + count
     } else next = path + "/" + prefix + index
     into.push(__widget_node(child, next, tree))
+  }
+  return seen
+}
+
+// The handler of the node with id `id` in the view `root` as built: what `__widget_tree(root).handlers[id]` would be,
+// found by following the id's path instead of building the tree (native hosts assign the ids). Where two siblings
+// share a segment (a key that looks like a repeat, `k~2`), the later one's subtree wins, as in the table.
+function __widget_find(root, id) {
+  if (!root || typeof root !== "object" || Array.isArray(root)) return undefined
+  const segments = String(id).split("/")
+  const named = root.key !== undefined && root.key !== null
+  if (segments[0] !== (named ? ":" + encodeURIComponent(String(root.key)) : "0")) return undefined
+  return __widget_found(root, segments, 1)
+}
+
+function __widget_found(node, segments, at) {
+  if (at === segments.length) {
+    const control = __WIDGET_CONTROLS[node.type]
+    const handler = control ? node[control.handler] : undefined
+    if (typeof handler !== "function") return undefined
+    if (node.type !== "carousel" || node.children === undefined) return { event: control.event, handler, node }
+    // A carousel's change is checked against its pages: its children as flattened.
+    return {
+      event: control.event,
+      handler,
+      node: { ...node, children: __widget_items(__widget_list(node.children), []) },
+    }
+  }
+  if (node.children === undefined) return undefined
+  const matches = []
+  __widget_segments(__widget_list(node.children), "", segments[at], matches, null)
+  for (let index = matches.length - 1; index >= 0; index--) {
+    const found = __widget_found(matches[index], segments, at + 1)
+    if (found) return found
+  }
+  return undefined
+}
+
+function __widget_list(children) {
+  return Array.isArray(children) ? children : [children]
+}
+
+function __widget_items(list, into) {
+  for (let index = 0; index < list.length; index++) {
+    const child = list[index]
+    if (Array.isArray(child)) __widget_items(child, into)
+    else if (child) into.push(child)
+  }
+  return into
+}
+
+// Pushes onto `into` the children in `list` whose path segment is `segment`, numbering them as `__widget_children`.
+function __widget_segments(list, prefix, segment, into, seen) {
+  for (let index = 0; index < list.length; index++) {
+    const child = list[index]
+    if (!child || typeof child !== "object") continue
+    if (Array.isArray(child)) {
+      seen = __widget_segments(child, prefix + index + ".", segment, into, seen)
+      continue
+    }
+    let next
+    if (child.key !== undefined && child.key !== null) {
+      next = ":" + encodeURIComponent(String(child.key))
+      if (seen === null) seen = new Map()
+      const count = (seen.get(next) ?? 0) + 1
+      seen.set(next, count)
+      if (count > 1) next = next + "~" + count
+    } else next = prefix + index
+    if (next === segment) into.push(child)
   }
   return seen
 }
@@ -277,7 +348,7 @@ function send(value, options) {
   return new __WidgetResult("send", { value: value ?? null, wake: options?.wake !== false }, options?.state)
 }
 
-function __widget_step(input) {
+function __widget_step(input, native) {
   const data = input.data
   if (input.phase === "draw") {
     const { id, ...frame } = input.frame ?? {}
@@ -288,9 +359,10 @@ function __widget_step(input) {
   }
   if (input.phase === "init") {
     const state = (typeof init === "function" ? init(data) : undefined) ?? {}
-    return { state, view: __widget_tree(view(state, data)).view }
+    const root = view(state, data)
+    return { state, view: native === true ? root : __widget_tree(root).view }
   }
-  const next = __widget_dispatch(input.state, input.event ?? {}, data)
+  const next = __widget_dispatch(input.state, input.event ?? {}, data, native === true)
   const result = next instanceof __WidgetResult ? next : undefined
   const state = result
     ? result.state === undefined
@@ -299,7 +371,8 @@ function __widget_step(input) {
     : next === undefined
       ? input.state
       : next
-  const output = { state, view: __widget_tree(view(state, data)).view }
+  const root = view(state, data)
+  const output = { state, view: native === true ? root : __widget_tree(root).view }
   if (result?.kind === "dismiss") output.dismiss = true
   if (result?.kind === "send") output.send = result.value
   if (result?.kind === "submit") output.submit = result.value
@@ -308,7 +381,7 @@ function __widget_step(input) {
 
 // Routes one client event: system events to the widget template's hooks, control events to the handler of the node with
 // that id in the view of the current state. Nothing else sees either; an event nobody takes changes nothing.
-function __widget_dispatch(state, event, data) {
+function __widget_dispatch(state, event, data, native) {
   if (event.type === "key") {
     const key = __widget_key(event.value)
     return key && typeof onKey === "function" ? onKey(state, key) : undefined
@@ -321,7 +394,8 @@ function __widget_dispatch(state, event, data) {
   if (event.type === "capture")
     return typeof onCapture === "function" ? onCapture(state, event.value === true) : undefined
   if (event.type !== "press" && event.type !== "change" && event.type !== "pointer") return undefined
-  const entry = __widget_tree(view(state, data)).handlers[event.id]
+  const root = view(state, data)
+  const entry = native ? __widget_find(root, event.id) : __widget_tree(root).handlers[event.id]
   if (!entry || entry.event !== event.type) return undefined
   const value = __widget_value(entry, event.value)
   if (value === undefined) return undefined
@@ -339,19 +413,21 @@ const widget = (() => {
     waiting: [],
     handlers: {},
     canvases: {},
+    // Native host: the last rendered view as built, and whether the host found handlers in it.
+    native: false,
+    root: undefined,
+    interactive: false,
     pumping: false,
     done: false,
     idle: null,
     reject: null,
   }
   const api = {}
-  const post = (message) => {
-    if (!live.done) __host.post(message)
-  }
+  const post = (message) => (live.done ? undefined : __host.post(message))
   const wanted = () =>
     !live.done &&
     (live.waiting.length > 0 ||
-      Object.keys(live.handlers).length > 0 ||
+      (live.native ? live.interactive : Object.keys(live.handlers).length > 0) ||
       Object.values(hooks).some((list) => list.length > 0))
   const fail = (error) => live.reject?.(error)
   // Runs a handler or hook; an async one that rejects fails the program like a throw.
@@ -375,7 +451,7 @@ const widget = (() => {
     if (event.type === "fullscreen") return emit("fullscreen", event.value === true, __widget_rect(event.close))
     if (event.type === "capture") return emit("capture", event.value === true)
     if (event.type === "pointer") api.pointer = __widget_pointer(event.value) ?? api.pointer
-    const entry = live.handlers[event.id]
+    const entry = live.native ? __widget_find(live.root, event.id) : live.handlers[event.id]
     if (!entry || entry.event !== event.type) return
     const value = __widget_value(entry, event.value)
     if (value === undefined) return
@@ -431,13 +507,25 @@ const widget = (() => {
     keys: new Set(),
     pointer: null,
     render: (node) => {
-      const tree = __widget_tree(node)
-      live.handlers = tree.handlers
-      live.canvases = tree.canvases
-      post({ type: "render", node: tree.view })
+      if (live.native) {
+        live.root = node
+        live.interactive = post({ type: "render", node }) === true
+      } else {
+        const tree = __widget_tree(node)
+        live.handlers = tree.handlers
+        live.canvases = tree.canvases
+        post({ type: "render", node: tree.view })
+      }
       pump()
     },
     draw: (key, commands) => {
+      // A native host knows the canvases by key and throws these errors itself.
+      if (live.native)
+        return void post({
+          type: "draw",
+          key: String(key),
+          commands: commands instanceof __WidgetDraw ? commands.commands : commands,
+        })
       const canvas = live.canvases[String(key)]
       if (canvas === undefined) throw new Error('No canvas with key "' + key + '" in the rendered view')
       if (canvas.wgsl) throw new Error('Canvas "' + key + '" is drawn by its wgsl; it takes no draw commands')
@@ -484,7 +572,8 @@ const widget = (() => {
     releasePointer: () => post({ type: "capture", value: false }),
   })
   // Runs `main`, then keeps the widget interactive while its view has handlers or hooks are registered.
-  api.__run = async (data) => {
+  api.__run = async (data, native) => {
+    live.native = native
     const failed = new Promise((_, reject) => (live.reject = reject))
     failed.catch(() => {})
     await Promise.race([main(data), failed])
@@ -494,7 +583,7 @@ const widget = (() => {
   return api
 })()
 
-async function __widget_live(input) {
-  await widget.__run(input.data)
+async function __widget_live(input, native) {
+  await widget.__run(input.data, native === true)
   return null
 }

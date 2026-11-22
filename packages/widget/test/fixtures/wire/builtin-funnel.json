@@ -31,6 +31,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Checkout funnel"
+      },
+      {
+        "onPointer": "$function",
+        "height": 224,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Funnel. Visited 12,400, Added to cart 4,100 (33.1% of previous), Checkout 2,300 (56.1% of previous), Paid 1,650 (71.7% of previous), Repeat 420 (25.5% of previous)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a stage to see its conversion"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose stage"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

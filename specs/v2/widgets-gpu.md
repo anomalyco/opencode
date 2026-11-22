@@ -113,7 +113,7 @@ names resources by handle.
 
 ```ts
 type Op =
-  | ["context", handle, canvasId, format, alphaMode]        // getContext + configure; handle is its current texture
+  | ["context", handle, key, format, alphaMode]             // getContext + configure; handle is its current texture
   | ["buffer", handle, size, usage]
   | ["texture", handle, width, height, depthOrArrayLayers, format, usage, mipLevelCount, sampleCount]
   | ["view", handle, texture, descriptor]                    // texture.createView (dimension: "2d" | "2d-array" | "cube")
@@ -147,8 +147,9 @@ type Op =
 ```
 
 Descriptors are WebGPU's, with handles in place of objects and defaults filled in by the prelude. A context's handle
-stands for that canvas's current texture at replay time, so views of it are created once. Before each frame the client
-sends the program `{ type: "canvas", id, width, height }` (physical pixels) for every GPU canvas whose size changed;
+stands for that canvas's current texture at replay time, so views of it are created once. The client finds the canvas
+by its `key` in the last rendered view, as for `widget.draw` (`widgets.md`, Native hosts). Before each frame the client
+sends the program `{ type: "canvas", key, width, height }` (physical pixels) for every GPU canvas whose size changed;
 the prelude updates `context.width`/`height`.
 
 ## Limits

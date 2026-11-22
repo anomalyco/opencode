@@ -5,6 +5,100 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "type": "button",
+        "label": "b"
+      },
+      {
+        "onPress": "$function",
+        "variant": "primary",
+        "type": "button",
+        "label": "bh"
+      },
+      {
+        "type": "checkbox",
+        "label": "c",
+        "checked": true
+      },
+      {
+        "onChange": "$function",
+        "type": "checkbox",
+        "label": "ch",
+        "checked": false
+      },
+      {
+        "value": 1,
+        "min": 0,
+        "max": 2,
+        "type": "slider"
+      },
+      {
+        "value": 1,
+        "min": 0,
+        "max": 2,
+        "onChange": "$function",
+        "type": "slider"
+      },
+      {
+        "value": "a",
+        "type": "select",
+        "options": [
+          {
+            "value": "a",
+            "label": "a"
+          },
+          {
+            "value": "b",
+            "label": "b"
+          }
+        ]
+      },
+      {
+        "multiple": true,
+        "onChange": "$function",
+        "type": "select",
+        "options": [
+          {
+            "value": "a",
+            "label": "a"
+          }
+        ]
+      },
+      {
+        "type": "input",
+        "value": "v"
+      },
+      {
+        "onChange": "$function",
+        "multiline": true,
+        "type": "input",
+        "value": "w"
+      },
+      {
+        "selected": true,
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "no handler"
+          }
+        ]
+      },
+      {
+        "onPress": "$function",
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "handler"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "type": "column",
     "children": [

@@ -10,6 +10,40 @@
       "danger": true
     }
   },
+  "built": {
+    "gap": 2,
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Sure?"
+      },
+      {
+        "type": "markdown",
+        "text": "Really."
+      },
+      {
+        "gap": 1,
+        "align": "center",
+        "type": "row",
+        "children": [
+          {
+            "variant": "danger",
+            "onPress": "$function",
+            "type": "button",
+            "label": "Confirm"
+          },
+          {
+            "variant": "secondary",
+            "onPress": "$function",
+            "type": "button",
+            "label": "Cancel"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 2,
     "type": "column",

@@ -14,6 +14,10 @@ clamps, unknown node types dropped).
     wrapper is the only change: the program text the server serves is untouched.
   - **Live.** `__host.post(message)` already receives a `HostValue`. The host encodes each post and hands a wake-up's
     posts to the app in one call (`on_posts_bytes(Vec<Vec<u8>>)`, beside today's `on_posts`).
+  - **Native tree building.** As a native host (`widgets.md`, Native hosts: the entries get `true`), the encoder builds
+    the tree while it encodes a view: it computes each node's path, writes `id` and `pointer`, skips `key`, the
+    handler markers and the other props the prelude would remove, and keeps the canvas ids by key and whether there
+    are handlers. A live `draw` post carries a `key`, which it writes as the canvas's `str(id)`. The bytes are the same.
 - **iOS and Android** decode the bytes into their existing types (`AgentWidgetNode`, `AgentWidgetDrawList`, step
   output).
 - **Rune doesn't use bytes.** It reads the `HostValue` straight into its structs (`Node`, `Command`, `StepOutput`),

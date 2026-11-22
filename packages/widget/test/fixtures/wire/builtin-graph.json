@@ -123,6 +123,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Service dependencies"
+      },
+      {
+        "onPointer": "$function",
+        "height": 320,
+        "fps": 60,
+        "duration": 1.2,
+        "alt": "Network of 12 nodes and 15 edges. Most connected: gateway (6), orders (4), auth (3)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a node to see its neighbors"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

@@ -5,6 +5,64 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "type": "stack",
+    "children": [
+      {
+        "key": "scene",
+        "height": 10,
+        "type": "canvas"
+      },
+      {
+        "height": 10,
+        "onPointer": "$function",
+        "type": "canvas"
+      },
+      {
+        "key": "game",
+        "height": 10,
+        "onPointer": "$function",
+        "place": "fill",
+        "type": "canvas"
+      },
+      {
+        "key": "gpu",
+        "wgsl": "fn shade(p: vec2f) -> vec4f { return vec4f(1.0); }",
+        "height": 10,
+        "onPointer": "$function",
+        "type": "canvas"
+      },
+      {
+        "key": "scene",
+        "height": 5,
+        "type": "canvas"
+      },
+      {
+        "type": "carousel",
+        "children": [
+          {
+            "type": "text",
+            "text": "p"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "onChange": "$function",
+        "type": "carousel",
+        "children": [
+          {
+            "type": "text",
+            "text": "q"
+          },
+          {
+            "type": "text",
+            "text": "r"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "type": "stack",
     "children": [

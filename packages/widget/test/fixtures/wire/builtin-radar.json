@@ -42,6 +42,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Model comparison"
+      },
+      {
+        "onPointer": "$function",
+        "height": 300,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Radar chart over Speed, Accuracy, Cost, Context, Tools, Vision. Model A: 8, 7, 6, 9, 7, 5; Model B: 5, 9, 4, 7, 9, 8",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap an axis to compare the series; tap a legend entry to hide one"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose axis"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

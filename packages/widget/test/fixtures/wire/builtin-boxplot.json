@@ -75,6 +75,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Build times by runner"
+      },
+      {
+        "onPointer": "$function",
+        "height": 260,
+        "fps": 60,
+        "duration": 0.6,
+        "alt": "Box plots. linux: median 46s, IQR 44–49s, whiskers 42–51s, n = 13, 1 outlier; macos: median 68s, IQR 65–70.5s, whiskers 61–75s, n = 11; windows: median 90s, IQR 86–97.5s, whiskers 80–101s, n = 11, 1 outlier; cached: median 17s, IQR 15–20s, whiskers 12–26s, 1 outlier",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a box to read its statistics"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose group"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

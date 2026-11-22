@@ -76,7 +76,8 @@ and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
    ```
 
    with exactly one global, a synchronous host function `__input()` that returns the step input. No other globals.
-   Use a timeout of at most 250 ms per step.
+   Use a timeout of at most 250 ms per step. A host that builds the view tree natively (ids, flattening) passes
+   `__widget_step(__input(), true)` instead; see the spec's Native hosts and the fixtures in `test/fixtures/wire`.
 
 3. Run it for each step with a different input:
 

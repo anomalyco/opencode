@@ -5,6 +5,14 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "onPress": "$function",
+    "type": "card",
+    "children": {
+      "type": "text",
+      "text": "only"
+    }
+  },
   "view": {
     "type": "card",
     "id": "0",

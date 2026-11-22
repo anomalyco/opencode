@@ -58,6 +58,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Q2 launch plan"
+      },
+      {
+        "onPointer": "$function",
+        "height": 292,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Timeline of 7 tasks, today Apr 20. Research · Apr 1 – Apr 10 (10 days) · 100% done · Design; Wireframes · Apr 8 – Apr 21 (14 days) · 80% done · Design; Visual design · Apr 18 – May 2 (15 days) · 30% done · Design; API · Apr 13 – May 8 (26 days) · 40% done · Build; Client · Apr 27 – May 22 (26 days) · 0% done · Build; Beta · May 25 (milestone) · Build; Launch prep · May 18 – Jun 5 (19 days) · Go to market",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a bar to see its dates"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose task"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

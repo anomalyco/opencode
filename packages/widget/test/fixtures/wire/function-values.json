@@ -1,0 +1,91 @@
+{
+  "name": "function-values",
+  "source": "function view(state, data) {\n  return ui.column({ onHover: (s) => s }, [ui.text(\"t\", { onPress: (s) => s }), (s) => s, ui.button(\"b\", { onChange: (s) => s }), ui.select([{ value: \"a\", label: \"A\", pick: (s) => s }], { onPress: (s) => s }), ui.canvas({ height: 1, onPress: (s) => s }), ui.card({ onChange: (s) => s }, [ui.text(\"c\")])])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "onHover": "$function",
+    "type": "column",
+    "children": [
+      {
+        "onPress": "$function",
+        "type": "text",
+        "text": "t"
+      },
+      "$function",
+      {
+        "onChange": "$function",
+        "type": "button",
+        "label": "b"
+      },
+      {
+        "onPress": "$function",
+        "type": "select",
+        "options": [
+          {
+            "value": "a",
+            "label": "A",
+            "pick": "$function"
+          }
+        ]
+      },
+      {
+        "height": 1,
+        "onPress": "$function",
+        "type": "canvas"
+      },
+      {
+        "onChange": "$function",
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "c"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "type": "column",
+    "children": [
+      {
+        "type": "text",
+        "text": "t"
+      },
+      null,
+      {
+        "type": "button",
+        "label": "b",
+        "id": "0/2"
+      },
+      {
+        "type": "select",
+        "options": [
+          {
+            "value": "a",
+            "label": "A"
+          }
+        ],
+        "id": "0/3"
+      },
+      {
+        "height": 1,
+        "type": "canvas"
+      },
+      {
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "c"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {},
+  "canvases": {}
+}

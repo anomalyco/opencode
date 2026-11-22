@@ -73,6 +73,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Service health"
+      },
+      {
+        "onPointer": "$function",
+        "height": 190,
+        "fps": 60,
+        "duration": 0.9,
+        "alt": "Gauges. CPU: 72% of 0–100 · warning band (60–85); p99 latency: 340 ms of 0–1000 · success band (0–500) · target 500 ms; Uptime: 99.95% of 99–100 · success band (99.9–100)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a gauge for its thresholds"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose gauge"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

@@ -5,6 +5,10 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "type": "text",
+    "text": "alone"
+  },
   "view": {
     "type": "text",
     "text": "alone"

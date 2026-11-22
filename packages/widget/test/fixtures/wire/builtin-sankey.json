@@ -82,6 +82,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Signup flow"
+      },
+      {
+        "onPointer": "$function",
+        "height": 300,
+        "fps": 60,
+        "duration": 0.8,
+        "alt": "Sankey diagram with 4 stages. Flows: Landing → Left 55k, Search → Landing 45k, Landing → Pricing 40k, Pricing → Signed up 32k, Ads → Landing 30k, Pricing → Left 23k, Social → Landing 20k, Search → Pricing 15k",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a stage or a flow to trace it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

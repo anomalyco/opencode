@@ -23,6 +23,32 @@
       "choose": true
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Chart"
+      },
+      {
+        "onPointer": "$function",
+        "height": 240,
+        "fps": 60,
+        "duration": 0.65,
+        "alt": "Bar chart. s: a 1, b 2",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a bar to choose it"
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

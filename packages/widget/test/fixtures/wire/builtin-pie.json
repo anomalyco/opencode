@@ -33,6 +33,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Traffic by source"
+      },
+      {
+        "onPointer": "$function",
+        "height": 240,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Donut chart. Search 48k (48%), Direct 27k (27%), Social 14k (14%), Referral 8k (8%), Email 3k (3%)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a slice to select it, or a legend entry to hide it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

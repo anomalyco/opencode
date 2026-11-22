@@ -5,6 +5,49 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "id": "c",
+    "pointer": true,
+    "type": "column",
+    "children": [
+      {
+        "id": "mine",
+        "pointer": true,
+        "onPress": "$function",
+        "type": "text",
+        "text": "s"
+      },
+      {
+        "id": "mine",
+        "pointer": true,
+        "type": "button",
+        "label": "b"
+      },
+      {
+        "key": null,
+        "type": "text",
+        "text": "n"
+      },
+      {
+        "type": "text",
+        "text": "u"
+      },
+      "loose",
+      7,
+      {
+        "type": "markdown",
+        "text": "**m**"
+      },
+      {
+        "type": "divider"
+      },
+      {
+        "alt": "i",
+        "type": "image",
+        "src": "i.png"
+      }
+    ]
+  },
   "view": {
     "type": "column",
     "children": [

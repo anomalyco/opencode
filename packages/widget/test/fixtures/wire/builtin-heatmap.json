@@ -101,6 +101,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Errors by hour"
+      },
+      {
+        "onPointer": "$function",
+        "height": 278,
+        "fps": 60,
+        "duration": 0.6,
+        "alt": "Heatmap of 7 rows by 8 columns, values 0 to 25. Highest: Thu × 12 25, Thu × 15 23, Tue × 12 22",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a cell to read it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose cell"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

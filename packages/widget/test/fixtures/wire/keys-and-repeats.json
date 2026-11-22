@@ -5,6 +5,56 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "key": "root",
+    "type": "row",
+    "children": [
+      {
+        "key": "k",
+        "onPress": "$function",
+        "type": "button",
+        "label": "x"
+      },
+      {
+        "key": "k",
+        "type": "text",
+        "text": "kk"
+      },
+      {
+        "key": "k",
+        "onPress": "$function",
+        "type": "button",
+        "label": "y"
+      },
+      {
+        "key": "k~2",
+        "onPress": "$function",
+        "type": "button",
+        "label": "z"
+      },
+      {
+        "key": 3,
+        "type": "text",
+        "text": "t"
+      },
+      {
+        "key": "a/b c",
+        "onPress": "$function",
+        "type": "card",
+        "children": [
+          {
+            "type": "button",
+            "label": "in"
+          }
+        ]
+      },
+      {
+        "key": 7,
+        "type": "button",
+        "label": "n"
+      }
+    ]
+  },
   "view": {
     "type": "row",
     "children": [

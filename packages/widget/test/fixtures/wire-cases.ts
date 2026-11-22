@@ -73,6 +73,30 @@ export const cases: ReadonlyArray<{ readonly name: string; readonly source: stri
     ),
   },
   {
+    // Functions where no handler goes: as a child (null on the wire), in another prop, inside a prop's value, and
+    // handler props on nodes that don't take that event.
+    name: "function-values",
+    source: view(
+      `ui.column({ onHover: (s) => s }, [ui.text("t", { onPress: (s) => s }), (s) => s, ui.button("b", { onChange: (s) => s }), ui.select([{ value: "a", label: "A", pick: (s) => s }], { onPress: (s) => s }), ui.canvas({ height: 1, onPress: (s) => s }), ui.card({ onChange: (s) => s }, [ui.text("c")])])`,
+    ),
+  },
+  {
+    // Number keys, written as JavaScript's String(number) writes them (finite ones: a fixture is JSON).
+    name: "number-keys",
+    source: view(
+      `ui.row([ui.button("a", { key: 1.5 }), ui.button("b", { key: -0 }), ui.button("c", { key: 1e21 }), ui.button("d", { key: 0.1 + 0.2 }), ui.button("e", { key: 123456789012345680000 }), ui.button("f", { key: 1e-7 }), ui.button("g", { key: -12.25 }), ui.canvas({ key: 2, height: 1 })])`,
+    ),
+  },
+  {
+    // Two siblings with the same segment and handlers (a repeated key, and a key written like its repeat): the later
+    // one takes the id's events, and the earlier one's subtree still takes the ids only it has. Carousels whose
+    // children flatten to more and to fewer pages than the array has items.
+    name: "collisions-and-pages",
+    source: view(
+      `ui.column([ui.button("first", { key: "k", onPress: (s) => s }), ui.card({ key: "k", onPress: (s) => s }, [ui.button("only here", { onPress: (s) => s })]), ui.card({ key: "k~2", onPress: (s) => s }, [ui.text("none")]), ui.carousel({ onChange: (s) => s }, [[ui.text("a"), ui.text("b"), ui.text("c"), ui.text("d")]]), ui.carousel({ onChange: (s) => s }, [null, null, null, ui.text("e")])])`,
+    ),
+  },
+  {
     // The wire benchmark's grid: 200 cards of six nodes.
     name: "grid-200",
     source: view(

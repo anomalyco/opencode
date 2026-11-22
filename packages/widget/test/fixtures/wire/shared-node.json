@@ -5,6 +5,25 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "onPress": "$function",
+        "type": "button",
+        "label": "Go"
+      },
+      {
+        "type": "text",
+        "text": "between"
+      },
+      {
+        "onPress": "$function",
+        "type": "button",
+        "label": "Go"
+      }
+    ]
+  },
   "view": {
     "type": "column",
     "children": [

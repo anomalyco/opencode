@@ -253,6 +253,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Response times"
+      },
+      {
+        "onPointer": "$function",
+        "height": 240,
+        "fps": 60,
+        "duration": 0.65,
+        "alt": "Histogram of 240 values from 104 ms to 252 ms, median 151.5 ms. Bins: 100–125 ms 51, 125–150 ms 62, 150–175 ms 38, 175–200 ms 26, 200–225 ms 29, 225–250 ms 32, 250–275 ms 2",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "n = 240 · median 151.5 ms · mean 164.8 ms"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose bin"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

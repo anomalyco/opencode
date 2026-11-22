@@ -5,6 +5,11 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "key": "k",
+    "type": "text",
+    "text": "keyed"
+  },
   "view": {
     "type": "text",
     "text": "keyed"

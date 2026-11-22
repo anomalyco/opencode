@@ -5,6 +5,45 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "type": "button",
+        "label": "raw",
+        "onPress": "$function",
+        "key": "r"
+      },
+      {
+        "type": "text",
+        "text": "t",
+        "id": "x"
+      },
+      {
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "in"
+          }
+        ]
+      },
+      {
+        "type": "card",
+        "onPress": "$function",
+        "children": [
+          {
+            "type": "text",
+            "text": "pressable"
+          }
+        ]
+      },
+      {
+        "type": "button",
+        "label": "plain"
+      }
+    ]
+  },
   "view": {
     "type": "column",
     "children": [

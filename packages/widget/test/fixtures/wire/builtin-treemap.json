@@ -76,6 +76,46 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Disk usage"
+      },
+      false,
+      {
+        "onPointer": "$function",
+        "height": 280,
+        "fps": 60,
+        "duration": 0.6,
+        "alt": "Treemap of repo (392 MB): node_modules 222 MB (56.6%), packages 118 MB (30.1%), assets 31 MB (7.9%), docs 18 MB (4.6%), scripts 3 MB (0.8%)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a block with children to drill in, or a leaf to select it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

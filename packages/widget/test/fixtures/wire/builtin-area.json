@@ -77,6 +77,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Storage by tier"
+      },
+      {
+        "onPointer": "$function",
+        "height": 260,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Stacked area chart from Jan to Dec. Hot: 12 TB to 34 TB, peak 34 TB; Warm: 20 TB to 38 TB, peak 38 TB; Cold: 30 TB to 70 TB, peak 70 TB",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Press to read the values at a point in time; tap a legend entry to hide a series"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

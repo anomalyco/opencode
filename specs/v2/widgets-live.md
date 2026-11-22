@@ -24,7 +24,7 @@ Hosts provide these functions under the global `__host` (nothing else beyond the
 
 | Function | Kind | Meaning |
 | --- | --- | --- |
-| `__host.post(message)` | sync | send a JSON message to the client |
+| `__host.post(message)` | sync | send a JSON message to the client; a native host returns whether a `render`'s view has handlers (`widgets.md`, Native hosts) |
 | `await __host.receive()` | async, idempotent | next JSON message from the client (queued in order) |
 | `await __host.sleep(ms)` | async, idempotent | resolve after `ms` milliseconds (clamped to >= 0) |
 | `__host.now()` | sync | milliseconds the program has been running, excluding time paused |
@@ -58,7 +58,8 @@ handlers, and `widget.frame()`, `widget.sleep()` and `Promise.race` cover waitin
 
 **Handlers.** The node props are the same as in step mode (`onPress`, `onChange`, `onPointer`; `widgets.md`, Events),
 but a live handler gets only the value (`onPress()`, `onChange(value)`, `onPointer(p)`) and its return value is
-ignored: it changes the program's variables or calls `widget.*`. `render` keeps the view's id → handler table. While
+ignored: it changes the program's variables or calls `widget.*`. `render` keeps the view's id → handler table (with a
+native host: the node, whose handlers it finds by the ids' paths, and whether the host found any). While
 the view has handlers, hooks are registered or a frame is awaited, the prelude keeps a `__host.receive()` in flight and
 calls the handler or hook for each message between the program's awaits (handlers run while `main` awaits a frame, a
 timer or a fetch). A handler that throws, or an async one that rejects, fails the program like a throw in `main`. When
@@ -74,14 +75,15 @@ full-screen GPU canvas can drive a game.
 
 ## Client ↔ program messages
 
-Program → client (`post`): `{ type: "render", node }`, `{ type: "draw", id, commands }`, `{ type: "frame" }` (one
+Program → client (`post`): `{ type: "render", node }`, `{ type: "draw", id, commands }` (to a native host
+`{ type: "draw", key, commands }`, which it turns into the canvas's id; `widgets.md`, Native hosts), `{ type: "frame" }` (one
 frame wanted), `{ type: "submit", value }`, `{ type: "dismiss" }`, `{ type: "send", value, wake }`, `{ type: "capture", value: true |
 false }` (`capturePointer` / `releasePointer`; clients without capture ignore it), `{ type: "gpu", ops, bytes }` (a GPU
 canvas batch; a frame request may carry one as `{ type: "frame", gpu }`, `widgets-gpu.md`).
 
 Client → program (`receive`): `{ type: "event", event }` (`{ id, type, value }` for a prelude-assigned id, or `id: ""`
 for keys, focus, full screen and capture; the prelude routes it), `{ type: "frame", frame }` (only after a frame request, at
-the next vsync while the widget is visible), `{ type: "resumed", pausedMs }` (after a pause, see below), `{ type: "canvas", id, width, height }` and
+the next vsync while the widget is visible), `{ type: "resumed", pausedMs }` (after a pause, see below), `{ type: "canvas", key, width, height }` and
 `{ type: "gpu", lost }` (GPU canvases, `widgets-gpu.md`).
 
 ## Capabilities
@@ -116,9 +118,9 @@ and hands the actual transfer to the app (URLSession / OkHttp), so system TLS an
 
 ## Lifecycle and budgets
 
-- The client starts `<program>\nreturn await __widget_live(__input())` (input `{ data }`) when an open live widget
-  first becomes visible, on its own thread or task, never the UI thread. Render the last `render` node; before the
-  first one, show a loading frame.
+- The client starts `<program>\nreturn await __widget_live(__input())` (a native host: `__widget_live(__input(), true)`;
+  input `{ data }`) when an open live widget first becomes visible, on its own thread or task, never the UI thread.
+  Render the last `render` node; before the first one, show a loading frame.
 - **Pause when not visible.** When a live widget scrolls out of view, its window or app goes to the background, or the
   session is closed, the client pauses the program: no frames, events or timer firings are delivered, `sleep` timers
   freeze with their remaining time, `now()` stops, and in-flight `fetch` results are held until resume. When the widget

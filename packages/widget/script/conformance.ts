@@ -1,6 +1,7 @@
 // Writes test/fixtures/wire/*.json: for every built-in widget template and a set of edge cases, the wire view, the
-// handler ids and the canvas keys that the prelude at the time of writing produced. Hosts that build view trees
-// natively check themselves against these files. Run `bun run script/conformance.ts` only to regenerate them from a
+// handler ids and the canvas keys that the prelude at the time of writing produced, and the view as built that a native
+// host gets (`built`, each function as the string `FUNCTION`). Hosts that build view trees natively check themselves
+// against these files. Run `bun run script/conformance.ts` only to regenerate them from a
 // prelude known to be right.
 import path from "node:path"
 import { Runtime } from "psychoscript"
@@ -9,6 +10,9 @@ import { examples } from "../test/fixtures/diagrams.js"
 import { cases } from "../test/fixtures/wire-cases.js"
 
 const dir = path.resolve(import.meta.dir, "../test/fixtures/wire")
+
+/** What stands for a function marker in a fixture's `built`. */
+export const FUNCTION = "$function"
 
 const data: Record<string, unknown> = {
   ...examples,
@@ -57,6 +61,25 @@ export const record = async (source: string, input: { phase: "init"; data: unkno
   }
 }
 
+// The step's output view in native mode, with each function as `FUNCTION` (holes and undefined items become null).
+export const built = async (source: string, input: { phase: "init"; data: unknown }) => {
+  const result = await Runtime.make({ limits: { timeoutMs: 10_000 } }).execute(
+    program(source) +
+      `
+      const __mark = (value) =>
+        typeof value === "function"
+          ? ${JSON.stringify(FUNCTION)}
+          : Array.isArray(value)
+            ? value.map(__mark)
+            : value && typeof value === "object"
+              ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, __mark(item)]))
+              : value
+      return JSON.stringify(__mark(__widget_step(${JSON.stringify(input)}, true).view))`,
+  )
+  if (!result.ok) throw new Error(result.error.message)
+  return JSON.parse(result.value as string) as unknown
+}
+
 export const fixtures = () => [
   ...builtins
     .filter((template) => template.mode === "step")
@@ -82,6 +105,7 @@ if (import.meta.main) {
       ...(fixture.builtin ? { builtin: fixture.builtin } : {}),
       source: fixture.source,
       input: fixture.input,
+      built: await built(fixture.source, fixture.input),
       ...expected,
     }
     await Bun.write(path.join(dir, `${fixture.name}.json`), JSON.stringify(file, null, 2) + "\n")

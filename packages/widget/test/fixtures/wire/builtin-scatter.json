@@ -76,6 +76,45 @@
       ]
     }
   },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Bundle size vs. load time"
+      },
+      {
+        "onPointer": "$function",
+        "height": 260,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Scatter chart of ms against KB. Web: 7 points, x 90 to 400, y 280 to 700; Mobile: 5 points, x 60 to 300, y 380 to 820",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Press a point to read it; tap a legend entry to hide a series"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose point"
+          }
+        ]
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "align": "stretch",

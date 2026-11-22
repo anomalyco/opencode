@@ -5,6 +5,41 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "gap": 1,
+    "type": "column",
+    "children": [
+      {
+        "type": "text",
+        "text": "a"
+      },
+      false,
+      null,
+      [
+        {
+          "onPress": "$function",
+          "type": "button",
+          "label": "b"
+        },
+        [
+          {
+            "type": "text",
+            "text": "c"
+          },
+          {
+            "onChange": "$function",
+            "type": "input",
+            "value": ""
+          }
+        ]
+      ],
+      null,
+      {
+        "type": "button",
+        "label": "d"
+      }
+    ]
+  },
   "view": {
     "gap": 1,
     "type": "column",
