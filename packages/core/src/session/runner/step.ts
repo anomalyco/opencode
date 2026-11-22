@@ -5,7 +5,6 @@ import {
   InvalidProviderOutputError,
   LLMClient,
   isContextOverflowFailure,
-  type LLMEvent,
   type ToolCall,
 } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
@@ -133,13 +132,10 @@ export const make = Effect.gen(function* () {
     // A local execution starts only after its Tool.Called publication completes.
     // Read to the end, not just the finish event, so the next request can reuse this response.
     // The span covers only the provider stream, so model time separates from tools, which run in this consumer.
-    const programs = new Map<string, string>()
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
       Stream.withSpan("LLM.stream", { attributes: modelAttributes }),
-      Stream.runForEach((streamed) =>
+      Stream.runForEach((event) =>
         Effect.gen(function* () {
-          const event = asProgram(streamed, programs, input.prepared.codeModeExpression)
-          if (event === undefined) return
           if (publisher.record().providerFailed) return
           // Wait here, where cancellation still works, rather than inside the uninterruptible publish.
           if (!publisher.hasStarted()) yield* Fiber.join(pendingStartSnapshot)
@@ -343,42 +339,6 @@ const isInterruptedStream = (failure: AIError) => {
   if (failure.reason._tag === "InvalidProviderOutput") return failure.reason.classification === "incomplete-stream"
   if (failure.reason._tag === "Transport") return failure.reason.operation === "read"
   return false
-}
-
-/**
- * Weaker models sometimes call a Code Mode tool at the top level. Rewrite that call into the `execute` program it should
- * have been, so it is recorded, run and replayed as one. Its input streams as JSON rather than code, so the deltas are
- * held back until the call completes.
- */
-const asProgram = (
-  event: LLMEvent,
-  programs: Map<string, string>,
-  expressionFor: ((name: string) => string | undefined) | undefined,
-): LLMEvent | undefined => {
-  if (expressionFor === undefined) return event
-  if (event.type === "tool-input-start" && !event.providerExecuted) {
-    const expression = expressionFor(event.name)
-    if (expression === undefined) return event
-    programs.set(event.id, expression)
-    return { ...event, name: "execute", namespace: undefined }
-  }
-  if (event.type === "tool-input-delta") return programs.has(event.id) ? undefined : event
-  if (event.type === "tool-input-end")
-    return programs.has(event.id) ? { ...event, name: "execute", namespace: undefined } : event
-  if (event.type === "tool-input-error") {
-    if (!programs.delete(event.id)) return event
-    return { ...event, name: "execute", namespace: undefined }
-  }
-  if (event.type !== "tool-call" || event.providerExecuted) return event
-  const expression = programs.get(event.id) ?? expressionFor(event.name)
-  if (expression === undefined) return event
-  programs.delete(event.id)
-  return {
-    ...event,
-    name: "execute",
-    namespace: undefined,
-    input: { code: `return await ${expression}(${JSON.stringify(event.input ?? {})})` },
-  }
 }
 
 /** Tool.Error settles in each fiber; only user declines remain in the typed error channel. */
