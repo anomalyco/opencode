@@ -30,6 +30,7 @@ import { ProjectHandler } from "./handlers/project"
 import { WorktreeHandler } from "./handlers/worktree"
 import { VcsHandler } from "./handlers/vcs"
 import { EventFeed } from "./event-feed"
+import { SpaceStore } from "./space-store"
 import { MigrationHandler } from "./handlers/migration"
 import { ConfigHandler } from "./handlers/config"
 
@@ -58,7 +59,7 @@ export const handlers = Layer.mergeAll(
   CommandHandler,
   SkillHandler,
   RpcHandler,
-  EventHandler.pipe(Layer.provide(EventFeed.layer)),
+  EventHandler.pipe(Layer.provide(EventFeed.layer(SpaceStore.extension))),
   PtyHandler,
   PersistentPtyHandler,
   ShellHandler,

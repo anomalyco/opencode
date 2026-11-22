@@ -303,6 +303,17 @@ import type {
   ExperimentalPushSessionRemoveOutput,
   ExperimentalPushSettingsSetInput,
   ExperimentalPushSettingsSetOutput,
+  ExperimentalSpaceSetInput,
+  ExperimentalSpaceSetOutput,
+  ExperimentalSpaceDeleteInput,
+  ExperimentalSpaceDeleteOutput,
+  ExperimentalSpaceSyncInput,
+  ExperimentalSpaceSyncOutput,
+  ExperimentalSpaceSubscribeInput,
+  ExperimentalSpaceSubscribeOutput,
+  ExperimentalSpaceUnsubscribeInput,
+  ExperimentalSpaceUnsubscribeOutput,
+  ExperimentalSpaceResetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1964,6 +1975,78 @@ export function make(options: ClientOptions) {
               requestOptions,
             ).then((value) => value.data),
         },
+      },
+      space: {
+        set: (input: ExperimentalSpaceSetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceSetOutput>(
+            {
+              method: "PUT",
+              path: `/api/experimental/space/${encodeURIComponent(input.space)}/${encodeURIComponent(input.key)}`,
+              body: { value: input["value"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        delete: (input: ExperimentalSpaceDeleteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceDeleteOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/space/${encodeURIComponent(input.space)}/${encodeURIComponent(input.key)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        sync: (input: ExperimentalSpaceSyncInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceSyncOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/space/${encodeURIComponent(input.space)}`,
+              query: { cursor: input["cursor"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        subscribe: (input: ExperimentalSpaceSubscribeInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceSubscribeOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/space/subscribe`,
+              body: { stream: input["stream"], spaces: input["spaces"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        unsubscribe: (input: ExperimentalSpaceUnsubscribeInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceUnsubscribeOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/space/unsubscribe`,
+              body: { stream: input["stream"], spaces: input["spaces"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        reset: (requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceResetOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/space/reset`,
+              successStatus: 204,
+              declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
       },
       migration: {
         v1: {
