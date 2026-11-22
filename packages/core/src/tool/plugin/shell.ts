@@ -446,8 +446,9 @@ export const Plugin = {
                     Effect.fail(new ToolFailure({ message: "Command interrupted by the user before it started." })),
                   ),
                 )
-                // An automation's code runs with nobody present to hear how a backgrounded command ends, so there a
-                // timeout stops the command, as it does a background one.
+                // An automation's code runs with nobody present to hear how a backgrounded command ends. There a
+                // timeout stops the command, as it does a background one, and the command gets no job the session
+                // could move to the background or be told about.
                 const unattended = (yield* Permission.Unattended) !== undefined
                 const timeoutBackgrounds = !background && !unattended
                 return yield* Effect.gen(function* () {
@@ -489,8 +490,6 @@ export const Plugin = {
                   )
                   yield* context.progress({ shellID: info.id })
 
-                  // An unattended command gets no job either: a job would let the session move it to the background
-                  // and tell the session how it ended.
                   if (unattended)
                     return yield* restore(finished(shell, info)).pipe(
                       Effect.onInterrupt(() => shell.stop(info.id, "killed").pipe(Effect.ignore)),
