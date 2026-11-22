@@ -13,7 +13,7 @@ use super::{edit, execute, generic, inline, patch, question, read, shell, subage
 use crate::dialogs::open::truncate_file_path;
 use crate::prelude::*;
 use crate::routes::session::messages::images::{Images, tool_images};
-use crate::routes::session::messages::list::Context;
+use crate::routes::session::messages::list::{Context, RowEvent};
 use crate::routes::session::permission;
 use opentui::input::strip_ansi_sequences;
 
@@ -77,13 +77,13 @@ impl Tool {
         let root = View::new(cx.app).column().shrink(0.0).child(&body).child(images.root());
         let claim: Rc<RefCell<Option<(claim::Mount, bool)>>> = Rc::default();
         // A claimed call changes height when its claim draws more or less, or falls back: the reader stays put.
-        let (claimed, reflowed, laid) = (Rc::downgrade(&claim), cx.reflowed.clone(), Cell::new(None));
+        let (claimed, events, laid) = (Rc::downgrade(&claim), cx.events.clone(), Cell::new(None));
         root.on_resize(move |_, rect| {
             if let (Some(before), Some(claim)) = (laid.replace(Some(rect.height)), claimed.upgrade())
                 && rect.height != before
                 && claim.borrow().is_some()
             {
-                reflowed(rect.screen_y, rect.height - before);
+                events.send(RowEvent::Reflowed { top: rect.screen_y, grown: rect.height - before });
             }
         });
         Self { root, body, view: RefCell::default(), claim, images }
@@ -149,8 +149,10 @@ impl Tool {
         if claim.is_none() {
             let Some(found) = cx.claims.find(&part.name) else { return false };
             let mount = found.mount(cx.app, &part.id, cx.content);
-            let (switched, message) = (cx.switched.clone(), message.id.0.clone());
-            mount.on_switch(move || switched(&message));
+            if let Some(key) = cx.lookup.key(message.id.as_str()) {
+                let events = cx.events.clone();
+                mount.on_switch(move || events.send(RowEvent::Switched(key)));
+            }
             *claim = Some((mount, false));
         }
         let Some((mount, shown)) = claim.as_mut() else { return false };
