@@ -19,7 +19,7 @@ pub mod shells;
 pub mod state;
 pub mod target;
 
-pub use changes::{Changes, Dirty, Selected, Touched};
+pub use changes::{Changes, Dirty, Parts, Selected, Touched};
 pub use connection::HELD;
 pub use driver::{DELTAS, Data, DeltaListening, Gate, Listening, LoadMore, MAILBOX, Prompt, Remote, Task, Unwoken};
 pub use forms::Form;

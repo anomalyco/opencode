@@ -15,7 +15,7 @@ use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
 use opencode_local::watch::Watch;
 use opencode_store::location::{Catalog, Location, LocationData};
-use opencode_store::{Data, Selected};
+use opencode_store::{Data, Parts, Selected};
 use opencode_ui::dialog::Dialogs;
 use opencode_ui::toast::Toasts;
 
@@ -47,6 +47,16 @@ impl Routed {
 
 const CATALOGS: [Catalog; 5] =
     [Catalog::Model, Catalog::Provider, Catalog::Agent, Catalog::Integration, Catalog::Config];
+
+/// What the selections and their readers read of the location: the catalogs above, and the usage limits.
+pub(crate) const READS: Parts = Parts::catalogs(&[
+    Catalog::Model,
+    Catalog::Provider,
+    Catalog::Agent,
+    Catalog::Integration,
+    Catalog::Config,
+    Catalog::UsageLimits,
+]);
 
 pub struct Files {
     /// The state directory that holds `model.json`.
@@ -180,7 +190,7 @@ impl Local {
         let relocated = moved.is_some();
         if let Some(location) = moved {
             self.relocate(location);
-        } else if changes.all() || self.at_tui_location(|at| changes.location(at)) {
+        } else if changes.all() || self.at_tui_location(|at| changes.location_parts(at, READS)) {
             self.notify();
         }
         // A connection can open after these reads: the server does not replay what it sent before the

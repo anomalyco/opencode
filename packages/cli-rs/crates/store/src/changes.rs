@@ -8,7 +8,7 @@ use opencode_api::generated::{AgentID, ModelRef, SessionID};
 
 use crate::driver::Data;
 use crate::forms::GLOBAL;
-use crate::location::Location;
+use crate::location::{Catalog, Location};
 use crate::messages::MessageKey;
 use crate::reads::LocationKey;
 use crate::sessions::{Session, SessionKey};
@@ -44,6 +44,28 @@ impl Touched {
     }
 }
 
+/// What changed of one location: its info, its web search providers, and its catalogs, a bit per [`Catalog`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Parts(u16);
+
+impl Parts {
+    pub const INFO: Self = Self(1 << 13);
+    pub const WEBSEARCH: Self = Self(1 << 14);
+
+    pub const fn catalogs(catalogs: &[Catalog]) -> Self {
+        let (mut bits, mut index) = (0, 0);
+        while index < catalogs.len() {
+            bits |= 1 << catalogs[index] as u16;
+            index += 1;
+        }
+        Self(bits)
+    }
+
+    pub fn any(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
 impl BitOr for Touched {
     type Output = Self;
 
@@ -70,8 +92,8 @@ pub struct Dirty {
     /// Each agent or model selection, in order: a batch can hold this client's acknowledgment and then another
     /// client's switch.
     selected: Vec<(SessionKey, Selected)>,
-    /// Locations whose info, catalogs, or shells changed.
-    locations: Vec<LocationKey>,
+    /// Locations whose info, catalogs, or shells changed, and which.
+    locations: Vec<(LocationKey, Parts)>,
 }
 
 static EVERYTHING: Dirty = Dirty::new(true);
@@ -251,9 +273,15 @@ impl<'a> Changes<'a> {
     }
 
     pub fn location(&self, location: &Location) -> bool {
+        self.location_parts(location, Parts(u16::MAX))
+    }
+
+    /// Any of `parts` of `location` changed.
+    pub fn location_parts(&self, location: &Location, parts: Parts) -> bool {
         self.dirty.all
             || self.data.read(|state| {
-                state.location_key(location).is_some_and(|location| self.dirty.locations.contains(&location))
+                let Some(key) = state.location_key(location) else { return false };
+                self.dirty.locations.iter().any(|(changed, of)| *changed == key && of.any(parts))
             })
     }
 
@@ -295,7 +323,7 @@ impl<'a> Changes<'a> {
     }
 
     pub fn locations<'s>(&self, state: &'s State) -> impl Iterator<Item = &'s Location> + use<'s, 'a> {
-        self.dirty.locations.iter().filter_map(|location| state.location_at(*location))
+        self.dirty.locations.iter().filter_map(|(location, _)| state.location_at(*location))
     }
 }
 
@@ -342,11 +370,12 @@ impl State {
         dirty.selected.push((key, selected));
     }
 
-    pub(crate) fn touch_location(&mut self, location: &Location) {
+    pub(crate) fn touch_location(&mut self, location: &Location, parts: Parts) {
         let key = self.intern(location);
         self.log.unflushed = true;
-        if !self.log.dirty.locations.contains(&key) {
-            self.log.dirty.locations.push(key);
+        match self.log.dirty.locations.iter_mut().find(|(changed, _)| *changed == key) {
+            Some((_, changed)) => changed.0 |= parts.0,
+            None => self.log.dirty.locations.push((key, parts)),
         }
     }
 

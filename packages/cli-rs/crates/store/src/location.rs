@@ -6,6 +6,7 @@ use std::time::Duration;
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
+use crate::changes::Parts;
 use crate::core::{CatalogRead, Effect, LocationRead, Ticket};
 use crate::reads::{Read, ReadKey};
 use crate::shells::{Shell, ShellRead};
@@ -178,13 +179,14 @@ impl State {
             || self.has_read(Read::Catalog(catalog, location))
     }
 
-    pub(crate) fn location_mut(&mut self, location: &Location) -> &mut LocationData {
-        self.touch_location(location);
+    /// The data of `location`, whose `parts` change.
+    pub(crate) fn location_mut(&mut self, location: &Location, parts: Parts) -> &mut LocationData {
+        self.touch_location(location, parts);
         self.locations.entry(location.clone()).or_default()
     }
 
-    fn publish(&mut self, location: &Location, loaded: Loaded) {
-        loaded.publish(self.location_mut(location));
+    fn publish(&mut self, location: &Location, catalog: Catalog, loaded: Loaded) {
+        loaded.publish(self.location_mut(location, Parts::catalogs(&[catalog])));
     }
 
     /// `refreshLocation`: invalidates the catalog and reads it again where something read it.
@@ -287,9 +289,9 @@ impl State {
     /// requested one.
     pub(crate) fn complete_catalog(&mut self, read: CatalogRead, at: Location, loaded: Loaded) {
         if read.catalog.alias() && at != read.location {
-            self.publish(&read.location, loaded.clone());
+            self.publish(&read.location, read.catalog, loaded.clone());
         }
-        self.publish(&at, loaded);
+        self.publish(&at, read.catalog, loaded);
     }
 
     /// Begins a read of the location info of `ticket`'s location; one of the default location `adopt`s the server's
@@ -305,7 +307,7 @@ impl State {
         if adopt {
             self.default_location = at.clone();
         }
-        self.location_mut(&at).info = Some(info);
+        self.location_mut(&at, Parts::INFO).info = Some(info);
     }
 
     /// Begins the trailing refetch of `catalog` at `location`: its key, its token, and the token of the timer it
@@ -357,7 +359,7 @@ impl State {
             changed = true;
         }
         if changed {
-            self.touch_location(location);
+            self.touch_location(location, Parts::catalogs(&[Catalog::Integration]));
         }
     }
 }
