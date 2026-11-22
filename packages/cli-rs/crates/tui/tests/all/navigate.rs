@@ -873,6 +873,33 @@ fn review_the_wheel_moves_evenly_while_rows_drop() {
     assert_eq!(h.idle(), from);
 }
 
+/// A key that drops rows, and a resize before the frame that lays it out: the resize pins the reader's row from rects
+/// the key's move and drop have not moved yet. A resize then moves the view by more than the page (as it does without
+/// a drop), but never past the rows it showed: each step still overlaps the one before, and paging back returns to
+/// the head. A drop the view missed would jump by its whole height. The height alternates, so no row rewraps.
+#[test]
+fn a_resize_in_the_frame_of_a_key_never_skips_rows() {
+    let h = open(turns(LONG), Info::default());
+    h.press("ctrl+g");
+    let head = h.wait_for("┃  Question 1\n");
+    let mut before = h.idle();
+    let mut jumps = Vec::new();
+    for step in 0..150 {
+        h.app.press("pagedown");
+        h.app.resize(80, if step % 2 == 0 { 26 } else { 25 });
+        h.app.advance(Duration::from_millis(1));
+        let after = h.idle();
+        if shift(&before, &after).is_none_or(|moved| !(-15..0).contains(&moved)) {
+            jumps.push(format!("step {step}:\n{before}\n=====\n{after}"));
+        }
+        before = after;
+    }
+    assert!(jumps.is_empty(), "{} jumps; the first:\n{}", jumps.len(), jumps[0]);
+    assert!(top_question(&before).is_some_and(|question| question > 60), "{before}");
+    let screen = page_to_end(&h, "pageup");
+    assert_eq!(screen, head);
+}
+
 #[test]
 fn freed_rows_go_back_to_the_system_once_the_reader_stops() {
     let runs = opencode_tui::features::release::runs;
