@@ -25,8 +25,10 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
       // Claude Agent runs the local `claude` binary, so skip it where opencode cannot start local processes.
       const environment = yield* Effect.serviceOption(Environment.Service)
       const location = yield* Effect.serviceOption(Location.Service)
-      if (Option.isSome(location) && location.value.workspaceID !== undefined) return
-      if (Option.isSome(environment) && environment.value.spawner === EnvironmentUnavailable.spawner) return
+      const remote = Option.isSome(environment)
+        ? !environment.value.hostsServer || environment.value.spawner === EnvironmentUnavailable.spawner
+        : Option.isSome(location) && location.value.workspaceID !== undefined
+      if (remote) return
 
       const status = yield* ClaudeStatus.make(
         io,
