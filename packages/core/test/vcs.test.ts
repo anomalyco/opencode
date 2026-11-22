@@ -572,6 +572,25 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("lists branches whose names end in /HEAD", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+          await commitAll(directory, "initial")
+          await $`git remote add origin ${directory}`.cwd(directory).quiet()
+          await $`git fetch --quiet origin`.cwd(directory).quiet()
+          await $`git remote set-head origin main`.cwd(directory).quiet()
+          await $`git update-ref refs/heads/topic/HEAD HEAD`.cwd(directory).quiet()
+          await $`git update-ref refs/remotes/origin/topic/HEAD HEAD`.cwd(directory).quiet()
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.branches()).toEqual(["main", "topic/HEAD", "origin/main", "origin/topic/HEAD"])
+        expect(yield* vcs.branches({ search: "topic" })).toEqual(["topic/HEAD", "origin/topic/HEAD"])
+      }),
+    ),
+  )
+
   it.live("reports modified, deleted, and untracked files", () =>
     withGit((directory) =>
       Effect.gen(function* () {
