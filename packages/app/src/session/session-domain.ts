@@ -4,6 +4,23 @@ export function selectSessionUserMessages(messages: SessionMessageInfo[]) {
   return messages.filter((message): message is SessionMessageUser => message.type === "user")
 }
 
+/** The latest prompt, unless the model has already answered it with text or a tool call. */
+export function selectUnansweredPrompt(messages: SessionMessageInfo[]) {
+  const index = messages.findLastIndex((message) => message.type === "user")
+  const message = messages[index]
+
+  if (message?.type !== "user") return
+  const answered = messages
+    .slice(index + 1)
+    .some(
+      (item) =>
+        item.type === "assistant" &&
+        item.content.some((part) => part.type === "tool" || (part.type === "text" && part.text.trim() !== "")),
+    )
+
+  return answered ? undefined : message
+}
+
 export function selectVisibleSessionUserMessages(messages: SessionMessageUser[], revertMessageID?: string) {
   if (!revertMessageID) return messages
 

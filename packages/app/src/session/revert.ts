@@ -22,7 +22,7 @@ import {
   type SessionRevertOperation,
   type SessionRevertState,
 } from "./revert-machine"
-import { selectSessionUserMessages } from "./session-domain"
+import { selectSessionUserMessages, selectUnansweredPrompt } from "./session-domain"
 
 const IDLE = createSessionRevertState()
 
@@ -277,14 +277,24 @@ export function createSessionRevert(input: {
     return { type: "undo-rewind.succeeded", attempt, ...snapshot(sessionID) }
   }
 
+  const to = (messageID: string, sessionID = input.session.identity.params.id) =>
+    request(sessionID, (id) => ({
+      type: "rewind.to",
+      messageID,
+      revertMessageID: data.session.get(id)?.revert?.messageID,
+      ...snapshot(id),
+    }))
+
   return {
-    to: (messageID: string, sessionID = input.session.identity.params.id) =>
-      request(sessionID, (id) => ({
-        type: "rewind.to",
-        messageID,
-        revertMessageID: data.session.get(id)?.revert?.messageID,
-        ...snapshot(id),
-      })),
+    to,
+    /** After Stop interrupted the Session: rewinds to its latest prompt if the model had not answered it yet. */
+    takeBack: async (sessionID: string) => {
+      // Interrupt acknowledges before the execution settles, so the start of an answer may still be on its way.
+      await server.api.experimental.session.wait({ sessionID })
+      const message = selectUnansweredPrompt(data.session.message.list(sessionID))
+
+      if (message) await to(message.id, sessionID)
+    },
     undo: () =>
       request(input.session.identity.params.id, (id) => ({
         type: "undo.requested",

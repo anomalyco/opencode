@@ -31,7 +31,8 @@ import { expandPromptInputPastedText, realignPromptInputMentions } from "../../p
 import { parseSlashHead } from "../../prompt/parse"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type ChipData, type PromptInfo, type PromptPartRef } from "../../prompt/history"
-import { registerComposer, saveDraft, takeDraft } from "./draft-stash"
+import { appendToSessionPrompt, registerComposer, saveDraft, takeDraft } from "./draft-stash"
+import { usePromptRestore } from "../../prompt/restore"
 import { Skill } from "@opencode/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
@@ -388,6 +389,33 @@ export function Prompt(props: PromptProps) {
     return pasteQueue
   }
 
+  const restorePrompt = usePromptRestore()
+  // Interrupting before the model has answered with text or a tool call takes the prompt back, as /undo does: the
+  // likeliest reason to stop that early is to reword what was just sent. A draft or a pending prompt means the user
+  // has moved on to something else, so those keep the plain interrupt.
+  async function interrupt(sessionID: string) {
+    const takeBack = !store.prompt.text.trim() && data.session.pending.list(sessionID).length === 0
+    const result = await client.api.session.interrupt({ sessionID, resume: true })
+    // A repeated press finds the execution already stopping and reports nothing interrupted.
+    if (!takeBack || !result.interrupted) return
+    await client.api.experimental.session.wait({ sessionID })
+    const messages = data.session.message.list(sessionID)
+    const index = messages.findLastIndex((message) => message.type === "user")
+    const message = messages[index]
+    if (message?.type !== "user") return
+    const answered = messages
+      .slice(index + 1)
+      .some(
+        (item) =>
+          item.type === "assistant" &&
+          item.content.some((part) => part.type === "tool" || (part.type === "text" && part.text.trim())),
+      )
+    if (answered) return
+    const restored = await restorePrompt(message)
+    await client.api.session.revert.stage({ sessionID, messageID: message.id })
+    appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
+  }
+
   const imageAttachments = createMemo(() =>
     (deduplicatePromptImages(store.prompt.files) ?? []).filter((file) => file.uri.startsWith("data:image/")),
   )
@@ -516,10 +544,9 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            void client.api.session.interrupt({
-              sessionID: props.sessionID,
-              resume: true,
-            })
+            void interrupt(props.sessionID).catch((error) =>
+              toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }),
+            )
             setStore("interrupt", 0)
           }
           dialog.clear()

@@ -365,6 +365,7 @@ export function createActiveSessionRegion(input: {
               sessionKey: input.session.identity.sessionKey,
               controls,
               dock,
+              takeBack: () => revert.takeBack(sessionID),
             })
           : undefined,
     ),

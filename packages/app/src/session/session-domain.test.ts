@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
-import { selectSessionUserMessages, selectVisibleSessionUserMessages } from "./session-domain"
+import { selectSessionUserMessages, selectUnansweredPrompt, selectVisibleSessionUserMessages } from "./session-domain"
 
 const user = (id: string): SessionMessageUser => ({
   id,
@@ -29,3 +29,23 @@ test("selects user history strictly before the revert boundary", () => {
   expect(selectVisibleSessionUserMessages(users.slice(2), "msg_b")).toEqual([])
   expect(selectVisibleSessionUserMessages(users)).toBe(users)
 })
+
+test.each([
+  ["nothing after it", [], "msg_b"],
+  ["only reasoning", [{ type: "reasoning", text: "Thinking" }], "msg_b"],
+  ["blank text", [{ type: "text", text: " \n" }], "msg_b"],
+  ["text", [{ type: "text", text: "Hello" }], undefined],
+  [
+    "a tool call",
+    [{ type: "tool", id: "call_1", name: "read", state: { status: "streaming", input: "" }, time: { created: 0 } }],
+    undefined,
+  ],
+] satisfies [string, SessionMessageAssistant["content"], string | undefined][])(
+  "the latest prompt is unanswered until text or a tool call follows it: %s",
+  (_name, content, expected) => {
+    const reply = { ...assistant, id: "msg_c", content }
+    const messages: SessionMessageInfo[] = [user("msg_a"), assistant, user("msg_b"), ...(content.length ? [reply] : [])]
+
+    expect(selectUnansweredPrompt(messages)?.id).toBe(expected)
+  },
+)
