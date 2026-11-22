@@ -8,11 +8,11 @@ process.env.DATA_DATABASE_PASSWORD = "stats"
 
 const { buildRetentionEntries, buildStatsHomeData, normalizeStatRows } = await import("./home")
 
-test("daily rankings use the latest day while weekly rankings retain seven days and their previous-period change", () => {
+test("daily rankings use yesterday while weekly rankings retain seven days and their previous-period change", () => {
   const rows = Array.from({ length: 14 }, (_, index) =>
     [
-      { model: "model-a", totalTokens: index === 13 ? 3_000_000_000 : 1_000_000_000 },
-      { model: "model-b", totalTokens: index === 13 ? 2_000_000_000 : 4_000_000_000 },
+      { model: "model-a", totalTokens: index === 12 ? 3_000_000_000 : 1_000_000_000 },
+      { model: "model-b", totalTokens: index === 12 ? 2_000_000_000 : 4_000_000_000 },
     ].map(
       (item) =>
         ({

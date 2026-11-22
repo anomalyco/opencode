@@ -16,6 +16,8 @@ export const iconNames = [
   "v0",
   "upstage",
   "togetherai",
+  "thinkingmachines",
+  "tencent",
   "synthetic",
   "submodel",
   "stepfun",

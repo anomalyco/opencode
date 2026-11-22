@@ -3597,14 +3597,13 @@ body {
 
 [data-page="stats"] [data-component="model-spec"] strong {
   min-width: 0;
-  overflow: hidden;
   color: var(--stats-text);
   font-size: 28px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.25;
   letter-spacing: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 [data-page="stats"] [data-section="model-momentum"] {
