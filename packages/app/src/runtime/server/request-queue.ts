@@ -144,12 +144,13 @@ export function createRequestQueue(input: {
         kind.setup ? setupHeadersTimeoutMs : headersTimeoutMs,
       )
 
-      // Native composition keeps body cancellation alive after header cleanup; older WebViews retain the fallback.
-      return base(
-        new Request(request, { signal: AbortSignal.any?.([request.signal, controller.signal]) ?? controller.signal }),
-      ).finally(() => {
+      // Without native composition, the once-only forwarder must live until the caller aborts.
+      const signal = AbortSignal.any?.([request.signal, controller.signal])
+
+      return base(new Request(request, { signal: signal ?? controller.signal })).finally(() => {
         clearTimeout(timer)
-        request.signal.removeEventListener("abort", abort)
+
+        if (signal) request.signal.removeEventListener("abort", abort)
         controllers.delete(id)
         dispatch({ type: "request.settled", id, now: now() })
       })
