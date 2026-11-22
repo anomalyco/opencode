@@ -134,7 +134,11 @@ const filtered = evaluate(
     lockfileVersion: 3,
     workspaces: {
       "": { dependencies: { site: "workspace:*" } },
-      "packages/site": { name: "site", dependencies: { alias: "npm:@scope/lib@1.2.3" } },
+      "packages/site": {
+        name: "site",
+        dependencies: { alias: "npm:@scope/lib@1.2.3" },
+        optionalDependencies: { "foreign-target": "1.0.0" },
+      },
       "services/unused": { name: "unused", dependencies: { missing: "1.0.0" } },
     },
     packages: {
@@ -145,6 +149,8 @@ const filtered = evaluate(
       "@scope/helper": ["@scope/helper@1.0.0", "", {}, hash],
       "elsewhere/peer": ["peer@1.0.0", "", {}, hash],
       missing: ["missing@1.0.0", "", {}, hash],
+      "foreign-target": ["foreign-target@1.0.0", "", { cpu: "arm64", dependencies: { "foreign-child": "*" } }, hash],
+      "foreign-child": ["foreign-child@1.0.0", "", {}, hash],
     },
   }),
   { os: "linux", cpu: "x64", workspaces: [""] },

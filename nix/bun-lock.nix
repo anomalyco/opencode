@@ -1,8 +1,35 @@
 target: lock:
 let
   entries =
-    if target ? workspaces then import ./bun-reachable.nix lock target.workspaces
+    if target ? workspaces then import ./bun-reachable.nix lock target.workspaces compatible
     else builtins.attrValues lock.packages;
+
+  # Bun 1.4.2 ignores libc; 1.4.4 filters it per dependency, not per source.
+  compatible =
+    metadata:
+    matches [
+      "aix"
+      "linux"
+      "sunos"
+      "win32"
+      "darwin"
+      "android"
+      "freebsd"
+      "openbsd"
+    ] target.os (metadata.os or [ ])
+    && matches [
+      "arm"
+      "ppc"
+      "x32"
+      "x64"
+      "ia32"
+      "mips"
+      "s390"
+      "arm64"
+      "ppc64"
+      "s390x"
+      "mipsel"
+    ] target.cpu (metadata.cpu or [ ]);
 
   sources = builtins.concatMap (
     entry:
@@ -21,31 +48,6 @@ let
           builtins.elemAt entry 1
         else
           throw "Unsupported Bun source: ${identity}";
-      # Bun 1.4.2 ignores libc; 1.4.4 filters it per dependency, not per source.
-      compatible =
-        matches [
-          "aix"
-          "linux"
-          "sunos"
-          "win32"
-          "darwin"
-          "android"
-          "freebsd"
-          "openbsd"
-        ] target.os (metadata.os or [ ])
-        && matches [
-          "arm"
-          "ppc"
-          "x32"
-          "x64"
-          "ia32"
-          "mips"
-          "s390"
-          "arm64"
-          "ppc64"
-          "s390x"
-          "mipsel"
-        ] target.cpu (metadata.cpu or [ ]);
       integrity = builtins.elemAt entry (builtins.length entry - 1);
       hash =
         if
@@ -58,7 +60,7 @@ let
     # Bun links workspaces from the repository, not the download cache.
     if builtins.match "workspace:.*" resolution != null then
       [ ]
-    else if !compatible then
+    else if !compatible metadata then
       [ ]
     else if github != null then
       [
@@ -97,7 +99,7 @@ let
             {
               inherit url hash;
             }
-            # bun2nix extracts files only when their store name ends in .tgz.
+            # Keep a stable archive name when the URL has no .tgz suffix.
             // (if builtins.match ".*[.]tgz" url == null then { name = "package.tgz"; } else { });
         }
       ]

@@ -6,19 +6,31 @@
   libarchive,
   fetchurl,
   bun,
-  bun2nix,
+  cacheEntryCreator,
 }:
 sources:
 let
   # Pinned bun2nix uses URL-only HTTP keys; Bun 1.4.4 requires integrity keys.
   # https://github.com/nix-community/bun2nix/pull/108#issuecomment-6442004506
   modernHttp = identity: lib.versionAtLeast bun.version "1.4.4" && lib.hasPrefix "tarball:" identity;
-  legacy = bun2nix.fetchBunDeps {
-    bunNix =
-      { ... }:
-      import ./fetch-bun-sources.nix fetchurl (lib.filterAttrs (name: _: !modernHttp name) sources);
-    # Bun applies patches itself against the original package bytes.
-    patchShebangs = false;
+  extract =
+    archive: destination: ''
+      mkdir -p "${destination}"
+      bsdtar --extract --file "${archive}" --directory "${destination}" \
+        --strip-components=1 --no-same-owner --no-same-permissions
+      chmod -R u+rwX "${destination}"
+    '';
+  legacy = symlinkJoin {
+    name = "bun-cache";
+    paths = lib.mapAttrsToList (
+      name: source:
+      runCommand "bun-pkg-${name}" { nativeBuildInputs = [ libarchive cacheEntryCreator ]; } ''
+        package="$out/share/bun-packages/"${lib.escapeShellArg name}
+        ${extract (fetchurl source) "$package"}
+        cache_entry_creator --out "$out/share/bun-cache" --name ${lib.escapeShellArg name} \
+          --package "$package"
+      ''
+    ) (lib.filterAttrs (name: _: !modernHttp name) sources);
   };
   http = builtins.mapAttrs (
     _: source:
@@ -43,12 +55,9 @@ let
     assert builtins.all (value: value.source.hash == source.hash) values;
     {
       name = "share/bun-cache/${name}";
-      path = runCommand "bun-http-package" { nativeBuildInputs = [ libarchive ]; } ''
-        mkdir -p "$out"
-        bsdtar --extract --file ${fetchurl source} --directory "$out" \
-          --strip-components=1 --no-same-owner --no-same-permissions
-        chmod -R u+rwx "$out"
-      '';
+      path = runCommand "bun-http-package" { nativeBuildInputs = [ libarchive ]; } (
+        extract (fetchurl source) "$out"
+      );
     }
   ) (builtins.groupBy (entry: entry.name) (builtins.attrValues http));
 in

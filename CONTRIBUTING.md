@@ -76,7 +76,8 @@ Follow the repository [style guide](./AGENTS.md).
 ### Nix packaging
 
 Nix builds use dependency versions and checksums from `bun.lock` (text formats 1–3).
-The cache prefetches the selected workspaces' dependency closure, including possible peer providers. Bun still resolves the frozen lockfile.
+The cache prefetches the selected workspaces' dependency closure for the target OS and CPU, including possible peer providers.
+Archive extraction preserves executable bits. Bun still resolves the frozen lockfile.
 On `dev`, `build-nix-deps` builds the dependency tree and offline cache fixtures on native runners.
 
 ```bash

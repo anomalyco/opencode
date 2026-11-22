@@ -41,7 +41,7 @@
       checks = forEachSystem (pkgs: {
         bun-cache = import ./nix/check-bun-cache.nix {
           inherit pkgs;
-          bun2nix = bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.bun2nix;
+          cacheEntryCreator = bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.cacheEntryCreator;
         };
       });
 
@@ -51,7 +51,7 @@
           let
             node_modules = final.callPackage ./nix/node_modules.nix {
               inherit rev;
-              bun2nix = bun2nix.packages.${final.stdenv.hostPlatform.system}.bun2nix;
+              cacheEntryCreator = bun2nix.packages.${final.stdenv.hostPlatform.system}.cacheEntryCreator;
             };
           in
           rec {
@@ -69,7 +69,7 @@
         let
           node_modules = pkgs.callPackage ./nix/node_modules.nix {
             inherit rev;
-            bun2nix = bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.bun2nix;
+            cacheEntryCreator = bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.cacheEntryCreator;
           };
         in
         rec {

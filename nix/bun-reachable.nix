@@ -1,6 +1,6 @@
 # Select cache inputs without rewriting the lock or resolving semver. Bun still
 # chooses the actual providers when it builds the isolated workspace graph.
-lock: roots:
+lock: roots: compatible:
 let
   inherit (lock) packages workspaces;
   packageKeys = builtins.attrNames packages;
@@ -78,6 +78,7 @@ let
         meta = builtins.elemAt entry (if builtins.match "[0-9]+[.][0-9]+[.][0-9]+.*" resolution != null then 2 else 1);
         edges =
           if workspace != null then workspaceEdges (builtins.head workspace)
+          else if !compatible meta then [ ]
           else dependencies node.key meta ++ byEntry.${builtins.hashString "sha256" (builtins.toJSON entry)};
       in
       map (key: { inherit key; }) edges;

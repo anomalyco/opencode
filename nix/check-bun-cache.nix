@@ -1,6 +1,6 @@
 {
   pkgs,
-  bun2nix,
+  cacheEntryCreator,
   bun ? pkgs.bun,
 }:
 let
@@ -120,7 +120,7 @@ let
       cache =
         pkgs.callPackage ./bun-cache.nix
           {
-            inherit bun bun2nix;
+            inherit bun cacheEntryCreator;
             fetchurl =
               source:
               let
@@ -151,6 +151,7 @@ let
       cp ${frozen} bun.lock
       bun install --frozen-lockfile --offline --linker=isolated --backend=copyfile --ignore-scripts --no-progress
       bun -e 'import assert from "node:assert/strict"; import marker from "cache-fixture"; assert.equal(marker("offline"), "verified:offline")'
+      test ! -x node_modules/cache-fixture/index.js
       cmp bun.lock ${frozen}
       echo "${case.name}: verified archive extraction and offline package execution"
       touch "$out"
