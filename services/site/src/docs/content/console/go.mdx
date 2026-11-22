@@ -138,7 +138,7 @@ with a $60 limit. Go responses report how much each request counted in [`opencod
 Console's Go page [estimates requests per 5 hours](https://opencode.ai/console/go#limits) for each model, based on
 typical Go usage patterns. Actual usage varies.
 
-You can track your current usage in the [console](https://opencode.ai/console).
+You can track your current usage in the [console](https://opencode.ai/console), or with the [usage endpoint](#usage).
 
 <Callout type="tip">If you reach the usage limit, you can continue using the free models.</Callout>
 
@@ -190,6 +190,44 @@ curl https://opencode.ai/inference/go/v1/models
 ```
 
 See the [model list API](/console/api/models) for every field in the response, including Go's monthly usage limits.
+
+### Usage
+
+Check how much of your [usage limits](#usage-limits) you've used, for example to show them in your own client:
+
+```bash
+curl https://opencode.ai/inference/go/v1/usage \
+  -H "Authorization: Bearer <token>"
+```
+
+Use the same key you use for Go. On Go and Go Plus, that is the subscriber's
+[personal API key](/console/api#personal-api-keys) or a [service account key](/console/api#service-accounts). On Go
+Teams, it is any member's personal API key.
+
+The response has one meter for each limit: `rolling` for the 5-hour limit, `weekly`, and `monthly`.
+
+```json
+{
+  "usage": {
+    "rolling": { "status": "ok", "percent": 30, "resetsAt": "2026-11-21T15:00:00.000Z" },
+    "weekly": { "status": "rate-limited", "percent": 100, "resetsAt": "2026-11-23T00:00:00.000Z" },
+    "monthly": { "status": "ok", "percent": 50, "resetsAt": "2026-12-01T00:00:00.000Z" }
+  }
+}
+```
+
+| Field      | Meaning                                                                                                    |
+| ---------- | ---------------------------------------------------------------------------------------------------------- |
+| `status`   | `ok`, or `rate-limited` once the limit is used up.                                                         |
+| `percent`  | How much of the limit is used, as a whole number from `0` to `100`.                                        |
+| `resetsAt` | When the limit resets, in ISO 8601. Before the 5-hour window starts, `rolling` resets five hours from now. |
+
+Requests without a valid key return HTTP `401`. Keys Go doesn't cover return HTTP `403` with a message that explains
+why, for example when the workspace has no active Go subscription.
+
+```json
+{ "type": "error", "error": { "type": "EntitlementError", "message": "OpenCode Go subscription required." } }
+```
 
 ## Privacy
 

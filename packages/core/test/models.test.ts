@@ -15,7 +15,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
-const cacheKey = "models-dev:v2:catalog"
+const cacheKey = "models-dev:v3:catalog"
 const metaKey = `${cacheKey}:meta`
 
 test("normalizes permissive interleaved values to compatibility", () => {
@@ -551,6 +551,35 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.effect("keeps realtime models that answer in speech and call tools as voice models, not chat models", () =>
+    Effect.gen(function* () {
+      const realtime = (id: string, input: Record<string, unknown> = {}) =>
+        sourceModel(id, {
+          type: "realtime",
+          release_date: "2026-09-10",
+          modalities: { input: ["audio/pcm"], output: ["text", "audio/pcm"] },
+          api: { live: { base_url: "https://api.acme.test/v1", sdk: { opencodeai: "none" } } },
+          ...input,
+        })
+      const [acme] = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          acme: {
+            ...fixture.acme,
+            models: {
+              chat: sourceModel("chat"),
+              voice: realtime("voice", { name: "Voice 1" }),
+              translate: realtime("translate", { capabilities: { tools: { supported: false } } }),
+              streaming: realtime("streaming", { modalities: { input: ["audio/pcm"], output: ["text"] } }),
+              retired: realtime("retired", { status: "deprecated" }),
+            },
+          },
+        }),
+      )
+      expect(acme?.models.map((item) => item.id)).toEqual([Model.ID.make("chat")])
+      expect(acme?.voices).toEqual([{ id: "voice", name: "Voice 1", api: "live", releaseDate: "2026-09-10" }])
+    }),
+  )
+
   it.live("drops model types opencode doesn't keep", () =>
     Effect.gen(function* () {
       const cache = makeCache()
@@ -721,7 +750,7 @@ describe("ModelsDev Service", () => {
       )
       const [beta] = yield* ModelsDev.Service.use((service) => service.get()).pipe(Effect.provide(layer))
       expect(urls).toEqual([
-        "https://mirror.example/experimental/v2.0/api.json?type=chat,decision,image,video",
+        "https://mirror.example/experimental/v2.0/api.json?type=chat,decision,image,video,realtime",
         "https://mirror.example/api.json",
       ])
       expect(beta?.models.map((model) => model.id)).toEqual([Model.ID.make("beta-1")])
@@ -802,7 +831,7 @@ describe("ModelsDev Service", () => {
         Effect.provide(buildLayer(state, cache, { url: "", fetch: true, snapshot: false })),
       )
       expect((yield* Ref.get(state)).calls[0]?.url).toBe(
-        "https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video",
+        "https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video,realtime",
       )
     }),
   )
@@ -1075,6 +1104,24 @@ describe("ModelsDev Service", () => {
       if (unrequested304?.status._tag === "Ended") {
         expect(Exit.isFailure(unrequested304.status.exit)).toBe(true)
       }
+    }),
+  )
+
+  it.live("frees and ignores catalogs cached under earlier keys", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      for (const old of ["models-dev:catalog", "models-dev:v2:catalog"]) {
+        cache.values.set(old, { updatedAt: Date.now(), digest: "old", body: "{}" })
+        cache.values.set(`${old}:meta`, { updatedAt: Date.now(), digest: "old" })
+      }
+      const state = yield* Ref.make(initialState)
+      const snapshots = yield* provided(
+        state,
+        cache,
+        Effect.flatMap(ModelsDev.Service, (svc) => svc.get()),
+      )
+      expect(snapshots.length).toBeGreaterThan(0)
+      expect([...cache.values.keys()]).toEqual([])
     }),
   )
 

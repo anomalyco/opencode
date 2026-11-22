@@ -1,0 +1,119 @@
+//! Foldable MCP status list for the session's location.
+
+use opencode_api::generated::McpServer;
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Click, Command, Layout, Placement, Span, Wrap};
+use opencode_plugin::slot;
+use serde_json::json;
+
+use super::{hidden, kept};
+
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: "opencode.sidebar.mcp", setup }
+}
+
+const FOLD: &str = "sidebar.mcp.fold";
+const ROOT: &str = "mcp";
+
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.storage_key("view");
+    setup.command(Command::new(FOLD), |host, _| {
+        host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!unfolded(host)))]));
+    });
+    setup.surface(Surface::new("mcp", Place::Slot(Placement::append(slot::SIDEBAR_CONTENT)), |cx| {
+        let Some(session) = cx.input.slot.as_ref().and_then(|slot| slot.session_id.as_deref()) else {
+            return hidden(ROOT);
+        };
+        let changed = &cx.input.changed;
+        if !(changed.all || changed.local || changed.session(session) || !changed.locations.is_empty()) {
+            return kept(ROOT);
+        }
+        // Where the TUI works while the session is not known.
+        let location = cx
+            .read
+            .session(session)
+            .map(|session| abi::LocationRef { directory: session.info.location.directory.0, workspace: None });
+        let list = cx.read.mcp_servers(location.as_ref()).unwrap_or_default();
+        if list.is_empty() {
+            return hidden(ROOT);
+        }
+        view(&list, unfolded(cx.read)).with_id(ROOT)
+    }));
+    Ok(())
+}
+
+fn view(list: &[McpServer], open: bool) -> Node {
+    let on = list.iter().filter(|item| item.status.tag() == "connected").count();
+    let bad = list.iter().filter(|item| matches!(item.status.tag(), "failed" | "needs_auth")).count();
+    let mut title = vec![Span::new("MCP").fg("text.base").bold()];
+    if !open {
+        let errors = match bad {
+            0 => String::new(),
+            1 => ", 1 error".to_owned(),
+            bad => format!(", {bad} errors"),
+        };
+        title.push(Span::new(format!(" ({on} active{errors})")).fg("text.muted"));
+    }
+    section(FOLD, list.len() > 2, open, title, list.iter().map(row))
+}
+
+fn row(item: &McpServer) -> Node {
+    let status = item.status.tag();
+    let dot = match status {
+        "connected" => "text.feedback.success.base",
+        "failed" => "text.feedback.error.base",
+        "needs_auth" => "text.feedback.warning.base",
+        _ => "text.muted",
+    };
+    let label = match status {
+        "connected" => "Connected",
+        "pending" => "Connecting",
+        "failed" => "Error",
+        "disabled" => "Disabled",
+        "needs_auth" => "Sign in",
+        other => other,
+    };
+    let fixed = Layout::default().shrink(false);
+    Node::row(vec![
+        Node::text([Span::new("•").fg(dot)]).layout(fixed),
+        Node::text([Span::new(item.name.clone()).fg("text.base").bold()])
+            .wrap(Wrap::None)
+            .truncate()
+            .layout(Layout::default().grow().shrink(true).min_width(0)),
+        Node::text([Span::new(label).fg(if status == "failed" { "text.feedback.error.base" } else { "text.muted" })])
+            .wrap(Wrap::None)
+            .layout(fixed),
+    ])
+    .gap(1)
+    .layout(Layout::default().min_width(0))
+    .on_click(Click::command("mcp.list").input(item.name.clone()))
+}
+
+/// Whether a foldable sidebar section (MCP, Todo) is open: its `view` storage's `open`, open by default.
+pub(super) fn unfolded(read: &dyn abi::Read) -> bool {
+    read.storage_get("view").and_then(|value| value.get("open")?.as_bool()).unwrap_or(true)
+}
+
+/// A sidebar section: `title`, behind a fold arrow that runs `fold` when `foldable`, then `rows` unless folded.
+pub(super) fn section(
+    fold: &str,
+    foldable: bool,
+    open: bool,
+    title: Vec<Span>,
+    rows: impl Iterator<Item = Node>,
+) -> Node {
+    let mut header = Vec::new();
+    if foldable {
+        header.push(Node::text([Span::new(if open { "▼" } else { "▶" }).fg("text.base")]));
+    }
+    header.push(Node::text(title));
+    let mut header = Node::row(header).gap(1);
+    if foldable {
+        header = header.on_click(Click::command(fold).on_down());
+    }
+    let mut children = vec![header];
+    if !foldable || open {
+        children.extend(rows);
+    }
+    Node::column(children)
+}

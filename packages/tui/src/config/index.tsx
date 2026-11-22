@@ -390,10 +390,10 @@ export function useCursorStyle() {
   return createMemo(() => ({ style: config.data.cursor.style, blinking: config.data.cursor.blinking }))
 }
 
-/** Reactive accessor for the temporary "new-designs" experiment. */
+/** Reactive accessor for the temporary "new-designs" experiment. On unless the config turns it off. */
 export function useNewDesigns() {
   const config = useConfig()
-  return () => config.data.experimental?.["new-designs"] === true
+  return () => config.data.experimental?.["new-designs"] !== false
 }
 
 /** Reactive accessor for the temporary "client-mcp" experiment. */

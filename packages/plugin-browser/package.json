@@ -19,6 +19,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./rpc": "./src/rpc.ts",
+    "./workspace": "./src/workspace.ts",
+    "./preview-path": "./src/preview-path.ts",
     "./proxy": "./src/proxy.ts"
   },
   "scripts": {
@@ -31,6 +33,7 @@
   "dependencies": {
     "@opencode/plugin": "workspace:*",
     "@opencode/schema": "workspace:*",
+    "@opencode/util": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

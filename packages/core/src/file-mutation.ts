@@ -1,13 +1,15 @@
 export * as FileMutation from "./file-mutation.js"
 
+import { isUtf8 } from "node:buffer"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bom } from "@opencode/util/bom"
 import { Environment } from "./environment/index.js"
 import type { Files } from "./environment/index.js"
-import type { FileAccess } from "./file-access.js"
+import { FileAccess } from "./file-access.js"
+import { AbsolutePath } from "./schema.js"
 
 export type Target = Pick<FileAccess.Target, "absolute" | "resource" | "environment">
 
@@ -33,10 +35,13 @@ export interface TextWriteResult extends WriteResult {
 }
 
 export interface Interface {
-  /** Serialize a complete read/prepare/write mutation transaction by resolved path. */
+  /**
+   * Serialize a complete read/prepare/write mutation transaction by file. A typed path is located first, so it
+   * names its machine when the text does.
+   */
   readonly withLock: (
-    targets: ReadonlyArray<string>,
-  ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+    targets: ReadonlyArray<Environment.Place | string>,
+  ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E | Environment.Failed, R>
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
   /** Add bytes to the end of a file, creating it when missing. */
   readonly append: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
@@ -48,8 +53,23 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
 
+export class InvalidUtf8Error extends Schema.TaggedError<InvalidUtf8Error>()("FileMutation.InvalidUtf8Error", {
+  path: Schema.String,
+}) {
+  override get message() {
+    return "file is not valid UTF-8. It was left unchanged because rewriting it as text would replace every byte that is not UTF-8 with U+FFFD; change it with a tool that preserves its bytes, or convert it to UTF-8 first"
+  }
+}
+
 export const readText = Effect.fn("FileMutation.readText")(function* (files: Files, target: string) {
   return Bom.decodeBytes((yield* files.read(target)).bytes)
+})
+
+/** Read text that will be rewritten. Decoding replaces invalid bytes with U+FFFD, so such files are refused. */
+export const readEditableText = Effect.fn("FileMutation.readEditableText")(function* (files: Files, target: string) {
+  const bytes = (yield* files.read(target)).bytes
+  if (!isUtf8(bytes)) return yield* new InvalidUtf8Error({ path: target })
+  return Bom.decodeBytes(bytes)
 })
 
 export const readOptionalText = Effect.fn("FileMutation.readOptionalText")(function* (files: Files, target: string) {
@@ -76,16 +96,31 @@ const transactionLocks = KeyedMutex.makeUnsafe<string>()
  */
 const layer = Layer.effect(
   Service,
-  Effect.sync(() => {
+  Effect.gen(function* () {
+    const access = yield* FileAccess.Service
     const locks = KeyedMutex.makeUnsafe<string>()
     const withLock: Interface["withLock"] = (targets) => (effect) =>
-      [...new Set(targets.map(FSUtil.resolve))]
-        .sort()
-        .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
+      Effect.gen(function* () {
+        const places = yield* Effect.forEach(targets, (target) =>
+          typeof target === "string" ? access.locate(target) : Effect.succeed(target),
+        )
+        return yield* [
+          ...new Set(
+            places.map((target) =>
+              FileAccess.key({
+                absolute: AbsolutePath.make(FSUtil.resolve(target.absolute)),
+                environment: target.environment,
+              }),
+            ),
+          ),
+        ]
+          .sort()
+          .reduceRight((result, file) => transactionLocks.withLock(file)(result), effect)
+      })
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        locks.withLock(target.absolute)(Effect.uninterruptible(effect))
+        locks.withLock(FileAccess.key(target))(Effect.uninterruptible(effect))
 
     const writeResult = (target: Target, existed: boolean): WriteResult => ({
       operation: "write",
@@ -137,7 +172,7 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [] })
+export const node = makeLocationNode({ service: Service, layer, deps: [FileAccess.node] })
 
 /**
  * Deferred until the corresponding integrations exist.

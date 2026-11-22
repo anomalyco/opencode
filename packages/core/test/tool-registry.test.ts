@@ -625,6 +625,23 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("gives the program expression for a Code Mode tool's path or registry ID", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make(), "kebab-echo": make() }, { namespace: "acme.tools" })
+      yield* transform(service, { direct: make() }, { codemode: false })
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.codeModeExpression?.("acme.tools.echo")).toBe("tools.acme.tools.echo")
+      expect(snapshot.codeModeExpression?.("acme_tools_echo")).toBe("tools.acme.tools.echo")
+      expect(snapshot.codeModeExpression?.("acme.tools.kebab-echo")).toBe('tools.acme.tools["kebab-echo"]')
+      for (const name of ["direct", "execute", "missing", "tools.acme.tools.echo"])
+        expect(snapshot.codeModeExpression?.(name)).toBeUndefined()
+      // A tool this request doesn't offer has no expression.
+      const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
+      expect(denied.codeModeExpression?.("acme.tools.echo")).toBeUndefined()
+    }),
+  )
+
   it.effect("logs invalid tool definitions without dropping healthy tools", () => {
     const output: unknown[] = []
     const logger = Logger.map(Logger.formatStructured, (entry) => {
@@ -1005,6 +1022,22 @@ describe("Tool", () => {
       const hidden = yield* service.snapshot([...denyExecute, { action: "mcp_lookup", resource: "*", effect: "deny" }])
       expect(hidden.definitions.map((tool) => tool.name)).toEqual(["bash"])
       expect(yield* hidden.execute(call("mcp_lookup")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
+    }),
+  )
+
+  it.effect("denies a nested-namespace tool by its flattened name in Code Mode and as a direct tool", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { move: make(), rename: make() }, { namespace: "opencode.session" })
+      const deny: Permission.Ruleset = [{ action: "opencode_session_move", resource: "*", effect: "deny" }]
+
+      const codeMode = yield* service.snapshot(deny)
+      const paths = codeModeListings(codeMode.codeModeCatalog!).map((entry) => entry.path)
+      expect(paths).toContain("opencode.session.rename")
+      expect(paths).not.toContain("opencode.session.move")
+
+      const direct = yield* service.snapshot([...deny, { action: "execute", resource: "*", effect: "deny" }])
+      expect(direct.definitions.map((tool) => tool.name)).toEqual(["opencode_session_rename"])
     }),
   )
 

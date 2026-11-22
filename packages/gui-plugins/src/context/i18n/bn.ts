@@ -5,7 +5,6 @@ export default {
   "usage.usage": "ব্যবহার",
   "usage.cost": "খরচ",
   "usage.view": "প্রসঙ্গ ব্যবহার দেখুন",
-  "systemPrompt.title": "সিস্টেম প্রম্পট",
   "rawMessages.title": "কাঁচা বার্তা",
   "export.session": "রপ্তানি সেশন",
   "stats.session": "সেশন",

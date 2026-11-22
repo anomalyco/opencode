@@ -5,7 +5,6 @@ export default {
   "usage.usage": "བེད་སྤྱོད།",
   "usage.cost": "གོང་ཚད",
   "usage.view": "སྐབས་དོན་ལག་ལེན་བལྟ།",
-  "systemPrompt.title": "རིམ་ལུགས་བརྡ་སྟོན།",
   "rawMessages.title": "འཕྲིན་དོན་སྔོ་མོ།",
   "export.session": "ལཱ་ཡུན་ཕྱིར་འདྲེན་འབད་ནི།",
   "stats.session": "ལཱ་ཡུན།",

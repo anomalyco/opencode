@@ -64,9 +64,9 @@ describe("SubagentReport settlement", () => {
           type: "synthetic",
           payload: {
             text: [
-              `<subagent sessionID="${child}" state="completed" description="Direct audit">`,
+              `<background-result kind="subagent" sessionID="${child}" state="completed" description="Direct audit">`,
               "Investigation complete",
-              "</subagent>",
+              "</background-result>",
             ].join("\n"),
             metadata: { source: "subagent", childID: child, agent: "explore", state: "completed" },
           },
@@ -197,14 +197,14 @@ describe("SubagentReport settlement", () => {
         {
           payload: {
             text: [
-              `<subagent sessionID="${child}" state="running" description="Background audit">`,
+              `<background-result kind="subagent" sessionID="${child}" state="running" description="Background audit">`,
               "Started tests",
               "",
               "Background work still running:",
               "- shell (sh_1): bun test --watch",
               "- image (test/painter): /tmp/chart.png",
               `- subagent (subagent, sessionID: ${active}): ${active}`,
-              "</subagent>",
+              "</background-result>",
             ].join("\n"),
             metadata: { state: "completed" },
           },

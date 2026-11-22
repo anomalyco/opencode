@@ -73,7 +73,7 @@ const permission = permissionLayer({
 })
 
 const formatter = Layer.mock(Formatter.Service, {
-  file: (target) => formatFile(target),
+  file: (target) => formatFile(target.absolute),
 })
 
 const reset = () => {
@@ -416,6 +416,43 @@ describe("PatchTool", () => {
         })
         expect(yield* exists(source)).toBe(false)
         expect(yield* Effect.promise(() => fs.readFile(destination, "utf8"))).toBe("same\n")
+      }),
+    ),
+  )
+
+  it.live("refuses to rewrite a file that is not valid UTF-8 and applies none of the patch", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const utf8 = path.join(directory, "a.txt")
+        const latin1 = path.join(directory, "Invoice.java")
+        const doomed = path.join(directory, "Old.java")
+        // "// José" in Latin-1, far from the patched line.
+        const bytes = Buffer.concat([Buffer.from("// Jos\xe9\n", "latin1"), Buffer.from("int MAX = 10;\n")])
+        yield* Effect.promise(() =>
+          Promise.all([fs.writeFile(utf8, "before\n"), fs.writeFile(latin1, bytes), fs.writeFile(doomed, bytes)]),
+        )
+        expect(
+          yield* executeTool(
+            registry,
+            call(
+              "*** Begin Patch\n*** Update File: a.txt\n@@\n-before\n+after\n*** Update File: Invoice.java\n@@\n-int MAX = 10;\n+int MAX = 25;\n*** End Patch",
+            ),
+          ),
+        ).toMatchObject({
+          status: "error",
+          error: {
+            message: expect.stringContaining(
+              `patch verification failed: Failed to read file to update ${latin1}: file is not valid UTF-8.`,
+            ),
+          },
+        })
+        expect(yield* Effect.promise(() => fs.readFile(utf8, "utf8"))).toBe("before\n")
+        expect(yield* Effect.promise(() => fs.readFile(latin1))).toEqual(bytes)
+        // Deleting does not rewrite the bytes, so it stays allowed.
+        expect(
+          yield* executeTool(registry, call("*** Begin Patch\n*** Delete File: Old.java\n*** End Patch", "call-delete")),
+        ).toMatchObject({ status: "completed" })
+        expect(yield* exists(doomed)).toBe(false)
       }),
     ),
   )

@@ -2,11 +2,13 @@ import "@pierre/trees/web-components"
 import { FileTree, type FileTreeDirectoryHandle, type FileTreeItemHandle } from "@pierre/trees"
 import { getIcon } from "@opencode/ui/icons/catalog"
 import { createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
+import { builtinContext } from "@opencode/plugin/gui/builtin"
 import type { ChangeKind } from "@opencode/plugin/gui/review"
 import { createKeyed, usePlugin, type FileNode, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
 import { startFileDrag } from "./drag"
 import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath } from "./path"
+import treeFocusCss from "./tree-focus.css?inline"
 import {
   createPierreTreeState,
   isPierreTreeMounted,
@@ -85,9 +87,7 @@ const TREE_UNSAFE_CSS = `
     --row-overlay: var(--v2-overlay-simple-overlay-pressed);
     color: var(--v2-text-text-base) !important; background-color: var(--row-overlay) !important;
   }
-  button[data-type="item"]:focus-visible, button[data-type="item"][data-item-focused="true"] {
-    outline: none !important; box-shadow: none !important;
-  }
+  ${treeFocusCss}
   button[data-type="item"]::before,
   [data-item-section="decoration"]:empty { display: none !important; }
   /* A folder holding changes keeps its lane, so the row still ends in the sticky end, but shows no dot. */
@@ -489,7 +489,13 @@ export default function PierreFileTree(props: {
           if (!draggable()) return
           const button = findTreeItemButton(event)
 
-          if (button?.dataset.itemPath) startFileDrag(event, pierreTreeOriginalPath(machine(), button.dataset.itemPath))
+          if (!button?.dataset.itemPath) return
+          startFileDrag(event, pierreTreeOriginalPath(machine(), button.dataset.itemPath))
+
+          // A file of this computer drags out to other apps as the file itself.
+          if (!openIn?.canOpen()) return
+          const node = pierreTreeFileNode(machine(), button.dataset.itemPath)
+          builtinContext(ctx).desktop?.dragOut(event, resolveOpenInAppPath(file.root, node.absolute || node.path))
         }}
       />
     </OpenInAppContextMenuV2>

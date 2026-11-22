@@ -51,10 +51,9 @@ export const key = (input: {
   /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
   readonly credential?: string
   readonly clientInfo?: { readonly name: string; readonly version: string }
-  readonly mcpEvents?: boolean
 }) => {
   const config = input.config
-  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null, input.mcpEvents === true]
+  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null]
   if (config.type === "remote")
     return JSON.stringify([
       "remote",
@@ -111,8 +110,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const scope = yield* Effect.scope
     const run = yield* FiberSet.makeRuntime<never, void, never>()
-    const driver = Environment.makeLocalDriver(yield* ChildProcessSpawner)
-    const host = Environment.Service.of({ files: Environment.makeFiles(driver), spawner: driver.spawner })
+    const host = Environment.local(yield* ChildProcessSpawner)
     const fetch = yield* FetchHttpClient.Fetch
     const slots = new Map<string, Slot>()
     // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.
@@ -124,7 +122,7 @@ export const layer = Layer.effect(
     const unfixed = new Set<string>()
 
     // Takes only data from the Location that opens it: the connection outlives that Location's claim.
-    const open = (key: string, input: Pick<Input, "name" | "config" | "directory" | "clientInfo" | "mcpEvents">) => {
+    const open = (key: string, input: Pick<Input, "name" | "config" | "directory" | "clientInfo">) => {
       const slot: Slot = {
         holders: new Set(),
         lock: Semaphore.makeUnsafe(1),
@@ -136,7 +134,6 @@ export const layer = Layer.effect(
           directory: input.directory,
           shared: true,
           clientInfo: input.clientInfo,
-          mcpEvents: input.mcpEvents,
           // Every holder of a key presents the same credential, so any of them can build the provider.
           authProvider: Effect.suspend(() => slot.holders.values().next().value?.authProvider ?? Effect.undefined),
           elicitation: {
@@ -248,7 +245,6 @@ export const layer = Layer.effect(
           config: input.config,
           directory: input.directory,
           clientInfo: input.clientInfo,
-          mcpEvents: input.mcpEvents,
         })
       yield* Effect.acquireRelease(
         Effect.sync(() => slot.holders.add(holder)),

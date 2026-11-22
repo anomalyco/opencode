@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Användning",
   "usage.cost": "Kostnad",
   "usage.view": "Visa kontextanvändning",
-  "systemPrompt.title": "Systemprompt",
   "rawMessages.title": "Råmeddelanden",
   "export.session": "Exportera session",
   "stats.session": "Session",

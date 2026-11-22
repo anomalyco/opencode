@@ -329,7 +329,7 @@ function parse(file: string, text: string) {
 
 /** Every member a window or main context exposes: `BaseContext`, `Context`, `SetupContext` and `MainContext`. */
 function contextMembers() {
-  const names = new Set(["BaseContext", "Context", "SetupContext", "MainContext"])
+  const names = new Set(["BaseContext", "Context", "SetupContext", "MainContext", "BuiltinContext"])
 
   return new Set(
     sources.flatMap((source) =>

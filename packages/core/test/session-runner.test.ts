@@ -65,7 +65,13 @@ import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
 import type { Info as ToolInfo } from "@opencode/schema/tool"
-import { InstructionStateTable, SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import {
+  InstructionStateTable,
+  SessionInboxTable,
+  SessionMessageTable,
+  SessionPartTable,
+  SessionTable,
+} from "@opencode/core/session/sql"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionStore } from "@opencode/core/session/store"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -5112,15 +5118,20 @@ describe("SessionRunnerLLM", () => {
       executed: false,
     })
     yield* s.db
-      .update(SessionMessageTable)
+      .update(SessionPartTable)
       .set({
         data: sql`json_set(
-          ${SessionMessageTable.data},
-          '$.content[0].state.metadata',
+          ${SessionPartTable.data},
+          '$.state.metadata',
           json('{"sessionID":"ses_existing_child","status":"running","internal":"private"}')
         )`,
       })
-      .where(eq(SessionMessageTable.id, assistantMessageID))
+      .where(
+        and(
+          eq(SessionPartTable.message_id, assistantMessageID),
+          eq(SessionPartTable.call_id, "call-interrupted-subagent"),
+        ),
+      )
       .run()
       .pipe(Effect.orDie)
     s.requests.length = 0
@@ -5197,11 +5208,9 @@ describe("SessionRunnerLLM", () => {
     })
     yield* callTool(crashed, "call-running", "subagent")
     yield* s.db
-      .update(SessionMessageTable)
-      .set({
-        data: sql`json_set(${SessionMessageTable.data}, '$.content[1].state.metadata', json('{"sessionID":"ses_child"}'))`,
-      })
-      .where(eq(SessionMessageTable.id, crashed))
+      .update(SessionPartTable)
+      .set({ data: sql`json_set(${SessionPartTable.data}, '$.state.metadata', json('{"sessionID":"ses_child"}'))` })
+      .where(and(eq(SessionPartTable.message_id, crashed), eq(SessionPartTable.call_id, "call-running")))
       .run()
       .pipe(Effect.orDie)
     // An unfinished assistant behind the checkpoint is outside the history the runner settles.
@@ -5482,6 +5491,57 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
     expect(s.requests).toHaveLength(2)
   })
+
+  scenario(
+    "records and runs a top-level call to a Code Mode tool as the execute program it should have been",
+    function* (s) {
+      const registry = yield* Tool.Service
+      yield* transformTools(
+        registry,
+        {
+          echo: {
+            name: "echo",
+            description: "Echo text",
+            input: Schema.Struct({ text: Schema.String }),
+            output: Schema.Struct({ text: Schema.String }),
+            execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
+          },
+        },
+        { namespace: "acme" },
+      )
+      yield* s.admit("Call echo directly")
+
+      const id = "call-echo"
+      yield* s.llm.push(
+        TestLLM.toolCalls(
+          LLMEvent.toolInputStart({ id, name: "acme.echo" }),
+          LLMEvent.toolInputDelta({ id, name: "acme.echo", text: '{"text":"hi"}' }),
+          LLMEvent.toolInputEnd({ id, name: "acme.echo" }),
+          LLMEvent.toolCall({ id, name: "acme.echo", input: { text: "hi" } }),
+        ),
+        TestLLM.stop(),
+      )
+      yield* s.resume
+
+      const code = 'return await tools.acme.echo({"text":"hi"})'
+      expect(yield* s.context).toMatchObject([
+        Expected.user("Call echo directly"),
+        Expected.assistant({}, [
+          Expected.completedTool(
+            { id, name: "execute" },
+            {
+              input: { code },
+              metadata: { toolCalls: [{ tool: "acme.echo", input: { text: "hi" }, status: "completed" }] },
+            },
+          ),
+        ]),
+        { type: "assistant", finish: "stop" },
+      ])
+      // The next request replays an ordinary execute call.
+      expect(JSON.stringify(s.requests[1]?.messages)).toContain(JSON.stringify(code))
+      expect(JSON.stringify(s.requests[1]?.messages)).not.toContain('acme.echo"')
+    },
+  )
 
   scenario("durably settles local tool failures before continuing", function* (s) {
     yield* s.admit("Call missing")

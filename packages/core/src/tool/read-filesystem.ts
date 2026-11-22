@@ -73,29 +73,29 @@ export type PageInput = typeof PageInput.Type
 
 export const TextContent = Schema.Struct({
   type: Schema.Literal("text"),
-  content: Schema.String,
   offset: PositiveInt,
   lineCount: NonNegativeInt,
   next: Schema.optionalKey(PositiveInt).annotate({
     description: "The line to continue reading from. Absent when the content reaches the end of the file.",
   }),
+  content: Schema.String,
 }).annotate({ identifier: "ReadTool.TextContent" })
 export type TextContent = typeof TextContent.Type
 
 export const DirectoryContent = Schema.Struct({
   type: Schema.Literal("directory"),
-  entries: Schema.Array(Schema.String),
   next: Schema.optionalKey(PositiveInt).annotate({
     description: "The entry to continue reading from. Absent when the listing reaches the last entry.",
   }),
+  entries: Schema.Array(Schema.String),
 }).annotate({ identifier: "ReadTool.DirectoryContent" })
 export type DirectoryContent = typeof DirectoryContent.Type
 
 export const MediaContent = Schema.Struct({
   type: Schema.Literal("media"),
-  uri: Schema.String,
   mime: Schema.String,
   name: Schema.optionalKey(Schema.String),
+  uri: Schema.String,
 }).annotate({ identifier: "ReadTool.MediaContent" })
 export type MediaContent = typeof MediaContent.Type
 

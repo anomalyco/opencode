@@ -16,7 +16,8 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { Tool } from "@opencode/core/tool"
 import { OpenCodeTools } from "@opencode/core/tool/plugin/opencode"
 import { VideoGenerateTool } from "@opencode/core/tool/plugin/video-generate"
-import { Effect, Layer, Schedule, Stream } from "effect"
+import { Effect, Layer, Stream } from "effect"
+import { advance } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { executeTool, toolIdentity } from "./lib/tool"
@@ -114,19 +115,19 @@ const setup = (providerID = "test") =>
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    const notice = (result: { readonly metadata?: Record<string, unknown> }) =>
-      Effect.sync(() => notices.find((item) => item.metadata?.jobID === result.metadata?.jobID)).pipe(
-        Effect.repeat({ until: (item) => item !== undefined, schedule: Schedule.spaced("5 millis") }),
-        Effect.timeout("10 seconds"),
-        Effect.map((item) => item?.text),
-      )
+    // VideoGeneration polls its jobs every 5 seconds on the test clock, so the wait advances it.
+    const notice = Effect.fnUntraced(function* (result: { readonly metadata?: Record<string, unknown> }) {
+      const find = () => notices.find((item) => item.metadata?.jobID === result.metadata?.jobID)
+      yield* advance(() => find() !== undefined)
+      return find()?.text
+    })
     return { session, run, notice, directory: location.directory }
   })
 
 const kinds = (assets: ReadonlyArray<Media.Asset> | undefined) => assets?.map((asset) => asset.mediaType)
 
 describe("experimental_video_generate", () => {
-  it.live("starts the job, saves every video it returns and lists them all in the notice", () =>
+  it.effect("starts the job, saves every video it returns and lists them all in the notice", () =>
     Effect.gen(function* () {
       yield* videoModel("test", "director")
       const { run, notice, directory, session } = yield* setup()
@@ -150,7 +151,7 @@ describe("experimental_video_generate", () => {
       expect(id).toStartWith("video_")
       expect(result.output).toEqual({ id, path: file, model: "test/director" })
       expect(yield* notice(result)).toBe(
-        `<video id="${id}" state="completed">\nVideo request finished. Saved 2 videos: ${file}, ${second}.\n</video>`,
+        `<background-result kind="video" id="${id}" state="completed">\nVideo request finished. Saved 2 videos: ${file}, ${second}.\n</background-result>`,
       )
       expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(file)))).toEqual(Uint8Array.of(...MP4, 0))
       expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(second)))).toEqual(Uint8Array.of(...MP4, 1))

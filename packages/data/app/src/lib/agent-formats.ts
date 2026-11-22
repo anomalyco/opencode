@@ -47,7 +47,7 @@ export function homeMarkdown(data: HomePageData) {
         formatChange(entry.change),
       ]),
     ),
-    "## Top models: past day",
+    "## Top models: yesterday",
     table(
       ["Rank", "Model", "Lab", "Tokens"],
       data.leaderboard.daily.map((entry) => [
