@@ -1,6 +1,12 @@
 import { createEffect, onCleanup, type ComponentProps, splitProps } from "solid-js"
 import { artworkNames, isIconName, getIcon, resolveIconName, type IconName } from "../catalog"
-import { isRegisteredIconName, mountRegisteredIcon, registeredIconSymbol, type RegisteredIconName } from "../registry"
+import {
+  ensureIconSpriteHost,
+  isRegisteredIconName,
+  mountRegisteredIcon,
+  registeredIconSymbol,
+  type RegisteredIconName,
+} from "../registry"
 import "./icon.css"
 
 const spriteID = "opencode-v2-icon-sprite"
@@ -37,7 +43,7 @@ function ensureSprite() {
   svg.style.position = "absolute"
   svg.style.overflow = "hidden"
   svg.innerHTML = spriteContent()
-  document.body.insertBefore(svg, document.body.firstChild)
+  ensureIconSpriteHost().append(svg)
   spriteInserted = true
 }
 

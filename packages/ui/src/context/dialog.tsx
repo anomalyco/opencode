@@ -183,6 +183,9 @@ function init(container: () => HTMLElement | undefined) {
         return (
           <Kobalte
             modal={modal()}
+            // The app shell already locks document scroll; Kobalte's preventScroll forces layout on open and installs a
+            // non-passive document wheel listener that runs ancestor scroll checks on every wheel tick.
+            preventScroll={false}
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (!open) dispatch({ type: "layer.dismiss", attempt })
