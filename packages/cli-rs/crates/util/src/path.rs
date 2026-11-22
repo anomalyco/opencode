@@ -53,77 +53,32 @@ impl Flavor {
 
     /// `path.parse(path).root`, with `\` on Windows.
     pub fn root(self, path: &str) -> String {
-        self.split(path).0
-    }
-
-    /// Splits a path into its root (`/`, `C:\`, `C:`, `\\server\share\`, `\`, or empty) and its segments.
-    pub fn split(self, path: &str) -> (String, Vec<String>) {
-        let is_sep = |c: char| self.is_sep(c);
-        let segments = |rest: &str| -> Vec<String> {
-            rest.split(is_sep).filter(|part| !part.is_empty()).map(str::to_owned).collect()
-        };
-        if self == Self::Posix {
-            let root = if path.starts_with('/') { "/" } else { "" };
-            return (root.to_owned(), segments(path));
-        }
-        let (device, rest, absolute) = windows_root(path);
-        let root = if absolute { format!("{device}\\") } else { device };
-        (root, segments(rest))
+        self.render(self.parse(path).0, std::iter::empty())
     }
 
     /// `path.resolve` over an absolute base: the last rooted path wins, `.` and `..` fold. Without a rooted path
     /// the result stays relative (`.` when empty), where Node would start from the working directory. On Windows a
     /// rooted result without a drive takes the working directory's, as Node does.
     pub fn resolve(self, paths: &[&str]) -> String {
-        if self == Self::Windows {
-            // Only on a Windows host: elsewhere the working directory has no drive to give.
-            let cwd = if Self::NATIVE == Self::Windows { std::env::current_dir().ok() } else { None };
-            let cwd = cwd.map(|cwd| strip_verbatim(&cwd.to_string_lossy()).into_owned()).unwrap_or_default();
-            return resolve_windows(&cwd, paths);
-        }
-        let mut root = String::new();
-        let mut segments: Vec<String> = Vec::new();
-        for path in paths {
-            let (path_root, parts) = self.split(path);
-            if !path_root.is_empty() {
-                root = path_root;
-                segments.clear();
-            }
-            for part in parts {
-                match part.as_str() {
-                    "." => {}
-                    ".." => {
-                        segments.pop();
-                    }
-                    _ => segments.push(part),
-                }
-            }
-        }
-        let joined = segments.join(&self.sep().to_string());
-        if root.is_empty() {
-            return if joined.is_empty() { ".".to_owned() } else { joined };
-        }
-        format!("{root}{joined}")
+        self.resolve_in(&self.cwd(), paths)
     }
 
     /// `path.relative` between two paths resolved the same way: `..` up to the common ancestor, then down. Windows
     /// compares without case.
     pub fn relative(self, from: &str, to: &str) -> String {
-        let from = self.resolve(&[from]);
-        let to = self.resolve(&[to]);
-        let (from_root, from_parts) = self.split(&from);
-        let (to_root, to_parts) = self.split(&to);
+        let cwd = self.cwd();
+        let (from, to) = (self.resolve_one(&cwd, from), self.resolve_one(&cwd, to));
+        let ((from_root, from_rest), (to_root, to_rest)) = (self.parse(&from), self.parse(&to));
+        if !from_root.same(to_root) {
+            return self.render(to_root, self.segments(to_rest));
+        }
         let same = |a: &str, b: &str| match self {
             Self::Posix => a == b,
             Self::Windows => a.eq_ignore_ascii_case(b),
         };
-        if !same(&from_root, &to_root) {
-            return to;
-        }
-        let common = from_parts.iter().zip(&to_parts).take_while(|(a, b)| same(a, b)).count();
-        let mut parts: Vec<String> = vec!["..".to_owned(); from_parts.len() - common];
-        parts.extend(to_parts[common..].iter().cloned());
-        parts.join(&self.sep().to_string())
+        let common = self.segments(from_rest).zip(self.segments(to_rest)).take_while(|(a, b)| same(a, b)).count();
+        let ups = self.segments(from_rest).count() - common;
+        self.render(Root::NONE, std::iter::repeat_n("..", ups).chain(self.segments(to_rest).skip(common)))
     }
 
     /// `path.normalize`: `.` and `..` fold, separators collapse (to `\` on Windows), a trailing separator stays, and
@@ -132,27 +87,17 @@ impl Flavor {
         if path.is_empty() {
             return ".".to_owned();
         }
-        let (root, parts) = self.split(path);
-        let absolute = root.ends_with(['/', '\\']);
-        let mut segments: Vec<String> = Vec::new();
-        for part in parts {
-            match part.as_str() {
-                "." => {}
-                ".." if segments.last().is_some_and(|last| last != "..") => {
-                    segments.pop();
-                }
-                ".." if absolute => {}
-                _ => segments.push(part),
-            }
+        let (root, rest) = self.parse(path);
+        let mut segments = Vec::new();
+        fold(&mut segments, self.segments(rest), !root.absolute);
+        let mut out = self.render(root, segments.iter().copied());
+        if segments.is_empty() && !root.absolute {
+            out.push('.');
         }
-        let mut tail = segments.join(&self.sep().to_string());
-        if tail.is_empty() && !absolute {
-            tail.push('.');
+        if (!segments.is_empty() || !root.absolute) && path.ends_with(|c| self.is_sep(c)) {
+            out.push(self.sep());
         }
-        if !tail.is_empty() && path.ends_with(|c| self.is_sep(c)) {
-            tail.push(self.sep());
-        }
-        format!("{root}{tail}")
+        out
     }
 
     /// `path.join`: the non-empty parts joined with the separator, then [normalized](Self::normalize).
@@ -163,7 +108,8 @@ impl Flavor {
 
     /// Whether a [`relative`](Self::relative) result leaves its base: `..`, `../…`, or absolute.
     pub fn outside(self, relative: &str) -> bool {
-        relative == ".." || relative.starts_with(&format!("..{}", self.sep())) || self.is_absolute(relative)
+        relative.strip_prefix("..").is_some_and(|rest| rest.is_empty() || rest.starts_with(self.sep()))
+            || self.is_absolute(relative)
     }
 
     /// `path.basename`: the last segment, without trailing separators and, on Windows, without a drive.
@@ -178,76 +124,209 @@ impl Flavor {
         };
         path.trim_end_matches(|c| self.is_sep(c)).rsplit(|c| self.is_sep(c)).next().unwrap_or_default()
     }
+
+    /// [`resolve`](Self::resolve), with `cwd` as the working directory whose device a rooted Windows path without
+    /// one takes.
+    fn resolve_in(self, cwd: &str, paths: &[&str]) -> String {
+        let (root, start) = match self {
+            Self::Posix => {
+                let start = paths.iter().rposition(|path| path.starts_with('/'));
+                (Root { device: Device::None, absolute: start.is_some() }, start.unwrap_or(0))
+            }
+            Self::Windows => windows_start(cwd, paths),
+        };
+        let rests = paths[start..].iter().filter_map(|path| {
+            let (path_root, rest) = self.parse(path);
+            (path_root.device.is_none() || path_root.device.same(root.device)).then_some(rest)
+        });
+        let segments = rests.flat_map(|rest| self.segments(rest));
+        let resolved = if segments.clone().all(|part| part != "." && part != "..") {
+            self.render(root, segments)
+        } else {
+            let mut folded = Vec::new();
+            // POSIX drops `..` above the start where Node would start from the working directory.
+            fold(&mut folded, segments, self == Self::Windows && !root.absolute);
+            self.render(root, folded.into_iter())
+        };
+        if resolved.is_empty() { ".".to_owned() } else { resolved }
+    }
+
+    /// `path` resolved alone, borrowed when resolving changes no more than its separators, so that both have the
+    /// same root and segments.
+    fn resolve_one<'a>(self, cwd: &str, path: &'a str) -> Cow<'a, str> {
+        let (root, rest) = self.parse(path);
+        let settled = match root.device {
+            Device::None => !path.is_empty() && (self == Self::Posix || !root.absolute),
+            _ => root.absolute,
+        };
+        if settled && self.segments(rest).all(|part| part != "." && part != "..") {
+            return Cow::Borrowed(path);
+        }
+        Cow::Owned(self.resolve_in(cwd, &[path]))
+    }
+
+    /// The working directory whose device a rooted Windows path without one takes. Only a Windows host has one.
+    fn cwd(self) -> String {
+        if self == Self::Windows
+            && Self::NATIVE == Self::Windows
+            && let Ok(cwd) = std::env::current_dir()
+        {
+            return strip_verbatim(&cwd.to_string_lossy()).into_owned();
+        }
+        String::new()
+    }
+
+    /// A path's root, and the rest after it.
+    fn parse(self, path: &str) -> (Root<'_>, &str) {
+        match self {
+            Self::Posix => (Root { device: Device::None, absolute: path.starts_with('/') }, path),
+            Self::Windows => {
+                let (device, rest, absolute) = windows_root(path);
+                (Root { device, absolute }, rest)
+            }
+        }
+    }
+
+    /// The non-empty segments of a path's rest.
+    fn segments(self, rest: &str) -> impl Iterator<Item = &str> + Clone {
+        let separators: &'static [char] = match self {
+            Self::Posix => &['/'],
+            Self::Windows => &['/', '\\'],
+        };
+        rest.split(separators).filter(|part| !part.is_empty())
+    }
+
+    /// `root`, then `segments` joined with the separator.
+    fn render<'a>(self, root: Root<'_>, segments: impl Iterator<Item = &'a str> + Clone) -> String {
+        let device = match root.device {
+            Device::None => ["", "", "", ""],
+            Device::Drive(drive) => [drive, "", "", ""],
+            Device::Unc { server, share } => ["\\\\", server, "\\", share],
+        };
+        let length = device.iter().map(|part| part.len()).sum::<usize>() + usize::from(root.absolute);
+        let mut out = String::with_capacity(length + segments.clone().map(|part| part.len() + 1).sum::<usize>());
+        device.iter().for_each(|part| out.push_str(part));
+        if root.absolute {
+            out.push(self.sep());
+        }
+        for (index, part) in segments.enumerate() {
+            if index > 0 {
+                out.push(self.sep());
+            }
+            out.push_str(part);
+        }
+        out
+    }
 }
 
-/// `path.win32.resolve`: from the last path back, collect segments until a rooted path with a device (a drive or a
-/// UNC share). A path on another device than the one found first is skipped, and a rooted path without a device takes
-/// the device of an earlier path, else the device of `cwd` (Node's `process.cwd()`). `..` stops at the root of an
-/// absolute result. Only a relative result stays relative, where Node would start from the working directory.
-fn resolve_windows(cwd: &str, paths: &[&str]) -> String {
-    let mut device = String::new();
+/// A path's root: its device on Windows, and whether a separator follows it.
+#[derive(Clone, Copy)]
+struct Root<'a> {
+    device: Device<'a>,
+    absolute: bool,
+}
+
+impl Root<'_> {
+    const NONE: Root<'static> = Root { device: Device::None, absolute: false };
+
+    fn same(self, other: Root<'_>) -> bool {
+        self.absolute == other.absolute && self.device.same(other.device)
+    }
+}
+
+/// A Windows device: a drive (`C:`), a UNC share (`\\server\share`), or none.
+#[derive(Clone, Copy)]
+enum Device<'a> {
+    None,
+    Drive(&'a str),
+    Unc { server: &'a str, share: &'a str },
+}
+
+impl Device<'_> {
+    fn is_none(self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    /// Whether two devices are the same, without case.
+    fn same(self, other: Device<'_>) -> bool {
+        match (self, other) {
+            (Self::None, Device::None) => true,
+            (Self::Drive(a), Device::Drive(b)) => a.eq_ignore_ascii_case(b),
+            (Self::Unc { server, share }, Device::Unc { server: other_server, share: other_share }) => {
+                server.eq_ignore_ascii_case(other_server) && share.eq_ignore_ascii_case(other_share)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Folds `.` and `..` into `segments`. `..` takes back the segment before it; with none to take back it stays when
+/// `keep_up`, else it is dropped.
+fn fold<'a>(segments: &mut Vec<&'a str>, parts: impl Iterator<Item = &'a str>, keep_up: bool) {
+    for part in parts {
+        match part {
+            "." => {}
+            ".." if segments.last().is_some_and(|last| *last != "..") => {
+                segments.pop();
+            }
+            ".." if !keep_up => {}
+            _ => segments.push(part),
+        }
+    }
+}
+
+/// `path.win32.resolve`'s root, and the index of the first path whose segments count: from the last path back,
+/// segments collect until a rooted path with a device (a drive or a UNC share). A path on another device than the one
+/// found first is skipped, and a rooted path without a device takes the device of an earlier path, else the device
+/// of `cwd` (Node's `process.cwd()`). Only a relative result stays relative, where Node would start from the working
+/// directory.
+fn windows_start<'a>(cwd: &'a str, paths: &[&'a str]) -> (Root<'a>, usize) {
+    let mut device = Device::None;
     let mut absolute = false;
-    let mut rests = Vec::new();
-    for path in paths.iter().rev().filter(|path| !path.is_empty()) {
-        let (path_device, rest, path_absolute) = windows_root(path);
-        if !path_device.is_empty() {
-            if device.is_empty() {
+    let mut start = 0;
+    for (index, path) in paths.iter().enumerate().rev().filter(|(_, path)| !path.is_empty()) {
+        let (path_device, _, path_absolute) = windows_root(path);
+        if !path_device.is_none() {
+            if device.is_none() {
                 device = path_device;
-            } else if !device.eq_ignore_ascii_case(&path_device) {
+            } else if !device.same(path_device) {
                 continue;
             }
         }
         if !absolute {
-            rests.push(rest);
+            start = index;
             absolute = path_absolute;
         }
-        if absolute && !device.is_empty() {
+        if absolute && !device.is_none() {
             break;
         }
     }
-    if absolute && device.is_empty() {
+    if absolute && device.is_none() {
         device = windows_root(cwd).0;
     }
     // A drive no path is rooted on: Node takes its directory from `=C:`, which only `cmd` sets, else its root.
-    absolute |= !device.is_empty();
-    let mut segments: Vec<&str> = Vec::new();
-    for part in rests.iter().rev().flat_map(|rest| rest.split(['/', '\\'])) {
-        match part {
-            "" | "." => {}
-            ".." if segments.last().is_some_and(|last| *last != "..") => {
-                segments.pop();
-            }
-            ".." if absolute => {}
-            _ => segments.push(part),
-        }
-    }
-    let joined = segments.join("\\");
-    if absolute {
-        return format!("{device}\\{joined}");
-    }
-    let relative = format!("{device}{joined}");
-    if relative.is_empty() { ".".to_owned() } else { relative }
+    (Root { device, absolute: absolute || !device.is_none() }, start)
 }
 
-/// The device (`C:`, `\\server\share`, or empty) of a Windows path, the rest after it, and whether the path is
-/// rooted. As in Node, `\\` starts a UNC device only when a server and a share follow.
-fn windows_root(path: &str) -> (String, &str, bool) {
+/// The device of a Windows path, the rest after it, and whether the path is rooted. As in Node, `\\` starts a UNC
+/// device only when a server and a share follow.
+fn windows_root(path: &str) -> (Device<'_>, &str, bool) {
     let is_sep = |c: char| c == '/' || c == '\\';
     let bytes = path.as_bytes();
     if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
-        return (path[..2].to_owned(), &path[2..], bytes.get(2).is_some_and(|&b| is_sep(char::from(b))));
+        return (Device::Drive(&path[..2]), &path[2..], bytes.get(2).is_some_and(|&b| is_sep(char::from(b))));
     }
     if !path.starts_with(is_sep) {
-        return (String::new(), path, false);
+        return (Device::None, path, false);
     }
     let unc = path[1..].strip_prefix(is_sep).and_then(|rest| {
         let (server, rest) = rest.split_once(is_sep)?;
         let rest = rest.trim_start_matches(is_sep);
         let share_end = rest.find(is_sep).unwrap_or(rest.len());
         (!server.is_empty() && share_end > 0)
-            .then(|| (format!("\\\\{server}\\{}", &rest[..share_end]), &rest[share_end..]))
+            .then(|| (Device::Unc { server, share: &rest[..share_end] }, &rest[share_end..]))
     });
-    let (device, rest) = unc.unwrap_or((String::new(), path));
+    let (device, rest) = unc.unwrap_or((Device::None, path));
     (device, rest, true)
 }
 
@@ -337,6 +416,9 @@ mod tests {
         assert_eq!(w.relative("C:\\Users\\U", "c:\\users\\u\\src/x"), "src\\x");
         assert_eq!(w.relative("C:\\a\\b", "C:\\a\\c"), "..\\c");
         assert_eq!(w.relative("C:\\a", "D:\\a"), "D:\\a");
+        // Another root gives the target resolved, with its separators respelled.
+        assert_eq!(w.relative("C:\\a", "d:/a/b"), "d:\\a\\b");
+        assert_eq!(w.relative("\\\\srv\\share\\a", "//SRV/Share/a/b"), "b");
         assert!(w.outside("..\\c") && w.outside("D:\\a") && !w.outside("..x"));
         assert!(w.is_absolute("C:/x") && w.is_absolute("\\x") && !w.is_absolute("C:x") && !w.is_absolute("x"));
         assert_eq!(w.basename("C:\\a\\b\\"), "b");
@@ -361,7 +443,7 @@ mod tests {
             ("", &["/x"], "\\x"),
             ("/home/u", &["/x"], "\\x"),
         ] {
-            assert_eq!(resolve_windows(cwd, paths), expected, "{cwd} {paths:?}");
+            assert_eq!(Flavor::Windows.resolve_in(cwd, paths), expected, "{cwd} {paths:?}");
         }
     }
 
@@ -404,6 +486,9 @@ mod tests {
         assert_eq!(p.resolve(&["/p", "a/../b/./c"]), "/p/b/c");
         assert_eq!(p.resolve(&["/p", "C:\\x"]), "/p/C:\\x");
         assert_eq!(p.relative("/h", "/h/a/b"), "a/b");
+        assert_eq!(p.relative("/h/./a", "/h//b/"), "../b");
+        // An empty relative path resolves to `.`, which counts as a segment.
+        assert_eq!(p.relative("a/..", "b"), "../b");
         assert_eq!(p.basename("/p/a\\b/"), "a\\b");
         assert_eq!(p.root("/x"), "/");
         assert!(!p.is_absolute("C:\\x"));
