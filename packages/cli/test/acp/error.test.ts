@@ -97,3 +97,58 @@ describe("acp terminal error metadata", () => {
     expect(plainData).not.toHaveProperty("retryAfterMs")
   })
 })
+
+describe("acp error field isolation", () => {
+  test("copies only defined provider metadata into exact RPC data", async () => {
+    const failureData = async (error: Parameters<typeof failed>[1], viaStep = false) => {
+      await using acp = await startSession({
+        onPrompt: ({ sessionID, id }) =>
+          viaStep
+            ? [
+                delivered(sessionID, id),
+                durableEvent("session.step.failed", { sessionID, assistantMessageID: "msg_failed", error }),
+                succeeded(sessionID),
+              ]
+            : [delivered(sessionID, id), failed(sessionID, error), succeeded(sessionID)],
+      })
+      return (await rpcError(acp.prompt(acp.sessionId, "hello"))).data
+    }
+
+    const statusOnly = { type: "provider.rate-limit", message: "busy", status: 503 }
+    expect(await failureData(statusOnly)).toEqual({
+      service: "session",
+      errorName: "provider.rate-limit",
+      status: 503,
+    })
+
+    const retryOnly = { type: "provider.rate-limit", message: "slow", retryAfterMs: 0 }
+    expect(await failureData(retryOnly)).toEqual({
+      service: "session",
+      errorName: "provider.rate-limit",
+      retryAfterMs: 0,
+    })
+
+    const sentinel = {
+      type: "provider.rate-limit",
+      message: "upstream error",
+      status: 502,
+      retryAfterMs: 1_000,
+      response: { body: "SENTINEL-SHOULD-NOT-LEAK" },
+    }
+    const expectedSentinelData = {
+      service: "session",
+      errorName: "provider.rate-limit",
+      status: 502,
+      retryAfterMs: 1_000,
+    }
+    expect(await failureData(sentinel)).toEqual(expectedSentinelData)
+    expect(await failureData(sentinel, true)).toEqual(expectedSentinelData)
+
+    const unknown = Object.assign(new Error("oauth refresh token"), {
+      status: 429,
+      retryAfterMs: 60_000,
+      response: { body: "SENTINEL-SHOULD-NOT-LEAK" },
+    })
+    expect(ACPError.toRequestError(ACPError.fromUnknown(unknown)).data).toEqual({ errorName: "Error" })
+  })
+})
