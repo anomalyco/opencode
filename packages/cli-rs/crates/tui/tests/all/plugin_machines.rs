@@ -131,7 +131,12 @@ impl Life {
                     self.harness.app.press("right");
                 }
                 self.harness.app.press("enter");
-                let answered = self.harness.app.wait_until(support::WAIT, || self.status() != Some(Status::Pending));
+                // The answer is applied when an approval stops holding the build back, or a decline lists the row;
+                // the approved files are staged and compiled after that, which `reconcile` waits for.
+                let answered = self.harness.app.wait_until(support::WAIT, || match action {
+                    "approve" => self.loader.held(&self.target).is_none(),
+                    _ => self.status() != Some(Status::Pending),
+                });
                 assert!(answered, "the answer to the question was not recorded");
                 self.reconcile();
                 self.settle();
