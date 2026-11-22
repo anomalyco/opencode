@@ -6,6 +6,11 @@
   darwin,
   callPackage,
   makeWrapper,
+  glib,
+  gtk3,
+  gtk4,
+  gsettings-desktop-schemas,
+  wrapGAppsHook3,
   writableTmpDirAsHomeHook,
   autoPatchelfHook,
   copyDesktopItems,
@@ -38,6 +43,7 @@ stdenv.mkDerivation (finalAttrs: {
   ++ lib.optionals stdenv.hostPlatform.isLinux [
     autoPatchelfHook
     copyDesktopItems
+    wrapGAppsHook3
   ]
   ++ lib.optionals stdenv.hostPlatform.isDarwin [
     darwin.cctools
@@ -48,7 +54,17 @@ stdenv.mkDerivation (finalAttrs: {
 
   buildInputs = lib.optionals stdenv.hostPlatform.isLinux [
     (lib.getLib stdenv.cc.cc)
+    # nixpkgs' electron wrapper used to sit between opencode-desktop and the
+    # Electron binary and exported these schemas through gappsWrapperArgs;
+    # the wrapper below now applies the same args directly.
+    gsettings-desktop-schemas
+    glib
+    gtk3
+    gtk4
   ];
+
+  # The makeWrapper call in installPhase is the only wrapping this needs.
+  dontWrapGApps = true;
 
   desktopItems = lib.optional stdenv.hostPlatform.isLinux (makeDesktopItem {
     name = "ai.opencode.desktop";
@@ -125,8 +141,23 @@ stdenv.mkDerivation (finalAttrs: {
     makeWrapper "$out/Applications/OpenCode.app/Contents/MacOS/OpenCode" $out/bin/opencode-desktop
   ''
   + lib.optionalString stdenv.hostPlatform.isLinux ''
-    mkdir -p $out/opt/opencode-desktop
-    cp -r dist/linux*-unpacked/{resources,LICENSE*} $out/opt/opencode-desktop
+    # Install electron-builder's full output. Its executable carries the Electron
+    # fuses the builder flipped (cookie encryption among them); the stock nixpkgs
+    # binary does not, and fuses are one-way build settings, so the builder's
+    # executable is what must launch. Flipping rewrites bytes in place, so the
+    # binary keeps nixpkgs' patched interpreter and RUNPATH from electron.dist
+    # and still resolves every library from the store as before.
+    mkdir -p $out/opt
+    cp -r dist/linux*-unpacked $out/opt/opencode-desktop
+    # electron-builder names the executable after the channel's appId, so find
+    # it: at the unpacked root only the sandbox and crashpad helpers are
+    # executable besides it, and nixpkgs strips the exec bit from the libraries.
+    desktop_exe=$(find "$out/opt/opencode-desktop" -maxdepth 1 -type f -perm -0111 \
+      ! -name chrome-sandbox ! -name chrome_crashpad_handler)
+    test "$(wc -l <<<"$desktop_exe")" -eq 1 || {
+      echo "expected a single electron-builder executable, found:" "$desktop_exe" >&2
+      exit 1
+    }
     install -Dm644 resources/icons/32x32.png \
       "$out/share/icons/hicolor/32x32/apps/ai.opencode.desktop.png"
     install -Dm644 resources/icons/64x64.png \
@@ -139,7 +170,9 @@ stdenv.mkDerivation (finalAttrs: {
       "$out/share/icons/hicolor/512x512/apps/ai.opencode.desktop.png"
     install -Dm644 resources/ai.opencode.desktop.metainfo.xml \
       "$out/share/metainfo/ai.opencode.desktop.metainfo.xml"
-    makeWrapper ${lib.getExe electron} $out/bin/opencode-desktop \
+    gappsWrapperArgsHook
+    makeWrapper "$desktop_exe" $out/bin/opencode-desktop \
+     "''${gappsWrapperArgs[@]}" \
      --inherit-argv0 \
      --set ELECTRON_FORCE_IS_PACKAGED 1 \
      --add-flags $out/opt/opencode-desktop/resources/app.asar \
