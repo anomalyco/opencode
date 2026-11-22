@@ -102,9 +102,9 @@ describe("ReadToolFileSystem scan ranges", () => {
         lineCount: 1,
       })
       // Every non-EOF scan read requests the remaining file (never shrinking to 4 KiB after a 1 KiB short read).
-      expect(file.calls.every((call) => call.offset + call.length === content.length || call.length >= 256 * 1024)).toBe(
-        true,
-      )
+      expect(
+        file.calls.every((call) => call.offset + call.length === content.length || call.length >= 256 * 1024),
+      ).toBe(true)
     }),
   )
 })
@@ -245,7 +245,8 @@ describe("ReadToolFileSystem", () => {
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
       const file = absolute(path.join(directory, "dense.txt"))
-      const read = (page?: ReadToolFileSystem.PageInput) => ReadToolFileSystem.read(environment, file, "dense.txt", page)
+      const read = (page?: ReadToolFileSystem.PageInput) =>
+        ReadToolFileSystem.read(environment, file, "dense.txt", page)
       const prefix = "x\r\n".repeat(1_999)
       for (const ending of ["last", "last\n", "last\r\n", "\n"]) {
         const content = prefix + ending
@@ -434,8 +435,7 @@ describe("ReadToolFileSystem", () => {
           Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
         )
       const lines = Array.from({ length: 3_000 }, (_, index) => `${index + 1}`.padEnd(100, "x"))
-      const expected = (from: number) =>
-        lines.slice(from - 1).map((line, index) => `${from + index}: ${line}`)
+      const expected = (from: number) => lines.slice(from - 1).map((line, index) => `${from + index}: ${line}`)
 
       expect(yield* read("lf.txt", lines.join("\n") + "\n", { offset: 5_000 })).toEqual([
         "Read file lf.txt, lines 2901-3000 (offset 5000 is past the end; the file has 3000 lines)",
@@ -472,7 +472,9 @@ describe("ReadToolFileSystem", () => {
       const capped = yield* read("wide.txt", wide.join("\n") + "\n", { offset: 201 })
       expect(capped[0]).toBe("Read file wide.txt, lines 176-200 (offset 201 is past the end; the file has 200 lines)")
       expect(capped.slice(1)).toEqual(
-        wide.slice(175).map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
+        wide
+          .slice(175)
+          .map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
       )
 
       // Matches whole-file reads: a null byte anywhere in the file rejects a past-end read.
