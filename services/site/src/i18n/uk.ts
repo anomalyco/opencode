@@ -59,7 +59,7 @@ export const dict = {
   "home.install.ariaLabel": "Параметри встановлення",
   "home.what.title": "Що таке OpenCode?",
   "home.what.multiSession.title": "Багатосесійність",
-  "home.what.multiSession.body": "Запускайте кількох агентів паралельно в одному проекті",
+  "home.what.multiSession.body": "Запускайте кількох агентів паралельно в одному проєкті",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Увійдіть через GitHub, щоб використовувати свій обліковий запис Copilot",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
