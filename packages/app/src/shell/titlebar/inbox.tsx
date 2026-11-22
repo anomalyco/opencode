@@ -170,6 +170,7 @@ export function SidebarInbox() {
     tabs.store
       .filter((tab): tab is DraftTab => {
         if (tab.type !== "draft") return false
+
         if (draftSelected(tab)) return true
 
         const composer = draftComposer(tab)
