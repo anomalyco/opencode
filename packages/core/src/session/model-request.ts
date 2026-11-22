@@ -76,8 +76,6 @@ export interface Prepared<Event = SessionRequest> {
   readonly executeTool: (
     input: Parameters<Tool.Snapshot["execute"]>[0],
   ) => Effect.Effect<Tool.NormalizedResult, ExecuteError>
-  /** The `execute` call a top-level call to one of this request's Code Mode tools should be recorded and run as. */
-  readonly codeModeCall?: (name: string) => Tool.CodeModeCall | undefined
 }
 
 export interface Input {
@@ -442,7 +440,6 @@ export const layer = Layer.effect(
         // catch them and turn a "no" into model-visible output. Recover them here as failures,
         // including declines a tool rethrew and its wrapper attached to a Tool.Error, as Promise
         // plugin tools do.
-        codeModeCall: (name: string) => input.tools?.codeModeCall?.(name, hooked),
         executeTool: (call: Parameters<Prepared["executeTool"]>[0]) =>
           tools.execute({ ...call, definitions: hooked }).pipe(
             Effect.catchCauseFilter(
