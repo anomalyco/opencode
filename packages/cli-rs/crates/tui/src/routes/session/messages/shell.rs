@@ -66,8 +66,15 @@ pub(crate) struct Output {
     pub(crate) text: String,
     pub(crate) truncated: bool,
     cursor: i64,
-    loading: bool,
-    drain_requested: bool,
+    reading: Reading,
+}
+
+#[derive(Default, PartialEq)]
+enum Reading {
+    #[default]
+    Idle,
+    Running,
+    ThenDrain,
 }
 
 /// What one [`Output::start`] read: the pages' output, the cursor after them, and whether it skipped ahead.
@@ -83,11 +90,13 @@ impl Output {
         directory: Option<String>,
         drain: bool,
     ) -> Option<impl Future<Output = Pages> + Send + use<>> {
-        if self.loading {
-            self.drain_requested |= drain;
+        if self.reading != Reading::Idle {
+            if drain {
+                self.reading = Reading::ThenDrain;
+            }
             return None;
         }
-        self.loading = true;
+        self.reading = Reading::Running;
         let client = client.clone();
         let start = self.cursor;
         let location = directory.map(|directory| LocationQueryInput { directory: Some(directory) });
@@ -138,8 +147,7 @@ impl Output {
         }
         self.truncated |= skipped;
         self.cursor = cursor;
-        self.loading = false;
-        std::mem::take(&mut self.drain_requested)
+        std::mem::take(&mut self.reading) == Reading::ThenDrain
     }
 }
 
