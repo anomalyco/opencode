@@ -22,6 +22,8 @@ export interface Custom {
   readonly format: Freeform
   /** The options line's prefix, when the tool has optional fields beside its string. */
   readonly optionsPrefix?: string
+  /** The optional fields the options line may set; it drops any others. */
+  readonly options?: ReadonlyArray<string>
 }
 
 /** How a tool goes out: a custom tool when it declares `freeform` with one required string parameter. */
@@ -30,8 +32,9 @@ export const resolve = (tool: ToolDefinition): Custom | undefined => {
   const prefix = tool.freeform.type === "text" ? tool.freeform.optionsPrefix : undefined
   const field = ToolDefinition.freeformField(tool.inputSchema, prefix !== undefined)
   if (field === undefined) return undefined
-  return prefix !== undefined && optionFields(tool, field).length > 0
-    ? { field, format: tool.freeform, optionsPrefix: prefix }
+  const options = optionFields(tool, field).map(([name]) => name)
+  return prefix !== undefined && options.length > 0
+    ? { field, format: tool.freeform, optionsPrefix: prefix, options }
     : { field, format: tool.freeform }
 }
 
@@ -108,7 +111,8 @@ const field = (custom: Custom | undefined) => custom?.field ?? "input"
 const decodeArguments = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))
 
 // The options on a complete first line, and the body after it. Without one, or when the line's JSON is not an object,
-// the whole text is the body: the line is then a comment the program ignores.
+// the whole text is the body: the line is then a comment the program ignores. Keys the tool does not declare, such as
+// options a model learned for another harness, are dropped so they cannot fail the call's validation.
 const split = (custom: Custom | undefined, raw: string) => {
   const line =
     custom?.optionsPrefix === undefined
@@ -117,7 +121,7 @@ const split = (custom: Custom | undefined, raw: string) => {
   const options = line ? Option.getOrUndefined(decodeArguments(line[1])) : undefined
   if (!line || !options) return { options: undefined, body: raw }
   return {
-    options: Object.fromEntries(Object.entries(options).filter(([name]) => name !== field(custom))),
+    options: Object.fromEntries(Object.entries(options).filter(([name]) => custom?.options?.includes(name))),
     body: raw.slice(line[0].length),
   }
 }

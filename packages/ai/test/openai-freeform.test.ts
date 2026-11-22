@@ -24,6 +24,7 @@ const optionsCustom = {
   field: "code",
   format: { type: "text", optionsPrefix: "// @exec:" },
   optionsPrefix: "// @exec:",
+  options: ["timeout", "background"],
 } as const
 
 const RAW = ['say "hi"\n\tdone\\', "naïve 😀 \u2028", "\u0000 }{ ]"]
@@ -37,6 +38,11 @@ const OPTIONS: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
   ],
   ["// @exec: {}\nreturn 1", { code: "return 1" }],
   ['// @exec: {"code":"ignored"}\nreturn 1', { code: "return 1" }],
+  [
+    '// @exec: {"yield_time_ms": 10000, "timeout": 5, "max_output_tokens": 1000}\nreturn 1',
+    { timeout: 5, code: "return 1" },
+  ],
+  ['// @exec: {"yield_time_ms": 10000}\nreturn 1', { code: "return 1" }],
   ["// @exec: {not json}\nreturn 1", { code: "// @exec: {not json}\nreturn 1" }],
   ["// @exec: [1]\nreturn 1", { code: "// @exec: [1]\nreturn 1" }],
   ['// @exec: {"timeout":1}', { code: '// @exec: {"timeout":1}' }],

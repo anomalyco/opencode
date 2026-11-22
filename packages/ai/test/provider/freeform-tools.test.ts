@@ -413,6 +413,10 @@ describe("freeform tools", () => {
       expect(yield* run("// @exec: {timeout}", "\nx()")).toEqual([{ code: "// @exec: {timeout}\nx()" }])
       expect(yield* run("// @exec: ", '{"timeout":5}')).toEqual([{ code: '// @exec: {"timeout":5}' }])
       expect(yield* run("x(", ")")).toEqual([{ code: "x()" }])
+      // Keys the tool does not declare, like Codex's options, are dropped, so the call still succeeds.
+      expect(yield* run('// @exec: {"yield_time_ms": 10000, "max_output_tokens": 1000, "timeout": 5}\nx()')).toEqual([
+        { timeout: 5, code: "x()" },
+      ])
     }),
   )
 
