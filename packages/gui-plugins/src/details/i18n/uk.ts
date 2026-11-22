@@ -25,7 +25,7 @@ export default {
   basedOn: "За матеріалами {{branch}}",
   "workspace.local": "Локальний репозиторій",
   "workspace.existing": "Робоче дерево",
-  "workspace.new": "Нова робоча область",
+  "workspace.new": "Нове робоче дерево",
   "mcp.interactiveAuth": "Сервер MCP {{name}} потребує інтерактивної форми автентифікації",
   "move.running": "Сесія виконується. Спробуйте ще раз, коли вона завершиться.",
   "move.removeFailed": "Не вдалося видалити робоче дерево",
