@@ -1,6 +1,7 @@
 import { Result, Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
-import { type Command, DrawOutput, type Frame, Node, type WidgetEvent } from "./node.js"
+import { type Command, type Frame, Node, type WidgetEvent } from "./node.js"
+import { checkDraw } from "./draw.js"
 import { prune, StepError } from "./session.js"
 import {
   denied,
@@ -475,9 +476,9 @@ export const LiveWidget = {
         return { type: "render", node: decoded.success }
       }
       if (message.type === "draw") {
-        const decoded = decodeDraw({ commands: message.commands })
-        if (Result.isFailure(decoded)) return void fail("invalid", decoded.failure.message)
-        return { type: "draw", id: message.id as string, commands: decoded.success.commands }
+        const checked = checkDraw(message.commands)
+        if ("error" in checked) return void fail("invalid", checked.error)
+        return { type: "draw", id: message.id as string, commands: checked.commands }
       }
       if (message.type === "frame") return { type: "frame" }
       if (message.type === "submit") return { type: "submit", value: message.value ?? null }
@@ -598,7 +599,6 @@ const checked = (name: string, args: ReadonlyArray<unknown>, from = 0) =>
   args.map((arg, index) => (index < from ? arg : unmark(arg, `Argument ${index + 1} to __host.${name}`)))
 
 const decodeNode = Schema.decodeUnknownResult(Node)
-const decodeDraw = Schema.decodeUnknownResult(DrawOutput)
 
 // Lets a program react to what just happened: it continues in microtasks and 1 ms slices between event-loop turns.
 async function turns() {

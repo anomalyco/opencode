@@ -151,21 +151,33 @@ test("draw gets state, data and frame; it may return the builder; no draw draws 
   expect((await drawn(`return undefined`)).commands).toEqual([])
 })
 
-test("invalid draw output is rejected", async () => {
-  expect(await failure(`return ui.draw().rect(0, 0, 1, 1, "red")`)).toMatchObject({ kind: "invalid" })
-  expect(await failure(`return ui.draw().rect(0, 0, 1, 1, "#12345")`)).toMatchObject({ kind: "invalid" })
-  expect(await failure(`return ui.draw().alpha(2)`)).toMatchObject({ kind: "invalid" })
-  expect(await failure(`return ui.draw().rect(0, 0, "1", 1)`)).toMatchObject({ kind: "invalid" })
-  expect(await failure(`return ui.draw().path([["A", 1]])`)).toMatchObject({ kind: "invalid" })
-  expect(await failure(`return ui.draw().text(0, 0, "x", { weight: 450 })`)).toMatchObject({ kind: "invalid" })
-  expect(await failure(`return [["sparkle"]]`)).toMatchObject({ kind: "invalid" })
-  expect(await failure(`return "rect"`)).toMatchObject({ kind: "invalid" })
+test("invalid draw output is rejected, with the message every host gives", async () => {
+  const invalid = (message: string) => ({ kind: "invalid", message })
+  expect(await failure(`return ui.draw().rect(0, 0, 1, 1, "red")`)).toMatchObject(
+    invalid("draw command 0: not a color"),
+  )
+  expect(await failure(`return ui.draw().rect(0, 0, 1, 1, "#12345")`)).toMatchObject(
+    invalid("draw command 0: not a color"),
+  )
+  expect(await failure(`return ui.draw().save().rect(0, 0, "1", 1)`)).toMatchObject(
+    invalid(`draw command 1: "rect" argument 3 must be a finite number`),
+  )
+  expect(await failure(`return ui.draw().path([["A", 1]])`)).toMatchObject(
+    invalid("draw command 0: unknown path segment"),
+  )
+  expect(await failure(`return ui.draw().text(0, 0, "x", { weight: 450 })`)).toMatchObject(
+    invalid("draw command 0: a text weight must be 400, 500, 600 or 700"),
+  )
+  expect(await failure(`return [["sparkle"]]`)).toMatchObject(invalid(`draw command 0: unknown draw command "sparkle"`))
+  expect(await failure(`return "rect"`)).toMatchObject(invalid("draw commands must be a list"))
+  // Clamped, not invalid.
+  expect((await drawn(`return ui.draw().alpha(2)`)).commands).toEqual([["alpha", 1]])
   expect(await failure(`throw new Error("no")`)).toMatchObject({ kind: "error", message: "Error: no" })
   const cap = `const g = ui.draw(); for (let i = 0; i < N; i++) g.save(); return g`
   expect((await drawn(cap.replace("N", String(MAX_COMMANDS)))).commands).toHaveLength(MAX_COMMANDS)
   expect(await failure(cap.replace("N", String(MAX_COMMANDS + 1)))).toMatchObject({
     kind: "invalid",
-    message: expect.stringContaining(`at most ${MAX_COMMANDS} commands`),
+    message: `${MAX_COMMANDS + 1} draw commands is over the budget of ${MAX_COMMANDS} per frame`,
   })
 })
 

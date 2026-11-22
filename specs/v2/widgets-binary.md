@@ -150,9 +150,9 @@ in each stream's order:
 - **F:** for a gradient, its geometry (4 or 3 floats) and each stop's offset (clamped to 0..1), in the same order as
   the I stream; then `width` (default 1).
 
-The host first applies the prelude's paint shorthand rules and Rune's validation (`Command::from_value`): a non-finite
-coordinate, an unknown command or segment, an invalid color, or more than 2,000 commands fail the post as a program
-error in phase `draw`, as an invalid draw does today. The streams are the same layout Android keeps in
+The host first checks the commands (`widgets.md`, Draw command checks): a failing draw fails the step or post as a
+program error in phase `draw`, with that section's message, and the streams hold the normalised commands (alpha and
+stop offsets clamped, a text size clamped, a negative width 0). The streams are the same layout Android keeps in
 `AgentWidgetDrawList`, except that colors are (kind, value) pairs rather than palette-resolved ARGB.
 
 ## GPU batch: section `G` (live, per `widgets-gpu.md`)

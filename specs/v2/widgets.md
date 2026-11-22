@@ -477,11 +477,57 @@ The builder methods push one command each and return the builder (`g.save().alph
 translate(x, y) rotate(r) scale(sx, sy = sx) alpha(a) rect(x, y, w, h, paint) rrect(x, y, w, h, r, paint)
 circle(cx, cy, r, paint) line(x1, y1, x2, y2, paint) path(segments, paint) text(x, y, string, style = {})
 image(src, x, y, w, h)`, and `g.commands` is the list. A `paint` may be a `Color` string, short for `{ fill: color }`
-(`{ stroke: color }` for `line`); an omitted paint is the `"text"` color. `draw` may return the builder itself. The
-TypeScript runtime rejects a draw output that breaks these shapes or exceeds 2,000 commands.
+(`{ stroke: color }` for `line`); an omitted paint is the `"text"` color. `draw` may return the builder itself.
 
 State works as in the Canvas 2D API: `alpha` sets the opacity (clamped to 0–1) for the commands after it, replacing
 the current value rather than multiplying it, and `save`/`restore` save and restore the transform and opacity.
+
+### Draw command checks
+
+Every host checks a draw's commands (a draw step's, or a live `draw` post's) with exactly these rules, on the values
+as they crossed (Native hosts), and gives the client the **normalised** commands, or fails with exactly the message
+below: a program error (Failures) in phase `draw`, which for a live `draw` post ends the run as an invalid post does.
+The TypeScript host fails with `StepError` `kind: "invalid"` and that message. Shared cases:
+`packages/widget/test/fixtures/draw.json`.
+
+- **The list.** The commands are a list (else `draw commands must be a list`) of at most 2,000 (else `<n> draw commands
+  is over the budget of 2000 per frame`). Then each command, in order; the first that fails fails the draw with
+  `draw command <i>: <reason>` (`<i>` from 0) and one of the reasons below.
+- **A command,** checked in this order:
+  1. an array (`a command is an array`) whose first item is a string (`a command starts with its name`), one of the
+     names in the `Command` type (`unknown draw command "<name>"`);
+  2. its length: at most the type's number of arguments (`"<name>" has more than <k> arguments`), and at least that
+     many, but for `text`, whose style may be left off (`"<name>" is missing argument <i>`, for the first missing one);
+  3. its arguments, first to last. A number must be a finite number (`"<name>" argument <i> must be a finite number`;
+     `null`, `undefined`, a string or a non-finite number fail). `alpha` is clamped to 0..1. `path`'s argument 1 is a
+     list (`"path" takes a list of segments`). `text`'s argument 3 is a string (`"text" argument 3 must be a string`).
+     `image`'s argument 1 is a string (`"image" takes a src`). Any other number, negative ones included, is kept.
+- **A path segment:** an array (`a path segment is an array`) whose first item is `M`, `L`, `Q`, `C` or `Z` (`unknown
+  path segment`), with exactly 2, 2, 4, 6 or 0 coordinates (`a "<verb>" path segment takes <k> coordinates`), each a
+  finite number (`a path coordinate must be a finite number`).
+- **A paint:** an object, not an array or `null` (`a paint is an object`). Its fields, checked in this order:
+  - `fill`: a color, or an object, a gradient (below);
+  - `stroke`: a color;
+  - `width`: a finite number (`a stroke's width must be a finite number`), a negative one made 0;
+  - `cap`: `"butt"` or `"round"` (`a stroke's cap must be "butt" or "round"`).
+- **A gradient:** `linear`, when present, is a list of 4 finite numbers (`a linear gradient takes 4 numbers`; an item
+  that isn't one: `linear must be a finite number`); `radial` likewise with 3 (`a radial gradient takes 3 numbers`,
+  `radial must be a finite number`). Both are checked when present; with both, it is linear. With neither: `a
+  gradient needs linear or radial`. Then `stops`, a list (`a gradient needs stops`, empty allowed) of `[offset,
+  color]` pairs (`a stop is [offset, color]`), the offset a finite number (`a stop's offset must be a finite
+  number`) clamped to 0..1.
+- **A color:** a string that is a theme token or `#` and 3, 6 or 8 hex digits (either case); anything else, `null`
+  included: `not a color`.
+- **A text style** (argument 4): left off, `undefined` or `null` is `{}` (JSON writes an `undefined` array item as
+  `null`); anything else but an object, arrays included: `a text style is an object`. Its fields, in this order:
+  `size`, a finite number (`a text size must be a finite number`) clamped to 1..512; `weight`, 400, 500, 600 or 700
+  (`a text weight must be 400, 500, 600 or 700`); `align`, `"left"`, `"center"` or `"right"` (`a text align must be
+  "left", "center" or "right"`); `color`, a color; `mono`, `true` or `false` (`a text mono must be true or false`).
+- **Fields of objects** (a paint, a gradient, a text style) that are absent or `undefined` take their defaults
+  (above); `null` is a value, and fails as any other wrong one. Fields the type doesn't name are ignored.
+- **Normalised commands:** each command with exactly its arguments, clamped values in place, a text style that was
+  left off as `{}`; in paints, gradients (`linear` or `radial`, then `stops`) and text styles only the fields given,
+  in the orders above, without unknown or `undefined` ones.
 
 ## GPU canvases
 

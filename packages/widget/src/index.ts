@@ -8,10 +8,10 @@ export {
   type Checkbox,
   type Color,
   type Column,
-  Command,
+  type Command,
   type Divider,
   type DrawInput,
-  DrawOutput,
+  type DrawOutput,
   type Frame,
   type Gap,
   type Gradient,
@@ -54,6 +54,7 @@ export {
   realClock,
 } from "./live.js"
 export { compile, type CompileError } from "./compile.js"
+export { checkDraw } from "./draw.js"
 export { entry, prelude, program, version } from "./program.js"
 export { NEWER, OLDER, PROTOCOL, protocol } from "./host.js"
 export {

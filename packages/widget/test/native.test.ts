@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test"
 import { MAX_VALUE_DEPTH } from "../src/host.js"
-import { Result, Schema } from "effect"
+import { Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
 import {
+  checkDraw,
   draw,
-  DrawOutput,
   LiveWidget,
   type LiveMessage,
   Node,
@@ -145,7 +145,7 @@ const scriptedLive = async (source: string, events: ReadonlyArray<unknown>) => {
       return {
         type: "draw",
         id: message.id,
-        commands: Schema.decodeUnknownSync(DrawOutput)({ commands: message.commands }).commands,
+        commands: (checkDraw(message.commands) as { commands: unknown }).commands,
       }
     if (message.type === "send") return { type: "send", value: message.value ?? null, wake: message.wake !== false }
     return message
@@ -294,8 +294,8 @@ const scriptedDraw = async (source: string, input: Record<string, unknown>) => {
     scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify({ phase: "draw", ...input })})`,
   )
   if (!result.ok) return { error: result.error.message }
-  const decoded = Schema.decodeUnknownResult(DrawOutput)(result.value)
-  return Result.isSuccess(decoded) ? decoded.success : { error: decoded.failure.message }
+  const checked = checkDraw(isRecord(result.value) ? result.value.commands : undefined)
+  return "error" in checked ? { error: checked.error } : checked
 }
 
 const nativeDraw = (source: string, input: Parameters<typeof draw>[1]) =>
@@ -339,3 +339,6 @@ test("native draw steps give the commands the run's result gave, and fail as it 
     })
   }
 })
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)

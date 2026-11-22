@@ -2,7 +2,7 @@ import { Result, Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
 import {
   type DrawInput,
-  DrawOutput,
+  type DrawOutput,
   type Frame,
   type Node,
   StepOutput,
@@ -12,6 +12,7 @@ import {
 } from "./node.js"
 import { json, tree, unmark, ViewError } from "./tree.js"
 import { compiled } from "./compiled.js"
+import { checkDraw } from "./draw.js"
 import { located, MAX_VALUE_DEPTH, NEWER, OLDER, protocol, PROTOCOL } from "./host.js"
 
 /** The most a step may run; clients may pass a smaller `timeoutMs`. */
@@ -59,9 +60,12 @@ export async function draw(
   input: Omit<DrawInput, "phase">,
   options?: StepOptions,
 ): Promise<DrawOutput> {
-  const decoded = decodeDraw(await run(program, { phase: "draw", ...input }, options?.timeoutMs ?? TIMEOUT_MS))
-  if (Result.isFailure(decoded)) throw new StepError({ kind: "invalid", message: decoded.failure.message })
-  return decoded.success
+  const output = (await run(program, { phase: "draw", ...input }, options?.timeoutMs ?? TIMEOUT_MS)) as {
+    readonly commands: unknown
+  }
+  const checked = checkDraw(output.commands)
+  if ("error" in checked) throw new StepError({ kind: "invalid", message: checked.error })
+  return checked
 }
 
 const EMITTED = "Argument 1 to __widget_emit"
@@ -154,7 +158,6 @@ export const WidgetSession = {
 }
 
 const decodeOutput = Schema.decodeUnknownResult(StepOutput)
-const decodeDraw = Schema.decodeUnknownResult(DrawOutput)
 const known = new Set<string>(types)
 
 // Drops nodes of unknown types from `children` so older clients render what they know (spec: "unknown node types

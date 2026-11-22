@@ -1,0 +1,2025 @@
+{
+  "about": "Draw command checks (specs/v2/widgets.md, Canvas, Draw command checks). Each case's `commands` is a draw's commands as they cross to the host; the strings \"$NaN\", \"$Infinity\", \"$-Infinity\" and \"$undefined\" stand for those values, and `repeat` for `count` copies of `command`. A host gives `valid`, the commands clients get (normalised: clamped values, a text's missing style as {}, unknown and undefined fields left out, fields in the spec's order), or fails with exactly `error`.",
+  "cases": [
+    {
+      "name": "empty list",
+      "commands": [],
+      "valid": []
+    },
+    {
+      "name": "save and restore",
+      "commands": [
+        [
+          "save"
+        ],
+        [
+          "restore"
+        ]
+      ],
+      "valid": [
+        [
+          "save"
+        ],
+        [
+          "restore"
+        ]
+      ]
+    },
+    {
+      "name": "transforms",
+      "commands": [
+        [
+          "translate",
+          -1.5,
+          2
+        ],
+        [
+          "scale",
+          2,
+          -0.5
+        ],
+        [
+          "rotate",
+          -3.14
+        ]
+      ],
+      "valid": [
+        [
+          "translate",
+          -1.5,
+          2
+        ],
+        [
+          "scale",
+          2,
+          -0.5
+        ],
+        [
+          "rotate",
+          -3.14
+        ]
+      ]
+    },
+    {
+      "name": "alpha clamps to 0..1",
+      "commands": [
+        [
+          "alpha",
+          0.5
+        ],
+        [
+          "alpha",
+          -1
+        ],
+        [
+          "alpha",
+          2
+        ]
+      ],
+      "valid": [
+        [
+          "alpha",
+          0.5
+        ],
+        [
+          "alpha",
+          0
+        ],
+        [
+          "alpha",
+          1
+        ]
+      ]
+    },
+    {
+      "name": "shapes",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          -10,
+          5,
+          {
+            "fill": "accent",
+            "stroke": "#FFF",
+            "width": 2,
+            "cap": "round"
+          }
+        ],
+        [
+          "rrect",
+          1,
+          2,
+          3,
+          4,
+          -5,
+          {
+            "fill": "#11223344"
+          }
+        ],
+        [
+          "circle",
+          1,
+          2,
+          -3,
+          {
+            "stroke": "text",
+            "cap": "butt"
+          }
+        ],
+        [
+          "line",
+          0,
+          0,
+          1,
+          1,
+          {
+            "stroke": "#abcdef",
+            "width": 0
+          }
+        ]
+      ],
+      "valid": [
+        [
+          "rect",
+          0,
+          0,
+          -10,
+          5,
+          {
+            "fill": "accent",
+            "stroke": "#FFF",
+            "width": 2,
+            "cap": "round"
+          }
+        ],
+        [
+          "rrect",
+          1,
+          2,
+          3,
+          4,
+          -5,
+          {
+            "fill": "#11223344"
+          }
+        ],
+        [
+          "circle",
+          1,
+          2,
+          -3,
+          {
+            "stroke": "text",
+            "cap": "butt"
+          }
+        ],
+        [
+          "line",
+          0,
+          0,
+          1,
+          1,
+          {
+            "stroke": "#abcdef",
+            "width": 0
+          }
+        ]
+      ]
+    },
+    {
+      "name": "an empty paint",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {}
+        ]
+      ],
+      "valid": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {}
+        ]
+      ]
+    },
+    {
+      "name": "a paint's fields in their order, unknown ones and undefined ones left out",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "cap": "round",
+            "glow": 1,
+            "width": 3,
+            "stroke": "muted",
+            "fill": "$undefined"
+          }
+        ]
+      ],
+      "valid": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "stroke": "muted",
+            "width": 3,
+            "cap": "round"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "a negative stroke width is 0",
+      "commands": [
+        [
+          "line",
+          0,
+          0,
+          1,
+          1,
+          {
+            "stroke": "text",
+            "width": -2
+          }
+        ]
+      ],
+      "valid": [
+        [
+          "line",
+          0,
+          0,
+          1,
+          1,
+          {
+            "stroke": "text",
+            "width": 0
+          }
+        ]
+      ]
+    },
+    {
+      "name": "every theme token",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "text"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "muted"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "accent"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "bg"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "surface"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "border"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "success"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "warning"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "error"
+          }
+        ]
+      ],
+      "valid": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "text"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "muted"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "accent"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "bg"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "surface"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "border"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "success"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "warning"
+          }
+        ],
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "error"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "gradients, stop offsets clamped to 0..1",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "stops": [
+                [
+                  -0.5,
+                  "#000"
+                ],
+                [
+                  0.5,
+                  "accent"
+                ],
+                [
+                  1.5,
+                  "#fff"
+                ]
+              ],
+              "linear": [
+                0,
+                0,
+                1,
+                1
+              ]
+            }
+          }
+        ],
+        [
+          "circle",
+          0,
+          0,
+          1,
+          {
+            "fill": {
+              "radial": [
+                0,
+                0,
+                5
+              ],
+              "stops": []
+            }
+          }
+        ]
+      ],
+      "valid": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "linear": [
+                0,
+                0,
+                1,
+                1
+              ],
+              "stops": [
+                [
+                  0,
+                  "#000"
+                ],
+                [
+                  0.5,
+                  "accent"
+                ],
+                [
+                  1,
+                  "#fff"
+                ]
+              ]
+            }
+          }
+        ],
+        [
+          "circle",
+          0,
+          0,
+          1,
+          {
+            "fill": {
+              "radial": [
+                0,
+                0,
+                5
+              ],
+              "stops": []
+            }
+          }
+        ]
+      ]
+    },
+    {
+      "name": "linear and radial: both checked, linear wins",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "linear": [
+                0,
+                0,
+                1,
+                1
+              ],
+              "radial": [
+                1,
+                1,
+                1
+              ],
+              "stops": [
+                [
+                  0,
+                  "#000"
+                ]
+              ]
+            }
+          }
+        ]
+      ],
+      "valid": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "linear": [
+                0,
+                0,
+                1,
+                1
+              ],
+              "stops": [
+                [
+                  0,
+                  "#000"
+                ]
+              ]
+            }
+          }
+        ]
+      ]
+    },
+    {
+      "name": "a path with every segment, and an empty one",
+      "commands": [
+        [
+          "path",
+          [
+            [
+              "M",
+              0,
+              0
+            ],
+            [
+              "L",
+              1,
+              1
+            ],
+            [
+              "Q",
+              1,
+              2,
+              3,
+              4
+            ],
+            [
+              "C",
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            [
+              "Z"
+            ]
+          ],
+          {
+            "stroke": "text"
+          }
+        ],
+        [
+          "path",
+          [],
+          {}
+        ]
+      ],
+      "valid": [
+        [
+          "path",
+          [
+            [
+              "M",
+              0,
+              0
+            ],
+            [
+              "L",
+              1,
+              1
+            ],
+            [
+              "Q",
+              1,
+              2,
+              3,
+              4
+            ],
+            [
+              "C",
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            [
+              "Z"
+            ]
+          ],
+          {
+            "stroke": "text"
+          }
+        ],
+        [
+          "path",
+          [],
+          {}
+        ]
+      ]
+    },
+    {
+      "name": "text: a missing, undefined or null style is {}",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "a"
+        ],
+        [
+          "text",
+          0,
+          0,
+          "b",
+          "$undefined"
+        ],
+        [
+          "text",
+          0,
+          0,
+          "c",
+          null
+        ],
+        [
+          "text",
+          0,
+          0,
+          "",
+          {}
+        ]
+      ],
+      "valid": [
+        [
+          "text",
+          0,
+          0,
+          "a",
+          {}
+        ],
+        [
+          "text",
+          0,
+          0,
+          "b",
+          {}
+        ],
+        [
+          "text",
+          0,
+          0,
+          "c",
+          {}
+        ],
+        [
+          "text",
+          0,
+          0,
+          "",
+          {}
+        ]
+      ]
+    },
+    {
+      "name": "text style fields in their order, size clamped to 1..512",
+      "commands": [
+        [
+          "text",
+          1,
+          2,
+          "t",
+          {
+            "mono": true,
+            "color": "#fff",
+            "align": "right",
+            "weight": 700,
+            "size": 600,
+            "font": "x"
+          }
+        ],
+        [
+          "text",
+          1,
+          2,
+          "t",
+          {
+            "size": 0.5,
+            "weight": 400,
+            "align": "left",
+            "mono": false
+          }
+        ],
+        [
+          "text",
+          1,
+          2,
+          "t",
+          {
+            "size": -3,
+            "weight": 500,
+            "align": "center"
+          }
+        ],
+        [
+          "text",
+          1,
+          2,
+          "t",
+          {
+            "size": 20,
+            "weight": 600,
+            "color": "$undefined"
+          }
+        ]
+      ],
+      "valid": [
+        [
+          "text",
+          1,
+          2,
+          "t",
+          {
+            "size": 512,
+            "weight": 700,
+            "align": "right",
+            "color": "#fff",
+            "mono": true
+          }
+        ],
+        [
+          "text",
+          1,
+          2,
+          "t",
+          {
+            "size": 1,
+            "weight": 400,
+            "align": "left",
+            "mono": false
+          }
+        ],
+        [
+          "text",
+          1,
+          2,
+          "t",
+          {
+            "size": 1,
+            "weight": 500,
+            "align": "center"
+          }
+        ],
+        [
+          "text",
+          1,
+          2,
+          "t",
+          {
+            "size": 20,
+            "weight": 600
+          }
+        ]
+      ]
+    },
+    {
+      "name": "image",
+      "commands": [
+        [
+          "image",
+          "a.png",
+          0,
+          0,
+          10,
+          -10
+        ]
+      ],
+      "valid": [
+        [
+          "image",
+          "a.png",
+          0,
+          0,
+          10,
+          -10
+        ]
+      ]
+    },
+    {
+      "name": "2,000 commands",
+      "repeat": {
+        "command": [
+          "save"
+        ],
+        "count": 2000
+      },
+      "valid": {
+        "repeat": {
+          "command": [
+            "save"
+          ],
+          "count": 2000
+        }
+      }
+    },
+    {
+      "name": "not a list",
+      "commands": "rect",
+      "error": "draw commands must be a list"
+    },
+    {
+      "name": "an object",
+      "commands": {
+        "commands": []
+      },
+      "error": "draw commands must be a list"
+    },
+    {
+      "name": "2,001 commands",
+      "repeat": {
+        "command": [
+          "save"
+        ],
+        "count": 2001
+      },
+      "error": "2001 draw commands is over the budget of 2000 per frame"
+    },
+    {
+      "name": "not an array",
+      "commands": [
+        [
+          "save"
+        ],
+        {
+          "op": "save"
+        }
+      ],
+      "error": "draw command 1: a command is an array"
+    },
+    {
+      "name": "no name",
+      "commands": [
+        []
+      ],
+      "error": "draw command 0: a command starts with its name"
+    },
+    {
+      "name": "a name that isn't a string",
+      "commands": [
+        [
+          1,
+          2
+        ]
+      ],
+      "error": "draw command 0: a command starts with its name"
+    },
+    {
+      "name": "an unknown command",
+      "commands": [
+        [
+          "sparkle",
+          1
+        ]
+      ],
+      "error": "draw command 0: unknown draw command \"sparkle\""
+    },
+    {
+      "name": "too many arguments: save",
+      "commands": [
+        [
+          "save",
+          1
+        ]
+      ],
+      "error": "draw command 0: \"save\" has more than 0 arguments"
+    },
+    {
+      "name": "too many arguments: rect",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {},
+          5
+        ]
+      ],
+      "error": "draw command 0: \"rect\" has more than 5 arguments"
+    },
+    {
+      "name": "too many arguments: text",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {},
+          1
+        ]
+      ],
+      "error": "draw command 0: \"text\" has more than 4 arguments"
+    },
+    {
+      "name": "too many arguments: alpha",
+      "commands": [
+        [
+          "alpha",
+          1,
+          2
+        ]
+      ],
+      "error": "draw command 0: \"alpha\" has more than 1 arguments"
+    },
+    {
+      "name": "a missing argument",
+      "commands": [
+        [
+          "translate",
+          1
+        ]
+      ],
+      "error": "draw command 0: \"translate\" is missing argument 2"
+    },
+    {
+      "name": "a missing paint",
+      "commands": [
+        [
+          "circle",
+          0,
+          0,
+          1
+        ]
+      ],
+      "error": "draw command 0: \"circle\" is missing argument 4"
+    },
+    {
+      "name": "lengths are checked before arguments",
+      "commands": [
+        [
+          "rect",
+          "x"
+        ]
+      ],
+      "error": "draw command 0: \"rect\" is missing argument 2"
+    },
+    {
+      "name": "a missing text",
+      "commands": [
+        [
+          "text",
+          0,
+          0
+        ]
+      ],
+      "error": "draw command 0: \"text\" is missing argument 3"
+    },
+    {
+      "name": "NaN",
+      "commands": [
+        [
+          "rotate",
+          "$NaN"
+        ]
+      ],
+      "error": "draw command 0: \"rotate\" argument 1 must be a finite number"
+    },
+    {
+      "name": "Infinity",
+      "commands": [
+        [
+          "translate",
+          1,
+          "$Infinity"
+        ]
+      ],
+      "error": "draw command 0: \"translate\" argument 2 must be a finite number"
+    },
+    {
+      "name": "-Infinity",
+      "commands": [
+        [
+          "scale",
+          "$-Infinity",
+          1
+        ]
+      ],
+      "error": "draw command 0: \"scale\" argument 1 must be a finite number"
+    },
+    {
+      "name": "null",
+      "commands": [
+        [
+          "rect",
+          0,
+          null,
+          1,
+          1,
+          {}
+        ]
+      ],
+      "error": "draw command 0: \"rect\" argument 2 must be a finite number"
+    },
+    {
+      "name": "undefined",
+      "commands": [
+        [
+          "rrect",
+          0,
+          0,
+          1,
+          1,
+          "$undefined",
+          {}
+        ]
+      ],
+      "error": "draw command 0: \"rrect\" argument 5 must be a finite number"
+    },
+    {
+      "name": "a numeric string",
+      "commands": [
+        [
+          "alpha",
+          "1"
+        ]
+      ],
+      "error": "draw command 0: \"alpha\" argument 1 must be a finite number"
+    },
+    {
+      "name": "the first bad argument",
+      "commands": [
+        [
+          "line",
+          0,
+          "a",
+          1,
+          "b",
+          {}
+        ]
+      ],
+      "error": "draw command 0: \"line\" argument 2 must be a finite number"
+    },
+    {
+      "name": "a paint that is a string",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          "accent"
+        ]
+      ],
+      "error": "draw command 0: a paint is an object"
+    },
+    {
+      "name": "a paint that is an array",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          [
+            "accent"
+          ]
+        ]
+      ],
+      "error": "draw command 0: a paint is an object"
+    },
+    {
+      "name": "a null paint",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          null
+        ]
+      ],
+      "error": "draw command 0: a paint is an object"
+    },
+    {
+      "name": "a null fill",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": null
+          }
+        ]
+      ],
+      "error": "draw command 0: not a color"
+    },
+    {
+      "name": "an unknown color",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "red"
+          }
+        ]
+      ],
+      "error": "draw command 0: not a color"
+    },
+    {
+      "name": "a short hex color",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "#12345"
+          }
+        ]
+      ],
+      "error": "draw command 0: not a color"
+    },
+    {
+      "name": "a hex color with a bad digit",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": "#12g"
+          }
+        ]
+      ],
+      "error": "draw command 0: not a color"
+    },
+    {
+      "name": "a number as a color",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "stroke": 5
+          }
+        ]
+      ],
+      "error": "draw command 0: not a color"
+    },
+    {
+      "name": "a null stroke",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "stroke": null
+          }
+        ]
+      ],
+      "error": "draw command 0: not a color"
+    },
+    {
+      "name": "a width that is a string",
+      "commands": [
+        [
+          "line",
+          0,
+          0,
+          1,
+          1,
+          {
+            "width": "2"
+          }
+        ]
+      ],
+      "error": "draw command 0: a stroke's width must be a finite number"
+    },
+    {
+      "name": "a null width",
+      "commands": [
+        [
+          "line",
+          0,
+          0,
+          1,
+          1,
+          {
+            "width": null
+          }
+        ]
+      ],
+      "error": "draw command 0: a stroke's width must be a finite number"
+    },
+    {
+      "name": "a NaN width",
+      "commands": [
+        [
+          "line",
+          0,
+          0,
+          1,
+          1,
+          {
+            "width": "$NaN"
+          }
+        ]
+      ],
+      "error": "draw command 0: a stroke's width must be a finite number"
+    },
+    {
+      "name": "an unknown cap",
+      "commands": [
+        [
+          "line",
+          0,
+          0,
+          1,
+          1,
+          {
+            "cap": "square"
+          }
+        ]
+      ],
+      "error": "draw command 0: a stroke's cap must be \"butt\" or \"round\""
+    },
+    {
+      "name": "a null cap",
+      "commands": [
+        [
+          "line",
+          0,
+          0,
+          1,
+          1,
+          {
+            "cap": null
+          }
+        ]
+      ],
+      "error": "draw command 0: a stroke's cap must be \"butt\" or \"round\""
+    },
+    {
+      "name": "paint fields in their order: fill before width",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "width": "x",
+            "fill": "red"
+          }
+        ]
+      ],
+      "error": "draw command 0: not a color"
+    },
+    {
+      "name": "a linear gradient of 3 numbers",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "linear": [
+                0,
+                0,
+                1
+              ],
+              "stops": []
+            }
+          }
+        ]
+      ],
+      "error": "draw command 0: a linear gradient takes 4 numbers"
+    },
+    {
+      "name": "a linear gradient with NaN",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "linear": [
+                0,
+                0,
+                1,
+                "$NaN"
+              ],
+              "stops": []
+            }
+          }
+        ]
+      ],
+      "error": "draw command 0: linear must be a finite number"
+    },
+    {
+      "name": "a radial gradient of 2 numbers",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "radial": [
+                0,
+                0
+              ],
+              "stops": []
+            }
+          }
+        ]
+      ],
+      "error": "draw command 0: a radial gradient takes 3 numbers"
+    },
+    {
+      "name": "a bad radial beside a good linear",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "linear": [
+                0,
+                0,
+                1,
+                1
+              ],
+              "radial": [
+                1
+              ],
+              "stops": []
+            }
+          }
+        ]
+      ],
+      "error": "draw command 0: a radial gradient takes 3 numbers"
+    },
+    {
+      "name": "a gradient with neither",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "stops": []
+            }
+          }
+        ]
+      ],
+      "error": "draw command 0: a gradient needs linear or radial"
+    },
+    {
+      "name": "a gradient without stops",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "linear": [
+                0,
+                0,
+                1,
+                1
+              ]
+            }
+          }
+        ]
+      ],
+      "error": "draw command 0: a gradient needs stops"
+    },
+    {
+      "name": "a stop of one",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "linear": [
+                0,
+                0,
+                1,
+                1
+              ],
+              "stops": [
+                [
+                  0
+                ]
+              ]
+            }
+          }
+        ]
+      ],
+      "error": "draw command 0: a stop is [offset, color]"
+    },
+    {
+      "name": "a stop of three",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "linear": [
+                0,
+                0,
+                1,
+                1
+              ],
+              "stops": [
+                [
+                  0,
+                  "#fff",
+                  1
+                ]
+              ]
+            }
+          }
+        ]
+      ],
+      "error": "draw command 0: a stop is [offset, color]"
+    },
+    {
+      "name": "a stop's offset that is a string",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "linear": [
+                0,
+                0,
+                1,
+                1
+              ],
+              "stops": [
+                [
+                  "0",
+                  "#fff"
+                ]
+              ]
+            }
+          }
+        ]
+      ],
+      "error": "draw command 0: a stop's offset must be a finite number"
+    },
+    {
+      "name": "a stop's bad color",
+      "commands": [
+        [
+          "rect",
+          0,
+          0,
+          1,
+          1,
+          {
+            "fill": {
+              "radial": [
+                0,
+                0,
+                1
+              ],
+              "stops": [
+                [
+                  0,
+                  "nope"
+                ]
+              ]
+            }
+          }
+        ]
+      ],
+      "error": "draw command 0: not a color"
+    },
+    {
+      "name": "a path without a list",
+      "commands": [
+        [
+          "path",
+          "M",
+          {}
+        ]
+      ],
+      "error": "draw command 0: \"path\" takes a list of segments"
+    },
+    {
+      "name": "a segment that isn't an array",
+      "commands": [
+        [
+          "path",
+          [
+            {}
+          ],
+          {}
+        ]
+      ],
+      "error": "draw command 0: a path segment is an array"
+    },
+    {
+      "name": "an unknown segment",
+      "commands": [
+        [
+          "path",
+          [
+            [
+              "A",
+              1
+            ]
+          ],
+          {}
+        ]
+      ],
+      "error": "draw command 0: unknown path segment"
+    },
+    {
+      "name": "an empty segment",
+      "commands": [
+        [
+          "path",
+          [
+            []
+          ],
+          {}
+        ]
+      ],
+      "error": "draw command 0: unknown path segment"
+    },
+    {
+      "name": "a short segment",
+      "commands": [
+        [
+          "path",
+          [
+            [
+              "M",
+              1
+            ]
+          ],
+          {}
+        ]
+      ],
+      "error": "draw command 0: a \"M\" path segment takes 2 coordinates"
+    },
+    {
+      "name": "a long segment",
+      "commands": [
+        [
+          "path",
+          [
+            [
+              "Z",
+              1
+            ]
+          ],
+          {}
+        ]
+      ],
+      "error": "draw command 0: a \"Z\" path segment takes 0 coordinates"
+    },
+    {
+      "name": "a bad coordinate",
+      "commands": [
+        [
+          "path",
+          [
+            [
+              "L",
+              1,
+              "x"
+            ]
+          ],
+          {}
+        ]
+      ],
+      "error": "draw command 0: a path coordinate must be a finite number"
+    },
+    {
+      "name": "a path without its paint",
+      "commands": [
+        [
+          "path",
+          []
+        ]
+      ],
+      "error": "draw command 0: \"path\" is missing argument 2"
+    },
+    {
+      "name": "a number as text",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          5
+        ]
+      ],
+      "error": "draw command 0: \"text\" argument 3 must be a string"
+    },
+    {
+      "name": "a null text",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          null
+        ]
+      ],
+      "error": "draw command 0: \"text\" argument 3 must be a string"
+    },
+    {
+      "name": "a style that is a string",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          "bold"
+        ]
+      ],
+      "error": "draw command 0: a text style is an object"
+    },
+    {
+      "name": "a style that is an array",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          []
+        ]
+      ],
+      "error": "draw command 0: a text style is an object"
+    },
+    {
+      "name": "a NaN size",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "size": "$NaN"
+          }
+        ]
+      ],
+      "error": "draw command 0: a text size must be a finite number"
+    },
+    {
+      "name": "a null size",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "size": null
+          }
+        ]
+      ],
+      "error": "draw command 0: a text size must be a finite number"
+    },
+    {
+      "name": "weight 450",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "weight": 450
+          }
+        ]
+      ],
+      "error": "draw command 0: a text weight must be 400, 500, 600 or 700"
+    },
+    {
+      "name": "weight 100",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "weight": 100
+          }
+        ]
+      ],
+      "error": "draw command 0: a text weight must be 400, 500, 600 or 700"
+    },
+    {
+      "name": "weight 400.5",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "weight": 400.5
+          }
+        ]
+      ],
+      "error": "draw command 0: a text weight must be 400, 500, 600 or 700"
+    },
+    {
+      "name": "weight as a string",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "weight": "700"
+          }
+        ]
+      ],
+      "error": "draw command 0: a text weight must be 400, 500, 600 or 700"
+    },
+    {
+      "name": "align start",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "align": "start"
+          }
+        ]
+      ],
+      "error": "draw command 0: a text align must be \"left\", \"center\" or \"right\""
+    },
+    {
+      "name": "a bad text color",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "color": "red"
+          }
+        ]
+      ],
+      "error": "draw command 0: not a color"
+    },
+    {
+      "name": "mono as a string",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "mono": "yes"
+          }
+        ]
+      ],
+      "error": "draw command 0: a text mono must be true or false"
+    },
+    {
+      "name": "a null mono",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "mono": null
+          }
+        ]
+      ],
+      "error": "draw command 0: a text mono must be true or false"
+    },
+    {
+      "name": "style fields in their order: size before weight",
+      "commands": [
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "weight": 1,
+            "size": "x"
+          }
+        ]
+      ],
+      "error": "draw command 0: a text size must be a finite number"
+    },
+    {
+      "name": "an image without a src",
+      "commands": [
+        [
+          "image",
+          5,
+          0,
+          0,
+          1,
+          1
+        ]
+      ],
+      "error": "draw command 0: \"image\" takes a src"
+    },
+    {
+      "name": "an image missing its height",
+      "commands": [
+        [
+          "image",
+          "a.png",
+          0,
+          0,
+          1
+        ]
+      ],
+      "error": "draw command 0: \"image\" is missing argument 5"
+    },
+    {
+      "name": "the index of the first bad command",
+      "commands": [
+        [
+          "save"
+        ],
+        [
+          "alpha",
+          3
+        ],
+        [
+          "text",
+          0,
+          0,
+          "t",
+          {
+            "weight": 800
+          }
+        ],
+        [
+          "sparkle"
+        ]
+      ],
+      "error": "draw command 2: a text weight must be 400, 500, 600 or 700"
+    }
+  ]
+}

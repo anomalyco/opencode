@@ -252,7 +252,7 @@ test("a program that throws, renders an invalid view, draws too much or fails in
     await failure(
       `widget.render(ui.canvas({ key: "c", height: 1 })); const g = ui.draw(); for (let i = 0; i < 2001; i++) g.save(); widget.draw("c", g)`,
     ),
-  ).toMatchObject({ kind: "invalid", message: expect.stringContaining("at most 2000 commands") })
+  ).toMatchObject({ kind: "invalid", message: "2001 draw commands is over the budget of 2000 per frame" })
   expect(
     await failure(`widget.render(ui.button("Go", { onPress: () => { throw new Error("handler") } }))`, (widget) =>
       widget.event(press("0")),
