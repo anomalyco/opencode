@@ -1147,6 +1147,7 @@ export const dict = {
 
   "settings.general.section.appearance": "Appearance",
   "settings.general.section.general": "General",
+  "settings.general.section.proxy": "Proxy",
   "settings.general.section.notifications": "Desktop notifications",
   "settings.general.section.sounds": "Sound effects",
 
@@ -1232,6 +1233,15 @@ export const dict = {
   "settings.general.row.followUpBehavior.steer": "Steer",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
+  "settings.general.row.proxy.enabled.title": "Use a proxy",
+  "settings.general.row.proxy.enabled.description":
+    "Route agent network requests through a proxy. Restart OpenCode to apply changes to running agents.",
+  "settings.general.row.proxy.http.title": "HTTP proxy",
+  "settings.general.row.proxy.http.description": "Proxy URL used for HTTP requests.",
+  "settings.general.row.proxy.https.title": "HTTPS proxy",
+  "settings.general.row.proxy.https.description": "Proxy URL used for HTTPS requests.",
+  "settings.general.row.proxy.noProxy.title": "Bypass proxy for",
+  "settings.general.row.proxy.noProxy.description": "Comma-separated hosts that connect directly, without the proxy.",
   "settings.general.row.spellcheck.title": "Spellcheck",
   "settings.general.row.spellcheck.description": "Underline misspelled words while typing",
 

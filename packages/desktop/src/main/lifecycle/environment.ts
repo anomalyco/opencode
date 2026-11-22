@@ -6,6 +6,7 @@ import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
 import { scoped } from "../native/logging"
+import { applyProxySettings } from "../native/proxy"
 import { applySpellcheck, spellcheckMenuItems } from "../native/spellcheck"
 import { nativeT } from "../native/translations"
 
@@ -38,6 +39,7 @@ export const installContextMenu = Effect.gen(function* () {
 
 export const prepareApplicationEnvironment = Effect.gen(function* () {
   yield* loadSystemCertificates
+  yield* Effect.sync(applyProxySettings)
   yield* loadProxyEnvironment
 })
 

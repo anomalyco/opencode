@@ -5,6 +5,13 @@ const ServerReadyData = Schema.Struct({
   url: Schema.String,
 })
 
+const ProxySettingsData = Schema.Struct({
+  enabled: Schema.Boolean,
+  http: Schema.String,
+  https: Schema.String,
+  noProxy: Schema.String,
+})
+
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
 
 export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
@@ -63,6 +70,12 @@ export const AppSetSpellcheckEnabled = Rpc.make("AppSetSpellcheckEnabled", {
   payload: { enabled: Schema.Boolean },
 })
 
+export const AppGetProxySettings = Rpc.make("AppGetProxySettings", { success: ProxySettingsData })
+
+export const AppSetProxySettings = Rpc.make("AppSetProxySettings", {
+  payload: { value: ProxySettingsData },
+})
+
 export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
   payload: { value: Schema.Unknown },
 })
@@ -83,6 +96,8 @@ export const AppRpcs = RpcGroup.make(
   AppSetForceFocus,
   AppGetSpellcheckEnabled,
   AppSetSpellcheckEnabled,
+  AppGetProxySettings,
+  AppSetProxySettings,
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
   AppRelaunch,
