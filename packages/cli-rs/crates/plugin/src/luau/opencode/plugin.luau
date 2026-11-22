@@ -1808,7 +1808,7 @@ export type AutomationTarget = ({
     session: any,
 })
 
---- When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz. Or { type: "event", server, event, args? } for a connected MCP server advertising push delivery (requires mcp_events).
+--- When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz. Or { type: "event", server, event, args? } for a connected MCP server advertising push delivery.
 export type AutomationTrigger = (AutomationTriggerAt | AutomationTriggerEvery | AutomationTriggerCron | AutomationTriggerEvent)
 
 export type AutomationTrigger1 = (AutomationTriggerAt | AutomationTriggerEvery | AutomationTriggerCron | AutomationTriggerEvent)
@@ -1993,7 +1993,6 @@ export type ConfigInfoEncoded = {
             })?,
         })?,
         console_watches: boolean?,
-        mcp_events: boolean?,
         recommended_api: boolean?,
         full_codemode: boolean?,
         machines: boolean?,
@@ -4550,6 +4549,8 @@ export type VcsInfo = {
 
 export type VoiceModel = {
     model: string,
+    name: string,
+    engine: string,
     provider: string,
     transports: { VoiceTransportType },
     available: boolean,
