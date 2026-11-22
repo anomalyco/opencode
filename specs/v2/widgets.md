@@ -224,8 +224,7 @@ psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript r
   and its `children` array, or an array in `children`), the deepest prop of a valid node three below it (`options` →
   an option → its `label`), and the widest wrapper one (a live `{ type: "render", node }`; an
   emitted view has none): 1 + 2 × 99 + 3 = 202. Values deeper than that (in a prop the node types don't define) fail where
-  they cross, with the interpreter's own error. (`@opencode/widget` keeps the default 32 until PsychoScript's TypeScript
-  runtime has the option, so its views cross up to 16 levels.)
+  they cross, with the interpreter's own error. (PsychoScript: `limits: { maxValueDepth: 202 }`.)
 - **A step's output, split.** `__widget_native_step` calls `__widget_emit(view)` once per `init` or `event` step with
   the view as built, then returns `{ state, submit?, dismiss?, send? }` as the run's result. The result keeps the
   run's JSON rules (`toJSON`, an `Error`'s fields, numbers, a typed array failing the step): the host only drops its

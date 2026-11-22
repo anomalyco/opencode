@@ -4,9 +4,10 @@
 // leaves out (protocol 1).
 const view = (expression: string) => `function view(state, data) {\n  return ${expression}\n}`
 
-// `levels` of nodes, each a column with one child; `array` puts each child in an array of its own too.
-const nested = (levels: number, array = false) =>
-  `function view() {\n  let node = ui.button("deep", { onPress: (s) => s })\n  for (let level = 1; level < ${levels}; level++) node = ui.column(${array ? "[[node]]" : "[node]"})\n  return node\n}`
+// `levels` of nodes, each a column with one child; `array` puts each child in an array of its own too. The innermost
+// node is a button, or `leaf`.
+const nested = (levels: number, array = false, leaf = `ui.button("deep", { onPress: (s) => s })`) =>
+  `function view() {\n  let node = ${leaf}\n  for (let level = 1; level < ${levels}; level++) node = ui.column(${array ? "[[node]]" : "[node]"})\n  return node\n}`
 
 const json = `{ when: new Date(0), invalid: new Date(NaN), error: Object.assign(new Error("boom"), { code: 7 }), big: [2 ** 64, 1e21, 2 ** 53 + 2, -0], own: { toJSON() { return { v: 1 } } }, nested: { toJSON: () => [1, () => 2] }, f: () => 1, list: [1, () => 2, undefined], map: new Map([[1, 2]]), set: new Set([1]), url: new URL("https://a.test/b?c=d"), nan: [NaN, Infinity] }`
 
@@ -114,11 +115,19 @@ export const cases: ReadonlyArray<{
   { name: "array-key", source: view(`ui.column([ui.button("b", { key: ["a"] })])`) },
   { name: "function-key", source: view(`ui.column([ui.button("b", { key: () => 1 })])`) },
   { name: "root-object-key", source: view(`ui.column({ key: {} }, [])`) },
-  // A view as deep as the interpreter's default boundary allows (16 levels), and views one level too deep (101), with
-  // and without arrays among the children, which fail in phase view.
+  // Views of 16 and of 100 levels, the most, one with the deepest prop a node has at level 100 (an option's label:
+  // value depth 201 of the 202 the boundary takes); views one level too deep (101), with and without arrays among the
+  // children, which the host's walk fails in phase view; and one too deep to cross the boundary at all (150), which
+  // the prelude reports as too deep in phase view.
   { name: "depth-16", source: nested(16) },
+  { name: "depth-100", source: nested(100) },
+  {
+    name: "depth-100-options",
+    source: nested(100, false, `ui.select([{ value: "a", label: "A", description: "d" }], { onChange: (s) => s })`),
+  },
   { name: "depth-101", source: nested(101) },
   { name: "depth-101-in-arrays", source: nested(51, true) },
+  { name: "depth-150", source: nested(150) },
   // The rest of a step's output is the run's result, as JSON: toJSON, Error fields, big numbers, functions left out.
   { name: "state-as-json", source: `function init() {\n  return ${json}\n}\n${view(`ui.text("x")`)}` },
   {

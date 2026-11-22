@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "effect": "catalog:",
-    "psychoscript": "github:anomalyco/psychoscript#c630d875eeb3c11823324f6c55a63bacceb5f098"
+    "psychoscript": "github:anomalyco/psychoscript#7b09bac0e4f3fc0f1767ef8bf4255c0c9cb7a3c1"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

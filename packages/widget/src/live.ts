@@ -16,7 +16,7 @@ import {
 import type { Capabilities } from "./widget-template.js"
 import { type Tree, tree, unmark, ViewError } from "./tree.js"
 import { compiled } from "./compiled.js"
-import { located, NEWER, OLDER, protocol, PROTOCOL } from "./host.js"
+import { located, MAX_VALUE_DEPTH, NEWER, OLDER, protocol, PROTOCOL } from "./host.js"
 
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
 export type LiveFrame = Omit<Frame, "id">
@@ -494,6 +494,7 @@ export const LiveWidget = {
     }
     arm()
     Runtime.make({
+      limits: { maxValueDepth: MAX_VALUE_DEPTH },
       globals: () => ({
         __input: Host.fn(() => ({ data })),
         __host: {

@@ -1,0 +1,12 @@
+{
+  "name": "depth-150",
+  "source": "function view() {\n  let node = ui.button(\"deep\", { onPress: (s) => s })\n  for (let level = 1; level < 150; level++) node = ui.column([node])\n  return node\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "error": {
+    "view": true,
+    "message": "The view nests more than 100 levels"
+  }
+}

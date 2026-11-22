@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { MAX_VALUE_DEPTH } from "../src/host.js"
 import { Result, Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
 import {
@@ -21,7 +22,7 @@ import { fixtures, scriptedProgram } from "../script/conformance.js"
 
 // A step with the prelude building the tree, read as `step` reads one.
 const scripted = async (source: string, input: unknown) => {
-  const result = await Runtime.make({ limits: { timeoutMs: 5000 } }).execute(
+  const result = await Runtime.make({ limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH } }).execute(
     scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify(input)})`,
   )
   if (!result.ok) return { error: result.error.message }
@@ -119,12 +120,17 @@ test("a view with a key of another type, or deeper than 100 levels, fails in pha
     expect(failed).toMatchObject({ _tag: "Widget.StepError", kind: "invalid", phase: "view", message })
     expect(await scripted(source, { phase: "init", data: null })).toEqual({ error: expect.stringContaining(message) })
   }
-  // 100 levels is the most; the interpreter's default boundary (32 values deep) stops this one first, without phase view.
-  const deepest = `function view() {\n  let node = ui.text("x")\n  for (let i = 1; i < 100; i++) node = ui.column([node])\n  return node\n}`
-  expect(await step(program(deepest), { phase: "init", data: null }).catch((error: unknown) => error)).toMatchObject({
-    kind: "error",
-    message: expect.stringContaining("exceeds the maximum value depth of 32"),
-  })
+  // 100 levels is the most, with the deepest prop a node has; 150 can't even cross the boundary, and the prelude
+  // reports it as too deep.
+  for (const [levels, failure] of [
+    [100, undefined],
+    [150, "The view nests more than 100 levels"],
+  ] as const) {
+    const source = `function view() {\n  let node = ui.select([{ value: "a", label: "A", description: "d" }])\n  for (let i = 1; i < ${levels}; i++) node = ui.column([node])\n  return node\n}`
+    const output = await step(program(source), { phase: "init", data: null }).catch((error: unknown) => error)
+    if (failure) expect(output).toMatchObject({ kind: "invalid", phase: "view", message: failure })
+    else expect(output).toEqual(await scripted(source, { phase: "init", data: null }))
+  }
 })
 
 // A live run with the prelude building trees, on a host that takes posts as they are, read as `LiveWidget` reads
@@ -145,7 +151,7 @@ const scriptedLive = async (source: string, events: ReadonlyArray<unknown>) => {
     return message
   }
   const result = await Runtime.make({
-    limits: { timeoutMs: 2000 },
+    limits: { timeoutMs: 2000, maxValueDepth: MAX_VALUE_DEPTH },
     globals: () => ({
       __input: Host.fn(() => ({ data: null })),
       __host: {
@@ -255,22 +261,36 @@ test("a live render with a key of another type, or deeper than 100 levels, ends 
     phase: "view",
     message: "A node's key must be a string, a number or a boolean",
   })
-  // Too deep to cross the interpreter's boundary: the prelude finds it is over 100 levels and posts that instead.
-  expect(
-    await end(
-      `(() => { let node = ui.text("x"); for (let i = 1; i < 101; i++) node = ui.column([node]); return node })()`,
-    ),
-  ).toMatchObject({ kind: "invalid", phase: "view", message: "The view nests more than 100 levels" })
+  const nested = (levels: number) =>
+    `(() => { let node = ui.select([{ value: "a", label: "A", description: "d" }]); for (let i = 1; i < ${levels}; i++) node = ui.column([node]); return node })()`
+  // 101 levels crosses (the render's wrapper and the option's label take the boundary's 202 only at 100); the host's
+  // walk fails it. 150 can't cross: the prelude finds it is over 100 levels and posts that instead.
+  for (const levels of [101, 150])
+    expect(await end(nested(levels))).toMatchObject({
+      kind: "invalid",
+      phase: "view",
+      message: "The view nests more than 100 levels",
+    })
+  // 100 levels, the deepest prop a node has in its deepest node: the render's value depth is 202 exactly.
+  const widget = LiveWidget.start(program(`async function main() {\n  widget.render(${nested(100)})\n}`), null)
+  expect(await widget.done).toEqual({ type: "return" })
+  let deepest: unknown = widget.view
+  for (let level = 1; level < 100; level++) deepest = (deepest as { children: unknown[] }).children[0]
+  expect(deepest).toEqual({
+    type: "select",
+    options: [{ value: "a", label: "A", description: "d" }],
+    id: "0" + "/0".repeat(99),
+  })
   // Deep only in a prop: the boundary's own error, where the render is.
-  expect(await end(`ui.text("x", { extra: JSON.parse("[".repeat(40) + "]".repeat(40)) })`)).toMatchObject({
+  expect(await end(`ui.text("x", { extra: JSON.parse("[".repeat(210) + "]".repeat(210)) })`)).toMatchObject({
     kind: "error",
-    message: expect.stringContaining("exceeds the maximum value depth of 32"),
+    message: expect.stringContaining("exceeds the maximum value depth of 202"),
   })
 })
 
 // A draw with the prelude giving its commands as the run's result, read as `draw` reads one.
 const scriptedDraw = async (source: string, input: Record<string, unknown>) => {
-  const result = await Runtime.make({ limits: { timeoutMs: 5000 } }).execute(
+  const result = await Runtime.make({ limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH } }).execute(
     scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify({ phase: "draw", ...input })})`,
   )
   if (!result.ok) return { error: result.error.message }

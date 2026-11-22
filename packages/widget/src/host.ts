@@ -7,6 +7,12 @@ import { Host as EffectHost } from "psychoscript/effect"
 /** The prelude<->host contract this host implements (specs/v2/widgets.md, Protocol). */
 export const PROTOCOL = 2
 
+/**
+ * The boundary value depth widget runs need (specs/v2/widgets.md, Native hosts): the deepest value of a view of 100
+ * levels, 1 + 2 × 99 + 3.
+ */
+export const MAX_VALUE_DEPTH = 202
+
 /** Why a host refuses a program built for another contract: a program error for an older one, a client error otherwise. */
 export const OLDER = "This widget was built with an older widget runtime; ask the agent to post it again"
 export const NEWER = "This widget needs a newer version of this app"

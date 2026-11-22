@@ -5,6 +5,361 @@
     "phase": "init",
     "data": null
   },
+  "built": {
+    "type": "column",
+    "children": [
+      [
+        {
+          "type": "column",
+          "children": [
+            [
+              {
+                "type": "column",
+                "children": [
+                  [
+                    {
+                      "type": "column",
+                      "children": [
+                        [
+                          {
+                            "type": "column",
+                            "children": [
+                              [
+                                {
+                                  "type": "column",
+                                  "children": [
+                                    [
+                                      {
+                                        "type": "column",
+                                        "children": [
+                                          [
+                                            {
+                                              "type": "column",
+                                              "children": [
+                                                [
+                                                  {
+                                                    "type": "column",
+                                                    "children": [
+                                                      [
+                                                        {
+                                                          "type": "column",
+                                                          "children": [
+                                                            [
+                                                              {
+                                                                "type": "column",
+                                                                "children": [
+                                                                  [
+                                                                    {
+                                                                      "type": "column",
+                                                                      "children": [
+                                                                        [
+                                                                          {
+                                                                            "type": "column",
+                                                                            "children": [
+                                                                              [
+                                                                                {
+                                                                                  "type": "column",
+                                                                                  "children": [
+                                                                                    [
+                                                                                      {
+                                                                                        "type": "column",
+                                                                                        "children": [
+                                                                                          [
+                                                                                            {
+                                                                                              "type": "column",
+                                                                                              "children": [
+                                                                                                [
+                                                                                                  {
+                                                                                                    "type": "column",
+                                                                                                    "children": [
+                                                                                                      [
+                                                                                                        {
+                                                                                                          "type": "column",
+                                                                                                          "children": [
+                                                                                                            [
+                                                                                                              {
+                                                                                                                "type": "column",
+                                                                                                                "children": [
+                                                                                                                  [
+                                                                                                                    {
+                                                                                                                      "type": "column",
+                                                                                                                      "children": [
+                                                                                                                        [
+                                                                                                                          {
+                                                                                                                            "type": "column",
+                                                                                                                            "children": [
+                                                                                                                              [
+                                                                                                                                {
+                                                                                                                                  "type": "column",
+                                                                                                                                  "children": [
+                                                                                                                                    [
+                                                                                                                                      {
+                                                                                                                                        "type": "column",
+                                                                                                                                        "children": [
+                                                                                                                                          [
+                                                                                                                                            {
+                                                                                                                                              "type": "column",
+                                                                                                                                              "children": [
+                                                                                                                                                [
+                                                                                                                                                  {
+                                                                                                                                                    "type": "column",
+                                                                                                                                                    "children": [
+                                                                                                                                                      [
+                                                                                                                                                        {
+                                                                                                                                                          "type": "column",
+                                                                                                                                                          "children": [
+                                                                                                                                                            [
+                                                                                                                                                              {
+                                                                                                                                                                "type": "column",
+                                                                                                                                                                "children": [
+                                                                                                                                                                  [
+                                                                                                                                                                    {
+                                                                                                                                                                      "type": "column",
+                                                                                                                                                                      "children": [
+                                                                                                                                                                        [
+                                                                                                                                                                          {
+                                                                                                                                                                            "type": "column",
+                                                                                                                                                                            "children": [
+                                                                                                                                                                              [
+                                                                                                                                                                                {
+                                                                                                                                                                                  "type": "column",
+                                                                                                                                                                                  "children": [
+                                                                                                                                                                                    [
+                                                                                                                                                                                      {
+                                                                                                                                                                                        "type": "column",
+                                                                                                                                                                                        "children": [
+                                                                                                                                                                                          [
+                                                                                                                                                                                            {
+                                                                                                                                                                                              "type": "column",
+                                                                                                                                                                                              "children": [
+                                                                                                                                                                                                [
+                                                                                                                                                                                                  {
+                                                                                                                                                                                                    "type": "column",
+                                                                                                                                                                                                    "children": [
+                                                                                                                                                                                                      [
+                                                                                                                                                                                                        {
+                                                                                                                                                                                                          "type": "column",
+                                                                                                                                                                                                          "children": [
+                                                                                                                                                                                                            [
+                                                                                                                                                                                                              {
+                                                                                                                                                                                                                "type": "column",
+                                                                                                                                                                                                                "children": [
+                                                                                                                                                                                                                  [
+                                                                                                                                                                                                                    {
+                                                                                                                                                                                                                      "type": "column",
+                                                                                                                                                                                                                      "children": [
+                                                                                                                                                                                                                        [
+                                                                                                                                                                                                                          {
+                                                                                                                                                                                                                            "type": "column",
+                                                                                                                                                                                                                            "children": [
+                                                                                                                                                                                                                              [
+                                                                                                                                                                                                                                {
+                                                                                                                                                                                                                                  "type": "column",
+                                                                                                                                                                                                                                  "children": [
+                                                                                                                                                                                                                                    [
+                                                                                                                                                                                                                                      {
+                                                                                                                                                                                                                                        "type": "column",
+                                                                                                                                                                                                                                        "children": [
+                                                                                                                                                                                                                                          [
+                                                                                                                                                                                                                                            {
+                                                                                                                                                                                                                                              "type": "column",
+                                                                                                                                                                                                                                              "children": [
+                                                                                                                                                                                                                                                [
+                                                                                                                                                                                                                                                  {
+                                                                                                                                                                                                                                                    "type": "column",
+                                                                                                                                                                                                                                                    "children": [
+                                                                                                                                                                                                                                                      [
+                                                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                          "type": "column",
+                                                                                                                                                                                                                                                          "children": [
+                                                                                                                                                                                                                                                            [
+                                                                                                                                                                                                                                                              {
+                                                                                                                                                                                                                                                                "type": "column",
+                                                                                                                                                                                                                                                                "children": [
+                                                                                                                                                                                                                                                                  [
+                                                                                                                                                                                                                                                                    {
+                                                                                                                                                                                                                                                                      "type": "column",
+                                                                                                                                                                                                                                                                      "children": [
+                                                                                                                                                                                                                                                                        [
+                                                                                                                                                                                                                                                                          {
+                                                                                                                                                                                                                                                                            "type": "column",
+                                                                                                                                                                                                                                                                            "children": [
+                                                                                                                                                                                                                                                                              [
+                                                                                                                                                                                                                                                                                {
+                                                                                                                                                                                                                                                                                  "type": "column",
+                                                                                                                                                                                                                                                                                  "children": [
+                                                                                                                                                                                                                                                                                    [
+                                                                                                                                                                                                                                                                                      {
+                                                                                                                                                                                                                                                                                        "type": "column",
+                                                                                                                                                                                                                                                                                        "children": [
+                                                                                                                                                                                                                                                                                          [
+                                                                                                                                                                                                                                                                                            {
+                                                                                                                                                                                                                                                                                              "type": "column",
+                                                                                                                                                                                                                                                                                              "children": [
+                                                                                                                                                                                                                                                                                                [
+                                                                                                                                                                                                                                                                                                  {
+                                                                                                                                                                                                                                                                                                    "type": "column",
+                                                                                                                                                                                                                                                                                                    "children": [
+                                                                                                                                                                                                                                                                                                      [
+                                                                                                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                                                                          "type": "column",
+                                                                                                                                                                                                                                                                                                          "children": [
+                                                                                                                                                                                                                                                                                                            [
+                                                                                                                                                                                                                                                                                                              {
+                                                                                                                                                                                                                                                                                                                "onPress": "$function",
+                                                                                                                                                                                                                                                                                                                "type": "button",
+                                                                                                                                                                                                                                                                                                                "label": "deep"
+                                                                                                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                                                                                                            ]
+                                                                                                                                                                                                                                                                                                          ]
+                                                                                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                                                                                      ]
+                                                                                                                                                                                                                                                                                                    ]
+                                                                                                                                                                                                                                                                                                  }
+                                                                                                                                                                                                                                                                                                ]
+                                                                                                                                                                                                                                                                                              ]
+                                                                                                                                                                                                                                                                                            }
+                                                                                                                                                                                                                                                                                          ]
+                                                                                                                                                                                                                                                                                        ]
+                                                                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                                                                    ]
+                                                                                                                                                                                                                                                                                  ]
+                                                                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                                                              ]
+                                                                                                                                                                                                                                                                            ]
+                                                                                                                                                                                                                                                                          }
+                                                                                                                                                                                                                                                                        ]
+                                                                                                                                                                                                                                                                      ]
+                                                                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                                                                  ]
+                                                                                                                                                                                                                                                                ]
+                                                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                                                            ]
+                                                                                                                                                                                                                                                          ]
+                                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                                      ]
+                                                                                                                                                                                                                                                    ]
+                                                                                                                                                                                                                                                  }
+                                                                                                                                                                                                                                                ]
+                                                                                                                                                                                                                                              ]
+                                                                                                                                                                                                                                            }
+                                                                                                                                                                                                                                          ]
+                                                                                                                                                                                                                                        ]
+                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                    ]
+                                                                                                                                                                                                                                  ]
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                              ]
+                                                                                                                                                                                                                            ]
+                                                                                                                                                                                                                          }
+                                                                                                                                                                                                                        ]
+                                                                                                                                                                                                                      ]
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                  ]
+                                                                                                                                                                                                                ]
+                                                                                                                                                                                                              }
+                                                                                                                                                                                                            ]
+                                                                                                                                                                                                          ]
+                                                                                                                                                                                                        }
+                                                                                                                                                                                                      ]
+                                                                                                                                                                                                    ]
+                                                                                                                                                                                                  }
+                                                                                                                                                                                                ]
+                                                                                                                                                                                              ]
+                                                                                                                                                                                            }
+                                                                                                                                                                                          ]
+                                                                                                                                                                                        ]
+                                                                                                                                                                                      }
+                                                                                                                                                                                    ]
+                                                                                                                                                                                  ]
+                                                                                                                                                                                }
+                                                                                                                                                                              ]
+                                                                                                                                                                            ]
+                                                                                                                                                                          }
+                                                                                                                                                                        ]
+                                                                                                                                                                      ]
+                                                                                                                                                                    }
+                                                                                                                                                                  ]
+                                                                                                                                                                ]
+                                                                                                                                                              }
+                                                                                                                                                            ]
+                                                                                                                                                          ]
+                                                                                                                                                        }
+                                                                                                                                                      ]
+                                                                                                                                                    ]
+                                                                                                                                                  }
+                                                                                                                                                ]
+                                                                                                                                              ]
+                                                                                                                                            }
+                                                                                                                                          ]
+                                                                                                                                        ]
+                                                                                                                                      }
+                                                                                                                                    ]
+                                                                                                                                  ]
+                                                                                                                                }
+                                                                                                                              ]
+                                                                                                                            ]
+                                                                                                                          }
+                                                                                                                        ]
+                                                                                                                      ]
+                                                                                                                    }
+                                                                                                                  ]
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          ]
+                                                                                                        }
+                                                                                                      ]
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ]
+                                                                                              ]
+                                                                                            }
+                                                                                          ]
+                                                                                        ]
+                                                                                      }
+                                                                                    ]
+                                                                                  ]
+                                                                                }
+                                                                              ]
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      ]
+                                                                    }
+                                                                  ]
+                                                                ]
+                                                              }
+                                                            ]
+                                                          ]
+                                                        }
+                                                      ]
+                                                    ]
+                                                  }
+                                                ]
+                                              ]
+                                            }
+                                          ]
+                                        ]
+                                      }
+                                    ]
+                                  ]
+                                }
+                              ]
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    ]
+  },
   "error": {
     "view": true,
     "message": "The view nests more than 100 levels"

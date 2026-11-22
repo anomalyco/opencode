@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { MAX_VALUE_DEPTH } from "../src/host.js"
 import { Glob } from "bun"
 import path from "node:path"
 import { Host, Runtime } from "psychoscript"
@@ -40,7 +41,7 @@ const __shape = (entry) =>
 const handlers = async (source: string, input: { data: unknown }) => {
   const run = async (code: string) => {
     const result = await Runtime.make({
-      limits: { timeoutMs: 60_000 },
+      limits: { timeoutMs: 60_000, maxValueDepth: MAX_VALUE_DEPTH },
       globals: () => ({ __input: Host.fn(() => input) }),
     }).execute(code)
     if (!result.ok) throw new Error(result.error.message)

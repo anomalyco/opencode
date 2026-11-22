@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { MAX_VALUE_DEPTH } from "../src/host.js"
 import { Host, Runtime } from "psychoscript"
 import { builtins, program } from "../src/index.js"
 import { tree } from "../src/tree.js"
@@ -66,7 +67,7 @@ function __reference_tree(root) {
 const trees = async (source: string, data: unknown) => {
   const crossed: { view?: unknown } = {}
   const result = await Runtime.make({
-    limits: { timeoutMs: 5000 },
+    limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH },
     translate: { functions: "mark" },
     globals: () => ({ __cross: Host.fn(([view]) => void (crossed.view = view)) }),
   }).execute(
