@@ -215,8 +215,11 @@ pub fn read_display_text(text: &str) -> Option<String> {
 
 /// Show paths inside the working directory as relative paths; leave outside paths absolute.
 pub fn tool_path(input: &str, directory: Option<&str>, home: Option<&str>) -> String {
-    let cwd = std::env::current_dir().map(|dir| dir.to_string_lossy().into_owned()).unwrap_or_default();
-    crate::path::format_path(input, directory.unwrap_or(&cwd), home, true)
+    if let Some(directory) = directory {
+        return crate::path::format_path(input, directory, home, true);
+    }
+    let cwd = std::env::current_dir().unwrap_or_default();
+    crate::path::format_path(input, &cwd.to_string_lossy(), home, true)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
