@@ -3,6 +3,7 @@ import type {
   SessionMessageInfo,
   SessionMessageToolStateCompleted,
 } from "@opencode/client"
+import { icon } from "../ui/design"
 import { isRecord } from "./record"
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled"
@@ -23,8 +24,8 @@ export function parseTodos(value: unknown): Todo[] {
 }
 
 export function todoMarker(status: TodoStatus, ascii = false) {
-  if (status === "completed") return ascii ? "[x]" : "[✓]"
-  if (status === "in_progress") return ascii ? "[>]" : "[•]"
+  if (status === "completed") return ascii ? "[x]" : `[${icon("check")}]`
+  if (status === "in_progress") return ascii ? "[>]" : `[${icon("dotSmall")}]`
   if (status === "cancelled") return "[-]"
   return "[ ]"
 }

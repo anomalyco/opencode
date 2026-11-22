@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { DialogMcp } from "../../component/dialog-mcp"
+import { icon } from "../../ui/design"
 
 export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }) {
   const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
@@ -34,7 +35,7 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
           }}
         >
           <Show when={list().length > 2}>
-            <text fg={theme.text.base}>{view.open ? "▼" : "▶"}</text>
+            <text fg={theme.text.base}>{icon(view.open ? "chevronDown" : "chevronRight")}</text>
           </Show>
           <text fg={theme.text.base}>
             <b>MCP</b>
@@ -65,7 +66,7 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
                     fg: dot(item.status.status),
                   }}
                 >
-                  •
+                  {icon("dotSmall")}
                 </text>
                 <text fg={theme.text.base} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
                   <b>{item.name}</b>

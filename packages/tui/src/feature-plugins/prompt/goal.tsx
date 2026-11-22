@@ -3,6 +3,7 @@ import { Goal } from "@opencode/schema/goal"
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor } from "solid-js"
 import { Keymap } from "../../context/keymap"
 import { useTheme } from "../../context/theme"
+import { icon } from "../../ui/design"
 import { DialogFooter, DialogHeader, DialogLayout, type DialogFooterAction } from "../../ui/dialog"
 
 /**
@@ -82,7 +83,7 @@ export function GoalStatus(props: {
           onMouseUp={() => showGoal(props.context, props.sessionID, props.goal)}
         >
           <text fg={color(current())} wrapMode="none">
-            ◎ {goalLabel(current())}
+            {icon("goal")} {goalLabel(current())}
           </text>
         </box>
       )}
@@ -159,7 +160,7 @@ function GoalDialog(props: {
             <text fg={theme.text.base}>{current().objective}</text>
             <box>
               <text fg={goalColor(theme, current())} wrapMode="none">
-                ◎ {current().status === "active" ? "Active" : current().status === "paused" ? "Paused" : "Met"}
+                {icon("goal")} {current().status === "active" ? "Active" : current().status === "paused" ? "Paused" : "Met"}
               </text>
               <Show when={current().reason}>{(reason) => <text fg={theme.text.muted}>{reason()}</text>}</Show>
             </box>

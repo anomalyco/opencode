@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, For, Show } from "solid-js"
 import { TodoItem } from "../../component/todo-item"
+import { icon } from "../../ui/design"
 import { sessionTodos } from "../../util/todo"
 
 export function SidebarTodo(props: { context: Plugin.Context; sessionID: string }) {
@@ -30,7 +31,7 @@ export function SidebarTodo(props: { context: Plugin.Context; sessionID: string 
           }}
         >
           <Show when={list().length > 2}>
-            <text fg={theme.text.base}>{view.open ? "▼" : "▶"}</text>
+            <text fg={theme.text.base}>{icon(view.open ? "chevronDown" : "chevronRight")}</text>
           </Show>
           <text fg={theme.text.base}>
             <b>Todo</b>

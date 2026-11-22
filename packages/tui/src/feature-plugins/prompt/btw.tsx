@@ -7,6 +7,7 @@ import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
+import { icon, keys } from "../../ui/design"
 import { usePlugin } from "../../plugin/context"
 import { DIALOG_INSET, DialogBleed, DialogFooter, DialogHeader, DialogLayout } from "../../ui/dialog"
 import { useSessionLinks } from "../../ui/session-link"
@@ -144,7 +145,7 @@ export function Answer(props: {
         actions: {
           primary: [
             copied()
-              ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: copy }
+              ? { title: `${icon("check")} copied`, color: theme.text.feedback.success.base, onTrigger: copy }
               : { title: "copy response", key: "c", onTrigger: copy },
           ],
         },
@@ -154,9 +155,9 @@ export function Answer(props: {
           actions={{
             secondary: [
               copied()
-                ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: copy }
+                ? { title: `${icon("check")} copied`, color: theme.text.feedback.success.base, onTrigger: copy }
                 : { title: "copy", key: "c", onTrigger: copy },
-              { title: "scroll", key: "j/k ↑/↓" },
+              { title: "scroll", key: `j/k ${keys.up}/${keys.down}` },
             ],
           }}
         />

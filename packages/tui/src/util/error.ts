@@ -1,3 +1,4 @@
+import { icon } from "../ui/design"
 import { isRecord } from "./record"
 
 type ConfigIssue = { message: string; path: string[] }
@@ -63,7 +64,7 @@ export function cliErrorMessage(input: unknown): string | undefined {
       : []
     return [
       `Configuration is invalid${path && path !== "config" ? ` at ${path}` : ""}` + (message ? `: ${message}` : ""),
-      ...issues.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")),
+      ...issues.map((issue) => icon("levelDown") + " " + issue.message + " " + issue.path.join(".")),
     ].join("\n")
   }
 

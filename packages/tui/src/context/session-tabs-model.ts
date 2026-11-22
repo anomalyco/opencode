@@ -1,3 +1,5 @@
+import { icon } from "../ui/design"
+
 export type SessionTab = {
   sessionID: string
   title?: string
@@ -18,7 +20,7 @@ export function sessionTabDetail(
   worktree: boolean,
 ) {
   const branch = worktree && current !== defaultBranch ? current : undefined
-  return branch && project ? `${project} ⎇ ${branch}` : (branch ?? project)
+  return branch && project ? `${project} ${icon("branchMark")} ${branch}` : (branch ?? project)
 }
 
 export type SessionTabHistory = {

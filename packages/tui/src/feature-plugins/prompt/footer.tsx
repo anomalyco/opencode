@@ -7,6 +7,7 @@ import { useInteractivity } from "../../context/interactivity"
 import { stringWidth } from "../../util/string-width"
 import { createGoal, GoalStatus } from "./goal"
 import { busyCounts, busyTab } from "../../routes/session/composer/tabs"
+import { icon } from "../../ui/design"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -79,22 +80,25 @@ export function PromptFooter(props: {
                     <Show when={shortcut("session.child.first")}>
                       {(value) => <span style={{ fg: props.context.theme.text.base }}>{value()} </span>}
                     </Show>
-                    {live().join(" · ")}
+                    {live().join(` ${icon("separator")} `)}
                   </text>
                 </box>
               </Show>
               <Show when={props.sessionID && goal()}>
                 <Show when={live().length > 0}>
                   <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
-                    {" · "}
+                    {` ${icon("separator")} `}
                   </text>
                 </Show>
                 <GoalStatus context={props.context} sessionID={props.sessionID ?? ""} goal={goal} />
               </Show>
               <Show when={props.showDetails && layout().usage && status().length > 0}>
                 <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
-                  <Show when={live().length > 0 || goal()}> · </Show>
-                  {status().join(" · ")}
+                  <Show when={live().length > 0 || goal()}>
+                    {" "}
+                    {icon("separator")}{" "}
+                  </Show>
+                  {status().join(` ${icon("separator")} `)}
                 </text>
               </Show>
             </box>
@@ -147,10 +151,11 @@ export default Plugin.define({
 })
 
 function promptFooterLayout(input: { width: number; usage: string[]; shortcuts: string[] }) {
-  const usage = input.usage.join(" · ")
-  const shortcuts = input.shortcuts.join(" · ")
+  const sep = ` ${icon("separator")} `
+  const usage = input.usage.join(sep)
+  const shortcuts = input.shortcuts.join(sep)
   const available = Math.max(0, input.width - Math.min(28, Math.floor(input.width / 2)))
-  if (usage && shortcuts && stringWidth(`${usage} · ${shortcuts}`) <= available) {
+  if (usage && shortcuts && stringWidth(`${usage}${sep}${shortcuts}`) <= available) {
     return { usage: true, shortcuts: true }
   }
   if (usage && stringWidth(usage) <= available) return { usage: true, shortcuts: false }
