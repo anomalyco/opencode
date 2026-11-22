@@ -27,7 +27,7 @@ import { Document, Event, Info } from "@opencode/schema/config"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import { Workspace } from "@opencode/schema/workspace"
 import { host } from "./plugin/host"
-import { initRepo } from "./fixture/git"
+import { bareRepo, initRepo } from "./fixture/git"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -162,6 +162,216 @@ describe("Worktree", () => {
     }),
   )
 
+  projectIt.live("uses a checkout, not the bare repository, as the canonical directory", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const linked = path.join(root.path, "linked")
+      yield* Effect.promise(() => bareRepo(root.path, [linked]))
+      const project = yield* Project.Service
+
+      const resolved = yield* project.resolve(abs(linked))
+
+      const directory = abs(yield* Effect.promise(() => fs.realpath(linked)))
+      expect(resolved.canonical).toBe(directory)
+      expect(yield* stored(resolved.id)).toEqual([{ directory, strategy: null }])
+    }),
+  )
+
+  it.live("refresh does not claim another project's checkout or the bare repository", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.promise(() => bareRepo(root.path, [path.join(root.path, "a"), path.join(root.path, "b")]))
+      const [a, b] = yield* Effect.forEach(["a", "b"], (name) =>
+        Effect.promise(() => fs.realpath(path.join(root.path, name))).pipe(Effect.map(abs)),
+      )
+      // Sibling checkouts of one repository that older versions resolved to separate projects.
+      const projects = [
+        { id: Project.ID.make("project-a"), directory: a },
+        { id: Project.ID.make("project-b"), directory: b },
+      ]
+      const database = yield* Database.Service
+      yield* database.db
+        .insert(ProjectTable)
+        .values(
+          projects.map((item) => ({
+            id: item.id,
+            worktree: item.directory,
+            sandboxes: [],
+            time_created: 1,
+            time_updated: 1,
+          })),
+        )
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(WorktreeTable)
+        .values(projects.map((item) => ({ project_id: item.id, directory: item.directory })))
+        .run()
+        .pipe(Effect.orDie)
+      const context = yield* Layer.build(worktreeLayer(a, projects[0].id, database, yield* Bus.Service, root.path))
+
+      yield* Context.get(context, Worktree.Service).refresh(
+        { projectID: projects[0].id },
+        Context.get(context, WorktreeStrategies.Service),
+      )
+
+      expect(yield* stored(projects[0].id)).toEqual([{ directory: a, strategy: null }])
+      expect(yield* stored(projects[1].id)).toEqual([{ directory: b, strategy: null }])
+    }),
+  )
+
+  it.live("refresh prunes foreign project roots that were previously registered", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.promise(() => bareRepo(root.path, [path.join(root.path, "a"), path.join(root.path, "b")]))
+      const [a, b] = yield* Effect.forEach(["a", "b"], (name) =>
+        Effect.promise(() => fs.realpath(path.join(root.path, name))).pipe(Effect.map(abs)),
+      )
+      const projects = [
+        { id: Project.ID.make("project-a"), directory: a },
+        { id: Project.ID.make("project-b"), directory: b },
+      ]
+      const database = yield* Database.Service
+      yield* database.db
+        .insert(ProjectTable)
+        .values(
+          projects.map((item) => ({
+            id: item.id,
+            worktree: item.directory,
+            sandboxes: [],
+            time_created: 1,
+            time_updated: 1,
+          })),
+        )
+        .run()
+        .pipe(Effect.orDie)
+      // Simulate historical cross-registration where project-a has project-b's root,
+      // and project-b had its own root previously stored as "git".
+      yield* database.db
+        .insert(WorktreeTable)
+        .values([
+          { project_id: projects[0].id, directory: a },
+          { project_id: projects[0].id, directory: b, strategy: Worktree.StrategyID.make("git") },
+          { project_id: projects[1].id, directory: b, strategy: Worktree.StrategyID.make("git") },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+      const contextA = yield* Layer.build(worktreeLayer(a, projects[0].id, database, yield* Bus.Service, root.path))
+
+      yield* Context.get(contextA, Worktree.Service).refresh(
+        { projectID: projects[0].id },
+        Context.get(contextA, WorktreeStrategies.Service),
+      )
+
+      expect(yield* stored(projects[0].id)).toEqual([{ directory: a, strategy: null }])
+
+      const contextB = yield* Layer.build(worktreeLayer(b, projects[1].id, database, yield* Bus.Service, root.path))
+      yield* Context.get(contextB, Worktree.Service).refresh(
+        { projectID: projects[1].id },
+        Context.get(contextB, WorktreeStrategies.Service),
+      )
+
+      expect(yield* stored(projects[1].id)).toEqual([{ directory: b, strategy: null }])
+
+      const removeExit = yield* Effect.exit(
+        Context.get(contextB, Worktree.Service).remove(
+          { projectID: projects[1].id, directory: b, force: false },
+          Context.get(contextB, WorktreeStrategies.Service),
+        ),
+      )
+      expect(Exit.isFailure(removeExit)).toBe(true)
+    }),
+  )
+
+  it.live("opening a second checkout of a bare repo registers it as linked and removable", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const first = path.join(root.path, "first")
+      const second = path.join(root.path, "second")
+      yield* Effect.promise(() => bareRepo(root.path, [first, second]))
+      const [firstReal, secondReal] = yield* Effect.forEach([first, second], (dir) =>
+        Effect.promise(() => fs.realpath(dir)).pipe(Effect.map(abs)),
+      )
+      const project = yield* Project.Service
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+
+      const resolvedFirst = yield* project.resolve(firstReal)
+      const resolvedSecond = yield* project.resolve(secondReal)
+
+      expect(resolvedFirst.canonical).toBe(firstReal)
+      expect(resolvedSecond.canonical).toBe(firstReal)
+      expect(yield* stored(resolvedFirst.id)).toEqual(
+        [
+          { directory: firstReal, strategy: null },
+          { directory: secondReal, strategy: "git" },
+        ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
+      )
+
+      const context = yield* Layer.build(worktreeLayer(firstReal, resolvedFirst.id, database, bus, root.path))
+      yield* Context.get(context, Worktree.Service).remove(
+        { projectID: resolvedFirst.id, directory: secondReal, force: false },
+        Context.get(context, WorktreeStrategies.Service),
+      )
+      expect(yield* stored(resolvedFirst.id)).toEqual([{ directory: firstReal, strategy: null }])
+    }),
+  )
+
+  it.live("migrates legacy projects whose root was set to a bare repository", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      const a = path.join(root.path, "a")
+      const { bare } = yield* Effect.promise(() => bareRepo(root.path, [a]))
+      const bareReal = abs(yield* Effect.promise(() => fs.realpath(bare)))
+      const aReal = abs(yield* Effect.promise(() => fs.realpath(a)))
+      const projectID = Project.ID.make("legacy-bare-project")
+      const database = yield* Database.Service
+      yield* database.db
+        .insert(ProjectTable)
+        .values({
+          id: projectID,
+          worktree: bareReal,
+          sandboxes: [],
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(WorktreeTable)
+        .values([
+          { project_id: projectID, directory: bareReal },
+          { project_id: projectID, directory: aReal, strategy: Worktree.StrategyID.make("git") },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      const context = yield* Layer.build(worktreeLayer(bareReal, projectID, database, yield* Bus.Service, root.path))
+      yield* Context.get(context, Worktree.Service).refresh(
+        { projectID },
+        Context.get(context, WorktreeStrategies.Service),
+      )
+
+      const projectRow = yield* database.db
+        .select({ worktree: ProjectTable.worktree })
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, projectID))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(projectRow?.worktree).toBe(aReal)
+      expect(yield* stored(projectID)).toEqual([{ directory: aReal, strategy: null }])
+
+      const removeExit = yield* Effect.exit(
+        Context.get(context, Worktree.Service).remove(
+          { projectID, directory: aReal, force: false },
+          Context.get(context, WorktreeStrategies.Service),
+        ),
+      )
+      expect(Exit.isFailure(removeExit)).toBe(true)
+    }),
+  )
+
   it.effect("accepts arbitrary non-empty strategy ids", () =>
     Effect.sync(() => {
       expect(String(Worktree.StrategyID.make("acme/snapshot"))).toBe("acme/snapshot")
@@ -265,6 +475,47 @@ describe("Worktree", () => {
       expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, ".git")).exists())).toBe(true)
       yield* worktree.remove({ directory: created.directory, force: false })
       yield* worktree.remove({ directory: duplicate.directory, force: false })
+    }),
+  )
+
+  it.live("claims an existing unowned row when creating a worktree", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* fixtureWorktree()
+      const bus = yield* Bus.Service
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-unowned"))
+      const target = abs(path.join(parent, "worktree"))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+
+      yield* input.db
+        .insert(WorktreeTable)
+        .values([{ project_id: input.projectID, directory: target }])
+        .run()
+        .pipe(Effect.orDie)
+
+      const fiber = yield* bus
+        .subscribe(Worktree.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      const created = yield* worktree.create({
+        directory: parent,
+        name: "worktree",
+      })
+
+      expect(created.directory).toBe(target)
+      expect(yield* stored(input.projectID)).toEqual(
+        [
+          { directory: input.sourceDirectory, strategy: null },
+          { directory: target, strategy: "git" },
+        ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
+      )
+      const event = yield* Fiber.join(fiber).pipe(Effect.timeoutOption("100 millis"))
+      expect(event._tag).toBe("Some")
+
+      yield* worktree.remove({ directory: created.directory, force: false })
+      expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
     }),
   )
 
