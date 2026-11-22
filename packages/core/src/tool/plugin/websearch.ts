@@ -31,8 +31,8 @@ const Output = Schema.Array(
   Schema.Struct({
     url: WebSearch.Result.fields.url,
     title: WebSearch.Result.fields.title,
-    content: WebSearch.Result.fields.content,
     published: WebSearch.Result.fields.time.fields.published,
+    content: WebSearch.Result.fields.content,
   }),
 )
 export const Plugin = {
