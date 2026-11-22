@@ -2,7 +2,7 @@ export * as FileSystemSearch from "./search.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
-import { Clock, Context, Deferred, Duration, Effect, Layer, Scope } from "effect"
+import { Clock, Context, Deferred, Duration, Effect, Layer, Option, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "@opencode/schema/filesystem"
@@ -23,6 +23,10 @@ export interface Options {
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem/Search") {}
 
 const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
+const INITIAL_SCAN_WAIT = Duration.millis(100)
+const SCAN_TIMEOUT = Duration.seconds(5)
+const SCAN_LIMIT = 100_000
+const PREPARE_BATCH_SIZE = 128
 type Prepared = ReturnType<typeof fuzzysort.prepare>
 
 function emptyIndex() {
@@ -67,49 +71,64 @@ const ripgrepLayer = Layer.effect(
       const next = emptyIndex()
       const previous = index
       if (!initialized) index = next
-      yield* ripgrep.find({
-        environment,
-        cwd: location.directory,
-        pattern: "*",
-        hidden: true,
-        limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
-        exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
-        onEntry: (entry) =>
-          Effect.sync(() => {
-            next.files.set(entry.path, previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path))
-            const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, offset) => {
-              const directory = parts.slice(0, offset + 1).join("/") + path.sep
-              if (!next.directories.has(directory))
-                next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
-            })
-          }),
-      })
-      index = next
+      let prepared = 0
+      const result = yield* ripgrep
+        .find({
+          environment,
+          cwd: location.directory,
+          pattern: "*",
+          hidden: true,
+          limit: SCAN_LIMIT,
+          exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
+          onEntry: (entry) =>
+            Effect.gen(function* () {
+              // Yield between bounded batches, including when stdout is already buffered.
+              if (++prepared % PREPARE_BATCH_SIZE === 0) yield* Effect.yieldNow
+              next.files.set(entry.path, previous.files.get(entry.path) ?? fuzzysort.prepare(entry.path))
+              const parts = entry.path.split("/")
+              parts.slice(0, -1).forEach((_, offset) => {
+                const directory = parts.slice(0, offset + 1).join("/") + path.sep
+                if (!next.directories.has(directory))
+                  next.directories.set(directory, previous.directories.get(directory) ?? fuzzysort.prepare(directory))
+              })
+            }),
+        })
+        .pipe(Effect.timeoutOption(SCAN_TIMEOUT))
+      // A cold index is already visible incrementally. A timed-out refresh must
+      // not replace a warm snapshot with just the prefix it managed to visit.
+      if (Option.isSome(result)) index = next
       initialized = true
     }).pipe(Effect.orDie)
-    const refresh = Effect.suspend(() => {
-      if (refreshing) return initialized ? Effect.void : Deferred.await(refreshing)
-      if (initialized && clock.currentTimeMillisUnsafe() < settledAt + REFRESH_INTERVAL) return Effect.void
+    // Publishing the attempt and forking its owner must be atomic with respect
+    // to request cancellation; only waiting for it belongs to the request.
+    const refresh = Effect.uninterruptible(
+      Effect.suspend(() => {
+        if (refreshing) return Effect.succeed(refreshing)
+        if (initialized && clock.currentTimeMillisUnsafe() < settledAt + REFRESH_INTERVAL) return Effect.undefined
 
-      const attempt = Deferred.makeUnsafe<void>()
-      refreshing = attempt
-      return scan.pipe(
-        Effect.onExit((exit) =>
-          Effect.sync(() => {
-            settledAt = clock.currentTimeMillisUnsafe()
-            if (refreshing === attempt) refreshing = undefined
-            Deferred.doneUnsafe(attempt, exit)
-          }),
-        ),
-        Effect.forkIn(scope),
-        Effect.flatMap(() => (initialized ? Effect.void : Deferred.await(attempt))),
-      )
-    })
+        const attempt = Deferred.makeUnsafe<void>()
+        refreshing = attempt
+        return scan.pipe(
+          Effect.onExit((exit) =>
+            Effect.sync(() => {
+              settledAt = clock.currentTimeMillisUnsafe()
+              if (refreshing === attempt) refreshing = undefined
+              Deferred.doneUnsafe(attempt, exit)
+            }),
+          ),
+          Effect.forkIn(scope),
+          Effect.as(attempt),
+        )
+      }),
+    )
     return Service.of({
       find: (input) =>
         Effect.gen(function* () {
-          yield* refresh
+          const attempt = yield* refresh
+          if (!initialized && attempt) {
+            yield* Deferred.await(attempt).pipe(Effect.timeoutOption(INITIAL_SCAN_WAIT))
+            initialized = true
+          }
           return search(index, input)
         }),
     })

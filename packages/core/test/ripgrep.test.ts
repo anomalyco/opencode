@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Deferred, Effect, Fiber } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
@@ -18,6 +19,47 @@ const it = testEffect(
 )
 
 describe("Ripgrep", () => {
+  it.live("closes its subprocess when a streaming find is interrupted", () =>
+    Effect.gen(function* () {
+      const environment = yield* Environment.Service
+      const ripgrep = yield* Ripgrep.Service
+      const spawned = yield* Deferred.make<ChildProcessSpawner.ChildProcessHandle>()
+      const observed = yield* Deferred.make<void>()
+      const pending = yield* Effect.forkChild(
+        ripgrep.find({
+          environment: {
+            ...environment,
+            spawner: {
+              ...environment.spawner,
+              spawn: () =>
+                Effect.gen(function* () {
+                  // Keep a real child alive after the first row so cleanup cannot
+                  // pass merely because a small directory walk already exited.
+                  const child = yield* environment.spawner.spawn(
+                    ChildProcess.make(process.execPath, [
+                      "-e",
+                      'process.stdout.write("src/file.ts\\n"); setInterval(() => {}, 1000)',
+                    ]),
+                  )
+                  yield* Deferred.succeed(spawned, child)
+                  return child
+                }),
+            },
+          },
+          cwd: ".",
+          pattern: "*",
+          limit: 100_000,
+          onEntry: () => Deferred.succeed(observed, undefined).pipe(Effect.andThen(Effect.never)),
+        }),
+      )
+      const child = yield* Deferred.await(spawned)
+      yield* Deferred.await(observed)
+      expect(yield* child.isRunning).toBe(true)
+      yield* Fiber.interrupt(pending)
+      expect(yield* child.isRunning).toBe(false)
+    }),
+  )
+
   // Creating a file symlink can require elevated privileges on Windows.
   describe.skipIf(process.platform === "win32")("partial results", () => {
     it.live("keeps matching files when an ignore glob is malformed and a symlink is broken", () =>
