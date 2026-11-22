@@ -131,8 +131,14 @@ const layer = Layer.effect(
         truncated: true,
         ...(saved.failure === undefined && { outputPath: saved.file }),
       }
-      if (fits)
-        return { ...result, content: [...content, { type: "text" as const, text: `[${saved.saved}]` }], metadata }
+      // A shortened text that fits takes the note on its own line, unless the note would push it over the limits.
+      const note = `[${saved.saved}]`
+      if (
+        fits &&
+        totalLines + 1 <= limits.maxLines &&
+        Buffer.byteLength(`${text}\n${note}`, "utf-8") <= limits.maxBytes
+      )
+        return { ...result, content: [...content, { type: "text" as const, text: note }], metadata }
 
       if ((options?.strategy ?? limits.strategy) === "head-tail") {
         const cut = headTail(text, limits)

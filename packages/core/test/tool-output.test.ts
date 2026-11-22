@@ -406,6 +406,27 @@ describe("ToolOutput", () => {
       ),
     )
 
+    it.live("saves the full output given for a shortened text, with one note or marker", () =>
+      withStore(
+        (output, fs) =>
+          Effect.gen(function* () {
+            const fits = yield* output.truncate({ content: [{ type: "text", text: "one\n[…]" }] }, { full: "one\ntwo" })
+            const fitsPath = fits.metadata?.outputPath
+            if (typeof fitsPath !== "string") throw new Error("expected an output path")
+            expect(text(fits)).toBe(`one\n[…]\n[full output saved to ${fitsPath}]`)
+            expect(yield* fs.readFileString(fitsPath)).toBe("one\ntwo")
+            // No room for the note on a line of its own, so the text is cut and the marker carries the path.
+            const full = yield* output.truncate({ content: [{ type: "text", text: "a\nb\nc\nd" }] }, { full: "all" })
+            const fullPath = full.metadata?.outputPath
+            if (typeof fullPath !== "string") throw new Error("expected an output path")
+            expect(text(full).match(/full output saved to/g)).toHaveLength(1)
+            expect(text(full)).toContain(`cut from the middle; full output saved to ${fullPath}]`)
+            expect(yield* fs.readFileString(fullPath)).toBe("all")
+          }),
+        { maxLines: 4, maxBytes: 100_000, strategy: "head-tail" },
+      ),
+    )
+
     it.live("a call can choose the strategy over the configured one", () =>
       withStore(
         (output) =>
