@@ -270,6 +270,7 @@ export const dict = {
   "provider.connect.apiKey.label": "{{provider}} API key",
   "provider.connect.apiKey.placeholder": "API key",
   "provider.connect.apiKey.required": "API key is required",
+  "provider.connect.apiKey.getKey": "Get your API key from the {{provider}} Dashboard",
   "provider.connect.oauth.code.label": "{{method}} authorization code",
   "provider.connect.oauth.code.placeholder": "Authorization code",
   "provider.connect.oauth.code.required": "Authorization code is required",

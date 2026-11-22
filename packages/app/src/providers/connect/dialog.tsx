@@ -15,9 +15,11 @@ import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
+import { ExternalLink } from "@/runtime/platform/external-link"
 import { useServerSDK } from "@/runtime/server/client"
 import { consoleProviderName } from "@/providers/catalog/console"
 import { useIntegrations } from "@/providers/catalog/integrations"
+import { getProviderApiKeyUrl } from "@/providers/catalog/urls"
 import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
 import type { ModelSelection } from "@/providers/models/selection"
 import { decode64 } from "@/runtime/persistence/base64"
@@ -992,6 +994,16 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
           placeholder={language.t("provider.connect.apiKey.placeholder")}
           ref={(el) => (apiKey = el)}
         />
+        <Show when={getProviderApiKeyUrl(props.provider)}>
+          {(url) => (
+            <div class="text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+              <ExternalLink href={url()} class="inline-flex items-center gap-1 hover:text-v2-text-text-base">
+                {language.t("provider.connect.apiKey.getKey", { provider: name() })}
+                <Icon name="arrow-up-right" size="small" />
+              </ExternalLink>
+            </div>
+          )}
+        </Show>
         <StepActions>
           <Button
             type="submit"
