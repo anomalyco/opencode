@@ -986,6 +986,44 @@ describe("ShellTool", () => {
     }),
   )
 
+  it.live(
+    "keeps a CodeMode shell result's exit code and output path when the execute output is truncated",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            yield* registry.transform((editor) =>
+              editor.update("shell", (tool) => {
+                tool.options = { ...tool.options, codemode: true }
+              }),
+            )
+            const command = `${overflowCommand(ToolOutput.MAX_BYTES + 1024)}${isWindows ? "; exit 3" : " && exit 3"}`
+            const result = yield* executeTool(registry, {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-truncated-shell",
+                name: "execute",
+                input: { code: `return await tools.shell(${JSON.stringify({ command })})` },
+              },
+            })
+            expect(result.status).toBe("completed")
+            const toolOutput = yield* ToolOutput.Service
+            const truncated = yield* toolOutput.truncate({ content: result.content!, metadata: result.metadata })
+            expect(truncated.metadata?.truncated).toBe(true)
+            const text = truncated.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+            const shell = JSON.parse(result.output.output)
+            expect(text).toStartWith(
+              `{"exitCode":3,"outputPath":${JSON.stringify(shell.outputPath)},"wallTimeSeconds":${shell.wallTimeSeconds},"output":"`,
+            )
+          }),
+        )
+      }),
+    { timeout: 15_000 },
+  )
+
   codeModeIt.live("runs parallel Code Mode shells with the long default and notifies after a shorter timeout", () =>
     withTempDir((tmp) => {
       reset()
