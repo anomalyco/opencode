@@ -5,6 +5,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { sameDirectory } from "@opencode/util/path"
 import path, { dirname, join } from "path"
+import { isDeepStrictEqual } from "node:util"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { Config } from "../../config.js"
@@ -142,6 +143,7 @@ export const Plugin = define({
         }
         for (const [key] of Array.from(watches)) if (!watched.has(key)) yield* FiberMap.remove(watches, key)
         for (const file of watched) {
+          if (FiberMap.hasUnsafe(watches, file)) continue
           const updates = yield* watcher.subscribe({ path: file, type: "file" })
           yield* FiberMap.run(watches, file, updates.pipe(Stream.runForEach(publish)), {
             onlyIfMissing: true,
@@ -160,6 +162,7 @@ export const Plugin = define({
           const sources = Array.from(
             new Set(entries.flatMap((entry) => (entry.type === "document" ? (entry.info.instructions ?? []) : []))),
           )
+          if (isDeepStrictEqual(configured.sources, sources)) return false
           const fetched = yield* Effect.forEach(
             sources.filter(isUrl),
             (url) =>
@@ -180,6 +183,7 @@ export const Plugin = define({
           configured.remote = new Map(
             fetched.filter((file) => file !== undefined).map((file) => [file.path, file] as const),
           )
+          return true
         },
         (effect) => lock.withPermit(effect),
       )
@@ -224,7 +228,11 @@ export const Plugin = define({
       )
       // Subscribe before the first config read so an update in between still triggers a reload.
       yield* ctx.event.subscribe({ types: ["config.updated"] }).pipe(
-        Stream.runForEach(() => reconfigure().pipe(Effect.andThen(refresh()), Effect.andThen(discovery.reload()))),
+        Stream.runForEach(() =>
+          reconfigure().pipe(
+            Effect.flatMap((changed) => (changed ? refresh().pipe(Effect.andThen(discovery.reload())) : Effect.void)),
+          ),
+        ),
         Effect.forkScoped({ startImmediately: true }),
       )
       yield* reconfigure()

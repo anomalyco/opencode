@@ -1,6 +1,6 @@
 export * as Config from "./config.js"
 
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
 import { applyEdits, modify, type ParseError, parse } from "jsonc-parser"
@@ -74,6 +74,16 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
 
+// A global save reaches every Location. Limit concurrent discovery/read work across them,
+// while each Location keeps its own debounce and merged configuration.
+export class Reloads extends Context.Service<Reloads, Semaphore.Semaphore>()("@opencode/Config/Reloads") {}
+
+const reloadsNode = makeGlobalNode({
+  service: Reloads,
+  layer: Layer.effect(Reloads, Semaphore.make(4)),
+  deps: [],
+})
+
 export interface TestInterface extends Interface {
   /** Replaces the entries returned by subsequent entries() calls. */
   readonly setEntries: (entries: Entry[]) => Effect.Effect<void>
@@ -132,6 +142,7 @@ export const layer = (options?: Options) =>
       const processes = yield* AppProcess.Service
       const app = yield* App.Service
       const overrides = yield* FlagResolve.Overrides
+      const reloadsLimit = yield* Reloads
       const integrations = new Map<string, ConfigIntegration.Document>()
       // Integrations set their documents from outside this layer, so their reloads run with its services.
       const context = yield* Effect.context<FSUtil.Service | Global.Service | Location.Service>()
@@ -455,7 +466,7 @@ export const layer = (options?: Options) =>
           configs = next.configs
           yield* bus.publish(Event.Updated, {})
         },
-        (effect) => reloadLock.withPermit(effect),
+        (effect) => reloadLock.withPermit(reloadsLimit.withPermit(effect)),
       )
 
       // Subscribe eagerly so synchronous watch readiness isn't dropped.
@@ -558,6 +569,7 @@ export function configured(options?: Options) {
     service: Service,
     layer: layer(options),
     deps: [
+      reloadsNode,
       Watcher.node,
       Bus.node,
       FSUtil.node,

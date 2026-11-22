@@ -21,6 +21,7 @@ import { location } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { readInitial, readUpdate, state } from "./lib/instructions"
 import { testEffect } from "./lib/effect"
+import { advance, drain } from "./lib/clock"
 import { host } from "./plugin/host"
 
 const it = testEffect(Layer.empty)
@@ -377,6 +378,59 @@ describe("ConfigInstructionPlugin.Plugin", () => {
                     { projectDirectory: AbsolutePath.make(project) },
                   ),
                 ),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.effect("keeps instruction watches and remote content on unrelated config updates", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const local = path.join(tmp.path, "instructions.md")
+        const remote = "https://example.test/instructions.md"
+        let fetches = 0
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => fs.writeFile(local, "initial"))
+          const events = yield* PubSub.unbounded<ReturnType<typeof configUpdated>>()
+          const config = yield* Config.Test
+          const watcher = yield* Watcher.Test
+          const discovery = yield* start(host({ event: { subscribe: () => Stream.fromPubSub(events) } }))
+          const subscriptions = yield* watcher.subscriptions()
+          yield* config.setEntries([
+            new Document({ type: "document", info: new Info({ shell: "unrelated", instructions: [local, remote] }) }),
+          ])
+          yield* PubSub.publish(events, configUpdated())
+          yield* drain
+          expect(fetches).toBe(1)
+          expect(yield* watcher.subscriptions()).toEqual(subscriptions)
+
+          const bus = yield* Bus.Service
+          let updates = 0
+          yield* bus.subscribe(InstructionDiscovery.Event.Updated).pipe(
+            Stream.runForEach(() => Effect.sync(() => updates++)),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          yield* Effect.promise(() => fs.writeFile(local, "updated"))
+          yield* watcher.emit({ type: "update", path: local })
+          yield* advance(() => updates > 0)
+          expect((yield* readInitial(yield* discovery.load())).text).toContain(`Instructions from: ${local}\nupdated`)
+          expect(fetches).toBe(1)
+          expect(yield* watcher.subscriptions()).toEqual(subscriptions)
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              instructions: [local, remote],
+              http: respond(() => {
+                fetches++
+                return new Response("remote")
+              }),
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
               ),
             }),
           ),

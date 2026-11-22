@@ -3,7 +3,7 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
-import { Directory, Document, type Entry, Info } from "@opencode/schema/config"
+import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { ConfigCompatibilityPlugin } from "@opencode/core/config/plugin/compatibility"
 import { SkillFile } from "@opencode/core/config/plugin/skill-file"
@@ -398,7 +398,6 @@ describe("ConfigSkillPlugin.Plugin", () => {
             { path: first, type: "directory", ignore: SkillScan.ignore.toSorted() },
             { path: source, type: "file" },
             { path: second, type: "directory", ignore: SkillScan.ignore.toSorted() },
-            { path: source, type: "file" },
           ])
         }),
       ),
@@ -425,6 +424,59 @@ describe("ConfigSkillPlugin.Plugin", () => {
           yield* emitAndWait({ type: "create", path: source })
           expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("deploy")])
         }),
+      ),
+    ),
+  )
+
+  it.effect("keeps skill watches across unrelated config updates and file rescans", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const directory = path.join(tmp.path, "skills")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(directory, "probe"), { recursive: true })
+            await write(directory, "probe", "Initial")
+          })
+          const config = yield* Config.Test
+          const watcher = yield* Watcher.Test
+          const bus = yield* Bus.Service
+          const service = yield* Skill.Service
+          const entry = (shell: string) =>
+            new Document({ type: "document", info: decode({ shell, skills: [directory] }) })
+          yield* config.setEntries([entry("first")])
+          let reloads = 0
+          yield* ConfigSkillPlugin.Plugin.effect(
+            host({
+              event: { subscribe: () => bus.subscribe(Event.Updated) },
+              skill: {
+                list: () => Effect.die("unused skill.list"),
+                transform: service.transform,
+                reload: () => service.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+              },
+            }),
+          )
+          yield* drain
+          const subscriptions = yield* watcher.subscriptions()
+          yield* config.setEntries([entry("second")])
+          yield* bus.publish(Event.Updated, {})
+          yield* drain
+          expect(reloads).toBe(0)
+          expect(yield* watcher.subscriptions()).toEqual(subscriptions)
+
+          yield* Effect.promise(() => write(directory, "probe", "Updated"))
+          yield* watcher.emit({ type: "update", path: path.join(directory, "probe", "SKILL.md") })
+          yield* advance(() => reloads === 1)
+          expect((yield* service.list())[0]?.description).toBe("Updated")
+          expect(yield* watcher.subscriptions()).toEqual(subscriptions)
+        }).pipe(
+          Effect.provide(Config.testLayer()),
+          Effect.provideService(SkillDiscovery.Service, emptyDiscovery),
+          Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: tmp.path })),
+          Effect.provideService(
+            Location.Service,
+            Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+          ),
+        ),
       ),
     ),
   )

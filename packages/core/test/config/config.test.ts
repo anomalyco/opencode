@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
-import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream, Tracer } from "effect"
+import { Arbitrary, Context, Deferred, Effect, Fiber, Layer, Logger, Schema, Scope, Stream, Tracer } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigIntegration } from "@opencode/core/config/integration"
@@ -9,7 +9,7 @@ import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/c
 import { ConfigModel } from "@opencode/schema/config/model"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { makeGlobalNode, Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Credential } from "@opencode/core/credential"
 import { ConfigV1 } from "../fixture/v1-config/config"
@@ -34,6 +34,8 @@ import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
 import { tmpdir, withTempDir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
+import { advance, drain } from "../lib/clock"
+import { TestClock } from "effect/testing"
 
 const it = testEffect(Layer.empty)
 const itWithPermissions = process.platform === "win32" || process.getuid?.() === 0 ? it.live.skip : it.live
@@ -819,6 +821,157 @@ describe("Config", () => {
     const settled = Effect.promise(() => first).pipe(Effect.timeout("3 seconds"))
     return { counter, tracer, settled }
   }
+
+  it.effect("coalesces consecutive global config writes without reacquiring watches", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const file = path.join(global, "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global)
+            await fs.mkdir(project)
+            await fs.writeFile(file, JSON.stringify({ shell: "initial" }))
+          })
+          const { counter, tracer, settled } = countReloads()
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
+            yield* advance(() => counter.reloads > 0)
+            yield* settled
+            yield* drain
+            counter.reloads = 0
+            const subscriptions = yield* watcher.subscriptions()
+            const values: Array<string | undefined> = []
+            const bus = yield* Bus.Service
+            yield* bus.subscribe(Event.Updated).pipe(
+              Stream.runForEach(() =>
+                config
+                  .entries()
+                  .pipe(Effect.tap((entries) => Effect.sync(() => values.push(Config.latest(entries, "shell"))))),
+              ),
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            for (const shell of ["first", "second", "final"]) {
+              yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell })))
+              yield* watcher.emit({ type: "update", path: file })
+              yield* TestClock.adjust("25 millis")
+            }
+            expect(counter.reloads).toBe(0)
+            yield* advance(() => values.length === 1)
+            yield* drain
+            expect(counter.reloads).toBe(1)
+            expect(values).toEqual(["final"])
+            expect(yield* watcher.subscriptions()).toEqual(subscriptions)
+          }).pipe(Effect.provide(testLayer(project, global)), Effect.withTracer(tracer))
+        }),
+      ),
+    ),
+  )
+
+  it.effect("bounds global config reloads across Locations sharing one native watch", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const file = path.join(global, "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global)
+            await fs.writeFile(file, JSON.stringify({ shell: "initial" }))
+          })
+          const release = yield* Deferred.make<void>()
+          let blocking = false
+          let active = 0
+          let peak = 0
+          let completed = 0
+          const filesystem = Layer.effect(
+            FSUtil.Service,
+            Effect.gen(function* () {
+              const base = yield* FSUtil.Service
+              return FSUtil.Service.of({
+                ...base,
+                readFileStringSafe: (target) =>
+                  Effect.gen(function* () {
+                    if (!blocking || target !== file) return yield* base.readFileStringSafe(target)
+                    active++
+                    peak = Math.max(peak, active)
+                    return yield* Deferred.await(release).pipe(
+                      Effect.andThen(base.readFileStringSafe(target)),
+                      Effect.ensuring(Effect.sync(() => active--)),
+                    )
+                  }),
+              })
+            }),
+          ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node)))
+          const tracer = Tracer.make({
+            span: (options) => {
+              const span = Tracer.nativeTracer.span(options)
+              if (options.name !== "Config.reload") return span
+              const end = span.end.bind(span)
+              span.end = (time, exit) => {
+                end(time, exit)
+                completed++
+              }
+              return span
+            },
+          })
+          yield* Effect.gen(function* () {
+            const memo = yield* Layer.makeMemoMap
+            const scope = yield* Scope.Scope
+            const watch = Watcher.testLayer
+            const watcher = Context.get(yield* Layer.buildWithMemoMap(watch, memo, scope), Watcher.Test)
+            const configs = yield* Effect.forEach(
+              Array.from({ length: 8 }, (_, i) => i),
+              (i) =>
+                Layer.buildWithMemoMap(
+                  LayerNode.compile(Config.configured({ project: false, system: false }), {
+                    shared: Node.tags.values.global,
+                    replacements: [
+                      Watcher.node.replace(watch),
+                      FSUtil.node.replace(filesystem),
+                      Global.node.replace(Global.layerWith({ config: global, home: tmp.path })),
+                      Location.node.replace(
+                        Layer.succeed(
+                          Location.Service,
+                          Location.Service.of(
+                            location({ directory: AbsolutePath.make(path.join(tmp.path, `project-${i}`)) }),
+                          ),
+                        ),
+                      ),
+                      Credential.node.replace(emptyCredentialNode),
+                      WellKnown.node.replace(emptyWellknownNode),
+                    ],
+                  }),
+                  memo,
+                  scope,
+                ).pipe(Effect.map(Context.get(Config.Service))),
+            )
+            yield* advance(() => completed === configs.length)
+            yield* drain
+            completed = 0
+            blocking = true
+            const subscriptions = yield* watcher.subscriptions()
+            expect(subscriptions.filter((input) => input.path === global)).toHaveLength(1)
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "changed" })))
+            yield* watcher.emit({ type: "update", path: file })
+            yield* advance(() => active >= 4)
+            yield* drain
+            expect(peak).toBe(4)
+            yield* Deferred.succeed(release, undefined)
+            yield* advance(() => completed === configs.length)
+            expect(peak).toBe(4)
+            expect(
+              yield* Effect.forEach(configs, (config) =>
+                config.entries().pipe(Effect.map((entries) => Config.latest(entries, "shell"))),
+              ),
+            ).toEqual(Array(8).fill("changed"))
+            expect(yield* watcher.subscriptions()).toEqual(subscriptions)
+          }).pipe(Effect.withTracer(tracer))
+        }),
+      ),
+    ),
+  )
 
   it.live("does not reload when an unrelated file under a config root changes", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(

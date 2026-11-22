@@ -5,6 +5,7 @@ import type { Entry } from "@opencode/schema/config"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import path from "path"
+import { isDeepStrictEqual } from "node:util"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
@@ -31,17 +32,21 @@ export const Plugin = define({
       skills: [],
     }
     const watches = yield* FiberMap.make<string>()
+    const wanted = new Set<string>()
     const changes = yield* PubSub.sliding<string>(1)
     const lock = Semaphore.makeUnsafe(1)
 
     const watch = Effect.fn("ConfigSkillPlugin.watch")(function* (directory: string, type: "file" | "directory") {
       const target = path.resolve(directory)
+      const key = `${type}:${target}`
+      wanted.add(key)
+      if (FiberMap.hasUnsafe(watches, key)) return
       const updates = yield* watcher.subscribe(
         type === "directory" ? { path: target, type, ignore: SkillScan.ignore } : { path: target, type },
       )
       yield* FiberMap.run(
         watches,
-        `${type}:${target}`,
+        key,
         updates.pipe(Stream.runForEach((update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid))),
         { onlyIfMissing: true, startImmediately: true },
       )
@@ -148,12 +153,13 @@ export const Plugin = define({
 
     const refresh = Effect.fn("ConfigSkillPlugin.refresh")(
       function* (file?: string) {
-        yield* FiberMap.clear(watches)
+        wanted.clear()
         const skills = new Map<Skill.ID, Skill.Info>()
         const current = sources()
         for (const source of current) {
           for (const skill of yield* load(source)) skills.set(skill.id, skill)
         }
+        for (const [key] of Array.from(watches)) if (!wanted.has(key)) yield* FiberMap.remove(watches, key)
         loaded.skills = Array.from(skills.values())
         if (file) {
           yield* Effect.logInfo("skills rescanned", {
@@ -180,11 +186,13 @@ export const Plugin = define({
     })
     yield* ctx.event.subscribe({ types: ["config.updated"] }).pipe(
       Stream.runForEach(() =>
-        config.entries().pipe(
-          Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-          Effect.andThen(refresh()),
-          Effect.andThen(ctx.skill.reload()),
-        ),
+        Effect.gen(function* () {
+          const previous = sources()
+          loaded.entries = yield* config.entries()
+          if (isDeepStrictEqual(previous, sources())) return
+          yield* refresh()
+          yield* ctx.skill.reload()
+        }),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )

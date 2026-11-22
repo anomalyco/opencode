@@ -2180,14 +2180,61 @@ testEffect(Layer.empty).live("batches MCP transforms without connecting intermed
   }),
 )
 
+testEffect(Layer.empty).effect("skips MCP catalog reloads when effective server settings are unchanged", () =>
+  Effect.gen(function* () {
+    const config = yield* Config.Test
+    const events = yield* PubSub.unbounded<{ readonly type: string }>()
+    let reloads = 0
+    const document = (shell: string, command = "example-mcp") =>
+      new Document({
+        type: "document",
+        info: new Info({
+          shell,
+          mcp: new ConfigMCP.Info({
+            servers: {
+              docs: new ConfigMCP.Local({ type: "local", command: [command] }),
+            },
+          }),
+        }),
+      })
+    yield* config.setEntries([document("first")])
+    yield* ConfigMcpPlugin.register(Stream.fromPubSub(events)).pipe(
+      Effect.provide(
+        Layer.mock(Mcp.Service, {
+          transform: () => Effect.succeed({ dispose: Effect.void }),
+          reload: () =>
+            Effect.sync(() => {
+              reloads++
+            }),
+        }),
+      ),
+    )
+    yield* config.setEntries([document("unrelated")])
+    yield* PubSub.publish(events, { type: "config.updated" })
+    yield* drain
+    expect(reloads).toBe(0)
+    yield* config.setEntries([document("unrelated", "changed-mcp")])
+    yield* PubSub.publish(events, { type: "config.updated" })
+    yield* advance(() => reloads > 0)
+    expect(reloads).toBe(1)
+  }).pipe(Effect.provide(Config.testLayer())),
+)
+
 test("reconciles only changed MCP server config", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const server = yield* resourceServer()
+        const server = yield* resourceServer({ modern: true })
+        const stable = yield* resourceServer({ modern: true })
+        const unchanged = new ConfigMCP.Remote({
+          type: "remote",
+          url: stable.url,
+          oauth: false,
+          protocol: "2026-07-28",
+        })
         const updates = yield* PubSub.unbounded<Payload>()
         const resources = (codemode?: boolean) =>
-          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, codemode })
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28", codemode })
         const added = new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })
         const dynamic = new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })
         const document = (servers: Record<string, typeof ConfigMCP.Server.Type>, username?: string) =>
@@ -2195,7 +2242,7 @@ test("reconciles only changed MCP server config", async () => {
             type: "document",
             info: new Info({
               username,
-              mcp: new ConfigMCP.Info({ servers }),
+              mcp: new ConfigMCP.Info({ servers: { stable: unchanged, ...servers } }),
             }),
           })
         let entries = [document({ resources: resources() })]
@@ -2211,7 +2258,7 @@ test("reconciles only changed MCP server config", async () => {
           const service = yield* Mcp.Service
           yield* settled(service)
           expect(server.state.toolLists).toBe(1)
-          expect(server.state.initializations).toBe(1)
+          expect(stable.state.toolLists).toBe(1)
 
           yield* service.add("dynamic", dynamic)
           entries = [document({ resources: resources() }, "unrelated")]
@@ -2225,9 +2272,14 @@ test("reconciles only changed MCP server config", async () => {
             ),
             Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
           )
-          expect(appended.map((item) => String(item.name)).toSorted()).toEqual(["added", "dynamic", "resources"])
+          expect(appended.map((item) => String(item.name)).toSorted()).toEqual([
+            "added",
+            "dynamic",
+            "resources",
+            "stable",
+          ])
           expect(server.state.toolLists).toBe(1)
-          expect(server.state.initializations).toBe(1)
+          expect(stable.state.toolLists).toBe(1)
 
           entries = [
             document(
@@ -2239,13 +2291,16 @@ test("reconciles only changed MCP server config", async () => {
             ),
           ]
           yield* publishUpdate()
-          yield* Effect.sync(() => server.state.initializations).pipe(
+          yield* Effect.sync(() => server.state.toolLists).pipe(
             Effect.filterOrFail(
               (count) => count === 2,
               () => new Error("MCP config change did not reconnect the server"),
             ),
             Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
           )
+
+          yield* settled(service)
+          expect(stable.state.toolLists).toBe(1)
 
           entries = [document({ added }, "unrelated")]
           yield* publishUpdate()
@@ -2256,7 +2311,7 @@ test("reconciles only changed MCP server config", async () => {
             ),
             Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
           )
-          expect(removed.map((item) => String(item.name)).toSorted()).toEqual(["added", "dynamic"])
+          expect(removed.map((item) => String(item.name)).toSorted()).toEqual(["added", "dynamic", "stable"])
         }).pipe(
           Effect.provide(
             resourceMcpLayer(resources(), undefined, undefined, {
