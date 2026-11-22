@@ -5,8 +5,9 @@ use opencode_api::generated::*;
 
 use crate::changes::Touched;
 use crate::connection::Follow;
+use crate::driver::{Data, Task};
 use crate::reads::{Read, SessionRead};
-use crate::state::{Data, Error, State, Task};
+use crate::state::{Error, State};
 
 /// The project of sessions outside any repository (`Project.ID.global`).
 const GLOBAL_PROJECT: &str = "global";

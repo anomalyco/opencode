@@ -1,8 +1,9 @@
 use opencode_api::generated::*;
 
 use crate::changes::Touched;
+use crate::driver::{Data, Task, evict_missing};
 use crate::reads::{Read, SessionRead};
-use crate::state::{Data, Error, State, Task, evict_missing, is_tag};
+use crate::state::{Error, State, is_tag};
 
 impl State {
     /// Pending permission requests of a session; none until read or asked.

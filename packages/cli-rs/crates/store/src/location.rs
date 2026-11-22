@@ -9,9 +9,10 @@ use opencode_api::client::Client;
 use opencode_api::generated::*;
 
 use crate::connection::Follow;
+use crate::driver::{Data, Task};
 use crate::reads::Read;
 use crate::shells::{Shell, ShellRead};
-use crate::state::{Data, Error, State, Task};
+use crate::state::{Error, State};
 
 /// Trailing window for event bursts that each ask for the same refetch (`settleMs`).
 pub const SETTLE: Duration = Duration::from_millis(150);
@@ -488,19 +489,21 @@ impl Data {
         // Spawned under the lock, so the timer cannot fire before its entry exists.
         let handle = self.runtime().spawn(async move {
             tokio::time::sleep(SETTLE).await;
-            let current = {
-                let mut state = data.lock();
-                let current = state.settling.get(&key).is_some_and(|(owner, _)| *owner == token);
+            let current = data.write_tasks(|state, tasks| {
+                tasks.timers.remove(&token);
+                let current = state.settling.get(&key) == Some(&token);
                 if current {
                     state.settling.remove(&key);
                 }
                 current
-            };
+            });
             if current {
                 data.refresh_catalogs(vec![catalog], location);
             }
         });
-        if let Some((_, previous)) = state.settling.insert(key, (token, handle.abort_handle())) {
+        let previous = state.settling.insert(key, token);
+        state.tasks().timers.insert(token, handle.abort_handle());
+        if let Some(previous) = previous.and_then(|previous| state.tasks().timers.remove(&previous)) {
             previous.abort();
         }
     }

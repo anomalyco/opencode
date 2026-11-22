@@ -8,9 +8,10 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use crate::changes::Touched;
+use crate::driver::{Data, Task, evict_missing};
 use crate::reads::{Read, SessionRead};
 use crate::sessions::SessionKey;
-use crate::state::{Data, Error, MESSAGE_PAGE, OVERLAY_LIMIT, State, Task, evict_missing};
+use crate::state::{Error, MESSAGE_PAGE, OVERLAY_LIMIT, State};
 
 /// A message's key in its transcript, never given to another message of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1212,12 +1213,9 @@ impl Data {
             return Ok(());
         }
         loop {
-            let pending = self.read(|state| {
-                state
-                    .sessions
-                    .get(session)
-                    .and_then(|session| session.message_load.as_ref())
-                    .map(|(_, task)| task.clone())
+            let pending = self.read_tasks(|state, tasks| {
+                let token = state.sessions.get(session)?.message_load?;
+                Some(tasks.loads[&token].clone())
             });
             let Some(pending) = pending else { break };
             let published = match &options.cancel {
@@ -1259,17 +1257,19 @@ impl Data {
         let cancel = options.cancel.clone();
         let task = self.spawn(async move {
             let result = load_pages(&data, &id, (cursor, incarnation), all, cancel.as_ref()).await;
-            data.write(|state| {
+            data.write_tasks(|state, tasks| {
+                tasks.loads.remove(&token);
                 let Some(session) = state.sessions.get_mut(&id) else { return };
                 session.loading = false;
-                session.message_load.take_if(|(current, _)| *current == token);
+                session.message_load.take_if(|current| *current == token);
             });
             match result {
                 Err(_) if cancel.as_ref().is_some_and(CancellationToken::is_cancelled) => Ok(false),
                 result => result,
             }
         });
-        state.sessions[key].message_load = Some((token, task.clone()));
+        state.tasks().loads.insert(token, task.clone());
+        state.sessions[key].message_load = Some(token);
         self.flush(&mut state);
         Some(task)
     }

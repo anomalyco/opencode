@@ -12,9 +12,10 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
 use crate::changes::Touched;
+use crate::driver::Data;
 use crate::location::{Catalog, Location};
 use crate::sessions::Outcome;
-use crate::state::{Data, Error, SessionStatus, State};
+use crate::state::{Error, SessionStatus, State};
 
 /// A read an event leaves for after the store lock is released.
 #[derive(Debug, Clone)]

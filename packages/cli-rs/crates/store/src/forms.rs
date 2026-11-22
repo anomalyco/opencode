@@ -2,9 +2,10 @@
 use opencode_api::client::Client;
 use opencode_api::generated::*;
 
+use crate::driver::{Data, Task, evict_missing};
 use crate::location::Location;
 use crate::reads::{Read, SessionRead};
-use crate::state::{Data, Error, Overlay, State, Task, evict_missing};
+use crate::state::{Error, Overlay, State};
 
 /// The owner of global MCP elicitations. They temporarily use "global" instead of a real session
 /// ID, so the server cannot recover their location when settling them; the store keeps the event

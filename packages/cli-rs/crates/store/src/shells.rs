@@ -3,9 +3,10 @@
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
+use crate::driver::{Data, Task};
 use crate::location::{Catalog, Location};
 use crate::reads::Read;
-use crate::state::{Data, Error, Overlay, State, Task};
+use crate::state::{Error, Overlay, State};
 
 /// A running shell and the location that reported it.
 #[derive(Debug, Clone, PartialEq)]

@@ -10,10 +10,11 @@ use opencode_api::generated::*;
 
 use crate::changes::Touched;
 use crate::connection::Follow;
+use crate::driver::{Data, Task, Tasks, evict_missing};
 use crate::messages::{MessageExt, from_event};
 use crate::reads::{Read, SessionRead};
 use crate::sessions::Life;
-use crate::state::{Compacting, Data, Error, SessionStatus, State, Task, evict_missing};
+use crate::state::{Compacting, Error, SessionStatus, State};
 
 /// `DataPendingStatus`: where a pending user prompt stands relative to the runner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -511,12 +512,12 @@ impl Data {
                 }
                 data.client().session_prompt(&request).await.map_err(Error::new)
             },
-            move |state, result| {
+            move |state, _, result| {
                 if result.is_err() && fresh && state.outbox.remove(id.as_str()) {
                     state.retract_local(&session, id.as_str());
                 }
             },
-            |_, _| {},
+            |_, _, _, _| {},
         )
     }
 
@@ -525,9 +526,9 @@ impl Data {
     /// proposed row.
     pub fn compact(&self, session: &SessionID, model: Option<ModelRef>) -> Task<SessionInboxCompaction> {
         let id = SessionMessageID(opencode_api::id::message());
-        let existing = self.write(|state| {
+        let existing = self.write_tasks(|state, tasks| {
             if let Some(active) = state.sessions.get(session).and_then(|session| session.compacting.as_ref()) {
-                return Some(active.request.clone());
+                return Some(tasks.compactions[&active.token].clone());
             }
             if !state.pending(session).iter().any(|item| matches!(item, SessionInboxInfo::Compaction(_))) {
                 state.outbox.insert(id.0.clone());
@@ -560,8 +561,11 @@ impl Data {
                 }
                 data.client().session_compact(&input).await.map_err(Error::new)
             },
-            move |state, result| {
+            move |state, tasks, result| {
                 let active = state.sessions.get_mut(&target).and_then(|session| session.compacting.take());
+                if let Some(active) = &active {
+                    tasks.compactions.remove(&active.token);
+                }
                 let observed = active.map(|active| active.observed).unwrap_or_default();
                 match result {
                     Ok(item) => {
@@ -582,9 +586,10 @@ impl Data {
                     }
                 }
             },
-            move |state, request| {
+            move |state, tasks, token, request| {
+                tasks.compactions.insert(token, request.clone());
                 state.sessions.get_or_insert(session).compacting =
-                    Some(Compacting { id, observed: HashSet::new(), request: request.clone() });
+                    Some(Compacting { id, observed: HashSet::new(), token });
             },
         )
     }
@@ -597,8 +602,8 @@ impl Data {
         session: &SessionID,
         gate: Option<Gate>,
         send: F,
-        settle: impl FnOnce(&mut State, &Result<T, Error>) + Send + 'static,
-        register: impl FnOnce(&mut State, &Task<T>),
+        settle: impl FnOnce(&mut State, &mut Tasks, &Result<T, Error>) + Send + 'static,
+        register: impl FnOnce(&mut State, &mut Tasks, u64, &Task<T>),
     ) -> Task<T>
     where
         T: Clone + Send + Sync + 'static,
@@ -607,11 +612,13 @@ impl Data {
     {
         let mut state = self.lock();
         let key = state.sessions.entry(session);
-        let created = match &state.sessions[key].life {
-            Life::Creating { gate, .. } => Some(gate.clone()),
+        let creating = match state.sessions[key].life {
+            Life::Creating { token, .. } => Some(token),
             _ => None,
         };
-        let previous = state.sessions[key].sending.as_ref().map(|(_, task)| task.clone());
+        let previous = state.sessions[key].sending;
+        let created = creating.map(|token| state.tasks().creations[&token].clone());
+        let previous = previous.map(|token| state.tasks().sends[&token].clone());
         let token = state.token();
         let data = self.clone();
         let id = session.clone();
@@ -642,18 +649,21 @@ impl Data {
                 Ok(_) => send(data.clone()).await,
                 Err(error) => Err(error),
             };
-            data.write(|state| {
-                settle(state, &result);
+            data.write_tasks(|state, tasks| {
+                settle(state, tasks, &result);
+                tasks.sends.remove(&token);
                 if let Some(session) = state.sessions.get_mut(&id) {
-                    session.sending.take_if(|(current, _)| *current == token);
+                    session.sending.take_if(|current| *current == token);
                 }
             });
             result
         });
         let chain = request.clone().map(|result| result.map(|_| ())).boxed().shared();
-        state.sessions[key].sending = Some((token, chain));
-        register(&mut state, &request);
-        self.flush(&mut state);
+        state.tasks().sends.insert(token, chain);
+        state.sessions[key].sending = Some(token);
+        let (store, tasks) = state.split();
+        register(store, tasks, token, &request);
+        self.flush(store);
         request
     }
 }

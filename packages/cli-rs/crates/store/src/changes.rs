@@ -6,12 +6,13 @@ use std::ops::BitOr;
 
 use opencode_api::generated::{AgentID, ModelRef, SessionID};
 
+use crate::driver::Data;
 use crate::forms::GLOBAL;
 use crate::location::Location;
 use crate::messages::MessageKey;
 use crate::reads::LocationKey;
 use crate::sessions::{Session, SessionKey};
-use crate::state::{Data, State};
+use crate::state::State;
 
 /// A session's agent and model.
 pub type Selected = (Option<AgentID>, Option<ModelRef>);

@@ -6,9 +6,10 @@ use indexmap::IndexMap;
 use opencode_api::generated::*;
 
 use crate::changes::Touched;
+use crate::driver::{Data, Task, evict_missing};
 use crate::reads::{Read, SessionRead};
 use crate::sessions::SessionKey;
-use crate::state::{Data, Error, Overlay, State, Task, evict_missing};
+use crate::state::{Error, Overlay, State};
 
 impl State {
     /// Running jobs owned by `session` or any session below it: a synced tree's listed members, plus jobs whose

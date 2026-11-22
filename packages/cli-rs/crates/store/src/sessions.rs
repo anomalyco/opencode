@@ -7,11 +7,12 @@ use opencode_api::generated::*;
 
 use crate::changes::Touched;
 use crate::connection::Follow;
+use crate::driver::{Data, Task, evict_missing};
 use crate::forms::Form;
 use crate::inbox::{PendingUpdate, now};
 use crate::messages::{HeadRead, Transcript, from_event};
 use crate::reads::{Read, ReadState, SessionRead, SessionReads};
-use crate::state::{Compacting, Data, Error, Overlay, SessionStatus, State, Task, evict_missing};
+use crate::state::{Compacting, Error, Overlay, SessionStatus, State};
 
 /// Children per page of a family read (`CHILD_PAGE`).
 const CHILD_PAGE: i64 = 200;
@@ -79,10 +80,10 @@ pub(crate) struct Session {
     pub(crate) permission_read: Option<Overlay<PermissionRequest>>,
     /// The head read in flight, with what overtook it.
     pub(crate) head_read: Option<HeadRead>,
-    /// The older-page load in flight, by token.
-    pub(crate) message_load: Option<(u64, Task<bool>)>,
-    /// The last admission, by token: each admission waits for the previous one to settle.
-    pub(crate) sending: Option<(u64, Task<()>)>,
+    /// The token of the older-page load in flight.
+    pub(crate) message_load: Option<u64>,
+    /// The token of the last admission: each admission waits for the previous one to settle.
+    pub(crate) sending: Option<u64>,
     pub(crate) compacting: Option<Compacting>,
     /// As the root of a synced job tree: the job IDs the server listed, plus those events added for owners in the
     /// tree. Loaded session info only reaches direct children, so parents alone would drop a grandchild's jobs.
@@ -99,8 +100,8 @@ pub(crate) enum Life {
     Known,
     /// Deleted at deletion epoch `epoch`: one of the newest deletions.
     Missing { epoch: u64 },
-    /// An optimistic creation in flight, by token; prompts to the session wait for `gate`.
-    Creating { token: u64, gate: Task<()>, echo: Echo },
+    /// An optimistic creation in flight, by token; prompts to the session wait for it.
+    Creating { token: u64, echo: Echo },
 }
 
 /// What the server said of a creation in flight.
@@ -844,7 +845,8 @@ impl Data {
         let session = id.clone();
         let task = self.spawn(async move {
             let result = data.client().session_create(&request).await.map_err(Error::new);
-            data.write(|state| {
+            data.write_tasks(|state, tasks| {
+                tasks.creations.remove(&token);
                 // A failure of a call that admitted nothing leaves another call's creation unacknowledged.
                 let acknowledged = (result.is_ok() || fresh)
                     && state.sessions.get_mut(&session).is_some_and(|record| record.life.acknowledge());
@@ -867,7 +869,8 @@ impl Data {
         });
         if fresh {
             let gate = task.clone().map(|result| result.map(|_| ())).boxed().shared();
-            state.sessions[key].life = Life::Creating { token, gate, echo: Echo::Awaited };
+            state.tasks().creations.insert(token, gate);
+            state.sessions[key].life = Life::Creating { token, echo: Echo::Awaited };
         }
         self.flush(&mut state);
         (id, task)
