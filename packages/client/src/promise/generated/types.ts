@@ -2660,7 +2660,6 @@ export type ConfigEntry =
         experimental?: {
           portable_shell_scanner?: boolean
           codemode_vm?: boolean
-          mcp_events?: boolean
           all_flags?: boolean
           todo?: boolean
           media_blob?: boolean

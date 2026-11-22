@@ -13,9 +13,6 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   codemode_vm: Schema.Boolean.pipe(optional).annotate({
     description: "Deprecated: ignored because Code Mode always runs on the VM.",
   }),
-  mcp_events: Schema.Boolean.pipe(optional).annotate({
-    description: "Deprecated: ignored because MCP Events are always enabled.",
-  }),
   all_flags: Schema.Boolean.pipe(optional).annotate({
     description:
       "Enable all flags except opt-in-only flags on any build channel, like OPENCODE_FLAGS=all. Per-flag config settings take precedence over all_flags; false leaves the build defaults in effect.",
