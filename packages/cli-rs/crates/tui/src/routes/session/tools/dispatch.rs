@@ -13,7 +13,7 @@ use super::{edit, execute, generic, inline, patch, question, read, shell, subage
 use crate::dialogs::open::truncate_file_path;
 use crate::prelude::*;
 use crate::routes::session::messages::images::{Images, tool_images};
-use crate::routes::session::messages::list::{Context, RowEvent};
+use crate::routes::session::messages::list::{Context, RowEvent, Switch};
 use crate::routes::session::permission;
 use opentui::input::strip_ansi_sequences;
 
@@ -283,6 +283,8 @@ pub fn finite(value: Option<&Value>) -> Option<f64> {
 /// What an [`InlineTool`] shows.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Inline {
+    /// The call's ID, which keeps the error open or closed when the row is built again.
+    pub id: String,
     pub icon: &'static str,
     /// The `color` prop: overrides every other color.
     pub color: Option<Color>,
@@ -304,6 +306,7 @@ pub struct Inline {
 impl Inline {
     pub fn new(props: &Props<'_>, icon: &'static str, pending: &str, complete: bool) -> Self {
         Self {
+            id: props.part.id.clone(),
             icon,
             color: None,
             complete,
@@ -345,7 +348,7 @@ struct InlineInner {
     /// The status badge beside a running call's spinner.
     badge: RefCell<Option<Text>>,
     hover: Cell<bool>,
-    expanded: Cell<bool>,
+    expanded: Switch,
     painted: RefCell<Painted>,
     click: RefCell<Option<Rc<dyn Fn()>>>,
 }
@@ -371,7 +374,7 @@ impl InlineTool {
             state: RefCell::default(),
             badge: RefCell::default(),
             hover: Cell::new(false),
-            expanded: Cell::new(false),
+            expanded: cx.toggles.switch(),
             painted: RefCell::new(Painted::None),
             click: RefCell::default(),
         });
@@ -388,7 +391,7 @@ impl InlineTool {
             let (failed, error_click) =
                 inner.state.borrow().as_ref().map_or((false, false), |state| (state.failed(), state.error_click));
             if failed && !error_click {
-                inner.expanded.set(!inner.expanded.get());
+                inner.expanded.flip();
                 inner.paint_error();
                 return;
             }
@@ -430,6 +433,7 @@ impl InlineTool {
         if inner.state.borrow().as_ref() == Some(&inline) {
             return;
         }
+        inner.expanded.key(format!("error {}", inline.id));
         inner.root.clear();
         inner.badge.take();
         let theme = &inner.theme.get();

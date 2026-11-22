@@ -5,8 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use opencode_local::cli_config::{Info, Session, Verbosity};
+use opencode_local::cli_config::{Grouping, Info, Session, Verbosity};
 use opencode_tui::{Deps, Route};
+use opentui::widget::Widget;
 use serde_json::{Value, json};
 
 /// Serves the same messages for every session, newest page first, `limit` at a time, with a cursor that
@@ -93,15 +94,20 @@ struct Nav {
 deref_harness!(Nav);
 
 fn open(messages: Vec<Value>, info: Info) -> Nav {
-    let last = messages.len() / 2;
+    let last = format!("Answer {} three.", messages.len() / 2);
+    open_until(messages, info, &last, 25)
+}
+
+/// [`open`], `height` rows tall, waiting for `shown` instead of the last answer.
+fn open_until(messages: Vec<Value>, info: Info, shown: &str, height: u16) -> Nav {
     let older = Arc::new(AtomicUsize::new(0));
     let failing = Arc::new(AtomicBool::new(false));
     let fake = fake(messages, older.clone(), failing.clone());
     let deps =
         Deps { config: support::config(info), route: support::session_route("ses_n"), ..support::deps(Arc::new(fake)) };
-    // Keep a 15-row transcript viewport for the paging assertions.
-    let h = Nav { harness: support::mount(80, 25, deps), older, failing };
-    h.wait_for(&format!("Answer {last} three."));
+    // 25 rows keep a 15-row transcript viewport for the paging assertions.
+    let h = Nav { harness: support::mount(80, height, deps), older, failing };
+    h.wait_for(shown);
     h
 }
 
@@ -271,8 +277,10 @@ fn first_mounts_the_head_and_newer_rows_mount_on_the_way_down() {
     assert!(!screen.contains("Jump to latest"), "{screen}");
     h.press("ctrl+g");
     h.wait_for("┃  Question 1\n");
+    // Message navigation finds its target among the mounted rows, so it mounts no others (a deviation:
+    // `ensureAllRows` mounted every row first).
     let screen = settle(&h, h.dispatch("session.message.next"));
-    assert!(head_thumb > thumb(&screen), "head thumb {head_thumb}, full thumb {}:\n{screen}", thumb(&screen));
+    assert_eq!(thumb(&screen), head_thumb, "{screen}");
 }
 
 #[test]
@@ -520,4 +528,223 @@ fn home_and_end_navigate_a_subagent_transcript() {
     h.press("end");
     let screen = h.wait_for("Message 19");
     assert!(!screen.lines().any(|line| line.trim_end().ends_with("Message 0")), "{screen}");
+}
+
+// ─── The window ─────────────────────────────────────────────────────────────
+// A session long enough that paging through it mounts rows ahead of the view and drops them on the far side.
+
+const LONG: u64 = 120;
+
+/// A page is half the 15-row view: 7 or 8 rows, as the halves add up. Anything else is a jump.
+fn paged(before: &str, after: &str) -> bool {
+    shift(before, after).is_some_and(|moved| (7..=8).contains(&moved.abs()))
+}
+
+/// The height of the mounted rows: the transcript's scroll content, the tallest widget over its first line.
+fn mounted(h: &Nav) -> f32 {
+    std::iter::successors(h.app.app().widget_at(4, TOP as u16 + 1), |widget| widget.parent())
+        .map(|widget| widget.rect().height)
+        .fold(0.0, f32::max)
+}
+
+/// The question whose box is on the transcript's first row.
+fn top_question(screen: &str) -> Option<u64> {
+    screen.lines().nth(TOP + 1)?.trim_end().rsplit_once("Question ")?.1.parse().ok()
+}
+
+/// Presses `key` until the screen stops changing, and returns the last screen.
+fn page_to_end(h: &Nav, key: &str) -> String {
+    let mut screen = h.idle();
+    for _ in 0..2000 {
+        let next = h.press(key);
+        if next == screen {
+            return screen;
+        }
+        screen = next;
+    }
+    panic!("{key} never reached an end:\n{screen}")
+}
+
+#[test]
+fn paging_away_and_back_returns_to_the_same_rows() {
+    let h = open(turns(LONG), Info::default());
+    for (start, away, back) in [("end", "pageup", "pagedown"), ("ctrl+g", "pagedown", "pageup")] {
+        h.press(start);
+        h.wait_for(if start == "end" { "Answer 120 three." } else { "┃  Question 1\n" });
+        let from = h.idle();
+        for pages in [1, 9, 40, 130] {
+            for _ in 0..pages {
+                h.press(away);
+            }
+            for _ in 0..pages {
+                h.press(back);
+            }
+            let screen = h.idle();
+            assert_eq!(screen, from, "{pages} × {away}, then {back}:\n{from}\n=====\n{screen}");
+        }
+    }
+}
+
+#[test]
+fn paging_end_to_end_moves_a_page_at_a_time_over_a_bounded_window() {
+    let h = open(turns(LONG), Info::default());
+    h.press("ctrl+g");
+    h.wait_for("┃  Question 1\n");
+    let (mut widest, mut travelled) = (0.0_f32, 0);
+    for (key, edge) in [("pagedown", "Answer 120 three."), ("pageup", "┃  Question 1\n")] {
+        let mut before = h.idle();
+        let mut jumps = Vec::new();
+        for step in 0.. {
+            assert!(step < 2000, "{key} never reached an end");
+            let after = h.press(key);
+            widest = widest.max(mounted(&h));
+            if after == before {
+                break;
+            }
+            if !paged(&before, &after) {
+                jumps.push(format!("{before}\n=====\n{after}"));
+            }
+            travelled += 1;
+            before = after;
+        }
+        assert!(before.contains(edge), "{key} stopped short:\n{before}");
+        // The last move stops at the edge, so it may be shorter.
+        assert!(jumps.len() <= 1, "{key} jumped {} times; the first:\n{}", jumps.len(), jumps[0]);
+    }
+    // Both ways cover the transcript twice, at 7.5 rows a page.
+    let height = travelled as f32 * 7.5 / 2.0;
+    assert!(widest < height / 2.0, "{widest} rows mounted at once, of about {height}");
+}
+
+#[test]
+fn a_streaming_reply_keeps_the_readers_rows_and_is_followed_at_the_bottom() {
+    let mut messages = turns(LONG);
+    messages.push(user("msg_livea", 9_000_000, "Question live"));
+    messages.push(json!({
+        "id": "msg_liveb", "type": "assistant", "agent": "build",
+        "model": { "providerID": "provider", "id": "model" },
+        "time": { "created": 9_001_000 }, "content": [],
+    }));
+    let h = open_until(messages, Info::default(), "Question live", 25);
+    let seq = std::cell::Cell::new(0);
+    let stream = |kind: &str, data: Value| {
+        seq.set(seq.get() + 1);
+        let ids = json!({ "sessionID": "ses_n", "assistantMessageID": "msg_liveb", "ordinal": 0 });
+        h.tui.data.apply(vec![support::event("ses_n", kind, seq.get(), support::merge(ids, data))]);
+    };
+    let line = |n: usize| stream("session.text.delta", json!({ "delta": format!("Streamed line {n}.\n\n") }));
+    stream("session.text.started", json!({}));
+    for n in 1..=5 {
+        line(n);
+        let screen = h.wait_for(&format!("Streamed line {n}."));
+        assert!(!screen.contains("Jump to latest"), "{screen}");
+    }
+    // Away from the bottom, far enough that rows drop below the view, what streams moves nothing on screen.
+    let mut before = h.idle();
+    for n in 6..90 {
+        let after = h.press("pageup");
+        assert!(paged(&before, &after), "{before}\n=====\n{after}");
+        line(n);
+        let screen = h.idle();
+        assert_eq!(screen, after, "line {n} moved the reader:\n{after}\n=====\n{screen}");
+        before = after;
+    }
+    h.press("end");
+    h.wait_for("Streamed line 89.");
+    line(90);
+    let screen = h.wait_for("Streamed line 90.");
+    assert!(!screen.contains("Jump to latest"), "{screen}");
+}
+
+#[test]
+fn jumps_land_on_their_target_wherever_the_window_is() {
+    let h = open(turns(LONG), Info::default());
+    // From the head, the last user message (a jump by ID) aligns with the top.
+    h.press("ctrl+g");
+    h.wait_for("┃  Question 1\n");
+    let screen = settle(&h, h.press("alt+end"));
+    assert_eq!(top_question(&screen), Some(LONG), "{screen}");
+    // From the tail, Home shows the head again.
+    h.press("end");
+    h.wait_for("Answer 120 three.");
+    h.press("ctrl+g");
+    let screen = h.wait_for("┃  Question 1\n");
+    assert_eq!(Nav::row(&screen, "Question 1"), Some(TOP + 2), "{screen}");
+    // Far below the head, stepping by user message lands each question on top in turn, back to the first.
+    for _ in 0..150 {
+        h.press("pagedown");
+    }
+    let screen = settle(&h, h.dispatch("session.message.user.previous"));
+    let mut question = top_question(&screen).unwrap_or_else(|| panic!("no question on top:\n{screen}"));
+    assert!(question > 60, "{screen}");
+    while question > 1 {
+        let screen = settle(&h, h.dispatch("session.message.user.previous"));
+        question -= 1;
+        assert_eq!(top_question(&screen), Some(question), "{screen}");
+    }
+    for question in 2..=12 {
+        let screen = settle(&h, h.dispatch("session.message.user.next"));
+        assert_eq!(top_question(&screen), Some(question), "{screen}");
+    }
+}
+
+#[test]
+fn what_the_reader_opened_is_open_when_its_rows_come_back() {
+    let mut messages = turns(LONG);
+    let output: Vec<String> = (1..=20).map(|line| format!("line {line}")).collect();
+    messages[1]["content"] = json!([
+        {
+            "type": "tool", "id": "call_missing", "name": "read",
+            "state": { "status": "error", "input": { "path": "src/c.rs" }, "error": { "type": "unknown", "message": "No such file" } },
+            "time": { "created": 1, "completed": 2 },
+        },
+        { "type": "reasoning", "text": "Weighing the parser.\n\nIt stops early.", "time": { "created": 1, "completed": 2 } },
+        {
+            "type": "tool", "id": "call_shell", "name": "shell",
+            "state": { "status": "completed", "input": { "command": "seq 20" }, "content": [{ "type": "text", "text": output.join("\n") }] },
+            "time": { "created": 1, "completed": 2 },
+        },
+        read("call_1a", "src/a.rs"),
+        { "type": "text", "text": "Answer 1 one.\n\nAnswer 1 two.\n\nAnswer 1 three." },
+    ]);
+    // Groups keep their state in the session's settings; ungrouped, each row keeps its own.
+    let session = Session { grouping: Some(Grouping::None), verbosity: Some(Verbosity::Medium), ..Session::default() };
+    let ungrouped = Info { session: Some(session), ..Info::default() };
+    let h = open_until(messages, ungrouped, "Answer 120 three.", 60);
+    h.press("ctrl+g");
+    let closed = h.wait_for("┃  Question 1\n");
+    for (shown, opened) in [("src/c.rs", "No such file"), ("Thought", "It stops early."), ("$ seq 20", "line 1\n")] {
+        h.idle();
+        let (x, y) = h.find(shown);
+        h.app.click(x + 1, y);
+        h.wait_for(opened);
+    }
+    let open = h.idle();
+    assert_ne!(open, closed);
+    page_to_end(&h, "pagedown");
+    let screen = page_to_end(&h, "pageup");
+    assert_eq!(screen, open, "{open}\n=====\n{screen}");
+}
+
+#[test]
+fn a_selection_keeps_its_rows_while_the_wheel_moves_away_and_back() {
+    let h = open(turns(LONG), Info::default());
+    h.press("ctrl+g");
+    let screen = h.wait_for("┃  Question 1\n");
+    let (x, from) = position(&screen, "Answer 1 one.");
+    let (_, to) = position(&screen, "Answer 1 three.");
+    h.app.drag((x as u16, from as u16), (x as u16 + 15, to as u16));
+    let selected = h.app.app().selected_text();
+    assert!(selected.as_deref().is_some_and(|text| text.contains("Answer 1 two.")), "{selected:?}");
+    for down in [true, false] {
+        for _ in 0..200 {
+            h.app.scroll(10, 8, down);
+            h.app.advance(Duration::from_millis(1));
+            h.idle();
+        }
+        assert_eq!(h.app.app().selected_text(), selected, "after the wheel went {}", if down { "down" } else { "up" });
+    }
+    // Below the toast that copying on select raises.
+    let rows = |screen: &str| screen.lines().skip(TOP + 3).map(str::to_owned).collect::<Vec<_>>();
+    assert_eq!(rows(&h.idle()), rows(&screen));
 }
