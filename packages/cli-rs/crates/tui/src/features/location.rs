@@ -119,13 +119,21 @@ fn sync(tui: &Tui, location: Option<Location>) {
     let target = tui.data.read(|state| (*state.default_location() != location).then(|| location.clone()));
     tui.location.error.borrow_mut().take();
     let remote = tui.data.remote();
+    // The first try's read begins now; a retry's, on this thread once its delay ends.
+    let mut first = Some(tui.data.location_sync_info(target.as_ref()));
     tui.app.spawn(
         async move {
             let mut tries = 0;
             loop {
                 let read = async {
-                    let info = target.clone();
-                    remote.call(move |data| data.location_sync_info(info.as_ref())).await?.await?;
+                    let info = match first.take() {
+                        Some(info) => info,
+                        None => {
+                            let target = target.clone();
+                            remote.call(move |data| data.location_sync_info(target.as_ref())).await?
+                        }
+                    };
+                    info.await?;
                     let target = target.clone();
                     let (sync, config) = remote
                         .call(move |data| {

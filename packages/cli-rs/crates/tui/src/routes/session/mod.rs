@@ -34,7 +34,7 @@ pub struct Session {
     form: form::SessionForms,
     location: crate::routes::location_missing::LocationMissing,
     prompt: crate::prompt::editor::Prompt,
-    /// The grammars of the first page are still to prewarm.
+    /// The grammars of the first page are still to prewarm, once its read settles.
     prewarm: Cell<bool>,
 }
 
@@ -151,7 +151,7 @@ impl RouteView for Session {
         if changes.has(&self.id, Touched::INFO) {
             crate::features::location::session(tui, &self.id);
         }
-        if self.prewarm.get() && tui.data.read(|state| state.transcript(&self.id).is_some()) {
+        if self.prewarm.get() && tui.data.read(|state| state.messages_read(&self.id)) {
             self.prewarm.set(false);
             prewarm(tui, &self.id);
         }

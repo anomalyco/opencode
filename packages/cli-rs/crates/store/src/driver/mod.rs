@@ -16,7 +16,7 @@ use opencode_api::generated::{EventKind, SessionInboxCompaction, V2Event};
 use opencode_api::kinds::EventKinds;
 use opencode_util::lock;
 use tokio::runtime::Handle;
-use tokio::sync::{Notify, Semaphore, oneshot};
+use tokio::sync::{Notify, Semaphore, TryAcquireError, oneshot};
 use tokio::task::AbortHandle;
 
 use crate::changes::Dirty;
@@ -561,6 +561,16 @@ pub(crate) enum Mail {
     Run(Box<dyn FnOnce(&Data) + Send>),
 }
 
+impl Mail {
+    /// The events it carries.
+    pub(crate) fn events(&self) -> usize {
+        match self {
+            Mail::Batch(events, _) => events.len(),
+            _ => 0,
+        }
+    }
+}
+
 impl Remote {
     pub fn client(&self) -> &Client {
         &self.0.client
@@ -574,8 +584,32 @@ impl Remote {
     pub(crate) async fn send(&self, mail: Mail) -> bool {
         let Ok(permit) = self.0.room.acquire().await else { return false };
         permit.forget();
+        self.push(mail)
+    }
+
+    /// [`Remote::send`] when there is room now; else the mail comes back, or nothing once the store is gone.
+    pub(crate) fn try_send(&self, mail: Mail) -> Result<(), Option<Mail>> {
+        match self.0.room.try_acquire() {
+            Ok(permit) => permit.forget(),
+            Err(TryAcquireError::NoPermits) => return Err(Some(mail)),
+            Err(TryAcquireError::Closed) => return Err(None),
+        }
+        if self.push(mail) { Ok(()) } else { Err(None) }
+    }
+
+    /// Waits until the mailbox has room; false once the store is gone.
+    pub(crate) async fn room(&self) -> bool {
+        self.0.room.acquire().await.is_ok()
+    }
+
+    /// Queues `mail`, which has its place, and wakes the owner if it is not awake; false once the store is gone.
+    fn push(&self, mail: Mail) -> bool {
         let wake = {
             let mut queue = lock(&self.0.queue);
+            // Checked under the lock `close` takes the mail under, so no mail stays in a closed mailbox.
+            if self.0.room.is_closed() {
+                return false;
+            }
             queue.mail.push_back(mail);
             !std::mem::replace(&mut queue.woken, true)
         };
@@ -597,6 +631,9 @@ impl Remote {
                     let mut wait = Duration::from_millis(1);
                     loop {
                         tokio::time::sleep(wait).await;
+                        if remote.0.room.is_closed() {
+                            return;
+                        }
                         match (remote.0.wake)() {
                             Ok(()) => return,
                             Err(Unwoken::Gone) => return remote.close(),
@@ -614,8 +651,11 @@ impl Remote {
         if self.0.room.is_closed() {
             return;
         }
-        self.0.room.close();
-        let mail = std::mem::take(&mut lock(&self.0.queue).mail);
+        let mail = {
+            let mut queue = lock(&self.0.queue);
+            self.0.room.close();
+            std::mem::take(&mut queue.mail)
+        };
         drop(mail);
         let _ = (self.0.wake)();
     }
@@ -720,7 +760,8 @@ pub struct DeltaListening {
 
 impl DeltaListening {
     /// Calls `f` with the streaming deltas the store applied since this listener last took them, or since it started,
-    /// oldest first.
+    /// oldest first. `f` may start or end listeners. It must not take again, or apply a batch: either panics, as the
+    /// deltas are lent to it.
     pub fn take<R>(&self, f: impl FnOnce(&[V2Event]) -> R) -> R {
         let Some(inner) = self.inner.upgrade() else { return f(&[]) };
         let deltas = &inner.deltas;
