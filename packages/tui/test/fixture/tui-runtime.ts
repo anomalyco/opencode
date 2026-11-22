@@ -15,8 +15,9 @@ export function createTuiResolvedConfig(input: ResolvedInput = {}) {
       ...input,
       experimental: { "new-designs": false, ...input.experimental },
       theme: { name: "opencode-classic", ...input.theme },
-      // Existing tests were written against the upstream appearance; fork visuals opt in explicitly.
-      ui: { style: "opencode", ...input.ui },
+      // Existing tests were written against the upstream appearance and exact theme colors; fork visuals and
+      // the 256-color fallback opt in explicitly.
+      ui: { style: "opencode", color_depth: "truecolor", ...input.ui },
     },
     { terminalSuspend: process.platform !== "win32", environment: {} },
   )
