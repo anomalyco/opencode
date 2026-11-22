@@ -5988,6 +5988,8 @@ VoiceTransportType {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct VoiceModel {
     pub model: String,
+    pub name: String,
+    pub engine: String,
     pub provider: String,
     pub transports: Vec<VoiceTransportType>,
     pub available: bool,
@@ -12607,8 +12609,6 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub console_watches: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mcp_events: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recommended_api: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
