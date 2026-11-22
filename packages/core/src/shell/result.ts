@@ -4,23 +4,20 @@ import os from "os"
 import type { Shell } from "@opencode/schema/shell"
 import { BackgroundResult } from "../session/background-result.js"
 
+// Truncation facts, set only when `truncated`: where the full output lives and which window was shown.
+type Truncation = {
+  outputPath?: string
+  totalBytes?: number
+  shownBytes?: number
+  totalLines?: number
+  startLine?: number
+  endLine?: number
+}
+
 export type Result = {
   info: Shell.Info
   // `killed` says why a command was killed when no exit code or signal of its own tells, e.g. the process daemon stopped.
-  capture:
-    | {
-        output: string
-        truncated: boolean
-        killed?: string
-        // Truncation facts, set only when `truncated`: where the full output lives and which window was shown.
-        outputPath?: string
-        totalBytes?: number
-        shownBytes?: number
-        totalLines?: number
-        startLine?: number
-        endLine?: number
-      }
-    | undefined
+  capture: ({ output: string; truncated: boolean; killed?: string } & Truncation) | undefined
 }
 
 type Output = {
@@ -30,13 +27,7 @@ type Output = {
   signal?: string
   timeout?: boolean
   killed?: string
-  outputPath?: string
-  totalBytes?: number
-  shownBytes?: number
-  totalLines?: number
-  startLine?: number
-  endLine?: number
-}
+} & Truncation
 
 const missing = "Shell command output is no longer available."
 export const unavailable: Shell.Output = {
@@ -47,19 +38,15 @@ export const unavailable: Shell.Output = {
 }
 
 export function output(result: Result): Output {
+  const { output, truncated, killed, ...truncation } = result.capture ?? {}
   return {
-    output: result.capture?.output ?? unavailable.output,
-    truncated: result.capture?.truncated ?? false,
+    output: output ?? unavailable.output,
+    truncated: truncated ?? false,
     ...(result.info.exit !== undefined ? { exit: result.info.exit } : {}),
     ...(result.info.signal !== undefined ? { signal: result.info.signal } : {}),
     ...(result.info.status === "timeout" ? { timeout: true } : {}),
-    ...(result.capture?.killed !== undefined ? { killed: result.capture.killed } : {}),
-    ...(result.capture?.outputPath !== undefined ? { outputPath: result.capture.outputPath } : {}),
-    ...(result.capture?.totalBytes !== undefined ? { totalBytes: result.capture.totalBytes } : {}),
-    ...(result.capture?.shownBytes !== undefined ? { shownBytes: result.capture.shownBytes } : {}),
-    ...(result.capture?.totalLines !== undefined ? { totalLines: result.capture.totalLines } : {}),
-    ...(result.capture?.startLine !== undefined ? { startLine: result.capture.startLine } : {}),
-    ...(result.capture?.endLine !== undefined ? { endLine: result.capture.endLine } : {}),
+    ...(killed !== undefined ? { killed } : {}),
+    ...truncation,
   }
 }
 
@@ -96,18 +83,14 @@ function exitCode(output: Pick<Output, "exit" | "signal">) {
 }
 
 export function metadata(output: Output) {
+  const { output: _output, truncated, exit, signal, timeout, killed, ...truncation } = output
   return {
-    truncated: output.truncated,
-    ...(output.exit !== undefined ? { exit: output.exit } : {}),
-    ...(output.signal !== undefined ? { signal: output.signal } : {}),
-    ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
-    ...(output.killed !== undefined ? { killed: true } : {}),
-    ...(output.outputPath !== undefined ? { outputPath: output.outputPath } : {}),
-    ...(output.totalBytes !== undefined ? { totalBytes: output.totalBytes } : {}),
-    ...(output.shownBytes !== undefined ? { shownBytes: output.shownBytes } : {}),
-    ...(output.totalLines !== undefined ? { totalLines: output.totalLines } : {}),
-    ...(output.startLine !== undefined ? { startLine: output.startLine } : {}),
-    ...(output.endLine !== undefined ? { endLine: output.endLine } : {}),
+    truncated,
+    ...(exit !== undefined ? { exit } : {}),
+    ...(signal !== undefined ? { signal } : {}),
+    ...(timeout !== undefined ? { timeout } : {}),
+    ...(killed !== undefined ? { killed: true } : {}),
+    ...truncation,
   }
 }
 
