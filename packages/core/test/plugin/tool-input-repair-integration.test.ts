@@ -159,6 +159,20 @@ it.effect("runs a call to another harness's tool name as the matching tool and s
       call: { type: "tool-call", id: "call-shell", name: "shell", input: { command: "pwd" } },
     })
     expect(direct.content).toEqual([{ type: "text", text: "done" }])
+
+    // A call rejected before it runs leaves no note behind for a later call with the same ID.
+    yield* snapshot
+      .execute({
+        ...identity,
+        call: { type: "tool-call", id: "call-reused", name: "bash", input: { command: "ls" } },
+        definitions: new Map(),
+      })
+      .pipe(Effect.flip)
+    const reused = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-reused", name: "shell", input: { command: "pwd" } },
+    })
+    expect(reused.content).toEqual([{ type: "text", text: "done" }])
   }),
 )
 

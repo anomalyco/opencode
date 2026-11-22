@@ -4,6 +4,7 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, JsonSchema, Option, Predicate, Schema } from "effect"
 import { toolExpression } from "@opencode/codemode"
+import { isRecord } from "@opencode/util/record"
 import { CodeModeTool } from "../codemode/tool.js"
 import { definition, normalizeContent } from "../tool/runtime.js"
 
@@ -26,16 +27,15 @@ const aliases = new Map([
   ["bash", "shell"],
   ["Bash", "shell"],
 ])
-// Calls still waiting for their result. A call that fails before it runs never reaches execute.after, so keep few.
-const PENDING_LIMIT = 100
 
 export const Plugin = define({
   id: "opencode.tool.input.repair",
   effect: (ctx) =>
     Effect.gen(function* () {
-      // Calls run under another tool or inside Code Mode, so the result can say how to call it next time.
-      const pending = new Map<
-        string,
+      // Calls run under another tool or inside Code Mode, so the result can say how to call it next time. Keyed by the
+      // call's own copy of its input, which execute.after receives, so a call that never runs leaves nothing behind.
+      const notes = new WeakMap<
+        object,
         { readonly called: string; readonly tool: string; readonly expression: string; readonly aliased: boolean }
       >()
       yield* ctx.tool.hook("execute.before", (event) =>
@@ -51,26 +51,25 @@ export const Plugin = define({
             aliased ?? tools.find((tool) => tool.id === event.tool || CodeModeTool.qualifiedName(tool) === event.tool)
           const tool = event.info ?? target
           if (!tool) return
-          if (target) {
-            if (pending.size >= PENDING_LIMIT) pending.delete(pending.keys().next().value!)
-            pending.set(event.id, {
-              called: event.tool,
-              tool: target.id,
-              expression: toolExpression(CodeModeTool.qualifiedName(target)),
-              aliased: aliased !== undefined,
-            })
-          }
+          const called = event.tool
           if (aliased) event.tool = aliased.id
           const schema = definition(tool, event.codemode).inputSchema
-          if (schema.type !== "object") return
-          event.input = repair(event.input, schema, schema, 0)
+          if (schema.type === "object") event.input = repair(event.input, schema, schema, 0)
+          if (!target || !isRecord(event.input)) return
+          const input = { ...event.input }
+          event.input = input
+          notes.set(input, {
+            called,
+            tool: target.id,
+            expression: toolExpression(CodeModeTool.qualifiedName(target)),
+            aliased: aliased !== undefined,
+          })
         }),
       )
       yield* ctx.tool.hook("execute.after", (event) =>
         Effect.sync(() => {
-          const call = pending.get(event.id)
+          const call = isRecord(event.input) ? notes.get(event.input) : undefined
           if (call === undefined) return
-          pending.delete(event.id)
           const inProgram = event.codemode
           if (!inProgram && !call.aliased) return
           const note = `<tool-repair>\n${
