@@ -42,7 +42,7 @@ export const dict = {
   "ui.sessionReview.image.placeholder": "Зображення",
   "ui.sessionReview.largeDiff.title": "Завеликий diff для відображення",
   "ui.sessionReview.largeDiff.meta": "Ліміт: {{limit}} змінених рядків. Зараз: {{current}} змінених рядків.",
-  "ui.sessionReview.largeDiff.renderAnyway": "Все одно відобразити",
+  "ui.sessionReview.largeDiff.renderAnyway": "Усе одно відобразити",
   "ui.sessionReviewV2.expandMode": "Розгорнути або згорнути diff",
   "ui.sessionReviewV2.filterFiles": "Фільтрувати файли",
   "ui.sessionReviewV2.toggleSidebar": "Перемкнути дерево файлів",
