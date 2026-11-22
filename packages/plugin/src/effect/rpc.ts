@@ -10,9 +10,9 @@ export interface RpcCallContext<M extends Rpc.Method> {
 
 export type RpcHandlers<D extends Rpc.Definition> = {
   readonly [Name in keyof D["methods"]]: (
-    input: Rpc.Output<D["methods"][Name]["input"]>,
+    input: Rpc.Output<Rpc.InputSchema<D["methods"][Name]>>,
     context: RpcCallContext<D["methods"][Name]>,
-  ) => Effect.Effect<Rpc.HandlerOutput<D["methods"][Name]["output"]>, Rpc.HandlerError<D["methods"][Name]>>
+  ) => Effect.Effect<Rpc.HandlerOutput<Rpc.OutputSchema<D["methods"][Name]>>, Rpc.HandlerError<D["methods"][Name]>>
 }
 
 export interface RpcRegistration<D extends Rpc.Definition> extends Registration {

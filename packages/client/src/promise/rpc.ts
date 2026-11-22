@@ -17,8 +17,8 @@ export type RpcArguments<Input, Options> = unknown extends Input
 
 export type RpcClient<D extends Rpc.PortableDefinition, Options = RpcCallOptions> = {
   readonly [Name in keyof D["methods"]]: (
-    ...args: RpcArguments<Rpc.Input<D["methods"][Name]["input"]>, Options>
-  ) => Promise<Rpc.Output<D["methods"][Name]["output"]>>
+    ...args: RpcArguments<Rpc.Input<Rpc.InputSchema<D["methods"][Name]>>, Options>
+  ) => Promise<Rpc.Output<Rpc.OutputSchema<D["methods"][Name]>>>
 } & {
   readonly events: {
     readonly subscribe: <Name extends keyof D["events"] & string>(

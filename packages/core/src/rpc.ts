@@ -114,7 +114,8 @@ const layer = Layer.effect(
         return yield* Effect.fail(failure("rpc.method_not_found", `Unknown RPC method: ${rpcID}.${name}`))
       const method = entry.definition.methods[name]
       const handler = entry.handlers[name]
-      const parsed = yield* parse(method.input, input).pipe(
+      // A method without an input schema takes no argument, so anything sent is ignored.
+      const parsed = yield* (method.input ? parse(method.input, input) : Effect.void).pipe(
         Effect.mapError((error) => failure("rpc.invalid_input", errorMessage(error, "Invalid RPC input"))),
       )
       const result = yield* Effect.suspend(() => {
@@ -136,6 +137,7 @@ const layer = Layer.effect(
           ),
         ),
       )
+      if (!method.output) return undefined
       return yield* encode(method.output, result).pipe(
         Effect.mapError((error) => failure("rpc.invalid_output", errorMessage(error, "Invalid RPC output"))),
       )
@@ -261,7 +263,7 @@ function isStandardSchema(schema: Tool.ValueSchema): schema is Extract<Tool.Valu
   return "~standard" in schema
 }
 
-function read(schema: Tool.ValueSchema, value: unknown): Effect.Effect<unknown, unknown> {
+function read(schema: Tool.ValueSchema | undefined, value: unknown): Effect.Effect<unknown, unknown> {
   // Standard Schema results were already parsed by the publisher; don't apply transforms twice.
   return Schema.isSchema(schema) ? Schema.decodeUnknownEffect(schema)(value) : Effect.succeed(value)
 }

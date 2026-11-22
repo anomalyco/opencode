@@ -18,10 +18,10 @@ export type RpcClient<
   EventError = E,
 > = {
   readonly [Name in keyof D["methods"]]: (
-    ...args: RpcArguments<Rpc.Input<D["methods"][Name]["input"]>, Options>
+    ...args: RpcArguments<Rpc.Input<Rpc.InputSchema<D["methods"][Name]>>, Options>
   ) => Effect.Effect<
-    Rpc.Output<D["methods"][Name]["output"]>,
-    Rpc.MethodError<D["methods"][Name]> | DecodeError<D["methods"][Name]["output"]> | E
+    Rpc.Output<Rpc.OutputSchema<D["methods"][Name]>>,
+    Rpc.MethodError<D["methods"][Name]> | DecodeError<Rpc.OutputSchema<D["methods"][Name]>> | E
   >
 } & {
   readonly events: {
