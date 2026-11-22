@@ -299,12 +299,13 @@ const themeContext = createSimpleContext({
     const has = (name: string) => Boolean(name) && available()[alias(name)] !== undefined
 
     const initStarted = performance.now()
+    // Terminal color capability is resolved once at startup. Re-resolving it while the session runs would rebuild
+    // every surface from a transient, partially styled frame; a terminal that changes capability needs a restart.
+    const transform = colorTransform(config.ui.color_depth, config.ui.mono)
     const selected = createMemo(() => {
       const sources = available()
       const active = alias(store.active)
       const name = sources[active] ? active : "opencode"
-      // Reading the resolved settings here keeps a live config edit (depth, mono) on the hot-reload path.
-      const transform = colorTransform(config.ui.color_depth, config.ui.mono)
       try {
         return loadTheme(sources[name], name, store.mode, newDesigns(), transform)
       } catch (error) {
