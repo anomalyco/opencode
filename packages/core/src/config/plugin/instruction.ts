@@ -162,7 +162,7 @@ export const Plugin = define({
           const sources = Array.from(
             new Set(entries.flatMap((entry) => (entry.type === "document" ? (entry.info.instructions ?? []) : []))),
           )
-          if (isDeepStrictEqual(configured.sources, sources)) return false
+          if (isDeepStrictEqual(configured.sources, sources)) return
           const fetched = yield* Effect.forEach(
             sources.filter(isUrl),
             (url) =>
@@ -183,7 +183,6 @@ export const Plugin = define({
           configured.remote = new Map(
             fetched.filter((file) => file !== undefined).map((file) => [file.path, file] as const),
           )
-          return true
         },
         (effect) => lock.withPermit(effect),
       )
@@ -227,12 +226,9 @@ export const Plugin = define({
         Effect.forkScoped({ startImmediately: true }),
       )
       // Subscribe before the first config read so an update in between still triggers a reload.
+      // Unchanged patterns can acquire new matches or point through a retargeted symlink.
       yield* ctx.event.subscribe({ types: ["config.updated"] }).pipe(
-        Stream.runForEach(() =>
-          reconfigure().pipe(
-            Effect.flatMap((changed) => (changed ? refresh().pipe(Effect.andThen(discovery.reload())) : Effect.void)),
-          ),
-        ),
+        Stream.runForEach(() => reconfigure().pipe(Effect.andThen(refresh()), Effect.andThen(discovery.reload()))),
         Effect.forkScoped({ startImmediately: true }),
       )
       yield* reconfigure()

@@ -6,7 +6,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import path from "path"
 import { isDeepStrictEqual } from "node:util"
-import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
+import { Effect, FiberMap, Option, PubSub, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { Location } from "../../location.js"
@@ -27,8 +27,8 @@ export const Plugin = define({
     const global = yield* Global.Service
     const location = yield* Location.Service
     const watcher = yield* Watcher.Service
-    const loaded: { entries: Entry[]; skills: Skill.Info[] } = {
-      entries: yield* config.entries(),
+    const loaded: { sources: Source[]; skills: Skill.Info[] } = {
+      sources: resolve(yield* config.entries()),
       skills: [],
     }
     const watches = yield* FiberMap.make<string>()
@@ -38,11 +38,19 @@ export const Plugin = define({
 
     const watch = Effect.fn("ConfigSkillPlugin.watch")(function* (directory: string, type: "file" | "directory") {
       const target = path.resolve(directory)
-      const key = `${type}:${target}`
+      // File watches attach to their parent, not the file inode (which changes on ordinary editor saves).
+      const identity = yield* fs.stat(type === "file" ? path.dirname(target) : target).pipe(
+        Effect.map((info) => Option.getOrUndefined(Option.map(info.ino, (ino) => `${info.dev}:${ino}`))),
+        Effect.orElseSucceed(() => undefined),
+      )
+      const key = JSON.stringify([type, target, identity])
       wanted.add(key)
-      if (FiberMap.hasUnsafe(watches, key)) return
+      if (identity !== undefined && FiberMap.hasUnsafe(watches, key)) return key
+      yield* FiberMap.remove(watches, key)
       const updates = yield* watcher.subscribe(
-        type === "directory" ? { path: target, type, ignore: SkillScan.ignore } : { path: target, type },
+        type === "directory"
+          ? { path: target, type, ignore: SkillScan.ignore, identity }
+          : { path: target, type, identity },
       )
       yield* FiberMap.run(
         watches,
@@ -50,6 +58,7 @@ export const Plugin = define({
         updates.pipe(Stream.runForEach((update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid))),
         { onlyIfMissing: true, startImmediately: true },
       )
+      return key
     })
 
     function firstMissing(target: string): Effect.Effect<string | undefined> {
@@ -69,27 +78,30 @@ export const Plugin = define({
         return resolved === target ? [target] : [target, resolved]
       }
       const missing = yield* firstMissing(target)
-      if (missing) yield* watch(missing, "file")
+      const pending = missing ? yield* watch(missing, "file") : undefined
       if (
         yield* fs.realPath(directory).pipe(
           Effect.as(true),
           Effect.orElseSucceed(() => false),
         )
       ) {
-        if (missing) yield* FiberMap.remove(watches, `file:${path.resolve(missing)}`)
+        if (pending) {
+          wanted.delete(pending)
+          yield* FiberMap.remove(watches, pending)
+        }
         return yield* watchDirectory(directory)
       }
       return [target]
     })
 
-    const sources = () => {
+    function resolve(entries: Entry[]) {
       const result: Source[] = []
       const add = (source: Source) => {
         if (result.some((item) => Skill.Source.equals(item, source))) return
         result.push(source)
       }
-      const directories = loaded.entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
-      const items = loaded.entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
+      const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
+      const items = entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
       for (const directory of directories) {
         add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }))
         add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }))
@@ -155,7 +167,7 @@ export const Plugin = define({
       function* (file?: string) {
         wanted.clear()
         const skills = new Map<Skill.ID, Skill.Info>()
-        const current = sources()
+        const current = loaded.sources
         for (const source of current) {
           for (const skill of yield* load(source)) skills.set(skill.id, skill)
         }
@@ -187,9 +199,9 @@ export const Plugin = define({
     yield* ctx.event.subscribe({ types: ["config.updated"] }).pipe(
       Stream.runForEach(() =>
         Effect.gen(function* () {
-          const previous = sources()
-          loaded.entries = yield* config.entries()
-          if (isDeepStrictEqual(previous, sources())) return
+          const sources = resolve(yield* config.entries())
+          if (isDeepStrictEqual(loaded.sources, sources)) return
+          loaded.sources = sources
           yield* refresh()
           yield* ctx.skill.reload()
         }),

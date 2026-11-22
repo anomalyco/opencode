@@ -404,6 +404,101 @@ describe("ConfigSkillPlugin.Plugin", () => {
     ),
   )
 
+  for (const external of [false, true]) {
+    it.effect(`reattaches ${external ? "external file parent" : "source directory"} watches after replacement`, () =>
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const source = path.join(tmp.path, "source")
+            const directory = external ? path.join(tmp.path, "external") : source
+            const replaced = external ? path.join(directory, "probe") : directory
+            const file = path.join(directory, "probe", "SKILL.md")
+            yield* Effect.promise(async () => {
+              await fs.mkdir(path.join(directory, "probe"), { recursive: true })
+              await write(directory, "probe", "Initial")
+              if (!external) return
+              await fs.mkdir(source)
+              await fs.symlink(
+                replaced,
+                path.join(source, "probe"),
+                process.platform === "win32" ? "junction" : undefined,
+              )
+            })
+            const handles: Array<{
+              input: Parameters<Watcher.NativeInterface["subscribe"]>[0]
+              dev: bigint
+              ino: bigint
+              active: boolean
+            }> = []
+            // Model native handles bound to directory inodes, rather than path-only test delivery.
+            const native = Watcher.Native.of({
+              subscribe: (input) =>
+                Effect.promise(async () => {
+                  const info = await fs.stat(input.type === "file" ? path.dirname(input.target) : input.target, {
+                    bigint: true,
+                  })
+                  const handle = { input, dev: info.dev, ino: info.ino, active: true }
+                  handles.push(handle)
+                  return {
+                    unsubscribe: async () => {
+                      handle.active = false
+                    },
+                  }
+                }),
+            })
+            const emit = Effect.promise(async () => {
+              for (const handle of handles) {
+                if (!handle.active) continue
+                const input = handle.input
+                if (input.type === "file" ? input.target !== file : !file.startsWith(input.target + path.sep)) continue
+                const info = await fs.stat(input.type === "file" ? path.dirname(input.target) : input.target, {
+                  bigint: true,
+                })
+                if (handle.dev === info.dev && handle.ino === info.ino) input.publish({ type: "update", path: file })
+              }
+            })
+            yield* Effect.gen(function* () {
+              const skill = yield* start([source], tmp.path)
+              const watcher = yield* Watcher.Service
+              const target = external ? file : directory
+              const original = handles.find((handle) => handle.input.target === target)
+              if (!original) throw new Error("missing initial native watch")
+              // Another Location keeps the old native handle alive while this one reconciles.
+              const retained = yield* watcher.subscribe(
+                external
+                  ? { path: target, type: "file", identity: original.input.identity }
+                  : { path: target, type: "directory", ignore: SkillScan.ignore, identity: original.input.identity },
+              )
+              yield* retained.pipe(Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+              const bus = yield* Bus.Service
+              let updates = 0
+              yield* bus.subscribe(Skill.Event.Updated).pipe(
+                Stream.runForEach(() => Effect.sync(() => updates++)),
+                Effect.forkScoped({ startImmediately: true }),
+              )
+              original.input.publish({ type: "delete", path: target })
+              yield* Effect.promise(async () => {
+                await fs.rename(replaced, replaced + "-old")
+                await fs.mkdir(path.dirname(file), { recursive: true })
+                await write(directory, "probe", "Replacement")
+              })
+              yield* advance(() => updates === 1)
+              expect((yield* skill.list())[0]?.description).toBe("Replacement")
+              expect(handles.filter((handle) => handle.input.target === target)).toHaveLength(2)
+              expect(original.active).toBe(true)
+              const count = handles.length
+              yield* Effect.promise(() => write(directory, "probe", "Subsequent edit"))
+              yield* emit
+              yield* advance(() => updates === 2)
+              expect((yield* skill.list())[0]?.description).toBe("Subsequent edit")
+              expect(handles.length).toBe(count)
+            }).pipe(Effect.provide(Watcher.layer().pipe(Layer.provide(Layer.succeed(Watcher.Native, native)))))
+          }),
+        ),
+      ),
+    )
+  }
+
   it.live("follows missing source directories as their parents appear", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>

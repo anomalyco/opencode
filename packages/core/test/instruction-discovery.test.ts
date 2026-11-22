@@ -439,6 +439,89 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     ),
   )
 
+  it.effect("rescans unchanged instruction patterns for new files and retargeted symlinks", () =>
+    tmpdirScoped().pipe(
+      Effect.flatMap((tmp) => {
+        const docs = path.join(tmp.path, "docs")
+        const first = path.join(docs, "first.md")
+        const second = path.join(docs, "second.md")
+        const missing = path.join(tmp.path, "missing.md")
+        const before = path.join(tmp.path, "before")
+        const after = path.join(tmp.path, "after")
+        const alias = path.join(tmp.path, "alias")
+        const remote = "https://example.test/instructions.md"
+        const sources = [path.join(docs, "*.md"), missing, path.join(alias, "notes.md"), remote]
+        let fetches = 0
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(docs)
+            await fs.mkdir(before)
+            await fs.mkdir(after)
+            await fs.writeFile(first, "first")
+            await fs.writeFile(path.join(before, "notes.md"), "old target")
+            await fs.writeFile(path.join(after, "notes.md"), "new target")
+            await fs.symlink(before, alias, process.platform === "win32" ? "junction" : undefined)
+          })
+          const events = yield* PubSub.unbounded<ReturnType<typeof configUpdated>>()
+          const config = yield* Config.Test
+          const watcher = yield* Watcher.Test
+          const discovery = yield* start(host({ event: { subscribe: () => Stream.fromPubSub(events) } }))
+          expect(yield* discovery.list()).toEqual([
+            file(first, "first"),
+            file(path.join(before, "notes.md"), "old target"),
+            file(remote, "remote"),
+          ])
+          const bus = yield* Bus.Service
+          let updates = 0
+          yield* bus.subscribe(InstructionDiscovery.Event.Updated).pipe(
+            Stream.runForEach(() => Effect.sync(() => updates++)),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          yield* Effect.promise(async () => {
+            await fs.writeFile(second, "new match")
+            await fs.writeFile(missing, "new file")
+            await fs.unlink(alias)
+            await fs.symlink(after, alias, process.platform === "win32" ? "junction" : undefined)
+          })
+          yield* config.setEntries([
+            new Document({ type: "document", info: new Info({ shell: "unrelated", instructions: sources }) }),
+          ])
+          yield* PubSub.publish(events, configUpdated())
+          yield* advance(() => updates === 1)
+          expect(yield* discovery.list()).toEqual([
+            file(first, "first"),
+            file(second, "new match"),
+            file(missing, "new file"),
+            file(path.join(after, "notes.md"), "new target"),
+            file(remote, "remote"),
+          ])
+          expect(fetches).toBe(1)
+          expect((yield* watcher.subscriptions()).filter((input) => input.path === first)).toHaveLength(1)
+
+          yield* Effect.promise(() => fs.writeFile(missing, "subsequent edit"))
+          yield* watcher.emit({ type: "update", path: missing })
+          yield* advance(() => updates === 2)
+          expect(yield* discovery.list()).toContainEqual(file(missing, "subsequent edit"))
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              instructions: sources,
+              http: respond(() => {
+                fetches++
+                return new Response("remote")
+              }),
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
   it.live("reloads configured sources on config updates and keeps the last fetched URL", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((tmp) => {

@@ -31,10 +31,14 @@ function getBackend() {
 export const hasNativeBinding = () => !!watcher()
 export type Update = ParcelWatcher.Event
 
-export type WatchInput =
+export type WatchInput = {
+  /** Identity of the watched directory, when the caller reconciles directory replacements. */
+  readonly identity?: string
+} & (
   | { readonly path: string; readonly type: "file" }
   | { readonly path: string; readonly type: "entries"; readonly names: readonly string[] }
   | { readonly path: string; readonly type: "directory"; readonly ignore?: readonly string[] }
+)
 
 type Subscription = {
   readonly unsubscribe: () => Promise<void>
@@ -45,6 +49,7 @@ type Subscription = {
 type Target = {
   readonly target: string
   readonly ignore: readonly string[]
+  readonly identity?: string
 } & (
   | { readonly type: "entries"; readonly names: readonly string[] }
   | { readonly type: "file" | "directory"; readonly names?: readonly string[] }
@@ -135,7 +140,13 @@ export const layer = (options?: Options) =>
         })
         return Stream.unwrap(
           Effect.gen(function* () {
-            const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore, names })
+            const pubsub = yield* RcMap.get(watchers, {
+              type: input.type,
+              target,
+              ignore,
+              names,
+              identity: input.identity,
+            })
             const subscription = yield* PubSub.subscribe(pubsub)
             if (yield* PubSub.isShutdown(pubsub)) return Stream.empty
             yield* onReady
