@@ -7,6 +7,7 @@ import { Global } from "@opencode/util/global"
 import { Effect, Stream } from "effect"
 import path from "node:path"
 import { Config } from "../../config.js"
+import { Environment } from "../../environment/index.js"
 import { Mcp } from "../../mcp/index.js"
 
 export const Plugin = define({
@@ -22,6 +23,7 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
   const config = yield* Config.Service
   const mcp = yield* Mcp.Service
   const global = yield* Global.Service
+  const environment = yield* Environment.Service
   const loaded = { entries: [] as Entry[] }
 
   yield* events.pipe(
@@ -50,9 +52,13 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
     for (const document of documents) {
       for (const [name, server] of Object.entries(document.info.mcp?.servers ?? {})) {
         // Apply defaults before folding: a project definition replaces the global server, including its scope.
+        // The host home is only valid on the host; workspace-backed servers keep their execution directory.
         servers.set(
           name,
-          server.type === "local" && document.path && path.dirname(document.path) === global.config
+          server.type === "local" &&
+            environment.hostsServer === true &&
+            document.path &&
+            path.dirname(document.path) === global.config
             ? { ...server, cwd: server.cwd ?? global.home, pool: server.pool ?? true }
             : server,
         )

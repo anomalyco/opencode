@@ -28,7 +28,7 @@ export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   command: Schema.String.pipe(Schema.Array),
   cwd: Schema.String.pipe(optional).annotate({
     description:
-      "Working directory for the MCP server process. Defaults to the user home for user-global config, or the workspace directory otherwise. Explicit relative paths resolve from the workspace directory.",
+      "Working directory for the MCP server process. Defaults to the user home for user-global config running on the host, or the workspace directory otherwise. Explicit relative paths resolve from the workspace directory.",
   }),
   environment: Schema.Record(Schema.String, Schema.String).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),
@@ -39,7 +39,7 @@ export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   protocol: Protocol.pipe(optional),
   pool: Schema.Boolean.pipe(optional).annotate({
     description:
-      'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to true for user-global config and false otherwise.',
+      'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only host-local connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to true for user-global config running on the host and false otherwise.',
   }),
 }) {}
 

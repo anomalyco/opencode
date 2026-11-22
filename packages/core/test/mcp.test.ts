@@ -3896,6 +3896,54 @@ describe("MCP pool", () => {
       }),
     )
 
+  for (const pooled of [undefined, true])
+    live(`keeps global local MCP servers in their remote workspace (pool: ${pooled})`, () =>
+      Effect.gen(function* () {
+        const probes: Array<ChildProcess.Command> = []
+        const spawns: Array<ChildProcess.Command> = []
+        const pool = yield* recordingPool(probes)
+        const config = new ConfigMCP.Local({
+          type: "local",
+          command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-modern-stdio.ts")],
+          pool: pooled,
+        })
+        const environment = Layer.effect(
+          Environment.Service,
+          Effect.gen(function* () {
+            const environment = yield* Environment.Service
+            return Environment.Service.of({ ...environment, hostsServer: false })
+          }),
+        ).pipe(Layer.provide(recordingEnvironmentLayer(spawns)))
+        const locations = yield* Effect.forEach(
+          directories,
+          (directory) =>
+            open(config, pool, directory, {
+              environment,
+              entries: () =>
+                Effect.succeed([
+                  new Document({
+                    type: "document",
+                    path: AbsolutePath.make(path.join(Global.Path.config, "opencode.json")),
+                    info: new Info({ mcp: new ConfigMCP.Info({ servers: { resources: config } }) }),
+                  }),
+                ]),
+            }),
+          { concurrency: "unbounded" },
+        )
+        for (const { mcp } of locations) expect(yield* status(mcp)).toEqual({ status: "connected" })
+        expect(probes).toHaveLength(0)
+        expect(spawns).toHaveLength(2)
+        expect(
+          spawns
+            .map((command) => {
+              if (!ChildProcess.isStandardCommand(command)) throw new Error("expected a standard command")
+              return command.options.cwd
+            })
+            .sort(),
+        ).toEqual(directories.slice().sort())
+      }),
+    )
+
   live("shares a local server across directories only when its cwd is fixed", () => {
     const captured = poolLogs()
     return Effect.gen(function* () {
