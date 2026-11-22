@@ -10,6 +10,8 @@ export const SPELLCHECK_ENABLED_KEY = "spellcheckEnabled"
 
 export const SPELLCHECK_LANGUAGES_KEY = "spellcheckLanguages"
 
+export const PROXY_SETTINGS_KEY = "proxySettings"
+
 export const BACKGROUND_COLOR_KEY = "backgroundColor"
 
 export const WINDOW_IDS_KEY = "windowIds"

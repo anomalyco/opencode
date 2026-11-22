@@ -33,6 +33,13 @@ export type FatalRendererErrorLog = {
   os?: DesktopOS
 }
 
+export type ProxySettings = {
+  enabled: boolean
+  http: string
+  https: string
+  noProxy: string
+}
+
 type PlatformBase = {
   requestMicrophone?(): Promise<boolean>
   setVoiceCallActive?(active: boolean): Promise<void>
@@ -139,6 +146,12 @@ type PlatformBase = {
 
   /** Turn the native spellchecker on or off (desktop only) */
   setSpellcheckEnabled?(enabled: boolean): Promise<void>
+
+  /** Get the proxy used by the desktop app's outbound requests (desktop only) */
+  getProxySettings?(): Promise<ProxySettings>
+
+  /** Set the proxy used by the desktop app's outbound requests (desktop only) */
+  setProxySettings?(value: ProxySettings): Promise<void>
 
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void

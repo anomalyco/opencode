@@ -5,6 +5,7 @@ import { AppRpcs } from "../../shared/ipc-rpc"
 import { checkAppExists, resolveAppPath } from "../files/apps"
 import { setForceFocus } from "../native/debug"
 import { DesktopLogging, scoped } from "../native/logging"
+import { getProxySettings, setProxySettings } from "../native/proxy"
 import { getSpellcheckEnabled, setSpellcheckEnabled } from "../native/spellcheck"
 import { setNativeTranslations } from "../native/translations"
 import { IpcPortHandoff } from "../ipc-transport"
@@ -44,6 +45,8 @@ export const appHandlers = AppRpcs.toLayer(
       AppSetBackgroundColor: ({ color }) => Effect.sync(() => setBackgroundColor(color)),
       AppGetSpellcheckEnabled: () => Effect.sync(getSpellcheckEnabled),
       AppSetSpellcheckEnabled: ({ enabled }) => Effect.sync(() => setSpellcheckEnabled(enabled)),
+      AppGetProxySettings: () => Effect.sync(getProxySettings),
+      AppSetProxySettings: ({ value }) => Effect.sync(() => setProxySettings(value)),
       AppExportDebugLogs: () => logging.exportDebug,
       AppSetForceFocus: ({ enabled }, context) => promise(() => setForceFocus(sender(handoff, context), enabled)),
       AppRecordFatalRendererError: ({ error }) =>

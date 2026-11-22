@@ -1,6 +1,8 @@
 import { Component, Show, createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
+import { Button } from "@opencode/ui/button"
 import { Select } from "@opencode/ui/select"
+import { TextInput } from "@opencode/ui/text-input"
 import { Switch } from "@opencode/ui/switch"
 import { Icon } from "@opencode/ui/icon"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
@@ -19,7 +21,7 @@ import { formatKeybind } from "@/shell/commands/command"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { createShellOptions } from "./behavior"
-import { createOptimisticSetting, type ShellSettingsController } from "./controllers"
+import { createOptimisticSetting, createProxySettingsController, type ShellSettingsController } from "./controllers"
 import { InterfaceModeSetting } from "./interface-mode"
 import "@/settings/settings.css"
 
@@ -249,6 +251,8 @@ export const SettingsGeneral: Component = () => {
     write: (checked) => platform.setSpellcheckEnabled?.(checked),
   })
 
+  const proxy = createProxySettingsController()
+
   const GeneralSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
@@ -346,6 +350,99 @@ export const SettingsGeneral: Component = () => {
       </div>
       <div class="settings-tab-body settings-tab-body--sectioned">
         <GeneralSection />
+
+        <Show when={desktop()}>
+          <section class="settings-section" aria-label={language.t("settings.general.section.proxy")}>
+            <h3 class="settings-section-title">{language.t("settings.general.section.proxy")}</h3>
+            <SettingsList>
+              <SettingsRow
+                title={language.t("settings.general.row.proxy.enabled.title")}
+                description={language.t("settings.general.row.proxy.enabled.description")}
+              >
+                <div data-action="settings-proxy-enabled">
+                  <Switch checked={proxy.draft().enabled} onChange={(enabled) => proxy.edit({ enabled })} />
+                </div>
+              </SettingsRow>
+              <Show when={proxy.draft().enabled}>
+                <SettingsRow
+                  title={language.t("settings.general.row.proxy.http.title")}
+                  description={language.t("settings.general.row.proxy.http.description")}
+                >
+                  <div class="w-full sm:w-[260px]">
+                    <TextInput
+                      data-action="settings-proxy-http"
+                      type="text"
+                      appearance="base"
+                      value={proxy.draft().http}
+                      onChange={(event) => proxy.edit({ http: event.currentTarget.value })}
+                      placeholder="http://127.0.0.1:7890"
+                      spellcheck={false}
+                      autocorrect="off"
+                      autocomplete="off"
+                      autocapitalize="off"
+                      aria-label={language.t("settings.general.row.proxy.http.title")}
+                    />
+                  </div>
+                </SettingsRow>
+                <SettingsRow
+                  title={language.t("settings.general.row.proxy.https.title")}
+                  description={language.t("settings.general.row.proxy.https.description")}
+                >
+                  <div class="w-full sm:w-[260px]">
+                    <TextInput
+                      data-action="settings-proxy-https"
+                      type="text"
+                      appearance="base"
+                      value={proxy.draft().https}
+                      onChange={(event) => proxy.edit({ https: event.currentTarget.value })}
+                      placeholder="http://127.0.0.1:7890"
+                      spellcheck={false}
+                      autocorrect="off"
+                      autocomplete="off"
+                      autocapitalize="off"
+                      aria-label={language.t("settings.general.row.proxy.https.title")}
+                    />
+                  </div>
+                </SettingsRow>
+                <SettingsRow
+                  title={language.t("settings.general.row.proxy.noProxy.title")}
+                  description={language.t("settings.general.row.proxy.noProxy.description")}
+                >
+                  <div class="w-full sm:w-[260px]">
+                    <TextInput
+                      data-action="settings-proxy-no-proxy"
+                      type="text"
+                      appearance="base"
+                      value={proxy.draft().noProxy}
+                      onChange={(event) => proxy.edit({ noProxy: event.currentTarget.value })}
+                      placeholder="localhost,127.0.0.1,::1"
+                      spellcheck={false}
+                      autocorrect="off"
+                      autocomplete="off"
+                      autocapitalize="off"
+                      aria-label={language.t("settings.general.row.proxy.noProxy.title")}
+                    />
+                  </div>
+                </SettingsRow>
+              </Show>
+            </SettingsList>
+            <Show when={proxy.draft().enabled}>
+              <p class="text-11-regular text-v2-text-text-muted pt-3">
+                {language.t("settings.general.row.proxy.serviceNote")}
+              </p>
+            </Show>
+            <div class="pt-3">
+              <Button
+                variant="outline"
+                size="small"
+                data-action="settings-proxy-apply"
+                onClick={proxy.apply}
+              >
+                {language.t("settings.general.row.proxy.apply")}
+              </Button>
+            </div>
+          </section>
+        </Show>
 
         <section class="settings-section" aria-label={language.t("settings.timeline.title")}>
           <h3 class="settings-section-title">{language.t("settings.timeline.title")}</h3>

@@ -93,6 +93,8 @@ export const api: ElectronAPI = {
   setForceFocus: (enabled) => invoke("AppSetForceFocus", { enabled }),
   getSpellcheckEnabled: () => invoke("AppGetSpellcheckEnabled"),
   setSpellcheckEnabled: (enabled) => invoke("AppSetSpellcheckEnabled", { enabled }),
+  getProxySettings: () => invoke("AppGetProxySettings"),
+  setProxySettings: (value) => invoke("AppSetProxySettings", { value }),
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
 }

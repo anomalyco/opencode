@@ -45,6 +45,15 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.proxy.enabled.title",
+    description: "settings.general.row.proxy.enabled.description",
+    target: "settings-proxy-enabled",
+    section: "settings.general.section.proxy",
+    keywords: "http https socks network vpn",
+    available: "desktop",
+  },
+  {
+    tab: "general",
     label: "settings.workspaces.default.title",
     target: "settings-workspace-destination",
     description: "settings.workspaces.default.description",

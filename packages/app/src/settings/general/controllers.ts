@@ -15,7 +15,7 @@ import {
   terminalInput,
   useSettings,
 } from "@/settings/model"
-import { usePlatform } from "@/runtime/platform/platform"
+import { type ProxySettings, usePlatform } from "@/runtime/platform/platform"
 import { desktopZoomLevels, type DesktopZoomLevel } from "@/shell/commands/desktop-menu"
 import { playSoundById, SOUND_OPTIONS } from "@/shell/notifications/sound"
 import { createSoundPreviewController } from "./behavior"
@@ -95,6 +95,35 @@ export function createOptimisticSetting<T, M, S>(options: {
     value: () => selectSettingValue(state()),
     meta: () => selectSettingMeta(state()),
     select: (value: T) => dispatch({ type: "write.requested", value }),
+  }
+}
+
+export const defaultProxySettings: ProxySettings = { enabled: false, http: "", https: "", noProxy: "" }
+
+export function createProxySettingsController() {
+  const platform = usePlatform()
+
+  const setting = createOptimisticSetting({
+    source: () => {
+      const get = platform.getProxySettings
+      const set = platform.setProxySettings
+
+      return platform.platform === "desktop" && get && set ? { get, set } : undefined
+    },
+    initial: defaultProxySettings,
+    initialMeta: undefined,
+    load: async (source) => ({ value: await source.get(), meta: undefined }),
+    write: (value, source) => source.set(value),
+  })
+
+  const [draft, setDraft] = createSignal<ProxySettings>(defaultProxySettings)
+
+  createEffect(() => setDraft(setting.value()))
+
+  return {
+    draft,
+    edit: (patch: Partial<ProxySettings>) => setDraft((current) => ({ ...current, ...patch })),
+    apply: () => setting.select(draft()),
   }
 }
 
