@@ -54,7 +54,12 @@ const subscriptionCatalog = (lists: { current: Record<string, readonly string[]>
     get: () =>
       Effect.sync(() => [
         {
-          info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
+          info: {
+            id: Provider.ID.openai,
+            name: "OpenAI",
+            activation: "auto",
+            package: "@opencode/ai/providers/openai",
+          },
           models: [],
           environment: [],
           subscriptions: lists.current,
@@ -100,7 +105,7 @@ const sharingCredential = (access: string) =>
     metadata: { clientID: "oaiapp_issued" },
   })
 
-const fallback = ["gpt-5.5", "gpt-6.2-astra", "gpt-6.2-sol"]
+const fallback = ["gpt-6-sol", "gpt-6.2-astra", "gpt-6.2-sol"]
 
 const addCatalog = Effect.gen(function* () {
   const catalog = yield* Provider.Service
@@ -748,6 +753,53 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
+  it.effect(
+    "shows the models.dev list until the account list loads, then the account list with the catalog's variants",
+    () =>
+      Effect.gen(function* () {
+        const catalog = yield* Provider.Service
+        const credentials = yield* Credential.Service
+        yield* catalog.transform((editor) => {
+          editor.update(Provider.ID.openai, (provider) => {
+            provider.package = "@opencode/ai/providers/openai"
+          })
+          for (const id of ["gpt-6-sol", "gpt-6.2-sol"])
+            editor.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
+          for (const id of ["gpt-6.2-sol-fast", "gpt-6.2-sol-flex"])
+            editor.models.update(Provider.ID.openai, Model.ID.make(id), (model) => {
+              model.modelID = Model.ID.make("gpt-6.2-sol")
+            })
+        })
+        const release = yield* Deferred.make<void>()
+        yield* addPlugin(
+          HttpClient.make((request) =>
+            Deferred.await(release).pipe(
+              Effect.as(
+                HttpClientResponse.fromWeb(
+                  request,
+                  Response.json({ models: [remote("gpt-6.2-sol"), remote("gpt-6.3-nova")] }),
+                ),
+              ),
+            ),
+          ),
+        ).pipe(
+          Effect.provideService(
+            ModelsDev.Service,
+            subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-6.2-sol", "gpt-6.2-sol-fast"] } }),
+          ),
+        )
+        yield* credentials.create({
+          integrationID: Integration.ID.make("openai"),
+          value: sharingCredential("chatgpt-token"),
+        })
+        yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6-sol,gpt-6.2-sol,gpt-6.2-sol-fast")))
+
+        // The account list decides the models; flex isn't on the catalog list, so it stays hidden.
+        yield* Deferred.succeed(release, undefined)
+        yield* until(openaiModels.pipe(Effect.map((ids) => ids.join() === "gpt-6.2-sol,gpt-6.2-sol-fast,gpt-6.3-nova")))
+      }),
+  )
+
   it.effect("shows the fallback list while a new sign-in discovers its models, then saves only listed API models", () =>
     Effect.gen(function* () {
       yield* addCatalog
@@ -1109,7 +1161,10 @@ describe("ChatGPTPlugin", () => {
         }),
       })
       yield* addPlugin().pipe(
-        Effect.provideService(ModelsDev.Service, subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } })),
+        Effect.provideService(
+          ModelsDev.Service,
+          subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } }),
+        ),
       )
       expect(
         (yield* models.available())
