@@ -26,6 +26,9 @@ function getBackend() {
   if (process.platform === "win32") return "windows"
   if (process.platform === "darwin") return "fs-events"
   if (process.platform === "linux") return "inotify"
+  // @parcel/watcher's FreeBSD build uses KQUEUE; the JS Backend union simply
+  // does not list it yet.
+  if (process.platform === "freebsd") return "kqueue" as any
 }
 
 export const hasNativeBinding = () => !!watcher()
