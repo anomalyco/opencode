@@ -9,10 +9,10 @@ clamps, unknown node types dropped).
 
 - **psychoscript-mobile writes it, in Rust, from the VM's value.** It needs no prelude change.
   - **Steps and draws.** The host runs `<program>\nreturn __widget_native_step(__input())` (`widgets.md`, Native
-    hosts). The prelude hands the view to the host global `__widget_emit` as a `HostValue`, which is cheaper than the
-    result path's VM → JSON → `Data`; the rest of the step output (`state`, `submit`, `dismiss`, `send`, or a draw's
-    `commands`) is the run's result, under its JSON rules. The host writes `S` from both: the flags and JSON from the
-    result, `N` from the emitted view.
+    hosts). The prelude hands the view, or a draw's commands, to the host global `__widget_emit` as a `HostValue`,
+    which is cheaper than the result path's VM → JSON → `Data`; the rest of an `init` or `event` step's output
+    (`state`, `submit`, `dismiss`, `send`) is the run's result, under its JSON rules. The host writes `S` from both
+    (the flags and JSON from the result, `N` from the emitted view) and `D` from the emitted commands.
   - **Live.** `__host.post(message)` already receives a `HostValue`. The host encodes each post and hands a wake-up's
     posts to the app in one call (`on_posts_bytes(Vec<Vec<u8>>)`, beside today's `on_posts`).
   - **Native tree building.** As a native host (`widgets.md`, Native hosts), the encoder builds

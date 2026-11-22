@@ -1,9 +1,19 @@
 import { expect, test } from "bun:test"
-import { Schema } from "effect"
+import { Result, Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
-import { DrawOutput, LiveWidget, type LiveMessage, Node, prelude, program, step, StepOutput } from "../src/index.js"
+import {
+  draw,
+  DrawOutput,
+  LiveWidget,
+  type LiveMessage,
+  Node,
+  prelude,
+  program,
+  step,
+  StepOutput,
+} from "../src/index.js"
 import { prune } from "../src/session.js"
-import { scriptedProgram } from "../script/conformance.js"
+import { fixtures, scriptedProgram } from "../script/conformance.js"
 
 // The TypeScript runtime is a native host (specs/v2/widgets.md, Native hosts). These hold its steps and live runs to
 // the last prelude that built trees itself (`scriptedProgram`, protocol 1's entries, with an id → handler table): the
@@ -256,4 +266,56 @@ test("a live render with a key of another type, or deeper than 100 levels, ends 
     kind: "error",
     message: expect.stringContaining("exceeds the maximum value depth of 32"),
   })
+})
+
+// A draw with the prelude giving its commands as the run's result, read as `draw` reads one.
+const scriptedDraw = async (source: string, input: Record<string, unknown>) => {
+  const result = await Runtime.make({ limits: { timeoutMs: 5000 } }).execute(
+    scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify({ phase: "draw", ...input })})`,
+  )
+  if (!result.ok) return { error: result.error.message }
+  const decoded = Schema.decodeUnknownResult(DrawOutput)(result.value)
+  return Result.isSuccess(decoded) ? decoded.success : { error: decoded.failure.message }
+}
+
+const nativeDraw = (source: string, input: Parameters<typeof draw>[1]) =>
+  draw(program(source), input, { timeoutMs: 5000 }).then(
+    (output) => output,
+    (error: Error) => ({ error: error.message }),
+  )
+
+test("native draw steps give the commands the run's result gave, and fail as it did", async () => {
+  const frame = { id: "0/:c", t: 0.5, dt: 1 / 60, width: 300, height: 200, scale: 2, pointer: null, dark: true }
+  const drawn = fixtures().filter((fixture) => fixture.builtin !== undefined && /function draw\(/.test(fixture.source))
+  expect(drawn.length).toBeGreaterThan(10)
+  for (const fixture of drawn) {
+    const init = await step(program(fixture.source), fixture.input as Parameters<typeof step>[1])
+    const input = { data: fixture.input.data, state: init.state, frame }
+    expect({ name: fixture.name, output: await nativeDraw(fixture.source, input) }).toEqual({
+      name: fixture.name,
+      output: await scriptedDraw(fixture.source, input),
+    })
+  }
+  // What only JSON cleans up (functions, undefined, non-finite numbers), and invalid outputs.
+  const outputs = [
+    `[["rect", 0, 0, 1, 1, { fill: "accent", stroke: undefined, f: () => 1 }], ["line", 0, 0, 1, 1, () => 1]]`,
+    `[["rect", NaN, 0, 1, 1, { fill: "accent" }]]`,
+    `[["circle", 1, 2, Infinity]]`,
+    `[["rect"]]`,
+    `[["sparkle", 1]]`,
+    `"commands"`,
+    `{ commands: [] }`,
+    `undefined`,
+    `ui.draw().rect(0, 0, 1, 1, "#fff").text(1, 2, "t", { size: undefined })`,
+    `Array.from({ length: 2001 }, () => ["save"])`,
+    `[["rect", 0, 0, 1, 1, { fill: { linear: [0, 0, 1, 1], stops: [[0, "#fff"], [1, "accent"]] } }]]`,
+  ]
+  for (const output of outputs) {
+    const source = `function view() { return ui.canvas({ key: "c", height: 1 }) }\nfunction draw() { return ${output} }`
+    const input = { data: null, state: {}, frame }
+    expect({ output, drawn: await nativeDraw(source, input) }).toEqual({
+      output,
+      drawn: await scriptedDraw(source, input),
+    })
+  }
 })

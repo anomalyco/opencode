@@ -10,7 +10,7 @@ import {
   type WidgetEvent,
   types,
 } from "./node.js"
-import { tree, unmark, ViewError } from "./tree.js"
+import { json, tree, unmark, ViewError } from "./tree.js"
 import { compiled } from "./compiled.js"
 import { located, NEWER, OLDER, protocol, PROTOCOL } from "./host.js"
 
@@ -67,16 +67,18 @@ export async function draw(
 const EMITTED = "Argument 1 to __widget_emit"
 
 /**
- * Runs `<program>\nreturn __widget_native_step(__input())`: the step output, with the view's tree built, or a draw's.
- * `observe` sees the view as the program emitted it.
+ * Runs `<program>\nreturn __widget_native_step(__input())`: the step output, with the view's tree built, or a draw's
+ * `{ commands }`. `observe` sees the view as the program emitted it.
  * @internal
  */
 export async function run(program: string, input: StepInput, timeoutMs: number, observe?: (view: unknown) => void) {
   const version = protocol(program)
   if (version > PROTOCOL) throw new Error(NEWER)
   if (version < PROTOCOL) throw new StepError({ kind: "invalid", message: OLDER })
-  const emitted: { view?: unknown; failure?: string } = {}
+  const emitted: { view?: unknown; failure?: string; commands?: unknown } = {}
   const emit = ([view, failure]: ReadonlyArray<unknown>) => {
+    // A draw's commands, as the run's result would have carried them; the draw output's checks follow.
+    if (input.phase === "draw") return void (emitted.commands = json(view))
     if (typeof failure === "string") return void (emitted.failure = failure)
     observe?.(view)
     try {
@@ -99,7 +101,7 @@ export async function run(program: string, input: StepInput, timeoutMs: number, 
     })
   // The result is JSON, with markers where functions were, which JSON leaves out.
   const value = unmark(result.value)
-  if (input.phase === "draw") return value
+  if (input.phase === "draw") return { commands: emitted.commands }
   if (!("view" in emitted)) throw new StepError({ kind: "invalid", message: "The step gave no view" })
   return isRecord(value) ? { ...value, view: emitted.view } : value
 }

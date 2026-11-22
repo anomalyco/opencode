@@ -101,7 +101,8 @@ and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
    the next event; render `view`. `submit` present (it may be `null`): send `{ value: submit }` to
    `POST /api/experimental/session/{sessionID}/widget/{messageID}/respond`. `dismiss: true`: send `{ dismiss: true }`.
    `send: { value, wake }`: deliver `value` to the agent as a message and keep the widget open (see the spec).
-   A `draw` run returns `{ commands }` for a `canvas` node (see the spec's Canvas section); it never changes state.
+   A `draw` run emits the commands for a `canvas` node and returns nothing (see the spec's Canvas section); it never
+   changes state.
 
 4. Validate `view` against the node set in the spec. Drop nodes of unknown `type` from `children` (render nothing, log
    a warning) and ignore unknown props. A failed step (throw, timeout, invalid view) keeps the previous state and view

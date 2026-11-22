@@ -297,8 +297,8 @@ function send(value, options) {
 }
 
 // One step (specs/v2/widgets.md, Native hosts): the view goes to `__widget_emit` as built, and the run's result is the
-// rest of the step output (`state`, `submit`, `dismiss`, `send`) or a draw's `{ commands }`. A view the host can't take
-// because it nests too deep goes as `__widget_emit(null, message)` instead.
+// rest of the step output (`state`, `submit`, `dismiss`, `send`); a draw's commands go to `__widget_emit` too, and
+// the run has no result. A view the host can't take because it nests too deep goes as `__widget_emit(null, message)`.
 function __widget_native_step(input) {
   const data = input.data
   if (input.phase === "draw") {
@@ -306,7 +306,8 @@ function __widget_native_step(input) {
     const last = typeof id === "string" ? id.slice(id.lastIndexOf("/") + 1) : ""
     frame.key = last.startsWith(":") ? decodeURIComponent(last.slice(1).replace(/~\d+$/, "")) : null
     const drawn = typeof draw === "function" ? draw(input.state, data, frame) : undefined
-    return { commands: (drawn instanceof __WidgetDraw ? drawn.commands : drawn) ?? [] }
+    __widget_emit((drawn instanceof __WidgetDraw ? drawn.commands : drawn) ?? [])
+    return
   }
   const output = {}
   if (input.phase === "init") output.state = (typeof init === "function" ? init(data) : undefined) ?? {}

@@ -53,6 +53,12 @@ const omitted = Symbol("omitted")
 export const carried = (label: string) =>
   new TypeError(`${label} contains a function, which cannot be passed to the host.`)
 
+/** `value` as JSON holds it: without markers, `undefined` left out (`null` in an array), non-finite numbers `null`. */
+export function json(value: unknown): unknown {
+  const out = clean(value, undefined, true)
+  return out === omitted ? undefined : out
+}
+
 /**
  * `value` with its markers gone, as a run's result leaves out functions: left out of objects, `null` in arrays. With
  * `strict` (a host call's argument) a marker throws instead. Copies only what changes.

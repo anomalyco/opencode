@@ -227,10 +227,14 @@ psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript r
   they cross, with the interpreter's own error. (`@opencode/widget` keeps the default 32 until PsychoScript's TypeScript
   runtime has the option, so its views cross up to 16 levels.)
 - **A step's output, split.** `__widget_native_step` calls `__widget_emit(view)` once per `init` or `event` step with
-  the view as built, then returns `{ state, submit?, dismiss?, send? }` as the run's result; a `draw` step calls no
-  `__widget_emit` and returns `{ commands }`. The result keeps the run's JSON rules exactly as before (`toJSON`, an
-  `Error`'s fields, numbers, a typed array failing the step): the host only drops its markers, as JSON drops
-  functions (left out of an object, `null` in an array). `__widget_emit` returns nothing.
+  the view as built, then returns `{ state, submit?, dismiss?, send? }` as the run's result. The result keeps the
+  run's JSON rules (`toJSON`, an `Error`'s fields, numbers, a typed array failing the step): the host only drops its
+  markers, as JSON drops functions (left out of an object, `null` in an array). A `draw` step calls
+  `__widget_emit(commands)` once with the draw's commands (`[]` when `draw` returns nothing), and the run has no result
+  (`undefined`). The host reads the commands as JSON would: it drops markers (left out of an object, `null` in an
+  array) and `undefined` props, and makes `undefined` items and non-finite numbers `null`; then it checks them as a
+  draw output (`{ commands }`, Canvas), with the same failures. (No `toJSON` runs: a valid command holds only numbers,
+  strings, arrays and plain paint objects.) `__widget_emit` returns nothing.
 - **What it gets.** The emitted view, and a live `render`'s `node`, are the view as built: handler props are markers,
   `key`s are there, `children` are as written (nested arrays, holes, `null`, `undefined`, `false`), and values are as
   a host call's argument carries them (as live renders always were).
@@ -261,10 +265,10 @@ psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript r
   <name> contains a function, which cannot be passed to the host.`, with `<n>` the argument's position from 1 and
   `<name>` the function as the program called it (`__widget_emit`, `__host.post`, `__host.fetch`, ...). So a function
   in another prop of a node (`id`, `pointer` and unknown props too), as a child, inside a prop's value, in a live
-  `send` or `submit` value, in draw commands or in a `fetch` request fails, and uncaught it fails the step or run with
+  `send` or `submit` value, in a live `draw` post's commands or in a `fetch` request fails, and uncaught it fails the step or run with
   that message and the call's line and column. A marker as a `key` is a key of another type (Keys and depth). (A
   step's `state`, `submit` and `send` are the run's result, not an argument: their functions are left out, as JSON
-  does.)
+  does; so are the functions in a draw step's emitted commands, as above.)
 - **Failures of the view.** A key of another type or a view deeper than 100 levels found in the walk: the host takes
   the view as failed and fails the step (after the run) or the live run (at once) as a program error in phase `view`,
   with the message of Keys and depth; `__widget_emit` and `post` don't throw for it. A view too deep to cross the
@@ -438,7 +442,7 @@ type Frame = {
   close?: { x: number; y: number; width: number; height: number } | null   // full screen: the close button's area
                       // over this canvas, in its coordinates, or null (widgets-fullscreen.md)
 }
-type DrawOutput = { commands: Command[] }
+type DrawOutput = { commands: Command[] }   // the run emits `commands` (Native hosts)
 ```
 
 Clients call it once when the canvas appears or state changes, then every frame while `fps > 0` (max 60;
