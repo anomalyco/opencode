@@ -234,11 +234,13 @@ export function makeSession(
     readonly model?: ModelRef
     readonly cost?: number
     readonly time?: SessionInfo["time"]
+    readonly parentID?: string
   } = {},
 ): SessionInfo {
   return {
     id,
     projectID: "global",
+    ...(input.parentID ? { parentID: input.parentID } : {}),
     ...(input.agent ? { agent: input.agent } : {}),
     ...(input.model ? { model: input.model } : {}),
     cost: input.cost ?? 0,
@@ -762,6 +764,7 @@ function startServer(options: WireOptions, changed: () => void) {
         GET: route((_req, query) => {
           const sessions = [...fake.sessions.values()]
             .filter((session) => !query.directory || session.location.directory === query.directory)
+            .filter((session) => !query.parentID || session.parentID === query.parentID)
             .toSorted((a, b) => b.time.updated - a.time.updated)
           return Response.json(page(sessions, query, 100))
         }),
