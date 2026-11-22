@@ -403,13 +403,15 @@ export function Prompt(props: PromptProps) {
     const index = messages.findLastIndex((message) => message.type === "user")
     const message = messages[index]
     if (message?.type !== "user") return
-    const answered = messages
-      .slice(index + 1)
-      .some(
-        (item) =>
-          item.type === "assistant" &&
-          item.content.some((part) => part.type === "tool" || (part.type === "text" && part.text.trim())),
+    // A shell command, a compaction and a synthetic prompt each start a run of their own, so the one just stopped
+    // wasn't this prompt's.
+    const answered = messages.slice(index + 1).some((item) => {
+      if (item.type === "shell" || item.type === "compaction" || item.type === "synthetic") return true
+      return (
+        item.type === "assistant" &&
+        item.content.some((part) => part.type === "tool" || (part.type === "text" && part.text.trim()))
       )
+    })
     if (answered) return
     const restored = await restorePrompt(message)
     await client.api.session.revert.stage({ sessionID, messageID: message.id })

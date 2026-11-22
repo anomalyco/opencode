@@ -23,12 +23,21 @@ const queued = {
   time: { created: 3 },
 }
 
+const shell = {
+  type: "shell",
+  id: "msg_shell",
+  shellID: "shl_1",
+  command: "sleep 60",
+  status: "running",
+  time: { created: 3 },
+}
+
 const INTERRUPT = `POST /api/session/${session.id}/interrupt`
 const WAIT = `POST /api/experimental/session/${session.id}/wait`
 const REVERT = `POST /api/session/${session.id}/revert/stage`
 
 /** Opens a running session whose last prompt got `content` back so far, and interrupts it. `calls` logs what that sent. */
-async function interrupt(input: { content: unknown[]; inbox?: unknown[]; draft?: string }) {
+async function interrupt(input: { content: unknown[]; later?: unknown[]; inbox?: unknown[]; draft?: string }) {
   // Drafts are stashed per tab for the whole process, so an earlier test or test file would prefill the composer.
   for (const id of [undefined, session.id]) takeDraft(id)
   const calls: string[] = []
@@ -51,6 +60,7 @@ async function interrupt(input: { content: unknown[]; inbox?: unknown[]; draft?:
       if (url.pathname === `/api/session/${session.id}/message`)
         return json({
           data: [
+            ...(input.later ?? []),
             {
               type: "assistant",
               id: "msg_reply",
@@ -89,6 +99,7 @@ test("interrupting before the model answers with text or a tool call takes the p
 
 test.each([
   ["after the model answered", { content: [{ type: "text", text: "Here you go" }] }, [INTERRUPT, WAIT]],
+  ["a shell command run after an unanswered prompt", { content: [], later: [shell] }, [INTERRUPT, WAIT]],
   ["with a draft in the composer", { content: [], draft: "something else" }, [INTERRUPT]],
   ["with a prompt still pending", { content: [], inbox: [queued] }, [INTERRUPT]],
 ])("interrupting %s only interrupts", async (_name, input, expected) => {

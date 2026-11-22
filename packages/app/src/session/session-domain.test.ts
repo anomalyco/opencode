@@ -49,3 +49,16 @@ test.each([
     expect(selectUnansweredPrompt(messages)?.id).toBe(expected)
   },
 )
+
+test("the latest prompt is not unanswered once something else has run after it", () => {
+  const shell: SessionMessageInfo = {
+    id: "msg_c",
+    type: "shell",
+    shellID: "shl_1",
+    command: "sleep 60",
+    status: "running",
+    time: { created: 0 },
+  }
+
+  expect(selectUnansweredPrompt([user("msg_a"), { ...assistant, id: "msg_b" }, shell])).toBeUndefined()
+})
