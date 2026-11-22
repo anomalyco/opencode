@@ -16,6 +16,13 @@ describe("Mime.detect", () => {
     expect(Mime.detect(bytes)).toBe(mime)
   })
 
+  test("keeps text ahead of the path's extension", () => {
+    // A media extension must not turn text into media: `read` would attach it as base64 in history, where it fails
+    // on every later turn. A Git-LFS pointer is the common case.
+    expect(Mime.detect(ascii("hello world"), "notes.gif")).toBe("text/plain")
+    expect(Mime.detect(ascii("version https://git-lfs.github.com/spec/v1\n"), "clip.mp4")).toBe("text/plain")
+  })
+
   test("keeps ordinary text starting with BM as text", () => {
     for (const text of ["BM", "BMW service schedule\n"]) expect(Mime.detect(Buffer.from(text))).toBe("text/plain")
   })

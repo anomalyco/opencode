@@ -3,15 +3,19 @@ export * as Mime from "./mime.js"
 import { Media } from "@opencode/ai/effect"
 
 /**
- * Sniff a media type from magic bytes, then the path's extension when one is given. Text and binary fall back to
- * `text/plain` / `application/octet-stream`, which callers rely on.
+ * Sniff a media type from magic bytes, then let the path's extension refine it. The extension never overrides a
+ * textual sample: otherwise a Git-LFS pointer named `clip.mp4` would be attached as media. Text and binary fall back
+ * to `text/plain` / `application/octet-stream`, which callers rely on.
  */
 export function detect(bytes: Uint8Array, path?: string) {
-  const media = path === undefined ? Media.detectMediaType(bytes) : Media.fileMediaType(bytes, path)
-  return media ?? (isText(bytes) ? "text/plain" : "application/octet-stream")
+  const sniffed = Media.detectMediaType(bytes)
+  if (sniffed !== undefined) return path === undefined ? sniffed : (Media.fileMediaType(bytes, path) ?? sniffed)
+  if (isText(bytes)) return "text/plain"
+  if (path === undefined) return "application/octet-stream"
+  return Media.fileMediaType(bytes, path) ?? "application/octet-stream"
 }
 
-/** Sniffed media type, or `undefined` when the sample carries no known signature. */
+/** Compatibility shim for callers that predate `detect`: sniffed media type, or `undefined` when nothing matches. */
 export const detectMedia = (bytes: Uint8Array) => Media.detectMediaType(bytes)
 
 export const isTextual = (mime: string) =>

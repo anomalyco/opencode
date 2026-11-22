@@ -18,14 +18,13 @@ const MAX_LINE_LENGTH = 2_000
 // Enough UTF-8 bytes for the clamped prefix, including a BOM and a partial code point at the end.
 const LINE_BYTES = 4 * (MAX_LINE_LENGTH + 1)
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
-export const MEDIA_MIMES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
+export const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
+
+// `read` covers every media type it attaches; MCP inlining keeps the narrower shared set above.
+export const READ_MEDIA_MIMES = new Set([
+  ...MEDIA_MIMES,
   "image/bmp",
   "image/avif",
-  "application/pdf",
   "audio/mpeg",
   "audio/wav",
   "audio/ogg",
@@ -147,7 +146,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
   if ("type" in first) return first
 
   const media = Mime.detect(first.bytes, input)
-  if (MEDIA_MIMES.has(media)) {
+  if (READ_MEDIA_MIMES.has(media)) {
     if (first.info.size > MAX_MEDIA_INGEST_BYTES)
       return yield* new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES })
     const whole = yield* readFile(files, input, resource)

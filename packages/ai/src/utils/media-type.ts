@@ -86,6 +86,7 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
   pdf: "application/pdf",
   mp4: "video/mp4",
   mov: "video/quicktime",
+  // WebM's EBML DocType does not mark audio-only files, so a MediaRecorder voice note reports as video here.
   webm: "video/webm",
   mp3: "audio/mpeg",
   m4a: "audio/mp4",
