@@ -13368,6 +13368,178 @@ impl crate::TaggedError for VcsInitNotSupportedError {
     const TAG: &'static str = "VcsInitNotSupportedError";
 }
 
+/// [`LocationRef`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct LocationRefView<'a> {
+    #[serde(borrow)]
+    pub directory: crate::de::Str<'a>,
+    #[serde(borrow, rename = "workspaceID", default)]
+    pub workspace_id: Option<crate::de::Str<'a>>,
+}
+
+impl LocationRefView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.directory) && self.workspace_id.as_ref().is_none_or(crate::de::Str::borrowed)
+    }
+}
+
+/// [`SessionTextDeltaData`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionTextDeltaDataView<'a> {
+    #[serde(borrow, rename = "sessionID")]
+    pub session_id: crate::de::Str<'a>,
+    #[serde(borrow, rename = "assistantMessageID")]
+    pub assistant_message_id: crate::de::Str<'a>,
+    pub ordinal: i64,
+    #[serde(borrow)]
+    pub delta: crate::de::Str<'a>,
+}
+
+impl SessionTextDeltaDataView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.session_id)
+            && crate::de::Str::borrowed(&self.assistant_message_id)
+            && crate::de::Str::borrowed(&self.delta)
+    }
+}
+
+/// [`SessionTextDelta`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionTextDeltaView<'a> {
+    #[serde(borrow)]
+    pub id: crate::de::Str<'a>,
+    pub created: f64,
+    #[serde(default)]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::SessionTextDelta,
+    #[serde(borrow, default)]
+    pub location: Option<LocationRefView<'a>>,
+    #[serde(borrow)]
+    pub data: SessionTextDeltaDataView<'a>,
+}
+
+impl SessionTextDeltaView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.id)
+            && self.location.as_ref().is_none_or(LocationRefView::borrowed)
+            && SessionTextDeltaDataView::borrowed(&self.data)
+    }
+}
+
+/// [`SessionReasoningDelta`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionReasoningDeltaView<'a> {
+    #[serde(borrow)]
+    pub id: crate::de::Str<'a>,
+    pub created: f64,
+    #[serde(default)]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::SessionReasoningDelta,
+    #[serde(borrow, default)]
+    pub location: Option<LocationRefView<'a>>,
+    #[serde(borrow)]
+    pub data: SessionTextDeltaDataView<'a>,
+}
+
+impl SessionReasoningDeltaView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.id)
+            && self.location.as_ref().is_none_or(LocationRefView::borrowed)
+            && SessionTextDeltaDataView::borrowed(&self.data)
+    }
+}
+
+/// [`SessionToolInputDeltaData`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionToolInputDeltaDataView<'a> {
+    #[serde(borrow, rename = "sessionID")]
+    pub session_id: crate::de::Str<'a>,
+    #[serde(borrow, rename = "assistantMessageID")]
+    pub assistant_message_id: crate::de::Str<'a>,
+    #[serde(borrow)]
+    pub id: crate::de::Str<'a>,
+    #[serde(borrow)]
+    pub delta: crate::de::Str<'a>,
+}
+
+impl SessionToolInputDeltaDataView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.session_id)
+            && crate::de::Str::borrowed(&self.assistant_message_id)
+            && crate::de::Str::borrowed(&self.id)
+            && crate::de::Str::borrowed(&self.delta)
+    }
+}
+
+/// [`SessionToolInputDelta`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionToolInputDeltaView<'a> {
+    #[serde(borrow)]
+    pub id: crate::de::Str<'a>,
+    pub created: f64,
+    #[serde(default)]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::SessionToolInputDelta,
+    #[serde(borrow, default)]
+    pub location: Option<LocationRefView<'a>>,
+    #[serde(borrow)]
+    pub data: SessionToolInputDeltaDataView<'a>,
+}
+
+impl SessionToolInputDeltaView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.id)
+            && self.location.as_ref().is_none_or(LocationRefView::borrowed)
+            && SessionToolInputDeltaDataView::borrowed(&self.data)
+    }
+}
+
+/// [`SessionCompactionDeltaData`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionCompactionDeltaDataView<'a> {
+    #[serde(borrow, rename = "sessionID")]
+    pub session_id: crate::de::Str<'a>,
+    #[serde(borrow)]
+    pub text: crate::de::Str<'a>,
+}
+
+impl SessionCompactionDeltaDataView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.session_id) && crate::de::Str::borrowed(&self.text)
+    }
+}
+
+/// [`SessionCompactionDelta`], with its strings borrowed from the JSON.
+#[derive(Debug, Deserialize)]
+pub struct SessionCompactionDeltaView<'a> {
+    #[serde(borrow)]
+    pub id: crate::de::Str<'a>,
+    pub created: f64,
+    #[serde(default)]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::SessionCompactionDelta,
+    #[serde(borrow, default)]
+    pub location: Option<LocationRefView<'a>>,
+    #[serde(borrow)]
+    pub data: SessionCompactionDeltaDataView<'a>,
+}
+
+impl SessionCompactionDeltaView<'_> {
+    /// Whether every string borrows from the JSON, none having had an escape to decode.
+    pub fn borrowed(&self) -> bool {
+        crate::de::Str::borrowed(&self.id)
+            && self.location.as_ref().is_none_or(LocationRefView::borrowed)
+            && SessionCompactionDeltaDataView::borrowed(&self.data)
+    }
+}
+
 /// Union members' tags. Each serializes as its literal and decodes from any string, since the union has picked the member.
 pub mod tag {
     tags! {

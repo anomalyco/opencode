@@ -11,8 +11,8 @@ use opencode_api::transport::BoxFuture;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
-use crate::core::Delta;
 use crate::driver::{Data, Mail, Remote};
+use crate::payload::{Payload, Wanted};
 
 /// The most events [`run`] holds while the store's mailbox is full. Past that it stops reading the connection, whose
 /// own queue then fills, and the connection drops the stream. The batches queued then are dropped, not held: the
@@ -23,7 +23,7 @@ pub const HELD: usize = 65_536;
 /// Returns when the batch receiver closes or the store is gone. While the owner does not drain (the UI thread runs a
 /// foreground program), the store's mailbox fills; this then keeps reading, and holds the batches with each part's
 /// deltas merged, so the stream stays up and no event is lost, up to [`HELD`] events.
-pub async fn run(remote: Remote, mut state: watch::Receiver<events::State>, mut batches: mpsc::Receiver<Vec<V2Event>>) {
+pub async fn run(remote: Remote, mut state: watch::Receiver<events::State>, mut batches: mpsc::Receiver<Vec<Payload>>) {
     let mut watching = true;
     let mut held = Held::default();
     loop {
@@ -79,7 +79,8 @@ struct Held {
 impl Held {
     /// Holds `mail`. A batch joins a held batch before it when the connection status between them is the same, and
     /// each of its deltas merges into its part's delta in the run of deltas the held batch ends with: appends to
-    /// different parts commute, and an event between them keeps its place. A status the hold ends with already adds
+    /// different parts commute, and an event between them keeps its place. A delta that came as JSON is decoded here
+    /// only when it merges. A status the hold ends with already adds
     /// nothing, and down, up and down again is down once, so a connection that keeps dropping adds nothing either.
     fn push(&mut self, mail: Mail) {
         if matches!(mail, Mail::Online(false)) && self.ends_down_up() {
@@ -97,12 +98,14 @@ impl Held {
                 return;
             }
         };
-        for event in batch {
+        for mut payload in batch {
             // Text deltas match by ordinal, as the connection's own merge does: a message has one open text part.
-            let merged = Delta::of(&event).is_some()
-                && tail.iter_mut().rev().take_while(|last| Delta::of(last).is_some()).any(|last| last.merge(&event));
+            let merged = match payload.delta() {
+                Some(event) => tail.iter_mut().rev().map_while(Payload::delta).any(|last| last.merge(event)),
+                None => false,
+            };
             if !merged {
-                tail.push(event);
+                tail.push(payload);
                 self.events += 1;
             }
         }
@@ -133,19 +136,23 @@ impl Held {
 
 pub struct Events {
     pub client: Client,
+    /// What the store's listeners want decoded here.
+    pub wanted: Wanted,
 }
 
-impl Source<V2Event> for Events {
+impl Source<Payload> for Events {
     /// The error as TS's connection records it: a declared error's message, else the client error's text.
     type Error = String;
 
-    fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<V2Event, Self::Error>> {
-        let client = self.client.clone();
+    /// The stream's events, each read by [`Payload::read`] as the stream frames it: the stream ends at the first that
+    /// does not decode, with its error.
+    fn open(&mut self, activity: Activity) -> BoxStream<'static, Result<Payload, Self::Error>> {
+        let (client, wanted) = (self.client.clone(), self.wanted.clone());
         futures_util::stream::once(async move {
             client
                 .event_subscribe(&EventSubscribeInput::default())
                 .await
-                .map(|response| response.events(move || activity()).boxed())
+                .map(|response| response.read(move || activity(), move |text| Payload::read(text, &wanted)).boxed())
         })
         .flat_map(|opened| match opened {
             Ok(stream) => stream,
@@ -165,7 +172,8 @@ impl Source<V2Event> for Events {
 pub fn connect(data: &Data, options: events::Options) -> (Connection, JoinHandle<()>) {
     let _runtime = data.runtime().enter();
     data.set_online(false);
-    let (connection, batches) = events::connect(Events { client: data.client().clone() }, options);
+    let events = Events { client: data.client().clone(), wanted: data.remote().wanted() };
+    let (connection, batches) = events::connect(events, options);
     let task = data.runtime().spawn(run(data.remote(), connection.watch(), batches));
     (connection, task)
 }

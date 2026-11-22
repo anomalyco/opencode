@@ -21,6 +21,7 @@ use tokio::task::AbortHandle;
 
 use crate::changes::Dirty;
 use crate::core::{Completion, Delta, Effect, Ticket};
+use crate::payload::{Kind, Payload, Wanted};
 use crate::reads::{Read, Start};
 use crate::state::{Error, MESSAGE_PAGE, Options, State, is_tag, session_not_found};
 
@@ -69,6 +70,8 @@ struct Inner {
     deltas: Deltas,
     /// False while the event connection is not connected; follow-up reads are skipped then.
     online: Cell<bool>,
+    /// The buffer adjacent deltas that came as JSON join in, kept between batches.
+    joined: Cell<String>,
     disposed: Cell<bool>,
     on_error: RefCell<Option<ErrorHandler>>,
     /// The drained mail's buffer, kept between drains.
@@ -98,6 +101,7 @@ impl Data {
             queue: Mutex::default(),
             room: Semaphore::new(MAILBOX),
             wake: Box::new(wake),
+            wanted: Wanted::default(),
         }));
         Self {
             inner: Rc::new(Inner {
@@ -109,6 +113,7 @@ impl Data {
                 signals: RefCell::default(),
                 deltas: Deltas::default(),
                 online: Cell::new(true),
+                joined: Cell::default(),
                 disposed: Cell::new(false),
                 on_error: RefCell::new(None),
                 drained: Cell::default(),
@@ -157,11 +162,11 @@ impl Data {
         let count = mail.len();
         for item in mail.drain(..) {
             match item {
-                Mail::Batch(events, online) => {
+                Mail::Batch(mut payloads, online) => {
                     if let Some(online) = online {
                         self.set_online(online);
                     }
-                    self.apply(events);
+                    self.apply_payloads(&mut payloads);
                 }
                 Mail::Online(online) => self.set_online(online),
                 Mail::Run(job) => job(self),
@@ -248,6 +253,7 @@ impl Data {
         let id = deltas.ids.get();
         deltas.ids.set(id + 1);
         deltas.cursors.borrow_mut().insert(id, deltas.next());
+        self.inner.remote.0.wanted.set(true);
         DeltaListening { inner: Rc::downgrade(&self.inner), id }
     }
 
@@ -438,16 +444,40 @@ impl Data {
         result
     }
 
-    /// Applies one batch of events under one flush. Then its streaming deltas go to the [`DeltaListening`]s and its
-    /// events of a listened type to [`Data::take_signals`], moved out of the batch.
-    pub fn apply(&self, mut events: Vec<V2Event>) {
+    /// Applies one batch of events under one flush. A delta that came as JSON, and that no listener wants, applies
+    /// borrowed from it, adjacent deltas of one part joined first, as the connection's batches join
+    /// decoded ones; the rest apply decoded. Then each streaming delta goes to the [`DeltaListening`]s, and each event of
+    /// a listened type to [`Data::take_signals`], moved out of the batch.
+    pub fn apply<P: Into<Payload>>(&self, batch: impl IntoIterator<Item = P>) {
+        self.apply_payloads(&mut batch.into_iter().map(Into::into).collect::<Vec<_>>());
+    }
+
+    /// [`Data::apply`] on a batch as the connection sends it, which it empties.
+    pub fn apply_payloads(&self, batch: &mut Vec<Payload>) {
+        let mut text = self.inner.joined.take();
         self.write_effects(|store, effects| {
-            for event in &events {
-                store.state.apply(event, effects);
+            let mut at = 0;
+            while at < batch.len() {
+                // A delta listener wants the owned events.
+                if let Kind::Hot(hot, _) = batch[at].0
+                    && self.inner.deltas.cursors.borrow().is_empty()
+                {
+                    let run = batch[at..].iter().take_while(|next| matches!(next.0, Kind::Hot(next, _) if next == hot));
+                    let end = at + run.count();
+                    store.state.apply_borrowed(hot, &batch[at..end], &mut text);
+                    at = end;
+                    continue;
+                }
+                if let Some(event) = batch[at].event() {
+                    store.state.apply(event, effects);
+                }
+                at += 1;
             }
         });
+        self.inner.joined.set(text);
         let mut told = false;
-        for event in events.drain(..) {
+        for Payload(kind) in batch.drain(..) {
+            let Kind::Event(event) = kind else { continue };
             if Delta::of(&event).is_some() {
                 // A delta of a session whose messages are not loaded changes nothing, and is kept all the same.
                 told |= self.inner.deltas.keep(event);
@@ -544,6 +574,8 @@ struct Mailbox {
     /// Free places in the queue: a sender waits for one, and the owner gives them back as it drains.
     room: Semaphore,
     wake: Box<dyn Fn() -> Result<(), Unwoken> + Send + Sync>,
+    /// Whether a listener wants the deltas owned, for the connection.
+    wanted: Wanted,
 }
 
 #[derive(Default)]
@@ -556,7 +588,7 @@ struct Queue {
 /// What other threads send the owner.
 pub(crate) enum Mail {
     /// A batch of events, applied after marking the connection up or down when it says.
-    Batch(Vec<V2Event>, Option<bool>),
+    Batch(Vec<Payload>, Option<bool>),
     Online(bool),
     Run(Box<dyn FnOnce(&Data) + Send>),
 }
@@ -578,6 +610,11 @@ impl Remote {
 
     pub(crate) fn head(&self) -> i64 {
         self.0.head
+    }
+
+    /// Whether a listener wants the deltas owned: the connection reads its payloads with it ([`Payload::read`]).
+    pub fn wanted(&self) -> Wanted {
+        self.0.wanted.clone()
     }
 
     /// Queues `mail` for the owner once there is room, and wakes it if it is not awake. False once the store is gone.
@@ -782,7 +819,9 @@ impl DeltaListening {
 impl Drop for DeltaListening {
     fn drop(&mut self) {
         if let Some(inner) = self.inner.upgrade() {
-            inner.deltas.cursors.borrow_mut().remove(&self.id);
+            let mut cursors = inner.deltas.cursors.borrow_mut();
+            cursors.remove(&self.id);
+            inner.remote.0.wanted.set(!cursors.is_empty());
         }
     }
 }

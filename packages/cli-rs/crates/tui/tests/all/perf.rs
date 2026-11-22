@@ -20,7 +20,7 @@ use opencode_api::client::Client;
 use opencode_api::events::Event;
 use opencode_api::generated::{SessionID, V2Event};
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_store::{Data, LoadMore, Options as StoreOptions};
+use opencode_store::{Data, LoadMore, Options as StoreOptions, Payload, Wanted};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
@@ -91,12 +91,17 @@ fn stream() {
     let events = streamed();
     let count = events.len() as u64;
     let batches: Vec<Vec<String>> = events.chunks(BATCH).map(<[_]>::to_vec).collect();
+    let wanted = tui.data.remote().wanted();
     let probe = Probe::start();
-    connected(batches, decoded, |batch| {
-        tui.data.apply(batch);
-        h.app.wait_until(WAIT, || tui.synced());
-        frame(&h.app);
-    });
+    connected(
+        batches,
+        |batch| read(batch, &wanted),
+        |mut batch| {
+            tui.data.apply_payloads(&mut batch);
+            h.app.wait_until(WAIT, || tui.synced());
+            frame(&h.app);
+        },
+    );
     settle(&h.app);
     probe.finish("stream", count);
     let screen = h.app.text();
@@ -235,11 +240,16 @@ fn store_stream() {
     let events = streamed();
     let count = events.len() as u64;
     let batches: Vec<Vec<String>> = events.chunks(BATCH).map(<[_]>::to_vec).collect();
+    let wanted = data.remote().wanted();
     let probe = Probe::start();
-    connected(batches, decoded, |batch| {
-        data.apply(batch);
-        deltas.take(|_| ());
-    });
+    connected(
+        batches,
+        |batch| read(batch, &wanted),
+        |mut batch| {
+            data.apply_payloads(&mut batch);
+            deltas.take(|_| ());
+        },
+    );
     probe.finish("store_stream", count);
     let text = data.read(|state| format!("{:?}", state.messages(&id).last()));
     assert!(text.contains("done streaming"), "{text}");
@@ -523,17 +533,16 @@ fn provider(index: usize) -> Value {
     json!({ "id": format!("provider-{index}"), "name": format!("Provider {index}"), "activation": "auto", "package": "@ai-sdk/test" })
 }
 
-/// A batch of the stream's payloads as the connection hands it to the store: each event's JSON decoded, and adjacent
-/// deltas merged.
-fn decoded(batch: Vec<String>) -> Vec<V2Event> {
-    let mut events: Vec<V2Event> = Vec::with_capacity(batch.len());
-    for payload in batch {
-        let event = serde_json::from_str(&payload).unwrap();
-        if !events.last_mut().is_some_and(|last| last.merge(&event)) {
-            events.push(event);
+/// A batch of the stream's payloads as the connection reads them, with what decoded there of adjacent deltas merged.
+fn read(batch: Vec<String>, wanted: &Wanted) -> Vec<Payload> {
+    let mut payloads: Vec<Payload> = Vec::with_capacity(batch.len());
+    for text in batch {
+        let payload = Payload::read(text, wanted).unwrap();
+        if !payloads.last_mut().is_some_and(|last| last.merge(&payload)) {
+            payloads.push(payload);
         }
     }
-    events
+    payloads
 }
 
 /// Hands `apply` the stream's batches as the connection sends them to the store, each made by `connection` on a thread
