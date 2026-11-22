@@ -5,7 +5,6 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { sameDirectory } from "@opencode/util/path"
 import path, { dirname, join } from "path"
-import { isDeepStrictEqual } from "node:util"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { Config } from "../../config.js"
@@ -153,30 +152,28 @@ export const Plugin = define({
         return files
       })
 
-      // Remote instructions are fetched only when config loads, not on every file rescan.
-      // A failed fetch keeps the last good copy or skips the URL, so an unreachable URL
-      // never makes the whole instruction set unavailable.
+      // Keep successful URL fetches until removed from config; retry missing ones on the next config update.
       const reconfigure = Effect.fn("ConfigInstructionPlugin.reconfigure")(
         function* () {
           const entries = yield* config.entries()
           const sources = Array.from(
             new Set(entries.flatMap((entry) => (entry.type === "document" ? (entry.info.instructions ?? []) : []))),
           )
-          if (isDeepStrictEqual(configured.sources, sources)) return
           const fetched = yield* Effect.forEach(
             sources.filter(isUrl),
-            (url) =>
-              HttpClientRequest.get(url).pipe(
+            (url) => {
+              const cached = configured.remote.get(url)
+              if (cached) return Effect.succeed(cached)
+              return HttpClientRequest.get(url).pipe(
                 http.execute,
                 Effect.flatMap((response) => response.text),
                 Effect.timeout("5 seconds"),
                 Effect.map((content) => new InstructionDiscovery.File({ path: url, content })),
                 Effect.catchCause((cause) =>
-                  Effect.logWarning("failed to fetch instruction url", { url, cause }).pipe(
-                    Effect.as(configured.remote.get(url)),
-                  ),
+                  Effect.logWarning("failed to fetch instruction url", { url, cause }).pipe(Effect.as(undefined)),
                 ),
-              ),
+              )
+            },
             { concurrency: 4 },
           )
           configured.sources = sources
