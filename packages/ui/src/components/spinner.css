@@ -34,10 +34,3 @@
   animation: none;
   transform: var(--spinner-still);
 }
-
-@media (prefers-reduced-motion: reduce) {
-  [data-slot="spinner-dots"] > [data-slot="spinner-strip"] {
-    animation: none;
-    transform: var(--spinner-still);
-  }
-}
