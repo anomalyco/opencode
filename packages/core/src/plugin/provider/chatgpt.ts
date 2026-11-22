@@ -32,10 +32,8 @@ const providerID = Provider.ID.openai
 const integrationID = Integration.ID.make("openai")
 const methodID = Integration.MethodID.make("chatgpt-token-sharing")
 const modelCacheKey = (clientID: string) => `models:${clientID}`
-// Used when the catalog has no Sign in with ChatGPT list.
+// Used when the catalog has no Sign in with ChatGPT list. gpt-5.5 is rejected there.
 const fallbackModels = new Set([
-  "gpt-5.5",
-  "gpt-5.5-fast",
   "gpt-5.6-luna",
   "gpt-5.6-luna-fast",
   "gpt-5.6-sol",

@@ -802,7 +802,7 @@ describe("ChatGPTPlugin", () => {
           draft.package = "@opencode/ai/providers/openai"
           draft.settings = { transport: "websocket" }
         })
-        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), (model) => {
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6.2-sol"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
           model.cost = [
             {
@@ -838,6 +838,7 @@ describe("ChatGPTPlugin", () => {
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-4.99"), () => {})
         for (const id of [
+          "gpt-5.5",
           "gpt-5.5-fast",
           "gpt-5.6-luna",
           "gpt-5.6-luna-fast",
@@ -891,7 +892,7 @@ describe("ChatGPTPlugin", () => {
         "thread-id": child.id,
         "x-client-request-id": child.id,
       })
-      const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
+      const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6.2-sol")))
       expect(eligible.package).toBe("@opencode/ai/providers/openai")
       expect(eligible.headers).not.toHaveProperty("x-openai-chatpass-test")
       expect(eligible.cost).toEqual([])
@@ -902,6 +903,8 @@ describe("ChatGPTPlugin", () => {
       expect(gpt56.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).enabled).toBe(true)
       for (const id of [
+        "gpt-5.5",
+        "gpt-5.5-fast",
         "gpt-5.5-pro",
         "gpt-5.4-pro",
         "gpt-5.4",
@@ -920,8 +923,6 @@ describe("ChatGPTPlugin", () => {
           .sort(),
       ).toEqual(
         [
-          "gpt-5.5",
-          "gpt-5.5-fast",
           "gpt-5.6-luna",
           "gpt-5.6-luna-fast",
           "gpt-5.6-sol",
@@ -938,6 +939,7 @@ describe("ChatGPTPlugin", () => {
           "gpt-6.1-sol-fast",
           "gpt-6.1-terra",
           "gpt-6.1-terra-fast",
+          "gpt-6.2-sol",
         ].map((id) => Model.ID.make(id)),
       )
     }),
@@ -1152,7 +1154,7 @@ describe("ChatGPTPlugin", () => {
         const models = yield* Model.Service
         const credentials = yield* Credential.Service
         const providerID = Provider.ID.openai
-        const baseID = Model.ID.make("gpt-5.5")
+        const baseID = Model.ID.make("gpt-6-sol")
         const modelID = Model.ID.make("gpt-5.6-sol")
         const variantID = Model.ID.make("gpt-6-astra")
         // const kv = yield* KV.Service
