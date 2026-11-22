@@ -749,6 +749,130 @@ fn a_selection_keeps_its_rows_while_the_wheel_moves_away_and_back() {
     assert_eq!(rows(&h.idle()), rows(&screen));
 }
 
+/// `count` turns whose replies run `tools` rows each, longer than a chunk of the window, ungrouped.
+fn long_turns(count: u64, tools: u64) -> Vec<Value> {
+    (1..=count)
+        .flat_map(|turn| {
+            let created = turn * 10_000;
+            let mut content: Vec<Value> = (0..tools)
+                .map(|tool| {
+                    json!({
+                        "type": "tool", "id": format!("call_{turn}_{tool}"), "name": "lookup",
+                        "state": { "status": "completed", "input": { "key": format!("k{turn}.{tool}") }, "content": [] },
+                        "time": { "created": 1, "completed": 2 },
+                    })
+                })
+                .collect();
+            content.push(json!({ "type": "text", "text": format!("Answer {turn} one.\n\nAnswer {turn} two.\n\nAnswer {turn} three.") }));
+            [
+                user(&format!("msg_{turn:03}a"), created, &format!("Question {turn}")),
+                assistant(&format!("msg_{turn:03}b"), created + 1000, Value::Array(content)),
+            ]
+        })
+        .collect()
+}
+
+fn ungrouped() -> Info {
+    let session = Session { grouping: Some(Grouping::None), verbosity: Some(Verbosity::Medium), ..Session::default() };
+    Info { session: Some(session), ..Info::default() }
+}
+
+/// The screen without the "Jump to latest" hint, which shows once the view leaves the bottom.
+fn unhinted(screen: &str) -> String {
+    let lines = screen.lines().map(|line| line.replace("Jump to latest ↓", "").trim_end().to_owned());
+    lines.collect::<Vec<_>>().join("\n")
+}
+
+/// Review repro (mem-scroll): stepping back by user message over replies longer than a chunk takes more than one
+/// `extend`. The first one's drop below runs in the same frame as the second one's mount above, whose pin reads the
+/// content height from before the drop, so for a frame or two the view shows rows that are neither where the reader
+/// was nor the target. Property: from any start, each `user.previous` lands on the question before the last, and every
+/// frame on the way shows the start or the target.
+#[test]
+fn review_user_previous_over_long_turns_holds_the_view_until_it_lands() {
+    let mut failures = Vec::new();
+    for pages in [0, 6, 12, 20] {
+        let h = open_until(long_turns(8, 90), ungrouped(), "Answer 8 three.", 25);
+        for _ in 0..pages {
+            h.press("pageup");
+        }
+        let mut landed = Vec::new();
+        for _ in 0..12 {
+            let before = unhinted(&h.idle());
+            h.tui.keymap.dispatch("session.message.user.previous", None);
+            let mut frames = Vec::new();
+            for _ in 0..40 {
+                h.app.advance(Duration::from_millis(1));
+                h.app.render();
+                frames.push(unhinted(&h.app.text()));
+            }
+            let screen = unhinted(&h.idle());
+            let question = top_question(&screen);
+            landed.push(question);
+            if let Some(stray) = frames.iter().find(|frame| **frame != before && **frame != screen) {
+                failures.push(format!(
+                    "{pages} pages up, user.previous to {question:?}: a frame on the way:\n{before}\n=====\n{stray}\n=====\n{screen}"
+                ));
+            }
+            if question == Some(1) {
+                break;
+            }
+        }
+        let first = landed.first().copied().flatten().unwrap_or(0);
+        let expected: Vec<Option<u64>> = (1..=first).rev().map(Some).collect();
+        if landed != expected {
+            failures.push(format!("{pages} pages up: user.previous landed on {landed:?}"));
+        }
+    }
+    let heads: Vec<&str> = failures.iter().map(|failure| failure.lines().next().unwrap_or_default()).collect();
+    assert!(failures.is_empty(), "{} failures:\n{}\n\nthe first:\n{}", failures.len(), heads.join("\n"), failures[0]);
+}
+
+/// Review check (mem-scroll): the wheel drops rows too (`on_mouse` → `reveal_*` → `grow`), and the only wheel test
+/// holds a selection, which keeps every row. Property: without a selection, every wheel step moves the content by the
+/// same distance end to end, both ways, and the way back ends on the screen it started from.
+#[test]
+fn review_the_wheel_moves_evenly_while_rows_drop() {
+    let h = open(turns(LONG), Info::default());
+    h.press("ctrl+g");
+    let from = h.wait_for("┃  Question 1\n");
+    let mut failures = Vec::new();
+    let mut steps = 0;
+    for down in [true, false] {
+        let mut before = h.idle();
+        for step in 0.. {
+            assert!(step < 3000, "the wheel never reached an end");
+            h.app.scroll(10, 8, down);
+            h.app.advance(Duration::from_millis(1));
+            let after = h.idle();
+            if after == before {
+                break;
+            }
+            if down {
+                steps += 1;
+            }
+            let moved = shift(&before, &after);
+            if moved.is_none_or(|moved| moved.abs() != 3) {
+                let direction = if down { "down" } else { "up" };
+                // The last step at each edge may be shorter; anything else is a jump.
+                let edge = moved.is_some_and(|moved| moved.abs() < 3);
+                failures.push((edge, format!("step {step} {direction}: moved {moved:?}\n{before}\n=====\n{after}")));
+            }
+            before = after;
+        }
+    }
+    assert!(steps > 300, "{steps} wheel steps to the bottom");
+    let jumps: Vec<&str> = failures.iter().filter(|(edge, _)| !edge).map(|(_, text)| text.as_str()).collect();
+    assert!(
+        jumps.is_empty() && failures.len() <= 2,
+        "{} jumps of {} uneven steps; the first:\n{}",
+        jumps.len(),
+        failures.len(),
+        jumps.first().copied().unwrap_or_else(|| failures[0].1.as_str())
+    );
+    assert_eq!(h.idle(), from);
+}
+
 #[test]
 fn freed_rows_go_back_to_the_system_once_the_reader_stops() {
     let runs = opencode_tui::features::release::runs;
