@@ -77,8 +77,8 @@ fn mount(server: &Cold) -> support::Harness {
     h.wait("the cold catalogs to load", || {
         h.tui.data.read(|state| {
             state.location(None).is_some_and(|data| {
-                data.model.as_ref().is_some_and(Vec::is_empty)
-                    && data.agent.as_ref().is_some_and(Vec::is_empty)
+                data.model.as_deref().is_some_and(<[_]>::is_empty)
+                    && data.agent.as_deref().is_some_and(<[_]>::is_empty)
                     && data.command.is_some()
             })
         })

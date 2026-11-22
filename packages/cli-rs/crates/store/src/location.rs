@@ -1,5 +1,6 @@
 //! Location catalogs are read once per invalidation. Events refresh only their affected location.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::future::try_join_all;
@@ -76,27 +77,27 @@ impl Catalog {
     }
 }
 
-/// What the store knows about one location. `None` means not read yet.
+/// What the store knows about one location. `None` means not read yet; a catalog is shared, so a copy is a count.
 #[derive(Debug, Clone, Default)]
 pub struct LocationData {
     pub info: Option<LocationPublicInfo>,
     pub vcs: Option<VcsInfo>,
-    pub agent: Option<Vec<AgentInfo>>,
-    pub command: Option<Vec<CommandInfo>>,
-    pub config: Option<Vec<ConfigEntry>>,
-    pub integration: Option<Vec<IntegrationInfo>>,
-    pub mcp_server: Option<Vec<McpServer>>,
-    pub mcp_resource: Option<Vec<McpResource>>,
-    pub model: Option<Vec<ModelInfo>>,
-    pub provider: Option<Vec<ProviderInfo>>,
-    pub reference: Option<Vec<ReferenceInfo>>,
+    pub agent: Option<Arc<[AgentInfo]>>,
+    pub command: Option<Arc<[CommandInfo]>>,
+    pub config: Option<Arc<[ConfigEntry]>>,
+    pub integration: Option<Arc<[IntegrationInfo]>>,
+    pub mcp_server: Option<Arc<[McpServer]>>,
+    pub mcp_resource: Option<Arc<[McpResource]>>,
+    pub model: Option<Arc<[ModelInfo]>>,
+    pub provider: Option<Arc<[ProviderInfo]>>,
+    pub reference: Option<Arc<[ReferenceInfo]>>,
     pub websearch: Option<Vec<WebSearchProvider>>,
     /// The Go allowance and Console budgets of the signed-in OpenCode Console workspace; the
     /// inner `None` means not signed in.
     pub usage_limits: Option<Option<UsageLimitsInfo>>,
     /// Running shells by ID. Exited and deleted shells are removed.
     pub shell: Option<IndexMap<ShellID, Shell>>,
-    pub skill: Option<Vec<SkillInfo>>,
+    pub skill: Option<Arc<[SkillInfo]>>,
     pub(crate) shell_read: Option<ShellRead>,
 }
 
@@ -125,16 +126,16 @@ impl LocationData {
 enum Loaded {
     Vcs(VcsInfo),
     UsageLimits(Option<UsageLimitsInfo>),
-    Agent(Vec<AgentInfo>),
-    Command(Vec<CommandInfo>),
-    Config(Vec<ConfigEntry>),
-    Integration(Vec<IntegrationInfo>),
-    McpServer(Vec<McpServer>),
-    McpResource(Vec<McpResource>),
-    Model(Vec<ModelInfo>),
-    Provider(Vec<ProviderInfo>),
-    Reference(Vec<ReferenceInfo>),
-    Skill(Vec<SkillInfo>),
+    Agent(Arc<[AgentInfo]>),
+    Command(Arc<[CommandInfo]>),
+    Config(Arc<[ConfigEntry]>),
+    Integration(Arc<[IntegrationInfo]>),
+    McpServer(Arc<[McpServer]>),
+    McpResource(Arc<[McpResource]>),
+    Model(Arc<[ModelInfo]>),
+    Provider(Arc<[ProviderInfo]>),
+    Reference(Arc<[ReferenceInfo]>),
+    Skill(Arc<[SkillInfo]>),
 }
 
 impl Loaded {
@@ -309,7 +310,9 @@ impl State {
             return;
         };
         let mut changed = false;
-        for integration in integrations.iter_mut().filter(|integration| integration.id == data.integration_id) {
+        for integration in
+            Arc::make_mut(integrations).iter_mut().filter(|integration| integration.id == data.integration_id)
+        {
             let Some(at) = integration.connections.iter().position(
                 |connection| matches!(connection, ConnectionInfo::Credential(info) if info.id == *credential),
             ) else {
@@ -520,44 +523,44 @@ async fn load(
         }
         Catalog::Agent => {
             let response = client.agent_list(&AgentListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Agent(response.data))
+            ((&response.location).into(), Loaded::Agent(response.data.into()))
         }
         Catalog::Command => {
             let response = client.command_list(&CommandListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Command(response.data))
+            ((&response.location).into(), Loaded::Command(response.data.into()))
         }
         // Config answers without a location; it publishes under the requested directory.
         Catalog::Config => {
             let entries = client.config_get(&ConfigGetInput { location: query }).await?;
-            (Location::new(location.directory.clone()), Loaded::Config(entries))
+            (Location::new(location.directory.clone()), Loaded::Config(entries.into()))
         }
         Catalog::Integration => {
             let response = client.integration_list(&IntegrationListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Integration(response.data))
+            ((&response.location).into(), Loaded::Integration(response.data.into()))
         }
         Catalog::McpServer => {
             let response = client.mcp_list(&McpListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::McpServer(response.data))
+            ((&response.location).into(), Loaded::McpServer(response.data.into()))
         }
         Catalog::McpResource => {
             let response = client.mcp_resource_catalog(&McpResourceCatalogInput { location: query }).await?;
-            ((&response.location).into(), Loaded::McpResource(response.data.resources))
+            ((&response.location).into(), Loaded::McpResource(response.data.resources.into()))
         }
         Catalog::Model => {
             let response = client.model_list(&ModelListInput { location: query, types: None }).await?;
-            ((&response.location).into(), Loaded::Model(response.data))
+            ((&response.location).into(), Loaded::Model(response.data.into()))
         }
         Catalog::Provider => {
             let response = client.provider_list(&ProviderListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Provider(response.data))
+            ((&response.location).into(), Loaded::Provider(response.data.into()))
         }
         Catalog::Reference => {
             let response = client.reference_list(&ReferenceListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Reference(response.data))
+            ((&response.location).into(), Loaded::Reference(response.data.into()))
         }
         Catalog::Skill => {
             let response = client.skill_list(&SkillListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Skill(response.data))
+            ((&response.location).into(), Loaded::Skill(response.data.into()))
         }
         Catalog::Shell => unreachable!("Data::shell_read reads shells"),
     })

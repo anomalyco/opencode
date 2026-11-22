@@ -155,6 +155,8 @@ struct Model {
     revision: u64,
     /// Number of preceding messages at this window start and revision.
     above: Option<(u64, Start, u32)>,
+    /// The row indices a patch updates, kept between patches for their buffer.
+    stale: Vec<usize>,
 }
 
 /// What rows paint with: the theme's colors and syntax, and the shortcuts read at the keymap revision kept beside them.
@@ -1004,7 +1006,7 @@ impl Inner {
             let visible = Visible::of(state, session);
             let lookup = visible.lookup;
             let (specs, legacy, mut stale) = {
-                let model = self.model.borrow();
+                let mut model = self.model.borrow_mut();
                 // Each changed message is where the last render saw it, in the same shape.
                 let same = model.shapes.len() == lookup.visible.len()
                     && changes.message_keys(state, session).all(|key| {
@@ -1013,19 +1015,18 @@ impl Inner {
                 if !same {
                     return false;
                 }
-                let stale: Vec<usize> = changes
-                    .message_keys(state, session)
-                    .filter_map(|key| model.refs.get(&key))
-                    .flatten()
-                    .copied()
-                    .collect();
+                let mut stale = std::mem::take(&mut model.stale);
+                let rows = changes.message_keys(state, session).filter_map(|key| model.refs.get(&key));
+                stale.extend(rows.flatten());
                 (model.specs.clone(), model.legacy, stale)
             };
             stale.sort_unstable();
             stale.dedup();
             let cx = self.context(tui, state, &visible, &keys, &paint, legacy);
-            self.update(&cx, stale.into_iter().map(|index| &specs[index]), Row::update);
+            self.update(&cx, stale.iter().map(|index| &specs[*index]), Row::update);
             self.trailing(tui, &visible, &keys);
+            stale.clear();
+            self.model.borrow_mut().stale = stale;
             true
         })
     }

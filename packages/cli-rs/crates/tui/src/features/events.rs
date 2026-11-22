@@ -19,6 +19,8 @@ pub struct Events {
     /// The deltas are handed over before the next frame.
     deltas_due: Cell<bool>,
     next: Cell<u64>,
+    /// The route the usage alerts last looked at.
+    alerted_route: RefCell<Option<Rc<Route>>>,
 }
 
 #[derive(Clone)]
@@ -184,11 +186,18 @@ pub fn deltas(tui: &Tui) {
 }
 
 pub fn sync(tui: &Tui, changes: &Changes) {
-    let default = tui.data.read(|state| state.default_location().clone());
-    if changes.location(&default) {
+    if tui.data.read(|state| changes.location(state.default_location())) {
         mcp_toasts(tui);
     }
-    crate::dialogs::model::usage_alerts(&tui.local);
+    // The alerts follow the local selections and catalogs on their own ([`crate::local::Local::sync`] tells of a
+    // catalog change); here they follow the route and the routed session's selection.
+    let route = tui.route();
+    let moved = tui.events.alerted_route.borrow().as_ref().is_none_or(|seen| !Rc::ptr_eq(seen, &route));
+    let session = matches!(&*route, Route::Session { id } if changes.has(id, Touched::INFO | Touched::SELECTED));
+    if moved || session {
+        crate::dialogs::model::usage_alerts(&tui.local);
+    }
+    *tui.events.alerted_route.borrow_mut() = Some(route);
 }
 
 fn handle(tui: &Tui, event: &Handled) {

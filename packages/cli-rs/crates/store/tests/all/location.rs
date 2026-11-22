@@ -57,7 +57,7 @@ fn pair(path: &str, directory: &str) -> (String, Option<String>) {
     (path.to_owned(), Some(directory.to_owned()))
 }
 
-fn name<T: serde::Serialize>(items: Option<&Vec<T>>) -> Option<String> {
+fn name<T: serde::Serialize>(items: Option<&std::sync::Arc<[T]>>) -> Option<String> {
     let value = serde_json::to_value(items?.first()?).ok()?;
     value["name"].as_str().map(str::to_owned)
 }
@@ -467,7 +467,7 @@ async fn a_first_connection_reads_the_catalogs_read_before_it_again() {
     );
     let models = || data.read(|state| state.location(None).and_then(|data| data.model.clone()));
     data.catalog_sync(Catalog::Model, None).await.unwrap();
-    assert_eq!(models(), Some(Vec::new()));
+    assert_eq!(models().as_deref(), Some(&[][..]));
 
     emit(&data, json!({ "id": "evt_connected", "created": 1, "type": "server.connected", "data": {} }));
     data.catalog_sync(Catalog::Model, None).await.unwrap();
@@ -578,7 +578,11 @@ async fn preserves_sibling_catalogs_through_location_preload_branch_shell_and_we
     data.catalog_sync(Catalog::Vcs, None).await.unwrap();
     let loaded = references();
     assert_eq!(
-        loaded.iter().flatten().map(|reference| (reference.name.clone(), reference.path.0.clone())).collect::<Vec<_>>(),
+        loaded
+            .iter()
+            .flat_map(|loaded| loaded.iter())
+            .map(|reference| (reference.name.clone(), reference.path.0.clone()))
+            .collect::<Vec<_>>(),
         [("docs".to_owned(), "/docs".to_owned())]
     );
     assert_eq!(data.read(|state| state.shell(&first).cloned()), Some(created.clone()));

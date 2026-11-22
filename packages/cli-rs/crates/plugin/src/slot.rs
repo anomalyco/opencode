@@ -68,8 +68,9 @@ impl Live {
         followers.push(follower);
     }
 
-    pub fn followers(&self) -> Vec<Rc<dyn Any>> {
-        self.followers.borrow().iter().filter_map(Weak::upgrade).collect()
+    /// The live followers `wanted` picks; none allocates nothing.
+    pub fn followers(&self, wanted: impl Fn(&dyn Any) -> bool) -> Vec<Rc<dyn Any>> {
+        self.followers.borrow().iter().filter_map(Weak::upgrade).filter(|follower| wanted(&**follower)).collect()
     }
 }
 

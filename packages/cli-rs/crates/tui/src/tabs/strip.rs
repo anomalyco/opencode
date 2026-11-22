@@ -241,33 +241,33 @@ impl MarkerFade {
     }
 }
 
-pub(super) fn indicator(
+pub(super) fn indicator<'a>(
     status: &Status,
-    label: &str,
-    idle: &str,
+    label: &'a str,
+    idle: &'a str,
     numbers: bool,
     animations: bool,
     fading: bool,
     step: u64,
-) -> (String, bool) {
+) -> (&'a str, bool) {
     let pending = status.busy || status.attention.is_some();
     let unread = status.unread.is_some() && !pending;
     let text = if numbers {
-        label.to_owned()
+        label
     } else if status.attention == Some(Attention::Permission) {
-        "!".to_owned()
+        "!"
     } else if status.attention == Some(Attention::Question) {
-        "?".to_owned()
+        "?"
     } else if status.runs() {
         let frames = opencode_ui::motion::SPINNER_FRAMES;
         let frame = if animations { (step % frames.len() as u64) as usize } else { 0 };
-        frames[frame].to_owned()
+        frames[frame]
     } else if label == "+" {
-        "+".to_owned()
+        "+"
     } else if status.unread.is_some() || fading {
-        UNREAD_MARKER.to_owned()
+        UNREAD_MARKER
     } else {
-        idle.to_owned()
+        idle
     };
     (text, unread)
 }
@@ -282,18 +282,16 @@ pub(super) fn fade(color: Color, background: Color, index: usize, length: usize,
     if opacity == 0.0 { color } else { tint(color, background, opacity) }
 }
 
-pub(super) fn take_width(text: &str, width: usize) -> Vec<char> {
+pub(super) fn take_width(text: &str, width: usize) -> impl Iterator<Item = char> + '_ {
     let mut used = 0;
-    text.chars()
-        .take_while(|character| {
-            let next = char_width(*character);
-            if used + next > width {
-                return false;
-            }
-            used += next;
-            true
-        })
-        .collect()
+    text.chars().take_while(move |character| {
+        let next = char_width(*character);
+        if used + next > width {
+            return false;
+        }
+        used += next;
+        true
+    })
 }
 
 pub(super) fn paint_pulse(painter: &mut Painter<'_>, x: i32, y: i32, cells: Option<Vec<(Option<char>, Color, Color)>>) {
@@ -307,14 +305,14 @@ pub(super) fn draw_chars(
     painter: &mut Painter<'_>,
     x: i32,
     y: i32,
-    characters: &[char],
+    characters: impl IntoIterator<Item = char>,
     style: impl Fn(usize) -> Style,
 ) {
     let mut column = x;
     let mut buffer = [0; 4];
-    for (index, character) in characters.iter().enumerate() {
+    for (index, character) in characters.into_iter().enumerate() {
         painter.text(column, y, character.encode_utf8(&mut buffer), style(index));
-        column += char_width(*character) as i32;
+        column += char_width(character) as i32;
     }
 }
 
@@ -411,14 +409,6 @@ impl Component for Strip {
             active_number: theme.interactive().step(200),
             idle_number: tint(theme.text.formfield.base, theme.background.base, 0.55),
         };
-        let statuses: Vec<Status> = items[layout.visible()]
-            .iter()
-            .map(
-                |tab| {
-                    if tab.session_id == NEW_TAB { Status::default() } else { tui.tabs.status(&tui, &tab.session_id) }
-                },
-            )
-            .collect();
         let names = self.names(&tui, &items);
         let titles = &names[layout.visible()];
 
@@ -434,7 +424,8 @@ impl Component for Strip {
         }
         let marquee_session = self.marquee.active();
         let mut marquee_titles = self.titles.borrow_mut();
-        let mut slots = Vec::new();
+        // The last paint's slots, overwritten in place: a tab painted again keeps its owned ID.
+        let mut slots = self.slots.take();
         let mut pulses = self.pulses.borrow_mut();
         let mut markers = self.fades.borrow_mut();
         let mut spins = self.spins.borrow_mut();
@@ -443,8 +434,8 @@ impl Component for Strip {
         for (offset, tab) in items[layout.visible()].iter().enumerate() {
             let index = layout.start + offset;
             let tab_width = layout.widths[offset].max(1);
-            let status = statuses[offset];
             let session = tab.session_id.as_str();
+            let status = if session == NEW_TAB { Status::default() } else { tui.tabs.status(&tui, session) };
             let selected = active.as_deref() == Some(session);
             let hovered = self.hovered.as_deref() == Some(session);
             let dragged = self.dragged && self.pressed.as_deref() == Some(session);
@@ -536,7 +527,7 @@ impl Component for Strip {
             if bold {
                 style = style.bold();
             }
-            painter.text(left + number_width as i32 - glyph_width as i32, 0, &glyph, style);
+            painter.text(left + number_width as i32 - glyph_width as i32, 0, glyph, style);
 
             let resting = tab_width.saturating_sub(1 + number_width).max(1);
             let available = if hovered { resting.saturating_sub(2).max(1) } else { resting };
@@ -553,13 +544,13 @@ impl Component for Strip {
             let parts = if scrolling {
                 marquee::text_parts(title, available, self.marquee.offset())
             } else {
-                take_width(title, available).into_iter().map(|character| (character, false)).collect()
+                take_width(title, available).map(|character| (character, false)).collect()
             };
-            let visible: Vec<char> = parts.iter().map(|(character, _)| *character).collect();
             let leading = if scrolling { self.marquee.leading(now) } else { 0.0 };
             let fades = marquee::overflows(title, available) && available > FADE_WIDTH;
-            let length = visible.len();
-            draw_chars(painter, left + number_width as i32 + 1, 0, &visible, |character| {
+            let length = parts.len();
+            let visible = parts.iter().map(|(character, _)| *character);
+            draw_chars(painter, left + number_width as i32 + 1, 0, visible, |character| {
                 let color = if glows {
                     tint(
                         foreground,
@@ -579,9 +570,14 @@ impl Component for Strip {
                     if self.close_hovered { theme.text.base } else { tint(theme.text.muted, theme.text.base, 0.6) };
                 painter.text(left + tab_width as i32 - 2, 0, "✕", Style::new().fg(color));
             }
-            slots.push((x, tab_width, session.to_owned()));
+            match slots.get_mut(offset) {
+                Some(slot) if slot.2 == session => (slot.0, slot.1) = (x, tab_width),
+                Some(slot) => *slot = (x, tab_width, session.to_owned()),
+                None => slots.push((x, tab_width, session.to_owned())),
+            }
             x += tab_width;
         }
+        slots.truncate(layout.widths.len());
         // A tab's `TabPulse` and spinner unmount with it: drop those of tabs no longer painted.
         pulses.retain(|session, _| slots.iter().any(|(_, _, painted)| painted == session));
         spins.retain(|session, _| spinning.contains(session));

@@ -306,7 +306,8 @@ impl Inner {
     /// tabs that come and go, like Scripts, leave the active tab alone unless they remove it.
     fn refresh(self: &Rc<Self>, tui: &Tui) {
         let open = !self.permissions.get() && (self.requested.get() || (self.child.get() && !self.forms.get()));
-        let mut tabs = vec![Tab::Subagents, Tab::Shell];
+        let mut tabs = self.tabs.take();
+        tabs.splice(.., [Tab::Subagents, Tab::Shell]);
         if scripts::shown(self, tui) {
             tabs.push(Tab::Scripts);
         }

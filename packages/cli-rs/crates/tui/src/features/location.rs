@@ -11,7 +11,7 @@ const DELAY: Duration = Duration::from_millis(500);
 
 #[derive(Default)]
 pub struct LocationState {
-    reference: RefCell<Option<Location>>,
+    pub(crate) reference: RefCell<Option<Location>>,
     error: RefCell<Option<Location>>,
     generation: Cell<u64>,
     home: RefCell<Option<Location>>,
