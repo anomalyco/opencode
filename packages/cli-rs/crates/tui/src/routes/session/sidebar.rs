@@ -122,7 +122,7 @@ impl Sidebar {
     }
 
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
-        if changes.session(&self.inner.session) {
+        if changes.has(&self.inner.session, Touched::INFO) {
             self.inner.retitle(tui);
         }
         self.inner.layout(tui);

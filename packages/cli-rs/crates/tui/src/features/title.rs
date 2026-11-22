@@ -54,7 +54,7 @@ pub fn route_changed(tui: &Tui) {
 
 pub fn sync(tui: &Tui, changes: &Changes) {
     if let Route::Session { id } = &*tui.route()
-        && changes.session(id)
+        && changes.has(id, Touched::INFO)
     {
         route_changed(tui);
     }

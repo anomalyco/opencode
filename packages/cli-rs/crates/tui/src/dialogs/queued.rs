@@ -67,7 +67,7 @@ impl List {
     /// Refreshes the options after each store flush that touched the inbox, while the dialog is open.
     fn sync(&self, changes: &Changes) {
         let Some(view) = self.view.upgrade() else { return };
-        if changes.pending(&view.session) {
+        if changes.has(&view.session, Touched::PENDING) {
             let select = self.select.borrow().clone();
             if let Some(select) = select {
                 select.set_options(self.options());

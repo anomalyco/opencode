@@ -123,12 +123,6 @@ pub(crate) enum Read<'a> {
     Projects,
 }
 
-impl<'a> Read<'a> {
-    pub(crate) fn session(id: &'a (impl AsRef<str> + ?Sized), read: SessionRead) -> Self {
-        Read::Session(id.as_ref(), read)
-    }
-}
-
 impl State {
     /// The key of `read`, adding its session record or location when missing.
     pub(crate) fn read_key(&mut self, read: Read) -> ReadKey {

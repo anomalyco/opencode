@@ -27,12 +27,8 @@ pub struct SessionKey {
     generation: u32,
 }
 
-/// One record per session the store holds anything of, found by ID once.
-///
-/// A record that holds nothing (see [`Session::is_vacant`]) is freed by [`Sessions::sweep`] when the consumer takes
-/// the changes, and its slot taken by the next new session, so the slots stay within about twice the records that hold something. Until the sweep it costs
-/// its slot, its ID and its key's entry, and a freed slot its size alone: what a deleted or evicted session held is
-/// dropped when it is deleted or evicted.
+/// One record per session the store holds anything of, found by ID once. The slots stay within about twice the
+/// records that hold something (see [`Sessions::sweep`]).
 #[derive(Default)]
 pub(crate) struct Sessions {
     slots: Vec<Slot>,
@@ -289,13 +285,6 @@ impl Sessions {
     pub(crate) fn entries_mut(&mut self) -> impl Iterator<Item = (SessionKey, &mut Session)> {
         self.slots.iter_mut().enumerate().filter_map(|(index, slot)| {
             Some((SessionKey { index: index as u32, generation: slot.generation }, slot.session.as_mut()?))
-        })
-    }
-
-    /// Every record with its key.
-    pub(crate) fn entries(&self) -> impl Iterator<Item = (SessionKey, &Session)> {
-        self.slots.iter().enumerate().filter_map(|(index, slot)| {
-            Some((SessionKey { index: index as u32, generation: slot.generation }, slot.session.as_ref()?))
         })
     }
 
@@ -576,23 +565,16 @@ impl State {
         self.touch_key(root, Touched::INFO);
     }
 
-    fn log_selected(&mut self, id: &SessionID) {
-        if let Some(info) = self.session(id) {
-            let selected = (info.agent.clone(), info.model.clone());
-            self.touch_selected(id, selected);
-        }
-    }
-
     /// True when a session read is worth revalidating: its info is loaded or a read is active.
     fn known(&self, id: &SessionID) -> bool {
-        self.session(id).is_some() || self.has_read(Read::session(id, SessionRead::Info))
+        self.session(id).is_some() || self.has_read(Read::Session(id.as_str(), SessionRead::Info))
     }
 
     fn revalidate(&mut self, id: &SessionID) -> Vec<Follow> {
         if !self.known(id) {
             return Vec::new();
         }
-        self.invalidate(Read::session(id, SessionRead::Info));
+        self.invalidate(Read::Session(id.as_str(), SessionRead::Info));
         vec![Follow::Session(id.clone())]
     }
 
@@ -602,7 +584,7 @@ impl State {
             self.clear_deleted(key);
             self.sessions[key].life.acknowledge();
         }
-        self.invalidate(Read::session(id, SessionRead::Info));
+        self.invalidate(Read::Session(id.as_str(), SessionRead::Info));
         // A new session starts empty, so live events are its source of truth. Separate pending and
         // message reads could both miss an input promoted between them and overwrite the events.
         let reads = &mut self.sessions.get_or_insert(id).reads;
@@ -622,7 +604,7 @@ impl State {
         let data = &event.data;
         let previous = self.session(&data.session_id).and_then(|info| info.agent.clone());
         self.edit_info(&data.session_id, |info| info.agent = Some(data.agent.clone()));
-        self.log_selected(&data.session_id);
+        self.touch_selected(&data.session_id);
         let row = SessionMessageAgentSelected {
             id: from_event(&event.id),
             r#type: tag::AgentSwitched,
@@ -639,7 +621,7 @@ impl State {
         let previous =
             data.previous.clone().or_else(|| self.session(&data.session_id).and_then(|info| info.model.clone()));
         self.edit_info(&data.session_id, |info| info.model = Some(data.model.clone()));
-        self.log_selected(&data.session_id);
+        self.touch_selected(&data.session_id);
         // A head read in flight places the row (models M2, O3).
         let shown = self.sessions.get(&data.session_id);
         if !shown.is_some_and(|session| session.transcript.is_some() || session.head_read.is_some()) {
@@ -754,7 +736,7 @@ impl State {
         self.insert_message(id, SessionMessageInfo::Idle(row));
         let mut follow = Vec::new();
         if self.has_live_tool(id) {
-            self.invalidate(Read::session(id, SessionRead::Messages));
+            self.invalidate(Read::Session(id.as_str(), SessionRead::Messages));
             follow.push(Follow::Messages(id.clone()));
         }
         // An event can overtake the first read; revalidate when that read is still active.
@@ -774,7 +756,7 @@ impl Data {
         let read = if children { SessionRead::Family } else { SessionRead::Info };
         let id = id.clone();
         self.sync_start(
-            self.keyed(Read::session(&id, read)),
+            self.keyed(Read::Session(id.as_str(), read)),
             |state, _| state.deletion_epoch,
             move |data, started| async move {
                 let info = async {
@@ -804,7 +786,7 @@ impl Data {
     }
 
     pub fn session_invalidate(&self, id: &SessionID) {
-        self.write(|state| state.invalidate(Read::session(id, SessionRead::Info)));
+        self.write(|state| state.invalidate(Read::Session(id.as_str(), SessionRead::Info)));
     }
 
     /// Stores fetched info, as a list read does.
@@ -959,7 +941,7 @@ impl Data {
         self.refresh(|data| async move {
             let family = data.read(|state| {
                 matches!(
-                    state.read_state(Read::session(&session, SessionRead::Family)),
+                    state.read_state(Read::Session(session.as_str(), SessionRead::Family)),
                     Some(ReadState::Loading { .. })
                 )
             });

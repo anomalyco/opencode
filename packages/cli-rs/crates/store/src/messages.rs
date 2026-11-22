@@ -59,14 +59,6 @@ impl Transcript {
         self.position(key).map(|position| &self.items[position])
     }
 
-    pub(crate) fn key_at(&self, position: usize) -> MessageKey {
-        self.keys[position]
-    }
-
-    pub(crate) fn index_of(&self, id: &str) -> Option<usize> {
-        self.index.get(id).copied()
-    }
-
     pub(crate) fn get_mut(&mut self, id: &str) -> Option<&mut SessionMessageInfo> {
         let position = *self.index.get(id)?;
         self.items.get_mut(position)
@@ -473,7 +465,7 @@ impl State {
                 let mut changed = false;
                 for (position, message) in messages.into_iter().enumerate() {
                     if transcript.items()[position] != message {
-                        self.log.message(key, transcript.key_at(position));
+                        self.log.message(key, transcript.keys()[position]);
                         transcript.items_mut()[position] = message;
                         changed = true;
                     }
@@ -500,7 +492,7 @@ impl State {
         let Some(transcript) = &mut self.sessions[key].transcript else { return };
         let SessionMessageInfo::Assistant(assistant) = &mut transcript.items_mut()[position] else { return };
         f(assistant);
-        let message = transcript.key_at(position);
+        let message = transcript.keys()[position];
         self.touch_message(key, message);
     }
 
@@ -515,7 +507,8 @@ impl State {
             return Some((key, position));
         }
         let key = self.sessions.key(session)?;
-        let position = self.sessions[key].transcript.as_ref()?.index_of(&message.0)?;
+        let transcript = self.sessions[key].transcript.as_ref()?;
+        let position = transcript.position(transcript.key(&message.0)?)?;
         self.last_edited = Some((key, position));
         Some((key, position))
     }
@@ -1096,7 +1089,7 @@ impl Data {
         let session = session.clone();
         let limit = self.inner.options.initial_message_limit.unwrap_or(MESSAGE_PAGE);
         self.sync_start(
-            self.keyed(Read::session(&session, SessionRead::Messages)),
+            self.keyed(Read::Session(session.as_str(), SessionRead::Messages)),
             move |state, key| {
                 let ticket = state.token();
                 state.sessions.get_or_insert(&begin).head_read = Some(HeadRead { ticket, ..HeadRead::default() });
@@ -1135,7 +1128,7 @@ impl Data {
     }
 
     pub fn message_invalidate(&self, session: &SessionID) {
-        self.write(|state| state.invalidate(Read::session(session, SessionRead::Messages)));
+        self.write(|state| state.invalidate(Read::Session(session.as_str(), SessionRead::Messages)));
     }
 
     /// Follows a setting that changes while the client runs (`omitToolFileData` as a function): it applies to messages

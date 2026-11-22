@@ -150,7 +150,7 @@ impl Permission {
                 family.iter().flat_map(|id| state.permissions(id).unwrap_or_default()).cloned().collect();
             (requests, family)
         });
-        if changes.all() || family.iter().any(|id| changes.session(id)) || *inner.family.borrow() != family {
+        if changes.all() || family.iter().any(|id| changes.has(id, Touched::INFO)) || *inner.family.borrow() != family {
             for id in &family {
                 super::form::quiet(tui, tui.data.permission_sync(id));
             }
@@ -171,7 +171,9 @@ impl Permission {
             return;
         }
         let refreshed = match (head, &mut *inner.prompt.borrow_mut()) {
-            (Some(head), Prompt::Asking { request, .. }) if changes.any_message(&head.session_id) => {
+            (Some(head), Prompt::Asking { request, .. })
+                if changes.has(&head.session_id, Touched::SHAPE | Touched::CONTENT) =>
+            {
                 *request = head;
                 true
             }

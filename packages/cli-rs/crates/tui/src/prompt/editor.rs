@@ -226,11 +226,11 @@ impl Prompt {
             self.inner.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, changed));
         });
         let Some(session) = &self.inner.session else { return };
-        if changes.session(session) {
+        if changes.has(session, Touched::INFO) {
             self.inner.follow_directory(tui);
         }
-        if changes.session(session) || changes.status(session) {
-            if changes.status(session) && !self.inner.running(tui) {
+        if changes.has(session, Touched::INFO | Touched::STATUS) {
+            if changes.has(session, Touched::STATUS) && !self.inner.running(tui) {
                 self.inner.interrupt.set(0);
             }
             self.inner.refresh(tui);

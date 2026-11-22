@@ -138,8 +138,7 @@ impl Log {
         Some(self.revision)
     }
 
-    /// Hands the changes to the consumer in `into`, whose earlier changes it no longer reads, and unmarks their
-    /// records.
+    /// Swaps the changes into `into` and unmarks their records.
     pub(crate) fn take(&mut self, sessions: &mut crate::sessions::Sessions, into: &mut Dirty) {
         into.clear();
         std::mem::swap(&mut self.dirty, into);
@@ -177,26 +176,6 @@ impl Log {
         dirty.messages.push((key, message));
     }
 
-    pub(crate) fn selected(&mut self, key: SessionKey, selected: Selected) {
-        if self.dirty.selected.len() == MESSAGE_LIMIT {
-            self.dirty.all = true;
-            return;
-        }
-        self.dirty.selected.push((key, selected));
-    }
-
-    pub(crate) fn location(&mut self, location: LocationKey) {
-        self.unflushed = true;
-        if !self.dirty.locations.contains(&location) {
-            self.dirty.locations.push(location);
-        }
-    }
-
-    pub(crate) fn global_forms(&mut self) {
-        self.unflushed = true;
-        self.dirty.global_forms = true;
-    }
-
     pub(crate) fn projects(&mut self) {
         self.unflushed = true;
         self.dirty.projects = true;
@@ -214,12 +193,6 @@ impl Log {
 pub struct Changes<'a> {
     dirty: &'a Dirty,
     data: &'a Data,
-}
-
-impl std::fmt::Debug for Changes<'_> {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.dirty.fmt(formatter)
-    }
 }
 
 impl<'a> Changes<'a> {
@@ -249,17 +222,9 @@ impl<'a> Changes<'a> {
         self.dirty.all || self.dirty.sessions
     }
 
-    /// What changed of `id`; all of it when everything did.
-    fn of(&self, id: &str, bits: Touched) -> bool {
+    /// Session `id` has any of `bits`; all of them when everything changed.
+    pub fn has(&self, id: &(impl AsRef<str> + ?Sized), bits: Touched) -> bool {
         self.dirty.all || self.data.read(|state| self.dirty.touched(state.sessions.key(id)).any(bits))
-    }
-
-    pub fn session(&self, id: &SessionID) -> bool {
-        self.of(id.as_str(), Touched::INFO)
-    }
-
-    pub fn status(&self, id: &SessionID) -> bool {
-        self.of(id.as_str(), Touched::STATUS)
     }
 
     /// Some session has any of `bits`.
@@ -267,45 +232,11 @@ impl<'a> Changes<'a> {
         self.dirty.all || self.dirty.touched.iter().any(|(_, touched)| touched.any(bits))
     }
 
-    /// The message list of `id` changed shape.
-    pub fn messages(&self, id: &SessionID) -> bool {
-        self.of(id.as_str(), Touched::SHAPE)
-    }
-
-    /// Any message of `id` changed, in place or by shape.
-    pub fn any_message(&self, id: &SessionID) -> bool {
-        self.of(id.as_str(), Touched::SHAPE | Touched::CONTENT)
-    }
-
-    /// The message changed in place, or its list changed shape.
-    pub fn message(&self, session: &SessionID, message: &str) -> bool {
-        self.dirty.all
-            || self.data.read(|state| {
-                let Some(key) = state.sessions.key(session) else { return false };
-                let bits = self.dirty.touched(Some(key));
-                bits.any(Touched::SHAPE)
-                    || bits.any(Touched::CONTENT)
-                        && state.sessions[key]
-                            .transcript
-                            .as_ref()
-                            .and_then(|transcript| transcript.key(message))
-                            .is_some_and(|message| self.dirty.messages.contains(&(key, message)))
-            })
-    }
-
-    pub fn pending(&self, id: &SessionID) -> bool {
-        self.of(id.as_str(), Touched::PENDING)
-    }
-
-    pub fn permissions(&self, id: &SessionID) -> bool {
-        self.of(id.as_str(), Touched::PERMISSIONS)
-    }
-
     /// The forms of `owner`: a session ID or [`GLOBAL`].
     pub fn forms(&self, owner: &str) -> bool {
         match owner {
             GLOBAL => self.dirty.all || self.dirty.global_forms,
-            _ => self.of(owner, Touched::FORMS),
+            _ => self.has(owner, Touched::FORMS),
         }
     }
 
@@ -318,11 +249,6 @@ impl<'a> Changes<'a> {
             || self.data.read(|state| {
                 state.location_key(location).is_some_and(|location| self.dirty.locations.contains(&location))
             })
-    }
-
-    /// Running jobs owned by `id` may have changed.
-    pub fn jobs(&self, id: &SessionID) -> bool {
-        self.of(id.as_str(), Touched::JOBS)
     }
 
     /// The sessions with any of `bits`, in the order first touched. Not everything: [`Changes::all`] says that.
@@ -392,19 +318,28 @@ impl State {
         self.log.message(key, message);
     }
 
-    pub(crate) fn touch_selected(&mut self, id: &SessionID, selected: Selected) {
+    /// Records `id`'s agent and model as selected.
+    pub(crate) fn touch_selected(&mut self, id: &SessionID) {
+        let Some(info) = self.session(id) else { return };
+        let selected = (info.agent.clone(), info.model.clone());
         let key = self.sessions.entry(id);
         self.touch_key(key, Touched::SELECTED);
-        self.log.selected(key, selected);
+        let dirty = &mut self.log.dirty;
+        if dirty.selected.len() == MESSAGE_LIMIT {
+            dirty.all = true;
+            return;
+        }
+        dirty.selected.push((key, selected));
     }
 
     pub(crate) fn touch_location(&mut self, location: &Location) {
         let key = self.intern(location);
-        self.log.location(key);
+        self.log.unflushed = true;
+        if !self.log.dirty.locations.contains(&key) {
+            self.log.dirty.locations.push(key);
+        }
     }
 
-    /// [`Data::take_changes`]. The records the changes name stay marked until the take, so the sweep before it frees
-    /// none the consumer reads; the consumer is done with what it took before.
     pub(crate) fn take(&mut self, into: &mut Dirty) -> u64 {
         self.sessions.sweep();
         self.log.take(&mut self.sessions, into);
@@ -414,7 +349,10 @@ impl State {
     /// The forms of `owner`: a session ID or [`GLOBAL`].
     pub(crate) fn touch_forms(&mut self, owner: &str) {
         match owner {
-            GLOBAL => self.log.global_forms(),
+            GLOBAL => {
+                self.log.unflushed = true;
+                self.log.dirty.global_forms = true;
+            }
             _ => self.touch(owner, Touched::FORMS),
         }
     }
@@ -422,7 +360,8 @@ impl State {
 
 impl Data {
     /// Hands what changed since the last take to the one consumer, in `into`, and returns the revision of the last
-    /// flush. `into`'s earlier changes go: the consumer no longer reads them.
+    /// flush. `into`'s earlier changes go: the consumer is done with them. The records the changes name stay marked
+    /// until the take, so the sweep before it frees none the consumer reads.
     pub fn take_changes(&self, into: &mut Dirty) -> u64 {
         self.lock().take(into)
     }

@@ -66,7 +66,7 @@ impl Data {
     pub fn permission_sync(&self, session: &SessionID) -> Task<()> {
         let (fetched, again) = (session.clone(), session.clone());
         self.overlay_sync(
-            self.keyed(Read::session(session, SessionRead::Permissions)),
+            self.keyed(Read::Session(session.as_str(), SessionRead::Permissions)),
             session.clone(),
             session.clone(),
             |state, session, overlay| state.sessions.get_or_insert(session).permission_read = Some(overlay),

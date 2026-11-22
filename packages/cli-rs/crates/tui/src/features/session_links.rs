@@ -61,7 +61,7 @@ pub fn sync(tui: &Tui, changes: &Changes) {
             .used
             .borrow_mut()
             .iter_mut()
-            .filter(|(id, _)| changes.session(id))
+            .filter(|(id, _)| changes.has(id, Touched::INFO))
             .filter_map(|(id, used)| {
                 let label = label_of(tui, id);
                 (*used != label).then(|| {

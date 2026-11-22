@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex};
 use common::*;
 use futures_util::FutureExt;
 use opencode_api::generated::SessionID;
-use opencode_store::{Changes, Data, LoadMore, Location, Options, Task};
+use opencode_store::{Changes, Data, LoadMore, Location, Options, Task, Touched};
 use opencode_util::rng::SplitMix64;
 use serde_json::{Value, json};
 use tokio::sync::oneshot;
@@ -886,8 +886,10 @@ impl Run {
 
     /// The safety properties, the change reports, and the view's resync on `changes.all`; true when it resynced.
     fn observed(&mut self) -> Result<bool, Failure> {
-        let (revision, changes) = self.taken.take(&self.data);
-        let changes = if self.mutant == Mutant::Silent { Changes::nothing(&self.data) } else { changes };
+        let revision = self.data.take_changes(&mut self.taken.0);
+        let dirty = &self.taken.0;
+        let changes =
+            if self.mutant == Mutant::Silent { Changes::nothing(&self.data) } else { Changes::new(dirty, &self.data) };
         let server = self.server.lock().unwrap();
         if let Some(request) = server.unexpected.first() {
             fail("unexpected", format!("the model has no answer for {request}"))?;
@@ -897,7 +899,7 @@ impl Run {
         for s in 0..SESSIONS {
             let (before, after) = (&self.seen[s as usize], &now[s as usize]);
             let session = Self::id(s);
-            if before.permissions != after.permissions && !changes.permissions(&session) {
+            if before.permissions != after.permissions && !changes.has(&session, Touched::PERMISSIONS) {
                 fail(format!("changes ses_{s}"), format!("permissions of ses_{s} changed unreported: {after:?}"))?;
             }
             if before.forms != after.forms && !changes.forms(&format!("ses_{s}")) {
@@ -907,14 +909,20 @@ impl Run {
                 seen.messages.as_ref().map(|rows| rows.iter().map(|row| row.0.clone()).collect::<Vec<_>>())
             };
             if std::env::var("MODEL_TRACE").is_ok() && !changes.is_empty() {
-                eprintln!("  changes at {revision}: {changes:?}");
+                eprintln!("  changes at {revision}: {dirty:?}");
             }
-            if (shape(before) != shape(after) || before.more != after.more) && !changes.messages(&session) {
+            if (shape(before) != shape(after) || before.more != after.more) && !changes.has(&session, Touched::SHAPE) {
                 fail(format!("changes ses_{s}"), format!("transcript of ses_{s} changed shape unreported"))?;
             }
             for row in after.messages.iter().flatten() {
                 let old = before.messages.iter().flatten().find(|old| old.0 == row.0);
-                if old.is_some_and(|old| old != row) && !changes.message(&session, &row.0) {
+                let changed = || {
+                    changes.has(&session, Touched::SHAPE)
+                        || self.data.read(|state| {
+                            changes.changed_messages(state).any(|(id, message)| *id == session && message == row.0)
+                        })
+                };
+                if old.is_some_and(|old| old != row) && !changed() {
                     fail(format!("changes ses_{s}"), format!("message {} of ses_{s} changed unreported", row.0))?;
                 }
             }

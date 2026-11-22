@@ -25,7 +25,7 @@ pub(crate) type FormRead = (String, Option<Location>);
 fn form_read<'a>(owner: &'a str, location: &'a Location) -> Read<'a> {
     match owner {
         GLOBAL => Read::GlobalForms(location),
-        _ => Read::session(owner, SessionRead::Forms),
+        _ => Read::Session(owner, SessionRead::Forms),
     }
 }
 
