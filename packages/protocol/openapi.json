@@ -16902,7 +16902,7 @@
             "$ref": "#/components/schemas/Automation.Trigger.Event"
           }
         ],
-        "description": "When it runs: { type: \"at\", at: \"in 20 minutes\" | \"2026-10-27T09:00\" }, { type: \"every\", every: \"1 hour\" } or { type: \"cron\", cron: \"0 9 * * 1-5\" }, each with an optional tz. Or { type: \"event\", server, event, args? } for a connected MCP server advertising push delivery (requires mcp_events)."
+        "description": "When it runs: { type: \"at\", at: \"in 20 minutes\" | \"2026-10-27T09:00\" }, { type: \"every\", every: \"1 hour\" } or { type: \"cron\", cron: \"0 9 * * 1-5\" }, each with an optional tz. Or { type: \"event\", server, event, args? } for a connected MCP server advertising push delivery."
       },
       "Automation.Trigger.At": {
         "type": "object",
@@ -17714,9 +17714,6 @@
                 ]
               },
               "console_watches": {
-                "type": "boolean"
-              },
-              "mcp_events": {
                 "type": "boolean"
               },
               "recommended_api": {
