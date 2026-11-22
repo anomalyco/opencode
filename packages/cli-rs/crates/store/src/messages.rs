@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
+use crate::reads::{Read, SessionRead};
 use crate::state::{Data, Error, MESSAGE_PAGE, OVERLAY_LIMIT, State, Task, evict_missing};
 
 /// One session's loaded messages, oldest first, with an index by ID.
@@ -983,18 +984,17 @@ impl Data {
     /// Reads the newest transcript page once per invalidation. Merge concurrent events by `durable.seq`; see
     /// [`State::publish_head`].
     pub fn message_sync(&self, session: &SessionID) -> Task<()> {
-        let key = format!("session.message:{}", session.0);
         let begin = session.clone();
         let session = session.clone();
         let limit = self.inner.options.initial_message_limit.unwrap_or(MESSAGE_PAGE);
         self.sync_start(
-            key.clone(),
-            move |state| {
+            self.keyed(Read::session(&session, SessionRead::Messages)),
+            move |state, key| {
                 let ticket = state.token();
                 state.sessions.get_or_insert(&begin).head_read = Some(HeadRead { ticket, ..HeadRead::default() });
-                (state.incarnation(&begin), ticket)
+                (state.incarnation(&begin), ticket, key)
             },
-            move |data, (incarnation, ticket)| async move {
+            move |data, (incarnation, ticket, key)| async move {
                 let input = MessageListInput {
                     session_id: session.clone(),
                     limit: Some(limit),
@@ -1014,7 +1014,7 @@ impl Data {
                     let reread = state.incarnation(&session) != incarnation
                         || state.publish_head(&session, read, response.data, response.cursor.next.flatten());
                     if reread {
-                        state.syncs.invalidate(&key);
+                        state.invalidate_key(key);
                     }
                     reread
                 });
@@ -1027,7 +1027,7 @@ impl Data {
     }
 
     pub fn message_invalidate(&self, session: &SessionID) {
-        self.write(|state| state.syncs.invalidate(&format!("session.message:{}", session.0)));
+        self.write(|state| state.invalidate(Read::session(session, SessionRead::Messages)));
     }
 
     /// Follows a setting that changes while the client runs (`omitToolFileData` as a function): it applies to messages

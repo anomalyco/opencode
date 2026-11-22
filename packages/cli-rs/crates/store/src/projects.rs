@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use opencode_api::generated::*;
 
 use crate::connection::Follow;
+use crate::reads::{Read, SessionRead};
 use crate::state::{Data, Error, State, Task};
 
 /// The project of sessions outside any repository (`Project.ID.global`).
@@ -66,7 +67,7 @@ impl State {
                 Some(info.location.directory.as_str())
             };
             let Some(directory) = directory else {
-                self.syncs.invalidate(&format!("session:{}", session.id.0));
+                session.reads[SessionRead::Info].invalidate();
                 follow.push(Follow::Session(session.id.clone()));
                 continue;
             };
@@ -134,7 +135,7 @@ fn is_windows_root(root: &str) -> bool {
 impl Data {
     /// Reads every project once per invalidation; the read replaces the cached set.
     pub fn project_sync(&self) -> Task<()> {
-        self.sync_run("project".to_owned(), |data| async move {
+        self.sync_run(self.keyed(Read::Projects), |data| async move {
             let projects = data.client().project_list(&ProjectListInput::default()).await.map_err(Error::new)?;
             data.write(|state| state.replace_projects(projects));
             Ok(())

@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
+use crate::reads::{Read, SessionRead};
 use crate::sessions::SessionKey;
 use crate::state::{Data, Error, Overlay, State, Task, evict_missing};
 
@@ -56,7 +57,7 @@ impl State {
     pub(crate) fn remove_job_tree(&mut self, root: SessionKey) {
         let session = &mut self.sessions[root];
         session.job_read = None;
-        self.syncs.invalidate(&job_key(&session.id));
+        session.reads[SessionRead::Jobs].invalidate();
         let Some(members) = session.job_tree.take() else { return };
         for id in &members {
             if let Some(job) = self.jobs.shift_remove(id) {
@@ -75,14 +76,10 @@ impl State {
 
     /// The synced trees, read again after `server.connected`.
     pub(crate) fn job_roots(&mut self) -> Vec<SessionID> {
-        let roots: Vec<SessionID> = self
-            .sessions
-            .iter()
-            .filter(|session| session.job_tree.is_some())
-            .map(|session| session.id.clone())
-            .collect();
-        for root in &roots {
-            self.syncs.invalidate(&job_key(root));
+        let mut roots = Vec::new();
+        for session in self.sessions.iter_mut().filter(|session| session.job_tree.is_some()) {
+            session.reads[SessionRead::Jobs].invalidate();
+            roots.push(session.id.clone());
         }
         roots
     }
@@ -126,7 +123,7 @@ impl State {
     fn publish_jobs(&mut self, root: &SessionID, ticket: u64, list: Vec<JobInfo>) -> bool {
         let Some(read) = self.end_job_read(root, ticket) else { return false };
         let Some(changes) = read.into_changes() else {
-            self.syncs.invalidate(&job_key(root));
+            self.invalidate(Read::session(root, SessionRead::Jobs));
             return true;
         };
         let listed: HashSet<String> = list.iter().map(|job| job.id().to_owned()).collect();
@@ -193,18 +190,14 @@ pub fn owned_jobs<'a>(
     jobs.iter().copied().filter(|job| owned(job)).collect()
 }
 
-fn job_key(root: &SessionID) -> String {
-    format!("job:{}", root.0)
-}
-
 impl Data {
     /// Reads the running jobs of the tree under `root` once per invalidation. Job events received during the read
     /// apply over its answer.
     pub fn job_sync(&self, root: &SessionID) -> Task<()> {
         let (begin, fetched) = (root.clone(), root.clone());
         self.sync_start(
-            job_key(root),
-            move |state| state.begin_job_read(&begin),
+            self.keyed(Read::session(root, SessionRead::Jobs)),
+            move |state, _| state.begin_job_read(&begin),
             move |data, ticket| async move {
                 let input = ExperimentalJobListInput {
                     session_id: Some(fetched.clone()),

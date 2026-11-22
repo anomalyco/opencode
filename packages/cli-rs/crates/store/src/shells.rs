@@ -4,6 +4,7 @@ use indexmap::IndexMap;
 use opencode_api::generated::*;
 
 use crate::location::{Catalog, Location};
+use crate::reads::Read;
 use crate::state::{Data, Error, Overlay, State, Task};
 
 /// A running shell and the location that reported it.
@@ -105,7 +106,7 @@ impl State {
             }
         }
         if overflowed {
-            self.syncs.invalidate(&Catalog::Shell.key(location));
+            self.invalidate(Read::Catalog(Catalog::Shell, location));
         }
         self.location_mut(&at).shell = Some(shells);
         overflowed
@@ -126,8 +127,8 @@ impl Data {
     pub(crate) fn shell_read(&self, location: Location) -> Task<()> {
         let begin = location.clone();
         self.sync_start(
-            Catalog::Shell.key(&location),
-            move |state| state.begin_shell_read(&begin),
+            self.keyed(Read::Catalog(Catalog::Shell, &location)),
+            move |state, _| state.begin_shell_read(&begin),
             move |data, ticket| async move {
                 let response = data
                     .client()
