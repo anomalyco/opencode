@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
@@ -35,6 +35,20 @@ describe.skipIf(process.platform !== "win32")("Windows app detection", () => {
     expect(await run(resolveAppPath("wt"))).toBe(alias)
     expect(await run(checkAppExists("wt"))).toBe(true)
     expect(await run(checkAppExists("Sublime Text"))).toBe(false)
+    expect(await run(checkAppExists("code"))).toBe(false)
+  })
+})
+
+describe.skipIf(process.platform !== "linux")("Linux app detection", () => {
+  test("lists only commands that are executable files on the PATH", async () => {
+    writeFileSync(path.join(root, "subl"), "#!/bin/sh\n")
+    chmodSync(path.join(root, "subl"), 0o755)
+    writeFileSync(path.join(root, "zed"), "")
+    chmodSync(path.join(root, "zed"), 0o644)
+    process.env.PATH = root
+
+    expect(await run(checkAppExists("subl"))).toBe(true)
+    expect(await run(checkAppExists("zed"))).toBe(false)
     expect(await run(checkAppExists("code"))).toBe(false)
   })
 })
