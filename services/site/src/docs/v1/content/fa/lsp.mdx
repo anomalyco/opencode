@@ -1,0 +1,214 @@
+---
+title: سرورهای زبان (LSP)
+description: اتصال OpenCode به سرورهای زبان (LSP).
+---
+
+OpenCode می‌تواند به سرورهایی که از پروتکل سرور زبان (LSP) استفاده می‌کنند متصل شود تا عامل هنگام کار به گزارش خطاها و هشدارهای آن‌ها دسترسی داشته باشد.
+
+---
+
+## سرورهای زبان داخلی
+
+OpenCode برای زبان‌های رایج از سرورهای زبان زیر پشتیبانی داخلی دارد.
+
+| سرور زبان | پسوندها | پیش‌نیازها |
+| ----------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| astro | .astro | نصب خودکار در پروژه‌های Astro |
+| bash | .sh, .bash, .zsh, .ksh | نصب خودکار bash-language-server |
+| clangd | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | نصب خودکار در پروژه‌های C/C++ |
+| csharp | .cs, .csx | `.NET SDK` نصب باشد |
+| clojure-lsp | .clj, .cljs, .cljc, .edn | فرمان `clojure-lsp` در دسترس باشد |
+| dart | .dart | فرمان `dart` در دسترس باشد |
+| deno | .ts, .tsx, .js, .jsx, .mjs | فرمان `deno` در دسترس باشد (deno.json و deno.jsonc خودکار شناسایی می‌شوند) |
+| elixir-ls | .ex, .exs | فرمان `elixir` در دسترس باشد |
+| eslint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue | پروژه به `eslint` وابسته باشد |
+| fsharp | .fs, .fsi, .fsx, .fsscript | `.NET SDK` نصب باشد |
+| gleam | .gleam | فرمان `gleam` در دسترس باشد |
+| gopls | .go | فرمان `go` در دسترس باشد |
+| haskell-language-server | .hs, .lhs | فرمان `haskell-language-server-wrapper` در دسترس باشد |
+| jdtls | .java | `Java SDK (version 21+)` نصب باشد |
+| julials | .jl | `julia` و `LanguageServer.jl` نصب باشند |
+| kotlin-ls | .kt, .kts | نصب خودکار در پروژه‌های Kotlin |
+| lua-ls | .lua | نصب خودکار در پروژه‌های Lua |
+| nixd | .nix | فرمان `nixd` در دسترس باشد |
+| ocaml-lsp | .ml, .mli | فرمان `ocamllsp` در دسترس باشد |
+| oxlint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | پروژه به `oxlint` وابسته باشد |
+| php intelephense | .php | نصب خودکار در پروژه‌های PHP |
+| prisma | .prisma | فرمان `prisma` در دسترس باشد |
+| pyright | .py, .pyi | وابستگی `pyright` نصب باشد |
+| razor | .razor, .cshtml | `.NET SDK` و افزونهٔ C# برای VS Code نصب باشند |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru | فرمان‌های `ruby` و `gem` در دسترس باشند |
+| rust | .rs | فرمان `rust-analyzer` در دسترس باشد |
+| sourcekit-lsp | .swift, .objc, .objcpp | `swift` نصب باشد (در macOS، `xcode`) |
+| svelte | .svelte | نصب خودکار در پروژه‌های Svelte |
+| terraform | .tf, .tfvars | نصب خودکار از انتشارهای GitHub |
+| tinymist | .typ, .typc | نصب خودکار از انتشارهای GitHub |
+| typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | پروژه به `typescript` وابسته باشد |
+| vue | .vue | نصب خودکار در پروژه‌های Vue |
+| yaml-ls | .yaml, .yml | نصب خودکار yaml-language-server محصول Red Hat |
+| zls | .zig, .zon | فرمان `zig` در دسترس باشد |
+
+LSP به‌طور پیش‌فرض غیرفعال است. پس از فعال‌سازی، وقتی یکی از پسوندهای بالا شناسایی شود و پیش‌نیازها فراهم باشند، سرور مربوط اجرا می‌شود.
+
+:::note
+برای غیرفعال کردن دانلود خودکار سرورهای زبان، متغیر محیطی `OPENCODE_DISABLE_LSP_DOWNLOAD` را روی `true` بگذارید.
+:::
+
+---
+
+## نحوهٔ کار
+
+وقتی LSP فعال باشد و OpenCode فایلی را باز کند، مراحل زیر را طی می‌کند.
+
+1. پسوند فایل را با سرورهای زبان فعال مطابقت می‌دهد.
+2. سرور زبان مناسب را، اگر از قبل در حال اجرا نباشد، راه‌اندازی می‌کند.
+
+---
+
+## توصیه‌های کاربردی
+
+گزارش خطاهای سرور زبان می‌تواند به عامل در پیدا کردن و رفع مشکل کمک کند. میزان سودمندی آن به پروژه بستگی دارد.
+
+سرورهای زبان گاهی با تغییرات فایل‌ها هماهنگ نمی‌مانند، حافظهٔ زیادی مصرف می‌کنند یا اجرای کار عامل را کند می‌کنند. رفتارشان نیز به نسخه و پروژه بستگی دارد. در بسیاری از پروژه‌ها بهتر است عامل مستقیماً ابزار تحلیل ایستا، بررسی نوع یا دیگر ابزارهای تشخیصی خط فرمان را اجرا کند تا خطاها را همان‌جا دریافت کند. فرمان‌های لازم را در فایل دستورالعملی مانند `AGENTS.md` یا در مهارت‌ها بنویسید. اگر گزارش‌های تکمیلی سرور زبان به کار پروژه می‌آید، LSP را فعال کنید.
+
+---
+
+## پیکربندی
+
+در بخش `lsp` پیکربندی OpenCode می‌توانید سرورهای زبان را فعال و تنظیم کنید.
+
+برای فعال کردن همهٔ سرورهای زبان داخلی، `lsp` را روی `true` بگذارید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": true
+}
+```
+
+با تعریف یک شیء، می‌توانید در کنار سرورهای زبان داخلی فعال، تنظیمات را تغییر دهید یا سرور سفارشی بیفزایید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+هر سرور زبان گزینه‌های زیر را می‌پذیرد.
+
+تعیین `command` الزامی است، مگر اینکه فقط بخواهید یک سرور را غیرفعال کنید.
+
+| ویژگی | نوع | توضیحات |
+| ---------------- | -------- | ------------------------------------------------- |
+| `disabled` | boolean | برای غیرفعال کردن سرور زبان، مقدار `true` را تعیین کنید. |
+| `command` | string[] | فرمان راه‌اندازی سرور زبان |
+| `extensions` | string[] | پسوند فایل‌هایی که این سرور پردازش می‌کند |
+| `env` | object | متغیرهای محیطی هنگام راه‌اندازی سرور |
+| `initialization` | object | گزینه‌های مقداردهی اولیه که برای سرور ارسال می‌شوند |
+
+در ادامه چند نمونه می‌بینید.
+
+---
+
+### متغیرهای محیطی
+
+با ویژگی `env` متغیرهای محیطی زمان راه‌اندازی سرور زبان را تعیین کنید.
+
+```json title="opencode.json" {5-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "command": ["rust-analyzer"],
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### گزینه‌های مقداردهی اولیه
+
+با ویژگی `initialization` گزینه‌های آغاز کار را به سرور زبان بدهید. این تنظیمات مخصوص هر سرورند و همراه درخواست `initialize` در پروتکل LSP فرستاده می‌شوند.
+
+```json title="opencode.json" {5-13}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"],
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+گزینه‌های قابل استفاده را در مستندات سرور زبان خود ببینید.
+:::
+
+---
+
+### غیرفعال کردن سرورهای زبان
+
+اگر `lsp` را تعیین نکنید، همهٔ سرورهای زبان غیرفعال‌اند. اگر پیکربندی دیگری آن‌ها را فعال کرده است، برای غیرفعال کردن همه، `lsp` را روی `false` بگذارید.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+برای غیرفعال کردن **یک سرور زبان مشخص**، `disabled` را روی `true` بگذارید.
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### سرورهای زبان سفارشی
+
+برای افزودن سرور زبان سفارشی، فرمان اجرا و پسوند فایل‌های آن را مشخص کنید.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## اطلاعات بیشتر
+
+### PHP Intelephense
+
+برای فعال‌سازی امکانات پیشرفتهٔ PHP Intelephense، کلید مجوز لازم است. آن را در یک فایل متنی در مسیر زیر ذخیره کنید.
+
+- در macOS یا لینوکس: `$HOME/intelephense/license.txt`
+- در ویندوز: `%USERPROFILE%/intelephense/license.txt`
+
+این فایل باید فقط حاوی کلید مجوز باشد.

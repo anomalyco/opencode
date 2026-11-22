@@ -1,0 +1,195 @@
+---
+title: ابزارهای سفارشی
+description: ساخت ابزارهایی که مدل زبانی می‌تواند در OpenCode فراخوانی کند.
+---
+
+ابزارهای سفارشی توابعی هستند که شما می‌نویسید تا مدل زبانی هنگام گفت‌وگو آن‌ها را فراخوانی کند. این ابزارها کنار [ابزارهای داخلی](/docs/tools) مانند `read`، `write` و `bash` در دسترس‌اند.
+
+---
+
+## ساخت ابزار
+
+ابزار را در یک فایل **TypeScript** یا **JavaScript** تعریف کنید. فقط تعریف ابزار باید به یکی از این دو زبان باشد. ابزار می‌تواند اسکریپت‌هایی به **هر زبانی** اجرا کند.
+
+---
+
+### محل فایل
+
+فایل ابزار را در یکی از این دو محل قرار دهید.
+
+- برای استفاده در یک پروژه، پوشهٔ `.opencode/tools/` همان پروژه.
+- برای استفادهٔ سراسری، پوشهٔ `~/.config/opencode/tools/`.
+
+---
+
+### ساختار
+
+ساده‌ترین راه برای تعریف ابزار، استفاده از تابع کمکی `tool()` است که هنگام تعریف ابزار ایمنی نوع و هنگام فراخوانی آن اعتبارسنجی ورودی‌ها را فراهم می‌کند.
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+**نام فایل**، **نام ابزار** را تعیین می‌کند. نمونهٔ بالا ابزار `database` را می‌سازد.
+
+---
+
+#### چند ابزار در یک فایل
+
+می‌توانید از یک فایل چند ابزار صادر کنید. هر عضو صادرشده **ابزاری مستقل** با نام **`<filename>_<exportname>`** خواهد بود.
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return (args.a + args.b).toString()
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return (args.a * args.b).toString()
+  },
+})
+```
+
+این نمونه دو ابزار `math_add` و `math_multiply` را می‌سازد.
+
+---
+
+#### هم‌نامی با ابزار داخلی
+
+OpenCode ابزار سفارشی را با نامش شناسایی می‌کند. اگر ابزار سفارشی و داخلی هم‌نام باشند، ابزار سفارشی اولویت دارد.
+
+برای نمونه، فایل زیر جایگزین ابزار داخلی `bash` می‌شود.
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+برای ابزارهای تازه نامی یکتا انتخاب کنید، مگر اینکه عمداً بخواهید جای ابزار داخلی را بگیرند. برای غیرفعال کردن یک ابزار داخلی می‌توانید [مجوزهای آن](/docs/permissions) را تغییر دهید.
+:::
+
+---
+
+### آرگومان‌ها
+
+برای تعیین نوع آرگومان‌ها می‌توانید از `tool.schema` استفاده کنید که همان [Zod](https://zod.dev) است.
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+همچنین می‌توانید مستقیماً [Zod](https://zod.dev) را وارد کنید و یک شیء معمولی برگردانید.
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### زمینهٔ اجرا
+
+اطلاعات زمینه‌ای نشست جاری در اختیار ابزار قرار می‌گیرد.
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
+  },
+})
+```
+
+پوشهٔ کاری نشست در `context.directory` و ریشهٔ درخت کاری Git در `context.worktree` قرار دارد.
+
+---
+
+## مثال‌ها
+
+### ساخت ابزار با Python
+
+ابزار را می‌توانید به زبان دلخواه بنویسید. در این مثال، اسکریپتی به زبان Python دو عدد را جمع می‌کند.
+
+ابتدا اسکریپت Python را بسازید.
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+سپس ابزاری تعریف کنید که اسکریپت را فراخوانی کند.
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+در این نمونه، ابزار کمکی [`Bun.$`](https://bun.com/docs/runtime/shell) اسکریپت Python را اجرا می‌کند.

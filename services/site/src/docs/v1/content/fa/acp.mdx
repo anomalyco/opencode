@@ -1,0 +1,159 @@
+---
+title: پشتیبانی از ACP
+description: استفاده از OpenCode در ویرایشگرهای سازگار با ACP.
+---
+
+OpenCode از [پروتکل ارتباط ویرایشگر با عامل (Agent Client Protocol یا ACP)](https://agentclientprotocol.com) پشتیبانی می‌کند. با این پروتکل می‌توانید مستقیماً از ویرایشگر یا محیط توسعهٔ سازگار با آن، با OpenCode کار کنید.
+
+:::tip
+فهرست ویرایشگرها و ابزارهای سازگار را در [گزارش پیشرفت ACP](https://zed.dev/blog/acp-progress-report#available-now) ببینید.
+:::
+
+ACP پروتکلی باز است که شیوهٔ ارتباط میان ویرایشگرهای کد و عامل‌های کدنویسی مبتنی بر هوش مصنوعی را استاندارد می‌کند.
+
+---
+
+## پیکربندی
+
+برای استفاده از OpenCode از طریق ACP، ویرایشگر را طوری تنظیم کنید که فرمان `opencode acp` را اجرا کند.
+
+این فرمان OpenCode را به‌صورت یک زیرفرایند سازگار با ACP اجرا می‌کند. این فرایند با پروتکل JSON-RPC و از طریق ورودی و خروجی استاندارد (stdio) با ویرایشگر ارتباط دارد.
+
+نمونه‌های زیر تنظیمات چند ویرایشگر رایج سازگار با ACP را نشان می‌دهند.
+
+---
+
+### Zed
+
+در فهرست فرمان‌های Zed، فرمان `zed: acp registry` را اجرا کنید و OpenCode را از [فهرست عامل‌های ACP در Zed](https://zed.dev/docs/ai/external-agents#registry) نصب کنید.
+
+برای استفاده از فایل اجرایی دلخواه OpenCode، آن را مانند نمونهٔ زیر به پیکربندی [Zed](https://zed.dev) در `~/.config/zed/settings.json` اضافه کنید.
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "type": "custom",
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+برای باز کردن آن، در **Command Palette** فرمان `agent: new thread` را اجرا کنید.
+
+با ویرایش `keymap.json` می‌توانید میان‌بر صفحه‌کلید هم تعریف کنید.
+
+```json title="keymap.json"
+[
+  {
+    "bindings": {
+      "cmd-alt-o": [
+        "agent::NewExternalAgentThread",
+        {
+          "agent": {
+            "custom": {
+              "name": "OpenCode",
+              "command": {
+                "command": "opencode",
+                "args": ["acp"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]
+```
+
+---
+
+### محیط‌های توسعهٔ JetBrains
+
+مطابق [مستندات](https://www.jetbrains.com/help/ai-assistant/acp.html)، قطعهٔ زیر را به فایل acp.json در [محیط توسعهٔ JetBrains](https://www.jetbrains.com/) اضافه کنید.
+
+```json title="acp.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "/absolute/path/bin/opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+برای باز کردن آن، عامل تازهٔ «OpenCode» را از فهرست عامل‌های AI Chat انتخاب کنید.
+
+---
+
+### Avante.nvim
+
+قطعهٔ زیر را به پیکربندی [Avante.nvim](https://github.com/yetone/avante.nvim) اضافه کنید.
+
+```lua
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" }
+    }
+  }
+}
+```
+
+اگر باید متغیرهای محیطی هم ارسال شوند، آن‌ها را مانند نمونهٔ زیر تعریف کنید.
+
+```lua {6-8}
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" },
+      env = {
+        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+      }
+    }
+  }
+}
+```
+
+---
+
+### CodeCompanion.nvim
+
+برای استفاده از OpenCode به‌عنوان عامل ACP در [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)، تنظیمات زیر را به پیکربندی Neovim اضافه کنید.
+
+```lua
+require("codecompanion").setup({
+  interactions = {
+    chat = {
+      adapter = {
+        name = "opencode",
+        model = "claude-sonnet-5-5",
+      },
+    },
+  },
+})
+```
+
+با این تنظیمات، CodeCompanion برای گفت‌وگو از OpenCode به‌عنوان عامل ACP استفاده می‌کند.
+
+برای ارسال متغیرهای محیطی مانند `OPENCODE_API_KEY`، بخش [تنظیم متغیرهای محیطیِ رابط‌ها](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) در مستندات CodeCompanion.nvim را ببینید.
+
+## امکانات
+
+رفتار OpenCode از طریق ACP مانند اجرای آن در ترمینال است. این قابلیت‌ها در دسترس‌اند.
+
+:::note
+بعضی از فرمان‌های اسلش داخلی مانند `/undo` و `/redo` در حال حاضر پشتیبانی نمی‌شوند.
+:::
+
+- ابزارهای داخلی برای کار با فایل‌ها، اجرای فرمان‌های ترمینال و موارد دیگر
+- ابزارها و فرمان‌های اسلش سفارشی
+- سرورهای MCP تعریف‌شده در پیکربندی OpenCode
+- قواعد اختصاصی پروژه در `AGENTS.md`
+- قالب‌بندها و ابزارهای تحلیل ایستای سفارشی
+- عامل‌ها و سامانهٔ مجوزها

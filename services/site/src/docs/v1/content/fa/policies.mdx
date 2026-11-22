@@ -1,0 +1,141 @@
+---
+title: سیاست‌ها
+description: تعیین منابعی که OpenCode مجاز به استفاده از آن‌هاست.
+---
+
+:::caution[به OpenCode 2 نیاز دارد]
+OpenCode 1 سیاست‌ها را اعمال نمی‌کند. مثال‌های این صفحه به OpenCode 2 نیاز دارند. در نسخهٔ ۱ با [`disabled_providers`](/docs/config#disabled-providers) یا [`enabled_providers`](/docs/config#enabled-providers) تعیین کنید کدام ارائه‌دهندگان در دسترس باشند. برای روش فعلی، [مستندات سیاست‌ها در OpenCode 2](https://opencode.ai/docs/policies/) را ببینید.
+:::
+
+سیاست تعیین می‌کند که آیا OpenCode مجاز است عملی را روی یک منبع مشخص انجام دهد. این قابلیت آزمایشی در OpenCode 2 با آرایهٔ `experimental.policies` در `opencode.json` تنظیم می‌شود.
+
+سیاست‌ها و [مجوزها](/docs/permissions) دو کاربرد جدا دارند. مجوزها تعیین می‌کنند ابزارها در یک نشست چه کارهایی انجام دهند. سیاست‌ها تعیین می‌کنند که OpenCode به کدام منابع، از جمله ارائه‌دهندگان مدل زبانی، دسترسی داشته باشد.
+
+---
+
+## پیکربندی
+
+هر قاعدهٔ سیاست سه فیلد دارد.
+
+- `effect` یکی از دو مقدار `"allow"` و `"deny"` را می‌گیرد.
+- `action` عملیاتی را مشخص می‌کند که قاعده آن را کنترل می‌کند.
+- `resource` شناسهٔ منبع یا الگویی با نویسهٔ عام است که منابع مشمول قاعده را مشخص می‌کند.
+
+برای نمونه، با قاعدهٔ زیر استفاده از ارائه‌دهندهٔ `openai` را ممنوع کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ]
+  }
+}
+```
+
+اگر سیاستی استفاده از یک ارائه‌دهنده را ممنوع کند، حتی با وجود اطلاعات احراز هویت و پیکربندی درست، انتخاب و استفاده از مدل‌های آن ممکن نیست.
+
+---
+
+## سیاست‌های موجود
+
+OpenCode در حال حاضر یک عملیات را برای سیاست‌ها پشتیبانی می‌کند.
+
+| عملیات | منبع | توضیحات |
+| -------------- | ----------------------------- | ------------------------------------- |
+| `provider.use` | شناسهٔ ارائه‌دهنده، مانند `openai` | اجازه یا منع استفاده از یک ارائه‌دهندهٔ مدل زبانی |
+
+ممکن است در آینده عملیات دیگری اضافه شود.
+
+---
+
+## تطبیق الگو
+
+فیلد `resource` از نویسه‌های عام پشتیبانی می‌کند. `*` با صفر یا چند نویسه و `?` با دقیقاً یک نویسه مطابقت دارد.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "company-*"
+      }
+    ]
+  }
+}
+```
+
+این قاعده ارائه‌دهندگانی مانند `company-us` و `company-eu` را مسدود می‌کند.
+
+---
+
+## ترتیب قواعد
+
+اگر چند قاعده مطابقت داشته باشند، آخرین قاعده‌ای که مطابقت دارد اعمال می‌شود. ابتدا قواعد کلی و سپس استثناهای جزئی‌تر را بنویسید.
+
+برای نمونه، فقط استفاده از Anthropic را مجاز کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "*"
+      },
+      {
+        "effect": "allow",
+        "action": "provider.use",
+        "resource": "anthropic"
+      }
+    ]
+  }
+}
+```
+
+اگر هیچ سیاستی با ارائه‌دهنده مطابقت نداشته باشد، استفاده از آن به‌طور پیش‌فرض مجاز است.
+
+سیاست را می‌توانید هم در پیکربندی سراسری و هم در پیکربندی پروژه تعیین کنید. اگر سیاست هر دو محل با یک ارائه‌دهنده مطابقت داشته باشد، سیاست سراسری اولویت دارد. به این ترتیب مخزن نمی‌تواند ارائه‌دهنده‌ای را که در سطح سراسری مسدود کرده‌اید دوباره فعال کند.
+
+---
+
+## فهرست ارائه‌دهندگان
+
+برای کنترل دسترسی به ارائه‌دهندگان در OpenCode 2، به‌جای تنظیمات قدیمی `disabled_providers` و `enabled_providers` سیاست تعریف کنید. در OpenCode 1 همچنان از همین فهرست‌ها استفاده کنید.
+
+معادل `disabled_providers` با سیاست به این شکل است.
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "openai" },
+      { "effect": "deny", "action": "provider.use", "resource": "google" }
+    ]
+  }
+}
+```
+
+برای جایگزینی `enabled_providers`، ابتدا همهٔ ارائه‌دهندگان را مسدود و سپس ارائه‌دهندگان موردنظر را مجاز کنید.
+
+```json title="opencode.json"
+{
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "*" },
+      { "effect": "allow", "action": "provider.use", "resource": "anthropic" },
+      { "effect": "allow", "action": "provider.use", "resource": "openai" }
+    ]
+  }
+}
+```

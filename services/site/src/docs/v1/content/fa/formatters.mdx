@@ -1,0 +1,142 @@
+---
+title: قالب‌بندها
+description: OpenCode فایل‌های هر زبان را با قالب‌بند همان زبان قالب‌بندی می‌کند.
+---
+
+OpenCode می‌تواند پس از نوشتن یا ویرایش فایل، آن را با ابزار ویژهٔ همان زبان قالب‌بندی کند. قالب‌بندها به‌طور پیش‌فرض غیرفعال‌اند. پیش از استفاده آن‌ها را در پیکربندی فعال کنید.
+
+---
+
+## قالب‌بندهای داخلی
+
+OpenCode چندین قالب‌بند داخلی برای زبان‌ها و چارچوب‌های رایج دارد. جدول زیر پسوندهای پشتیبانی‌شده و فرمان یا تنظیم لازم برای هر قالب‌بند را نشان می‌دهد.
+
+| قالب‌بند | پسوندها | پیش‌نیازها |
+| -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| air | .R | فرمان `air` در دسترس باشد |
+| biome | .js، .jsx، .ts، .tsx، .html، .css، .md، .json، .yaml و [موارد دیگر](https://biomejs.dev/) | فایل پیکربندی `biome.json(c)` |
+| clang-format | .c، .cpp، .h، .hpp، .ino و [موارد دیگر](https://clang.llvm.org/docs/ClangFormat.html) | فایل پیکربندی `.clang-format` |
+| cljfmt | .clj, .cljs, .cljc, .edn | فرمان `cljfmt` در دسترس باشد |
+| dart | .dart | فرمان `dart` در دسترس باشد |
+| dfmt | .d | فرمان `dfmt` در دسترس باشد |
+| gleam | .gleam | فرمان `gleam` در دسترس باشد |
+| gofmt | .go | فرمان `gofmt` در دسترس باشد |
+| htmlbeautifier | .erb, .html.erb | فرمان `htmlbeautifier` در دسترس باشد |
+| ktlint | .kt, .kts | فرمان `ktlint` در دسترس باشد |
+| mix | .ex, .exs, .eex, .heex, .leex, .neex, .sface | فرمان `mix` در دسترس باشد |
+| nixfmt | .nix | فرمان `nixfmt` در دسترس باشد |
+| ocamlformat | .ml, .mli | فرمان `ocamlformat` و فایل پیکربندی `.ocamlformat` در دسترس باشند |
+| ormolu | .hs | فرمان `ormolu` در دسترس باشد |
+| oxfmt (آزمایشی) | .js, .jsx, .ts, .tsx | وابستگی `oxfmt` در `package.json` و [فعال بودن متغیر محیطی آزمایشی](/docs/cli/#experimental) |
+| pint | .php | وابستگی `laravel/pint` در `composer.json` |
+| prettier | .js، .jsx، .ts، .tsx، .html، .css، .md، .json، .yaml و [موارد دیگر](https://prettier.io/docs/en/index.html) | وابستگی `prettier` در `package.json` |
+| rubocop | .rb, .rake, .gemspec, .ru | فرمان `rubocop` در دسترس باشد |
+| ruff | .py, .pyi | فرمان `ruff` و پیکربندی آن در دسترس باشند |
+| rustfmt | .rs | فرمان `rustfmt` در دسترس باشد |
+| shfmt | .sh, .bash | فرمان `shfmt` در دسترس باشد |
+| standardrb | .rb, .rake, .gemspec, .ru | فرمان `standardrb` در دسترس باشد |
+| terraform | .tf, .tfvars | فرمان `terraform` در دسترس باشد |
+| uv | .py, .pyi | فرمان `uv` در دسترس باشد |
+| zig | .zig, .zon | فرمان `zig` در دسترس باشد |
+
+اگر قالب‌بندها فعال باشند و پروژه در `package.json` به `prettier` وابسته باشد، فایل‌های منطبق با `prettier` قالب‌بندی می‌شوند.
+
+---
+
+## نحوهٔ کار
+
+اگر قالب‌بندها فعال باشند، پس از نوشتن یا ویرایش فایل، OpenCode این مراحل را طی می‌کند.
+
+1. پسوند فایل را با قالب‌بندهای فعال مطابقت می‌دهد.
+2. فرمان قالب‌بند مناسب را روی فایل اجرا می‌کند.
+3. تغییرات قالب‌بندی را اعمال می‌کند.
+
+این فرایند برای قالب‌بندهای فعال در پس‌زمینه انجام می‌شود.
+
+---
+
+## پیکربندی
+
+در بخش `formatter` پیکربندی OpenCode می‌توانید قالب‌بندها را فعال کنید و تنظیمات آن‌ها را تغییر دهید.
+
+برای فعال کردن همهٔ قالب‌بندهای داخلی، مقدار `formatter` را برابر `true` قرار دهید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true
+}
+```
+
+برای تغییر بعضی تنظیمات یا افزودن قالب‌بند سفارشی در کنار قالب‌بندهای داخلی فعال، یک شیء تعریف کنید.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {}
+}
+```
+
+هر قالب‌بند گزینه‌های زیر را می‌پذیرد.
+
+| ویژگی | نوع | توضیحات |
+| ------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `disabled` | boolean | برای غیرفعال کردن این قالب‌بند، مقدار `true` را تعیین کنید. |
+| `command` | string[] | فرمان اجرای قالب‌بندی. برای قالب‌بندهای سفارشی الزامی و برای قالب‌بندهای داخلی اختیاری است. |
+| `environment` | object | متغیرهای محیطی هنگام اجرای قالب‌بند |
+| `extensions` | string[] | پسوند فایل‌هایی که این قالب‌بند پردازش می‌کند |
+
+چند نمونه را در ادامه می‌بینید.
+
+---
+
+### غیرفعال کردن قالب‌بندها
+
+اگر `formatter` را تعیین نکنید، همهٔ قالب‌بندها غیرفعال‌اند. اگر پیکربندی دیگری آن‌ها را فعال کرده است، برای غیرفعال کردن همهٔ قالب‌بندها `formatter` را روی `false` بگذارید.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+برای غیرفعال کردن **یک قالب‌بند مشخص**، `disabled` را روی `true` بگذارید.
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### قالب‌بندهای سفارشی
+
+تنظیمات قالب‌بندهای داخلی را با گزینه‌هایی مانند `environment` و `extensions` تغییر دهید. برای افزودن یک قالب‌بند سفارشی، `command` و `extensions` را مشخص کنید.
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    },
+    "custom-markdown-formatter": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"]
+    }
+  }
+}
+```
+
+در فرمان، **جای‌نگهدار `$FILE`** با مسیر فایل موردنظر برای قالب‌بندی جایگزین می‌شود.

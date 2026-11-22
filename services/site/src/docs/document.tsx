@@ -67,7 +67,7 @@ const components = {
 // language's strings (the latest docs are English; the V1 docs have the site's languages and
 // Bosnian, src/i18n/bs.ts) with their {{params}} filled in (as ~/i18n's interpolate), without the
 // site's language loader.
-const dicts = import.meta.glob<typeof dict>("../i18n/{ar,br,bs,da,de,es,fr,it,ja,ko,no,pl,ru,th,tr,zh,zht}.ts", {
+const dicts = import.meta.glob<typeof dict>("../i18n/{ar,br,bs,da,de,es,fa,fr,it,ja,ko,no,pl,ru,th,tr,zh,zht}.ts", {
   eager: true,
   import: "dict",
 })

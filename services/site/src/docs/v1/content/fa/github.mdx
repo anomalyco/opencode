@@ -1,0 +1,333 @@
+---
+title: GitHub
+description: استفاده از OpenCode در مسئله‌ها و درخواست‌های ادغام GitHub.
+---
+
+در نظرهای GitHub با نوشتن `/opencode` یا `/oc` از OpenCode بخواهید کاری را در اجراکنندهٔ GitHub Actions شما انجام دهد.
+
+---
+
+## امکانات
+
+- **بررسی مسئله‌ها**: از OpenCode بخواهید یک مسئله را بررسی کند و توضیح دهد.
+- **رفع مشکل و پیاده‌سازی قابلیت**: از OpenCode بخواهید مشکلی را رفع کند یا قابلیتی بیفزاید. در شاخه‌ای تازه کار می‌کند و تغییرات را در قالب درخواست ادغام (PR) می‌فرستد.
+- **اجرای امن**: OpenCode داخل اجراکننده‌های GitHub شما اجرا می‌شود.
+
+---
+
+## نصب
+
+در پروژه‌ای که در مخزن GitHub قرار دارد، فرمان زیر را اجرا کنید.
+
+```bash
+opencode github install
+```
+
+این فرمان شما را در نصب برنامهٔ GitHub، ساخت گردش‌کار و تنظیم اطلاعات محرمانه راهنمایی می‌کند.
+
+---
+
+### راه‌اندازی دستی
+
+می‌توانید مراحل راه‌اندازی را دستی هم انجام دهید.
+
+1. **برنامهٔ GitHub را نصب کنید**
+
+   به [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent) بروید. مطمئن شوید برنامه روی مخزن موردنظر نصب شده است.
+
+2. **گردش‌کار را اضافه کنید**
+
+   فایل گردش‌کار زیر را در مسیر `.github/workflows/opencode.yml` مخزن قرار دهید. `model` مناسب و کلیدهای API لازم در `env` را مشخص کنید.
+
+   ```yml title=".github/workflows/opencode.yml" {28,30}
+   name: opencode
+
+   on:
+     issue_comment:
+       types: [created]
+     pull_request_review_comment:
+       types: [created]
+
+   jobs:
+     opencode:
+       if: |
+         contains(github.event.comment.body, '/oc') ||
+         contains(github.event.comment.body, '/opencode')
+       runs-on: ubuntu-latest
+       permissions:
+         id-token: write
+         contents: read
+       steps:
+         - name: Checkout repository
+           uses: actions/checkout@v6
+           with:
+             fetch-depth: 1
+             persist-credentials: false
+
+         - name: Run OpenCode
+           uses: anomalyco/opencode/github@latest
+           env:
+             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+           with:
+             model: anthropic/claude-sonnet-5-5
+   ```
+
+   با `contents: read`، مرحلهٔ checkout می‌تواند مخزن‌های خصوصی را بخواند. `id-token: write` به OpenCode اجازه می‌دهد توکن OIDC را با توکن برنامهٔ GitHub مبادله کند. این توکن مجوز ثبت نظر و فرستادن تغییرات را فراهم می‌کند.
+
+3. **کلیدهای API را در Secrets ذخیره کنید**
+
+   در **Settings** سازمان یا پروژه، در سمت چپ **Secrets and variables** را باز کنید، **Actions** را انتخاب و کلیدهای API لازم را اضافه کنید.
+
+---
+
+## پیکربندی
+
+- `model` مدل مورد استفادهٔ OpenCode را به شکل `provider/model` تعیین می‌کند. این ورودی **الزامی** است.
+- `agent` عامل مورد استفاده است و باید از نوع اصلی باشد. در نبود آن، `default_agent` از پیکربندی خوانده می‌شود و اگر یافت نشود، `"build"` انتخاب خواهد شد.
+- `prompt` متن درخواست اختیاری برای تغییر رفتار پیش‌فرض OpenCode در پردازش درخواست‌هاست.
+- `mentions` فهرست عبارت‌های فراخوانی است، با ویرگول لاتین از هم جدا می‌شوند و به بزرگی و کوچکی حروف حساس نیستند. پیش‌فرض `/opencode,/oc` است.
+- `variant` گونهٔ مدل را برای تعیین میزان استدلال ویژهٔ ارائه‌دهنده مشخص می‌کند، مثلاً `high`، `max` یا `minimal`.
+- `oidc_base_url` نشانی پایهٔ API مبادلهٔ توکن OIDC است. فقط برای نصب سفارشی برنامهٔ GitHub لازم است. پیش‌فرض `https://api.opencode.ai` است.
+- با تنظیم `use_github_token` روی `true`، به‌جای مبادلهٔ توکن OIDC با توکن نصب برنامهٔ OpenCode، از `GITHUB_TOKEN` ارائه‌شده از سوی فراخواننده استفاده می‌شود. پیش‌فرض `false` است.
+
+  در این حالت می‌توانید بدون نصب برنامهٔ GitHub مربوط به OpenCode کار کنید. توکن را از طریق `env` بدهید و مجوزهای لازم برای گردش‌کار را تنظیم کنید.
+
+  ```yaml
+  permissions:
+    contents: write
+    pull-requests: write
+    issues: write
+
+  steps:
+    - uses: actions/checkout@v6
+    - run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+    - uses: anomalyco/opencode/github@latest
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        model: anthropic/claude-sonnet-5-5
+        use_github_token: true
+  ```
+
+  چون مبادلهٔ OIDC انجام نمی‌شود، `id-token: write` لازم نیست. برای احراز هویت Git، پیش‌فرض `persist-credentials: true` مرحلهٔ checkout را نگه دارید. اگر OpenCode تغییرات را ثبت می‌کند، نام و ایمیل کاربر Git را تنظیم کنید. OpenCode فقط در حالت OIDC این مقادیر را تنظیم می‌کند.
+
+  برای استفاده از [توکن دسترسی شخصی](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) یا توکن برنامهٔ GitHub دیگر، آن را به‌صورت یک secret ذخیره کنید و مقدارش را هم به `GITHUB_TOKEN` و هم به ورودی `token` در checkout بدهید.
+
+---
+
+## رویدادهای پشتیبانی‌شده
+
+رویدادهای زیر در GitHub می‌توانند OpenCode را اجرا کنند.
+
+| نوع رویداد | محرک | جزئیات |
+| ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `issue_comment` | ثبت نظر در مسئله یا PR | `/opencode` یا `/oc` را در نظر بنویسید. OpenCode متن مربوط را می‌خواند و می‌تواند شاخه یا PR بسازد یا پاسخ دهد. |
+| `pull_request_review_comment` | نظر روی خط‌های مشخصی از کد در PR | هنگام بازبینی کد `/opencode` یا `/oc` را بنویسید. OpenCode مسیر فایل، شمارهٔ خط‌ها و بخش مرتبط از تفاوت کد را دریافت می‌کند. |
+| `issues` | ایجاد یا ویرایش مسئله | هنگام ایجاد یا تغییر مسئله، OpenCode خودکار اجرا می‌شود. ورودی `prompt` لازم است. |
+| `pull_request` | باز شدن یا به‌روزرسانی PR | هنگام باز شدن، همگام‌سازی یا بازگشایی PR،‏ OpenCode خودکار اجرا می‌شود. برای بازبینی خودکار کاربرد دارد. |
+| `schedule` | زمان‌بندی با cron | OpenCode را طبق برنامه اجرا می‌کند. ورودی `prompt` لازم است. خروجی در گزارش‌ها و PRها ثبت می‌شود، چون مسئله‌ای برای ثبت نظر وجود ندارد. |
+| `workflow_dispatch` | اجرای دستی در رابط GitHub | از زبانهٔ Actions می‌توانید OpenCode را هر زمان خواستید اجرا کنید. ورودی `prompt` لازم است. خروجی در گزارش‌ها و PRها ثبت می‌شود. |
+
+### نمونهٔ زمان‌بندی
+
+برای خودکارسازی کارهای دوره‌ای، OpenCode را طبق زمان‌بندی اجرا کنید.
+
+```yaml title=".github/workflows/opencode-scheduled.yml"
+name: Scheduled OpenCode Task
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Every Monday at 9am UTC
+
+jobs:
+  opencode:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-5-5
+          prompt: |
+            نظرهای TODO را در کد پیدا کن و خلاصه‌ای از آن‌ها بنویس.
+            اگر مشکلی پیدا کردی که نیاز به رسیدگی دارد، برای پیگیری آن یک مسئله باز کن.
+```
+
+در رویدادهای زمان‌بندی‌شده ورودی `prompt` **الزامی** است، چون نظری برای استخراج دستورالعمل وجود ندارد. گردش‌کار زمان‌بندی‌شده بدون هویت کاربری برای بررسی مجوز اجرا می‌شود. با `use_github_token: true`، برای ساخت شاخه یا PR مجوزهای `contents: write` و `pull-requests: write` را بدهید و تنظیمات checkout و Git را طبق بخش [پیکربندی](#configuration) انجام دهید. در حالت پیش‌فرض OIDC، مجوزهای برنامهٔ GitHub مربوط به OpenCode استفاده می‌شوند.
+
+---
+
+### نمونهٔ درخواست ادغام
+
+هنگام باز شدن یا به‌روز شدن PR، آن را خودکار بازبینی کنید.
+
+```yaml title=".github/workflows/opencode-review.yml"
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: anthropic/claude-sonnet-5-5
+          use_github_token: true
+          prompt: |
+            این درخواست ادغام را بررسی کن:
+            - اشکالات مربوط به کیفیت کد را مشخص کن.
+            - خطاهای احتمالی را پیدا کن.
+            - برای بهبود کد پیشنهاد بده.
+```
+
+در رویداد `pull_request`، اگر `prompt` تعیین نشود، OpenCode به‌طور پیش‌فرض درخواست ادغام را بازبینی می‌کند.
+
+با `issues: write`،‏ OpenCode می‌تواند روی PR واکنش یا نظر بگذارد، چون GitHub نظرهای PR را با API مسئله‌ها مدیریت می‌کند. این مثال برای شاخه‌های همان مخزن است. PRهایی که از فورک می‌آیند معمولاً `GITHUB_TOKEN` فقط‌خواندنی دریافت می‌کنند و به مقادیر محرمانهٔ مخزن دسترسی ندارند.
+
+---
+
+### نمونهٔ بررسی اولیهٔ مسئله‌ها
+
+مسئله‌های تازه را خودکار بررسی کنید. در این مثال، برای کاهش هرزنامه فقط حساب‌های قدیمی‌تر از ۳۰ روز پذیرفته می‌شوند.
+
+```yaml title=".github/workflows/opencode-triage.yml"
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Check account age
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const user = await github.rest.users.getByUsername({
+              username: context.payload.issue.user.login
+            });
+            const created = new Date(user.data.created_at);
+            const days = (Date.now() - created) / (1000 * 60 * 60 * 24);
+            return days >= 30;
+          result-encoding: string
+
+      - uses: actions/checkout@v6
+        if: steps.check.outputs.result == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: anomalyco/opencode/github@latest
+        if: steps.check.outputs.result == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-5-5
+          prompt: |
+            این مسئله را بررسی کن. اگر راه‌حل روشنی یا مستندات مرتبطی وجود دارد:
+            - پیوندهای مستندات را در پاسخ بیاور.
+            - برای مدیریت خطا در نمونه‌های کد راهنمایی بده.
+            در غیر این صورت نظری ثبت نکن.
+```
+
+برای رویدادهای `issues`، ورودی `prompt` **الزامی** است، چون نظری برای استخراج دستورالعمل وجود ندارد.
+
+---
+
+## درخواست‌های سفارشی
+
+برای هماهنگ کردن رفتار OpenCode با گردش‌کار، متن درخواست پیش‌فرض را تغییر دهید.
+
+```yaml title=".github/workflows/opencode.yml"
+- uses: anomalyco/opencode/github@latest
+  with:
+    model: anthropic/claude-sonnet-5-5
+    prompt: |
+      این درخواست ادغام را بررسی کن:
+      - اشکالات مربوط به کیفیت کد را مشخص کن.
+      - خطاهای احتمالی را پیدا کن.
+      - برای بهبود کد پیشنهاد بده.
+```
+
+می‌توانید معیارهای بازبینی، استانداردهای کدنویسی یا بخش‌های مهم پروژه را در آن تعیین کنید.
+
+---
+
+## مثال‌ها
+
+نمونه‌های زیر روش استفاده از OpenCode در GitHub را نشان می‌دهند.
+
+- **توضیح مسئله**
+
+  نظر زیر را به یک مسئلهٔ GitHub اضافه کنید.
+
+  ```
+  /opencode این مسئله را توضیح بده.
+  ```
+
+  OpenCode کل گفت‌وگو، از جمله همهٔ نظرها را می‌خواند و با توضیحی روشن پاسخ می‌دهد.
+
+- **رفع مسئله**
+
+  در یک مسئلهٔ GitHub بنویسید:
+
+  ```
+  /opencode این مشکل را رفع کن.
+  ```
+
+  OpenCode شاخه‌ای تازه می‌سازد، تغییرات را انجام می‌دهد و برای آن‌ها PR باز می‌کند.
+
+- **بازبینی PR و اعمال تغییر**
+
+  نظر زیر را روی یک PR در GitHub بگذارید.
+
+  ```
+  وقتی یادداشت حذف شد، پیوست آن را از S3 پاک کن. /oc
+  ```
+
+  OpenCode تغییر را انجام می‌دهد و آن را در همان PR ثبت می‌کند.
+
+- **بازبینی خط‌های مشخص کد**
+
+  در زبانهٔ «Files» درخواست ادغام، مستقیماً روی خط‌های موردنظر نظر بگذارید. OpenCode فایل، شمارهٔ خط‌ها و متن پیرامون تغییر را خودکار تشخیص می‌دهد تا پاسخ دقیق‌تری بدهد.
+
+  ```
+  [روی خط‌های موردنظر در زبانهٔ Files نظر بگذارید]
+  /oc اینجا مدیریت خطا را اضافه کن.
+  ```
+
+  هنگام ثبت نظر روی خط‌های مشخص، این اطلاعات در اختیار OpenCode قرار می‌گیرند.
+  - فایل دقیق مورد بازبینی
+  - خط‌های مشخص کد
+  - تفاوت‌های پیرامون خط‌های انتخاب‌شده
+  - اطلاعات شمارهٔ خط‌ها
+
+  به این ترتیب می‌توانید بدون وارد کردن دستی مسیر یا شمارهٔ خط، درخواست مشخص‌تری مطرح کنید.

@@ -1,0 +1,347 @@
+---
+title: ابزارها
+description: مدیریت ابزارهای در دسترس مدل زبانی.
+---
+
+ابزارها به مدل زبانی امکان می‌دهند در پروژهٔ شما کاری انجام دهد. افزون بر ابزارهای داخلی OpenCode، می‌توانید [ابزار سفارشی](/docs/custom-tools) یا [سرور MCP](/docs/mcp-servers) اضافه کنید.
+
+به‌طور پیش‌فرض همهٔ ابزارها **فعال‌اند** و برای اجرا نیازی به تأیید ندارند. رفتار آن‌ها را با [مجوزها](/docs/permissions) تنظیم کنید.
+
+---
+
+## پیکربندی
+
+در فیلد `permission` برای هر ابزار تعیین کنید که اجرا مجاز یا ممنوع باشد یا به تأیید نیاز داشته باشد.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+با نویسه‌های عام می‌توانید چند ابزار را هم‌زمان کنترل کنید. برای نمونه، تنظیم زیر برای همهٔ ابزارهای یک سرور MCP درخواست تأیید می‌کند.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+جزئیات را در [راهنمای پیکربندی مجوزها](/docs/permissions) ببینید.
+
+---
+
+## ابزارهای داخلی
+
+ابزارهای داخلی OpenCode در ادامه آمده‌اند.
+
+---
+
+### bash
+
+اجرای فرمان‌های پوسته در محیط پروژه.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+با این ابزار مدل زبانی می‌تواند `npm install`، `git status` یا فرمان‌های دیگر پوسته را اجرا کند.
+
+---
+
+### edit
+
+ویرایش فایل‌های موجود با جایگزینی رشته‌های دقیق.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+این ابزار بخش‌هایی از فایل را که دقیقاً با متن داده‌شده مطابقت دارند جایگزین می‌کند. مدل زبانی برای ویرایش کد عمدتاً از این روش استفاده می‌کند.
+
+---
+
+### write
+
+ساخت فایل تازه یا بازنویسی فایل موجود.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+با این ابزار مدل می‌تواند فایل بسازد. اگر فایل از قبل وجود داشته باشد، محتویات آن بازنویسی می‌شود.
+
+:::note
+مجوز `edit` ابزار `write` را کنترل می‌کند و همهٔ تغییرات فایل از طریق `edit`، `write` و `apply_patch` را در بر می‌گیرد.
+:::
+
+---
+
+### read
+
+خواندن محتوای فایل‌های پروژه.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+این ابزار محتوای فایل را برمی‌گرداند. در فایل‌های بزرگ می‌توان بازهٔ مشخصی از خط‌ها را خواند.
+
+---
+
+### grep
+
+جست‌وجو در محتوای فایل‌ها با عبارت باقاعده.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+جست‌وجوی سریع در پروژه با پشتیبانی از نحو کامل عبارت‌های باقاعده و محدود کردن فایل‌ها بر اساس الگو.
+
+---
+
+### glob
+
+یافتن فایل‌های منطبق با الگو.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+برای جست‌وجوی فایل‌ها از الگوهای glob مانند `**/*.js` یا `src/**/*.ts` استفاده کنید. خروجی، مسیر فایل‌های منطبق به‌ترتیب زمان آخرین تغییر است.
+
+---
+
+### lsp (آزمایشی)
+
+ارتباط با سرورهای زبان پیکربندی‌شده برای یافتن تعریف‌ها، ارجاع‌ها، اطلاعات زیر نشانگر و سلسله‌مراتب فراخوانی‌ها.
+
+:::note
+این ابزار فقط با `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` یا `OPENCODE_EXPERIMENTAL=true` در دسترس است.
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+عملیات قابل استفاده عبارت‌اند از `goToDefinition`، `findReferences`، `hover`، `documentSymbol`، `workspaceSymbol`، `goToImplementation`، `prepareCallHierarchy`، `incomingCalls` و `outgoingCalls`.
+
+برای تعیین سرورهای زبان در دسترس پروژه، [راهنمای سرورهای زبان](/docs/lsp) را ببینید.
+
+---
+
+### apply_patch
+
+اعمال وصله روی فایل‌ها.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+این ابزار وصله را روی کد پروژه اعمال می‌کند و برای وارد کردن تفاوت‌ها یا وصله‌های دریافتی از منابع مختلف کاربرد دارد.
+
+در توابع رویداد `tool.execute.before` و `tool.execute.after`، مقدار `input.tool === "apply_patch"` را بررسی کنید. نام ابزار `"patch"` نیست.
+
+ابزار `apply_patch` مسیر را در `output.args.filePath` نمی‌دهد و از `output.args.patchText` استفاده می‌کند. مسیرها نسبت به ریشهٔ پروژه‌اند و در خط‌های نشانگر داخل `patchText` قرار دارند، مانند `*** Add File: src/new-file.ts`، `*** Update File: src/existing.ts`، `*** Move to: src/renamed.ts` و `*** Delete File: src/obsolete.ts`.
+
+:::note
+مجوز `edit` ابزار `apply_patch` را کنترل می‌کند و همهٔ تغییرات فایل از طریق `edit`، `write` و `apply_patch` را در بر می‌گیرد.
+:::
+
+---
+
+### skill
+
+یک [مهارت](/docs/skills) (فایل `SKILL.md`) را بارگذاری می‌کند و محتوای آن را به گفت‌وگو می‌آورد.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todowrite
+
+مدیریت فهرست کارها در نشست‌های کدنویسی.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+این ابزار فهرست کارها را می‌سازد و به‌روز می‌کند تا مدل بتواند پیشرفت کارهای چندمرحله‌ای را پیگیری کند.
+
+:::note
+این ابزار برای زیرعامل General به‌طور پیش‌فرض غیرفعال است. می‌توانید آن را [دستی فعال کنید](/docs/agents/#permissions).
+:::
+
+---
+
+### webfetch
+
+دریافت محتوا از وب.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+مدل زبانی می‌تواند صفحات وب را دریافت کند و بخواند. این ابزار برای مراجعه به مستندات و بررسی منابع آنلاین کاربرد دارد.
+
+---
+
+### websearch
+
+جست‌وجوی اطلاعات در وب.
+
+:::note
+این ابزار با ارائه‌دهندگان OpenCode و OpenCode Go در دسترس است. برای ارائه‌دهندگان دیگر، متغیر محیطی `OPENCODE_ENABLE_EXA` یا `OPENCODE_ENABLE_PARALLEL` را روی مقداری مانند `true` یا `1` تنظیم کنید که درست ارزیابی شود.
+
+برای فعال‌سازی هنگام اجرای OpenCode، فرمان زیر را وارد کنید.
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+# or
+OPENCODE_ENABLE_PARALLEL=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+این ابزار با Exa یا Parallel در وب جست‌وجو می‌کند. می‌توانید دربارهٔ یک موضوع تحقیق کنید، رویدادهای جدید را پیدا کنید یا اطلاعاتی فراتر از داده‌های آموزشی مدل به دست آورید.
+
+کلید API لازم نیست. ابزار مستقیماً و بدون احراز هویت به سرویس میزبانی‌شدهٔ MCP در سمت سرور متصل می‌شود.
+
+:::tip
+برای یافتن منابع از `websearch` و برای دریافت محتوای یک نشانی مشخص از `webfetch` استفاده کنید.
+:::
+
+---
+
+### question
+
+پرسیدن سؤال از کاربر هنگام اجرا.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+با این ابزار، مدل زبانی در طول کار می‌تواند برای هدف‌های زیر از کاربر سؤال بپرسد.
+
+- دریافت ترجیحات یا نیازهای کاربر
+- روشن کردن دستورالعمل‌های مبهم
+- گرفتن تصمیم دربارهٔ شیوهٔ پیاده‌سازی
+- ارائهٔ چند گزینه برای ادامهٔ کار
+
+هر پرسش یک عنوان، متن و فهرست گزینه‌ها دارد. کاربر می‌تواند گزینه‌ای انتخاب کند یا پاسخ دلخواهش را بنویسد. اگر چند پرسش وجود داشته باشد، می‌تواند پیش از ثبت پاسخ‌ها میان آن‌ها جابه‌جا شود.
+
+---
+
+## ابزارهای سفارشی
+
+برای ابزارهای سفارشی، توابعی تعریف می‌کنید که مدل می‌تواند آن‌ها را فراخوانی کند. این ابزارها در پیکربندی معرفی می‌شوند و می‌توانند کد دلخواه اجرا کنند.
+
+برای ساخت ابزار، [راهنمای ابزارهای سفارشی](/docs/custom-tools) را ببینید.
+
+---
+
+## سرورهای MCP
+
+سرورهای MCP (پروتکل زمینهٔ مدل) ابزارها و سرویس‌های بیرونی را در دسترس مدل می‌گذارند، از جمله پایگاه‌های داده، APIها و سرویس‌های شخص ثالث.
+
+[راهنمای پیکربندی سرورهای MCP](/docs/mcp-servers) را ببینید.
+
+---
+
+## جزئیات پیاده‌سازی
+
+ابزارهایی مانند `grep` و `glob` از [ripgrep](https://github.com/BurntSushi/ripgrep) استفاده می‌کنند. ripgrep به‌طور پیش‌فرض الگوهای `.gitignore` را رعایت می‌کند. در نتیجه فایل‌ها و پوشه‌های فهرست‌شده در `.gitignore` در جست‌وجو و فهرست فایل‌ها ظاهر نمی‌شوند.
+
+---
+
+### الگوهای نادیده‌گیری
+
+برای اینکه جست‌وجو فایل‌هایی را هم پیدا کند که معمولاً نادیده گرفته می‌شوند، در ریشهٔ پروژه فایل `.ignore` بسازید و مسیرهای موردنظر را صریحاً مجاز کنید.
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+برای مثال، فایل `.ignore` زیر به ripgrep اجازه می‌دهد در پوشه‌های `node_modules/`، `dist/` و `build/` جست‌وجو کند، حتی اگر این مسیرها در `.gitignore` آمده باشند.

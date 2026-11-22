@@ -70,7 +70,7 @@ export function docs(): Plugin {
 
 /** The docs set a file's MDX belongs to. */
 function setOf(file: string) {
-  return docsSets.find((set) => file.startsWith(path.join(repository, set.content) + path.sep))
+  return docsSets.find((set) => path.normalize(file).startsWith(path.join(repository, set.content) + path.sep))
 }
 
 /** A set's page slugs: its MDX files, and the latest docs' API reference (render.tsx). */
@@ -104,7 +104,7 @@ async function compileMdx(source: string, id: string, set: DocsSet) {
         ? v1Plugins(id)
         : [remarkGfm, remarkSmartypants, [remarkDocsLinks, { base: set.base }], remarkSlots],
     rehypePlugins: [rehypeShiki, rehypeTableScroll, rehypeHeadings],
-    recmaPlugins: [recmaSolid],
+    recmaPlugins: [[recmaSolid, { preserveLinks: set.id === "v1" }]],
   })
   return [
     String(compiled.value).replaceAll("import.meta.env.BASE_URL", JSON.stringify(set.base)),

@@ -1,0 +1,221 @@
+---
+title: مدل‌ها
+description: پیکربندی ارائه‌دهنده و انتخاب مدل زبانی.
+---
+
+OpenCode با [AI SDK](https://ai-sdk.dev/) و [Models.dev](https://models.dev) از **بیش از ۷۵ ارائه‌دهندهٔ مدل زبانی** پشتیبانی می‌کند. امکان اجرای مدل‌های محلی هم وجود دارد.
+
+---
+
+## ارائه‌دهندگان
+
+بیشتر ارائه‌دهندگان رایج از پیش تعریف شده‌اند. اگر اطلاعات دسترسی یک ارائه‌دهنده را با فرمان `/connect` وارد کرده باشید، هنگام اجرای OpenCode مدل‌های آن در دسترس شما خواهند بود.
+
+[راهنمای ارائه‌دهندگان](/docs/providers) را بخوانید.
+
+---
+
+## انتخاب مدل
+
+پس از تنظیم ارائه‌دهنده، برای انتخاب مدل دلخواه فرمان زیر را وارد کنید.
+
+```bash frame="none"
+/models
+```
+
+---
+
+## مدل‌های پیشنهادی
+
+مدل‌های فراوانی در دسترس‌اند و هر هفته مدل‌های تازه‌ای منتشر می‌شوند.
+
+:::tip
+می‌توانید کار را با یکی از مدل‌های پیشنهادی ما شروع کنید.
+:::
+
+فقط شماری از این مدل‌ها هم در تولید کد و هم در فراخوانی ابزار عملکرد خوبی دارند.
+
+مدل‌های زیر با OpenCode به‌خوبی کار می‌کنند. فهرست ترتیب مشخصی ندارد، جامع نیست و ممکن است تازه‌ترین مدل‌ها را در بر نگیرد.
+
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- Minimax M2.1
+- Gemini 3 Pro
+
+---
+
+## تعیین مدل پیش‌فرض
+
+برای انتخاب یک مدل به‌عنوان پیش‌فرض، کلید `model` را در پیکربندی OpenCode تعیین کنید.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+شناسهٔ کامل به شکل `provider_id/model_id` است. برای نمونه، در [OpenCode Models](https://opencode.ai/docs/console/)، شناسهٔ مدل GPT-6.1 Sol برابر `opencode/gpt-6.1-sol` است.
+
+اگر [ارائه‌دهندهٔ سفارشی](/docs/providers#custom) تعریف کرده‌اید، `provider_id` کلید آن در بخش `provider` پیکربندی و `model_id` کلید مدل در `provider.models` است.
+
+---
+
+## پیکربندی مدل‌ها
+
+گزینه‌های هر مدل را می‌توانید در پیکربندی سراسری تعیین کنید.
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-5-5": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+در این مثال، تنظیمات سراسری دو مدل داخلی را تعیین می‌کنیم: مدل `gpt-6.1-sol` از طریق ارائه‌دهندهٔ `openai` و مدل `claude-sonnet-5-5` از طریق ارائه‌دهندهٔ `anthropic`. نام مدل‌ها و ارائه‌دهندگان داخلی را در [Models.dev](https://models.dev) ببینید.
+
+گزینه‌های مدل را برای هر عامل نیز می‌توانید تنظیم کنید. تنظیمات عامل بر گزینه‌های سراسری اولویت دارند. [راهنمای تنظیمات عامل](/docs/agents/#additional) را ببینید.
+
+برای یک مدل می‌توانید از روی گونه‌های داخلی، گونه‌های دلخواه با تنظیمات متفاوت بسازید. به این ترتیب نیازی به تعریف دوبارهٔ مدل ندارید.
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-6.1-sol": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## گونه‌های مدل
+
+بسیاری از مدل‌ها با تنظیمات گوناگون کار می‌کنند. OpenCode برای ارائه‌دهندگان رایج چند گونهٔ آماده دارد.
+
+### گونه‌های داخلی
+
+OpenCode برای بسیاری از ارائه‌دهندگان گونه‌های پیش‌فرض دارد.
+
+**Anthropic**:
+
+- `high` با بودجهٔ استدلال زیاد (پیش‌فرض)
+- `max` با بیشترین بودجهٔ استدلال
+
+**OpenAI**:
+
+بسته به مدل متفاوت است، اما معمولاً این گزینه‌ها را دارد.
+
+- `none` بدون استدلال
+- `minimal` با کمترین میزان استدلال
+- `low` با استدلال کم
+- `medium` با استدلال متوسط
+- `high` با استدلال زیاد
+- `xhigh` با استدلال بسیار زیاد
+
+**Google**:
+
+- `low` با میزان تلاش یا بودجهٔ توکن کمتر
+- `high` با میزان تلاش یا بودجهٔ توکن بیشتر
+
+:::tip
+این فهرست کامل نیست. ارائه‌دهندگان دیگری نیز گونه‌های پیش‌فرض دارند.
+:::
+
+### گونه‌های سفارشی
+
+می‌توانید تنظیمات گونه‌های موجود را تغییر دهید یا گونهٔ تازه‌ای اضافه کنید.
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+### جابه‌جایی میان گونه‌ها
+
+با میان‌بر `variant_cycle` می‌توانید به‌سرعت میان گونه‌ها جابه‌جا شوید. [راهنمای میان‌برها](/docs/keybinds) را ببینید.
+
+---
+
+## بارگذاری مدل‌ها
+
+OpenCode هنگام راه‌اندازی، مدل را به‌ترتیب اولویت زیر انتخاب می‌کند.
+
+1. گزینهٔ خط فرمان `--model` یا `-m`. قالب شناسه مانند فایل پیکربندی، `provider_id/model_id` است.
+
+2. فهرست مدل‌ها در پیکربندی OpenCode.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "anthropic/claude-sonnet-5-5"
+   }
+   ```
+
+   قالب شناسه در اینجا `provider/model` است.
+
+3. آخرین مدلی که استفاده کرده‌اید.
+
+4. نخستین مدل بر اساس اولویت داخلی.
