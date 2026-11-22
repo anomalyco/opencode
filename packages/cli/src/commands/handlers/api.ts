@@ -1,4 +1,5 @@
 import { EOL } from "node:os"
+import { pipeline } from "node:stream/promises"
 import { Effect, Option, Predicate } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -6,7 +7,7 @@ import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { ServerConnection } from "../../services/server-connection"
 
 const methods = new Set(["delete", "get", "head", "options", "patch", "post", "put"])
-const brokenPipeCodes = new Set(["EPIPE", "EOF", "ERR_STREAM_PREMATURE_CLOSE", "ERR_STREAM_DESTROYED"])
+const brokenPipeCodes = new Set(["EPIPE", "EOF", "ERR_STREAM_PREMATURE_CLOSE"])
 
 type Operation = {
   operationId?: string
@@ -34,32 +35,23 @@ export default Runtime.handler(
     const body = Option.getOrUndefined(input.data)
     if (body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")
 
-    const controller = new AbortController()
-    const response = yield* Effect.tryPromise({
-      try: (signal) =>
-        withAbort(
-          signal,
-          () => controller.abort(),
-          () =>
-            fetch(new URL(request.path, endpoint.url), {
-              method: request.method,
-              headers,
-              body,
-              signal: controller.signal,
-            }),
-        ),
-      catch: (cause) => cause,
-    })
+    const response = yield* Effect.tryPromise(() =>
+      fetch(new URL(request.path, endpoint.url), {
+        method: request.method,
+        headers,
+        body,
+      }),
+    )
     const mediaType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase()
     if (response.ok && mediaType === "text/event-stream" && response.body) {
       const stream = response.body
+      const stdout = process.stdout
       yield* Effect.tryPromise({
         try: (signal) =>
-          withAbort(
-            signal,
-            () => controller.abort(),
-            () => streamEvents(stream, process.stdout, () => controller.abort()),
-          ),
+          pipeline(stream, stdout, { end: false, signal }).catch((error) => {
+            if ((stdout.errored !== null || stdout.destroyed) && isBrokenPipe(error)) return
+            throw error
+          }),
         catch: (cause) => cause,
       })
       return
@@ -73,90 +65,8 @@ export default Runtime.handler(
   }),
 )
 
-export async function streamEvents(
-  stream: ReadableStream<Uint8Array>,
-  output: NodeJS.WritableStream,
-  abort?: () => void,
-) {
-  if ("destroyed" in output && output.destroyed) {
-    abort?.()
-    await stream.cancel().catch(() => {})
-    return
-  }
-  let streamError: unknown
-  let broken = false
-  let handledError: unknown
-  const onStreamError = (error: unknown) => {
-    streamError = error
-  }
-  output.on("error", onStreamError)
-  const reader = stream.getReader()
-  try {
-    while (true) {
-      const next = await reader.read()
-      if (next.done) return
-      const failure = (await writeChunk(output, next.value)) ?? streamError
-      if (failure === undefined) continue
-      if (isBrokenPipe(failure)) {
-        broken = true
-        abort?.()
-        await reader.cancel().catch(() => {})
-        return
-      }
-      handledError = failure
-      abort?.()
-      await reader.cancel().catch(() => {})
-      throw failure
-    }
-  } finally {
-    reader.releaseLock()
-    if (broken) output.on("error", ignoreBrokenPipe)
-    if (!broken && handledError !== undefined && streamError === undefined) {
-      const swallow = (error: unknown) => {
-        if (error !== handledError) throw error
-      }
-      output.once("error", swallow)
-      setImmediate(() => output.off("error", swallow))
-    }
-    output.off("error", onStreamError)
-  }
-}
-
-function withAbort<A>(signal: AbortSignal, onAbort: () => void, run: () => Promise<A>) {
-  if (signal.aborted) onAbort()
-  signal.addEventListener("abort", onAbort, { once: true })
-  return run().finally(() => signal.removeEventListener("abort", onAbort))
-}
-
-function writeChunk(output: NodeJS.WritableStream, chunk: Uint8Array) {
-  return new Promise<unknown>((resolve) => {
-    const onError = (error: unknown) => {
-      cleanup()
-      resolve(error)
-    }
-    const cleanup = () => {
-      output.off("error", onError)
-    }
-    output.once("error", onError)
-    try {
-      output.write(chunk, (error) => {
-        cleanup()
-        resolve(error ?? undefined)
-      })
-    } catch (error) {
-      cleanup()
-      resolve(error)
-    }
-  })
-}
-
 function isBrokenPipe(error: unknown) {
   return Predicate.hasProperty(error, "code") && typeof error.code === "string" && brokenPipeCodes.has(error.code)
-}
-
-function ignoreBrokenPipe(error: unknown) {
-  if (isBrokenPipe(error)) return
-  throw error
 }
 
 export function resolveOperation(spec: OpenApi, operationID: string, params: Record<string, string>) {
