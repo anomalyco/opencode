@@ -175,5 +175,15 @@
     "0/2/3": "change",
     "0/3/0": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {
+      "values": {
+        "name": "",
+        "size": 1,
+        "on": false,
+        "pick": []
+      }
+    }
+  }
 }

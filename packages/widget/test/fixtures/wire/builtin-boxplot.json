@@ -158,5 +158,56 @@
     "0/1": "pointer",
     "0/3/0": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "stats": [
+        {
+          "n": 13,
+          "min": 42,
+          "q1": 44,
+          "median": 46,
+          "q3": 49,
+          "max": 51,
+          "mean": 50,
+          "outliers": [
+            95
+          ]
+        },
+        {
+          "n": 11,
+          "min": 61,
+          "q1": 65,
+          "median": 68,
+          "q3": 70.5,
+          "max": 75,
+          "mean": 67.818182,
+          "outliers": []
+        },
+        {
+          "n": 11,
+          "min": 80,
+          "q1": 86,
+          "median": 90,
+          "q3": 97.5,
+          "max": 101,
+          "mean": 94.727273,
+          "outliers": [
+            140
+          ]
+        },
+        {
+          "min": 12,
+          "q1": 15,
+          "median": 17,
+          "q3": 20,
+          "max": 26,
+          "outliers": [
+            41
+          ]
+        }
+      ]
+    }
+  }
 }

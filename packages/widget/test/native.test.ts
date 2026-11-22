@@ -69,12 +69,12 @@ test("a native step takes every event as the prelude's own table does", async ()
   }
 }, 60_000)
 
-test("a native step leaves out functions where no handler goes, as a step output does", async () => {
+test("a native step leaves functions out of the result as JSON does, and fails on one in the view", async () => {
   const source = `function init() {
   return { f: () => 1, list: [1, () => 2], nested: { g: () => 3, n: 4 } }
 }
 function view(state) {
-  return ui.column({ onHover: () => 1 }, [ui.text("t", { extra: { f: () => 1, n: 1 } }), ui.button("b", { onPress: () => send({ f: () => 1, v: 1 }) })])
+  return ui.column([ui.text("t", state.bad ? { extra: { f: () => 1 } } : {}), ui.button("b", { onPress: () => send({ f: () => 1, v: 1 }) })])
 }`
   const init = await native(source, { phase: "init", data: null })
   expect(init).toEqual(await scripted(source, { phase: "init", data: null }))
@@ -83,6 +83,37 @@ function view(state) {
   const pressed = await native(source, input)
   expect(pressed).toMatchObject({ send: { value: { v: 1 } } })
   expect(pressed).toEqual(await scripted(source, input))
+  // The view is a host call's argument: a function anywhere but a handler prop fails the call, where the call is.
+  expect(
+    await native(source, { phase: "event", data: null, state: { bad: true }, event: { id: "x", type: "press" } }),
+  ).toEqual({
+    error: expect.stringMatching(
+      /^TypeError: Argument 1 to __widget_emit contains a function, which cannot be passed to the host\. \(line \d+, col \d+\)$/,
+    ),
+  })
+})
+
+test("a view with a key of another type, or deeper than 100 levels, fails in phase view in both modes", async () => {
+  const cases = [
+    [`ui.column([ui.text("t", { key: { a: 1 } })])`, "A node's key must be a string, a number or a boolean"],
+    [`ui.column({ key: [1] }, [])`, "A node's key must be a string, a number or a boolean"],
+    [
+      `(() => { let node = ui.text("x"); for (let i = 1; i < 101; i++) node = ui.column([node]); return node })()`,
+      "The view nests more than 100 levels",
+    ],
+  ] as const
+  for (const [expression, message] of cases) {
+    const source = `function view() {\n  return ${expression}\n}`
+    const failed = await step(program(source), { phase: "init", data: null }).catch((error: unknown) => error)
+    expect(failed).toMatchObject({ _tag: "Widget.StepError", kind: "invalid", phase: "view", message })
+    expect(await scripted(source, { phase: "init", data: null })).toEqual({ error: expect.stringContaining(message) })
+  }
+  // 100 levels is the most; the interpreter's default boundary (32 values deep) stops this one first, without phase view.
+  const deepest = `function view() {\n  let node = ui.text("x")\n  for (let i = 1; i < 100; i++) node = ui.column([node])\n  return node\n}`
+  expect(await step(program(deepest), { phase: "init", data: null }).catch((error: unknown) => error)).toMatchObject({
+    kind: "error",
+    message: expect.stringContaining("exceeds the maximum value depth of 32"),
+  })
 })
 
 // A live run with the prelude building trees, on a host that takes posts as they are, read as `LiveWidget` reads
@@ -190,4 +221,28 @@ test("a function posted where none may go fails a native live run at the same li
   }
   const missing = await nativeLive(`async function main() {\n  widget.draw("nope", [])\n}`, [])
   expect(missing.ended).toMatch(/^Error: No canvas with key "nope" in the rendered view \(line \d+, col \d+\)$/)
+})
+
+test("a live render with a key of another type, or deeper than 100 levels, ends the run in phase view", async () => {
+  const end = async (expression: string) => {
+    const widget = LiveWidget.start(program(`async function main() {\n  widget.render(${expression})\n}`), null)
+    const done = await widget.done
+    return done.type === "error" ? done.error : done
+  }
+  expect(await end(`ui.column([ui.button("b", { key: {} })])`)).toMatchObject({
+    kind: "invalid",
+    phase: "view",
+    message: "A node's key must be a string, a number or a boolean",
+  })
+  // Too deep to cross the interpreter's boundary: the prelude finds it is over 100 levels and posts that instead.
+  expect(
+    await end(
+      `(() => { let node = ui.text("x"); for (let i = 1; i < 101; i++) node = ui.column([node]); return node })()`,
+    ),
+  ).toMatchObject({ kind: "invalid", phase: "view", message: "The view nests more than 100 levels" })
+  // Deep only in a prop: the boundary's own error, where the render is.
+  expect(await end(`ui.text("x", { extra: JSON.parse("[".repeat(40) + "]".repeat(40)) })`)).toMatchObject({
+    kind: "error",
+    message: expect.stringContaining("exceeds the maximum value depth of 32"),
+  })
 })

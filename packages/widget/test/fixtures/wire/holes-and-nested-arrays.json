@@ -73,5 +73,8 @@
     "0/3.0": "press",
     "0/3.1.1": "change"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
 }

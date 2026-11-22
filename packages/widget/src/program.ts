@@ -10,9 +10,12 @@ export function program(source: string) {
   return prelude + "\n" + source
 }
 
-/** What a client appends to the program to run it in `mode` (one step, or `main` for a live widget template). */
+/**
+ * What a native host appends to the program to run it in `mode` (one step, or `main` for a live widget template); see
+ * specs/v2/widgets.md, Native hosts.
+ */
 export function entry(mode: Mode) {
-  return mode === "live" ? "\nreturn await __widget_live(__input())" : "\nreturn __widget_step(__input())"
+  return mode === "live" ? "\nreturn await __widget_live(__input(), true)" : "\nreturn __widget_native_step(__input())"
 }
 
 /**

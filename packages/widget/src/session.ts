@@ -10,8 +10,9 @@ import {
   type WidgetEvent,
   types,
 } from "./node.js"
-import { tree, unmark } from "./tree.js"
+import { tree, unmark, ViewError } from "./tree.js"
 import { compiled } from "./compiled.js"
+import { located, NEWER, OLDER, protocol, PROTOCOL } from "./host.js"
 
 /** The most a step may run; clients may pass a smaller `timeoutMs`. */
 export const TIMEOUT_MS = 250
@@ -20,24 +21,27 @@ export type StepOptions = { readonly timeoutMs?: number }
 
 /**
  * A step that failed: the program threw or failed to parse (`error`), ran out of time (`timeout`), or returned
- * something that is not a step output with a valid view (`invalid`). Callers keep the previous state and view.
+ * something that is not a step output with a valid view (`invalid`). Callers keep the previous state and view. `phase`
+ * is `view` for a view that breaks the rules of views (a key's type, its depth), which clients report as that phase.
  */
 export class StepError extends Schema.TaggedError<StepError>()("Widget.StepError", {
   kind: Schema.Literals(["error", "timeout", "invalid"]),
   message: Schema.String,
+  phase: Schema.optionalKey(Schema.Literal("view")),
 }) {}
 
 /**
- * Runs one step of `program` (see `program()`) on the stock interpreter with `__input` as the only host global, as a
- * native host (specs/v2/widgets.md, Native hosts): it builds the view's tree itself. Nodes of unknown types are dropped
- * from the view and reported in `warnings`. Rejects with a `StepError`.
+ * Runs one step of `program` (see `program()`) on the stock interpreter as a native host (specs/v2/widgets.md, Native
+ * hosts): the view comes through `__widget_emit` and the host builds its tree, the rest is the run's result. Nodes of
+ * unknown types are dropped from the view and reported in `warnings`. Rejects with a `StepError`, or an `Error` for a
+ * program that needs a newer host.
  */
 export async function step(
   program: string,
   input: Exclude<StepInput, DrawInput>,
   options?: StepOptions,
 ): Promise<StepOutput> {
-  const value = native(await run(program, input, options?.timeoutMs ?? TIMEOUT_MS, true))
+  const value = await run(program, input, options?.timeoutMs ?? TIMEOUT_MS)
   const warnings: string[] = []
   const decoded = decodeOutput(isRecord(value) ? { ...value, view: prune(value.view, warnings) } : value)
   if (Result.isFailure(decoded)) throw new StepError({ kind: "invalid", message: decoded.failure.message })
@@ -60,33 +64,44 @@ export async function draw(
   return decoded.success
 }
 
-// The step output with the view's tree built and every other function marker gone, as the prelude's own tree
-// building and the interpreter's result would leave it.
-function native(value: unknown) {
-  if (!isRecord(value)) return unmark(value)
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([name, item]) => {
-      const out = name === "view" ? tree(item).view : unmark(item)
-      return out === undefined ? [] : [[name, out]]
-    }),
-  )
-}
+const EMITTED = "Argument 1 to __widget_emit"
 
-// A draw has no handlers, so it runs without markers.
-async function run(program: string, input: StepInput, timeoutMs: number, marked = false) {
+/**
+ * Runs `<program>\nreturn __widget_native_step(__input())`: the step output, with the view's tree built, or a draw's.
+ * `observe` sees the view as the program emitted it.
+ * @internal
+ */
+export async function run(program: string, input: StepInput, timeoutMs: number, observe?: (view: unknown) => void) {
+  const version = protocol(program)
+  if (version > PROTOCOL) throw new Error(NEWER)
+  if (version < PROTOCOL) throw new StepError({ kind: "invalid", message: OLDER })
+  const emitted: { view?: unknown; failure?: string } = {}
+  const emit = ([view, failure]: ReadonlyArray<unknown>) => {
+    if (typeof failure === "string") return void (emitted.failure = failure)
+    observe?.(view)
+    try {
+      emitted.view = tree(view, EMITTED).view
+    } catch (error) {
+      if (!(error instanceof ViewError)) throw error
+      emitted.failure = error.message
+    }
+  }
   const result = await Runtime.make({
     limits: { timeoutMs },
-    translate: marked ? { functions: "mark" } : undefined,
-    globals: () => ({ __input: Host.fn(() => input) }),
-  }).execute(
-    compiled(program + (marked ? "\nreturn __widget_step(__input(), true)" : "\nreturn __widget_step(__input())")),
-  )
+    translate: { functions: "mark" },
+    globals: () => ({ __input: Host.fn(() => input), __widget_emit: located(emit) }),
+  }).execute(compiled(program + "\nreturn __widget_native_step(__input())"))
+  if (emitted.failure !== undefined) throw new StepError({ kind: "invalid", message: emitted.failure, phase: "view" })
   if (!result.ok)
     throw new StepError({
       kind: result.error.kind === "TimeoutExceeded" ? "timeout" : "error",
       message: result.error.message,
     })
-  return result.value
+  // The result is JSON, with markers where functions were, which JSON leaves out.
+  const value = unmark(result.value)
+  if (input.phase === "draw") return value
+  if (!("view" in emitted)) throw new StepError({ kind: "invalid", message: "The step gave no view" })
+  return isRecord(value) ? { ...value, view: emitted.view } : value
 }
 
 export interface WidgetSession {

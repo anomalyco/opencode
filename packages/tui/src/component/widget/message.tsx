@@ -141,7 +141,10 @@ export function WidgetMessage(props: { message: WidgetInfo; focus: WidgetFocus }
     if (!(error instanceof StepError)) return clientError("a widget step failed", error)
     if (status() !== "open") return
     void backend
-      .report({ widget: props.message, error: { phase, ...stepPosition(error.message, source.lines) } })
+      .report({
+        widget: props.message,
+        error: { phase: error.phase ?? phase, ...stepPosition(error.message, source.lines) },
+      })
       .catch((cause) => clientError("failed to report a widget error", cause))
   }
 

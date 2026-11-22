@@ -184,5 +184,11 @@
     "0/1": "pointer",
     "0/3/0": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "cells": null
+    }
+  }
 }

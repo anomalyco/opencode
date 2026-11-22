@@ -89,5 +89,10 @@
   "handlers": {
     "0/3": "change"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {
+      "speed": 1
+    }
+  }
 }

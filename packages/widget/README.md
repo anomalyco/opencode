@@ -33,7 +33,7 @@ or `invalid`); keep the previous state and view and show the message inline.
 ## Live mode
 
 A widget template with `mode: "live"` defines `async function main(data)` and runs as one long program per open widget:
-`<program>\nreturn await __widget_live(__input())` with `__input()` = `{ data }` and the host functions `__host.post`,
+`<program>\nreturn await __widget_live(__input(), true)` with `__input()` = `{ data }` and the host functions `__host.post`,
 `__host.receive`, `__host.sleep`, `__host.now` and `__host.fetch` (see `specs/v2/widgets-live.md` for the messages,
 pausing and budgets). The prelude builds the program-facing `widget` object on them; model guidance with examples is
 in `docs/live-guidance.md`.
@@ -70,16 +70,18 @@ and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
 
 1. Fetch the widget template version with the `opencode.widget` RPC's `program` method (`{ name, version }`) once and cache it forever by `name@version`. Its `program` field is
    the full program (prelude + widget template); you never need a prelude of your own.
-2. Compile, once per program, this PsychoScript source:
+2. Check the program's first line, `const __widget_protocol = 2`, and refuse other versions (the spec's Protocol).
+   Compile, once per program, this PsychoScript source:
 
    ```js
    <program>
-   return __widget_step(__input())
+   return __widget_native_step(__input())
    ```
 
-   with exactly one global, a synchronous host function `__input()` that returns the step input. No other globals.
-   Use a timeout of at most 250 ms per step. A host that builds the view tree natively (ids, flattening) passes
-   `__widget_step(__input(), true)` instead; see the spec's Native hosts and the fixtures in `test/fixtures/wire`.
+   with two globals, synchronous host functions: `__input()`, which returns the step input, and `__widget_emit(view)`,
+   which takes the view as built; the host builds the tree clients get from it (ids, flattening), and the run's result
+   is the rest of the step output. No other globals. Use a timeout of at most 250 ms per step. See the spec's Native
+   hosts and the fixtures in `test/fixtures/wire`.
 
 3. Run it for each step with a different input:
 
@@ -95,7 +97,7 @@ and drops `render`/`draw`/`frame` posts beyond 240 a second with a warning.
      | { phase: "draw"; data: unknown; state: unknown; frame: Frame }
    ```
 
-   An `init` or `event` run returns `{ state, view, submit?, dismiss?, send? }`. Keep `state` and pass it back with
+   An `init` or `event` run emits the view and returns `{ state, submit?, dismiss?, send? }`. Keep `state` and pass it back with
    the next event; render `view`. `submit` present (it may be `null`): send `{ value: submit }` to
    `POST /api/experimental/session/{sessionID}/widget/{messageID}/respond`. `dismiss: true`: send `{ dismiss: true }`.
    `send: { value, wake }`: deliver `value` to the agent as a message and keep the widget open (see the spec).

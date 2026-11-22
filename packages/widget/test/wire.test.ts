@@ -2,19 +2,19 @@ import { expect, test } from "bun:test"
 import { Glob } from "bun"
 import path from "node:path"
 import { Runtime } from "psychoscript"
-import { native, record, written } from "../script/conformance.js"
+import { disagreement, FUNCTION, native, scripted } from "../script/conformance.js"
 import { program } from "../src/index.js"
-import { tree } from "../src/tree.js"
+import { marker, tree } from "../src/tree.js"
 
-// The wire conformance fixtures: every host that builds view trees must turn each fixture's program and input into
-// exactly its `view`, `handlers` and `canvases`. This checks both modes of the TypeScript runtime: the prelude building
-// trees itself, and native mode, where the prelude hands over the view as built (`built`), `src/tree.ts` builds the
-// tree, and the prelude finds handlers by their ids' paths.
+// The wire conformance fixtures: every native host must turn each fixture's program and input into exactly its
+// `view`, `handlers`, `canvases` and `result`, or fail as its `error` says. This checks the TypeScript host against
+// them, its walk alone against `built`, the prelude building trees itself against the host, and the prelude finding
+// handlers by their ids' paths against its own table.
 const dir = path.resolve(import.meta.dir, "fixtures/wire")
 const files = [...new Glob("*.json").scanSync(dir)].toSorted()
 
 test("there is a fixture for every built-in and every edge case", () => {
-  expect(files.length).toBeGreaterThanOrEqual(36)
+  expect(files.length).toBeGreaterThanOrEqual(53)
 })
 
 // For every id on the view's nodes and some that are on none: what the prelude's handler table holds, and what it
@@ -55,23 +55,51 @@ const handlers = async (source: string, input: { data: unknown }) => {
   return result.value as ReadonlyArray<[string, boolean, unknown, unknown]>
 }
 
+// A fixture's `built` as the host gets it: markers and non-finite numbers back in place.
+const emitted = (value: unknown): unknown =>
+  value === FUNCTION
+    ? marker
+    : value === "$NaN" || value === "$Infinity" || value === "$-Infinity"
+      ? Number(value.slice(1))
+      : Array.isArray(value)
+        ? value.map(emitted)
+        : value && typeof value === "object"
+          ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, emitted(item)]))
+          : value
+
+const drops = new Set(["function-in-a-prop", "function-as-a-child", "function-in-an-option", "function-as-an-id"])
+
 for (const file of files) {
   test(`wire fixture ${file}`, async () => {
     const fixture = await Bun.file(path.join(dir, file)).json()
-    const actual = await record(fixture.source, fixture.input)
-    expect(JSON.stringify(actual.view)).toBe(JSON.stringify(fixture.view))
-    expect(actual.handlers).toEqual(fixture.handlers)
-    expect(actual.canvases).toEqual(fixture.canvases)
-  })
+    const host = await native(fixture.source, fixture.input)
+    for (const field of ["built", "view", "canvases", "result", "error"] as const)
+      expect({ field, value: JSON.stringify(host[field]) }).toEqual({ field, value: JSON.stringify(fixture[field]) })
+    expect(Object.keys(host.handlers ?? {}).toSorted()).toEqual(Object.keys(fixture.handlers ?? {}).toSorted())
+    // The prelude building the tree agrees, but for the functions it leaves out where the host fails.
+    const name = file.replace(/\.json$/, "")
+    expect(disagreement(await scripted(fixture.source, fixture.input), host, drops.has(name))).toBeUndefined()
+  }, 60_000)
 
-  test(`wire fixture ${file}, native mode`, async () => {
+  test(`wire fixture ${file}, the walk alone`, async () => {
     const fixture = await Bun.file(path.join(dir, file)).json()
-    const view = await native(fixture.source, fixture.input)
-    expect(JSON.stringify(written(view))).toBe(JSON.stringify(fixture.built))
-    const built = tree(view)
+    if (!("built" in fixture)) return
+    const walk = () => tree(emitted(fixture.built), "Argument 1 to __widget_emit")
+    if (fixture.error) {
+      // The run's own failures (the result, a function's position) are the host's, not the walk's.
+      if (fixture.error.view) expect(walk).toThrow(fixture.error.message)
+      else if (fixture.error.message.includes("contains a function")) expect(walk).toThrow("contains a function")
+      return
+    }
+    const built = walk()
     expect(JSON.stringify(built.view)).toBe(JSON.stringify(fixture.view))
     expect([...built.handlers].toSorted()).toEqual(Object.keys(fixture.handlers).toSorted())
     expect(Object.fromEntries([...built.canvases].map(([key, canvas]) => [key, canvas.id]))).toEqual(fixture.canvases)
+  })
+
+  test(`wire fixture ${file}, handlers by path`, async () => {
+    const fixture = await Bun.file(path.join(dir, file)).json()
+    if (fixture.error || fixture.input.phase !== "init") return
     for (const [id, same, table, found] of await handlers(fixture.source, fixture.input)) {
       expect({ id, same }).toEqual({ id, same: true })
       expect({ id, found }).toEqual({ id, found: table })

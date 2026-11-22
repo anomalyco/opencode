@@ -141,5 +141,81 @@
     "0/1": "pointer",
     "0/3/0": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "rows": [
+        {
+          "group": "Design"
+        },
+        {
+          "task": 0
+        },
+        {
+          "task": 1
+        },
+        {
+          "task": 2
+        },
+        {
+          "group": "Build"
+        },
+        {
+          "task": 3
+        },
+        {
+          "task": 4
+        },
+        {
+          "task": 5
+        },
+        {
+          "group": "Go to market"
+        },
+        {
+          "task": 6
+        }
+      ],
+      "spans": [
+        {
+          "start": 20544,
+          "end": 20554
+        },
+        {
+          "start": 20551,
+          "end": 20565
+        },
+        {
+          "start": 20561,
+          "end": 20576
+        },
+        {
+          "start": 20556,
+          "end": 20582
+        },
+        {
+          "start": 20570,
+          "end": 20596
+        },
+        {
+          "start": 20598,
+          "end": 20598
+        },
+        {
+          "start": 20591,
+          "end": 20610
+        }
+      ],
+      "groups": [
+        "Design",
+        "Build",
+        "Go to market"
+      ],
+      "dates": true,
+      "today": 20563,
+      "low": 20542.02,
+      "high": 20611.98
+    }
+  }
 }

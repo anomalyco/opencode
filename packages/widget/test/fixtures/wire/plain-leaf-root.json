@@ -14,5 +14,8 @@
     "text": "alone"
   },
   "handlers": {},
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
 }

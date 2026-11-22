@@ -85,5 +85,8 @@
     ]
   },
   "handlers": {},
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
 }

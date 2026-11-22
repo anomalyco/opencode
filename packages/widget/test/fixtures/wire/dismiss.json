@@ -1,0 +1,35 @@
+{
+  "name": "dismiss",
+  "source": "function view(state, data) {\n  return ui.button(\"go\", { onPress: () => dismiss() })\n}",
+  "input": {
+    "phase": "event",
+    "data": null,
+    "state": {
+      "n": 1
+    },
+    "event": {
+      "id": "0",
+      "type": "press"
+    }
+  },
+  "built": {
+    "onPress": "$function",
+    "type": "button",
+    "label": "go"
+  },
+  "view": {
+    "type": "button",
+    "label": "go",
+    "id": "0"
+  },
+  "handlers": {
+    "0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "n": 1
+    },
+    "dismiss": true
+  }
+}

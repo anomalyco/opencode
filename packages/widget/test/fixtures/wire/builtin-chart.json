@@ -79,5 +79,11 @@
   "handlers": {
     "0/1": "pointer"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {
+      "active": null,
+      "down": false
+    }
+  }
 }

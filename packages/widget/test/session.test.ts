@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { type Node, program, step, StepError, WidgetSession } from "../src/index.js"
+import { NEWER, type Node, OLDER, program, step, StepError, WidgetSession } from "../src/index.js"
 
 const counter = program(`
   function init(data) { return { count: data.start } }
@@ -210,9 +210,28 @@ test("failures reject with a typed StepError", async () => {
   expect(await step(counter, { phase: "init", data: null }).catch((error: unknown) => error)).toMatchObject({
     kind: "error",
   })
-  expect(await step("function view( {", { phase: "init", data: null }).catch((error: unknown) => error)).toMatchObject({
-    kind: "error",
+  expect(
+    await step(program("function view( {"), { phase: "init", data: null }).catch((error: unknown) => error),
+  ).toMatchObject({ kind: "error" })
+})
+
+test("a program built for another prelude<->host contract is refused before it runs", async () => {
+  const text = program(`function view() { return ui.text("x") }`)
+  const declared = /^const __widget_protocol = 2\n/
+  const run = (code: string) => step(code, { phase: "init", data: null }).catch((error: unknown) => error)
+  // Without the prelude, or with one from before protocol 2: a program error the agent can fix by posting it again.
+  expect(await run(`function view() { return { type: "text", text: "x" } }`)).toMatchObject({
+    _tag: "Widget.StepError",
+    kind: "invalid",
+    message: OLDER,
   })
+  expect(await run(text.replace(declared, ""))).toMatchObject({ kind: "invalid", message: OLDER })
+  expect(await run(text.replace(declared, "const __widget_protocol = 1\n"))).toMatchObject({ message: OLDER })
+  // A newer one: this host can't run it, a client error.
+  const newer = await run(text.replace(declared, "const __widget_protocol = 3\n"))
+  expect(newer).not.toBeInstanceOf(StepError)
+  expect(newer).toMatchObject({ message: NEWER })
+  expect(await run(text)).toMatchObject({ view: { type: "text", text: "x" } })
 })
 
 test("a view that breaks the node schema is invalid", async () => {

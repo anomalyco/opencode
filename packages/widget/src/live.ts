@@ -1,6 +1,5 @@
-import { Effect, Result, Schema } from "effect"
+import { Result, Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
-import { Host as EffectHost } from "psychoscript/effect"
 import { type Command, DrawOutput, type Frame, Node, type WidgetEvent } from "./node.js"
 import { prune, StepError } from "./session.js"
 import {
@@ -15,8 +14,9 @@ import {
   type Transport,
 } from "./fetch.js"
 import type { Capabilities } from "./widget-template.js"
-import { type Tree, tree, unmark } from "./tree.js"
+import { type Tree, tree, unmark, ViewError } from "./tree.js"
 import { compiled } from "./compiled.js"
+import { located, NEWER, OLDER, protocol, PROTOCOL } from "./host.js"
 
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
 export type LiveFrame = Omit<Frame, "id">
@@ -141,7 +141,10 @@ export interface LiveWidget {
 }
 
 export const LiveWidget = {
-  /** Starts `<program>\nreturn await __widget_live(__input(), true)` with `__input()` = `{ data }`. */
+  /**
+   * Starts `<program>\nreturn await __widget_live(__input(), true)` with `__input()` = `{ data }`. A program built for an
+   * older contract ends at once with an error; one for a newer contract throws (a client error).
+   */
   start: (program: string, data: unknown, options?: LiveOptions): LiveWidget => {
     const clock = options?.clock ?? realClock
     const busyMs = options?.busyMs ?? 50
@@ -194,8 +197,8 @@ export const LiveWidget = {
             : watcher.reject(new Error(`The live widget ended: ${result.type}`)),
         )
     }
-    const fail = (kind: StepError["kind"], message: string) =>
-      end({ type: "error", error: new StepError({ kind, message }) })
+    const fail = (kind: StepError["kind"], message: string, phase?: "view") =>
+      end({ type: "error", error: new StepError({ kind, message, ...(phase ? { phase } : {}) }) })
 
     // The program can only be idle while it waits on a host call, so a stretch with none in flight is busy work. (One
     // in flight doesn't prove it is idle, so this misses busy loops that leave a timer or receive running.)
@@ -338,13 +341,23 @@ export const LiveWidget = {
 
     // A post as the program made it, as it was when the prelude built trees itself: a render's tree built, a draw's key
     // turned into its canvas's id, no functions. For a render, also whether its view has handlers, which `post`
-    // returns. Throws what the program would have got: an unknown canvas key, a function where none may go.
-    const native = (message: unknown): { message: unknown; handlers?: boolean } => {
+    // returns, or why the view breaks the rules of views (`failure`; the prelude posts one too deep to cross that way).
+    // Throws what the program would have got: an unknown canvas key, a function where none may go.
+    const native = (message: unknown): { message: unknown; handlers?: boolean; failure?: string } => {
       if (isRecord(message) && message.type === "render") {
-        const { node, ...rest } = message
-        const built = tree(node, POSTED)
-        current.tree = built
-        return { message: { ...(unmark(rest, POSTED) as object), node: built.view }, handlers: built.handlers.size > 0 }
+        const { node, failure, ...rest } = message
+        if (typeof failure === "string") return { message, failure }
+        try {
+          const built = tree(node, POSTED)
+          current.tree = built
+          return {
+            message: { ...(unmark(rest, POSTED) as object), node: built.view },
+            handlers: built.handlers.size > 0,
+          }
+        } catch (error) {
+          if (!(error instanceof ViewError)) throw error
+          return { message, failure: error.message }
+        }
       }
       if (!isRecord(message) || message.type !== "draw" || !("key" in message))
         return { message: unmark(message, POSTED) }
@@ -356,9 +369,10 @@ export const LiveWidget = {
     }
 
     const post = (args: ReadonlyArray<unknown>) => {
-      const { message, handlers } = native(args[0])
+      const { message, handlers, failure } = native(args[0])
       checked("post", args, 1)
       if (current.ended) return
+      if (failure !== undefined) return void fail("invalid", failure, "view")
       deliverPost(message)
       return handlers
     }
@@ -472,6 +486,12 @@ export const LiveWidget = {
       },
     }
 
+    const version = protocol(program)
+    if (version > PROTOCOL) throw new Error(NEWER)
+    if (version < PROTOCOL) {
+      fail("invalid", OLDER)
+      return widget
+    }
     arm()
     Runtime.make({
       globals: () => ({
@@ -512,17 +532,6 @@ export const LiveWidget = {
 const POSTED = "Argument 1 to __host.post"
 const checked = (name: string, args: ReadonlyArray<unknown>, from = 0) =>
   args.map((arg, index) => (index < from ? arg : unmark(arg, `Argument ${index + 1} to __host.${name}`)))
-
-// A host function whose errors reach the program at the call's line and column, as the interpreter's own errors for
-// an argument do: what it throws becomes an Effect defect, which psychoscript gives the call's location.
-const located = (f: (args: ReadonlyArray<unknown>, call: Host.Call) => unknown, options?: EffectHost.Options) =>
-  EffectHost.fn((args, call) => {
-    try {
-      return f(args, call)
-    } catch (error) {
-      return Effect.die(error)
-    }
-  }, options)
 
 const decodeNode = Schema.decodeUnknownResult(Node)
 const decodeDraw = Schema.decodeUnknownResult(DrawOutput)

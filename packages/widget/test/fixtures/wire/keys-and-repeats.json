@@ -105,5 +105,8 @@
     ":root/:k~2": "press",
     ":root/:a%2Fb%20c": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
 }

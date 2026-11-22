@@ -15,5 +15,8 @@
     "text": "keyed"
   },
   "handlers": {},
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
 }

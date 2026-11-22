@@ -276,5 +276,11 @@
     "0/3/0": "press",
     "0/3/1": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {
+      "picked": null,
+      "note": ""
+    }
+  }
 }

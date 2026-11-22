@@ -1,0 +1,175 @@
+{
+  "name": "depth-16",
+  "source": "function view() {\n  let node = ui.button(\"deep\", { onPress: (s) => s })\n  for (let level = 1; level < 16; level++) node = ui.column([node])\n  return node\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "type": "column",
+        "children": [
+          {
+            "type": "column",
+            "children": [
+              {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "column",
+                    "children": [
+                      {
+                        "type": "column",
+                        "children": [
+                          {
+                            "type": "column",
+                            "children": [
+                              {
+                                "type": "column",
+                                "children": [
+                                  {
+                                    "type": "column",
+                                    "children": [
+                                      {
+                                        "type": "column",
+                                        "children": [
+                                          {
+                                            "type": "column",
+                                            "children": [
+                                              {
+                                                "type": "column",
+                                                "children": [
+                                                  {
+                                                    "type": "column",
+                                                    "children": [
+                                                      {
+                                                        "type": "column",
+                                                        "children": [
+                                                          {
+                                                            "type": "column",
+                                                            "children": [
+                                                              {
+                                                                "onPress": "$function",
+                                                                "type": "button",
+                                                                "label": "deep"
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "type": "column",
+    "children": [
+      {
+        "type": "column",
+        "children": [
+          {
+            "type": "column",
+            "children": [
+              {
+                "type": "column",
+                "children": [
+                  {
+                    "type": "column",
+                    "children": [
+                      {
+                        "type": "column",
+                        "children": [
+                          {
+                            "type": "column",
+                            "children": [
+                              {
+                                "type": "column",
+                                "children": [
+                                  {
+                                    "type": "column",
+                                    "children": [
+                                      {
+                                        "type": "column",
+                                        "children": [
+                                          {
+                                            "type": "column",
+                                            "children": [
+                                              {
+                                                "type": "column",
+                                                "children": [
+                                                  {
+                                                    "type": "column",
+                                                    "children": [
+                                                      {
+                                                        "type": "column",
+                                                        "children": [
+                                                          {
+                                                            "type": "column",
+                                                            "children": [
+                                                              {
+                                                                "type": "button",
+                                                                "label": "deep",
+                                                                "id": "0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0"
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

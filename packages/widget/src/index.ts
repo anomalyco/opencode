@@ -55,6 +55,7 @@ export {
 } from "./live.js"
 export { compile, type CompileError } from "./compile.js"
 export { entry, prelude, program, version } from "./program.js"
+export { NEWER, OLDER, PROTOCOL, protocol } from "./host.js"
 export {
   FETCH_LIMITS,
   type FetchError,

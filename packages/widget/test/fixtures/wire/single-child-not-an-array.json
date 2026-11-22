@@ -26,5 +26,8 @@
   "handlers": {
     "0": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
 }

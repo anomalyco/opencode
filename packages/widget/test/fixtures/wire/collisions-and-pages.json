@@ -146,5 +146,8 @@
     "0/3": "change",
     "0/4": "change"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
 }

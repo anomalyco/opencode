@@ -165,5 +165,113 @@
     "0/1": "pointer",
     "0/3/0": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "columns": 4,
+      "nodes": [
+        {
+          "column": 0,
+          "value": 30,
+          "y0": 0,
+          "y1": 0.2455
+        },
+        {
+          "column": 0,
+          "value": 60,
+          "y0": 0.2955,
+          "y1": 0.7864
+        },
+        {
+          "column": 0,
+          "value": 20,
+          "y0": 0.8364,
+          "y1": 1
+        },
+        {
+          "column": 1,
+          "value": 95,
+          "y0": 0.1591,
+          "y1": 0.9364
+        },
+        {
+          "column": 2,
+          "value": 55,
+          "y0": 0.2002,
+          "y1": 0.6502
+        },
+        {
+          "column": 3,
+          "value": 32,
+          "y0": 0.05,
+          "y1": 0.3118
+        },
+        {
+          "column": 3,
+          "value": 78,
+          "y0": 0.3618,
+          "y1": 1
+        }
+      ],
+      "links": [
+        {
+          "source": 0,
+          "target": 3,
+          "width": 0.2455,
+          "sy": 0,
+          "ty": 0.1591
+        },
+        {
+          "source": 1,
+          "target": 3,
+          "width": 0.3682,
+          "sy": 0.2955,
+          "ty": 0.4046
+        },
+        {
+          "source": 1,
+          "target": 4,
+          "width": 0.1227,
+          "sy": 0.6636,
+          "ty": 0.5274
+        },
+        {
+          "source": 2,
+          "target": 3,
+          "width": 0.1636,
+          "sy": 0.8364,
+          "ty": 0.7727
+        },
+        {
+          "source": 3,
+          "target": 4,
+          "width": 0.3273,
+          "sy": 0.1591,
+          "ty": 0.2002
+        },
+        {
+          "source": 3,
+          "target": 6,
+          "width": 0.45,
+          "sy": 0.4864,
+          "ty": 0.3618
+        },
+        {
+          "source": 4,
+          "target": 5,
+          "width": 0.2618,
+          "sy": 0.2002,
+          "ty": 0.05
+        },
+        {
+          "source": 4,
+          "target": 6,
+          "width": 0.1882,
+          "sy": 0.462,
+          "ty": 0.8118
+        }
+      ]
+    }
+  }
 }

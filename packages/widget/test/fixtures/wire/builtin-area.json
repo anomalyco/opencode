@@ -160,5 +160,12 @@
     "0/1": "pointer",
     "0/3/0": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {
+      "active": null,
+      "down": false,
+      "hidden": []
+    }
+  }
 }

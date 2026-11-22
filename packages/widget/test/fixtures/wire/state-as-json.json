@@ -1,0 +1,56 @@
+{
+  "name": "state-as-json",
+  "source": "function init() {\n  return { when: new Date(0), invalid: new Date(NaN), error: Object.assign(new Error(\"boom\"), { code: 7 }), big: [2 ** 64, 1e21, 2 ** 53 + 2, -0], own: { toJSON() { return { v: 1 } } }, nested: { toJSON: () => [1, () => 2] }, f: () => 1, list: [1, () => 2, undefined], map: new Map([[1, 2]]), set: new Set([1]), url: new URL(\"https://a.test/b?c=d\"), nan: [NaN, Infinity] }\n}\nfunction view(state, data) {\n  return ui.text(\"x\")\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "text",
+    "text": "x"
+  },
+  "view": {
+    "type": "text",
+    "text": "x"
+  },
+  "handlers": {},
+  "canvases": {},
+  "result": {
+    "state": {
+      "when": "1970-01-01T00:00:00.000Z",
+      "invalid": null,
+      "error": {
+        "name": "Error",
+        "message": "boom",
+        "code": 7
+      },
+      "big": [
+        18446744073709552000,
+        1e+21,
+        9007199254740994,
+        0
+      ],
+      "own": {
+        "v": 1
+      },
+      "nested": [
+        1,
+        null
+      ],
+      "list": [
+        1,
+        null,
+        null
+      ],
+      "map": {},
+      "set": [
+        1
+      ],
+      "url": "https://a.test/b?c=d",
+      "nan": [
+        null,
+        null
+      ]
+    }
+  }
+}

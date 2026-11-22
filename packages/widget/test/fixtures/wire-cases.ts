@@ -1,8 +1,22 @@
-// Edge cases of view tree building (ids, keys, flattening, stripping) for the wire conformance fixtures in
-// `wire/`. Each is a widget template source; `data` is its input (default null).
+// Edge cases of view tree building (ids, keys, flattening, stripping, depth) and of the rest of a step's output for
+// the wire conformance fixtures in `wire/`. Each is a widget template source; `data` is its init input (default null),
+// `input` another step input. `drops`: a function the native host fails on, which the prelude building the tree
+// leaves out (protocol 1).
 const view = (expression: string) => `function view(state, data) {\n  return ${expression}\n}`
 
-export const cases: ReadonlyArray<{ readonly name: string; readonly source: string; readonly data?: unknown }> = [
+// `levels` of nodes, each a column with one child; `array` puts each child in an array of its own too.
+const nested = (levels: number, array = false) =>
+  `function view() {\n  let node = ui.button("deep", { onPress: (s) => s })\n  for (let level = 1; level < ${levels}; level++) node = ui.column(${array ? "[[node]]" : "[node]"})\n  return node\n}`
+
+const json = `{ when: new Date(0), invalid: new Date(NaN), error: Object.assign(new Error("boom"), { code: 7 }), big: [2 ** 64, 1e21, 2 ** 53 + 2, -0], own: { toJSON() { return { v: 1 } } }, nested: { toJSON: () => [1, () => 2] }, f: () => 1, list: [1, () => 2, undefined], map: new Map([[1, 2]]), set: new Set([1]), url: new URL("https://a.test/b?c=d"), nan: [NaN, Infinity] }`
+
+export const cases: ReadonlyArray<{
+  readonly name: string
+  readonly source: string
+  readonly data?: unknown
+  readonly input?: unknown
+  readonly drops?: boolean
+}> = [
   {
     // Holes keep their index; nested arrays get index.index; deeper nesting index.index.index.
     name: "holes-and-nested-arrays",
@@ -73,19 +87,59 @@ export const cases: ReadonlyArray<{ readonly name: string; readonly source: stri
     ),
   },
   {
-    // Functions where no handler goes: as a child (null on the wire), in another prop, inside a prop's value, and
-    // handler props on nodes that don't take that event.
-    name: "function-values",
+    // Handler props on nodes that don't take that event: left out, no id, no pointer.
+    name: "handler-props-elsewhere",
     source: view(
-      `ui.column({ onHover: (s) => s }, [ui.text("t", { onPress: (s) => s }), (s) => s, ui.button("b", { onChange: (s) => s }), ui.select([{ value: "a", label: "A", pick: (s) => s }], { onPress: (s) => s }), ui.canvas({ height: 1, onPress: (s) => s }), ui.card({ onChange: (s) => s }, [ui.text("c")])])`,
+      `ui.column([ui.text("t", { onPress: (s) => s }), ui.button("b", { onChange: (s) => s }), ui.select(["a"], { onPress: (s) => s }), ui.canvas({ height: 1, onPress: (s) => s }), ui.card({ onChange: (s) => s }, [ui.text("c")]), ui.column({ onPointer: (s) => s }, [])])`,
     ),
   },
+  // A function anywhere else in the view fails the step: in a prop, as a child, inside a prop's value, as an id.
+  { name: "function-in-a-prop", drops: true, source: view(`ui.column({ onHover: (s) => s }, [ui.text("t")])`) },
+  { name: "function-as-a-child", drops: true, source: view(`ui.column([ui.text("t"), (s) => s])`) },
   {
-    // Number keys, written as JavaScript's String(number) writes them (finite ones: a fixture is JSON).
+    name: "function-in-an-option",
+    drops: true,
+    source: view(`ui.select([{ value: "a", label: "A", pick: (s) => s }])`),
+  },
+  { name: "function-as-an-id", drops: true, source: view(`ui.button("b", { id: (s) => s })`) },
+  {
+    // Number and boolean keys, written as JavaScript's String(key) writes them.
     name: "number-keys",
     source: view(
-      `ui.row([ui.button("a", { key: 1.5 }), ui.button("b", { key: -0 }), ui.button("c", { key: 1e21 }), ui.button("d", { key: 0.1 + 0.2 }), ui.button("e", { key: 123456789012345680000 }), ui.button("f", { key: 1e-7 }), ui.button("g", { key: -12.25 }), ui.canvas({ key: 2, height: 1 })])`,
+      `ui.row([ui.button("a", { key: 1.5 }), ui.button("b", { key: -0 }), ui.button("c", { key: 1e21 }), ui.button("d", { key: 0.1 + 0.2 }), ui.button("e", { key: 123456789012345680000 }), ui.button("f", { key: 1e-7 }), ui.button("g", { key: -12.25 }), ui.canvas({ key: 2, height: 1 }), ui.button("h", { key: NaN }), ui.button("i", { key: Infinity }), ui.button("j", { key: -Infinity }), ui.button("k", { key: true }), ui.button("l", { key: false })])`,
     ),
+  },
+  // A key that is not a string, a number or a boolean fails the step, in phase view.
+  { name: "object-key", source: view(`ui.column([ui.text("t", { key: { a: 1 } })])`) },
+  { name: "array-key", source: view(`ui.column([ui.button("b", { key: ["a"] })])`) },
+  { name: "function-key", source: view(`ui.column([ui.button("b", { key: () => 1 })])`) },
+  { name: "root-object-key", source: view(`ui.column({ key: {} }, [])`) },
+  // A view as deep as the interpreter's default boundary allows (16 levels), and views one level too deep (101), with
+  // and without arrays among the children, which fail in phase view.
+  { name: "depth-16", source: nested(16) },
+  { name: "depth-101", source: nested(101) },
+  { name: "depth-101-in-arrays", source: nested(51, true) },
+  // The rest of a step's output is the run's result, as JSON: toJSON, Error fields, big numbers, functions left out.
+  { name: "state-as-json", source: `function init() {\n  return ${json}\n}\n${view(`ui.text("x")`)}` },
+  {
+    name: "submit-as-json",
+    source: view(`ui.button("go", { onPress: () => submit(${json}) })`),
+    input: { phase: "event", data: null, state: { n: 1 }, event: { id: "0", type: "press" } },
+  },
+  {
+    name: "send-as-json",
+    source: view(`ui.button("go", { onPress: () => send(${json}, { wake: false, state: { n: 2 } }) })`),
+    input: { phase: "event", data: null, state: { n: 1 }, event: { id: "0", type: "press" } },
+  },
+  {
+    name: "dismiss",
+    source: view(`ui.button("go", { onPress: () => dismiss() })`),
+    input: { phase: "event", data: null, state: { n: 1 }, event: { id: "0", type: "press" } },
+  },
+  // A typed array can't be data: the step fails as the run's result does.
+  {
+    name: "typed-array-in-state",
+    source: `function init() {\n  return { values: new Float32Array([1, 2]) }\n}\n${view(`ui.text("x")`)}`,
   },
   {
     // Two siblings with the same segment and handlers (a repeated key, and a key written like its repeat): the later

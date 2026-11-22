@@ -96,12 +96,14 @@ The prelude is canonical JavaScript in `packages/widget/src/prelude.js`. It defi
   `value`, `min`, `max`), `select(options, props?)` (options may be strings), `input(value, props?)`, `divider()`.
   `children` may nest arrays and contain `null`/`undefined`/`false`, which are dropped (`cond && ui.text(...)`).
   Also `canvas(props)` (with `wgsl` in `props` for a GPU canvas) and `draw()`, the draw command builder (see Canvas). Authors never set
-  `id`; any `node.key` (string or number) names a node among its siblings.
+  `id`; a node's `key` (a string, a number or a boolean) names it among its siblings (Keys and depth).
 - `submit(value)` and `dismiss()`: final, the widget closes; the state stays. `submit(undefined)` submits `null`.
 - `send(value, { wake = true, state })`: a non-final message to the agent; the widget stays open and can send again,
   submit or dismiss later. `state`, when given, becomes the next state. `send(undefined)` sends `null`. `wake: false`
   delivers it without waking the agent: it sees the message on its next turn (use it for background updates).
-- `__widget_step(input, native?)`: runs one step (below); `native` is `true` from a native host (Native hosts).
+- `__widget_protocol`, on the prelude's first line: the version of the prelude↔host contract (Protocol).
+- `__widget_native_step(input)`: runs one step (below) for a native host (Native hosts); `__widget_step(input)` runs
+  one for a host of protocol 1, the prelude building the tree.
 
 **Ids.** Before a view reaches the client, the prelude (or a native host, below) turns the tree widget templates build into the tree clients get: it
 flattens `children`, removes handler functions and `key`s, and gives each interactive node an `id` derived from its
@@ -112,6 +114,18 @@ the second item of a nested array at index 2; a `null`/`false` hole keeps its in
 `canvas` with `onPointer` or a `key`. The same node keeps its id from one view to the next as long as its
 path does, which keys make true for lists that change shape. The prelude keeps an id → handler table for the view
 (with a native host, it finds an id's handler by following the id's path).
+
+**Keys and depth.** Two rules for every view, checked when it is turned into the tree clients get (by the prelude or
+a native host; lint can't check them, so they are runtime rules):
+
+- A node's `key` is a string, a number (finite or not) or a boolean; `undefined` and `null` mean no key. Any other key
+  (an object, an array, a function) fails the view with `A node's key must be a string, a number or a boolean`.
+- A view nests at most 100 levels: the root is level 1, the items of a node's `children` are one level below the
+  node, and the items of an array inside `children` one level below that array. A node or an array below level 100
+  fails the view with `The view nests more than 100 levels`.
+
+Either failure is a program error in phase `view` (Failures), with exactly that message and no line or column; in
+a step, the state and view stay as they were.
 
 **Steps.** `init` runs `init(data)` (`undefined` gives `{}`) and `view`. `event` routes `input.event`:
 
@@ -130,12 +144,38 @@ To run a step, a client compiles once per widget template version:
 
 ```js
 <program>
-return __widget_step(__input())
+return __widget_native_step(__input())
 ```
 
-with one global sync host function `__input` returning the step input, and reruns it per step. No other globals.
+with two global sync host functions, `__input` returning the step input and `__widget_emit` taking the view (Native
+hosts), and reruns it per step. No other globals. (Hosts of protocol 1 ran `return __widget_step(__input())` with
+`__input` alone; the prelude still answers that, building the tree itself.)
 Limits: 250 ms timeout per step; a client may use smaller limits. (`@opencode/widget` compiles each program text once,
 with `Runtime.compile`, and keeps the 32 last used.)
+
+### Protocol
+
+The prelude↔host contract has a version, `__widget_protocol`, raised whenever that contract changes (the entries,
+the host globals, what crosses between them). Protocol 1 is the prelude building the tree (`__widget_step`); protocol 2
+is native hosts (below). The prelude's first line declares it, so a program's first line is exactly
+
+```js
+const __widget_protocol = 2
+```
+
+A host reads it from the program text before it runs the program (after fetching it, when it compiles it): the
+first line matching `^const __widget_protocol = (\d+)$` gives the version; a program whose first line doesn't match
+is protocol 1. A host runs only the protocols it implements (the hosts in this document: 2) and refuses the others
+without running anything:
+
+- **An older protocol**: a program error (Failures) with the message `This widget was built with an older widget
+  runtime; ask the agent to post it again`, in the phase of the step or run refused (`init`, `event`, `draw`; `main`
+  for a live run), reported once like any program error, so the agent can post the widget again.
+- **A newer protocol**: a client error (the app is older than the widget): show `This widget needs a newer version of
+  this app`, log it in dev builds, and don't report it.
+
+Before release, decide whether the server serves stored widget templates (programs saved under older preludes) with
+the current prelude, which would make the older-protocol case one of cached programs only.
 
 **Heap cap.** Every run of a program, a step (`init`, `event`, `draw`) or a live run, has a heap cap set by the host,
 32 MB by default. A run that exceeds it stops with a program error (see Failures) with the message
@@ -173,39 +213,62 @@ interpreter. A **native host** does it instead, natively, while it converts or e
 psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript runtime (`@opencode/widget`'s
 `step`, `WidgetSession` and `LiveWidget`). Clients see the same views, ids and handler dispatch either way.
 
-- **Signal.** A native host passes `true` as the entry's second argument: `return __widget_step(__input(), true)` (or
-  `__widget_emit(__widget_step(__input(), true))`, `widgets-binary.md`) and `return await __widget_live(__input(), true)`.
-  It is the same program; without `true` the prelude builds the tree itself.
-- **Functions cross as markers.** The host's runtime sets PsychoScript's `translate: { functions: "mark" }`, so a
-  program function inside a step output or a post arrives as the function marker. (The option covers host calls'
-  arguments, such as `__widget_emit`'s and `post`'s; a host that takes the step output as the run's result needs it
-  for results too.)
-- **What it gets.** The step output's `view` and a live `render`'s `node` are the view as built: handler props are
-  markers, `key`s are there, and `children` are as written (nested arrays, holes, `null`, `undefined`, `false`).
+- **Entries.** Steps (`init`, `event`, `draw`): `return __widget_native_step(__input())`. Live:
+  `return await __widget_live(__input(), true)`.
+- **Runtime options.** PsychoScript's `translate: { functions: "mark" }`, so a program function in a host call's
+  argument or in the run's result crosses as the function marker, and the boundary value depth (default 32) at
+  **202**: the deepest value of a view of 100 levels (Keys and depth). A level takes at most two value levels (a node
+  and its `children` array, or an array in `children`), the deepest prop of a valid node three below it (`options` →
+  an option → its `label`), and the widest wrapper one (a live `{ type: "render", node }`, or protocol 1's step output
+  `{ state, view }`): 1 + 2 × 99 + 3 = 202. Values deeper than that (in a prop the node types don't define) fail where
+  they cross, with the interpreter's own error. (`@opencode/widget` keeps the default 32 until PsychoScript's TypeScript
+  runtime has the option, so its views cross up to 16 levels.)
+- **A step's output, split.** `__widget_native_step` calls `__widget_emit(view)` once per `init` or `event` step with
+  the view as built, then returns `{ state, submit?, dismiss?, send? }` as the run's result; a `draw` step calls no
+  `__widget_emit` and returns `{ commands }`. The result keeps the run's JSON rules exactly as before (`toJSON`, an
+  `Error`'s fields, numbers, a typed array failing the step): the host only drops its markers, as JSON drops
+  functions (left out of an object, `null` in an array). `__widget_emit` returns nothing.
+- **What it gets.** The emitted view, and a live `render`'s `node`, are the view as built: handler props are markers,
+  `key`s are there, `children` are as written (nested arrays, holes, `null`, `undefined`, `false`), and values are as
+  a host call's argument carries them (as live renders always were).
 - **What it makes.** Exactly what the prelude's `__widget_tree` makes:
-  1. The root's path is `:` + enc(root `key`) when the root is an object (not an array) whose `key` is neither
-     `undefined` nor `null`; otherwise `0`.
-  2. A value that isn't an object, or is an array, goes out as it is. An object goes out with its props in their order,
-     leaving out `key`, `id`, `pointer`, `onPress`, `onChange`, `onPointer` and `children`. If its `type` is in the
-     Events table, its handler prop is that type's (`onPress`, `onChange` or `onPointer`); when that prop is a marker,
-     or the type is `button`, `checkbox`, `slider`, `select` or `input`, or it is a `canvas` whose `key` is neither
-     `undefined` nor `null`, the node gets `id` (its path) after its props. A `canvas` with a handler then gets
-     `pointer: true`. If `children` isn't `undefined`, the node gets `children` last: the items below.
+  1. The root's path is `:` + enc(root `key`) when the root is an object (not an array) with a key (Keys and depth);
+     otherwise `0`.
+  2. A value that isn't an object, or is an array, goes out as in 5. An object (a node) goes out with its props in their
+     order, leaving out `key`, `id`, `pointer`, `onPress`, `onChange`, `onPointer` and `children`. If its `type` is in
+     the Events table, its handler prop is that type's (`onPress`, `onChange` or `onPointer`); when that prop is a
+     marker, or the type is `button`, `checkbox`, `slider`, `select` or `input`, or it is a `canvas` with a key, the
+     node gets `id` (its path) after its props. A `canvas` with a handler then gets `pointer: true`. If `children`
+     isn't `undefined`, the node gets `children` last: the items below.
   3. A `children` value that isn't an array is a list of one. Its items in order, at index `i`: a falsy item (a hole,
      `undefined`, `null`, `false`, `0`, `NaN`, `""`) is skipped and keeps its index; an array's items come in its place
-     with `i.` before their indices (`2.1`, `2.1.0`); a non-object (a string, a number, `true`) goes out as it is (a
-     marker as in 5); an object goes out as in 2, with path parent path + `/` + its segment. The segment is `:` +
-     enc(`key`) when its `key` is neither `undefined` nor `null`, with `~n` appended for the n-th child (n ≥ 2) of the
-     same parent with that segment, counted in order across nested arrays; otherwise its index (`3`, `2.1`).
-  4. enc(key) is JavaScript's `encodeURIComponent(String(key))`: a number is written as `String(number)` does
-     (`1.5`, `1e+21`, `0.30000000000000004`, `0` for `-0`, `NaN`, `Infinity`), `true` and `false` as words. A key it
-     can't encode (a lone surrogate) is a program error, as in the prelude.
-  5. A marker anywhere else, and an `undefined` prop, go as they do in a step output: left out of an object, `null` in
-     an array. So do markers in the rest of a step output (`state`, `submit`, `send`).
-- **Functions where none may go.** In a live post, a marker anywhere but the props 2 leaves out of a node (`key`, `id`,
-  `pointer`, the handler props) fails the call as a function in a host call's argument does without the option: the
-  host throws its runtime's `TypeError` (`Argument 1 to __host.post contains a function, which cannot be passed to the
-  host.`). The same goes for the other `__host` functions' arguments.
+     with `i.` before their indices (`2.1`, `2.1.0`); a non-object (a string, a number, `true`) goes out as in 5; an
+     object goes out as in 2, with path parent path + `/` + its segment. The segment is `:` + enc(`key`) when it has a
+     key, with `~n` appended for the n-th child (n ≥ 2) of the same parent with that segment, counted in order across
+     nested arrays; otherwise its index (`3`, `2.1`). Levels count as in Keys and depth.
+  4. enc(key) is JavaScript's `encodeURIComponent(String(key))`: a number is written as `String(number)` does (`1.5`,
+     `1e+21`, `0.30000000000000004`, `0` for `-0`, `NaN`, `Infinity`, `-Infinity`), a boolean as `true` or `false`. A
+     key it can't encode (a lone surrogate) is a program error, as in the prelude. A key of another type fails the view
+     (Keys and depth); the host checks an item's level, then a node's key, before the node's other props.
+  5. Every value goes out as JSON holds it: an `undefined` prop is left out and an `undefined` item is `null`, a
+     non-finite number is `null`.
+- **Functions where none may go.** A marker in a host call's argument anywhere but the value of a node's `onPress`,
+  `onChange` or `onPointer` (a node: the view's root, or an object among `children` or an array in them) fails the
+  call as a function did without `"mark"`: the host throws, from that call, its runtime's `TypeError` `Argument <n> to
+  <name> contains a function, which cannot be passed to the host.`, with `<n>` the argument's position from 1 and
+  `<name>` the function as the program called it (`__widget_emit`, `__host.post`, `__host.fetch`, ...). So a function
+  in another prop of a node (`id`, `pointer` and unknown props too), as a child, inside a prop's value, in a live
+  `send` or `submit` value, in draw commands or in a `fetch` request fails, and uncaught it fails the step or run with
+  that message and the call's line and column. A marker as a `key` is a key of another type (Keys and depth). (A
+  step's `state`, `submit` and `send` are the run's result, not an argument: their functions are left out, as JSON
+  does.)
+- **Failures of the view.** A key of another type or a view deeper than 100 levels found in the walk: the host takes
+  the view as failed and fails the step (after the run) or the live run (at once) as a program error in phase `view`,
+  with the message of Keys and depth; `__widget_emit` and `post` don't throw for it. A view too deep to cross the
+  boundary at all never reaches the walk: the prelude catches the call's error and, when the view has a node or an
+  array below level 100, passes `__widget_emit(null, message)` instead (live: `__host.post({ type: "render", node:
+  null, failure: message })`); a host given a string `message` there fails the same way with that message. Any other
+  error from the call stays the program's.
 - **Handlers.** An id has a handler when its node's handler prop is a marker. The host keeps, for the last view, the
   canvas ids by key (`String(key)`, the first such canvas) and whether any id has a handler. The prelude finds an
   event's handler by following the id's path through the view as built (the rebuilt view in a step, the last rendered
@@ -218,12 +281,16 @@ psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript r
   prelude's `{ type: "draw", id, commands }`. For an unknown key it throws from `post` an `Error`
   `No canvas with key "<key>" in the rendered view`, for a GPU canvas `Canvas "<key>" is drawn by its wgsl; it takes no
   draw commands`; the program can catch either, as before.
-- **Draw steps** are unchanged: the host passes the canvas's id in `frame.id`.
+- **Draw steps**: the host passes the canvas's id in `frame.id`, as before.
 - **Conformance.** `packages/widget/test/fixtures/wire/*.json` hold, for every built-in and the edge cases, the
-  widget template `source`, the step `input`, the `view` clients get (as JSON), the `handlers` (id → event) and the
-  `canvases` (key → id), from the prelude's own tree building, and `built`, the native step output's view with each
-  function as the string `"$function"`. A native host runs `prelude + "\n" + source` on `input` and must give the same
-  values; `built` tests its walk alone. `packages/widget/src/tree.ts` is the walk in TypeScript.
+  widget template `source` and the step `input`, and what the host must make of them: `built`, the view as emitted
+  (each function as the string `"$function"`, `NaN` and `±Infinity` as `"$NaN"`, `"$Infinity"`, `"$-Infinity"`, holes
+  and `undefined` items as `null`), and either the `view` clients get (as JSON), the `handlers` (id → event), the
+  `canvases` (key → id) and the run's `result` (as JSON), or the `error`: `{ view: true, message }` for a program error
+  in phase `view` with exactly that message, `{ view: false, message }` for the step failing with exactly that message.
+  They come from the prelude's own tree building where it agrees (all but a function the prelude leaves out), and
+  from the TypeScript host for failures. A native host runs `prelude + "\n" + source` on `input` and must give the
+  same; `built` tests its walk alone. `packages/widget/src/tree.ts` is the walk in TypeScript.
 
 ## Events
 

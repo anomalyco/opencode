@@ -336,5 +336,55 @@
     "0/1": "pointer",
     "0/3/0": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {
+      "active": null,
+      "down": false,
+      "bins": [
+        {
+          "from": 100,
+          "to": 125,
+          "count": 51
+        },
+        {
+          "from": 125,
+          "to": 150,
+          "count": 62
+        },
+        {
+          "from": 150,
+          "to": 175,
+          "count": 38
+        },
+        {
+          "from": 175,
+          "to": 200,
+          "count": 26
+        },
+        {
+          "from": 200,
+          "to": 225,
+          "count": 29
+        },
+        {
+          "from": 225,
+          "to": 250,
+          "count": 32
+        },
+        {
+          "from": 250,
+          "to": 275,
+          "count": 2
+        }
+      ],
+      "stats": {
+        "n": 240,
+        "min": 104,
+        "max": 252,
+        "mean": 164.80416666666667,
+        "median": 151.5
+      }
+    }
+  }
 }

@@ -521,5 +521,12 @@
     "spark1": "0/:1/0/:spark1",
     "spark2": "0/:2/0/:spark2",
     "spark3": "0/:3/0/:spark3"
+  },
+  "result": {
+    "state": {
+      "sort": null,
+      "desc": false,
+      "selected": null
+    }
   }
 }

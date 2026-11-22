@@ -47,5 +47,8 @@
     "0/0": "press",
     "0/2": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
 }

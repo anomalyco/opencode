@@ -104,5 +104,8 @@
     "0/:a/0/0": "press",
     "0/:a/0/0/0/0": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
 }

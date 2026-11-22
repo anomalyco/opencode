@@ -8,13 +8,14 @@ clamps, unknown node types dropped).
 ## Where it is produced and read
 
 - **psychoscript-mobile writes it, in Rust, from the VM's value.** It needs no prelude change.
-  - **Steps and draws.** The host runs `<program>\n__widget_emit(__widget_step(__input()))` instead of
-    `return __widget_step(...)`. `__widget_emit` is a host global that receives the step output as a `HostValue`,
-    which is cheaper than the result path's VM → JSON → `Data`. The prototype calls it `__emit`. That host-supplied
-    wrapper is the only change: the program text the server serves is untouched.
+  - **Steps and draws.** The host runs `<program>\nreturn __widget_native_step(__input())` (`widgets.md`, Native
+    hosts). The prelude hands the view to the host global `__widget_emit` as a `HostValue`, which is cheaper than the
+    result path's VM → JSON → `Data`; the rest of the step output (`state`, `submit`, `dismiss`, `send`, or a draw's
+    `commands`) is the run's result, under its JSON rules. The host writes `S` from both: the flags and JSON from the
+    result, `N` from the emitted view.
   - **Live.** `__host.post(message)` already receives a `HostValue`. The host encodes each post and hands a wake-up's
     posts to the app in one call (`on_posts_bytes(Vec<Vec<u8>>)`, beside today's `on_posts`).
-  - **Native tree building.** As a native host (`widgets.md`, Native hosts: the entries get `true`), the encoder builds
+  - **Native tree building.** As a native host (`widgets.md`, Native hosts), the encoder builds
     the tree while it encodes a view: it computes each node's path, writes `id` and `pointer`, skips `key`, the
     handler markers and the other props the prelude would remove, and keeps the canvas ids by key and whether there
     are handlers. A live `draw` post carries a `key`, which it writes as the canvas's `str(id)`. The bytes are the same.

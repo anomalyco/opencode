@@ -15,7 +15,15 @@ const CONTROLS: Record<string, { readonly handler: string; readonly always?: boo
   canvas: { handler: "onPointer", keyed: true },
 }
 
-const REMOVED = new Set(["key", "id", "pointer", "onPress", "onChange", "onPointer", "children"])
+const HANDLERS = new Set(["onPress", "onChange", "onPointer"])
+
+/** The most levels a view nests (specs/v2/widgets.md, Keys and depth), and the failures of a view that breaks the rules. */
+export const LEVELS = 100
+export const DEEP = "The view nests more than 100 levels"
+export const KEY = "A node's key must be a string, a number or a boolean"
+
+/** A view that breaks a rule of views: a program error in phase `view`. */
+export class ViewError extends Error {}
 
 export const marker: unknown = Host.functionMarker
 
@@ -29,36 +37,45 @@ export interface Tree {
 type Item = Record<string, unknown>
 
 const isNode = (value: unknown): value is Item => typeof value === "object" && value !== null && !Array.isArray(value)
-const named = (node: Item) => node.key !== undefined && node.key !== null
+const named = (node: Item) => {
+  const key = node.key
+  if (key === undefined || key === null) return false
+  if (typeof key === "string" || typeof key === "number" || typeof key === "boolean") return true
+  throw new ViewError(KEY)
+}
 const segment = (node: Item) => ":" + encodeURIComponent(String(node.key))
 const omitted = Symbol("omitted")
 
 /**
- * A function a live post may not carry: the error the interpreter throws for one without `"mark"`, so a program sees
- * the same as when the prelude built the tree. `label` names the argument, as in `Argument 1 to __host.post`.
+ * A function where a host call's argument may not carry one: the error the interpreter throws for one without `"mark"`.
+ * `label` names the argument, as in `Argument 1 to __host.post`.
  */
 export const carried = (label: string) =>
   new TypeError(`${label} contains a function, which cannot be passed to the host.`)
 
 /**
- * `value` with its markers gone, as a step output leaves out functions: left out of objects, `null` in arrays. With
- * `strict` (a live post) a marker throws instead, as a function in a post does. Copies only what changes.
+ * `value` with its markers gone, as a run's result leaves out functions: left out of objects, `null` in arrays. With
+ * `strict` (a host call's argument) a marker throws instead. Copies only what changes.
  */
 export function unmark(value: unknown, strict?: string): unknown {
   const out = clean(value, strict)
   return out === omitted ? undefined : out
 }
 
-function clean(value: unknown, strict: string | undefined): unknown {
+// `value` without markers. With `json` (a view), also as JSON holds it: `undefined` left out (`null` in an array), a
+// non-finite number `null`.
+function clean(value: unknown, strict: string | undefined, json = false): unknown {
   if (value === marker) {
     if (strict !== undefined) throw carried(strict)
     return omitted
   }
+  if (json && value === undefined) return omitted
+  if (json && typeof value === "number") return Number.isFinite(value) ? value : null
   if (typeof value !== "object" || value === null) return value
   if (Array.isArray(value)) {
     let out: unknown[] | undefined
     for (let index = 0; index < value.length; index++) {
-      const item = clean(value[index], strict)
+      const item = clean(value[index], strict, json)
       if (item === value[index]) continue
       out ??= value.slice()
       out[index] = item === omitted ? null : item
@@ -68,7 +85,7 @@ function clean(value: unknown, strict: string | undefined): unknown {
   let out: Item | undefined
   for (const name in value) {
     const prop = (value as Item)[name]
-    const item = clean(prop, strict)
+    const item = clean(prop, strict, json)
     if (item === prop) continue
     out ??= { ...(value as Item) }
     if (item === omitted) delete out[name]
@@ -77,55 +94,60 @@ function clean(value: unknown, strict: string | undefined): unknown {
   return out ?? value
 }
 
-/** Builds the tree clients get from `root`; `strict` as for `unmark`, for a live render. */
-export function tree(root: unknown, strict?: string): Tree {
+/**
+ * Builds the tree clients get from `root`, the view as built in a host call's argument named `label`. Throws a
+ * `ViewError` for a key of another type or a view deeper than `LEVELS`, and `carried(label)` for a function anywhere
+ * but a node's handler props.
+ */
+export function tree(root: unknown, label: string): Tree {
   const canvases = new Map<string, { id: string; wgsl: boolean }>()
   const handlers = new Set<string>()
 
-  const node = (value: Item, path: string): Item => {
+  const node = (value: Item, path: string, level: number): Item => {
+    const keyed = named(value)
     const out: Item = {}
     for (const name in value) {
-      if (REMOVED.has(name)) continue
-      const item = clean(value[name], strict)
-      if (item !== omitted) out[name] = item
+      if (name === "children" || HANDLERS.has(name)) continue
+      const item = clean(value[name], label, true)
+      if (item !== omitted && name !== "key" && name !== "id" && name !== "pointer") out[name] = item
     }
     const control =
       typeof value.type === "string" && Object.hasOwn(CONTROLS, value.type) ? CONTROLS[value.type] : undefined
     if (control) {
       const handled = value[control.handler] === marker
-      const keyed = control.keyed === true && named(value)
-      if (handled || control.always || keyed) {
+      const canvas = control.keyed === true && keyed
+      if (handled || control.always || canvas) {
         out.id = path
         if (handled) handlers.add(path)
         if (value.type === "canvas" && handled) out.pointer = true
-        if (keyed && !canvases.has(String(value.key)))
+        if (canvas && !canvases.has(String(value.key)))
           canvases.set(String(value.key), { id: path, wgsl: typeof value.wgsl === "string" })
       }
     }
     if (value.children === undefined) return out
     const children: unknown[] = []
     const seen = new Map<string, number>()
-    const flatten = (list: ReadonlyArray<unknown>, prefix: string) => {
+    const flatten = (list: ReadonlyArray<unknown>, prefix: string, level: number) => {
       for (let index = 0; index < list.length; index++) {
         const child = list[index]
         if (!child) continue
-        if (Array.isArray(child)) flatten(child, prefix + index + ".")
-        else if (!isNode(child)) {
-          const item = clean(child, strict)
-          children.push(item === omitted ? null : item)
-        } else if (!named(child)) children.push(node(child, path + "/" + prefix + index))
+        if (level > LEVELS && typeof child === "object") throw new ViewError(DEEP)
+        if (Array.isArray(child)) flatten(child, prefix + index + ".", level + 1)
+        else if (!isNode(child)) children.push(clean(child, label, true))
+        else if (!named(child)) children.push(node(child, path + "/" + prefix + index, level))
         else {
           const count = (seen.get(segment(child)) ?? 0) + 1
           seen.set(segment(child), count)
-          children.push(node(child, path + "/" + segment(child) + (count > 1 ? "~" + count : "")))
+          children.push(node(child, path + "/" + segment(child) + (count > 1 ? "~" + count : ""), level))
         }
       }
     }
-    flatten(Array.isArray(value.children) ? value.children : [value.children], "")
+    flatten(Array.isArray(value.children) ? value.children : [value.children], "", level + 1)
     out.children = children
     return out
   }
 
-  const view = isNode(root) ? node(root, named(root) ? segment(root) : "0") : unmark(root, strict)
-  return { view, handlers, canvases }
+  if (isNode(root)) return { view: node(root, named(root) ? segment(root) : "0", 1), handlers, canvases }
+  const view = clean(root, label, true)
+  return { view: view === omitted ? undefined : view, handlers, canvases }
 }

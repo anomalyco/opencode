@@ -129,6 +129,9 @@ and hands the actual transfer to the app (URLSession / OkHttp), so system TLS an
 - If a widget stays paused for more than 30 s (or the OS asks the app to free memory), the client may suspend the
   program to a snapshot (PsychoScript `suspend`, `toBytes`), drop the VM, and resume from the snapshot when it's visible
   again; if suspending fails, stop it and restart from `main` then.
+- A render whose view breaks Keys and depth (`widgets.md`: a key of another type, more than 100 levels) ends the run
+  with that program error in phase `view`, like an invalid post. A program built for another protocol isn't started
+  (`widgets.md`, Protocol).
 - Budgets: a program that runs more than 50 ms without awaiting is stopped with an error; at most 2,000 draw commands
   per `draw`; posts beyond 240 per second are dropped with a warning; the heap cap applies as to steps (`widgets.md`, Heap
   cap: default 32 MB, phase `main`). One error shows inline with "Restart".

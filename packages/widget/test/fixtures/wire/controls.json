@@ -206,5 +206,8 @@
     "0/9": "change",
     "0/11": "press"
   },
-  "canvases": {}
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
 }

@@ -132,5 +132,8 @@
     "scene": "0/:scene",
     "game": "0/:game",
     "gpu": "0/:gpu"
+  },
+  "result": {
+    "state": {}
   }
 }
