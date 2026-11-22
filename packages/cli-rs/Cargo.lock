@@ -710,6 +710,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "indexmap",
+ "libc",
  "log",
  "opencode-api",
  "opencode-service",

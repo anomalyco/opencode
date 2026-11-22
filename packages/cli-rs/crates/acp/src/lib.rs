@@ -13,6 +13,8 @@ pub mod directories;
 pub mod elicitation;
 pub mod error;
 pub mod paths;
+#[cfg(test)]
+mod perf;
 pub mod permission;
 pub mod prompt;
 pub mod replay;

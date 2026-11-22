@@ -245,13 +245,14 @@ function option(args: string[], name: string) {
 }
 
 /**
- * Builds the test binaries that hold scenarios, the TUI's integration tests and mini's unit tests, with the `perf`
+ * Builds the test binaries that hold scenarios, the TUI's integration tests and mini's and ACP's unit tests, with the `perf`
  * profile (release code generation), and returns their paths.
  */
 function build() {
   const targets = [
     ["opencode-tui", "--test", "all"],
     ["opencode-mini", "--lib"],
+    ["opencode-acp", "--lib"],
   ]
   return targets.map(([pkg, ...target]) => {
     const command = ["bun", "run", "cargo", "test", "--profile", "perf", "-p", pkg, ...target]
