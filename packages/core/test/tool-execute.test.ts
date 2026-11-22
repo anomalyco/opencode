@@ -5,6 +5,9 @@ import { CodeModeDiffs } from "@opencode/core/codemode/diffs"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
+import { ToolOutput } from "@opencode/core/tool-output"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Global } from "@opencode/util/global"
 import { execute } from "@opencode/core/tool/runtime"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
@@ -13,7 +16,7 @@ import type { Info } from "@opencode/schema/tool"
 import { Context, Deferred, Effect, Fiber, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { codeModeServices } from "./fixture/codemode"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdir, withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
 
@@ -31,7 +34,15 @@ const createCodeMode = (
   tools: ReadonlyMap<string, Info>,
   permission = allowAll,
   services?: Context.Context<CodeModeTool.Services>,
-) => CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, services)
+  toolOutput?: ToolOutput.Interface,
+) =>
+  CodeModeTool.create(
+    { tools },
+    (_, tool, input, context) => execute(tool, input, context),
+    permission,
+    services,
+    toolOutput,
+  )
 
 test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
   const input = Schema.Struct({ text: Schema.NonEmptyString })
@@ -483,6 +494,72 @@ describe("execute output", () => {
   test("a returned value keeps its line before the logs", async () => {
     expect(await run('console.log("hi"); return { n: 1 }')).toBe('{"n":1}\n\nLogs:\nhi')
   })
+})
+
+describe("full Code Mode output", () => {
+  // As a session step sends it: the execute result, then the generic cut, here head and tail as with full_codemode.
+  const run = (code: string, body: (text: string, metadata: Tool.Metadata | undefined) => Effect.Effect<void>) =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const output = yield* ToolOutput.Service
+        yield* output.transform((editor) => editor.configure({ strategy: "head-tail" }))
+        const tool = createCodeMode(new Map(), allowAll, codeModeServices(tmp.path), output)
+        const result = yield* output.truncate(yield* tool.execute({ code }, context))
+        const text = result.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+        yield* body(text, result.metadata)
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(ToolOutput.node, [Global.node.replace(Global.layerWith({ data: tmp.path }))]),
+        ),
+      ),
+    )
+
+  it.live("a huge string keeps its start and end, and the keys after it", () =>
+    run(`return { output: "start\\n" + "x".repeat(200 * 1024) + "\\nend of output", exitCode: 3 }`, (text, metadata) =>
+      Effect.gen(function* () {
+        const value = JSON.parse(text.slice(0, text.indexOf("\n\n[full output saved to ")))
+        expect(value.exitCode).toBe(3)
+        expect(value.output.startsWith("start\n")).toBe(true)
+        expect(value.output.endsWith("x\nend of output")).toBe(true)
+        expect(value.output).toMatch(/\[… \d+ chars cut …\]/)
+        expect(metadata?.truncated).toBe(false)
+        const saved = /\[full output saved to (.+)\]$/.exec(text)?.[1]
+        if (saved === undefined) throw new Error("expected a saved output path")
+        const full = JSON.parse(yield* Effect.promise(() => Bun.file(saved).text()))
+        expect(full.output.length).toBe(200 * 1024 + 20)
+      }),
+    ),
+  )
+
+  it.live("huge logs after a small result keep their start and end", () =>
+    run(`for (let i = 1; i <= 5000; i++) console.log("log " + i)\nreturn { ok: true }`, (text, metadata) =>
+      Effect.gen(function* () {
+        expect(text.startsWith('{"ok":true}\n\nLogs:\nlog 1\nlog 2\n')).toBe(true)
+        expect(text).toMatch(/\n\[… \d+ lines \(.+\) cut from the middle; full output saved to .+\]\n/)
+        expect(text.endsWith("\nlog 4999\nlog 5000")).toBe(true)
+        expect(metadata?.truncated).toBe(true)
+      }),
+    ),
+  )
+
+  it.live("a throw shows its error first and the logs before it", () =>
+    run(`for (let i = 1; i <= 5000; i++) console.log("log " + i)\nthrow new Error("boom")`, (text) =>
+      Effect.sync(() => {
+        expect(text).toMatch(/^.*boom.*\n/)
+        expect(text).toContain("\n\nLogs:\nlog 1\n")
+        expect(text.endsWith("\nlog 5000")).toBe(true)
+      }),
+    ),
+  )
+
+  it.live("a result within the limits is sent as it is", () =>
+    run(`console.log("hi"); return { output: "x".repeat(20 * 1024), exitCode: 0 }`, (text, metadata) =>
+      Effect.sync(() => {
+        expect(text).toBe(JSON.stringify({ output: "x".repeat(20 * 1024), exitCode: 0 }) + "\n\nLogs:\nhi")
+        expect(metadata).not.toHaveProperty("outputPath")
+      }),
+    ),
+  )
 })
 
 describe("streaming fetch", () => {

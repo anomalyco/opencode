@@ -23,6 +23,7 @@ import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
+import { ToolOutput } from "../tool-output.js"
 import { modelTools } from "../tool/model-policy.js"
 import { WebSearch } from "../websearch.js"
 import { AgentNotFoundError } from "./error.js"
@@ -101,6 +102,7 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
     const services = yield* CodeModeTool.services
+    const toolOutput = yield* ToolOutput.Service
     const websearch = yield* WebSearch.Service
 
     const resolveModel = (
@@ -168,6 +170,7 @@ const layer = Layer.effect(
       const policyModel = selected?.info ?? (fallbackRef && Model.Info.default(fallbackRef.providerID, fallbackRef.id))
       const tools = yield* registry.snapshot(permissions, {
         services,
+        toolOutput,
         // An agent that can't run `execute` (such as explore) keeps every tool direct, so give it the flag-off policy.
         tools: modelTools({
           model: policyModel,
@@ -268,6 +271,7 @@ export const node = makeLocationNode({
     SessionStore.node,
     SkillInstructions.node,
     Tool.node,
+    ToolOutput.node,
     WebSearch.node,
   ],
 })

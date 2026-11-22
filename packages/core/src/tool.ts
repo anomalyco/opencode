@@ -19,6 +19,7 @@ import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
+import type { ToolOutput } from "./tool-output.js"
 import {
   defaultCodeMode,
   definition,
@@ -71,6 +72,8 @@ export interface SnapshotOptions {
    * session's Location and file services.
    */
   readonly services?: Context.Context<CodeModeTool.Services>
+  /** With `full_codemode`, where Code Mode saves a result whose long strings it cut. */
+  readonly toolOutput?: ToolOutput.Interface
   readonly tools?: Policy
 }
 
@@ -355,6 +358,7 @@ const layer = Layer.effect(
                   (name, item, input, context) => run(inventory.tools, item, name, input, context),
                   permission,
                   full ? options.services : undefined,
+                  full ? options.toolOutput : undefined,
                 )
                 const entry = cached ?? {
                   inventory,

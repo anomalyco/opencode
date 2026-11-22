@@ -13,6 +13,7 @@ import type {
 } from "@opencode/schema/tool"
 import { Identifier } from "@opencode/schema/identifier"
 import { CallID } from "@opencode/schema/tool"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
@@ -22,6 +23,7 @@ import { FileWrite } from "../file-write.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { PositiveInt } from "../schema.js"
+import { ToolOutput } from "../tool-output.js"
 import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeDiffs } from "./diffs.js"
@@ -144,6 +146,8 @@ export const create = (
   permission: Permission.Interface,
   /** With `full_codemode`, the session's services, which turn on the experimental `path` and `Bun` globals. */
   services?: Context.Context<Services>,
+  /** With `full_codemode`, where the full result is saved when a long string in it is cut. */
+  toolOutput?: ToolOutput.Interface,
 ) => {
   return {
     name: "execute",
@@ -233,6 +237,17 @@ export const create = (
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
         const output = formatResult(result)
+        // Only a result over the limits has its long strings cut, so one that fits is sent as it is.
+        const limits = toolOutput === undefined ? undefined : yield* toolOutput.limits
+        const shown =
+          limits === undefined ||
+          (ToolOutput.countLines(output) <= limits.maxLines && Buffer.byteLength(output, "utf-8") <= limits.maxBytes)
+            ? output
+            : formatResult(cutStrings(result))
+        const text =
+          shown === output || toolOutput === undefined
+            ? shown
+            : `${shown}\n\n[full output saved to ${yield* toolOutput.save(new TextEncoder().encode(output), "")}]`
         const value: typeof ExecuteOutput.Type = {
           output,
           toolCalls,
@@ -240,7 +255,7 @@ export const create = (
           ...(result.ok ? {} : { error: true }),
         }
         const content: Array<Content> = [
-          { type: "text", text: value.output },
+          { type: "text", text },
           ...value.files.map((file) => ({
             type: "file" as const,
             uri: `data:${file.mime};base64,${file.data}`,
@@ -525,6 +540,41 @@ function formatResult(result: CodeMode.Result) {
   // A program that only logs returns undefined (sent as null); a "null" line before its logs says nothing.
   const value = result.ok && result.value === null && (warnings || logs) ? undefined : output
   return [value, warnings, logs].filter((part) => part !== undefined && part !== "").join("\n\n")
+}
+
+/**
+ * Strings longer than this in a full Code Mode result or its logs keep only their start and end, so one huge string,
+ * like a command's output, cannot push the rest of a returned object, its logs or warnings out of the result.
+ */
+const STRING_CUT_THRESHOLD = 16 * 1024
+const STRING_HEAD = Math.floor(STRING_CUT_THRESHOLD * 0.6)
+const STRING_TAIL = STRING_CUT_THRESHOLD - STRING_HEAD
+
+function cutStrings(result: CodeMode.Result): CodeMode.Result {
+  const logs = result.logs?.map(cutString)
+  if (!result.ok) return { ...result, ...(logs && { logs }) }
+  return { ...result, value: cutValue(result.value), ...(logs && { logs }) }
+}
+
+function cutValue(value: CodeMode.DataValue): CodeMode.DataValue {
+  if (typeof value === "string") return cutString(value)
+  if (Array.isArray(value)) return value.map(cutValue)
+  if (typeof value === "object" && value !== null)
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cutValue(item)]))
+  return value
+}
+
+// Cut on line breaks when one is in the outer half of each side, so the kept lines are whole.
+function cutString(text: string) {
+  if (text.length <= STRING_CUT_THRESHOLD) return text
+  const start = TextBoundary.head(text, STRING_HEAD)
+  const end = TextBoundary.tail(text, STRING_TAIL)
+  const headBreak = start.lastIndexOf("\n")
+  const tailBreak = end.indexOf("\n")
+  const head = headBreak >= start.length / 2 ? start.slice(0, headBreak + 1) : start
+  const tail = tailBreak !== -1 && tailBreak < end.length / 2 ? end.slice(tailBreak + 1) : end
+  const marker = `[… ${text.length - head.length - tail.length} chars cut …]`
+  return head.endsWith("\n") ? `${head}${marker}\n${tail}` : `${head}${marker}${tail}`
 }
 
 // Compact JSON: indentation adds tokens on every later step without helping the model. Clients pretty-print it.
