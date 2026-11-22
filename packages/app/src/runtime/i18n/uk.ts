@@ -762,7 +762,7 @@ export const dict = {
   "settings.timeline.detail": "Деталі часової шкали",
   "settings.timeline.description":
     "Виберіть, скільки активності відображатиметься на часовій шкалі. Повідомлення залишаються видимими.",
-  "settings.timeline.preset.everything": "Все",
+  "settings.timeline.preset.everything": "Усе",
   "settings.timeline.preset.detailed": "Детально",
   "settings.timeline.preset.compact": "Компактний",
   "settings.timeline.preset.quiet": "Тихо",
