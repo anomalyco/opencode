@@ -4,6 +4,7 @@
 pub mod heap;
 pub mod ide;
 pub mod model;
+pub mod probe;
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;

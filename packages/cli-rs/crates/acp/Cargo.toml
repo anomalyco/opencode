@@ -26,3 +26,5 @@ url.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
+# The performance scenario (`src/perf.rs`): the process's CPU time and the thread's instruction counter.
+libc.workspace = true

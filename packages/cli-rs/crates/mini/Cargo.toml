@@ -24,5 +24,9 @@ serde_json.workspace = true
 tokio.workspace = true
 unicode-width.workspace = true
 
+[dev-dependencies]
+# The performance scenario (`src/perf.rs`): the process's CPU time and the thread's instruction counter.
+libc.workspace = true
+
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["event", "pipe", "stdio"] }
