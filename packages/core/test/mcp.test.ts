@@ -376,7 +376,7 @@ function resourceMcpLayer(
     name?: string
     credentials?: Partial<Credential.Interface>
     bus?: Layer.Layer<Bus.Service>
-    /** `OPENCODE_FLAGS`, such as `-mcp_events`. */
+    /** `OPENCODE_FLAGS`, such as `-machines`. */
     flags?: string
   },
 ) {
@@ -4018,15 +4018,8 @@ describe("MCP events", () => {
       },
     }).pipe(Effect.map((server) => ({ ...server, streams })))
   }
-  const layer = (url: string, flags: string) =>
-    resourceMcpLayer(
-      new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }),
-      undefined,
-      undefined,
-      {
-        flags,
-      },
-    )
+  const layer = (url: string) =>
+    resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }))
 
   testEffect(Layer.empty).live(
     "streams a server's events over Streamable HTTP with Mcp-Name and Mcp-Param headers",
@@ -4046,7 +4039,7 @@ describe("MCP events", () => {
             { name: "job.finished", job: null, params },
             { name: "job.finished", job: "j1", params },
           ])
-        }).pipe(Effect.provide(layer(server.url, "mcp_events")))
+        }).pipe(Effect.provide(layer(server.url)))
       }),
   )
 
@@ -4145,12 +4138,12 @@ describe("MCP events", () => {
     return { layer, published, until, delivered }
   })
 
-  const subscriptionLayer = (url: string, bus: Layer.Layer<Bus.Service>, flags = "mcp_events") =>
+  const subscriptionLayer = (url: string, bus: Layer.Layer<Bus.Service>) =>
     resourceMcpLayer(
       new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }),
       undefined,
       undefined,
-      { flags, bus },
+      { bus },
     )
 
   const only = (mcp: Mcp.Interface) => mcp.subscriptions().pipe(Effect.map((all) => all[0]))
@@ -4353,17 +4346,10 @@ describe("MCP events", () => {
     }),
   )
 
-  testEffect(Layer.empty).live("refuses to subscribe with the flag off, and ends at a server without events", () =>
+  testEffect(Layer.empty).live("ends a subscription at a server without events", () =>
     Effect.gen(function* () {
-      const offering = yield* streamServer()
       const plain = yield* streamServer({ events: false })
       const bus = yield* workingBus
-      const refused = yield* Effect.gen(function* () {
-        const mcp = yield* Mcp.Service
-        return yield* mcp.subscribe("resources", { name: "job.finished" }).pipe(Effect.flip)
-      }).pipe(Effect.provide(subscriptionLayer(offering.url, bus.layer, "-mcp_events")))
-      expect(refused).toBeInstanceOf(Mcp.EventsUnavailableError)
-
       yield* Effect.gen(function* () {
         const mcp = yield* Mcp.Service
         expect(yield* ready(mcp)).toEqual({ status: "connected" })
@@ -4375,18 +4361,14 @@ describe("MCP events", () => {
     }),
   )
 
-  testEffect(Layer.empty).live("offers no events with the mcp_events flag off, or from a server without them", () =>
+  testEffect(Layer.empty).live("offers no events from a server without them", () =>
     Effect.gen(function* () {
-      const offering = yield* eventServer({ events: true })
       const plain = yield* eventServer()
-      const events = (url: string, flags: string) =>
-        Effect.gen(function* () {
-          const mcp = yield* Mcp.Service
-          expect(yield* ready(mcp)).toEqual({ status: "connected" })
-          return yield* mcp.events("resources")
-        }).pipe(Effect.provide(layer(url, flags)))
-      expect(yield* events(offering.url, "-mcp_events")).toBeUndefined()
-      expect(yield* events(plain.url, "mcp_events")).toBeUndefined()
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+        expect(yield* mcp.events("resources")).toBeUndefined()
+      }).pipe(Effect.provide(layer(plain.url)))
     }),
   )
 })

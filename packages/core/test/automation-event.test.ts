@@ -74,7 +74,6 @@ const it = testEffect(
             info: new Info({
               experimental: new ConfigExperimental.Info({
                 location_idle_timeout: Duration.seconds(1),
-                mcp_events: true,
               }),
             }),
           }),

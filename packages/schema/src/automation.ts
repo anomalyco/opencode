@@ -200,7 +200,7 @@ export const Request = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1)).annotate({ description: "A short label shown in lists." }),
   trigger: Trigger.annotate({
     description:
-      'When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz. Or { type: "event", server, event, args? } for a connected MCP server advertising push delivery (requires mcp_events).',
+      'When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz. Or { type: "event", server, event, args? } for a connected MCP server advertising push delivery.',
   }),
   action: ActionInput.annotate({
     description:

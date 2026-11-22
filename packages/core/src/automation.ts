@@ -51,7 +51,6 @@ import { AutomationTable } from "./automation/sql.js"
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
-import { Flag } from "./flag.js"
 import { Instance } from "./instance/service.js"
 import { KVTable } from "./kv/sql.js"
 import { Location } from "./location.js"
@@ -299,11 +298,9 @@ const layer = Layer.effect(
     const settings = (directory: string) =>
       Effect.gen(function* () {
         const config = yield* Config.Service
-        const flags = yield* Flag.Service
         const entries = yield* config.entries()
         return {
           enabled: Config.latest(entries, "automations") ?? true,
-          events: flags.resolve(entries).mcp_events.enabled,
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(inDirectory(directory))
@@ -780,7 +777,7 @@ const layer = Layer.effect(
     // Re-check the original placement and the resource-specific grant before opening a stream or running an action.
     const checkWatch = Effect.fnUntraced(function* (row: Row, server: string) {
       const config = yield* settings(row.directory)
-      if (!config.enabled || !config.events)
+      if (!config.enabled)
         return yield* new InvalidError({
           reason: "Event automations are disabled",
         })
@@ -1061,10 +1058,6 @@ const layer = Layer.effect(
         if (!config.enabled) return yield* new DisabledError()
         if (input.trigger.type === "event") {
           const trigger = input.trigger
-          if (!config.events)
-            return yield* new InvalidError({
-              reason: "Event automations require experimental.mcp_events",
-            })
           if (!owner || !invocation || owner.location.workspaceID !== undefined)
             return yield* new InvalidError({
               reason: "Create an event automation from a tool call in a local session",

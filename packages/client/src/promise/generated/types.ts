@@ -2660,13 +2660,13 @@ export type ConfigEntry =
         experimental?: {
           portable_shell_scanner?: boolean
           codemode_vm?: boolean
+          mcp_events?: boolean
           all_flags?: boolean
           todo?: boolean
           media_blob?: boolean
           artifacts?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           console_watches?: boolean
-          mcp_events?: boolean
           recommended_api?: boolean
           full_codemode?: boolean
           machines?: boolean

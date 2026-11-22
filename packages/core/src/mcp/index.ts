@@ -31,7 +31,6 @@ import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
-import { Flag } from "../flag.js"
 import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
@@ -197,7 +196,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly uri: string
   }) => Effect.Effect<ResourceContent | undefined, Error>
-  /** Experimental: MCP Events of a connected server that offers them, while the `mcp_events` flag is on. */
+  /** Experimental: MCP Events of a connected server that offers them. */
   readonly events: (server: ServerName | string) => Effect.Effect<McpClient.Events | undefined, NotFoundError>
   /**
    * Experimental: follows an event type of a server from `position`, or from now. It reopens a broken stream and waits
@@ -227,7 +226,7 @@ export interface Interface extends State.Transformable<Editor> {
       /** Where to start; omitted or null starts from now. */
       readonly cursor?: string | null
     },
-  ) => Effect.Effect<Subscription, NotFoundError | EventsUnavailableError>
+  ) => Effect.Effect<Subscription, NotFoundError>
   /** Experimental: stops following a subscription. */
   readonly unsubscribe: (id: string) => Effect.Effect<void>
   /** Experimental: every subscription, with its status. */
@@ -364,7 +363,6 @@ export const layer = (options?: Options) =>
       const credentials = yield* Credential.Service
       const fetch = yield* FetchHttpClient.Fetch
       const pool = yield* McpPool.Service
-      const mcpEvents = yield* Flag.enabled("mcp_events")
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
@@ -394,10 +392,6 @@ export const layer = (options?: Options) =>
 
       const follow: Interface["follow"] = (server, input) => {
         const name = ServerName.make(server)
-        if (!mcpEvents)
-          return Stream.fail(
-            new EventsUnavailableError({ server: name, message: "MCP events need the mcp_events flag." }),
-          )
         return Stream.unwrap(
           requireServer(name).pipe(
             Effect.as(
@@ -673,7 +667,6 @@ export const layer = (options?: Options) =>
             config,
             directory: location.directory,
             clientInfo: options?.clientInfo,
-            mcpEvents,
             authProvider: Effect.suspend(() =>
               selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(name, entry, credential))),
             ),
@@ -1157,8 +1150,6 @@ export const layer = (options?: Options) =>
         follow,
         subscribe: Effect.fn("MCP.subscribe")(function* (server, input) {
           const name = ServerName.make(server)
-          if (!mcpEvents)
-            return yield* new EventsUnavailableError({ server: name, message: "MCP events need the mcp_events flag." })
           yield* requireServer(name)
           const id = "mcpsub_" + Hash.sha256(canonicalJson([name, input.name, input.arguments ?? {}])).slice(0, 24)
           const existing = followed.get(id)
@@ -1216,7 +1207,6 @@ export function configured(options?: Options) {
     deps: [
       Location.node,
       Environment.node,
-      Flag.node,
       Bus.node,
       Form.node,
       Integration.node,
