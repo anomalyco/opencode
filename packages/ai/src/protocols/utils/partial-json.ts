@@ -52,9 +52,9 @@ export function parseJSON(jsonString: string, allowPartial = Allow.ALL): unknown
   }
 
   try {
-    return _parseJSON(input, allowPartial)
+    return _parseJSON(repaired, allowPartial)
   } catch (error) {
-    if (repaired !== input) return _parseJSON(repaired, allowPartial)
+    if (repaired !== input) return _parseJSON(input, allowPartial)
     throw error
   }
 }
@@ -79,12 +79,26 @@ const repairJSON = (input: string) => {
 
     if (character === "\\") {
       const next = input[index + 1]
-      if (next === "u" && /^[0-9a-fA-F]{4}$/.test(input.slice(index + 2, index + 6))) {
-        repaired += input.slice(index, index + 6)
-        index += 5
+      if (next === undefined) {
+        repaired += "\\"
         continue
       }
-      if (next !== undefined && '"\\/bfnrtu'.includes(next)) {
+      if (next === "u") {
+        const hex = input.slice(index + 2, index + 6)
+        if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+          repaired += input.slice(index, index + 6)
+          index += 5
+          continue
+        }
+        const rest = input.slice(index + 2)
+        if (rest.length < 4 && /^[0-9a-fA-F]*$/.test(rest)) {
+          repaired += input.slice(index)
+          break
+        }
+        repaired += "\\\\"
+        continue
+      }
+      if ('"\\/bfnrt'.includes(next)) {
         repaired += `\\${next}`
         index++
         continue
@@ -185,7 +199,10 @@ const _parseJSON = (jsonString: string, allow: number) => {
       try {
         return decodeJsonString(`${jsonString.substring(start, index - Number(escape))}"`)
       } catch {
-        return decodeJsonString(`${jsonString.substring(start, jsonString.lastIndexOf("\\"))}"`)
+        const lastBackslash = jsonString.lastIndexOf("\\")
+        if (lastBackslash > start) {
+          return decodeJsonString(`${jsonString.substring(start, lastBackslash)}"`)
+        }
       }
     }
     return markPartialJSON("Unterminated string literal")
