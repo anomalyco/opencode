@@ -129,6 +129,42 @@ fn scroll() {
     probe.finish("scroll", steps);
 }
 
+/// A reader going through a whole long session: Home, Page Down until the view stops moving, then Page Up back to the
+/// head. Memory should stay bounded by the rows near the view, not grow with every page passed. Most of what a mounted
+/// row holds is OpenTUI's native memory, which the counting allocator does not see, so the line also carries the
+/// process's malloc peak and what malloc still holds at the end, over the start (`malloc_peak`, `malloc_kept`).
+#[test]
+#[ignore = "performance scenario; run with `bun run perf`"]
+fn scroll_all() {
+    let h = mount(Server::new().long(), support::session_route(LONG), 120, 40);
+    wait_tail(&h, LONG, TURNS);
+    settle(&h.app);
+    let malloc = Malloc::start();
+    let probe = Probe::start();
+    first(&h);
+    malloc.sample();
+    let mut steps = 0;
+    for command in ["session.page.down", "session.page.up"] {
+        let mut screen = h.app.text();
+        let mut still = 0;
+        while still < 2 {
+            assert!(steps < 20_000, "{command} never reached an end:\n{screen}");
+            h.dispatch(command);
+            settle(&h.app);
+            malloc.sample();
+            steps += 1;
+            let now = h.app.text();
+            still = if now == screen { still + 1 } else { 0 };
+            screen = now;
+        }
+    }
+    settle(&h.app);
+    let malloc = malloc.finish();
+    probe.finish_with("scroll_all", steps, malloc);
+    let screen = h.app.text();
+    assert!(screen.contains("Question 1 "), "the head never showed again:\n{screen}");
+}
+
 #[test]
 #[ignore = "performance scenario; run with `bun run perf`"]
 fn resize() {
@@ -352,6 +388,49 @@ fn first(h: &support::Harness) {
     });
     assert!(loaded, "the history never loaded:\n{}", h.app.text());
     settle(&h.app);
+}
+
+/// The bytes malloc has handed out and not taken back, for every thread and for OpenTUI's native side as well as
+/// Rust, sampled where a scenario asks: its peak and its change over the start.
+struct Malloc {
+    start: Option<u64>,
+    peak: std::cell::Cell<u64>,
+}
+
+impl Malloc {
+    fn start() -> Self {
+        let start = malloc_in_use();
+        Self { start, peak: std::cell::Cell::new(start.unwrap_or(0)) }
+    }
+
+    fn sample(&self) {
+        if let Some(now) = malloc_in_use() {
+            self.peak.set(self.peak.get().max(now));
+        }
+    }
+
+    /// The fields for the `PERF` line; null where the allocator cannot tell.
+    fn finish(self) -> Value {
+        self.sample();
+        let end = malloc_in_use();
+        json!({
+            "malloc_peak": self.start.map(|start| self.peak.get() - start),
+            "malloc_kept": self.start.zip(end).map(|(start, end)| end as i64 - start as i64),
+        })
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[allow(unsafe_code)]
+fn malloc_in_use() -> Option<u64> {
+    // SAFETY: `mallinfo2` only reads the allocator's counters.
+    let info = unsafe { libc::mallinfo2() };
+    Some((info.uordblks + info.hblkhd) as u64)
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+fn malloc_in_use() -> Option<u64> {
+    None
 }
 
 /// A fake server whose answers are serialized up front, so serving one costs a copy.
