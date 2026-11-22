@@ -105,7 +105,7 @@ const source = (entry: Info & { readonly removed: boolean }) =>
       initial: (value) => renderBlock(entry.key, value),
       changed: (_previous, value) =>
         [
-          `The context under "${entry.key}" changed and supersedes the previous value:`,
+          `Context "${entry.key}" has changed. Previous value replaced with:`,
           renderBlock(entry.key, value),
         ].join("\n"),
       removed: () => `The context under "${entry.key}" no longer applies. Disregard it.`,

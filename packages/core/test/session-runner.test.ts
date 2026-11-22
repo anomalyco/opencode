@@ -2335,7 +2335,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[1]?.messages.at(1)?.content).toEqual([
       Expected.text(
         [
-          'The context under "deploy-target" changed and supersedes the previous value:',
+          'Context "deploy-target" has changed. Previous value replaced with:',
           '<context key="deploy-target">',
           "{",
           '  "region": "us-east-1"',
@@ -2368,7 +2368,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[1]?.messages.at(1)?.content).toEqual([
       Expected.text(
         [
-          'The context under "nullable" changed and supersedes the previous value:',
+          'Context "nullable" has changed. Previous value replaced with:',
           '<context key="nullable">',
           "null",
           "</context>",
