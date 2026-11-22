@@ -665,6 +665,8 @@ nothing.
 
 ## Client behaviour
 
+- Step outputs and live posts reach iOS and Android in the binary format of `widgets-binary.md`, written by
+  psychoscript-mobile from the VM's value; Rune reads the VM's value directly; the TUI and the web host keep JSON.
 - Render each `widget` tool call inline in the timeline at its position, from its tool input plus its state.
 - `failure` (any status `open`): show the error on the widget. With `failure.sent: false`, add an **"Ask agent to fix
   it"** action that calls `report` with that error and `ask: true`; with `sent: true`, say the agent was told.
