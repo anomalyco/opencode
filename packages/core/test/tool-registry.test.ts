@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { ToolDefinition } from "@opencode/ai/effect"
 import { Agent } from "@opencode/core/agent"
 import { Permission } from "@opencode/core/permission"
 import { Flag } from "@opencode/core/flag"
@@ -625,20 +626,40 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("gives the program expression for a Code Mode tool's path or registry ID", () =>
+  it.effect("gives the execute call for a Code Mode tool's path or registry ID", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { echo: make(), "kebab-echo": make() }, { namespace: "acme.tools" })
       yield* transform(service, { direct: make() }, { codemode: false })
       const snapshot = yield* service.snapshot()
-      expect(snapshot.codeModeExpression?.("acme.tools.echo")).toBe("tools.acme.tools.echo")
-      expect(snapshot.codeModeExpression?.("acme_tools_echo")).toBe("tools.acme.tools.echo")
-      expect(snapshot.codeModeExpression?.("acme.tools.kebab-echo")).toBe('tools.acme.tools["kebab-echo"]')
+      const program = (name: string, definitions?: ReadonlyMap<string, ToolDefinition>) => {
+        const call = snapshot.codeModeCall?.(name, definitions)
+        return call && { name: call.name, code: call.input({ text: "hi" }).code }
+      }
+      expect(program("acme.tools.echo")).toEqual({
+        name: "execute",
+        code: 'return await tools.acme.tools.echo({"text":"hi"})',
+      })
+      expect(program("acme_tools_echo")?.code).toBe('return await tools.acme.tools.echo({"text":"hi"})')
+      expect(program("acme.tools.kebab-echo")?.code).toBe('return await tools.acme.tools["kebab-echo"]({"text":"hi"})')
       for (const name of ["direct", "execute", "missing", "tools.acme.tools.echo"])
-        expect(snapshot.codeModeExpression?.(name)).toBeUndefined()
-      // A tool this request doesn't offer has no expression.
+        expect(program(name)).toBeUndefined()
+      // A session context rename of execute is the call's name; without execute there is no call.
+      const definitions = (rename: string | undefined) =>
+        new Map(
+          snapshot.definitions.flatMap((definition) =>
+            definition.name !== "execute"
+              ? [[definition.name, definition] as const]
+              : rename
+                ? [[rename, definition] as const]
+                : [],
+          ),
+        )
+      expect(program("acme.tools.echo", definitions("run_code"))?.name).toBe("run_code")
+      expect(program("acme.tools.echo", definitions(undefined))).toBeUndefined()
+      // A tool this request doesn't offer has no call.
       const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
-      expect(denied.codeModeExpression?.("acme.tools.echo")).toBeUndefined()
+      expect(denied.codeModeCall?.("acme.tools.echo")).toBeUndefined()
     }),
   )
 

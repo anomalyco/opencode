@@ -76,12 +76,8 @@ export interface Prepared<Event = SessionRequest> {
   readonly executeTool: (
     input: Parameters<Tool.Snapshot["execute"]>[0],
   ) => Effect.Effect<Tool.NormalizedResult, ExecuteError>
-  /**
-   * When `name` isn't a tool this request advertised but is one of its Code Mode tools, the name `execute` is advertised
-   * under and the expression a program calls the tool by, so the call can be recorded and run as the program it should
-   * have been.
-   */
-  readonly codeModeCall?: (name: string) => { readonly name: string; readonly expression: string } | undefined
+  /** The `execute` call a top-level call to one of this request's Code Mode tools should be recorded and run as. */
+  readonly codeModeCall?: (name: string) => Tool.CodeModeCall | undefined
 }
 
 export interface Input {
@@ -446,13 +442,7 @@ export const layer = Layer.effect(
         // catch them and turn a "no" into model-visible output. Recover them here as failures,
         // including declines a tool rethrew and its wrapper attached to a Tool.Error, as Promise
         // plugin tools do.
-        codeModeCall: (name: string) => {
-          // A session context hook may advertise execute under another name.
-          const execute = Array.from(hooked).find(([, tool]) => tool.name === "execute")?.[0]
-          if (hooked.has(name) || execute === undefined) return
-          const expression = input.tools?.codeModeExpression?.(name)
-          return expression === undefined ? undefined : { name: execute, expression }
-        },
+        codeModeCall: (name: string) => input.tools?.codeModeCall?.(name, hooked),
         executeTool: (call: Parameters<Prepared["executeTool"]>[0]) =>
           tools.execute({ ...call, definitions: hooked }).pipe(
             Effect.catchCauseFilter(

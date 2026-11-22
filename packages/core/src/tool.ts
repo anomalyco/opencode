@@ -115,10 +115,16 @@ export interface Snapshot {
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
   /**
-   * The expression a Code Mode program calls a tool by (`tools.opencode.session.search`), when `name` is the path or
-   * registry ID of one of this snapshot's Code Mode tools.
+   * When `name` isn't a tool the request advertised but is the path or registry ID of one of its Code Mode tools, the
+   * `execute` call that runs it: the name `execute` is advertised under and the program for a given input.
+   * `definitions` are the request's surviving definitions, as for `execute`.
    */
-  readonly codeModeExpression?: (name: string) => string | undefined
+  readonly codeModeCall?: (name: string, definitions?: ReadonlyMap<string, ToolDefinition>) => CodeModeCall | undefined
+}
+
+export interface CodeModeCall {
+  readonly name: string
+  readonly input: (input: unknown) => { readonly code: string }
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Tool") {}
@@ -370,16 +376,25 @@ const layer = Layer.effect(
                 }
                 return { tool, inventory, catalog: entry.value, definition: entry.definition }
               })()
+          const codeModeCall = (
+            name: string,
+            definitions?: ReadonlyMap<string, ToolDefinition>,
+          ): CodeModeCall | undefined => {
+            if (!codemode || name === "execute" || direct.has(name) || definitions?.has(name)) return
+            // A session context hook may advertise execute under another name, or drop it.
+            const execute = definitions
+              ? Array.from(definitions).find(([, definition]) => definition.name === "execute")?.[0]
+              : "execute"
+            const found = execute === undefined ? undefined : CodeModeTool.find(codemode.inventory, name)
+            if (execute === undefined || !found) return
+            const expression = toolExpression(CodeModeTool.qualifiedName(found.registration))
+            return {
+              name: execute,
+              input: (input) => ({ code: `return await ${expression}(${JSON.stringify(input ?? {})})` }),
+            }
+          }
           return {
-            ...(codemode === undefined
-              ? {}
-              : {
-                  codeModeCatalog: codemode.catalog,
-                  codeModeExpression: (name: string) => {
-                    const found = CodeModeTool.find(codemode.inventory, name)
-                    return found && toolExpression(CodeModeTool.qualifiedName(found.registration))
-                  },
-                }),
+            ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog, codeModeCall }),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
@@ -405,19 +420,9 @@ const layer = Layer.effect(
               const name = requested?.name ?? event.tool
               // A plugin may rename a call to a tool this request only offers inside Code Mode, as the input repair plugin
               // does when `shell` lives there. Run it as the program that calls that tool.
-              const program =
-                codemode &&
-                name !== "execute" &&
-                !direct.has(name) &&
-                (!input.definitions || Array.from(input.definitions.values()).some((item) => item.name === "execute"))
-                  ? CodeModeTool.find(codemode.inventory, name)
-                  : undefined
+              const program = codeModeCall(name, input.definitions)
               if ((name === "execute" || program) && codemode) {
-                const programInput = program
-                  ? {
-                      code: `return await ${toolExpression(CodeModeTool.qualifiedName(program.registration))}(${JSON.stringify(event.input ?? {})})`,
-                    }
-                  : event.input
+                const programInput = program ? program.input(event.input) : event.input
                 const run = (ctx: Tool.Context) => executeTool(codemode.tool, "execute", programInput, ctx)
                 const background = yield* CodeModeJob.Current
                 return yield* background

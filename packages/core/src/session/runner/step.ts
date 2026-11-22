@@ -133,7 +133,7 @@ export const make = Effect.gen(function* () {
     // A local execution starts only after its Tool.Called publication completes.
     // Read to the end, not just the finish event, so the next request can reuse this response.
     // The span covers only the provider stream, so model time separates from tools, which run in this consumer.
-    const programs = new Map<string, { readonly name: string; readonly expression: string }>()
+    const programs = new Map<string, Tool.CodeModeCall>()
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
       Stream.withSpan("LLM.stream", { attributes: modelAttributes }),
       Stream.runForEach((streamed) =>
@@ -352,7 +352,7 @@ const isInterruptedStream = (failure: AIError) => {
  */
 const asProgram = (
   event: LLMEvent,
-  programs: Map<string, { readonly name: string; readonly expression: string }>,
+  programs: Map<string, Tool.CodeModeCall>,
   programFor: SessionModelRequest.Prepared["codeModeCall"],
 ): LLMEvent | undefined => {
   if (programFor === undefined) return event
@@ -377,7 +377,7 @@ const asProgram = (
     ...event,
     name: program.name,
     namespace: undefined,
-    input: { code: `return await ${program.expression}(${JSON.stringify(event.input ?? {})})` },
+    input: program.input(event.input),
   }
 }
 
