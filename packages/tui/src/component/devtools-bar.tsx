@@ -13,6 +13,7 @@ import { useRoute } from "../context/route"
 import { Keymap } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
 import { DevTools } from "../devtools"
+import { icon } from "../ui/design"
 import { useDialog } from "../ui/dialog"
 import { DialogExperiments } from "./dialog-experiments"
 import { usePlugin } from "../plugin/context"
@@ -579,15 +580,15 @@ export function runtimeStatus(samples: readonly Readonly<{ delay: number; time: 
 }
 
 export function statusIcon(status: RuntimeStatus) {
-  if (status === "high") return "●"
+  if (status === "high") return icon("dot")
   if (status === "medium") return "⦿"
-  return "○"
+  return icon("circle")
 }
 
 export function connectionIndicator(status: "connected" | "connecting" | "reconnecting", attempt: number) {
-  if (status === "connected") return { state: "connected" as const, icon: "✓" }
+  if (status === "connected") return { state: "connected" as const, icon: icon("check") }
   if (status === "reconnecting" && attempt >= 3) return { state: "disconnected" as const, icon: "×" }
-  return { state: "reconnecting" as const, icon: "↻" }
+  return { state: "reconnecting" as const, icon: icon("refresh") }
 }
 
 export function brailleGraph(values: readonly number[], width = graphWidth) {

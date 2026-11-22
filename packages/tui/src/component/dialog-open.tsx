@@ -16,6 +16,7 @@ import { Locale } from "../util/locale"
 import { abbreviateHome } from "../runtime"
 import { useTuiPaths } from "../context/runtime"
 import { truncateFilePath } from "../ui/file-path"
+import { icon } from "../ui/design"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { stringWidth } from "../util/string-width"
@@ -230,7 +231,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           theme,
           state,
           running,
-          tabs.has(session.id) ? () => <text fg={theme.hue.accent[200]}>▪</text> : undefined,
+          tabs.has(session.id) ? () => <text fg={theme.hue.accent[200]}>{icon("square")}</text> : undefined,
         ),
       }
     })
@@ -255,7 +256,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           (git ? 2 : 0)
         return {
           title,
-          footer: `${truncateFilePath(footer, width)}${git ? " →" : ""}`,
+          footer: `${truncateFilePath(footer, width)}${git ? " " + icon("arrowRight") : ""}`,
           searchText: `${footer} ${projectName(item.project) ?? ""}`,
           value: {
             type: "project",
@@ -266,7 +267,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           gutter:
             item.directory === current.directory ||
             item.directory === location.current?.project.canonical
-              ? () => <text fg={theme.text.formfield.selected}>●</text>
+              ? () => <text fg={theme.text.formfield.selected}>{icon("dot")}</text>
               : undefined,
         }
       })
@@ -317,7 +318,9 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           footer: footer + " ".repeat(Math.max(0, width - stringWidth(footer))),
           value: { type: "project", directory } as OpenTarget,
           gutter:
-            directory === current.directory ? () => <text fg={theme.text.formfield.selected}>●</text> : undefined,
+            directory === current.directory
+              ? () => <text fg={theme.text.formfield.selected}>{icon("dot")}</text>
+              : undefined,
         }
       })
   })

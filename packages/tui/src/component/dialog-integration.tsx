@@ -22,6 +22,7 @@ import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
 import { useLocation } from "../context/location"
 import { useTheme } from "../context/theme"
+import { icon, keys } from "../ui/design"
 import {
   DIALOG_INSET,
   DIALOG_LIST_INSET,
@@ -139,13 +140,13 @@ export function DialogIntegration(
         title: integration.name,
         value: integration.id,
         description: methods.length === 0 ? "Environment only" : undefined,
-        footer: status ? "Sign in required →" : connectionSummary(integration) || undefined,
+        footer: status ? `Sign in required ${icon("arrowRight")}` : connectionSummary(integration) || undefined,
         footerColor: status ? theme.text.feedback.warning.base : undefined,
         category,
         disabled: methods.length === 0 && credentials.length === 0,
         gutter:
           integration.connections.length > 0 && !status
-            ? () => <text fg={theme.text.feedback.success.base}>✓</text>
+            ? () => <text fg={theme.text.feedback.success.base}>{icon("check")}</text>
             : undefined,
         onSelect: () => {
           if (credentials.length) return manageConnections(integration, methods, location, dialog, props.onConnected)
@@ -222,7 +223,7 @@ function manageConnections(
                   ? `Press ${shortcuts.get("dialog.integration.delete")} again to confirm`
                   : connection.label,
                 value: connection.id,
-                footer: connection.status ? "Sign in required →" : undefined,
+                footer: connection.status ? `Sign in required ${icon("arrowRight")}` : undefined,
                 footerColor: connection.status ? theme.text.feedback.warning.base : undefined,
                 category: "Connected accounts",
                 bg: confirming ? theme.background.action.destructive.focused : undefined,
@@ -1060,7 +1061,7 @@ function StringChoiceField(props: {
                 { title: "back", key: "esc", onTrigger: back },
               ]
             : [
-                { title: "select", key: "↑/↓" },
+                { title: "select", key: `${keys.up}/${keys.down}` },
                 { title: "confirm", key: "enter", onTrigger: () => select(store.selected) },
                 { title: "cancel", key: "esc", onTrigger: () => dialog.clear() },
               ],

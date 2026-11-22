@@ -54,21 +54,22 @@ import "./spinner-renderable"
 import { SPINNER_FRAMES } from "./spinner-frames"
 import { SessionTabsRailControls, SessionTabHalfRow } from "./session-tabs-rail"
 import "./title-shimmer"
+import { icon, motion, type IconName } from "../ui/design"
 
 export const TAB_SPINNERS = {
   dots: { frames: SPINNER_FRAMES, interval: 80 },
-  arcs: { frames: ["◜", "◝", "◞", "◟"], interval: 120 },
-  quadrants: { frames: ["◴", "◷", "◶", "◵"], interval: 120 },
+  arcs: { frames: motion.arcs, interval: 120 },
+  quadrants: { frames: motion.quadrants, interval: 120 },
   line: { frames: ["|", "/", "-", "\\"], interval: 120 },
 }
 export type TabSpinner = keyof typeof TAB_SPINNERS
 
 export const TAB_UNREAD_MARKERS = {
-  "small-dot": "•",
-  dot: "●",
-  square: "▪",
-  "large-square": "■",
-}
+  "small-dot": "dotSmall",
+  dot: "dot",
+  square: "square",
+  "large-square": "squareLarge",
+} as const satisfies Record<string, IconName>
 export type TabUnreadMarker = keyof typeof TAB_UNREAD_MARKERS
 
 // A long title fades out over its last cells instead of cutting hard.
@@ -176,7 +177,7 @@ function TabIndicator(props: {
     if (props.status.attention === "question") return "?"
     if (runs()) return spinner().frames[0]
     if (props.label === "+") return "+"
-    if (props.status.unread || fading()) return TAB_UNREAD_MARKERS[props.unreadMarker ?? "small-dot"]
+    if (props.status.unread || fading()) return icon(TAB_UNREAD_MARKERS[props.unreadMarker ?? "small-dot"])
     return props.idleLabel ?? ""
   }
   return (
@@ -1093,7 +1094,7 @@ function VerticalSessionTabs(props: {
                             tabs.close(tab.sessionID)
                           }}
                         >
-                          {hovered() === tab.sessionID ? "✕" : ""}
+                          {hovered() === tab.sessionID ? icon("close") : ""}
                         </text>
                       </box>
                     </box>
@@ -1739,7 +1740,7 @@ function HorizontalSessionTabs(props: {
                     tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
                   }}
                 >
-                  {hovered() === tab.sessionID ? "✕" : ""}
+                  {hovered() === tab.sessionID ? icon("close") : ""}
                 </text>
               </box>
             </box>
@@ -1748,7 +1749,7 @@ function HorizontalSessionTabs(props: {
       </For>
       <Show when={layout().after > 0}>
         <text width={sessionTabOverflowWidth(layout().after)} fg={theme.text.muted} selectable={false}>
-          {" " + layout().after}›
+          {" " + layout().after + icon("chevronSmall")}
         </text>
       </Show>
       <Show when={showPlus()}>

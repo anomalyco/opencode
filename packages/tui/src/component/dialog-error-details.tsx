@@ -8,6 +8,7 @@ import { useLocation } from "../context/location"
 import { useRoute } from "../context/route"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTheme } from "../context/theme"
+import { icon, keys } from "../ui/design"
 import { emptyPrompt } from "../prompt/history"
 import { DIALOG_INSET, DialogFooter, DialogHeader, DialogLayout, dialogWidth, useDialog } from "../ui/dialog"
 import { FilePath } from "../ui/file-path"
@@ -64,7 +65,7 @@ export function DialogErrorDetails(props: {
   const actions = () => [
     { title: "investigate", key: "i", onTrigger: investigate },
     copied()
-      ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: copy }
+      ? { title: `${icon("check")} copied`, color: theme.text.feedback.success.base, onTrigger: copy }
       : { title: "copy details", key: "c", onTrigger: copy },
   ]
 
@@ -109,7 +110,9 @@ export function DialogErrorDetails(props: {
         </box>
       }
       footer={{ actions: { primary: actions() } }}
-      legacyFooter={<DialogFooter actions={{ secondary: actions(), primary: [{ title: "scroll", key: "↑/↓" }] }} />}
+      legacyFooter={
+        <DialogFooter actions={{ secondary: actions(), primary: [{ title: "scroll", key: `${keys.up}/${keys.down}` }] }} />
+      }
     >
       <scrollbox
         ref={(element: ScrollBoxRenderable) => (scroll = element)}

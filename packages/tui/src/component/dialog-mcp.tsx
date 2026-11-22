@@ -11,6 +11,7 @@ import { useToast } from "../ui/toast"
 import { DialogErrorDetails } from "./dialog-error-details"
 import { DialogIntegration } from "./dialog-integration"
 import { useLocation } from "../context/location"
+import { icon } from "../ui/design"
 
 function statusError(status: McpServer["status"]) {
   if (status.status === "failed" || status.status === "needs_auth") return status.error
@@ -22,15 +23,15 @@ function Status(props: { status: McpServer["status"]; loading: boolean }) {
     return <>Connecting …</>
   }
   if (props.status.status === "connected") {
-    return <span style={{ attributes: TextAttributes.BOLD }}>Connected ✓</span>
+    return <span style={{ attributes: TextAttributes.BOLD }}>Connected {icon("check")}</span>
   }
   if (props.status.status === "failed") {
     return <>Failed !</>
   }
   if (props.status.status === "needs_auth") {
-    return <>Sign in required →</>
+    return <>Sign in required {icon("arrowRight")}</>
   }
-  return <>Disabled ○</>
+  return <>Disabled {icon("circle")}</>
 }
 
 export function DialogMcp(props: { initialServer?: string; details?: boolean } = {}) {

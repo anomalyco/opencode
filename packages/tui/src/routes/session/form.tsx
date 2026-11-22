@@ -11,6 +11,7 @@ import {
 } from "@opentui/core"
 import { openUrl } from "@opencode/util/open"
 import { useTheme } from "../../context/theme"
+import { icon, keys } from "../../ui/design"
 import type { FormAnswer, FormField, FormValue } from "@opencode/client"
 import { useData, type FormWithLocation } from "../../context/data"
 import { useClipboard } from "../../context/clipboard"
@@ -870,7 +871,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 fg={store.answers[external().key] === true ? theme.text.feedback.success.base : theme.text.muted}
               >
                 {store.answers[external().key] === true
-                  ? "✓ Acknowledged"
+                  ? `${icon("check")} Acknowledged`
                   : store.externalReady[external().key]
                     ? "Complete the external action, then press enter to confirm."
                     : "Open or copy the URL, complete the external action, then confirm."}
@@ -954,7 +955,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                                       : theme.text.muted
                                 }
                               >
-                                [{picked() ? "✓" : " "}]
+                                [{picked() ? icon("check") : " "}]
                               </text>
                             </Show>
                             <text fg={active() ? theme.text.formfield.focused : theme.text.formfield.base}>
@@ -962,7 +963,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                             </text>
                           </box>
                           <Show when={!multi()}>
-                            <text fg={theme.text.formfield.selected}>{picked() ? " ✓" : ""}</text>
+                            <text fg={theme.text.formfield.selected}>{picked() ? " " + icon("check") : ""}</text>
                           </Show>
                         </box>
                         <Show when={row.description}>
@@ -1009,7 +1010,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                                   : theme.text.muted
                             }
                           >
-                            [{customChecked() ? "✓" : " "}]
+                            [{customChecked() ? icon("check") : " "}]
                           </text>
                         </Show>
                         <Show
@@ -1020,7 +1021,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                                 {input() || "Type your own answer"}
                               </text>
                               <Show when={!multi() && customPicked()}>
-                                <text fg={theme.text.formfield.selected}>✓</text>
+                                <text fg={theme.text.formfield.selected}>{icon("check")}</text>
                               </Show>
                             </>
                           }
@@ -1136,17 +1137,17 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         <box flexDirection="row" gap={2}>
           <Show when={!single()}>
             <text fg={theme.text.base}>
-              {"⇆"} <span style={{ fg: theme.text.muted }}>tab</span>
+              {keys.tab} <span style={{ fg: theme.text.muted }}>tab</span>
             </text>
           </Show>
           <Show when={!confirm() && !textual() && !externalField() && !store.editing}>
             <text fg={theme.text.base}>
-              {"↑↓"} <span style={{ fg: theme.text.muted }}>select</span>
+              {keys.up}{keys.down} <span style={{ fg: theme.text.muted }}>select</span>
             </text>
           </Show>
           <Show when={confirm() && reviewContentHeight() > reviewMaxHeight()}>
             <text fg={theme.text.base}>
-              {"↑↓"} <span style={{ fg: theme.text.muted }}>scroll</span>
+              {keys.up}{keys.down} <span style={{ fg: theme.text.muted }}>scroll</span>
             </text>
           </Show>
           <text

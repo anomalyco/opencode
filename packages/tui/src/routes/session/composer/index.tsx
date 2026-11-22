@@ -1,6 +1,7 @@
 import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../../../context/theme"
+import { keys } from "../../../ui/design"
 import { SplitBorder } from "../../../ui/border"
 import { Keymap } from "../../../context/keymap"
 import { SubagentsTab } from "./subagents-tab"
@@ -131,7 +132,9 @@ export function Composer(props: ComposerProps) {
                   <span style={{ fg: theme.text.base }}>
                     <b>tabs</b>{" "}
                   </span>
-                  <span style={{ fg: theme.text.muted }}>←/→</span>
+                  <span style={{ fg: theme.text.muted }}>
+                    {keys.left}/{keys.right}
+                  </span>
                 </text>
               </Show>
             </box>

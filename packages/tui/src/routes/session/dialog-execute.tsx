@@ -7,6 +7,7 @@ import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
+import { icon, keys } from "../../ui/design"
 import {
   DIALOG_INSET,
   DialogBleed,
@@ -99,10 +100,10 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
 
   const copyActions = () => [
     copied() === "code"
-      ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: () => copy("code") }
+      ? { title: `${icon("check")} copied`, color: theme.text.feedback.success.base, onTrigger: () => copy("code") }
       : { title: "copy code", key: "c", onTrigger: () => copy("code") },
     copied() === "output"
-      ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: () => copy("output") }
+      ? { title: `${icon("check")} copied`, color: theme.text.feedback.success.base, onTrigger: () => copy("output") }
       : { title: "copy output", key: "o", onTrigger: () => copy("output") },
   ]
 
@@ -126,7 +127,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
         <DialogFooter
           actions={{
             secondary: [
-              { title: "scroll", key: "↑/↓" },
+              { title: "scroll", key: `${keys.up}/${keys.down}` },
               ...copyActions(),
               { title: "back", key: "esc", onTrigger: () => dialog.clear() },
             ],

@@ -3,6 +3,7 @@ import { RGBA, type Renderable } from "@opentui/core"
 import { useRenderer, type JSX } from "@opentui/solid"
 import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client"
 import { useTheme } from "../../context/theme"
+import { icon } from "../../ui/design"
 import { reasoningSummary } from "../../context/thinking"
 import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
@@ -141,7 +142,7 @@ function GroupContent(props: GroupProps) {
           <Show when={grouped()} fallback={children("normal")}>
             <Show when={tools().length > 0}>
               <InlineToolRow
-                icon={completed() ? "→" : "✱"}
+                icon={completed() ? icon("arrowRight") : icon("sparkle")}
                 color={hover() ? theme.text.base : theme.text.muted}
                 complete={completed()}
                 pending={label()}
@@ -246,7 +247,7 @@ function InstructionsGroup(props: GroupProps) {
   return (
     <GroupAnchor groupID={disclosure.id()} active={files() > 0}>
       <InlineToolRow
-        icon="◈"
+        icon={icon("globe")}
         color={hover() ? theme.text.base : theme.text.muted}
         complete={true}
         pending=""

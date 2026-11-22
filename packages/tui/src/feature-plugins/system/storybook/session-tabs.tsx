@@ -12,6 +12,7 @@ import {
   type TabUnreadMarker,
 } from "../../../component/session-tabs"
 import { closeSessionTab, cycleSessionTab, moveSessionTab } from "../../../context/session-tabs-model"
+import { icon } from "../../../ui/design"
 import { StoryFooter } from "./footer"
 import { DialogPrompt } from "../../../ui/dialog-prompt"
 import { useDialog } from "../../../ui/dialog"
@@ -532,7 +533,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           vertical() ? `${railCompact() ? "compact rail" : "expanded rail"} · ${resize.size()} cols` : "top strip",
           spinner(),
           indicators(),
-          `${TAB_UNREAD_MARKERS[marker()]} ${marker()}`,
+          `${icon(TAB_UNREAD_MARKERS[marker()])} ${marker()}`,
           animations() ? "animated" : "still",
         ]}
         status={stateSummary()}

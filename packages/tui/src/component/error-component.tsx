@@ -6,6 +6,7 @@ import { useClipboard } from "../context/clipboard"
 import { useExit } from "../context/exit"
 import { useTuiApp } from "../context/runtime"
 import { describeOS, describeTerminal } from "../util/system"
+import { icon, keys } from "../ui/design"
 
 export function ErrorComponent(props: { error: Error; reset: () => void; mode?: "dark" | "light" }) {
   const term = useTerminalDimensions()
@@ -55,7 +56,8 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   const actions = [
     {
       key: "c",
-      label: () => ({ idle: "Copy report", copied: "✓ Copied", failed: "Copy failed" })[copyState()],
+      label: () =>
+        ({ idle: "Copy report", copied: `${icon("check")} Copied`, failed: "Copy failed" })[copyState()],
       copy: true,
       onUse: copyReport,
     },
@@ -186,7 +188,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           borderColor={colors.borderSubtle}
           title=" Stack trace "
           titleColor={colors.muted}
-          bottomTitle=" ↑↓ scroll "
+          bottomTitle={` ${keys.up}${keys.down} scroll `}
           bottomTitleAlignment="right"
           paddingLeft={1}
           paddingRight={1}

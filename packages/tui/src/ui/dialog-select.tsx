@@ -1,6 +1,7 @@
 import { CliRenderEvents, InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { Keymap, type KeymapCommand } from "../context/keymap"
 import { useTheme } from "../context/theme"
+import { icon } from "./design"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
 import { batch, createEffect, createMemo, For, Show, type JSX, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -857,7 +858,9 @@ export function DialogSelectChoice(props: { value: string; active: boolean; open
   const theme = useTheme().surface("dialog")
   const text = () => {
     if (!props.active) return `  ${props.value}  `
-    return props.open ? `  ${props.value} ↵` : `‹ ${props.value} ›`
+    return props.open
+      ? `  ${props.value} ${icon("enter")}`
+      : `${icon("angleLeft")} ${props.value} ${icon("angleRight")}`
   }
   return <span style={{ fg: props.active ? theme.text.action.primary.focused : theme.text.muted }}>{text()}</span>
 }
@@ -923,7 +926,7 @@ function DialogSelectRow(props: {
       </Show>
       <Show when={props.current && !props.gutter}>
         <text flexShrink={0} fg={newDesigns() ? theme.text.formfield.selected : text()}>
-          {newDesigns() ? "▪" : "●"}
+          {icon(newDesigns() ? "square" : "dot")}
         </text>
       </Show>
       <Show when={props.gutter}>

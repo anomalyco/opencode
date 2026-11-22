@@ -4,6 +4,7 @@ import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { tint } from "../theme/color"
 import type { SessionTabsController } from "./session-tabs"
+import { icon } from "../ui/design"
 
 export function SessionTabsRailControls(props: {
   width: number
@@ -48,7 +49,7 @@ export function SessionTabsRailControls(props: {
         onMouseDragEnd={() => (pressed = false)}
       >
         <text width={1} height={1} fg={theme.text.action.secondary.base} selectable={false} wrapMode="none">
-          ⌕
+          {icon("search")}
         </text>
       </box>
       <text

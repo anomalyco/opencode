@@ -1,3 +1,4 @@
+import { icon } from "../ui/design"
 import { Locale } from "./locale"
 import { canonicalToolName, finiteNumber, webSearchProviderLabel } from "./tool-display"
 
@@ -34,7 +35,7 @@ export function permissionPresentation(
     const first = dict(Array.isArray(metadata.files) ? metadata.files[0] : undefined)
     const diff = text(first.patch) || text(first.diff) || text(metadata.diff) || undefined
     return {
-      icon: "→",
+      icon: icon("edit"),
       title: `Edit ${formatPath(file)}`,
       lines: [],
       diff,
@@ -47,7 +48,7 @@ export function permissionPresentation(
     const value = text(input.path) || resources[0] || ""
     const title = action === "read" ? "Read" : "List"
     return {
-      icon: "→",
+      icon: action === "read" ? icon("read") : icon("list"),
       title: `${title} ${formatPath(value)}`,
       lines: value ? [`Path: ${formatPath(value)}`] : [],
     }
@@ -57,7 +58,7 @@ export function permissionPresentation(
     const pattern = text(input.pattern) || resources[0] || ""
     const title = action === "glob" ? "Glob" : "Grep"
     return {
-      icon: "✱",
+      icon: action === "glob" ? icon("glob") : icon("grep"),
       title: `${title} "${pattern}"`,
       lines: pattern ? [`Pattern: ${pattern}`] : [],
     }
@@ -66,7 +67,7 @@ export function permissionPresentation(
   if (action === "shell") {
     const command = text(input.command)
     return {
-      icon: "#",
+      icon: icon("shell"),
       title: "Shell command",
       lines: command ? [`$ ${command}`] : resources.map((item) => `- ${item}`),
     }
@@ -76,16 +77,16 @@ export function permissionPresentation(
     const agent = text(input.agent) || "general"
     const description = text(input.description)
     return {
-      icon: "#",
+      icon: icon("subagent"),
       title: `${Locale.titlecase(agent)} Subagent`,
-      lines: description ? [`◉ ${description}`] : [],
+      lines: description ? [`${icon("dotSelected")} ${description}`] : [],
     }
   }
 
   if (action === "webfetch") {
     const url = text(input.url) || text(metadata.url)
     return {
-      icon: "%",
+      icon: icon("webfetch"),
       title: `WebFetch ${url}`,
       lines: url ? [`URL: ${url}`] : [],
     }
@@ -95,7 +96,7 @@ export function permissionPresentation(
     const query = text(input.query) || text(metadata.query)
     const title = webSearchProviderLabel(metadata.provider)
     return {
-      icon: "◈",
+      icon: icon("websearch"),
       title: query ? `${title} "${query}"` : title,
       lines: query ? [`Query: ${query}`] : [],
     }
@@ -108,7 +109,7 @@ export function permissionPresentation(
     const character = finiteNumber(input.character)
     const position = line !== undefined && character !== undefined ? `${line}:${character}` : undefined
     return {
-      icon: "→",
+      icon: icon("lsp"),
       title: `LSP ${operation}${file ? ` ${formatPath(file)}${position ? `:${position}` : ""}` : ""}`,
       lines: [
         ...(input.operation ? [`Operation: ${operation}`] : []),
@@ -122,7 +123,7 @@ export function permissionPresentation(
     const raw = text(metadata.parentDir) || text(metadata.filepath) || resources[0] || ""
     const directory = wildcardDirectory(raw)
     return {
-      icon: "←",
+      icon: icon("external"),
       title: `Access external directory ${formatPath(directory)}`,
       lines: resources.map((item) => `- ${item}`),
     }
@@ -130,14 +131,14 @@ export function permissionPresentation(
 
   if (action === "doom_loop") {
     return {
-      icon: "⟳",
+      icon: icon("doom"),
       title: "Continue after repeated failures",
       lines: ["This keeps the session running despite repeated failures."],
     }
   }
 
   return {
-    icon: "⚙",
+    icon: icon("tool"),
     title: `Call tool ${source.action}`,
     lines: [`Tool: ${source.action}`],
   }

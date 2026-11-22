@@ -2,6 +2,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
+import { icon, keys } from "../ui/design"
 import { DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { createMediaSource } from "./media-source"
 
@@ -44,8 +45,8 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
           primary:
             props.images.length > 1
               ? [
-                  { title: "previous", key: "←", onTrigger: () => move(-1) },
-                  { title: "next", key: "→", onTrigger: () => move(1) },
+                  { title: "previous", key: keys.left, onTrigger: () => move(-1) },
+                  { title: "next", key: keys.right, onTrigger: () => move(1) },
                 ]
               : [],
         },
@@ -60,13 +61,13 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
       legacyFooter={
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.text.muted} onMouseUp={() => move(-1)}>
-            {props.images.length > 1 ? "← previous" : ""}
+            {props.images.length > 1 ? `${icon("arrowLeft")} previous` : ""}
           </text>
           <text fg={media.failed() ? theme.text.feedback.error.base : theme.text.muted} wrapMode="none" truncate>
             {media.failed() ? "No preview" : (current().mention?.text ?? `Image ${index() + 1}`)}
           </text>
           <text fg={theme.text.muted} onMouseUp={() => move(1)}>
-            {props.images.length > 1 ? "next →" : ""}
+            {props.images.length > 1 ? `next ${icon("arrowRight")}` : ""}
           </text>
         </box>
       }

@@ -13,6 +13,7 @@ import { formatCommandBindings, formatKeySequence } from "@opentui/keymap/extras
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { KeymapProvider, useBindings, useKeymapSelector } from "@opentui/keymap/solid"
 import { useRenderer } from "@opentui/solid"
+import { keys } from "../ui/design"
 import {
   createComputed,
   createContext,
@@ -500,10 +501,10 @@ function formatOptions(config: KeymapConfig) {
       leader: leader ? (typeof leader === "string" ? leader : stringifyKeyStroke(leader)) : TuiKeybind.LeaderDefault,
     },
     keyNameAliases: {
-      up: "↑",
-      down: "↓",
-      left: "←",
-      right: "→",
+      up: keys.up,
+      down: keys.down,
+      left: keys.left,
+      right: keys.right,
       pageup: "pgup",
       pagedown: "pgdn",
       delete: "del",

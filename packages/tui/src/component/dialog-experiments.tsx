@@ -3,6 +3,7 @@ import { useConfig, useNewDesigns } from "../config"
 import { DIALOG_LIST_INSET } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useTheme } from "../context/theme"
+import { keys } from "../ui/design"
 import { useToast } from "../ui/toast"
 
 type Experiment = {
@@ -77,7 +78,9 @@ export function DialogExperiments() {
           <text fg={theme.text.muted}>No experiments available</text>
         </box>
       }
-      footerHints={experiments.length > 0 && !newDesigns() ? [{ title: "change", label: "←/→" }] : []}
+      footerHints={
+        experiments.length > 0 && !newDesigns() ? [{ title: "change", label: `${keys.left}/${keys.right}` }] : []
+      }
       bindings={
         experiments.length > 0
           ? [

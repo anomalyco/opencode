@@ -1,6 +1,7 @@
 import { Keymap } from "../context/keymap"
 import { useNewDesigns } from "../config"
 import { useTheme } from "../context/theme"
+import { icon } from "./design"
 import { DialogHeader, DialogLayout, type DialogContext } from "./dialog"
 import { DialogSelect, DialogSelectChoice } from "./dialog-select"
 import { createStore } from "solid-js/store"
@@ -243,7 +244,7 @@ function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
                   onMouseUp={() => selectFormat(format)}
                 >
                   <text fg={markColor(store.active === format, store.format === format)}>
-                    {store.format === format ? "◉" : "○"}
+                    {icon(store.format === format ? "dotSelected" : "circle")}
                   </text>
                   <text fg={labelColor(store.active === format)}>{format === "markdown" ? "Markdown" : "JSON"}</text>
                 </box>

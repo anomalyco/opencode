@@ -1,6 +1,7 @@
 import { createMemo, createSignal } from "solid-js"
 import { useConfig, useNewDesigns } from "../config"
 import { useThemes } from "../context/theme"
+import { keys } from "../ui/design"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { DialogSelect, DialogSelectChoice } from "../ui/dialog-select"
 import { useToast } from "../ui/toast"
@@ -473,7 +474,7 @@ export function DialogConfig(props: { current?: string }) {
         if (newDesigns() && open) return open(dialog)
         void change(1, option.value)
       }}
-      footerHints={newDesigns() ? [] : [{ title: "change", label: "←/→" }]}
+      footerHints={newDesigns() ? [] : [{ title: "change", label: `${keys.left}/${keys.right}` }]}
       bindings={[
         {
           bind: "left",

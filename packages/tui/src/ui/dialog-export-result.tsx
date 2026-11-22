@@ -3,6 +3,7 @@ import { useNewDesigns } from "../config"
 import { useClipboard } from "../context/clipboard"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
+import { icon } from "./design"
 import { DialogHeader, DialogLayout, useDialog, type DialogContext } from "./dialog"
 import { useToast } from "./toast"
 
@@ -51,7 +52,7 @@ export function DialogExportResult(props: { path: string; onClose?: () => void }
         actions: {
           primary: [
             copied()
-              ? { title: "copied", key: "✓", color: theme.text.feedback.success.base, onTrigger: copy }
+              ? { title: "copied", key: icon("check"), color: theme.text.feedback.success.base, onTrigger: copy }
               : { title: "copy path", key: "c", onTrigger: copy },
           ],
         },

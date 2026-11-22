@@ -27,6 +27,7 @@ import { createDebouncedSignal } from "../../util/signal"
 import { type DiffSource, useConfig } from "../../config"
 import { locationKey } from "../../context/data"
 import { useTheme, useThemes } from "../../context/theme"
+import { icon } from "../../ui/design"
 import { PatchDiff, type PatchDiffRef } from "../../component/patch-diff"
 import {
   allExpandedFileTreeDirectories,
@@ -1038,7 +1039,7 @@ export function DiffViewerContent(props: {
                               </box>
                               <Show when={reviewed()}>
                                 <text fg={theme.text.muted} flexShrink={0}>
-                                  ✓
+                                  {icon("check")}
                                 </text>
                               </Show>
                               <Show when={!image()} fallback={<text fg={theme.text.muted}>Image</text>}>

@@ -1,6 +1,7 @@
 import { createMemo, createSignal, For } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
+import { icon } from "../ui/design"
 import { DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { useRoute } from "../context/route"
 import { useLocal } from "../context/local"
@@ -54,7 +55,7 @@ export function DialogDebug() {
   }))
 
   const copyAction = () => ({
-    title: copied() ? "✓ copied" : "copy",
+    title: copied() ? `${icon("check")} copied` : "copy",
     key: newDesigns() ? "c" : "enter",
     color: copied() ? theme.text.feedback.success.base : undefined,
     onTrigger: copy,

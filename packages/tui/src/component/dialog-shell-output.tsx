@@ -9,6 +9,7 @@ import { useClient } from "../context/client"
 import { useClipboard } from "../context/clipboard"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
+import { icon, keys } from "../ui/design"
 import { DialogFooter, DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 
@@ -107,7 +108,7 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
 
   const copyAction = (kind: "command" | "output", key: string) =>
     copied() === kind
-      ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: () => copy(kind) }
+      ? { title: `${icon("check")} copied`, color: theme.text.feedback.success.base, onTrigger: () => copy(kind) }
       : { title: `copy ${kind}`, key, onTrigger: () => copy(kind) }
 
   Keymap.createLayer(() => ({
@@ -155,7 +156,7 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
         <DialogFooter
           actions={{
             secondary: [
-              { title: "scroll", key: "↑/↓" },
+              { title: "scroll", key: `${keys.up}/${keys.down}` },
               { title: "follow", key: "end" },
               { title: "back", key: "esc" },
             ],

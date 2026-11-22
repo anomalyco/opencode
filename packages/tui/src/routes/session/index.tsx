@@ -96,6 +96,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
 import { useConfig, useNewDesigns } from "../../config"
 import { useDesign } from "../../ui/design-context"
+import { icon } from "../../ui/design"
 import { MessageCard } from "../../ui/message-card"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
@@ -1599,7 +1600,7 @@ export function Session(props: {
                   <text
                     fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
                   >
-                    Jump to latest ↓
+                    Jump to latest {icon("arrowDown")}
                   </text>
                 </box>
               </Show>
@@ -2090,7 +2091,7 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
     return (
       <box paddingLeft={3}>
         <text>
-          <span style={{ fg: theme.text.muted }}>↳ Moved to </span>
+          <span style={{ fg: theme.text.muted }}>{icon("levelDown")} Moved to </span>
           <span style={{ fg: theme.text.feedback.info.base }}>{props.message.location.directory}</span>
         </text>
       </box>
@@ -2143,7 +2144,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     if (state() === "error") return "failed"
     return state() ?? "finished"
   }
-  const heading = () => `${state() === "completed" ? "↳" : "!"} ${actor()} ${status()}`
+  const heading = () => `${state() === "completed" ? icon("levelDown") : "!"} ${actor()} ${status()}`
   const suffix = () => Locale.truncateWidth(` · ${description()}`, Math.max(0, ctx.width - 3 - stringWidth(heading())))
   const color = () => {
     if (state() === "error") return theme.text.feedback.error.base
@@ -2155,7 +2156,12 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     <Show
       when={completion()}
       fallback={
-        <InlineToolRow icon={source() === "goal" ? "◎" : "◈"} color={theme.text.muted} pending="Notice" complete={true}>
+        <InlineToolRow
+          icon={source() === "goal" ? icon("goal") : icon("globe")}
+          color={theme.text.muted}
+          pending="Notice"
+          complete={true}
+        >
           {text()}
         </InlineToolRow>
       }
@@ -2182,7 +2188,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
 function SessionSkillMessage(props: { message: Extract<SessionMessageInfo, { type: "skill" }> }) {
   const theme = useTheme()
   return (
-    <InlineToolRow icon="→" color={theme.text.muted} pending="Skill" complete={true}>
+    <InlineToolRow icon={icon("arrowRight")} color={theme.text.muted} pending="Skill" complete={true}>
       Skill {props.message.name}
     </InlineToolRow>
   )
@@ -2220,7 +2226,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
               </Show>
             </Match>
             <Match when={status() === "failed" && !cancelled()}>
-              <text fg={color()}>✗</text>
+              <text fg={color()}>{icon("cross")}</text>
             </Match>
           </Switch>
           <text fg={color()}>
@@ -2262,7 +2268,7 @@ function CompactionQueued() {
     <box flexDirection="row" alignItems="center">
       <box border={["top"]} borderColor={theme.border.base} flexGrow={1} />
       <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
-        <text fg={theme.text.muted}>◇</text>
+        <text fg={theme.text.muted}>{icon("diamondOutline")}</text>
         <text fg={theme.text.muted}>Compaction queued</text>
       </box>
       <box border={["top"]} borderColor={theme.border.base} flexGrow={1} />
@@ -2553,7 +2559,8 @@ function FreeLimitNotice(props: { message: Pick<SessionMessageAssistant, "error"
     <box paddingLeft={3} flexDirection="column">
       <text fg={theme.text.muted}>You've used today's free messages.{reset() ? ` They reset at ${reset()}.` : ""}</text>
       <text fg={theme.text.muted}>
-        Upgrade to OpenCode Go → <span style={{ fg: theme.text.base }}>/connect</span> · Switch model →{" "}
+        Upgrade to OpenCode Go {icon("arrowRight")} <span style={{ fg: theme.text.base }}>/connect</span> · Switch model{" "}
+        {icon("arrowRight")}{" "}
         <span style={{ fg: theme.text.base }}>/models</span>
       </text>
     </box>
@@ -2578,7 +2585,7 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
       {(retry) => (
         <box paddingLeft={3}>
           <text fg={theme.text.feedback.warning.base}>
-            ⚠ {seconds() > 0 ? `Retrying in ${seconds()}s` : "Retry due"} · attempt {retry().attempt} ·{" "}
+            {icon("warning")} {seconds() > 0 ? `Retrying in ${seconds()}s` : "Retry due"} · attempt {retry().attempt} ·{" "}
             {retry().error.message}
           </text>
         </box>
@@ -2765,7 +2772,7 @@ function GenericTool(props: ToolProps) {
   return (
     <>
       <InlineTool
-        icon={props.part.state.status === "error" ? "✗" : "✓"}
+        icon={props.part.state.status === "error" ? icon("cross") : icon("check")}
         complete={props.part.state.status === "completed"}
         pending={props.tool}
         spinner={loading()}
@@ -3217,7 +3224,12 @@ function Write(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing write…" complete={stringValue(props.input.path)} part={props.part}>
+        <InlineTool
+          icon={icon("editBlock")}
+          pending="Preparing write…"
+          complete={stringValue(props.input.path)}
+          part={props.part}
+        >
           Write {pathFormatter.format(stringValue(props.input.path))}
         </InlineTool>
       </Match>
@@ -3228,7 +3240,7 @@ function Write(props: ToolProps) {
 function Glob(props: ToolProps) {
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Finding files…" complete={stringValue(props.input.pattern)} part={props.part}>
+    <InlineTool icon={icon("glob")} pending="Finding files…" complete={stringValue(props.input.pattern)} part={props.part}>
       Glob "{stringValue(props.input.pattern)}"{" "}
       <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
       <Show when={finiteNumber(props.metadata.count)}>
@@ -3251,7 +3263,7 @@ function Read(props: ToolProps) {
   return (
     <>
       <InlineTool
-        icon="→"
+        icon={icon("read")}
         pending="Reading file…"
         complete={stringValue(props.input.path)}
         spinner={isRunning()}
@@ -3267,7 +3279,7 @@ function Read(props: ToolProps) {
         {(filepath) => (
           <box paddingLeft={3}>
             <text fg={theme.text.muted}>
-              ↳ Loaded {pathFormatter.format(filepath)}
+              {icon("levelDown")} Loaded {pathFormatter.format(filepath)}
             </text>
           </box>
         )}
@@ -3279,7 +3291,7 @@ function Read(props: ToolProps) {
 function Grep(props: ToolProps) {
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Searching content…" complete={stringValue(props.input.pattern)} part={props.part}>
+    <InlineTool icon={icon("grep")} pending="Searching content…" complete={stringValue(props.input.pattern)} part={props.part}>
       Grep "{stringValue(props.input.pattern)}"{" "}
       <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
       <Show when={finiteNumber(props.metadata.matches)}>
@@ -3301,7 +3313,7 @@ function WebSearch(props: ToolProps) {
   const ctx = use()
   const provider = createMemo(() => stringValue(props.metadata.provider))
   return (
-    <InlineTool icon="◈" pending="Searching web…" complete={stringValue(props.input.query)} part={props.part}>
+    <InlineTool icon={icon("websearch")} pending="Searching web…" complete={stringValue(props.input.query)} part={props.part}>
       <Show when={provider()} fallback="Web Search">
         {(value) => (
           <>
@@ -3342,7 +3354,15 @@ function Subagent(props: ToolProps) {
 
   return (
     <InlineTool
-      icon={isRunning() ? "│" : continuation() ? "↳" : props.part.state.status === "completed" ? "✓" : "│"}
+      icon={
+        isRunning()
+          ? icon("pipe")
+          : continuation()
+            ? icon("levelDown")
+            : props.part.state.status === "completed"
+              ? icon("check")
+              : icon("pipe")
+      }
       spinner={isRunning()}
       running={isRunning()}
       complete={description()}
@@ -3399,7 +3419,7 @@ function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
     >
       <box flexDirection="row">
         <box width={INLINE_TOOL_ICON_WIDTH} flexShrink={0}>
-          <text fg={color()}>{props.call().status === "error" ? "✗" : "›"}</text>
+          <text fg={color()}>{props.call().status === "error" ? icon("cross") : icon("chevronSmall")}</text>
         </box>
         <text flexGrow={1} wrapMode="none" truncate fg={color()}>
           {expanded() ? props.call().tool : executeCallSummary(props.call())}
@@ -3447,7 +3467,13 @@ function Execute(props: ToolProps) {
   return (
     <>
       <InlineTool
-        icon={hasRuntimeError() ? "✗" : props.part.state.status === "completed" ? "✓" : "│"}
+        icon={
+          hasRuntimeError()
+            ? icon("cross")
+            : props.part.state.status === "completed"
+              ? icon("check")
+              : icon("pipe")
+        }
         color={hasRuntimeError() ? theme.text.feedback.error.base : undefined}
         spinner={isLoading()}
         pending="execute"
@@ -3464,7 +3490,7 @@ function Execute(props: ToolProps) {
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
               <text fg={theme.text.feedback.error.base}>
-                {index() === 0 ? "↳ " : "  "}
+                {index() === 0 ? icon("levelDown") + " " : "  "}
                 {line}
               </text>
             )}
@@ -3501,7 +3527,7 @@ function Edit(props: ToolProps) {
     <Switch>
       <Match when={file()}>
         {(item) => (
-          <BlockTool path={{ label: "← Edit", value: pathFormatter.format(path()) }} part={props.part}>
+          <BlockTool path={{ label: `${icon("editBlock")} Edit`, value: pathFormatter.format(path()) }} part={props.part}>
             <box paddingLeft={1} paddingRight={1}>
               <PatchDiff
                 diff={item().patch}
@@ -3532,7 +3558,7 @@ function Edit(props: ToolProps) {
         <BlockTool
           path={
             stringValue(props.input.path)
-              ? { label: "← Edit", value: pathFormatter.format(stringValue(props.input.path)) }
+              ? { label: `${icon("editBlock")} Edit`, value: pathFormatter.format(stringValue(props.input.path)) }
               : undefined
           }
           title={stringValue(props.input.path) ? undefined : "# Preparing edit…"}
@@ -3575,7 +3601,12 @@ function ApplyPatch(props: ToolProps) {
             {(file) => (
               <BlockTool
                 path={{
-                  label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
+                  label:
+                    file.type === "add"
+                      ? `${icon("created")} Created`
+                      : file.type === "delete"
+                        ? `${icon("deleted")} Deleted`
+                        : `${icon("editBlock")} Patched`,
                   value: pathFormatter.format(file.resource),
                 }}
                 part={props.part}
@@ -3627,7 +3658,7 @@ function TodoWrite(props: ToolProps) {
       </Match>
       <Match when={true}>
         <InlineTool
-          icon="⚙"
+          icon={icon("tool")}
           pending="Updating todos…"
           complete={props.part.state.status === "completed" || props.part.state.status === "error"}
           part={props.part}
@@ -3667,7 +3698,7 @@ function Question(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="→" pending="Asking questions…" complete={count()} part={props.part}>
+        <InlineTool icon={icon("arrowRight")} pending="Asking questions…" complete={count()} part={props.part}>
           Asked {count()} question{count() !== 1 ? "s" : ""}
         </InlineTool>
       </Match>
@@ -3678,7 +3709,7 @@ function Question(props: ToolProps) {
 function Skill(props: ToolProps) {
   const name = createMemo(() => stringValue(props.metadata.name) ?? stringValue(props.input.id))
   return (
-    <InlineTool icon="→" pending="Loading skill…" complete={name()} part={props.part}>
+    <InlineTool icon={icon("skill")} pending="Loading skill…" complete={name()} part={props.part}>
       Skill "{name()}"
     </InlineTool>
   )
@@ -3771,7 +3802,12 @@ function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; par
         {(file) => (
           <BlockTool
             path={{
-              label: file().type === "add" ? "# Created" : file().type === "delete" ? "# Deleted" : "← Patched",
+              label:
+                file().type === "add"
+                  ? `${icon("created")} Created`
+                  : file().type === "delete"
+                    ? `${icon("deleted")} Deleted`
+                    : `${icon("editBlock")} Patched`,
               value: pathFormatter.format(file().relativePath),
             }}
             part={props.part}
