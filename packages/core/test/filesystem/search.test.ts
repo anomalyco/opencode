@@ -184,8 +184,8 @@ describe("FileSystemSearch", () => {
       yield* Effect.promise(() => symlink(path.join(outside, "secret.md"), path.join(directory, ".slim/deepwork/outside.md")))
       expect(Bun.spawnSync(["git", "init", "-q"], { cwd: directory }).exitCode).toBe(0)
 
-      const layer = FileSystemSearch.fffLayer.pipe(
-        Layer.provide(
+      const layer = AppNodeBuilder.build(FileSystem.node, [
+        Location.node.replace(
           Layer.succeed(
             Location.Service,
             Location.Service.of(
@@ -195,14 +195,47 @@ describe("FileSystemSearch", () => {
             ),
           ),
         ),
-      )
+        FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: true })),
+      ])
       yield* Effect.gen(function* () {
-        const search = yield* FileSystemSearch.Service
+        const search = yield* FileSystem.Service
         const exact = yield* search.find({ query: ".slim/deepwork/restant.md", type: "file" })
         expect(exact).toContainEqual({ path: RelativePath.make(".slim/deepwork/restant.md"), type: "file" })
         expect(yield* search.find({ query: "restant", type: "file" })).toEqual([])
         expect(yield* search.find({ query: "../outside.txt", type: "file" })).toEqual([])
         expect(yield* search.find({ query: ".slim/deepwork/outside.md", type: "file" })).toEqual([])
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.live("finds an exact ignored path through the ripgrep backend", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-rg-exact-")))).path
+      yield* Effect.promise(() => mkdir(path.join(directory, ".slim/deepwork"), { recursive: true }))
+      yield* Effect.promise(() => Bun.write(path.join(directory, ".gitignore"), ".slim/\n"))
+      yield* Effect.promise(() => Bun.write(path.join(directory, ".slim/deepwork/restant.md"), "notes"))
+      expect(Bun.spawnSync(["git", "init", "-q"], { cwd: directory }).exitCode).toBe(0)
+
+      const layer = AppNodeBuilder.build(FileSystem.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location({ directory: AbsolutePath.make(directory) }, {
+                vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) },
+              }),
+            ),
+          ),
+        ),
+        FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: false })),
+      ])
+      yield* Effect.gen(function* () {
+        const filesystem = yield* FileSystem.Service
+        expect(yield* filesystem.find({ query: ".slim/deepwork/restant.md", type: "file" })).toContainEqual({
+          path: RelativePath.make(".slim/deepwork/restant.md"),
+          type: "file",
+        })
+        expect(yield* filesystem.find({ query: "restant", type: "file" })).toEqual([])
       }).pipe(Effect.provide(layer))
     }),
   )

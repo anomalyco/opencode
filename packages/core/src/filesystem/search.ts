@@ -208,7 +208,7 @@ export const makeFffLayer = (create: CreatePicker) =>
                 score: found.value.scores[index]?.total ?? 0,
               }))
             })()
-            const entries = items
+            return items
               .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
               .map((item) => {
                 const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
@@ -217,26 +217,6 @@ export const makeFffLayer = (create: CreatePicker) =>
                   type: item.type,
                 })
               })
-            // fff intentionally excludes ignored files. Resolve only an exact path-like query on a miss;
-            // ordinary fuzzy searches must not walk ignored directories or enumerate their contents.
-            if (!input.query.includes("/") || path.isAbsolute(input.query)) return entries
-            const exact = input.query.replace(/\/$/, "")
-            if (entries.some((entry) => entry.path === exact || entry.path === `${exact}${path.sep}`)) return entries
-            const candidate = path.resolve(location.directory, exact)
-            const found = yield* Effect.tryPromise(async () => {
-              const { realpath, stat } = await import("node:fs/promises")
-              const root = await realpath(location.directory)
-              const target = await realpath(candidate)
-              const relative = path.relative(root, target)
-              if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
-                return undefined
-              const info = await stat(target)
-              const type = info.isFile() ? "file" : info.isDirectory() ? "directory" : undefined
-              if (!type) return undefined
-              if (input.type && input.type !== type) return undefined
-              return FileSystem.Entry.make({ path: RelativePath.make(exact + (type === "directory" ? path.sep : "")), type })
-            }).pipe(Effect.orElseSucceed(() => undefined))
-            return found ? [found, ...entries].slice(0, options.pageSize) : entries
           }),
       })
     }),
