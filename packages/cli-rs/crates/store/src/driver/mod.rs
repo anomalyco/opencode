@@ -697,22 +697,31 @@ impl Remote {
         let _ = (self.0.wake)();
     }
 
-    /// Runs `f` on the owner's thread.
-    pub(crate) async fn post(&self, f: impl FnOnce(&Data) + Send + 'static) {
-        self.send(Mail::Run(Box::new(f))).await;
+    /// Runs `f` on the owner's thread. `f` is boxed at once, so a task that awaits this holds a pointer, not `f` and
+    /// what it captures (often a whole completion).
+    pub(crate) fn post(&self, f: impl FnOnce(&Data) + Send + 'static) -> impl Future<Output = ()> + Send + 'static {
+        let (remote, mail) = (self.clone(), Mail::Run(Box::new(f)));
+        async move {
+            remote.send(mail).await;
+        }
     }
 
     /// Runs `f` on the owner's thread and returns its answer, or an error once the store is gone: how a task asks the
-    /// state something between two awaits.
-    pub async fn call<R: Send + 'static>(&self, f: impl FnOnce(&Data) -> R + Send + 'static) -> Result<R, Error> {
+    /// state something between two awaits. `f` is boxed at once, as for [`Remote::post`].
+    pub fn call<R: Send + 'static>(
+        &self,
+        f: impl FnOnce(&Data) -> R + Send + 'static,
+    ) -> impl Future<Output = Result<R, Error>> + Send + 'static {
         let (reply, answer) = oneshot::channel();
-        self.post(move |data| {
+        let posted = self.post(move |data| {
             let _ = reply.send(f(data));
-        })
-        .await;
-        answer
-            .await
-            .map_err(|_| Arc::new(opencode_api::error::Error::Transport("store task failed: store gone".into())))
+        });
+        async move {
+            posted.await;
+            answer
+                .await
+                .map_err(|_| Arc::new(opencode_api::error::Error::Transport("store task failed: store gone".into())))
+        }
     }
 }
 
