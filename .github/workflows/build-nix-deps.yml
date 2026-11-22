@@ -46,6 +46,10 @@ jobs:
       - name: Setup Nix
         uses: nixbuild/nix-quick-install-action@2c9db80fb984ceb1bcaa77cdda3fdf8cfba92035 # v34
 
+      - name: Check lockfile source selection
+        if: matrix.system == 'x86_64-linux'
+        run: nix shell --inputs-from . nixpkgs#bun --command bun nix/check-lock.ts
+
       - name: Build dependencies and run offline cache fixtures
         env:
           SYSTEM: ${{ matrix.system }}
