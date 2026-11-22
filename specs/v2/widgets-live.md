@@ -128,8 +128,8 @@ and hands the actual transfer to the app (URLSession / OkHttp), so system TLS an
   program to a snapshot (PsychoScript `suspend`, `toBytes`), drop the VM, and resume from the snapshot when it's visible
   again; if suspending fails, stop it and restart from `main` then.
 - Budgets: a program that runs more than 50 ms without awaiting is stopped with an error; at most 2,000 draw commands
-  per `draw`; posts beyond 240 per second are dropped with a warning; heap per program capped by the host (default 32
-  MB). One error shows inline with "Restart".
+  per `draw`; posts beyond 240 per second are dropped with a warning; the heap cap applies as to steps (`widgets.md`, Heap
+  cap: default 32 MB, phase `main`). One error shows inline with "Restart".
 - A submitted/dismissed widget (from any client) stops its program; its last rendered view stays, read-only.
 - Answers and sends go to the server exactly as in step mode.
 

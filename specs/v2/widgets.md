@@ -136,6 +136,11 @@ with one global sync host function `__input` returning the step input, and rerun
 Limits: 250 ms timeout per step; a client may use smaller limits. (The TypeScript `psychoscript` 0.2.1 has no
 separate compile step, so `@opencode/widget` parses the program on each step; a step of a built-in takes a few ms.)
 
+**Heap cap.** Every run of a program, a step (`init`, `event`, `draw`) or a live run, has a heap cap set by the host,
+32 MB by default. A run that exceeds it stops with a program error (see Failures) with the message
+`It used more than 32 MB of memory` (the host's cap in place of 32), no `line` or `column`, and `phase` the step's
+phase (`init`, `event`, `draw`) or `main` for a live run.
+
 Step input:
 
 ```ts
