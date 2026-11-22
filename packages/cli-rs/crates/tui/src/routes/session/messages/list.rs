@@ -153,6 +153,9 @@ struct Model {
     end: Option<End>,
     /// Set when rows mount above the window or the terminal resizes, so the reader's rows stay in place.
     pin: Option<Pin>,
+    /// The height of the rows dropped since the last layout, and the frame number then. The content's rect still
+    /// counts them, so a pin set before the next layout takes them off.
+    dropped: Option<(u64, f32)>,
     /// An older page is loading.
     loading: bool,
     /// Message navigation or its slack holds the view, so the bottom it reaches is not the tail.
@@ -708,8 +711,9 @@ impl Model {
         // what they add (`pinAbove`), in place of a resize's pin.
         let first = self.mounted.iter().find(|key| wanted.contains(key));
         let above = first.is_some_and(|first| specs[start].key() != *first);
+        let dropped = self.dropped.filter(|(frame, _)| *frame == layout.1).map_or(0.0, |(_, height)| height);
         let pin = (above && self.pin.as_ref().is_none_or(|pin| pin.above.is_some())).then(|| Pin {
-            height: layout.0,
+            height: layout.0 - dropped,
             frame: layout.1,
             above: None,
         });
@@ -1313,6 +1317,7 @@ impl Inner {
             // that asked for the rows.
             if let Some((_, height)) = above {
                 self.scroll.scroll_by(0.0, -f64::from(height));
+                self.dropped(tui, height);
             }
             return true;
         }
@@ -1338,9 +1343,10 @@ impl Inner {
             &tui.app,
             bind!(self.this, |inner| {
                 let Some(tui) = inner.tui.upgrade() else { return };
-                let Some(end) = inner.drop_below(&tui) else { return };
+                let Some((end, height)) = inner.drop_below(&tui) else { return };
                 inner.model.borrow_mut().end = Some(end);
                 inner.render(&tui, |_| false);
+                inner.dropped(&tui, height);
             }),
         );
     }
@@ -1364,13 +1370,29 @@ impl Inner {
         Some((Start::Row(model.specs[keep].key()), height as f32))
     }
 
-    /// The window's end once the rows more than [`MARGIN`] below the view drop; None when no row is that far, or while
-    /// the rows must stay (see [`Self::visible`]).
-    fn drop_below(&self, tui: &Tui) -> Option<End> {
+    /// The window's end once the rows more than [`MARGIN`] below the view drop, and the height they take with them;
+    /// None when no row is that far, or while the rows must stay (see [`Self::visible`]).
+    fn drop_below(&self, tui: &Tui) -> Option<(End, f32)> {
         let visible = self.visible(tui)?;
         let model = self.model.borrow();
-        let keep = grouping::rows_after(&model.weights, visible.end, MARGIN);
-        (keep < model.window_end()).then(|| End::After(model.specs[keep - 1].key(), keep))
+        let (end, keep) = (model.window_end(), grouping::rows_after(&model.weights, visible.end, MARGIN));
+        if keep >= end {
+            return None;
+        }
+        let bottom = |index: usize| {
+            let rect = self.rows.borrow().get(&model.specs[index].key())?.wrapper.rect();
+            Some(rect.screen_y + f64::from(rect.height))
+        };
+        let height = bottom(end - 1)? - bottom(keep - 1)?;
+        Some((End::After(model.specs[keep - 1].key(), keep), height as f32))
+    }
+
+    /// Notes rows of `height` dropped before the next layout (see `Model::dropped`).
+    fn dropped(&self, tui: &Tui, height: f32) {
+        let frame = tui.app.frame_number();
+        let mut model = self.model.borrow_mut();
+        let before = model.dropped.filter(|(at, _)| *at == frame).map_or(0.0, |(_, before)| before);
+        model.dropped = Some((frame, before + height));
     }
 
     /// The mounted rows on screen, as a range of the rows, while rows may drop. They may not before the rows are laid
