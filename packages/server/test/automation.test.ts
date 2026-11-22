@@ -30,12 +30,7 @@ it.live(
       yield* Effect.promise(async () => {
         await Promise.all([global, enabled, ask].map((item) => fs.mkdir(item, { recursive: true })))
         await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ automations: true }))
-        await fs.writeFile(
-          path.join(enabled, "opencode.json"),
-          JSON.stringify({
-            experimental: { mcp_events: true },
-          }),
-        )
+        await fs.writeFile(path.join(enabled, "opencode.json"), JSON.stringify({}))
         await fs.writeFile(path.join(ask, "opencode.json"), JSON.stringify({ permission: { execute: "ask" } }))
       })
       const handler = yield* ServerFetch.make({

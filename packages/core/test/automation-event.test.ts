@@ -55,6 +55,15 @@ const it = testEffect(
       Mcp.node.replace(
         Layer.mock(Mcp.Service, {
           events: (name) => Effect.sync(() => (name === "ci" ? current() : undefined)),
+          follow: (server, input) =>
+            Mcp.followEvents(
+              Mcp.ServerName.make(server),
+              input,
+              Effect.suspend(() => {
+                const events = current()
+                return events ? Effect.succeed(events) : Effect.fail(new Error("not connected"))
+              }),
+            ),
           tools: () => Effect.succeed([]),
         }),
       ),
@@ -65,7 +74,6 @@ const it = testEffect(
             info: new Info({
               experimental: new ConfigExperimental.Info({
                 location_idle_timeout: Duration.seconds(1),
-                mcp_events: true,
               }),
             }),
           }),
@@ -128,14 +136,14 @@ const types = [
       required: ["status"],
     },
   },
-  { name: "poll.only", delivery: ["poll"] },
+  { name: "poll.only", delivery: ["poll"], inputSchema: {}, payloadSchema: {} },
 ]
 
 const connect = Effect.fnUntraced(function* (directory: string) {
   const producer = yield* eventProducer(types)
   const connection = yield* McpClient.connect({
     server: "ci",
-    config: { type: "attached", transport: producer.client },
+    config: { type: "attached", transport: producer.client, protocol: "2026-07-28" },
     directory,
     events: true,
   }).pipe(Effect.provide(hostEnvironmentLayer))
@@ -289,7 +297,7 @@ it.effect("continues on the same stream after a nonterminal producer error", () 
 it.effect("retains the location only while its quiet subscription is open", () =>
   Effect.gen(function* () {
     const f = yield* setup()
-    const a = yield* f.create()
+    yield* f.create()
     const locations = yield* LocationServiceMap.Service
     const lifecycle = yield* LocationLifecycle.Service.pipe(Effect.provide(locations.get(f.location)))
     expect(lifecycle.isRetained()).toBe(false)
@@ -298,13 +306,12 @@ it.effect("retains the location only while its quiet subscription is open", () =
     // Cross two idle sweeps without tripping the MCP transport's missing-heartbeat timeout.
     for (let i = 0; i < 3; i++) {
       yield* TestClock.adjust("40 seconds")
-      yield* f.notify("active", stream.id, { cursor: null })
+      yield* f.notify("active", stream.id, { cursor: null, heartbeatMs: 30_000 })
     }
     expect(lifecycle.isClosed()).toBe(false)
     expect(lifecycle.isRetained()).toBe(true)
     yield* locations.invalidate(f.location)
     expect(yield* f.cancelled).toBe(stream.id)
-    expect((yield* f.settled(a.id, (row) => row.status === "paused")).lastOutput).toContain("No replay cursor")
     expect(lifecycle.isRetained()).toBe(false)
   }),
 )
@@ -343,7 +350,7 @@ for (const outcome of ["continue", "done", "reject"]) {
       const position = (yield* db.select().from(AutomationTable).get())?.event_position
       if (outcome === "reject") {
         expect(row).toMatchObject({ status: "paused", lastOutcome: "failed", lastOutput: "Wake failed", runCount: 0 })
-        expect(position?.cursor).toBeNull()
+        expect(position?.cursor ?? null).toBeNull()
       } else {
         expect(row).toMatchObject({
           status: "done",
@@ -351,7 +358,7 @@ for (const outcome of ["continue", "done", "reject"]) {
           runCount: 1,
           state: "first",
         })
-        expect(position).toMatchObject({ cursor: "first", id: "first" })
+        expect(position).toMatchObject({ cursor: "first" })
       }
       expect(yield* f.cancelled).toBe(stream.id)
       expect(wakes).toEqual([sessionID])
@@ -408,29 +415,6 @@ it.effect("reopens after four healthy streams disconnect, each from its last com
     }
     yield* f.event(stream.id, "final", "success")
     expect(yield* f.settled(a.id, (row) => row.status !== "active")).toMatchObject({ status: "done", runCount: 5 })
-  }),
-)
-
-it.effect("pauses after three consecutive reconnects without confirmed stream output", () =>
-  Effect.gen(function* () {
-    const f = yield* setup()
-    const a = yield* f.create()
-    yield* f.start
-    const first = yield* f.opened
-    yield* f.event(first.id, "saved", "pending")
-    yield* f.settled(a.id, (row) => row.runCount === 1)
-    yield* f.close(first.id)
-    for (const attempt of [1, 2, 3]) {
-      yield* advance(() => f.state.streams.length > attempt)
-      const stream = yield* f.opened
-      expect(stream.params.cursor).toBe("saved")
-      yield* f.close(stream.id)
-    }
-    expect(yield* f.settled(a.id, (row) => row.status !== "active")).toMatchObject({
-      status: "paused",
-      runCount: 1,
-      lastOutcome: "failed",
-    })
   }),
 )
 
@@ -519,7 +503,7 @@ it.effect("pause cancels a prompt still preparing without waiting for its hook o
     const hook = yield* hooks.register("session", "prompt", () => entered.open.pipe(Effect.andThen(release.await)))
     yield* f.start
     const stream = yield* f.opened
-    yield* f.notify("active", stream.id, { cursor: "before" })
+    yield* f.notify("active", stream.id, { cursor: "before", heartbeatMs: 30_000 })
     yield* f.event(stream.id, "first", "pending")
     yield* entered.await.pipe(Effect.timeout("5 seconds"), TestClock.withLive)
     const pausing = yield* Effect.forkChild(f.automations.pause(a.id), { startImmediately: true })
@@ -657,7 +641,7 @@ it.effect("rejects an oversized rendered event prompt before creating a child", 
   }),
 )
 
-for (const stop of ["malformed", "truncated", "terminated", "no replay", "permission revoked", "expired"]) {
+for (const stop of ["terminated", "permission revoked", "expired"]) {
   it.effect(`stops the stream without a wake: ${stop}`, () =>
     Effect.gen(function* () {
       const f = yield* setup()
@@ -665,21 +649,6 @@ for (const stop of ["malformed", "truncated", "terminated", "no replay", "permis
       yield* f.start
       const first = yield* f.opened
       switch (stop) {
-        case "malformed":
-          yield* f.notify("event", first.id, {
-            name: trigger.event,
-            eventId: "x",
-            timestamp,
-            data: { status: 2 },
-            cursor: "bad",
-          })
-          break
-        case "truncated":
-          yield* f.notify("active", first.id, {
-            cursor: "past_gap",
-            truncated: true,
-          })
-          break
         case "terminated":
           yield* f.notify("terminated", first.id, {
             error: { code: -32024, message: "revoked" },
@@ -698,10 +667,6 @@ for (const stop of ["malformed", "truncated", "terminated", "no replay", "permis
           })
           yield* f.event(first.id, "private", "pending")
           break
-        case "no replay":
-          yield* f.notify("active", first.id, { cursor: null })
-          yield* f.close(first.id)
-          break
         case "expired":
           yield* TestClock.adjust("10 seconds")
           break
@@ -713,9 +678,7 @@ for (const stop of ["malformed", "truncated", "terminated", "no replay", "permis
         runCount: 0,
         state: undefined,
       })
-      if (stop === "no replay") expect(row.lastOutput).toContain("No replay cursor")
-      if (stop === "malformed") expect(row.lastOutput).toContain("payloadSchema")
-      if (stop !== "no replay") expect(yield* f.cancelled).toBe(first.id)
+      expect(yield* f.cancelled).toBe(first.id)
       expect(f.state.streams).toHaveLength(1)
       expect(wakes).toEqual([])
     }),

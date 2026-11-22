@@ -51,7 +51,6 @@ import { AutomationTable } from "./automation/sql.js"
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
-import { Flag } from "./flag.js"
 import { Instance } from "./instance/service.js"
 import { KVTable } from "./kv/sql.js"
 import { Location } from "./location.js"
@@ -299,11 +298,9 @@ const layer = Layer.effect(
     const settings = (directory: string) =>
       Effect.gen(function* () {
         const config = yield* Config.Service
-        const flags = yield* Flag.Service
         const entries = yield* config.entries()
         return {
           enabled: Config.latest(entries, "automations") ?? true,
-          events: flags.resolve(entries).mcp_events.enabled,
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(inDirectory(directory))
@@ -365,11 +362,7 @@ const layer = Layer.effect(
       if (event && row.event_position)
         return {
           ...(done ? { status: "done" as const } : {}),
-          event_position: {
-            ...row.event_position,
-            cursor: event.cursor,
-            id: event.eventId,
-          },
+          event_position: { ...row.event_position, cursor: event.position.cursor },
         }
       const next = following(row, ended)
       return done || finished(row, next) ? { status: "done" as const, next_due_at: null } : { next_due_at: next }
@@ -784,7 +777,7 @@ const layer = Layer.effect(
     // Re-check the original placement and the resource-specific grant before opening a stream or running an action.
     const checkWatch = Effect.fnUntraced(function* (row: Row, server: string) {
       const config = yield* settings(row.directory)
-      if (!config.enabled || !config.events)
+      if (!config.enabled)
         return yield* new InvalidError({
           reason: "Event automations are disabled",
         })
@@ -844,16 +837,13 @@ const layer = Layer.effect(
           return yield* new InvalidError({
             reason: "No authorized event watch",
           })
-        if (position.cursor === null)
-          return yield* new InvalidError({
-            reason: "No replay cursor; recreate the watch to start from now",
-          })
-        const stream = yield* AutomationEvent.resolve(trigger, position.cursor).pipe(inDirectory(row.directory))
-        // Even a crash before the first heartbeat must not silently turn a restart into a fresh watch.
-        if (position.cursor === undefined) yield* settle(row, { event_position: { ...position, cursor: null } })
+        const stream = yield* AutomationEvent.follow(trigger, { cursor: position.cursor ?? null, seen: [] }).pipe(
+          inDirectory(row.directory),
+        )
         return stream.pipe(
           Stream.takeWhileEffect(
-            Effect.fnUntraced(function* (message) {
+            Effect.fnUntraced(function* (update) {
+              if (update.type === "pending") return true
               const current = yield* find(id)
               const at = yield* Clock.currentTimeMillis
               if (current.status !== "active" || !(yield* claimLeader(at))) return false
@@ -862,38 +852,18 @@ const layer = Layer.effect(
                 return false
               }
               yield* checkWatch(current, trigger.server)
-              if (message.type !== "event") {
+              if (update.type === "position") {
                 yield* settle(current, {
-                  event_position: {
-                    ...position,
-                    ...current.event_position,
-                    cursor: message.cursor,
-                  },
+                  event_position: { ...position, ...current.event_position, cursor: update.position.cursor },
                 })
                 return true
               }
-              if (current.event_position?.id === message.eventId) return true
-              yield* runAction(current, at, message)
+              yield* runAction(current, at, update)
               return (yield* find(id)).status === "active"
             }, delivery.withPermit),
           ),
         )
-      }).pipe(
-        Stream.unwrap,
-        Stream.tapError(
-          Effect.fnUntraced(function* (error) {
-            if (error instanceof AutomationEvent.Disconnected && (yield* find(id)).event_position?.cursor == null)
-              return yield* new InvalidError({ reason: "No replay cursor; recreate the watch to start from now" })
-          }),
-        ),
-        // Only a validated, processed message resets Stream.retry, never opening an empty stream.
-        Stream.retry(
-          Schedule.exponential("1 second").pipe(
-            Schedule.while(({ input, attempt }) => input instanceof AutomationEvent.Disconnected && attempt <= 3),
-          ),
-        ),
-        Stream.runDrain,
-      )
+      }).pipe(Stream.unwrap, Stream.runDrain)
       const run =
         expires === null
           ? open
@@ -1087,10 +1057,6 @@ const layer = Layer.effect(
         if (!config.enabled) return yield* new DisabledError()
         if (input.trigger.type === "event") {
           const trigger = input.trigger
-          if (!config.events)
-            return yield* new InvalidError({
-              reason: "Event automations require experimental.mcp_events",
-            })
           if (!owner || !invocation || owner.location.workspaceID !== undefined)
             return yield* new InvalidError({
               reason: "Create an event automation from a tool call in a local session",
@@ -1109,7 +1075,7 @@ const layer = Layer.effect(
               resources: [trigger.server],
               metadata: { automation: input.name, trigger },
             })
-            yield* AutomationEvent.resolve(trigger).pipe(
+            yield* AutomationEvent.check(trigger).pipe(
               Effect.mapError((error) => new InvalidError({ reason: error.message })),
             )
           }).pipe(inDirectory(directory), Effect.catchTag("FileSystem.DirectoryNotFoundError", missingDirectory))
