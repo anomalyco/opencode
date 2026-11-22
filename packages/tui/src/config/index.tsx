@@ -8,6 +8,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { safeWatch } from "../util/watch"
 import path from "path"
 import { TuiKeybind } from "./keybind"
+import { resolveColorDepth, resolveIconMode, resolveMotion, type ResolvedColorDepth, type ResolvedIconMode, type ResolvedMotion, type UiStyle } from "../ui/design"
 
 export interface Interface {
   readonly path?: string
@@ -65,6 +66,24 @@ export const Cursor = Schema.Struct({
     description: "Whether the cursor blinks. Has no effect when style is 'default'",
   }),
 }).annotate({ description: "Terminal cursor settings" })
+
+export const Ui = Schema.Struct({
+  style: Schema.optional(Schema.Literals(["fork", "opencode"])).annotate({
+    description: "Visual profile: 'fork' adds the fork's card treatment, 'opencode' restores the upstream appearance",
+  }),
+  color_depth: Schema.optional(Schema.Literals(["auto", "truecolor", "256"])).annotate({
+    description: "Color depth; 'auto' uses truecolor only when the terminal advertises it",
+  }),
+  icons: Schema.optional(Schema.Literals(["auto", "nerd", "ascii"])).annotate({
+    description: "Icon set; 'auto' keeps ASCII unless a Nerd Font is declared in the environment",
+  }),
+  motion: Schema.optional(Schema.Literals(["auto", "full", "reduced"])).annotate({
+    description: "Motion level; 'reduced' disables decorative transitions",
+  }),
+  mono: Schema.optional(Schema.Boolean).annotate({
+    description: "Render the interface in grayscale for monochrome terminals",
+  }),
+}).annotate({ description: "Fork design system settings" })
 
 export const Info = Schema.Struct({
   theme: Schema.optional(
@@ -250,6 +269,7 @@ export const Info = Schema.Struct({
   experimental: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
     description: "Experimental features that may change or be removed at any time",
   }),
+  ui: Schema.optional(Ui),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
   highlights: Schema.optional(Schema.Boolean).annotate({
     description: "Show the release highlights once after OpenCode updates",
@@ -259,7 +279,14 @@ export const Info = Schema.Struct({
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader" | "mouse" | "session" | "tabs"> & {
+export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader" | "mouse" | "session" | "tabs" | "ui"> & {
+  ui: {
+    style: UiStyle
+    color_depth: ResolvedColorDepth
+    icons: ResolvedIconMode
+    motion: ResolvedMotion
+    mono: boolean
+  }
   attention: {
     notifications: boolean
     sound: boolean
@@ -321,6 +348,13 @@ export function resolve(
     cursor: {
       style: input.cursor?.style ?? "block",
       blinking: input.cursor?.blinking ?? true,
+    },
+    ui: {
+      style: input.ui?.style ?? "fork",
+      color_depth: resolveColorDepth(input.ui?.color_depth, options.environment),
+      icons: resolveIconMode(input.ui?.icons, options.environment),
+      motion: resolveMotion(input.ui?.motion, options.environment),
+      mono: input.ui?.mono ?? false,
     },
     session: {
       ...input.session,

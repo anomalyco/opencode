@@ -25,6 +25,10 @@ import { selectThemeMode, themeModes } from "./select.js"
 
 type ResolvedHue = ResolvedThemeTokens["hue"] & Readonly<Record<string, HueScale>>
 
+/** Applied to every color as it is resolved, before hue indexes are compiled. */
+export type ColorTransform = (color: RGBA) => RGBA
+const identity: ColorTransform = (color) => color
+
 const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition, { reportInput: true })
 const decodeThemeDocumentSchema = Schema.decodeUnknownSync(ThemeDocument, { reportInput: true })
 
@@ -52,18 +56,18 @@ export function parseThemeDocument(input: unknown, name = "theme") {
   }
 }
 
-export function resolveThemeDocument(document: ThemeDocument, mode?: Mode) {
+export function resolveThemeDocument(document: ThemeDocument, mode?: Mode, transform: ColorTransform = identity) {
   const selected = selectThemeMode(document, mode)
   const definition = expandTheme(selected.theme)
-  return resolveExpandedTheme(definition)
+  return resolveExpandedTheme(definition, transform)
 }
 
-export function resolveTheme(definition: ThemeDefinition): ResolvedTheme {
-  return resolveExpandedTheme(expandTheme(decodeThemeDefinition(definition)))
+export function resolveTheme(definition: ThemeDefinition, transform: ColorTransform = identity): ResolvedTheme {
+  return resolveExpandedTheme(expandTheme(decodeThemeDefinition(definition)), transform)
 }
 
-function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
-  const hue = resolveHue(definition.hue)
+function resolveExpandedTheme(definition: ThemeDefinition, transform: ColorTransform): ResolvedTheme {
+  const hue = resolveHue(definition.hue, transform)
   const categorical = definition.categorical.map((name) => {
     const scale = hue[name]
     if (!scale) throw new Error(`Categorical hue "${name}" was not found`)
@@ -73,7 +77,7 @@ function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
   const base = tokens(definition)
   const views = {} as Record<SurfaceName, ResolvedTheme>
   const view = (tokens: ThemeTokensDefinition): ResolvedTheme => ({
-    ...resolveView(tokens, hue, categorical, hueSteps),
+    ...resolveView(tokens, hue, categorical, hueSteps, transform),
     surface: (name) => views[name],
   })
   const dialog = definition["@dialog"]
@@ -140,9 +144,10 @@ function resolveView(
   hue: ResolvedThemeTokens["hue"],
   categorical: ResolvedThemeTokens["categorical"],
   hueSteps: Pick<ResolvedThemeTokens, "source" | "increase" | "decrease">,
+  transform: ColorTransform,
 ): ResolvedThemeTokens {
   const source: Record<string, unknown> = { hue, ...definition }
-  const resolved = createResolver(source)(source, "theme") as ResolvedThemeTokens
+  const resolved = createResolver(source, transform)(source, "theme") as ResolvedThemeTokens
   return {
     ...resolved,
     hue,
@@ -198,7 +203,7 @@ function compileHueSteps(
   }
 }
 
-function resolveHue(definition: ThemeDefinition["hue"]) {
+function resolveHue(definition: ThemeDefinition["hue"], transform: ColorTransform) {
   const source = definition as Record<string, unknown>
   const cache = new Map<string, HueScale>()
 
@@ -212,7 +217,9 @@ function resolveHue(definition: ThemeDefinition["hue"]) {
       if (!match?.[1]) throw new Error(`Hue alias "${value}" must reference a hue scale`)
       if (source[match[1]] === undefined) throw new Error(`Hue alias "${value}" references a missing hue`)
       const target = resolve(match[1], [...stack, name])
-      const result = Object.fromEntries(HueStep.literals.map((step) => [step, RGBA.clone(target[step])])) as HueScale
+      const result = Object.fromEntries(
+        HueStep.literals.map((step) => [step, RGBA.clone(target[step])]),
+      ) as HueScale
       cache.set(name, result)
       return result
     }
@@ -221,7 +228,7 @@ function resolveHue(definition: ThemeDefinition["hue"]) {
       HueStep.literals.map((step) => {
         const color = value[step]
         if (typeof color !== "string" || !isHex(color)) throw new Error(`Invalid hue color at "hue.${name}.${step}"`)
-        return [step, RGBA.fromHex(color)]
+        return [step, transform(RGBA.fromHex(color))]
       }),
     ) as HueScale
     for (const step of Object.keys(value)) {
@@ -235,7 +242,7 @@ function resolveHue(definition: ThemeDefinition["hue"]) {
   return Object.fromEntries(Object.keys(source).map((name) => [name, resolve(name, [])])) as ResolvedHue
 }
 
-function createResolver(source: Record<string, unknown>) {
+function createResolver(source: Record<string, unknown>, transform: ColorTransform) {
   const cache = new Map<string, RGBA>()
 
   function resolve(value: unknown, path: string, stack: string[] = []): unknown {
@@ -249,8 +256,8 @@ function createResolver(source: Record<string, unknown>) {
   }
 
   function resolveColor(value: string, path: string, stack: string[]) {
-    if (value === "transparent") return RGBA.fromInts(0, 0, 0, 0)
-    if (isHex(value)) return RGBA.fromHex(value)
+    if (value === "transparent") return transform(RGBA.fromInts(0, 0, 0, 0))
+    if (isHex(value)) return transform(RGBA.fromHex(value))
     if (!value.startsWith("$")) throw new Error(`Invalid color "${value}" at "${path}"`)
     const target = value.slice(1)
     const hit = cache.get(target)

@@ -4,9 +4,11 @@ import {
   generateSyntax,
   resolveThemeDocument,
   themeModes,
+  type ColorTransform,
   type ResolvedTheme,
   type SurfaceName,
 } from "@opencode/theme/tui"
+import { colorTransform } from "../ui/design"
 import {
   allThemes,
   hasTheme,
@@ -301,13 +303,15 @@ const themeContext = createSimpleContext({
       const sources = available()
       const active = alias(store.active)
       const name = sources[active] ? active : "opencode"
+      // Reading the resolved settings here keeps a live config edit (depth, mono) on the hot-reload path.
+      const transform = colorTransform(config.ui.color_depth, config.ui.mono)
       try {
-        return loadTheme(sources[name], name, store.mode, newDesigns())
+        return loadTheme(sources[name], name, store.mode, newDesigns(), transform)
       } catch (error) {
         if (name === "opencode") throw error
         themeErrors.emit(name, error)
         setStore("active", "opencode")
-        return loadTheme(sources.opencode, "opencode", store.mode, newDesigns())
+        return loadTheme(sources.opencode, "opencode", store.mode, newDesigns(), transform)
       }
     })
     const modes = () => selected().modes
@@ -396,11 +400,17 @@ function usablePalette(colors: TerminalColors | undefined): colors is TerminalCo
   )
 }
 
-function loadTheme(source: ThemeDocumentSource, name: string, requested: "dark" | "light", newDesigns: boolean) {
+function loadTheme(
+  source: ThemeDocumentSource,
+  name: string,
+  requested: "dark" | "light",
+  newDesigns: boolean,
+  transform: ColorTransform,
+) {
   const document = parseTheme(source, name, { newDesigns })
   const modes = themeModes(document)
   const mode = modes.includes(requested) ? requested : (modes[0] ?? requested)
-  return { modes, mode, theme: resolveThemeDocument(document, mode) }
+  return { modes, mode, theme: resolveThemeDocument(document, mode, transform) }
 }
 
 export function createSyntaxStyleMemo(factory: () => SyntaxStyle) {

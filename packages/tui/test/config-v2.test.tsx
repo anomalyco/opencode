@@ -84,6 +84,28 @@ test("resolves nested config and keybind defaults", () => {
   })
 })
 
+test("resolves the fork design defaults", () => {
+  const config = resolve({}, { terminalSuspend: true, environment: {} })
+
+  expect(config.ui).toEqual({ style: "fork", color_depth: "256", icons: "ascii", motion: "full", mono: false })
+  expect(
+    resolve(
+      { ui: { style: "opencode", color_depth: "truecolor", icons: "nerd", motion: "reduced", mono: true } },
+      { terminalSuspend: true, environment: {} },
+    ).ui,
+  ).toEqual({ style: "opencode", color_depth: "truecolor", icons: "nerd", motion: "reduced", mono: true })
+})
+
+test("validates design settings", () => {
+  expect(decodeInfo({ ui: { style: "fork", color_depth: "256", icons: "ascii", motion: "full", mono: true } })).toEqual({
+    ui: { style: "fork", color_depth: "256", icons: "ascii", motion: "full", mono: true },
+  })
+  expect(() => decodeInfo({ ui: { style: "upstream" } })).toThrow()
+  expect(() => decodeInfo({ ui: { color_depth: "16" } })).toThrow()
+  expect(() => decodeInfo({ ui: { icons: "emoji" } })).toThrow()
+  expect(() => decodeInfo({ ui: { motion: "off" } })).toThrow()
+})
+
 test("resolves automatic tabs from the terminal environment", () => {
   expect(resolve({}, { terminalSuspend: true, environment: {} }).tabs.enabled).toBe(true)
   expect(resolve({}, { terminalSuspend: true, environment: { HERDR_ENV: "1" } }).tabs.enabled).toBe(false)

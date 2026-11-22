@@ -95,6 +95,8 @@ import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
 import { useConfig, useNewDesigns } from "../../config"
+import { useDesign } from "../../ui/design-context"
+import { MessageCard } from "../../ui/message-card"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -2387,6 +2389,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   )
   const themes = useThemes()
   const theme = useTheme()
+  const design = useDesign()
   const mode = themes.mode
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
@@ -2400,10 +2403,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
 
   return (
     <Show when={props.message.text.trim() || files().length || skills().length}>
-      <box
-        border={["left"]}
+      <MessageCard
+        style={design.style()}
         borderColor={delivery() ? theme.border.base : color()}
-        customBorderChars={SplitBorder.customBorderChars}
         backgroundColor={theme.background.raised.base}
       >
         <SessionImages images={images()} paddingLeft={2} />
@@ -2493,7 +2495,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
             </box>
           </Show>
         </box>
-      </box>
+      </MessageCard>
     </Show>
   )
 }
