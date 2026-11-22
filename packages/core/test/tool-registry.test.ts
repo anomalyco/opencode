@@ -625,7 +625,7 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("runs a call to a Code Mode tool's path or registry ID as the program that calls it", () =>
+  it.effect("runs a call to a Code Mode tool's path or registry ID as a Code Mode call", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { echo: make(), "kebab-echo": make() }, { namespace: "acme.tools" })
@@ -635,9 +635,8 @@ describe("Tool", () => {
       const snapshot = yield* service.snapshot()
       for (const name of ["acme.tools.echo", "acme_tools_echo", "acme.tools.kebab-echo"]) {
         const result = yield* snapshot.execute(call(name))
-        expect(result.output).toMatchObject({ output: JSON.stringify({ text: name }) })
+        expect(result.output).toEqual({ text: name })
       }
-      // A failing program fails the call, since it isn't shown as an execute block.
       expect((yield* snapshot.execute(call("fails")).pipe(Effect.flip)).message).toContain("boom")
       // Not without execute, and not for a tool this request doesn't offer.
       const withoutExecute = new Map(

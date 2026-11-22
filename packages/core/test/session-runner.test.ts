@@ -5516,10 +5516,7 @@ describe("SessionRunnerLLM", () => {
       Expected.assistant({}, [
         Expected.completedTool(
           { id: "call-echo", name: "acme.echo" },
-          {
-            input: { text: "hi" },
-            metadata: { toolCalls: [{ tool: "acme.echo", input: { text: "hi" }, status: "completed" }] },
-          },
+          { input: { text: "hi" }, content: [Expected.text("hi")] },
         ),
       ]),
       { type: "assistant", finish: "stop" },

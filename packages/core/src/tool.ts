@@ -3,7 +3,7 @@ export { CallID, Content, Error, FileContent, TextContent } from "@opencode/sche
 export type { Context, Info, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
-import { toolExpression, type CodeMode } from "@opencode/codemode"
+import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
 import { isRecord } from "@opencode/util/record"
 import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
@@ -390,36 +390,25 @@ const layer = Layer.effect(
               if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              // A call to a tool this request only offers inside Code Mode, by the model at the top level or renamed there by
-              // a plugin, runs as the program that calls it.
-              const program =
-                codemode &&
-                name !== "execute" &&
-                !direct.has(name) &&
-                (!input.definitions || Array.from(input.definitions.values()).some((item) => item.name === "execute"))
-                  ? CodeModeTool.find(codemode.inventory, name)
-                  : undefined
-              if ((name === "execute" || program) && codemode) {
-                const programInput = program
-                  ? {
-                      code: `return await ${toolExpression(CodeModeTool.qualifiedName(program.registration))}(${JSON.stringify(event.input ?? {})})`,
-                    }
-                  : event.input
-                const run = (ctx: Tool.Context) => executeTool(codemode.tool, "execute", programInput, ctx)
+              if (name === "execute" && codemode) {
+                const run = (ctx: Tool.Context) => executeTool(codemode.tool, name, event.input, ctx)
                 const background = yield* CodeModeJob.Current
-                const result = yield* background
-                  ? background(context, run, full ? executeOptions(programInput) : undefined)
+                return yield* background
+                  ? background(context, run, full ? executeOptions(event.input) : undefined)
                   : run(context)
-                // A failed program is a completed execute result flagged as an error, which only an execute block shows. A
-                // call recorded under its own name fails as a tool error instead, so it reads as one.
-                if (!program || result.metadata?.error !== true) return result
-                return yield* new Tool.Error({
-                  message: result.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n\n"),
-                  metadata: result.metadata,
-                })
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
+              // A tool this request only offers inside Code Mode, called by the model at the top level or renamed there by
+              // a plugin, runs as a Code Mode call when the request offered execute.
+              const found =
+                codemode &&
+                name !== "execute" &&
+                (!input.definitions || Array.from(input.definitions.values()).some((item) => item.name === "execute"))
+                  ? CodeModeTool.find(codemode.inventory, name)
+                  : undefined
+              if (found)
+                return yield* executeTool(found.registration, found.id, event.input, { ...context, codemode: true })
               return yield* new Tool.Error({
                 message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
               })

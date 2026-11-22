@@ -46,7 +46,7 @@ export const Plugin = define({
           const tools = event.info ? [] : yield* ctx.tool.list()
           const alias = aliases.get(event.tool)
           const aliased = alias === undefined ? undefined : tools.find((tool) => tool.id === alias)
-          // A call to a Code Mode tool at the top level runs as a program; see Tool's snapshot.execute.
+          // A call to a Code Mode tool at the top level runs as a Code Mode call; see Tool's snapshot.execute.
           const target =
             aliased ?? tools.find((tool) => tool.id === event.tool || CodeModeTool.qualifiedName(tool) === event.tool)
           const tool = event.info ?? target
@@ -71,7 +71,7 @@ export const Plugin = define({
           const call = pending.get(event.id)
           if (call === undefined) return
           pending.delete(event.id)
-          const inProgram = event.tool === "execute"
+          const inProgram = event.codemode
           if (!inProgram && !call.aliased) return
           const note = `<tool-repair>\n${
             !inProgram
