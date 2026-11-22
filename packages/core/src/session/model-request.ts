@@ -29,7 +29,7 @@ import type {
 } from "@opencode/plugin/effect/session"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
-import type { Content } from "@opencode/schema/tool"
+import type { Content, Freeform } from "@opencode/schema/tool"
 import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -90,6 +90,15 @@ export interface Input {
   readonly webSocket?: "session"
   /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
   readonly inputTokens?: { readonly measured: number; readonly estimated: number }
+}
+
+// An options line goes out as a Lark grammar, so without Lark the tool keeps only its plain-text form, which a tool
+// with optional fields does not have.
+const supportedFreeform = (freeform: Freeform | undefined, capabilities: Model.Capabilities) => {
+  if (!freeform || !capabilities.freeform?.includes(freeform.type)) return undefined
+  if (freeform.type !== "text" || freeform.optionsPrefix === undefined || capabilities.freeform.includes("lark"))
+    return freeform
+  return { type: "text" as const }
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
@@ -348,7 +357,7 @@ export const layer = Layer.effect(
         tools: Array.from(hooked, ([name, t]) => ({
           ...t,
           name,
-          freeform: t.freeform && model.capabilities.freeform?.includes(t.freeform.type) ? t.freeform : undefined,
+          freeform: supportedFreeform(t.freeform, model.capabilities),
         })),
         toolChoice: input.toolChoice,
         ...generation,

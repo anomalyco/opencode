@@ -77,6 +77,33 @@ describe("SessionModelRequest HTTP hooks", () => {
       }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 
+  it.effect("keeps an options line only for models that accept Lark grammars", () =>
+    Effect.gen(function* () {
+      const freeform = { type: "text", optionsPrefix: "// @exec:" } as const
+      const tools = {
+        definitions: [new ToolDefinition({ name: "run", description: "", inputSchema: {}, freeform })],
+        execute: () => Effect.die("unused tool execution"),
+      }
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const cases = [
+        [["text", "lark"], freeform],
+        [["text"], { type: "text" }],
+        [["lark"], undefined],
+      ] as const
+      for (const [supported, expected] of cases) {
+        const prepared = yield* requests.primary({
+          session,
+          agent: Agent.ID.make("build"),
+          model: { ...model, capabilities: { ...model.capabilities, freeform: [...supported] } },
+          system: [],
+          messages: [],
+          tools,
+        })
+        expect(prepared.request.tools.map((tool) => tool.type === "tool" && tool.freeform)).toEqual([expected])
+      }
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
   it.effect("tags every Session request kind on http.request and http.response", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
@@ -182,14 +209,12 @@ describe("SessionModelRequest HTTP hooks", () => {
       }
 
       const required = yield* Effect.forEach([1, 2], () =>
-        requests
-          .primary({ session, agent: Agent.ID.make("build"), model, system: [], messages: [], tools })
-          .pipe(
-            Effect.map((prepared) => {
-              const tool = prepared.request.tools[0]
-              return tool?.type === "tool" ? tool.inputSchema.required : undefined
-            }),
-          ),
+        requests.primary({ session, agent: Agent.ID.make("build"), model, system: [], messages: [], tools }).pipe(
+          Effect.map((prepared) => {
+            const tool = prepared.request.tools[0]
+            return tool?.type === "tool" ? tool.inputSchema.required : undefined
+          }),
+        ),
       )
 
       expect(required).toEqual([
