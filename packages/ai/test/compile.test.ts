@@ -220,6 +220,61 @@ describe("request option precedence", () => {
     ),
   )
 
+  it.effect("flattens a forced choice only when it names a namespaced tool", () =>
+    Effect.gen(function* () {
+      const choose = (name: string) =>
+        compileRequest(
+          ai.request({
+            model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+            prompt: "Hi",
+            tools: [
+              ToolDefinition.make({ name: "foo_bar", description: "Top level", inputSchema: {} }),
+              ToolNamespace.make({
+                name: "crm",
+                description: "CRM tools",
+                tools: [ToolDefinition.make({ name: "customer.lookup", description: "Look up", inputSchema: {} })],
+              }),
+            ],
+            toolChoice: name,
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.tool_choice))
+      // A dotted leaf flattens as flattenTools names it.
+      expect(yield* choose("crm.customer.lookup")).toEqual({
+        type: "function",
+        function: { name: "crm_customer.lookup" },
+      })
+      // A dotted name that isn't a namespaced tool is left for the provider to reject, not matched to foo_bar.
+      expect(yield* choose("foo.bar")).toEqual({ type: "function", function: { name: "foo.bar" } })
+    }),
+  )
+
+  it.effect("flattens a forced choice for a namespace a tool update adds", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: AnthropicMessages.route
+            .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.bearer("unused") })
+            .model({ id: "claude-opus-5", capabilities: { tools: { updates: ["add", "remove", "replace"] } } }),
+          messages: [
+            Message.user("Hi"),
+            Message.tools({
+              add: [
+                ToolNamespace.make({
+                  name: "crm",
+                  description: "CRM tools",
+                  tools: [ToolDefinition.make({ name: "lookup", description: "Look up", inputSchema: {} })],
+                }),
+              ],
+            }),
+            Message.user("Look up a customer"),
+          ],
+          toolChoice: "crm.lookup",
+        }),
+      )
+      expect(prepared.body.tool_choice).toMatchObject({ type: "tool", name: "crm_lookup" })
+    }),
+  )
+
   it.effect("normalizes tool history before protocol lowering", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

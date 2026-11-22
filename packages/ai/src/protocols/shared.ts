@@ -389,7 +389,7 @@ export const flattenToolRequest = (request: LLMRequest) => {
     const content = message.content.map(flatten)
     return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
   })
-  const toolChoice = flattenToolChoice(request.toolChoice, declared)
+  const toolChoice = flattenToolChoice(request, declared)
   return {
     tools,
     request:
@@ -399,12 +399,25 @@ export const flattenToolRequest = (request: LLMRequest) => {
   }
 }
 
-// A forced choice names a namespaced tool by its qualified path (`crm.lookup`); point it at the flattened definition.
-const flattenToolChoice = (toolChoice: LLMRequest["toolChoice"], declared: ReadonlySet<string>) => {
-  if (toolChoice?.type !== "tool" || toolChoice.name === undefined || declared.has(toolChoice.name)) return toolChoice
-  const name = toolChoice.name.replaceAll(".", "_")
-  return declared.has(name) ? new ToolChoice({ ...toolChoice, name }) : toolChoice
+// A forced choice names a namespaced tool by its path (`crm.lookup`), including one a tool update adds later; point it
+// at the flattened definition.
+const flattenToolChoice = (request: LLMRequest, declared: ReadonlySet<string>) => {
+  const choice = request.toolChoice
+  if (choice?.type !== "tool" || choice.name === undefined || declared.has(choice.name)) return choice
+  const added = request.messages.flatMap((message) => (message.role === "system" ? (message.tools?.add ?? []) : []))
+  const name = new Map(namespacedPaths([...request.tools, ...added])).get(choice.name)
+  return name === undefined ? choice : new ToolChoice({ ...choice, name })
 }
+
+// Each namespaced tool's path and the name flattenTools gives it.
+const namespacedPaths = (
+  tools: ReadonlyArray<ToolEntry>,
+  path: ReadonlyArray<string> = [],
+): ReadonlyArray<readonly [string, string]> =>
+  tools.flatMap((tool) => {
+    if (tool.type === "namespace") return namespacedPaths(tool.tools, [...path, tool.name])
+    return path.length === 0 ? [] : [[[...path, tool.name].join("."), [...path, tool.name].join("_")] as const]
+  })
 
 const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(
   part: Part,
