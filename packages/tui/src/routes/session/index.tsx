@@ -73,6 +73,7 @@ import { statusLabel } from "../../component/dialog-workspace-file-changes"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
+import { findUndoMessage } from "./undo"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
 import { useStorage } from "../../context/storage"
@@ -1130,15 +1131,18 @@ export function Session(props: {
       group: "Session",
       slash: { name: "undo" },
       run: () => {
-        const message = messagesBeforeRevert().findLast(
-          (message): message is SessionMessageUser => message.type === "user" && !!message.text.trim(),
+        const pending = pendingDeliveries()
+        const message = findUndoMessage(
+          messagesBeforeRevert(),
+          new Set(data.session.input.list(sessionID)),
+          new Set(pending.keys()),
         )
         if (!message) {
           toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
           dialog.clear()
           return
         }
-        const undo = pendingDeliveries().has(message.id)
+        const undo = pending.has(message.id)
           ? undoPending(message.id, message)
           : (async () => {
               const restored = await restorePrompt(message)
