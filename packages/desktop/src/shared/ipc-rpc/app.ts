@@ -16,8 +16,6 @@ export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { succe
 
 export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
 
-export const AppRestartService = Rpc.make("AppRestartService", { success: ServerReadyData })
-
 // The renderer listens for DeepLinksOpened before it reports ready, and acknowledges each delivery once handled.
 export const AppReadyDeepLinks = Rpc.make("AppReadyDeepLinks")
 
@@ -87,7 +85,6 @@ export const AppRelaunch = Rpc.make("AppRelaunch")
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
-  AppRestartService,
   AppReadyDeepLinks,
   AppAcknowledgeDeepLinks,
   AppIsFirstLaunchOnboardingPending,

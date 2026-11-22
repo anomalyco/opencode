@@ -1235,7 +1235,8 @@ export const dict = {
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
   "settings.general.row.proxy.enabled.title": "Use a proxy",
   "settings.general.row.proxy.enabled.description":
-    "Route agent network requests through a proxy. Changes apply immediately and running sessions reconnect.",
+    "Route network requests through a proxy. Apply to save; the proxy takes effect for the desktop app immediately and for new agent service processes.",
+  "settings.general.row.proxy.apply": "Apply proxy settings",
   "settings.general.row.proxy.http.title": "HTTP proxy",
   "settings.general.row.proxy.http.description": "Proxy URL used for HTTP requests.",
   "settings.general.row.proxy.https.title": "HTTPS proxy",

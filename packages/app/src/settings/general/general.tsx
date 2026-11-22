@@ -1,5 +1,6 @@
 import { Component, Show, createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
+import { Button } from "@opencode/ui/button"
 import { Select } from "@opencode/ui/select"
 import { TextInput } from "@opencode/ui/text-input"
 import { Switch } from "@opencode/ui/switch"
@@ -359,10 +360,10 @@ export const SettingsGeneral: Component = () => {
                 description={language.t("settings.general.row.proxy.enabled.description")}
               >
                 <div data-action="settings-proxy-enabled">
-                  <Switch checked={proxy.value().enabled} onChange={(enabled) => proxy.set({ enabled })} />
+                  <Switch checked={proxy.draft().enabled} onChange={(enabled) => proxy.edit({ enabled })} />
                 </div>
               </SettingsRow>
-              <Show when={proxy.value().enabled}>
+              <Show when={proxy.draft().enabled}>
                 <SettingsRow
                   title={language.t("settings.general.row.proxy.http.title")}
                   description={language.t("settings.general.row.proxy.http.description")}
@@ -372,8 +373,8 @@ export const SettingsGeneral: Component = () => {
                       data-action="settings-proxy-http"
                       type="text"
                       appearance="base"
-                      value={proxy.value().http}
-                      onChange={(event) => proxy.set({ http: event.currentTarget.value })}
+                      value={proxy.draft().http}
+                      onChange={(event) => proxy.edit({ http: event.currentTarget.value })}
                       placeholder="http://127.0.0.1:7890"
                       spellcheck={false}
                       autocorrect="off"
@@ -392,8 +393,8 @@ export const SettingsGeneral: Component = () => {
                       data-action="settings-proxy-https"
                       type="text"
                       appearance="base"
-                      value={proxy.value().https}
-                      onChange={(event) => proxy.set({ https: event.currentTarget.value })}
+                      value={proxy.draft().https}
+                      onChange={(event) => proxy.edit({ https: event.currentTarget.value })}
                       placeholder="http://127.0.0.1:7890"
                       spellcheck={false}
                       autocorrect="off"
@@ -412,8 +413,8 @@ export const SettingsGeneral: Component = () => {
                       data-action="settings-proxy-no-proxy"
                       type="text"
                       appearance="base"
-                      value={proxy.value().noProxy}
-                      onChange={(event) => proxy.set({ noProxy: event.currentTarget.value })}
+                      value={proxy.draft().noProxy}
+                      onChange={(event) => proxy.edit({ noProxy: event.currentTarget.value })}
                       placeholder="localhost,127.0.0.1,::1"
                       spellcheck={false}
                       autocorrect="off"
@@ -425,6 +426,16 @@ export const SettingsGeneral: Component = () => {
                 </SettingsRow>
               </Show>
             </SettingsList>
+            <div class="pt-3">
+              <Button
+                variant="outline"
+                size="small"
+                data-action="settings-proxy-apply"
+                onClick={proxy.apply}
+              >
+                {language.t("settings.general.row.proxy.apply")}
+              </Button>
+            </div>
           </section>
         </Show>
 

@@ -19,7 +19,6 @@ const RegisteredService = Schema.Struct({ version: Schema.optional(Schema.String
 export interface Interface {
   readonly connection: Effect.Effect<SidecarCredentials.Data>
   readonly reconnect: Effect.Effect<SidecarCredentials.Data>
-  readonly restart: Effect.Effect<SidecarCredentials.Data>
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/BackgroundService") {}
@@ -29,21 +28,18 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const context = yield* Effect.context<FileSystem.FileSystem | Path.Path | DesktopCli.Service>()
 
-    const service = yield* BackgroundServiceMachine.make({
-      probe: probe().pipe(Effect.provide(context)),
-      ensure: (mode) => ensure(mode).pipe(Effect.provide(context)),
-      publish: (data) => {
-        SidecarCredentials.set(data)
-        // Every window moves its requests and event stream to the new origin, not only the one that reconnected.
-        const event = new SidecarChanged({ url: data.url })
-        getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
-      },
-    })
-
-    return Service.of({
-      ...service,
-      restart: restart().pipe(Effect.provide(context), Effect.orDie),
-    })
+    return Service.of(
+      yield* BackgroundServiceMachine.make({
+        probe: probe().pipe(Effect.provide(context)),
+        ensure: (mode) => ensure(mode).pipe(Effect.provide(context)),
+        publish: (data) => {
+          SidecarCredentials.set(data)
+          // Every window moves its requests and event stream to the new origin, not only the one that reconnected.
+          const event = new SidecarChanged({ url: data.url })
+          getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
+        },
+      }),
+    )
   }),
 )
 
@@ -99,15 +95,6 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
     )
 
   return ready.credentials
-})
-
-// Proxy settings live in the main process environment, so the service must be respawned to inherit a later change.
-const restart = Effect.fn("BackgroundService.restart")(function* () {
-  const setup = yield* prepare("reconnect")
-
-  yield* Effect.tryPromise(() => setup.client.Service.stop(setup.file ? { file: setup.file } : {})).pipe(Effect.orDie)
-
-  return yield* ensure("reconnect")
 })
 
 const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: BackgroundServiceMachine.ConnectMode) {

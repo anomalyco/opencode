@@ -113,15 +113,17 @@ export function createProxySettingsController() {
     initial: defaultProxySettings,
     initialMeta: undefined,
     load: async (source) => ({ value: await source.get(), meta: undefined }),
-    write: async (value, source) => {
-      await source.set(value)
-      await platform.restartService?.()
-    },
+    write: (value, source) => source.set(value),
   })
 
+  const [draft, setDraft] = createSignal<ProxySettings>(defaultProxySettings)
+
+  createEffect(() => setDraft(setting.value()))
+
   return {
-    value: setting.value,
-    set: (patch: Partial<ProxySettings>) => setting.select({ ...setting.value(), ...patch }),
+    draft,
+    edit: (patch: Partial<ProxySettings>) => setDraft((current) => ({ ...current, ...patch })),
+    apply: () => setting.select(draft()),
   }
 }
 
