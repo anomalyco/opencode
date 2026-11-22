@@ -798,6 +798,7 @@ dependencies = [
 name = "opencode-drive"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "log",
  "opencode-api-types",
  "opencode-util",
