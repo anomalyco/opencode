@@ -988,9 +988,9 @@ async fn signals_carry_the_listened_events_but_no_deltas() {
     let data = data(handler(|_req: Req| async { ok(json!({ "data": [] })) }), Options::default());
     data.remember(info(session(0)));
     let mut signals = data.signals();
-    let _steps = data.listen(["session.step.started", "session.text.delta"]);
-    let renamed = data.listen(["session.renamed"]);
-    let again = data.listen(["session.renamed"]);
+    let _steps = data.listen([EventKind::SessionStepStarted, EventKind::SessionTextDelta]);
+    let renamed = data.listen([EventKind::SessionRenamed]);
+    let again = data.listen([EventKind::SessionRenamed]);
     let step = json!({
         "sessionID": SESSION, "assistantMessageID": "msg_a", "agent": "build",
         "model": { "providerID": "p", "id": "m" }, "started": 1,

@@ -39,6 +39,7 @@ use std::sync::Arc;
 
 use activation::{Activation, Drawn};
 pub use opencode_plugin_abi as abi;
+use opencode_plugin_abi::types::kinds::EventKinds;
 use opencode_ui::dialog::DialogKeymap;
 use opencode_ui::keymap::{Bind, Slash, TuiCommand};
 use opencode_ui::markdown::CodeBlockRenderers;
@@ -137,8 +138,8 @@ pub trait Host: 'static {
     /// Asks for the user's attention. Called outside every plugin callback.
     fn attention(&self, _attention: &abi::Attention) {}
     /// Calls `run` with each server event, after the host has applied it, until the disposer is dropped. `run` gets at
-    /// least the events whose type is in `types`, and may get others.
-    fn on_event(&self, _types: &[String], _run: Rc<dyn Fn(&abi::types::V2Event)>) -> Option<Disposer> {
+    /// least the events whose type is in `kinds`, and may get others.
+    fn on_event(&self, _kinds: EventKinds, _run: Rc<dyn Fn(&abi::types::V2Event)>) -> Option<Disposer> {
         None
     }
     /// Mounts slot `path` with `input` into `parent`, for a claim's [`abi::Node::Slot`].
@@ -565,11 +566,11 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
         }
         let revoked = &scope.revoked;
         for (types, run) in api.events() {
-            let (kinds, run, scope) = (types.to_vec(), run.clone(), scope.clone());
+            let (kinds, run, scope) = (EventKinds::named(types), run.clone(), scope.clone());
             let subscription = setup.host().on_event(
-                types,
+                kinds.clone(),
                 Rc::new(move |event| {
-                    if kinds.iter().any(|kind| kind == event.tag()) {
+                    if kinds.contains(event) {
                         scope.run("on-event", |host| run(host, event));
                     }
                 }),

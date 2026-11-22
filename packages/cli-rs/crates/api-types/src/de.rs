@@ -68,6 +68,21 @@ pub fn double_option<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
+/// Reads a union member's tag without keeping it: any string, as the `String` it replaces accepted.
+pub fn tag<'de, D: Deserializer<'de>>(deserializer: D) -> Result<(), D::Error> {
+    struct TagVisitor;
+    impl Visitor<'_> for TagVisitor {
+        type Value = ();
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a string")
+        }
+        fn visit_str<E: Error>(self, _: &str) -> Result<(), E> {
+            Ok(())
+        }
+    }
+    deserializer.deserialize_str(TagVisitor)
+}
+
 /// The name serde_json's `RawValue` asks for. serde_json then hands over the value's text instead of
 /// parsing it; any other deserializer gives the value itself.
 const RAW_TOKEN: &str = "$serde_json::private::RawValue";

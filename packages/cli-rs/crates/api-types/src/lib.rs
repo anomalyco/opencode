@@ -5,7 +5,9 @@ pub mod call;
 pub mod client;
 pub mod de;
 pub mod js;
+pub mod kinds;
 pub mod ser;
+pub mod tool;
 #[macro_use]
 mod type_macros;
 pub mod types;

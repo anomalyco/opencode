@@ -21,7 +21,7 @@ pub const CONNECTED: &str = "server.connected";
 /// A server event.
 pub trait Event: Clone + Send + 'static {
     /// The wire `type` tag.
-    fn kind(&self) -> &str;
+    fn tag(&self) -> &str;
 
     /// Folds `next` into `self` when both continue the same delta stream (for example two text deltas
     /// of one message part), and reports whether it did. Only adjacent events of one batch merge.
@@ -31,7 +31,7 @@ pub trait Event: Clone + Send + 'static {
 }
 
 impl Event for serde_json::Value {
-    fn kind(&self) -> &str {
+    fn tag(&self) -> &str {
         self.get("type").and_then(serde_json::Value::as_str).unwrap_or_default()
     }
 }
@@ -285,7 +285,7 @@ impl<E: Event, S: Source<E>> Runner<E, S> {
         let first = match first {
             None => return failed("Event stream disconnected", None),
             Some(Err(error)) => return failed(&error.to_string(), None),
-            Some(Ok(first)) if first.kind() != CONNECTED => {
+            Some(Ok(first)) if first.tag() != CONNECTED => {
                 return failed("Event stream did not start with server.connected", None);
             }
             Some(Ok(first)) => first,
@@ -401,7 +401,7 @@ mod tests {
     }
 
     impl Event for Ev {
-        fn kind(&self) -> &str {
+        fn tag(&self) -> &str {
             self.kind
         }
 
@@ -771,7 +771,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(20);
         while kinds.len() < 5 {
             let Ok(Some(batch)) = tokio::time::timeout_at(deadline, batches.recv()).await else { break };
-            kinds.extend(batch.iter().map(|event| event.kind().to_owned()));
+            kinds.extend(batch.iter().map(|event| event.tag().to_owned()));
         }
         println!("live: {server} state {:?}", connection.state());
         println!("live: event types {}", serde_json::to_string(&kinds).unwrap());

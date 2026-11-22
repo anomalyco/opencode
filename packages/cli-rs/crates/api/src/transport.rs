@@ -107,8 +107,8 @@ impl<T: DeserializeOwned + Send> SseResponse<T> {
 }
 
 impl crate::events::Event for V2Event {
-    fn kind(&self) -> &str {
-        self.tag()
+    fn tag(&self) -> &str {
+        V2Event::tag(self)
     }
 
     /// Joins adjacent deltas of one text or reasoning part (same session, message, and ordinal) or of

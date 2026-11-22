@@ -58,14 +58,12 @@ impl Data {
         for follow in follows {
             self.follow(follow);
         }
-        // Each other event of a type someone listens to.
-        let mut listened = None;
-        for event in events {
-            if is_delta(event) {
-                continue;
-            }
-            let listened = listened.get_or_insert_with(|| opencode_util::lock(&self.inner.listened));
-            if listened.contains_key(event.tag()) {
+        // Each other event of a type someone listens to: of its kind, and of its name for a named kind.
+        for event in events.iter().filter(|event| !is_delta(event)) {
+            let kind = event.kind();
+            if self.inner.listened[kind as usize].load(std::sync::atomic::Ordering::SeqCst) > 0
+                && (!kind.named() || opencode_util::lock(&self.inner.named).contains_key(event.tag()))
+            {
                 // No receiver is not an error: views subscribe when they need to.
                 let _ = self.inner.signals.send(std::sync::Arc::new(event.clone()));
             }
@@ -216,7 +214,7 @@ impl State {
                     let keys: Vec<&str> = event.data.delta.keys().map(String::as_str).collect();
                     let row = SessionMessageSystem {
                         id: crate::messages::from_event(&event.id),
-                        r#type: "system".into(),
+                        r#type: tag::System,
                         text: text.clone(),
                         description: Some(format!("Instructions updated: {}", keys.join(", "))),
                         metadata: event.metadata.clone(),
@@ -228,7 +226,7 @@ impl State {
             V2Event::SessionSynthetic(event) => {
                 let row = SessionMessageSynthetic {
                     id: crate::messages::from_event(&event.id),
-                    r#type: "synthetic".into(),
+                    r#type: tag::Synthetic,
                     text: event.data.text.clone(),
                     description: event.data.description.clone(),
                     metadata: event.data.metadata.clone(),

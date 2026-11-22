@@ -717,6 +717,7 @@ dependencies = [
  "opencode-util",
  "percent-encoding",
  "regex",
+ "serde",
  "serde_json",
  "tokio",
  "tokio-util",

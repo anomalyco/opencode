@@ -103,12 +103,14 @@ fn trail_colors(color: Color, steps: usize) -> Vec<Color> {
 /// `getScannerState` for the bidirectional scanner.
 struct State {
     position: i64,
-    holding: bool,
-    hold_progress: i64,
-    hold_total: i64,
-    movement_progress: i64,
-    movement_total: i64,
     forward: bool,
+    phase: Phase,
+}
+
+/// What the head does, and how far through it the frame is.
+enum Phase {
+    Holding { progress: i64, total: i64 },
+    Moving { progress: i64, total: i64 },
 }
 
 impl State {
@@ -116,42 +118,25 @@ impl State {
         let chars = options.width as i64;
         let (hold_end, hold_start) = (options.hold_end as i64, options.hold_start as i64);
         let backward = chars - 1;
-        let still = |position, progress, total, forward| Self {
-            position,
-            holding: true,
-            hold_progress: progress,
-            hold_total: total,
-            movement_progress: 0,
-            movement_total: 0,
-            forward,
-        };
-        let moving = |position, progress, total, forward| Self {
-            position,
-            holding: false,
-            hold_progress: 0,
-            hold_total: 0,
-            movement_progress: progress,
-            movement_total: total,
-            forward,
-        };
+        let state = |position, forward, phase| Self { position, forward, phase };
         if frame < chars {
-            return moving(frame, frame, chars, true);
+            return state(frame, true, Phase::Moving { progress: frame, total: chars });
         }
         if frame < chars + hold_end {
-            return still(chars - 1, frame - chars, hold_end, true);
+            return state(chars - 1, true, Phase::Holding { progress: frame - chars, total: hold_end });
         }
         if frame < chars + hold_end + backward {
             let index = frame - chars - hold_end;
-            return moving(chars - 2 - index, index, backward, false);
+            return state(chars - 2 - index, false, Phase::Moving { progress: index, total: backward });
         }
-        still(0, frame - chars - hold_end - backward, hold_start, false)
+        state(0, false, Phase::Holding { progress: frame - chars - hold_end - backward, total: hold_start })
     }
 
     /// `calculateColorIndex`: 0 at the head, the distance behind it along the trail, or -1 when unlit.
     fn color_index(&self, char: i64, trail: i64) -> i64 {
         let distance = if self.forward { self.position - char } else { char - self.position };
-        if self.holding {
-            return distance + self.hold_progress;
+        if let Phase::Holding { progress, .. } = self.phase {
+            return distance + progress;
         }
         if distance > 0 && distance < trail {
             return distance;
@@ -165,14 +150,14 @@ impl State {
         if !options.enable_fading {
             return 1.0;
         }
-        if self.holding && self.hold_total > 0 {
-            let progress = (self.hold_progress as f64 / self.hold_total as f64).min(1.0);
-            return min.max(1.0 - progress * (1.0 - min));
+        match self.phase {
+            Phase::Holding { progress, total } if total > 0 => {
+                min.max(1.0 - (progress as f64 / total as f64).min(1.0) * (1.0 - min))
+            }
+            Phase::Moving { progress, total } if total > 0 => {
+                min + (progress as f64 / 1.max(total - 1) as f64).min(1.0) * (1.0 - min)
+            }
+            _ => 1.0,
         }
-        if !self.holding && self.movement_total > 0 {
-            let progress = (self.movement_progress as f64 / 1.max(self.movement_total - 1) as f64).min(1.0);
-            return min + progress * (1.0 - min);
-        }
-        1.0
     }
 }
