@@ -160,11 +160,8 @@ pub async fn with_completed_diffs(update: Value, source: Option<&DiffSource>, cw
 
 async fn completed_diff(file: &FileDiff, hunks: &[patch::Hunk], cwd: &str) -> Option<Diff> {
     let path = absolute_path(&file.file, cwd);
-    let new_text = match file.status.as_str() {
-        "deleted" => String::new(),
-        _ => read_text(&path).await?,
-    };
-    if file.status == "added" {
+    let new_text = if file.status == FileStatus::Deleted { String::new() } else { read_text(&path).await? };
+    if file.status == FileStatus::Added {
         return Some(Diff::new(path, None, new_text));
     }
     let recorded = unified::parse_first(&file.patch)?;
@@ -206,10 +203,7 @@ async fn permission_previews(tool_name: &str, input: &Value, metadata: Option<&V
     let mut previews = Vec::new();
     for file in decode_files(metadata.and_then(|metadata| metadata.get("files"))) {
         let path = absolute_path(&file.file, cwd);
-        let old_text = match file.status.as_str() {
-            "added" => None,
-            _ => Some(read_text(&path).await?),
-        };
+        let old_text = if file.status == FileStatus::Added { None } else { Some(read_text(&path).await?) };
         let files = unified::parse(&file.patch)?;
         // `applyPatch` throws on a patch of more than one file.
         let [hunks] = files.as_slice() else { return None };
@@ -288,11 +282,17 @@ async fn read_text(path: &str) -> Option<String> {
 }
 
 /// One `FileDiff.Info`.
-#[derive(Debug, Clone, PartialEq)]
 struct FileDiff {
     file: String,
     patch: String,
-    status: String,
+    status: FileStatus,
+}
+
+#[derive(PartialEq)]
+enum FileStatus {
+    Added,
+    Deleted,
+    Modified,
 }
 
 /// `Schema.decodeUnknownOption(Schema.Array(FileDiff.Info))`, with an invalid value as no files.
@@ -304,18 +304,18 @@ fn decode_files(value: Option<&Value>) -> Vec<FileDiff> {
 fn decode_file(value: &Value) -> Option<FileDiff> {
     let count =
         |key: &str| value.get(key).and_then(Value::as_f64).is_some_and(|number| number >= 0.0 && number.fract() == 0.0);
-    let status = value.get("status")?.as_str()?;
-    let more = value.get("more");
-    if !count("additions")
-        || !count("deletions")
-        || !matches!(status, "added" | "deleted" | "modified")
-        || more.is_some_and(|more| more != &json!(true))
-    {
+    let status = match value.get("status")?.as_str()? {
+        "added" => FileStatus::Added,
+        "deleted" => FileStatus::Deleted,
+        "modified" => FileStatus::Modified,
+        _ => return None,
+    };
+    if !count("additions") || !count("deletions") || value.get("more").is_some_and(|more| more != &json!(true)) {
         return None;
     }
     Some(FileDiff {
         file: value.get("file")?.as_str()?.to_owned(),
         patch: value.get("patch")?.as_str()?.to_owned(),
-        status: status.to_owned(),
+        status,
     })
 }
