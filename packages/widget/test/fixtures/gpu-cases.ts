@@ -1,0 +1,310 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
+
+// The GPU conformance fixtures' programs (`gpu/*.json`): the example widget templates, run for a few frames, and
+// programs that break the subset's structure, handles or limits. `canvases`: sizes the host sends before the first
+// frame; `inputs`: what the client sends before frame `frame` (an `event`, or a `canvas` size).
+export interface GpuCase {
+  readonly name: string
+  readonly source: string
+  readonly data?: unknown
+  readonly canvases: ReadonlyArray<{ readonly key: string; readonly width: number; readonly height: number }>
+  readonly inputs?: ReadonlyArray<{ readonly frame: number; readonly input: unknown }>
+}
+
+const template = (name: string) => readFileSync(path.resolve(import.meta.dir, `gpu/templates/${name}.js`), "utf8")
+
+// A live program that renders GPU canvases `keys`, gets a device and configures each, then runs `body` with
+// `device`, `contexts` (by key) and `view(key)` (the canvas's current view).
+const program = (body: string, keys: ReadonlyArray<string> = ["scene"]) => `async function main() {
+  widget.render(ui.column([${keys.map((key) => `ui.canvas({ key: ${JSON.stringify(key)}, gpu: true, height: 100 })`).join(", ")}]))
+  const device = await widget.gpu.requestDevice()
+  const format = widget.gpu.getPreferredCanvasFormat()
+  const contexts = {}
+  for (const key of ${JSON.stringify(keys)}) {
+    contexts[key] = widget.gpu.getContext(key)
+    contexts[key].configure({ device, format })
+  }
+  const view = (key) => contexts[key].getCurrentTexture().createView()
+  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: "clear", storeOp: "store" }] })
+${body}
+}`
+
+const scene = [{ key: "scene", width: 200, height: 200 }]
+
+export const gpuCases: ReadonlyArray<GpuCase> = [
+  { name: "cube", source: template("cube"), data: { frames: 3 }, canvases: [{ key: "cube", width: 600, height: 480 }] },
+  {
+    name: "textured-quad",
+    source: template("textured-quad"),
+    data: { frames: 2 },
+    canvases: [{ key: "quad", width: 400, height: 400 }],
+  },
+  {
+    name: "post-process",
+    source: template("post-process"),
+    data: { frames: 3 },
+    // The size changes before the second frame: the offscreen texture follows it.
+    canvases: [{ key: "post", width: 320, height: 220 }],
+    inputs: [{ frame: 1, input: { type: "canvas", key: "post", width: 640, height: 440 } }],
+  },
+  {
+    name: "maze",
+    source: template("maze"),
+    data: { frames: 4 },
+    canvases: [{ key: "maze", width: 640, height: 360 }],
+    inputs: [
+      {
+        frame: 1,
+        input: {
+          type: "event",
+          event: {
+            id: "",
+            type: "key",
+            value: {
+              kind: "down",
+              key: "w",
+              code: "KeyW",
+              repeat: false,
+              shift: false,
+              alt: false,
+              ctrl: false,
+              meta: false,
+            },
+          },
+        },
+      },
+      { frame: 2, input: { type: "event", event: { id: "", type: "capture", value: true } } },
+      {
+        frame: 2,
+        input: {
+          type: "event",
+          event: { id: "0/:maze", type: "pointer", value: { kind: "move", dx: 40, dy: -10, button: 0 } },
+        },
+      },
+    ],
+  },
+  {
+    // Device loss isn't a fixture input; two devices' worth of handles are: a second requestDevice keeps the first.
+    name: "handles-and-defaults",
+    source: program(`
+  const again = await widget.gpu.requestDevice()
+  if (again !== device) throw new Error("one device per widget")
+  const texture = device.createTexture({ size: { width: 8, height: 8, depthOrArrayLayers: 6 }, format: "rgba8unorm", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST, mipLevelCount: 2 })
+  const cube = texture.createView({ dimension: "cube" })
+  const layers = texture.createView()
+  if (texture.createView({ dimension: "cube" }) !== cube) throw new Error("equal views are one handle")
+  device.createSampler()
+  const layout = device.createBindGroupLayout({ entries: [
+    { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: "cube" } },
+    { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+    { binding: 2, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: "read-only-storage", hasDynamicOffset: true } },
+  ] })
+  const storage = device.createBuffer({ size: 512, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC })
+  const copy = device.createBuffer({ size: 512, usage: GPUBufferUsage.COPY_DST })
+  device.createBindGroup({ layout, entries: [
+    { binding: 0, resource: cube },
+    { binding: 1, resource: device.createSampler({ magFilter: "linear", compare: undefined }) },
+    { binding: 2, resource: { buffer: storage, offset: 256, size: 64 } },
+  ] })
+  device.createPipelineLayout({ bindGroupLayouts: [layout] })
+  device.queue.writeBuffer(storage, 4, new Uint32Array([1, 2, 3, 4, 5]), 1, 3)
+  device.queue.writeBuffer(storage, 0, new Uint8Array([9, 8, 7, 6]).buffer)
+  device.queue.writeTexture({ texture, mipLevel: 1, origin: [0, 0, 2] }, new Uint8Array(4 * 4 * 4).fill(200), { bytesPerRow: 16 }, { width: 4, height: 4 })
+  const encoder = device.createCommandEncoder()
+  encoder.copyBufferToBuffer(storage, 0, copy, 0, 256)
+  device.queue.submit([encoder.finish()])
+  texture.destroy()
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    // The encoder errors the prelude finds itself go into the batch as \`error\` ops.
+    name: "error-encoder-finished",
+    source: program(`
+  const encoder = device.createCommandEncoder()
+  const buffer = encoder.finish()
+  encoder.beginRenderPass(clear("scene")).end()
+  device.queue.submit([buffer])
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-open-pass",
+    source: program(`
+  const encoder = device.createCommandEncoder()
+  encoder.beginRenderPass(clear("scene"))
+  device.queue.submit([encoder.finish()])
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-submitted-twice",
+    source: program(`
+  const encoder = device.createCommandEncoder()
+  encoder.beginRenderPass(clear("scene")).end()
+  const buffer = encoder.finish()
+  device.queue.submit([buffer])
+  device.queue.submit([buffer])
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-unknown-canvas",
+    source: `async function main() {
+  widget.render(ui.canvas({ key: "scene", gpu: true, height: 100 }))
+  const device = await widget.gpu.requestDevice()
+  widget.gpu.getContext("elsewhere").configure({ device, format: widget.gpu.getPreferredCanvasFormat() })
+  await widget.frame()
+}`,
+    canvases: scene,
+  },
+  {
+    name: "error-buffer-too-big",
+    source: program(`
+  device.createBuffer({ size: 64 * 1024 * 1024 + 4, usage: GPUBufferUsage.VERTEX })
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-texture-too-wide",
+    source: program(`
+  device.createTexture({ size: [4097, 4], format: "rgba8unorm", usage: GPUTextureUsage.TEXTURE_BINDING })
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-unknown-format",
+    source: program(`
+  device.createTexture({ size: [4, 4], format: "rg11b10ufloat", usage: GPUTextureUsage.TEXTURE_BINDING })
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-usage-outside-the-subset",
+    source: program(`
+  device.createBuffer({ size: 16, usage: 1 })
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-resources-over-256-mb",
+    source: program(`
+  for (let i = 0; i < 5; i++) device.createBuffer({ size: 64 * 1024 * 1024, usage: GPUBufferUsage.STORAGE })
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-destroyed-buffer",
+    source: program(`
+  const buffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST })
+  buffer.destroy()
+  device.queue.writeBuffer(buffer, 0, new Float32Array(4))
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-too-many-passes",
+    source: program(`
+  await widget.frame()
+  const encoder = device.createCommandEncoder()
+  for (let i = 0; i < 17; i++) encoder.beginRenderPass(clear("scene")).end()
+  device.queue.submit([encoder.finish()])
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    // 10,000 draws a frame are allowed; one more is over, in any of the frame's batches.
+    name: "error-too-many-draws",
+    source: program(`
+  const module = device.createShaderModule({ code: "@vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); } @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }" })
+  const pipeline = device.createRenderPipeline({ layout: "auto", vertex: { module }, fragment: { module, targets: [{ format }] } })
+  const frame = async (draws) => {
+    const encoder = device.createCommandEncoder()
+    const pass = encoder.beginRenderPass(clear("scene"))
+    pass.setPipeline(pipeline)
+    for (let i = 0; i < draws; i++) pass.draw(3)
+    pass.end()
+    device.queue.submit([encoder.finish()])
+  }
+  await frame(10000)
+  await widget.frame()
+  await frame(6000)
+  await widget.sleep(1)
+  await frame(4001)
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    // An error stops the canvases its batch renders into: "a"'s batch fails on frame 1, "b"'s on frame 2; a batch
+    // that renders into neither stops both, but they are stopped already, so it gives no error.
+    name: "error-isolated-to-a-canvas",
+    source: program(
+      `
+  const buffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.VERTEX })
+  const gone = device.createBuffer({ size: 16, usage: GPUBufferUsage.VERTEX })
+  gone.destroy()
+  const draw = (key, vertices) => {
+    const encoder = device.createCommandEncoder()
+    const pass = encoder.beginRenderPass(clear(key))
+    pass.setVertexBuffer(0, vertices)
+    pass.end()
+    device.queue.submit([encoder.finish()])
+  }
+  for (let frame = 0; frame < 3; frame++) {
+    await widget.frame()
+    draw("a", frame === 1 ? gone : buffer)
+    await widget.sleep(1)
+    draw("b", frame === 2 ? gone : buffer)
+  }
+  await widget.frame()
+  device.queue.writeBuffer(gone, 0, new Float32Array(4))`,
+      ["a", "b"],
+    ),
+    canvases: [
+      { key: "a", width: 100, height: 100 },
+      { key: "b", width: 100, height: 100 },
+    ],
+  },
+]
+
+// Batches a program posts itself, which the prelude never makes, one fixture each: a JavaScript expression for the
+// batch's ops, posted with 8 bytes.
+const raw = (ops: string) => `async function main() {
+  widget.render(ui.canvas({ key: "scene", gpu: true, height: 100 }))
+  __host.post({ type: "gpu", ops: ${ops}, bytes: new ArrayBuffer(8) })
+  await widget.frame()
+}`
+const view = `{ dimension: "2d", baseMipLevel: 0, mipLevelCount: 1, baseArrayLayer: 0, arrayLayerCount: 1 }`
+const sampler = `{ addressModeU: "wrap", addressModeV: "repeat", addressModeW: "repeat", magFilter: "nearest", minFilter: "nearest", mipmapFilter: "nearest", lodMinClamp: 0, lodMaxClamp: 32, compare: null, maxAnisotropy: 1 }`
+
+export const rawCases: ReadonlyArray<GpuCase> = (
+  [
+    ["unknown-op", `[["sparkle", 1]]`],
+    ["not-a-list", `[{ op: "buffer" }]`],
+    ["wrong-arity", `[["buffer", 1, 16]]`],
+    ["handle-reused", `[["buffer", 1, 16, 32], ["buffer", 1, 16, 32]]`],
+    ["handles-out-of-order", `[["buffer", 2, 16, 32], ["buffer", 1, 16, 32]]`],
+    ["no-such-handle", `[["destroy", 9]]`],
+    ["wrong-kind", `[["shader", 1, ""], ["destroy", 1]]`],
+    ["bytes-out-of-range", `[["buffer", 1, 16, 8], ["writeBuffer", 1, 0, 4, 8]]`],
+    ["not-a-whole-number", `[["buffer", 1, 16.5, 8]]`],
+    ["bad-enum", `[["sampler", 1, ${sampler}]]`],
+    ["draw-outside-a-pass", `[["draw", 3, 1, 0, 0]]`],
+    [
+      "pass-left-open",
+      `[["context", 1, "scene", "rgba8unorm", "opaque"], ["view", 2, 1, ${view}], ["pass", { colorAttachments: [{ view: 2, resolveTarget: null, clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" }], depthStencilAttachment: null }]]`,
+    ],
+    [
+      "bind-group-layout-entry",
+      `[["bindGroupLayout", 1, { entries: [{ binding: 0, visibility: 2, buffer: null, sampler: null, texture: null }] }]]`,
+    ],
+    ["shader-over-256-kb", `[["shader", 1, "x".repeat(256 * 1024 + 1)]]`],
+    ["ops-over-20000", `Array.from({ length: 20001 }, (_, i) => ["shader", i + 1, ""])`],
+    ["handles-over-4096", `Array.from({ length: 4097 }, (_, i) => ["shader", i + 1, ""])`],
+  ] as const
+).map(([name, ops]) => ({
+  name: `raw-${name}`,
+  source: raw(ops),
+  canvases: [{ key: "scene", width: 100, height: 100 }],
+}))

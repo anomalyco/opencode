@@ -1,0 +1,32 @@
+{
+  "name": "error-texture-too-wide",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  device.createTexture({ size: [4097, 4], format: \"rgba8unorm\", usage: GPUTextureUsage.TEXTURE_BINDING })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 1: \"texture\" argument 2 is over the limit of 4096",
+      "canvases": "all"
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"],
+        ["texture",2,4097,4,1,"rgba8unorm",4,1,1]
+      ]
+    }
+  ]
+}

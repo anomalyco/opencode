@@ -1,0 +1,32 @@
+{
+  "name": "error-unknown-format",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  device.createTexture({ size: [4, 4], format: \"rg11b10ufloat\", usage: GPUTextureUsage.TEXTURE_BINDING })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 1: \"texture\" argument 5 must be one of rgba8unorm, rgba8unorm-srgb, bgra8unorm, r8unorm, rgba16float, depth24plus, depth32float",
+      "canvases": "all"
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"],
+        ["texture",2,4,4,1,"rg11b10ufloat",4,1,1]
+      ]
+    }
+  ]
+}

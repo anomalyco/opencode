@@ -1,0 +1,22 @@
+{
+  "name": "raw-bytes-out-of-range",
+  "source": "async function main() {\n  widget.render(ui.canvas({ key: \"scene\", gpu: true, height: 100 }))\n  __host.post({ type: \"gpu\", ops: [[\"buffer\", 1, 16, 8], [\"writeBuffer\", 1, 0, 4, 8]], bytes: new ArrayBuffer(8) })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 100,
+      "height": 100
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 1: bytes [4, 12) are outside the batch's 8 bytes",
+      "canvases": "all"
+    }
+  ],
+  "end": "return"
+}

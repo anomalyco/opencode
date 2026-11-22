@@ -352,7 +352,8 @@ type Node = (
   | { type: "divider" }
   | { type: "canvas"; id?: string; height: number; width?: number; fps?: number; duration?: number; alt?: string;
       poster?: string; wgsl?: string; values?: number[]      // values only with wgsl
-      pointer?: true }   // set by the prelude when it has onPointer: only then does it take input
+      pointer?: true     // set by the prelude when it has onPointer: only then does it take input
+      gpu?: true }       // drawn by a live program's widget.gpu (widgets-gpu.md); not with wgsl
   | { type: "stack"; children: Node[] }
 ) & {
   // Any node, as a child of a stack (see Stack); ignored elsewhere.

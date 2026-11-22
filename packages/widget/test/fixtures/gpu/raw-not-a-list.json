@@ -1,0 +1,22 @@
+{
+  "name": "raw-not-a-list",
+  "source": "async function main() {\n  widget.render(ui.canvas({ key: \"scene\", gpu: true, height: 100 }))\n  __host.post({ type: \"gpu\", ops: [{ op: \"buffer\" }], bytes: new ArrayBuffer(8) })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 100,
+      "height": 100
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 0: an op is a list that starts with its name",
+      "canvases": "all"
+    }
+  ],
+  "end": "return"
+}

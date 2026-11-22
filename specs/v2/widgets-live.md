@@ -141,9 +141,9 @@ and hands the actual transfer to the app (URLSession / OkHttp), so system TLS an
 
 ## Lifecycle and budgets
 
-- The client starts `<program>\nreturn await __widget_live(__input(), true)` (input `{ data }`) when an open live
-  widget first becomes visible, on its own thread or task, never the UI thread. Render the last `render` node; before
-  the first one, show a loading frame.
+- The client starts `<program>\nreturn await __widget_live(__input(), true)` (input `{ data, gpu? }`, `gpu` per
+  `widgets-gpu.md`) when an open live widget first becomes visible, on its own thread or task, never the UI thread.
+  Render the last `render` node; before the first one, show a loading frame.
 - **Pause when not visible.** When a live widget scrolls out of view, its window or app goes to the background, or the
   session is closed, the client pauses the program: no frames, events or timer firings are delivered, `sleep` timers
   freeze with their remaining time, `now()` stops, and in-flight `fetch` results are held until resume. When the widget

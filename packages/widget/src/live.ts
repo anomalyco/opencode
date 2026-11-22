@@ -18,6 +18,7 @@ import type { Capabilities } from "./widget-template.js"
 import { type Tree, tree, unmark, ViewError } from "./tree.js"
 import { compiled } from "./compiled.js"
 import { located, MAX_VALUE_DEPTH, NEWER, OLDER, protocol, PROTOCOL } from "./host.js"
+import { type GpuBatch, type GpuError, gpuChecks } from "./gpu.js"
 
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
 export type LiveFrame = Omit<Frame, "id">
@@ -26,7 +27,10 @@ export type LiveFrame = Omit<Frame, "id">
 export type LiveMessage =
   | { readonly type: "render"; readonly node: Node }
   | { readonly type: "draw"; readonly id: string; readonly commands: ReadonlyArray<Command> }
-  | { readonly type: "frame" }
+  /** A frame request; it may carry the GPU batch recorded since the last one (widgets-gpu.md). */
+  | { readonly type: "frame"; readonly gpu?: GpuBatch }
+  /** A GPU batch on its own, posted before the program waits on something else than a frame. */
+  | ({ readonly type: "gpu" } & GpuBatch)
   | { readonly type: "submit"; readonly value: unknown }
   | { readonly type: "dismiss" }
   | { readonly type: "send"; readonly value: unknown; readonly wake: boolean }
@@ -38,6 +42,10 @@ export type LiveInput =
   | { readonly type: "event"; readonly event: WidgetEvent }
   | { readonly type: "frame"; readonly frame: LiveFrame }
   | { readonly type: "resumed"; readonly pausedMs: number }
+  /** A GPU canvas's size in physical pixels, before the frame after it changed (widgets-gpu.md). */
+  | { readonly type: "canvas"; readonly key: string; readonly width: number; readonly height: number }
+  /** The GPU device is lost: every handle is gone. */
+  | { readonly type: "gpu"; readonly lost: string }
 
 /** How a live program ended. `return`: `main` returned without an answer; its last view stays. */
 export type LiveEnd =
@@ -113,6 +121,11 @@ export interface LiveOptions {
   readonly capabilities?: Capabilities
   /** Performs `fetch` requests that passed the contract's checks; the platform `fetch` by default. */
   readonly transport?: Transport
+  /**
+   * The GPU the program sees (widgets-gpu.md): by default one with `rgba8unorm` canvases, whose batches this host checks
+   * without replaying them (it draws no canvas); `false`: none, so the program records nothing.
+   */
+  readonly gpu?: false | { readonly format?: "bgra8unorm" | "rgba8unorm" }
 }
 
 /**
@@ -128,11 +141,17 @@ export interface LiveWidget {
   readonly frameRequested: boolean
   readonly paused: boolean
   readonly warnings: ReadonlyArray<string>
+  /** The program errors (phase `gpu`) the GPU batches had, each with the canvases it stopped. */
+  readonly gpuErrors: ReadonlyArray<GpuError>
   readonly ended: LiveEnd | undefined
   readonly done: Promise<LiveEnd>
   readonly event: (event: WidgetEvent) => void
   /** Delivers a frame if the program asked for one and isn't paused; returns whether it did. */
   readonly frame: (frame: LiveFrame) => boolean
+  /** Tells the program a GPU canvas's size, in physical pixels. */
+  readonly canvas: (key: string, width: number, height: number) => void
+  /** Loses the GPU device: every handle is gone, and the program's `device.lost` resolves. */
+  readonly loseDevice: (reason: string) => void
   /**
    * Holds everything for the program: events, timer firings and fetch results wait, and `now()` stops, until `resume`,
    * which first delivers `{ type: "resumed", pausedMs }`.
@@ -146,7 +165,7 @@ export interface LiveWidget {
 
 export const LiveWidget = {
   /**
-   * Starts `<program>\nreturn await __widget_live(__input(), true)` with `__input()` = `{ data }`. A program built for an
+   * Starts `<program>\nreturn await __widget_live(__input(), true)` with `__input()` = `{ data, gpu }`. A program built for an
    * older contract ends at once with an error; one for a newer contract throws (a client error).
    */
   start: (program: string, data: unknown, options?: LiveOptions): LiveWidget => {
@@ -166,6 +185,15 @@ export const LiveWidget = {
     }> = []
     const drawings = new Map<string, ReadonlyArray<Command>>()
     const warnings: string[] = []
+    const gpuErrors: GpuError[] = []
+    const gpu = gpuChecks(
+      () => new Set([...(current.tree?.canvases ?? new Map())].flatMap(([key, canvas]) => (canvas.gpu ? [key] : []))),
+    )
+    // A GPU batch, checked; `frame`: it came with a frame request.
+    const replay = (batch: GpuBatch, frame: boolean) => {
+      const error = gpu.batch(batch, frame)
+      if (error) gpuErrors.push(error)
+    }
     const ending = Promise.withResolvers<LiveEnd>()
     const current = {
       view: undefined as Node | undefined,
@@ -178,7 +206,11 @@ export const LiveWidget = {
       // The post rate's token bucket, and the `render` and `draw` posts waiting for a token, oldest first; a canvas's
       // draws coalesce by its key.
       bucket: { tokens: BURST, at: started },
-      waiting: [] as Array<{ readonly key: string | undefined; readonly message: LiveMessage }>,
+      waiting: [] as Array<{
+        readonly key: string | undefined
+        readonly message: LiveMessage
+        readonly counted: boolean
+      }>,
       slot: undefined as (() => void) | undefined,
       fetches: { inFlight: 0, starts: [] as number[] },
       // The last rendered view's tree, for `draw` keys.
@@ -378,6 +410,7 @@ export const LiveWidget = {
       const canvas = current.tree?.canvases.get(key)
       if (canvas === undefined) throw new Error('No canvas with key "' + key + '" in the rendered view')
       if (canvas.wgsl) throw new Error('Canvas "' + key + '" is drawn by its wgsl; it takes no draw commands')
+      if (canvas.gpu) throw new Error('Canvas "' + key + '" is drawn by the GPU; it takes no draw commands')
       return { message: unmark({ type: "draw", id: canvas.id, commands: message.commands }, POSTED), key }
     }
 
@@ -397,15 +430,23 @@ export const LiveWidget = {
       const accepted = accept(message)
       if (!accepted) return
       if (accepted.type === "render" || accepted.type === "draw") return counted(accepted, key)
-      if (accepted.type === "frame" && current.requested) return
+      // A GPU batch takes no token, but never overtakes a waiting render or draw: its canvas may be in one.
+      if ((accepted.type === "gpu" || (accepted.type === "frame" && accepted.gpu)) && current.waiting.length > 0)
+        return void current.waiting.push({ key: undefined, message: accepted, counted: false })
       if (accepted.type === "submit" || accepted.type === "dismiss") release()
-      apply(accepted)
+      send(accepted)
+    }
+
+    // A frame request while one is pending changes nothing, but its GPU batch is applied.
+    const send = (accepted: LiveMessage) => {
+      if (accepted.type !== "frame" || !current.requested) return apply(accepted)
+      if (accepted.gpu) apply({ type: "gpu", ops: accepted.gpu.ops, bytes: accepted.gpu.bytes })
     }
 
     // The post rate (specs/v2/widgets-live.md): a token bucket of `BURST` tokens, refilled at `postsPerSecond`. A
     // `render` or `draw` post takes a token and goes out at once when nothing waits; otherwise it waits, in place of a
     // waiting post of its kind (the render, or the draw for its canvas key), and waiting posts go out in order, one per
-    // token, as tokens come.
+    // token, as tokens come; a GPU batch waiting among them takes none.
     const refill = () => {
       const at = clock.now()
       current.bucket.tokens = Math.min(
@@ -425,8 +466,8 @@ export const LiveWidget = {
           ? entry.message.type === "render"
           : entry.message.type === "draw" && entry.key === key,
       )
-      if (index === -1) current.waiting.push({ key, message })
-      else current.waiting[index] = { key, message }
+      if (index === -1) current.waiting.push({ key, message, counted: true })
+      else current.waiting[index] = { key, message, counted: true }
       schedule()
     }
     const schedule = () => {
@@ -436,9 +477,12 @@ export const LiveWidget = {
       current.slot = clock.schedule(wait, () => {
         current.slot = undefined
         refill()
-        while (current.waiting.length > 0 && current.bucket.tokens >= 1 - EPSILON && !current.ended) {
-          current.bucket.tokens -= 1
-          apply(current.waiting.shift()!.message)
+        while (current.waiting.length > 0 && !current.ended) {
+          const next = current.waiting[0]!
+          if (next.counted && current.bucket.tokens < 1 - EPSILON) break
+          if (next.counted) current.bucket.tokens -= 1
+          current.waiting.shift()
+          send(next.message)
         }
         schedule()
       })
@@ -447,13 +491,15 @@ export const LiveWidget = {
     const release = () => {
       current.slot?.()
       current.slot = undefined
-      current.waiting.splice(0).forEach((entry) => apply(entry.message))
+      current.waiting.splice(0).forEach((entry) => send(entry.message))
     }
 
     const apply = (accepted: LiveMessage) => {
       if (accepted.type === "render") current.view = accepted.node
       if (accepted.type === "draw") drawings.set(accepted.id, accepted.commands)
       if (accepted.type === "frame") current.requested = true
+      if (accepted.type === "frame" && accepted.gpu) replay(accepted.gpu, true)
+      if (accepted.type === "gpu") replay(accepted, false)
       options?.onMessage?.(accepted)
       if (accepted.type === "submit") return end({ type: "submit", value: accepted.value })
       if (accepted.type === "dismiss") return end({ type: "dismiss" })
@@ -480,7 +526,10 @@ export const LiveWidget = {
         if ("error" in checked) return void fail("invalid", checked.error)
         return { type: "draw", id: message.id as string, commands: checked.commands }
       }
-      if (message.type === "frame") return { type: "frame" }
+      if (message.type === "frame")
+        return isRecord(message.gpu) ? { type: "frame", gpu: message.gpu as unknown as GpuBatch } : { type: "frame" }
+      if (message.type === "gpu")
+        return { type: "gpu", ops: message.ops as GpuBatch["ops"], bytes: message.bytes as ArrayBuffer }
       if (message.type === "submit") return { type: "submit", value: message.value ?? null }
       if (message.type === "dismiss") return { type: "dismiss" }
       if (message.type === "send") return { type: "send", value: message.value ?? null, wake: message.wake !== false }
@@ -508,6 +557,7 @@ export const LiveWidget = {
         return current.pausedAt !== undefined
       },
       warnings,
+      gpuErrors,
       get ended() {
         return current.ended
       },
@@ -518,6 +568,11 @@ export const LiveWidget = {
         current.requested = false
         deliver({ type: "frame", frame })
         return true
+      },
+      canvas: (key, width, height) => deliver({ type: "canvas", key, width, height }),
+      loseDevice: (reason) => {
+        gpu.lost()
+        deliver({ type: "gpu", lost: reason })
       },
       pause: () => {
         if (current.pausedAt !== undefined || current.ended) return
@@ -554,7 +609,11 @@ export const LiveWidget = {
     Runtime.make({
       limits: { maxValueDepth: MAX_VALUE_DEPTH },
       globals: () => ({
-        __input: Host.fn(() => ({ data })),
+        __input: Host.fn(() =>
+          options?.gpu === false
+            ? { data }
+            : { data, gpu: { available: true, format: options?.gpu?.format ?? "rgba8unorm" } },
+        ),
         __host: {
           post: located((args) => post(args)),
           receive: located((args, call) => (checked("receive", args), receive(call.signal)), {

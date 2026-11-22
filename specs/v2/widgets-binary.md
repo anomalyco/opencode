@@ -108,6 +108,7 @@ today.
 | 17 | value | f64 (slider), str (input, one-value select), str list (multiple select) | 35 | pointer | int |
 | 18 | min | f64 | 36 | place | int: top-left 0, top 1, top-right 2, left 3, center 4, right 5, bottom-left 6, bottom 7, bottom-right 8, fill 9 |
 | | | | 37 | inset | f64 (all sides) or f64 list of 4 (top, right, bottom, left) |
+| | | | 38 | gpu | int (a GPU canvas, `widgets-gpu.md`) |
 
 **Rules for the encoder** (`write_node`). It writes the props the tree has, in its key order:
 - `type` and `children` are never props.

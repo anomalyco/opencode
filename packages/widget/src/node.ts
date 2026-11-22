@@ -112,6 +112,8 @@ export interface Canvas {
   readonly wgsl?: string
   /** With `wgsl`: up to 16 floats, available as `widget.values` (4 vec4f, row-major, zero padded). */
   readonly values?: ReadonlyArray<number>
+  /** A live program draws it with `widget.gpu` (widgets-gpu.md); it needs a `key`. */
+  readonly gpu?: true
   /** An image src shown where the canvas can't be drawn (a terminal, a shader that fails to compile). */
   readonly poster?: string
   /** Set by the prelude when the canvas has an `onPointer` handler: only then does it take pointer input. */
@@ -451,10 +453,15 @@ export const Node: Schema.Codec<Node> = Schema.Union([
     values: optional(Schema.Array(Schema.Finite).check(Schema.isMaxLength(16))),
     poster: optional(Schema.String),
     pointer: optional(Schema.Literal(true)),
+    gpu: optional(Schema.Literal(true)),
   }).check(
     Schema.makeFilter(
-      (canvas: { readonly wgsl?: string; readonly values?: ReadonlyArray<number> }) =>
+      (canvas: { readonly wgsl?: string; readonly values?: ReadonlyArray<number>; readonly gpu?: true }) =>
         canvas.values === undefined || canvas.wgsl !== undefined || "`values` need `wgsl`",
+    ),
+    Schema.makeFilter(
+      (canvas: { readonly wgsl?: string; readonly gpu?: true }) =>
+        canvas.gpu === undefined || canvas.wgsl === undefined || "`gpu` and `wgsl` exclude each other",
     ),
   ),
 ])

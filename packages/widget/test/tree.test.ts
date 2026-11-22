@@ -84,7 +84,11 @@ const trees = async (source: string, data: unknown) => {
   if (!result.ok) throw new Error(result.error.message)
   const host = tree(crossed.view, "Argument 1 to __cross")
   return [
-    JSON.stringify([host.view, [...host.handlers], Object.fromEntries(host.canvases)]),
+    JSON.stringify([
+      host.view,
+      [...host.handlers],
+      Object.fromEntries([...host.canvases].map(([key, canvas]) => [key, { id: canvas.id, wgsl: canvas.wgsl }])),
+    ]),
     result.value as string,
   ] as const
 }

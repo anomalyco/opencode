@@ -33,7 +33,7 @@ or `invalid`); keep the previous state and view and show the message inline.
 ## Live mode
 
 A widget template with `mode: "live"` defines `async function main(data)` and runs as one long program per open widget:
-`<program>\nreturn await __widget_live(__input(), true)` with `__input()` = `{ data }` and the host functions `__host.post`,
+`<program>\nreturn await __widget_live(__input(), true)` with `__input()` = `{ data, gpu }` and the host functions `__host.post`,
 `__host.receive`, `__host.sleep`, `__host.now` and `__host.fetch` (see `specs/v2/widgets-live.md` for the messages,
 pausing and budgets). The prelude builds the program-facing `widget` object on them; model guidance with examples is
 in `docs/live-guidance.md`.

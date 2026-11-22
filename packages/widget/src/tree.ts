@@ -31,7 +31,7 @@ export const marker: unknown = Host.functionMarker
 export interface Tree {
   readonly view: unknown
   readonly handlers: ReadonlySet<string>
-  readonly canvases: ReadonlyMap<string, { readonly id: string; readonly wgsl: boolean }>
+  readonly canvases: ReadonlyMap<string, { readonly id: string; readonly wgsl: boolean; readonly gpu: boolean }>
 }
 
 type Item = Record<string, unknown>
@@ -106,7 +106,7 @@ function clean(value: unknown, strict: string | undefined, json = false): unknow
  * but a node's handler props.
  */
 export function tree(root: unknown, label: string): Tree {
-  const canvases = new Map<string, { id: string; wgsl: boolean }>()
+  const canvases = new Map<string, { id: string; wgsl: boolean; gpu: boolean }>()
   const handlers = new Set<string>()
 
   const node = (value: Item, path: string, level: number): Item => {
@@ -127,7 +127,7 @@ export function tree(root: unknown, label: string): Tree {
         if (handled) handlers.add(path)
         if (value.type === "canvas" && handled) out.pointer = true
         if (canvas && !canvases.has(String(value.key)))
-          canvases.set(String(value.key), { id: path, wgsl: typeof value.wgsl === "string" })
+          canvases.set(String(value.key), { id: path, wgsl: typeof value.wgsl === "string", gpu: value.gpu === true })
       }
     }
     if (value.children === undefined) return out
