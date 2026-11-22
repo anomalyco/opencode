@@ -426,6 +426,11 @@ export const SettingsGeneral: Component = () => {
                 </SettingsRow>
               </Show>
             </SettingsList>
+            <Show when={proxy.draft().enabled}>
+              <p class="text-11-regular text-v2-text-text-muted pt-3">
+                {language.t("settings.general.row.proxy.serviceNote")}
+              </p>
+            </Show>
             <div class="pt-3">
               <Button
                 variant="outline"

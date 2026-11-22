@@ -1237,6 +1237,8 @@ export const dict = {
   "settings.general.row.proxy.enabled.description":
     "Route network requests through a proxy. Apply to save; the proxy takes effect for the desktop app immediately and for new agent service processes.",
   "settings.general.row.proxy.apply": "Apply proxy settings",
+  "settings.general.row.proxy.serviceNote":
+    "Agent requests use this proxy only after the background service restarts. Run \"opencode service restart\" in a terminal to apply it now.",
   "settings.general.row.proxy.http.title": "HTTP proxy",
   "settings.general.row.proxy.http.description": "Proxy URL used for HTTP requests.",
   "settings.general.row.proxy.https.title": "HTTPS proxy",
