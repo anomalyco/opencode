@@ -358,7 +358,7 @@ for (const outcome of ["continue", "done", "reject"]) {
           runCount: 1,
           state: "first",
         })
-        expect(position).toMatchObject({ cursor: "first", seen: ["first"] })
+        expect(position).toMatchObject({ cursor: "first" })
       }
       expect(yield* f.cancelled).toBe(stream.id)
       expect(wakes).toEqual([sessionID])

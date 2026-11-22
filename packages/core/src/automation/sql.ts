@@ -38,8 +38,6 @@ export const AutomationTable = sqliteTable(
     event_position: text({ mode: "json" }).$type<{
       agent: Agent.ID
       cursor?: string | null
-      /** The latest event IDs it ran, oldest first, to skip a replayed duplicate. */
-      seen?: ReadonlyArray<string>
     }>(),
     ...Timestamps,
   },
@@ -47,8 +45,6 @@ export const AutomationTable = sqliteTable(
     index("automation_project_idx").on(table.project_id),
     index("automation_session_idx").on(table.session_id),
     // Active watches have no due time; both they and timers belong in the scheduler's index.
-    index("automation_active_idx")
-      .on(table.next_due_at)
-      .where(sql`${table.status} = 'active'`),
+    index("automation_active_idx").on(table.next_due_at).where(sql`${table.status} = 'active'`),
   ],
 )

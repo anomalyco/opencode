@@ -362,7 +362,7 @@ const layer = Layer.effect(
       if (event && row.event_position)
         return {
           ...(done ? { status: "done" as const } : {}),
-          event_position: { ...row.event_position, ...event.position },
+          event_position: { ...row.event_position, cursor: event.position.cursor },
         }
       const next = following(row, ended)
       return done || finished(row, next) ? { status: "done" as const, next_due_at: null } : { next_due_at: next }
@@ -837,10 +837,9 @@ const layer = Layer.effect(
           return yield* new InvalidError({
             reason: "No authorized event watch",
           })
-        const stream = yield* AutomationEvent.follow(trigger, {
-          cursor: position.cursor ?? null,
-          seen: position.seen ?? [],
-        }).pipe(inDirectory(row.directory))
+        const stream = yield* AutomationEvent.follow(trigger, { cursor: position.cursor ?? null, seen: [] }).pipe(
+          inDirectory(row.directory),
+        )
         return stream.pipe(
           Stream.takeWhileEffect(
             Effect.fnUntraced(function* (update) {
@@ -855,7 +854,7 @@ const layer = Layer.effect(
               yield* checkWatch(current, trigger.server)
               if (update.type === "position") {
                 yield* settle(current, {
-                  event_position: { ...position, ...current.event_position, ...update.position },
+                  event_position: { ...position, ...current.event_position, cursor: update.position.cursor },
                 })
                 return true
               }
