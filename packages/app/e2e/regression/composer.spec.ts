@@ -218,8 +218,8 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
           ? [
               {
                 id: "opencode-go",
-                integrationID: "opencode-go",
-                name: "OpenCode Go",
+                integrationID: "opencode",
+                name: "Anomaly / OpenCode Go",
                 models: {
                   "glm-5-go": {
                     id: "glm-5-go",
@@ -238,21 +238,22 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
     integrations: () => [
       {
         id: "opencode",
-        name: "OpenCode Console",
-        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        name: "OpenCode",
+        methods: [
+          { id: "device", type: "oauth", label: "OpenCode account" },
+          { type: "key", label: "API key (service account)" },
+        ],
         connections: state.authorized
           ? [{ type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" }]
           : [],
       },
-      {
-        id: "opencode-go",
-        name: "OpenCode Go",
-        methods: [{ type: "key" }],
-        connections: state.authorized ? [{ type: "credential", id: "cred_go", label: "Go key", method: "key" }] : [],
-      },
+      { id: "opencode-go", name: "OpenCode Go", methods: [{ type: "key" }], connections: [] },
     ],
-    onConnectKey: (input) => {
-      if (input.integrationID === "opencode-go") state.authorized = true
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=GOGO-1234" }),
+    onIntegrationOAuthStatus: () => {
+      state.authorized = true
+
+      return "complete"
     },
     pageMessages: () => ({
       items: [
@@ -293,13 +294,15 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
   await expect(view.editor).toHaveCount(0)
   await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
 
-  // Subscribe -> Go API key -> Continue switches the model in the current session without opening a new draft tab.
+  // Subscribe -> OpenCode sign-in -> the workspace's Go model -> Continue switches the model in the current session
+  // without opening a new draft tab.
   await upsell.getByRole("button", { name: "Subscribe", exact: true }).click()
-  const connect = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
-  await connect.getByPlaceholder("API key").fill("sk-go-test")
-  await connect.getByRole("button", { name: "Continue", exact: true }).click()
-  const connected = page.getByRole("dialog", { name: "Connected to OpenCode Go" })
-  await expect(connected.getByRole("radio", { name: "GLM-5 Go", exact: true })).toHaveAttribute("aria-checked", "true")
+  const connect = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
+  await connect.getByRole("button", { name: "OpenCode account", exact: true }).click()
+  const connected = page.getByRole("dialog", { name: "Connected to OpenCode" })
+  const go = connected.getByRole("radio", { name: "GLM-5 Go", exact: true })
+  await go.click()
+  await expect(go).toHaveAttribute("aria-checked", "true")
   await connected.getByRole("button", { name: "Continue", exact: true }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expectPath(page, sessionHref(sessionID))
