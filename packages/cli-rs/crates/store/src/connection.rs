@@ -32,8 +32,8 @@ pub(crate) enum Follow {
     Rehydrate,
     /// Catalogs of a location, read together (already invalidated).
     Catalogs(Vec<Catalog>, Location),
-    /// A catalog read once a burst of events under the key goes quiet (already invalidated).
-    Settle(String, Catalog, Location),
+    /// A catalog read once a burst of events that ask for it goes quiet (already invalidated).
+    Settle(Catalog, Location),
     /// The web search providers of a location.
     Websearch(Location),
     /// The running jobs of a synced tree (already invalidated).
@@ -91,7 +91,7 @@ impl Data {
                 self.refresh(|data| data.project_sync());
             }
             Follow::Catalogs(catalogs, location) => self.refresh_catalogs(catalogs, location),
-            Follow::Settle(key, catalog, location) => self.settle(key, catalog, location),
+            Follow::Settle(catalog, location) => self.settle(catalog, location),
             Follow::Websearch(location) => self.refresh(move |data| data.websearch_refresh(Some(&location))),
             Follow::Jobs(root) => self.refresh(move |data| data.job_sync(&root)),
         }
@@ -160,7 +160,7 @@ impl Data {
     pub fn set_online(&self, online: bool) {
         let was = self.inner.online.swap(online, Ordering::SeqCst);
         if was && !online {
-            self.write(|state| state.syncs.invalidate_prefix(""));
+            self.write(State::invalidate_all);
         }
     }
 }
@@ -176,13 +176,13 @@ impl State {
                 // coalesced (`resync`, a queue-full drop): what the old stream left cached is
                 // stale, and every view must look again.
                 if self.connected {
-                    self.syncs.invalidate_prefix("");
+                    self.invalidate_all();
                 } else {
                     // The first stream opens after the route reads, and the server does not replay what it sent
                     // before the subscription: a catalog read in that window can have missed the update that
                     // followed it, and a model list is empty until its providers settle. Only the catalogs are
                     // invalidated, since nothing else can be stale without a disconnect; the views look again.
-                    self.syncs.invalidate_prefix("location.");
+                    self.invalidate_catalogs();
                 }
                 self.log.everything();
                 self.connected = true;

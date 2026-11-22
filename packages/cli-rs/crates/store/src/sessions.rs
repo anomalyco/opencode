@@ -9,6 +9,7 @@ use crate::connection::Follow;
 use crate::forms::Form;
 use crate::inbox::{PendingUpdate, now};
 use crate::messages::{HeadRead, Transcript, from_event};
+use crate::reads::{Read, ReadState, SessionRead, SessionReads};
 use crate::state::{Compacting, Data, Error, Overlay, SessionStatus, State, Task, evict_missing};
 
 /// Children per page of a family read (`CHILD_PAGE`).
@@ -72,6 +73,7 @@ pub(crate) struct Session {
     pub(crate) forms: Option<Vec<Form>>,
     /// The token of the transcript window that ended last, while it is one of the newest that ended; else 0.
     pub(crate) incarnation: u64,
+    pub(crate) reads: SessionReads,
     /// The inbox read in flight, by token, with the inbox events that overtook it.
     pub(crate) pending_read: Option<(u64, IndexMap<String, PendingUpdate>)>,
     /// The permission read in flight, with the asks and replies that overtook it.
@@ -184,6 +186,7 @@ impl Session {
             permissions,
             forms,
             incarnation,
+            reads,
             pending_read,
             permission_read,
             head_read,
@@ -204,6 +207,7 @@ impl Session {
             && permissions.is_none()
             && forms.is_none()
             && *incarnation == 0
+            && reads.is_idle()
             && pending_read.is_none()
             && permission_read.is_none()
             && head_read.is_none()
@@ -221,12 +225,11 @@ impl Sessions {
     }
 
     pub(crate) fn get(&self, id: &(impl AsRef<str> + ?Sized)) -> Option<&Session> {
-        self.key(id).map(|key| &self[key])
+        self.live(self.key(id)?)
     }
 
     pub(crate) fn get_mut(&mut self, id: &(impl AsRef<str> + ?Sized)) -> Option<&mut Session> {
-        let key = self.key(id)?;
-        Some(&mut self[key])
+        self.live_mut(self.key(id)?)
     }
 
     /// The key of `id`'s record, added empty when there is none.
@@ -250,6 +253,18 @@ impl Sessions {
         };
         self.keys.insert(SessionID::from(id), key);
         key
+    }
+
+    /// The record of `key`, unless it was freed: a key kept across a write may outlive its record.
+    pub(crate) fn live(&self, key: SessionKey) -> Option<&Session> {
+        let slot = self.slots.get(key.index as usize)?;
+        slot.session.as_ref().filter(|_| slot.generation == key.generation)
+    }
+
+    pub(crate) fn live_mut(&mut self, key: SessionKey) -> Option<&mut Session> {
+        let slot = self.slots.get_mut(key.index as usize)?;
+        let live = slot.generation == key.generation;
+        slot.session.as_mut().filter(|_| live)
     }
 
     /// `id`'s record, added empty when there is none.
@@ -293,17 +308,13 @@ impl Index<SessionKey> for Sessions {
     type Output = Session;
 
     fn index(&self, key: SessionKey) -> &Session {
-        let slot = &self.slots[key.index as usize];
-        assert_eq!(slot.generation, key.generation, "a freed session key");
-        slot.session.as_ref().expect("a live session key")
+        self.live(key).expect("a live session key")
     }
 }
 
 impl IndexMut<SessionKey> for Sessions {
     fn index_mut(&mut self, key: SessionKey) -> &mut Session {
-        let slot = &mut self.slots[key.index as usize];
-        assert_eq!(slot.generation, key.generation, "a freed session key");
-        slot.session.as_mut().expect("a live session key")
+        self.live_mut(key).expect("a live session key")
     }
 }
 
@@ -430,8 +441,9 @@ impl State {
         let key = self.sessions.entry(&info.id);
         self.clear_deleted(key);
         self.log.session(&info.id);
-        self.syncs.complete(&format!("session:{}", info.id.0));
-        self.sessions[key].info = Some(info);
+        let session = &mut self.sessions[key];
+        session.reads[SessionRead::Info].complete();
+        session.info = Some(info);
         self.register(key);
     }
 
@@ -465,13 +477,10 @@ impl State {
         if let Some((_, updates)) = &mut self.active_updates {
             updates.insert(id.clone(), None);
         }
-        for key in ["session", "session.family", "session.pending", "session.message", "session.permission"] {
-            self.syncs.invalidate(&format!("{key}:{}", id.0));
-        }
-        self.syncs.invalidate_prefix(&format!("session.form:{}:", id.0));
         let key = self.sessions.entry(id);
         self.end_transcript(key);
         let session = &mut self.sessions[key];
+        session.reads.invalidate();
         for item in &session.pending {
             self.outbox.remove(item.id());
         }
@@ -503,14 +512,13 @@ impl State {
     /// Drops heavy cached data of one session, keeping unacknowledged submissions
     /// (`evictSession`).
     fn evict_session(&mut self, key: SessionKey) {
-        let session = &self.sessions[key];
-        if session.life.unacknowledged() {
+        if self.sessions[key].life.unacknowledged() {
             return;
         }
-        self.syncs.invalidate(&format!("session.pending:{}", session.id.0));
-        self.syncs.invalidate(&format!("session.message:{}", session.id.0));
         self.end_transcript(key);
         let session = &mut self.sessions[key];
+        session.reads[SessionRead::Pending].invalidate();
+        session.reads[SessionRead::Messages].invalidate();
         session.message_load = None;
         session.head_read = None;
         session.cursor = None;
@@ -559,14 +567,14 @@ impl State {
 
     /// True when a session read is worth revalidating: its info is loaded or a read is active.
     fn known(&self, id: &SessionID) -> bool {
-        self.session(id).is_some() || self.syncs.has(&format!("session:{}", id.0))
+        self.session(id).is_some() || self.has_read(Read::session(id, SessionRead::Info))
     }
 
     fn revalidate(&mut self, id: &SessionID) -> Vec<Follow> {
         if !self.known(id) {
             return Vec::new();
         }
-        self.syncs.invalidate(&format!("session:{}", id.0));
+        self.invalidate(Read::session(id, SessionRead::Info));
         vec![Follow::Session(id.clone())]
     }
 
@@ -576,11 +584,12 @@ impl State {
             self.clear_deleted(key);
             self.sessions[key].life.acknowledge();
         }
-        self.syncs.invalidate(&format!("session:{}", id.0));
+        self.invalidate(Read::session(id, SessionRead::Info));
         // A new session starts empty, so live events are its source of truth. Separate pending and
         // message reads could both miss an input promoted between them and overwrite the events.
-        self.syncs.complete(&format!("session.pending:{}", id.0));
-        self.syncs.complete(&format!("session.message:{}", id.0));
+        let reads = &mut self.sessions.get_or_insert(id).reads;
+        reads[SessionRead::Pending].complete();
+        reads[SessionRead::Messages].complete();
         vec![Follow::Session(id.clone())]
     }
 
@@ -727,7 +736,7 @@ impl State {
         self.insert_message(id, SessionMessageInfo::Idle(row));
         let mut follow = Vec::new();
         if self.has_live_tool(id) {
-            self.syncs.invalidate(&format!("session.message:{}", id.0));
+            self.invalidate(Read::session(id, SessionRead::Messages));
             follow.push(Follow::Messages(id.clone()));
         }
         // An event can overtake the first read; revalidate when that read is still active.
@@ -744,12 +753,11 @@ impl Data {
     /// Reads a session once per invalidation (`session.sync`); with `children`, also every direct
     /// child, under its own key.
     pub fn session_sync(&self, id: &SessionID, children: bool) -> Task<()> {
-        let key = if children { "session.family" } else { "session" };
+        let read = if children { SessionRead::Family } else { SessionRead::Info };
         let id = id.clone();
-        let key = format!("{key}:{}", id.0);
         self.sync_start(
-            key,
-            |state| state.deletion_epoch,
+            self.keyed(Read::session(&id, read)),
+            |state, _| state.deletion_epoch,
             move |data, started| async move {
                 let info = async {
                     data.client()
@@ -778,7 +786,7 @@ impl Data {
     }
 
     pub fn session_invalidate(&self, id: &SessionID) {
-        self.write(|state| state.syncs.invalidate(&format!("session:{}", id.0)));
+        self.write(|state| state.invalidate(Read::session(id, SessionRead::Info)));
     }
 
     /// Stores fetched info, as a list read does.
@@ -838,8 +846,8 @@ impl Data {
             });
             // A mounted optimistic session must not read its empty collections before creation
             // settles; the `session.created` echo reads its info again.
-            for key in ["session.family", "session.pending", "session.message"] {
-                state.syncs.complete(&format!("{key}:{}", id.0));
+            for read in [SessionRead::Family, SessionRead::Pending, SessionRead::Messages] {
+                state.sessions[key].reads[read].complete();
             }
         }
         let request = SessionCreateInput {
@@ -931,7 +939,12 @@ impl Data {
     /// Applies a live title after the session's reads, so a racing read cannot overwrite it.
     pub(crate) fn renamed(&self, session: SessionID, title: String) {
         self.refresh(|data| async move {
-            let family = data.read(|state| state.syncs.pending(&format!("session.family:{}", session.0)));
+            let family = data.read(|state| {
+                matches!(
+                    state.read_state(Read::session(&session, SessionRead::Family)),
+                    Some(ReadState::Loading { .. })
+                )
+            });
             let own = data.session_sync(&session, false);
             if family {
                 futures_util::future::try_join(own, data.session_sync(&session, true)).await?;

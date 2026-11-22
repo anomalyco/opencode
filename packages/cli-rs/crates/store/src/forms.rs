@@ -3,6 +3,7 @@ use opencode_api::client::Client;
 use opencode_api::generated::*;
 
 use crate::location::Location;
+use crate::reads::{Read, SessionRead};
 use crate::state::{Data, Error, Overlay, State, Task, evict_missing};
 
 /// The owner of global MCP elicitations. They temporarily use "global" instead of a real session
@@ -18,11 +19,14 @@ pub struct Form {
 }
 
 /// A form read: its owner, and the location of a global one.
-pub(crate) type Read = (String, Option<Location>);
+pub(crate) type FormRead = (String, Option<Location>);
 
-pub(crate) fn sync_key(owner: &str, location: &Location) -> String {
-    let scope = if owner == GLOBAL { location.key() } else { String::new() };
-    format!("session.form:{owner}:{scope}")
+/// The keyed read of `owner`'s forms: a session's own, or the global forms of `location`.
+fn form_read<'a>(owner: &'a str, location: &'a Location) -> Read<'a> {
+    match owner {
+        GLOBAL => Read::GlobalForms(location),
+        _ => Read::session(owner, SessionRead::Forms),
+    }
 }
 
 impl State {
@@ -136,10 +140,10 @@ impl Data {
     pub fn form_sync(&self, owner: &str, location: Option<&Location>) -> Task<()> {
         let location = location.cloned().unwrap_or_else(|| self.read(|state| state.default_location().clone()));
         let owner = owner.to_owned();
-        let read: Read = (owner.clone(), (owner == GLOBAL).then(|| location.clone()));
+        let read: FormRead = (owner.clone(), (owner == GLOBAL).then(|| location.clone()));
         let again = (owner.clone(), location.clone());
         self.overlay_sync(
-            sync_key(&owner, &location),
+            self.keyed(form_read(&owner, &location)),
             SessionID(owner.clone()),
             read,
             |state, read, overlay| {
@@ -177,7 +181,7 @@ impl Data {
     pub fn form_invalidate(&self, owner: &str, location: Option<&Location>) {
         self.write(|state| {
             let location = location.unwrap_or(state.default_location()).clone();
-            state.syncs.invalidate(&sync_key(owner, &location));
+            state.invalidate(form_read(owner, &location));
         });
     }
 

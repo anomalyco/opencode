@@ -10,6 +10,7 @@ use opencode_api::generated::*;
 
 use crate::connection::Follow;
 use crate::messages::{MessageExt, from_event};
+use crate::reads::{Read, SessionRead};
 use crate::sessions::Life;
 use crate::state::{Compacting, Data, Error, SessionStatus, State, Task, evict_missing};
 
@@ -251,11 +252,11 @@ impl State {
         }
         // An item this client never saw admitted (its enqueue was lost in a reconnect) has no row to show: a synced
         // transcript reads its head again.
-        let key = format!("session.message:{}", session.0);
-        if known || !self.syncs.has(&key) {
+        let read = Read::session(session, SessionRead::Messages);
+        if known || !self.has_read(read) {
             return Vec::new();
         }
-        self.syncs.invalidate(&key);
+        self.invalidate(read);
         vec![Follow::Messages(session.clone())]
     }
 
@@ -351,106 +352,114 @@ impl Data {
         // is spawned.
         let register = {
             let session = session.clone();
-            move |state: &mut State| {
+            move |state: &mut State, _| {
                 let token = state.token();
                 // Ordered, as the TS `Map`: overtaking enqueues keep their arrival order.
                 state.sessions.get_or_insert(&session).pending_read = Some((token, IndexMap::new()));
                 (state.deletion_epoch, token)
             }
         };
-        self.sync_start(format!("session.pending:{}", session.0), register, move |data, (started, token)| async move {
-            let response =
-                data.client().session_inbox_list(&SessionInboxListInput { session_id: session.clone() }).await;
-            let response = match response {
-                Ok(response) => response,
-                Err(error) => {
-                    data.write(|state| {
-                        release_updates(state, &session, token);
-                    });
-                    return Err(evict_missing(&data, error));
-                }
-            };
-            let reread = data.write(|state| {
-                let updates = release_updates(state, &session, token).unwrap_or_default();
-                if state.deleted_since(&session, started) {
-                    return false;
-                }
-                let mut current: IndexMap<String, SessionInboxInfo> =
-                    response.into_iter().map(|item| (item.id().to_owned(), item)).collect();
-                for (id, update) in updates {
-                    match update {
-                        PendingUpdate::Removed => {
-                            current.shift_remove(&id);
-                        }
-                        PendingUpdate::Delivery(delivery) => {
-                            if let Some(item) = current.get_mut(&id) {
-                                item.set_delivery(delivery);
+        self.sync_start(
+            self.keyed(Read::session(&session, SessionRead::Pending)),
+            register,
+            move |data, (started, token)| async move {
+                let response =
+                    data.client().session_inbox_list(&SessionInboxListInput { session_id: session.clone() }).await;
+                let response = match response {
+                    Ok(response) => response,
+                    Err(error) => {
+                        data.write(|state| {
+                            release_updates(state, &session, token);
+                        });
+                        return Err(evict_missing(&data, error));
+                    }
+                };
+                let reread = data.write(|state| {
+                    let updates = release_updates(state, &session, token).unwrap_or_default();
+                    if state.deleted_since(&session, started) {
+                        return false;
+                    }
+                    let mut current: IndexMap<String, SessionInboxInfo> =
+                        response.into_iter().map(|item| (item.id().to_owned(), item)).collect();
+                    for (id, update) in updates {
+                        match update {
+                            PendingUpdate::Removed => {
+                                current.shift_remove(&id);
+                            }
+                            PendingUpdate::Delivery(delivery) => {
+                                if let Some(item) = current.get_mut(&id) {
+                                    item.set_delivery(delivery);
+                                }
+                            }
+                            PendingUpdate::Item(item) => {
+                                current.insert(id, *item);
                             }
                         }
-                        PendingUpdate::Item(item) => {
-                            current.insert(id, *item);
+                    }
+                    let pending: Vec<_> = current.into_values().collect();
+                    // A positive read acknowledges admission even when its echo is delayed.
+                    for item in &pending {
+                        state.outbox.remove(item.id());
+                    }
+                    // Compactions also coalesce by session, not just by the proposed ID.
+                    if pending.iter().any(|item| item.tag() == "compaction") {
+                        let local: Vec<String> = state
+                            .pending(&session)
+                            .iter()
+                            .filter(|item| item.tag() == "compaction")
+                            .map(|item| item.id().to_owned())
+                            .collect();
+                        for id in local {
+                            state.outbox.remove(&id);
                         }
                     }
-                }
-                let pending: Vec<_> = current.into_values().collect();
-                // A positive read acknowledges admission even when its echo is delayed.
-                for item in &pending {
-                    state.outbox.remove(item.id());
-                }
-                // Compactions also coalesce by session, not just by the proposed ID.
-                if pending.iter().any(|item| item.tag() == "compaction") {
-                    let local: Vec<String> = state
+                    // Keep optimistic rows still awaiting their echo: this read may have raced ahead
+                    // of an admission the server does not know yet.
+                    let inflight: Vec<_> = state
                         .pending(&session)
                         .iter()
-                        .filter(|item| item.tag() == "compaction")
+                        .filter(|item| state.outbox.contains(item.id()))
+                        .cloned()
+                        .collect();
+                    let mut merged = pending;
+                    merged.extend(inflight);
+                    // An item the read no longer lists was cancelled or delivered by an event this client missed (a
+                    // reconnect loses events): its row goes, and a synced transcript reads again for a delivered one.
+                    let listed: HashSet<&str> = merged.iter().map(SessionInboxInfo::id).collect();
+                    let dropped: Vec<String> = state
+                        .pending(&session)
+                        .iter()
+                        .filter(|item| !listed.contains(item.id()))
                         .map(|item| item.id().to_owned())
                         .collect();
-                    for id in local {
-                        state.outbox.remove(&id);
+                    let record = state.sessions.get_or_insert(&session);
+                    let mut retracted = false;
+                    if let Some(transcript) = &mut record.transcript {
+                        for id in &dropped {
+                            retracted |= transcript.remove(id).is_some();
+                        }
                     }
-                }
-                // Keep optimistic rows still awaiting their echo: this read may have raced ahead
-                // of an admission the server does not know yet.
-                let inflight: Vec<_> =
-                    state.pending(&session).iter().filter(|item| state.outbox.contains(item.id())).cloned().collect();
-                let mut merged = pending;
-                merged.extend(inflight);
-                // An item the read no longer lists was cancelled or delivered by an event this client missed (a
-                // reconnect loses events): its row goes, and a synced transcript reads again for a delivered one.
-                let listed: HashSet<&str> = merged.iter().map(SessionInboxInfo::id).collect();
-                let dropped: Vec<String> = state
-                    .pending(&session)
-                    .iter()
-                    .filter(|item| !listed.contains(item.id()))
-                    .map(|item| item.id().to_owned())
-                    .collect();
-                let record = state.sessions.get_or_insert(&session);
-                let mut retracted = false;
-                if let Some(transcript) = &mut record.transcript {
-                    for id in &dropped {
-                        retracted |= transcript.remove(id).is_some();
+                    record.pending = merged.clone();
+                    let read = Read::session(&session, SessionRead::Messages);
+                    let reread = retracted && state.has_read(read);
+                    if retracted {
+                        state.log.messages(&session);
                     }
-                }
-                record.pending = merged.clone();
-                let key = format!("session.message:{}", session.0);
-                let reread = retracted && state.syncs.has(&key);
-                if retracted {
-                    state.log.messages(&session);
-                }
+                    if reread {
+                        state.invalidate(read);
+                    }
+                    state.log.pending(&session);
+                    for item in &merged {
+                        state.materialize(item);
+                    }
+                    reread
+                });
                 if reread {
-                    state.syncs.invalidate(&key);
+                    data.refresh(|data| data.message_sync(&session));
                 }
-                state.log.pending(&session);
-                for item in &merged {
-                    state.materialize(item);
-                }
-                reread
-            });
-            if reread {
-                data.refresh(|data| data.message_sync(&session));
-            }
-            Ok(())
-        })
+                Ok(())
+            },
+        )
     }
 
     /// Optimistic prompt admission: renders the prompt at once under a client-minted ID, then

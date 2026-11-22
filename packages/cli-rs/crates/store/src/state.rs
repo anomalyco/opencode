@@ -20,6 +20,7 @@ use tokio::task::AbortHandle;
 use crate::changes::{Changes, Log};
 use crate::forms::Form;
 use crate::location::{Location, LocationData};
+use crate::reads::{Phase, Read, ReadKey, ReadState};
 use crate::sessions::{SessionKey, Sessions};
 
 /// How many [`Data::signals`] events a slow receiver may fall behind. One batch may hold hundreds of a listened type
@@ -73,7 +74,10 @@ pub struct State {
     pub(crate) log: Log,
     /// A `server.connected` arrived before; the next one is a reconnect.
     pub(crate) connected: bool,
-    pub(crate) syncs: Syncs,
+    /// The keyed reads that belong to no session; a session's are in its record.
+    pub(crate) reads: HashMap<ReadKey, ReadState>,
+    /// The locations a keyed read names, by [`crate::reads::LocationKey`].
+    pub(crate) read_locations: IndexSet<Location>,
     /// Batches being applied; flushes wait for the outermost.
     pub(crate) batch: u32,
     next_token: u64,
@@ -88,11 +92,11 @@ pub struct State {
     /// The sessions whose transcript window ended last (deleted, evicted or reverted), oldest first: the newest
     /// [`DELETED_LIMIT`], the only ones with an incarnation.
     ended: IndexSet<SessionKey>,
-    /// Trailing refetch timers by key, with the token of the newest.
-    pub(crate) settling: HashMap<String, (u64, AbortHandle)>,
+    /// Trailing refetch timers by the read they refetch, with the token of the newest.
+    pub(crate) settling: HashMap<ReadKey, (u64, AbortHandle)>,
     /// The form read in flight per owner (and location, for [`crate::forms::GLOBAL`]), with the
     /// forms created and settled that overtook it.
-    pub(crate) form_reads: HashMap<crate::forms::Read, Overlay<Form>>,
+    pub(crate) form_reads: HashMap<crate::forms::FormRead, Overlay<Form>>,
     /// Running background jobs by ID, of the trees synced and of job events since (`store.job`).
     pub(crate) jobs: IndexMap<String, JobInfo>,
     /// The `durable.seq` of the event being applied, for the rows it creates.
@@ -234,79 +238,6 @@ impl State {
         {
             self.sessions[oldest].incarnation = 0;
         }
-    }
-}
-
-/// A keyed read (`createSync`): one spawned load per key shared by every caller, with the TS
-/// invalidation rules.
-#[derive(Default)]
-pub(crate) struct Syncs {
-    entries: HashMap<String, Entry>,
-}
-
-enum Entry {
-    Done,
-    Pending {
-        token: u64,
-        task: Task<()>,
-        invalidated: bool,
-        /// False while a reload waits for the load it replaces; invalidations then are covered.
-        started: Arc<AtomicBool>,
-    },
-}
-
-impl Syncs {
-    pub(crate) fn complete(&mut self, key: &str) {
-        self.entries.entry(key.to_owned()).or_insert(Entry::Done);
-    }
-
-    pub(crate) fn has(&self, key: &str) -> bool {
-        self.entries.contains_key(key)
-    }
-
-    pub(crate) fn pending(&self, key: &str) -> bool {
-        matches!(self.entries.get(key), Some(Entry::Pending { .. }))
-    }
-
-    pub(crate) fn invalidate(&mut self, key: &str) {
-        match self.entries.get_mut(key) {
-            Some(Entry::Done) => {
-                self.entries.remove(key);
-            }
-            Some(Entry::Pending { invalidated, started, .. }) if started.load(Ordering::SeqCst) => *invalidated = true,
-            _ => {}
-        }
-    }
-
-    /// Invalidates every key that starts with `prefix` (every key for `""`).
-    pub(crate) fn invalidate_prefix(&mut self, prefix: &str) {
-        self.entries.retain(|key, entry| {
-            if !key.starts_with(prefix) {
-                return true;
-            }
-            match entry {
-                Entry::Done => false,
-                Entry::Pending { invalidated, started, .. } => {
-                    if started.load(Ordering::SeqCst) {
-                        *invalidated = true;
-                    }
-                    true
-                }
-            }
-        });
-    }
-
-    /// Settles the load `token` of `key`: done when it succeeded and was not invalidated.
-    fn settle(&mut self, key: &str, token: u64, ok: bool) {
-        let Some(Entry::Pending { token: current, invalidated, .. }) = self.entries.get(key) else { return };
-        if *current != token {
-            return;
-        }
-        if ok && !*invalidated {
-            self.entries.insert(key.to_owned(), Entry::Done);
-            return;
-        }
-        self.entries.remove(key);
     }
 }
 
@@ -494,7 +425,8 @@ impl Data {
         if state.batch > 0 {
             return;
         }
-        // No key outlives a write, so a freed slot can go to the next session.
+        // Only a read in flight keeps a key across writes, and its record holds the read: a freed slot can go to the
+        // next session.
         state.sessions.sweep();
         if let Some(revision) = state.log.flush() {
             self.inner.revision.send_replace(revision);
@@ -565,11 +497,18 @@ impl Data {
     }
 
     /// Runs `load` once per key until invalidated (`sync.run`).
-    pub(crate) fn sync_run<F>(&self, key: String, load: impl FnOnce(Data) -> F + Send + 'static) -> Task<()>
+    pub(crate) fn sync_run<F>(&self, read: Keyed, load: impl FnOnce(Data) -> F + Send + 'static) -> Task<()>
     where
         F: Future<Output = Result<(), Error>> + Send + 'static,
     {
-        self.sync_start(key, |_| (), move |data, ()| load(data))
+        self.sync_start(read, |_, _| (), move |data, ()| load(data))
+    }
+
+    /// Locks the state and finds the key of `read`, for [`Data::sync_start`].
+    pub(crate) fn keyed(&self, read: Read) -> Keyed<'_> {
+        let mut state = self.lock();
+        let key = state.read_key(read);
+        (state, key)
     }
 
     /// [`Data::sync_run`] with a synchronous start, as the part of a TS load before its first
@@ -579,60 +518,63 @@ impl Data {
     /// from what `begin` returned, outside the lock.
     pub(crate) fn sync_start<R, F>(
         &self,
-        key: String,
-        begin: impl FnOnce(&mut State) -> R + Send + 'static,
+        (mut state, key): Keyed,
+        begin: impl FnOnce(&mut State, ReadKey) -> R + Send + 'static,
         load: impl FnOnce(Data, R) -> F + Send + 'static,
     ) -> Task<()>
     where
         R: Send + 'static,
         F: Future<Output = Result<(), Error>> + Send + 'static,
     {
-        let mut state = self.lock();
-        let wait = match state.syncs.entries.get(&key) {
-            Some(Entry::Done) => return futures_util::future::ready(Ok(())).boxed().shared(),
-            Some(Entry::Pending { task, invalidated, .. }) => {
-                if !*invalidated {
-                    return task.clone();
-                }
-                Some(task.clone())
-            }
-            None => None,
+        let wait = match state.read_state_mut(key) {
+            Some(ReadState::Done) => return futures_util::future::ready(Ok(())).boxed().shared(),
+            Some(ReadState::Loading { task, phase: Phase::Stale, .. }) => Some(task.clone()),
+            Some(ReadState::Loading { task, .. }) => return task.clone(),
+            _ => None,
         };
         let token = state.token();
-        let started = Arc::new(AtomicBool::new(wait.is_none()));
+        let phase = if wait.is_some() { Phase::Queued } else { Phase::Running };
         let start = match wait {
-            None => Start::Begun(begin(&mut state)),
+            None => Start::Begun(begin(&mut state, key)),
             Some(wait) => Start::After(wait, begin),
         };
         let data = self.clone();
-        let flag = started.clone();
-        let settle = key.clone();
-        // Spawned under the lock, so its settlement cannot run before the entry exists.
+        // Spawned under the lock, so its settlement cannot run before its state exists.
         let task = self.spawn(async move {
             let begun = match start {
                 Start::Begun(begun) => begun,
                 Start::After(wait, begin) => {
                     let _ = wait.await;
                     data.write(|state| {
-                        flag.store(true, Ordering::SeqCst);
-                        begin(state)
+                        if let Some(ReadState::Loading { token: current, phase, .. }) = state.read_state_mut(key)
+                            && *current == token
+                        {
+                            *phase = Phase::Running;
+                        }
+                        begin(state, key)
                     })
                 }
             };
             let result = load(data.clone(), begun).await;
-            data.write(|state| state.syncs.settle(&settle, token, result.is_ok()));
+            data.write(|state| {
+                if let Some(read) = state.read_state_mut(key) {
+                    read.settle(token, result.is_ok());
+                }
+            });
             result
         });
-        state.syncs.entries.insert(key, Entry::Pending { token, task: task.clone(), invalidated: false, started });
+        if let Some(state) = state.read_state_mut(key) {
+            *state = ReadState::Loading { token, task: task.clone(), phase };
+        }
         task
     }
 
     /// Fetches a list and applies its overlay before publishing. Discard superseded reads and reads for deleted
-    /// sessions. An overflow invalidates the key and schedules another read.
+    /// sessions. An overflow invalidates the read and schedules another.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn overlay_sync<K, V, T, F>(
         &self,
-        key: String,
+        sync: Keyed,
         session: SessionID,
         read: K,
         open: fn(&mut State, &K, Overlay<V>),
@@ -650,13 +592,13 @@ impl Data {
     {
         let begin = read.clone();
         self.sync_start(
-            key.clone(),
-            move |state| {
+            sync,
+            move |state, key| {
                 let ticket = state.token();
                 open(state, &begin, Overlay::new(ticket));
-                (state.deletion_epoch, ticket)
+                (state.deletion_epoch, ticket, key)
             },
-            move |data, (started, ticket)| async move {
+            move |data, (started, ticket, key)| async move {
                 let (list, extra) = match fetch(data.clone()).await {
                     Ok(fetched) => fetched,
                     Err(error) => {
@@ -670,7 +612,7 @@ impl Data {
                         return false;
                     }
                     let Some(list) = overlay.apply(list, id) else {
-                        state.syncs.invalidate(&key);
+                        state.invalidate_key(key);
                         return true;
                     };
                     publish(state, &read, list, extra);
@@ -684,6 +626,9 @@ impl Data {
         )
     }
 }
+
+/// The locked state and the key of a read, for [`Data::sync_start`].
+pub(crate) type Keyed<'a> = (Locked<'a>, ReadKey);
 
 /// How a keyed load starts: begun under the caller's lock, or after the load it replaces.
 enum Start<R, B> {

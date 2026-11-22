@@ -8,6 +8,7 @@ use opencode_api::client::Client;
 use opencode_api::generated::*;
 
 use crate::connection::Follow;
+use crate::reads::Read;
 use crate::shells::{Shell, ShellRead};
 use crate::state::{Data, Error, State, Task};
 
@@ -68,28 +69,6 @@ pub enum Catalog {
 }
 
 impl Catalog {
-    fn field(self) -> &'static str {
-        match self {
-            Catalog::Vcs => "vcs",
-            Catalog::UsageLimits => "usageLimits",
-            Catalog::Agent => "agent",
-            Catalog::Command => "command",
-            Catalog::Config => "config",
-            Catalog::Integration => "integration",
-            Catalog::McpServer => "mcpServer",
-            Catalog::McpResource => "mcpResource",
-            Catalog::Model => "model",
-            Catalog::Provider => "provider",
-            Catalog::Reference => "reference",
-            Catalog::Skill => "skill",
-            Catalog::Shell => "shell",
-        }
-    }
-
-    pub(crate) fn key(self, location: &Location) -> String {
-        format!("location.{}:{}", self.field(), location.key())
-    }
-
     /// Model and provider reads also publish under the requested location when the server
     /// answers with another.
     fn alias(self) -> bool {
@@ -196,7 +175,8 @@ impl State {
 
     /// `hasLocation`: read, or being read.
     pub(crate) fn has_catalog(&self, catalog: Catalog, location: &Location) -> bool {
-        self.locations.get(location).is_some_and(|data| data.has(catalog)) || self.syncs.has(&catalog.key(location))
+        self.locations.get(location).is_some_and(|data| data.has(catalog))
+            || self.has_read(Read::Catalog(catalog, location))
     }
 
     pub(crate) fn location_mut(&mut self, location: &Location) -> &mut LocationData {
@@ -211,7 +191,7 @@ impl State {
     /// `refreshLocation`: invalidates the catalog and reads it again where something read it.
     pub(crate) fn refresh_catalog(&mut self, catalog: Catalog, location: &Location) -> Vec<Follow> {
         let active = self.has_catalog(catalog, location);
-        self.syncs.invalidate(&catalog.key(location));
+        self.invalidate(Read::Catalog(catalog, location));
         follow_if(active, vec![catalog], location)
     }
 
@@ -219,7 +199,7 @@ impl State {
     fn refresh_together(&mut self, watched: &[Catalog], catalogs: Vec<Catalog>, location: &Location) -> Vec<Follow> {
         let active = watched.iter().any(|catalog| self.has_catalog(*catalog, location));
         for catalog in &catalogs {
-            self.syncs.invalidate(&catalog.key(location));
+            self.invalidate(Read::Catalog(*catalog, location));
         }
         follow_if(active, catalogs, location)
     }
@@ -307,11 +287,11 @@ impl State {
             // burst to go quiet.
             V2Event::McpStatusChanged(_) => {
                 let active = self.has_catalog(Catalog::McpServer, &location);
-                self.syncs.invalidate(&Catalog::McpServer.key(&location));
+                self.invalidate(Read::Catalog(Catalog::McpServer, &location));
                 if !active {
                     return Vec::new();
                 }
-                vec![Follow::Settle(format!("mcp.status:{}", location.key()), Catalog::McpServer, location)]
+                vec![Follow::Settle(Catalog::McpServer, location)]
             }
             V2Event::McpResourcesChanged(_) => self.refresh_catalog(Catalog::McpResource, &location),
             _ => Vec::new(),
@@ -388,7 +368,7 @@ impl Data {
         if catalog == Catalog::Shell {
             return self.shell_read(location);
         }
-        self.sync_run(catalog.key(&location), move |data| async move {
+        self.sync_run(self.keyed(Read::Catalog(catalog, &location)), move |data| async move {
             let (at, loaded) = load(data.client(), catalog, &location).await.map_err(Error::new)?;
             data.write(|state| {
                 if catalog.alias() && at != location {
@@ -402,7 +382,7 @@ impl Data {
 
     pub fn catalog_invalidate(&self, catalog: Catalog, location: Option<&Location>) {
         let location = self.resolve(location);
-        self.write(|state| state.syncs.invalidate(&catalog.key(&location)));
+        self.write(|state| state.invalidate(Read::Catalog(catalog, &location)));
     }
 
     /// Reads location info once per invalidation (`location.syncInfo`). A read of the default
@@ -410,7 +390,7 @@ impl Data {
     pub fn location_sync_info(&self, location: Option<&Location>) -> Task<()> {
         let default = location.is_none();
         let current = self.resolve(location);
-        self.sync_run(format!("location:{}", current.key()), move |data| async move {
+        self.sync_run(self.keyed(Read::Location(&current)), move |data| async move {
             let info = data
                 .client()
                 .location_get(&LocationGetInput { location: current.query() })
@@ -496,20 +476,20 @@ impl Data {
         });
     }
 
-    /// Reads `catalog` once a burst of events under `key` goes quiet for [`SETTLE`].
-    pub(crate) fn settle(&self, key: String, catalog: Catalog, location: Location) {
+    /// Reads `catalog` once a burst of events that ask for it goes quiet for [`SETTLE`].
+    pub(crate) fn settle(&self, catalog: Catalog, location: Location) {
         let data = self.clone();
         let mut state = self.lock();
         let token = state.token();
-        let timer = key.clone();
+        let key = state.read_key(Read::Catalog(catalog, &location));
         // Spawned under the lock, so the timer cannot fire before its entry exists.
         let handle = self.runtime().spawn(async move {
             tokio::time::sleep(SETTLE).await;
             let current = {
                 let mut state = data.lock();
-                let current = state.settling.get(&timer).is_some_and(|(owner, _)| *owner == token);
+                let current = state.settling.get(&key).is_some_and(|(owner, _)| *owner == token);
                 if current {
-                    state.settling.remove(&timer);
+                    state.settling.remove(&key);
                 }
                 current
             };
