@@ -144,6 +144,16 @@ function unreachable(reason: AIError["reason"]): SessionError.Error {
   }
 }
 
+// A provider can return far more body than a person or a client needs: Gemini repeats the whole
+// candidate in a JSON error, base64 thought signatures included. Keep enough to debug the failure and
+// bound the rest, so one incident that fails several times does not multiply the payload into the
+// session database and into every client that reads the message.
+const MAX_PROVIDER_BODY = 4_000
+const boundedBody = (body: string) =>
+  body.length <= MAX_PROVIDER_BODY
+    ? body
+    : `${body.slice(0, MAX_PROVIDER_BODY)}… (${body.length - MAX_PROVIDER_BODY} characters truncated)`
+
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
   const status = reason.http?.status
   const retryAfterMs = "retryAfterMs" in reason ? reason.retryAfterMs : undefined
@@ -151,7 +161,7 @@ function providerError(type: string, reason: AIError["reason"]): SessionError.Er
     type,
     message: Object.entries(tokenSharingMessages).find(([code]) => reason.body?.includes(code))?.[1] ?? reason.message,
     ...(status === undefined ? {} : { status }),
-    ...(reason.body === undefined ? {} : { response: { body: reason.body } }),
+    ...(reason.body === undefined ? {} : { response: { body: boundedBody(reason.body) } }),
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   }
 }

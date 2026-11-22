@@ -407,6 +407,28 @@ describe("toSessionError", () => {
     expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false])
   })
 
+  test("bounds the provider body kept on a session error", () => {
+    const body = JSON.stringify({ candidates: [{ content: { parts: [{ text: "", thoughtSignature: "A".repeat(12_000) }] } }] })
+    const bounded = toSessionError(
+      llm(
+        new InvalidProviderOutputError({
+          message: "Gemini stopped with MALFORMED_RESPONSE",
+          body,
+          http: new HttpContext({ url: "https://example.com", status: 200, headers: {} }),
+        }),
+      ),
+    )
+
+    expect(bounded.response?.body.length).toBeLessThan(body.length)
+    expect(bounded.response?.body.endsWith(`(${body.length - 4_000} characters truncated)`)).toBeTrue()
+    expect(bounded.response?.body.startsWith(body.slice(0, 4_000))).toBeTrue()
+
+    const small = toSessionError(
+      llm(new InvalidProviderOutputError({ message: "short", body: '{"error":{}}', http: new HttpContext({ url: "https://example.com", status: 400, headers: {} }) })),
+    )
+    expect(small.response?.body).toBe('{"error":{}}')
+  })
+
   test("honors provider retry header overrides", () => {
     const http = (headers: Record<string, string>) =>
       new HttpContext({
