@@ -90,7 +90,8 @@ export function executeToolCalls(metadata: ToolProps["metadata"], start = 0) {
     )
 }
 
-const callFailed = Schema.is(Schema.Struct({ status: Schema.Literal("error") }))
+// Matches only calls the rows can decode, so a failure is never counted on a call that shows nowhere.
+const callFailed = Schema.is(Schema.Struct({ tool: Schema.String, status: Schema.Literal("error") }))
 
 const isCallArg = Schema.is(Schema.Union([Schema.String, Schema.Number, Schema.Boolean]))
 
