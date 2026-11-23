@@ -112,7 +112,7 @@ it.live("lists background jobs by session, kind, and descendants until completio
 
     yield* jobs.start({
       id: "img_other",
-      type: "experimental_image_generate",
+      type: "generate_image",
       title: "diagram",
       recovery: { kind: "image", sessionID: otherID, path: "/tmp/diagram", model: "openai/gpt-image-1" },
       run: Deferred.await(imageGate),

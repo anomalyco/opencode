@@ -24,19 +24,19 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
         : `${description} Defaults to on in local and dev builds and off in releases.`,
     }),
   ),
-  // The flag also takes settings; an object turns it on.
   video_generate: Schema.Union([
     Schema.Boolean,
     Schema.Struct({
       model: ConfigModel.Selection.pipe(optional).annotate({
         description:
-          "Default model for the experimental_video_generate tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
+          "Default model for the generate_video tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
       }),
     }),
   ])
     .pipe(optional)
     .annotate({
-      description: `${ConfigFlag.registry.video_generate} Defaults to on in local and dev builds and off in releases. An object turns it on and sets the tool's options.`,
+      description:
+        "Settings for the generate_video tool, which is offered while a connected provider has a video model.",
     }),
   part_rows: Schema.Boolean.pipe(optional).annotate({
     description:
@@ -47,14 +47,14 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     Schema.Struct({
       model: ConfigModel.Selection.pipe(optional).annotate({
         description:
-          "Default model for the experimental_image_generate tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
+          "Default model for the generate_image tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
       }),
     }),
   ])
     .pipe(optional)
     .annotate({
       description:
-        "Settings for the experimental_image_generate tool, which is offered while a connected provider has an image model.",
+        "Settings for the generate_image tool, which is offered while a connected provider has an image model.",
     }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",

@@ -31,7 +31,7 @@ export function MenuScroll(
 ) {
   const [local, rest] = splitProps(props, ["class", "children", "viewportClass", "viewportRef", "onScroll"])
 
-  const [geometry, setGeometry] = createStore({ size: 0 })
+  const [geometry, setGeometry] = createStore({ size: 0, start: 4 })
 
   const [thumbState, setThumbState] = createSignal<ScrollThumbState>(INITIAL_SCROLL_THUMB_STATE)
 
@@ -42,18 +42,14 @@ export function MenuScroll(
   let thumb: HTMLDivElement | undefined
 
   let idleTimer: ReturnType<typeof setTimeout> | undefined
-  let idleDeadline = 0
+  let cachedTrack = 0
+  let cachedSize = 0
+  let cachedMax = 0
+  let measured = false
+  let pointerFocus = false
 
   const onIdleElapsed = () => {
     idleTimer = undefined
-    const remaining = idleDeadline - performance.now()
-
-    if (remaining > 4) {
-      idleTimer = setTimeout(onIdleElapsed, remaining)
-
-      return
-    }
-
     dispatch(SCROLL_IDLE_ELAPSED)
   }
 
@@ -70,56 +66,54 @@ export function MenuScroll(
         continue
       }
 
-      if (effect === "reset-idle-timer") {
-        // Record the next deadline instead of clearing and recreating a timer on every scroll frame.
-        idleDeadline = performance.now() + SCROLL_IDLE_MS
-
-        if (idleTimer === undefined) idleTimer = setTimeout(onIdleElapsed, SCROLL_IDLE_MS)
-        continue
-      }
-
       clearTimeout(idleTimer)
-      idleTimer = undefined
+      idleTimer = effect === "reset-idle-timer" ? setTimeout(onIdleElapsed, SCROLL_IDLE_MS) : undefined
     }
   }
 
-  // Cached from ResizeObserver so scroll events only read scrollTop and never force layout after child handlers write.
-  const metrics = { track: 0, size: 0, max: 0, start: 4, measured: false }
-
-  const position = (scrollTop: number) => {
-    const start = 4 + (metrics.max > 0 ? (scrollTop / metrics.max) * (metrics.track - metrics.size) : 0)
-
-    if (metrics.start === start) return
-    metrics.start = start
-
-    if (thumb) thumb.style.transform = `translateY(${start}px)`
+  const syncThumbStart = (scrollTop: number) => {
+    setGeometry("start", 4 + (cachedMax > 0 ? (scrollTop / cachedMax) * (cachedTrack - cachedSize) : 0))
   }
 
   const measure = () => {
     const clientHeight = viewport.clientHeight
     const scrollHeight = viewport.scrollHeight
-    const scrollTop = viewport.scrollTop
     const track = Math.max(0, clientHeight - 8)
     const size = Math.min(track, Math.max(24, (clientHeight / Math.max(1, scrollHeight)) * track))
-    const max = Math.max(0, scrollHeight - clientHeight)
+    const max = scrollHeight - clientHeight
 
-    metrics.track = track
-    metrics.size = size
-    metrics.max = max
-    metrics.measured = true
+    cachedTrack = track
+    cachedSize = size
+    cachedMax = max
+    measured = true
 
-    const start = 4 + (max > 0 ? (scrollTop / max) * (track - size) : 0)
-    metrics.start = start
-
-    if (geometry.size !== size) setGeometry("size", size)
-
-    if (thumb) thumb.style.transform = `translateY(${start}px)`
+    setGeometry("size", size)
+    syncThumbStart(viewport.scrollTop)
     dispatch(overflowChanged(max > 0, false))
   }
 
   const onPointerEnd = (event: PointerEvent) => dispatch({ type: "drag.ended", pointerId: event.pointerId })
 
-  onMount(() => createResizeObserver([viewport, content], measure))
+  onMount(() => {
+    createResizeObserver([viewport, content], measure)
+
+    const onPointer = () => {
+      pointerFocus = true
+    }
+
+    const onKey = () => {
+      pointerFocus = false
+    }
+
+    viewport.addEventListener("pointermove", onPointer, { passive: true })
+    viewport.addEventListener("pointerdown", onPointer, { passive: true })
+    viewport.addEventListener("keydown", onKey)
+    onCleanup(() => {
+      viewport.removeEventListener("pointermove", onPointer)
+      viewport.removeEventListener("pointerdown", onPointer)
+      viewport.removeEventListener("keydown", onKey)
+    })
+  })
 
   onCleanup(() => dispatch(SCROLL_THUMB_DISPOSED))
 
@@ -140,19 +134,22 @@ export function MenuScroll(
         data-scrollable
         class={local.viewportClass}
         onScroll={(event) => {
+          // Read before the list's own handler runs: it may write styles, and reading scrollTop after that forces a
+          // layout. The thumb and the scrolling state are written last, so that handler reads a clean layout too.
           const top = viewport.scrollTop
-          // Child handlers read clean layout before thumb geometry and scroll state write.
           local.onScroll?.(event)
 
-          if (metrics.measured) position(top)
+          if (measured) syncThumbStart(top)
 
-          if (!metrics.measured) measure()
+          if (!measured) measure()
           // Keyboard navigation scrolls without hovering, so the thumb also shows while the list scrolls.
           dispatch(SCROLLED)
         }}
-        // Kobalte menus focus items without scrolling and scroll their own content, which no longer overflows here.
+        // Kobalte menus focus items without scrolling on keyboard navigation, and also focus on pointermove; only reveal
+        // non-pointer focus so hovering a clipped row never fights the wheel.
         onFocusIn={(event) => {
-          if (event.target !== viewport) event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
+          if (!pointerFocus && event.target !== viewport)
+            event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
         }}
       >
         <div ref={content} data-slot="menu-scroll-content">
@@ -161,13 +158,10 @@ export function MenuScroll(
       </div>
       <Show when={selectShowVerticalThumb(thumbState())}>
         <div
-          ref={(element) => {
-            thumb = element
-            element.style.transform = `translateY(${metrics.start}px)`
-          }}
+          ref={thumb}
           data-slot="menu-scroll-thumb"
           aria-hidden="true"
-          style={{ height: `${geometry.size}px` }}
+          style={{ height: `${geometry.size}px`, transform: `translateY(${geometry.start}px)` }}
           onPointerDown={(event) => {
             if (event.button !== 0) return
             event.preventDefault()

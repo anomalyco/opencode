@@ -554,8 +554,15 @@ const layer = Layer.effect(
 
         if (action.type === "prompt") {
           const text = event ? AutomationEvent.prompt(action.prompt, event) : action.prompt
+          // One oversized event is skipped, so the watch moves past it instead of stopping on it.
           if (event && Buffer.byteLength(text) > 32_768)
-            return yield* new InvalidError({ reason: "Event prompt exceeds 32 KiB" })
+            return yield* settle(row, {
+              last_outcome: "skipped",
+              last_output: "Event prompt exceeds 32 KiB",
+              retry_at: null,
+              ...advance(row, now, false, event),
+              time_updated: now,
+            })
           const target = yield* promptTarget(row, action.to)
           // Only an unchanging timer prompt can be coalesced. Re-wake it in case the first wake was lost.
           if (!event && action.to.session && row.last_message_id && (yield* pending(row.last_message_id))) {

@@ -70,6 +70,7 @@ import {
 import { AssistantReasoningContent } from "../message/message-content"
 import { createCopyFeedback } from "../components/copy"
 import { stripAnsi } from "./ansi"
+import { relativizeProjectPath } from "./project-path"
 import { createShellFollower } from "./shell-output"
 import {
   createShellRunState,
@@ -227,25 +228,6 @@ function DiagnosticsDisplay(props: { diagnostics: readonly Diagnostic[] }): JSX.
       </div>
     </Show>
   )
-}
-
-function relativizeProjectPath(path: string, directory?: string) {
-  if (!path) return ""
-
-  if (!directory) return path
-
-  if (directory === "/") return path
-
-  if (directory === "\\") return path
-
-  if (path === directory) return ""
-
-  const separator = directory.includes("\\") ? "\\" : "/"
-  const prefix = directory.endsWith(separator) ? directory : directory + separator
-
-  if (!path.startsWith(prefix)) return path
-
-  return path.slice(prefix.length)
 }
 
 export function displayDirectory(path: string | undefined) {

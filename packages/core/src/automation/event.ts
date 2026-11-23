@@ -27,12 +27,6 @@ export const follow = Effect.fnUntraced(function* (trigger: Automation.Event, po
     Stream.onStart(lifecycle.retain),
     Stream.scoped,
     Stream.interruptWhen(lifecycle.awaitShutdown),
-    Stream.mapEffect((update) => {
-      // A prompt carries the event, so its size is bounded here; the MCP client already checked its shape.
-      if (update.type === "event" && Buffer.byteLength(JSON.stringify(input(update))) > 16_384)
-        return Effect.fail(new Error("Oversized MCP event"))
-      return Effect.succeed(update)
-    }),
   )
 })
 
