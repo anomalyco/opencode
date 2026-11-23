@@ -524,6 +524,19 @@ export function ComposerEditor(props: ComposerEditorProps) {
                     </Show>
                   )}
                 </Show>
+                <Show when={view.speed} keyed>
+                  {(control) => (
+                    // Hidden at the standard speed, so it adds nothing to the composer until a speed is chosen with
+                    // the speed command.
+                    <Show when={control.options().length > 1 && control.current() !== "standard"}>
+                      <ComposerEditorConfiguredSelect
+                        mobileDrawer
+                        title={i18n.t("ui.promptInput.chooseSpeed")}
+                        control={control}
+                      />
+                    </Show>
+                  )}
+                </Show>
               </Show>
             </div>
           </div>
@@ -1724,10 +1737,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
           onClick={() => props.controller.submit()}
         >
           {label()}
-          <Show
-            when={busy()}
-            fallback={<Icon name={props.controller.mode() === "shell" ? "enter" : "arrow-up"} />}
-          >
+          <Show when={busy()} fallback={<Icon name={props.controller.mode() === "shell" ? "enter" : "arrow-up"} />}>
             <Loader class="size-4" />
           </Show>
         </Button>

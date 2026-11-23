@@ -37,7 +37,8 @@ export function Composer(props: {
 
     if (preview) return preview.model
     const selection = props.model.model.selection
-    const model = selection.current()
+    // The speed shows beside the name, so the name is the model's own.
+    const model = selection.standard?.() ?? selection.current()
 
     if (model) return model.name
     const key = selection.key()

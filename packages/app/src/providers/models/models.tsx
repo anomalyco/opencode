@@ -113,6 +113,61 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 
   const find = (key: ModelKey) => list().find((m) => m.id === key.modelID && m.provider.id === key.providerID)
 
+  // A model that is another model served faster or slower ("gpt-5.5-fast") is offered as a speed of that model
+  // instead of as an entry of its own. This is the model whose entry stands for it.
+  const standard = (key: ModelKey): ModelKey => {
+    const base = find(key)?.speed?.base
+    const model = base ? { providerID: key.providerID, modelID: base } : undefined
+
+    return model && find(model) ? model : { providerID: key.providerID, modelID: key.modelID }
+  }
+
+  const isSpeed = (key: ModelKey) => modelKey(standard(key)) !== modelKey(key)
+
+  // The model's other speeds, slowest first.
+  const speeds = (key: ModelKey) => {
+    const base = standard(key)
+
+    return list().filter((item) => item.provider.id === base.providerID && item.speed?.base === base.modelID)
+  }
+
+  const listed = createMemo(() => list().filter((item) => !isSpeed({ providerID: item.provider.id, modelID: item.id })))
+
+  // Saved entries may name a model at any of its speeds; the lists show each model once.
+  const recent = createMemo(() => uniqueModels(models.recent().map(standard)))
+  const favorite = createMemo(() => uniqueModels(models.favorite().map(standard)))
+
+  const speed = {
+    /** The speed the model runs at; none is its standard speed. */
+    of: (key: ModelKey) => (isSpeed(key) ? find(key)?.speed?.id : undefined),
+    list: (key: ModelKey) =>
+      speeds(key).flatMap((item) => (item.speed ? [{ id: item.speed.id, faster: item.speed.faster }] : [])),
+    /** The model that is `key` at a speed; none is its standard speed. */
+    model: (key: ModelKey, value: string | undefined): ModelKey | undefined => {
+      if (value === undefined) return standard(key)
+      const item = speeds(key).find((item) => item.speed?.id === value)
+
+      return item && { providerID: item.provider.id, modelID: item.id }
+    },
+    /** The model to run when `key` is picked: itself, at the speed last used with it. */
+    remembered: (key: ModelKey): ModelKey => {
+      const value = store.speed?.[variantKey(key)]
+
+      return (value && !isSpeed(key) && speed.model(key, value)) || key
+    },
+    remember: (key: ModelKey, value: string | undefined) => {
+      const name = variantKey(standard(key))
+
+      if (!store.speed) {
+        setStore("speed", { [name]: value })
+
+        return
+      }
+
+      setStore("speed", name, value)
+    },
+  }
+
   function update(model: ModelKey, state: Visibility) {
     const index = store.user.findIndex((x) => x.modelID === model.modelID && x.providerID === model.providerID)
 
@@ -152,8 +207,9 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 
   // Newest favorite first, as in the TUI.
   const toggleFavorite = (model: ModelKey) => {
-    const key = modelKey(model)
-    const rest = store.favorite.filter((item) => modelKey(item) !== key)
+    const key = modelKey(standard(model))
+    // An entry saved for the model at another speed is the same favorite.
+    const rest = store.favorite.filter((item) => modelKey(standard(item)) !== key)
 
     setStore(
       "favorite",
@@ -164,10 +220,11 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
   }
 
   const variantKey = (model: ModelKey) => `${model.providerID}/${model.modelID}`
-  const getVariant = (model: ModelKey) => store.variant?.[variantKey(model)]
+  // A model's speeds share its variant.
+  const getVariant = (model: ModelKey) => store.variant?.[variantKey(standard(model))]
 
   const setVariant = (model: ModelKey, value: string | undefined) => {
-    const key = variantKey(model)
+    const key = variantKey(standard(model))
 
     if (!store.variant) {
       setStore("variant", { [key]: value ?? "default" })
@@ -181,15 +238,19 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
   return {
     ready: models.ready,
     list,
+    /** The models offered as entries: every model but the ones that are another model's speed. */
+    listed,
     find,
+    standard,
+    speed,
     visible,
     setVisibility,
     recent: {
-      list: models.recent,
+      list: recent,
       push,
     },
     favorite: {
-      list: models.favorite,
+      list: favorite,
       toggle: toggleFavorite,
     },
     variant: {

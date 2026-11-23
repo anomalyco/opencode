@@ -17659,6 +17659,9 @@
               "recommended_api": {
                 "type": "boolean"
               },
+              "model_speeds": {
+                "type": "boolean"
+              },
               "full_codemode": {
                 "type": "boolean"
               },
@@ -22103,6 +22106,15 @@
               "$ref": "#/components/schemas/Model.Variant"
             }
           },
+          "experimental": {
+            "type": "object",
+            "properties": {
+              "speed": {
+                "$ref": "#/components/schemas/Model.Speed"
+              }
+            },
+            "additionalProperties": false
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -22218,6 +22230,22 @@
             "additionalProperties": {}
           }
         ]
+      },
+      "Model.Speed": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "faster": {
+            "type": "boolean"
+          }
+        },
+        "required": ["base", "id", "faster"],
+        "additionalProperties": false
       },
       "Model.Type": {
         "anyOf": [

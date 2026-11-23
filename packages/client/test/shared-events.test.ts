@@ -209,6 +209,47 @@ test("source completion preserves events already buffered for an idle consumer",
   expect(await idle.next()).toEqual({ done: true, value: undefined })
 })
 
+test.each(["EOF", "error"] as const)("abort after source %s cancels buffered delivery", async (ending) => {
+  const events = source()
+  const shared = SharedEvents.make(events.connect)
+  const controller = new AbortController()
+  const cancelled = shared.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
+  const buffered = shared.subscribe()[Symbol.asyncIterator]()
+  const observer = shared.subscribe()[Symbol.asyncIterator]()
+  const connected = [cancelled.next(), buffered.next(), observer.next()]
+  const connection = events.connections[0]
+  const value = { type: "session.updated", value: 1 }
+  const failure = new Error("source failed")
+
+  try {
+    connection.push({ type: "server.connected" })
+    await Promise.all(connected)
+    connection.push(value)
+    expect(await observer.next()).toEqual({ done: false, value })
+
+    // An active subscriber's completion witnesses finalization of the shared source.
+    const finished = Promise.allSettled([observer.next()])
+    if (ending === "EOF") connection.close()
+    if (ending === "error") connection.fail(failure)
+    expect(await finished).toEqual(
+      ending === "EOF"
+        ? [{ status: "fulfilled", value: { done: true, value: undefined } }]
+        : [{ status: "rejected", reason: failure }],
+    )
+
+    controller.abort()
+    expect(await cancelled.next()).toEqual({ done: true, value: undefined })
+    expect(await cancelled.next()).toEqual({ done: true, value: undefined })
+    expect(await buffered.next()).toEqual({ done: false, value })
+    if (ending === "EOF") expect(await buffered.next()).toEqual({ done: true, value: undefined })
+    if (ending === "error") await expect(buffered.next()).rejects.toBe(failure)
+    expect(events.connections).toHaveLength(1)
+  } finally {
+    await Promise.all([cancelled.return?.(), buffered.return?.(), observer.return?.()])
+    await connection.closed
+  }
+})
+
 test("late consumers receive the latest connection marker but no business event replay", async () => {
   const events = source()
   const shared = SharedEvents.make(events.connect)

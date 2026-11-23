@@ -23,7 +23,7 @@ Use one default ring when someone navigates focus to a control, not when they cl
 Chromium matches `:focus-visible` on every focused text field, and on anything that has focus once a key is pressed. A ring on a large surface then shows after a click, when the app moves focus there, and on returning to the window.
 
 - A text field never draws the ring, the composer and Home search included. Focus shows as the caret and the field's focused border or background. Don't add ring state or pointer tracking to a field.
-- A scroll area (the timeline, Home's list) takes focus so the keyboard can scroll it, and draws no ring. Show focus on the items inside it instead.
+- A scroll area (the timeline, Home's list) takes focus from a click so the keyboard can scroll it, and draws no ring. It is not a Tab stop: Tab moves between the items inside it, and they show the ring. In a session, PageUp and PageDown in the composer page the timeline.
 - Moving a screen reader’s reading cursor alone does not move DOM focus.
 
 ## Rows

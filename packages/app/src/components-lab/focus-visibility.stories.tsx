@@ -615,11 +615,11 @@ const surfaces: Surface[] = [
       {
         name: "Home viewport: invisible Tab stop",
         failure: "Invisible",
-        target: '.scroll-view__viewport[tabindex="0"]',
-        keys: "Tab to the scrollable viewport, then use ArrowDown or PageDown. With no overflow, Tab skips the viewport.",
-        sizing: "The viewport only needs a keyboard stop when it can scroll.",
+        target: ".scroll-view__viewport",
+        keys: "Tab through the list: focus skips the viewport. Click it, then use ArrowDown or PageDown to scroll.",
+        sizing: "The items inside the viewport take Tab focus and show the ring.",
         source: "ui/src/components/scroll-view.tsx, scroll-view.css",
-        fix: "Only include the viewport in the Tab order when it overflows, and draw the ring inside its edge.",
+        fix: "Keep the viewport out of the Tab order. A click still focuses it so the keyboard can scroll it.",
         render: () => (
           <ScrollView class="h-[90px] w-[300px] rounded-[6px] bg-v2-background-bg-layer-01">
             <div class="grid gap-3 p-3 text-13-regular">
