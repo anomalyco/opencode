@@ -23,7 +23,7 @@ export const ProviderGroup = HttpApiGroup.make("server.provider")
   )
   .add(
     HttpApiEndpoint.get("provider.get", "/api/provider/:providerID", {
-      params: { providerID: Provider.ID.annotateKey({ description: "Provider ID, as returned by provider.list." }) },
+      params: { providerID: Provider.ID },
       query: LocationQuery,
       success: Location.response(Provider.Info),
       error: [ProviderNotFoundError, ServiceUnavailableError],

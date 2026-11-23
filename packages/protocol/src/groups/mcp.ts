@@ -16,13 +16,9 @@ export function hasMcpClientTicketURL(url: URL) {
 const McpClientQuery = Schema.Struct({
   ...LocationQuery.fields,
   name: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]+$/)).annotateKey({
-    description: "Name of the MCP server the client hosts. Letters, digits, _ and - only.",
+    description: "Name of the MCP server the client hosts.",
   }),
 })
-
-const params = {
-  server: Schema.String.annotateKey({ description: "MCP server name, as listed by mcp.list." }),
-}
 
 export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, LocationService>(
   locationMiddleware: Context.Key<LocationId, LocationService>,
@@ -44,7 +40,7 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.put("mcp.add", "/api/experimental/mcp/:server", {
-        params: { server: Schema.String.annotateKey({ description: "Name to add the MCP server under." }) },
+        params: { server: Schema.String },
         query: LocationQuery,
         // Wrapped in a struct because the client codegen flattens payload fields and cannot
         // represent a top-level union payload.
@@ -62,7 +58,7 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.delete("mcp.remove", "/api/experimental/mcp/:server", {
-        params,
+        params: { server: Schema.String },
         query: LocationQuery,
         success: HttpApiSchema.NoContent,
         error: McpServerNotFoundError,
@@ -78,7 +74,7 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.post("mcp.connect", "/api/experimental/mcp/:server/connect", {
-        params,
+        params: { server: Schema.String },
         query: LocationQuery,
         success: HttpApiSchema.NoContent,
         error: McpServerNotFoundError,
@@ -94,7 +90,7 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.post("mcp.disconnect", "/api/experimental/mcp/:server/disconnect", {
-        params,
+        params: { server: Schema.String },
         query: LocationQuery,
         success: HttpApiSchema.NoContent,
         error: McpServerNotFoundError,

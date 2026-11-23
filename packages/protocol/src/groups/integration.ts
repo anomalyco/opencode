@@ -11,16 +11,6 @@ import {
 } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
-const params = {
-  integrationID: Integration.ID.annotateKey({ description: "Integration ID, as returned by integration.list." }),
-  oauthAttemptID: Integration.AttemptID.annotateKey({
-    description: "OAuth attempt ID, as returned by integration.oauth.connect.",
-  }),
-  commandAttemptID: Integration.AttemptID.annotateKey({
-    description: "Command attempt ID, as returned by integration.command.connect.",
-  }),
-}
-
 export const IntegrationGroup = HttpApiGroup.make("server.integration")
   .add(
     HttpApiEndpoint.get("integration.list", "/api/integration", {
@@ -38,7 +28,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
   )
   .add(
     HttpApiEndpoint.get("integration.get", "/api/integration/:integrationID", {
-      params: { integrationID: params.integrationID },
+      params: { integrationID: Integration.ID },
       query: LocationQuery,
       success: Location.response(Integration.Info),
       error: IntegrationNotFoundError,
@@ -70,7 +60,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
   )
   .add(
     HttpApiEndpoint.post("integration.connect.key", "/api/integration/:integrationID/connect/key", {
-      params: { integrationID: params.integrationID },
+      params: { integrationID: Integration.ID },
       query: LocationQuery,
       payload: Schema.Struct({
         key: Schema.String,
@@ -91,7 +81,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
   )
   .add(
     HttpApiEndpoint.post("integration.connect.external", "/api/integration/:integrationID/connect/external", {
-      params: { integrationID: params.integrationID },
+      params: { integrationID: Integration.ID },
       query: LocationQuery,
       payload: Schema.Struct({
         methodID: Integration.MethodID,
@@ -112,7 +102,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
   )
   .add(
     HttpApiEndpoint.post("integration.oauth.connect", "/api/integration/:integrationID/connect/oauth", {
-      params: { integrationID: params.integrationID },
+      params: { integrationID: Integration.ID },
       query: LocationQuery,
       payload: Schema.Struct({
         methodID: Integration.MethodID,
@@ -133,7 +123,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
   )
   .add(
     HttpApiEndpoint.get("integration.oauth.status", "/api/integration/:integrationID/connect/oauth/:attemptID", {
-      params: { integrationID: params.integrationID, attemptID: params.oauthAttemptID },
+      params: { integrationID: Integration.ID, attemptID: Integration.AttemptID },
       query: LocationQuery,
       success: Location.response(Integration.AttemptStatus),
       error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError],
@@ -152,7 +142,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       "integration.oauth.complete",
       "/api/integration/:integrationID/connect/oauth/:attemptID/complete",
       {
-        params: { integrationID: params.integrationID, attemptID: params.oauthAttemptID },
+        params: { integrationID: Integration.ID, attemptID: Integration.AttemptID },
         query: LocationQuery,
         payload: Schema.Struct({ code: Schema.optional(Schema.String) }),
         success: HttpApiSchema.NoContent,
@@ -171,7 +161,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
   )
   .add(
     HttpApiEndpoint.delete("integration.oauth.cancel", "/api/integration/:integrationID/connect/oauth/:attemptID", {
-      params: { integrationID: params.integrationID, attemptID: params.oauthAttemptID },
+      params: { integrationID: Integration.ID, attemptID: Integration.AttemptID },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
     })
@@ -186,7 +176,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
   )
   .add(
     HttpApiEndpoint.post("integration.command.connect", "/api/integration/:integrationID/connect/command", {
-      params: { integrationID: params.integrationID },
+      params: { integrationID: Integration.ID },
       query: LocationQuery,
       payload: Schema.Struct({
         methodID: Integration.MethodID,
@@ -206,7 +196,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
   )
   .add(
     HttpApiEndpoint.get("integration.command.status", "/api/integration/:integrationID/connect/command/:attemptID", {
-      params: { integrationID: params.integrationID, attemptID: params.commandAttemptID },
+      params: { integrationID: Integration.ID, attemptID: Integration.AttemptID },
       query: LocationQuery,
       success: Location.response(Integration.CommandAttemptStatus),
       error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError],
@@ -222,7 +212,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
   )
   .add(
     HttpApiEndpoint.delete("integration.command.cancel", "/api/integration/:integrationID/connect/command/:attemptID", {
-      params: { integrationID: params.integrationID, attemptID: params.commandAttemptID },
+      params: { integrationID: Integration.ID, attemptID: Integration.AttemptID },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
     })

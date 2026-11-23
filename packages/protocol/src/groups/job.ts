@@ -43,9 +43,7 @@ export const JobEndpoints = [
     }),
   ),
   HttpApiEndpoint.post("job.cancel", "/api/experimental/job/:id/cancel", {
-    params: {
-      id: Schema.String.annotateKey({ description: "Background job ID, as returned by experimental.job.list." }),
-    },
+    params: { id: Schema.String },
     success: HttpApiSchema.NoContent,
   }).annotateMerge(
     OpenApi.annotations({

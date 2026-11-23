@@ -3,6 +3,7 @@ import { Location } from "@opencode/schema/location"
 import { Permission } from "@opencode/schema/permission"
 import { PermissionSaved } from "@opencode/schema/permission-saved"
 import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import {
@@ -13,7 +14,6 @@ import {
   SessionNotFoundError,
 } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
-import { Params } from "./params.js"
 
 export const makePermissionGroup = <
   LocationId extends HttpApiMiddleware.AnyId,
@@ -60,11 +60,7 @@ export const makePermissionGroup = <
     )
     .add(
       HttpApiEndpoint.patch("permission.saved.update", "/api/permission/saved/:id", {
-        params: {
-          id: PermissionSaved.ID.annotateKey({
-            description: "Saved permission ID, as returned by permission.saved.list.",
-          }),
-        },
+        params: { id: PermissionSaved.ID },
         payload: Schema.Struct({
           action: Schema.String.pipe(Schema.optional),
           resource: Schema.String.pipe(Schema.optional),
@@ -82,11 +78,7 @@ export const makePermissionGroup = <
     )
     .add(
       HttpApiEndpoint.delete("permission.saved.remove", "/api/permission/saved/:id", {
-        params: {
-          id: PermissionSaved.ID.annotateKey({
-            description: "Saved permission ID, as returned by permission.saved.list.",
-          }),
-        },
+        params: { id: PermissionSaved.ID },
         success: HttpApiSchema.NoContent,
       }).annotateMerge(
         OpenApi.annotations({
@@ -98,7 +90,7 @@ export const makePermissionGroup = <
     )
     .add(
       HttpApiEndpoint.post("session.permission.create", "/api/session/:sessionID/permission", {
-        params: { sessionID: Params.sessionID },
+        params: { sessionID: Session.ID },
         payload: Schema.Struct({
           id: Permission.ID.pipe(Schema.optional),
           action: Permission.Request.fields.action,
@@ -124,7 +116,7 @@ export const makePermissionGroup = <
     )
     .add(
       HttpApiEndpoint.get("session.permission.list", "/api/session/:sessionID/permission", {
-        params: { sessionID: Params.sessionID },
+        params: { sessionID: Session.ID },
         success: Schema.Struct({ data: Schema.Array(Permission.Request) }),
         error: [SessionNotFoundError, LocationNotFoundError],
       }).annotateMerge(
@@ -137,12 +129,7 @@ export const makePermissionGroup = <
     )
     .add(
       HttpApiEndpoint.get("session.permission.get", "/api/session/:sessionID/permission/:requestID", {
-        params: {
-          sessionID: Params.sessionID,
-          requestID: Permission.ID.annotateKey({
-            description: "Permission request ID, as returned by session.permission.list.",
-          }),
-        },
+        params: { sessionID: Session.ID, requestID: Permission.ID },
         success: Schema.Struct({ data: Permission.Request }),
         error: [SessionNotFoundError, PermissionNotFoundError],
       })
@@ -157,12 +144,7 @@ export const makePermissionGroup = <
     )
     .add(
       HttpApiEndpoint.post("session.permission.reply", "/api/session/:sessionID/permission/:requestID/reply", {
-        params: {
-          sessionID: Params.sessionID,
-          requestID: Permission.ID.annotateKey({
-            description: "Permission request ID, as returned by session.permission.list.",
-          }),
-        },
+        params: { sessionID: Session.ID, requestID: Permission.ID },
         payload: Schema.Struct({
           decision: Permission.Reply,
           message: Schema.String.pipe(Schema.optional),

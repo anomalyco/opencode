@@ -5,10 +5,6 @@ import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/ht
 import { ShellNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
-const params = {
-  id: Shell.ID.annotateKey({ description: "Shell command ID, as returned by shell.create or shell.list." }),
-}
-
 export const ShellGroup = HttpApiGroup.make("server.shell")
   .add(
     HttpApiEndpoint.get("shell.list", "/api/shell", {
@@ -42,7 +38,7 @@ export const ShellGroup = HttpApiGroup.make("server.shell")
   )
   .add(
     HttpApiEndpoint.get("shell.get", "/api/shell/:id", {
-      params,
+      params: { id: Shell.ID },
       query: LocationQuery,
       success: Location.response(Shell.Info),
       error: ShellNotFoundError,
@@ -58,7 +54,7 @@ export const ShellGroup = HttpApiGroup.make("server.shell")
   )
   .add(
     HttpApiEndpoint.get("shell.output", "/api/shell/:id/output", {
-      params,
+      params: { id: Shell.ID },
       query: Schema.Struct({ ...LocationQuery.fields, ...Shell.OutputInput.fields }),
       success: Location.response(Shell.Output),
       error: ShellNotFoundError,
@@ -74,7 +70,7 @@ export const ShellGroup = HttpApiGroup.make("server.shell")
   )
   .add(
     HttpApiEndpoint.delete("shell.remove", "/api/shell/:id", {
-      params,
+      params: { id: Shell.ID },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
     })
@@ -87,4 +83,6 @@ export const ShellGroup = HttpApiGroup.make("server.shell")
         }),
       ),
   )
-  .annotateMerge(OpenApi.annotations({ title: "shell", description: "Location-scoped shell command routes." }))
+  .annotateMerge(
+    OpenApi.annotations({ title: "shell", description: "Location-scoped shell command routes." }),
+  )

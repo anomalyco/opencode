@@ -31,7 +31,7 @@ export const ProjectGroup = HttpApiGroup.make("server.project")
   )
   .add(
     HttpApiEndpoint.patch("project.update", `${root}/:projectID`, {
-      params: { projectID: Project.ID.annotateKey({ description: "Project ID, as returned by project.list." }) },
+      params: { projectID: Project.ID },
       payload: UpdatePayload,
       success: Project.Info,
       error: ProjectNotFoundError,

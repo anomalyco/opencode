@@ -101,8 +101,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "Pairing code from server.pair."
+            "required": true
           }
         ],
         "security": [],
@@ -367,8 +366,7 @@
             "schema": {
               "$ref": "#/components/schemas/Agent.ID"
             },
-            "required": true,
-            "description": "Agent ID, as returned by agent.list."
+            "required": true
           },
           {
             "name": "location",
@@ -952,8 +950,7 @@
             "schema": {
               "$ref": "#/components/schemas/Project.ID"
             },
-            "required": false,
-            "description": "Only sessions in this project, as returned by project.list."
+            "required": false
           },
           {
             "name": "subpath",
@@ -1202,8 +1199,7 @@
             "schema": {
               "$ref": "#/components/schemas/Project.ID"
             },
-            "required": false,
-            "description": "Only count sessions in this project, as returned by project.list."
+            "required": false
           },
           {
             "name": "timezone",
@@ -1379,8 +1375,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "sanitize",
@@ -1523,8 +1518,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -1590,8 +1584,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -1643,8 +1636,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -1759,8 +1751,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -1858,8 +1849,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -1930,8 +1920,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -2002,8 +1991,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -2084,8 +2072,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -2241,8 +2228,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -2365,8 +2351,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -2457,8 +2442,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -2600,8 +2584,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -2689,8 +2672,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -2801,8 +2783,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -2866,8 +2847,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -2992,8 +2972,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -3073,8 +3052,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -3137,8 +3115,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -3219,8 +3196,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "from",
@@ -3350,8 +3326,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -3422,8 +3397,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "inboxID",
@@ -3431,8 +3405,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.Message.ID"
             },
-            "required": true,
-            "description": "Inbox item ID, as returned by session.inbox.list."
+            "required": true
           }
         ],
         "security": [],
@@ -3484,8 +3457,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "inboxID",
@@ -3493,8 +3465,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.Message.ID"
             },
-            "required": true,
-            "description": "Inbox item ID, as returned by session.inbox.list."
+            "required": true
           }
         ],
         "security": [],
@@ -3575,8 +3546,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -3647,8 +3617,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "key",
@@ -3656,8 +3625,7 @@
             "schema": {
               "$ref": "#/components/schemas/InstructionEntry.Key"
             },
-            "required": true,
-            "description": "Instruction entry key, as returned by experimental.session.instructions.entry.list."
+            "required": true
           }
         ],
         "security": [],
@@ -3734,8 +3702,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "key",
@@ -3743,8 +3710,7 @@
             "schema": {
               "$ref": "#/components/schemas/InstructionEntry.Key"
             },
-            "required": true,
-            "description": "Instruction entry key, as returned by experimental.session.instructions.entry.list."
+            "required": true
           }
         ],
         "security": [],
@@ -3798,8 +3764,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -3894,8 +3859,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "after",
@@ -4056,8 +4020,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "resume",
@@ -4128,8 +4091,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -4183,8 +4145,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "messageID",
@@ -4192,8 +4153,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.Message.ID"
             },
-            "required": true,
-            "description": "Message ID, as returned by session.message.list."
+            "required": true
           }
         ],
         "security": [],
@@ -4268,8 +4228,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -4345,8 +4304,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -4441,8 +4399,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "formID",
@@ -4450,8 +4407,7 @@
             "schema": {
               "$ref": "#/components/schemas/Form.ID"
             },
-            "required": true,
-            "description": "Form ID, as returned by session.form.list or session.form.create."
+            "required": true
           }
         ],
         "security": [],
@@ -4527,8 +4483,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "formID",
@@ -4536,8 +4491,7 @@
             "schema": {
               "$ref": "#/components/schemas/Form.ID"
             },
-            "required": true,
-            "description": "Form ID, as returned by session.form.list or session.form.create."
+            "required": true
           },
           {
             "name": "message",
@@ -4620,8 +4574,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "formID",
@@ -4629,8 +4582,7 @@
             "schema": {
               "$ref": "#/components/schemas/Form.ID"
             },
-            "required": true,
-            "description": "Form ID, as returned by session.form.list or session.form.create."
+            "required": true
           }
         ],
         "security": [],
@@ -4721,8 +4673,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -4796,8 +4747,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -4868,8 +4818,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "limit",
@@ -5677,8 +5626,7 @@
             "schema": {
               "$ref": "#/components/schemas/Generate.VideoID"
             },
-            "required": true,
-            "description": "Video generation ID, as returned by experimental.generate.video.create."
+            "required": true
           }
         ],
         "security": [],
@@ -6103,8 +6051,7 @@
             "schema": {
               "$ref": "#/components/schemas/Provider.ID"
             },
-            "required": true,
-            "description": "Provider ID, as returned by provider.list."
+            "required": true
           },
           {
             "name": "location",
@@ -6308,8 +6255,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true,
-            "description": "Integration ID, as returned by integration.list."
+            "required": true
           },
           {
             "name": "location",
@@ -6500,8 +6446,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true,
-            "description": "Integration ID, as returned by integration.list."
+            "required": true
           },
           {
             "name": "location",
@@ -6624,8 +6569,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true,
-            "description": "Integration ID, as returned by integration.list."
+            "required": true
           },
           {
             "name": "location",
@@ -6748,8 +6692,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true,
-            "description": "Integration ID, as returned by integration.list."
+            "required": true
           },
           {
             "name": "location",
@@ -6882,8 +6825,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true,
-            "description": "Integration ID, as returned by integration.list."
+            "required": true
           },
           {
             "name": "attemptID",
@@ -6891,8 +6833,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.AttemptID"
             },
-            "required": true,
-            "description": "OAuth attempt ID, as returned by integration.oauth.connect."
+            "required": true
           },
           {
             "name": "location",
@@ -6996,8 +6937,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true,
-            "description": "Integration ID, as returned by integration.list."
+            "required": true
           },
           {
             "name": "attemptID",
@@ -7005,8 +6945,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.AttemptID"
             },
-            "required": true,
-            "description": "OAuth attempt ID, as returned by integration.oauth.connect."
+            "required": true
           },
           {
             "name": "location",
@@ -7085,8 +7024,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true,
-            "description": "Integration ID, as returned by integration.list."
+            "required": true
           },
           {
             "name": "attemptID",
@@ -7094,8 +7032,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.AttemptID"
             },
-            "required": true,
-            "description": "OAuth attempt ID, as returned by integration.oauth.connect."
+            "required": true
           },
           {
             "name": "location",
@@ -7207,8 +7144,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true,
-            "description": "Integration ID, as returned by integration.list."
+            "required": true
           },
           {
             "name": "location",
@@ -7341,8 +7277,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true,
-            "description": "Integration ID, as returned by integration.list."
+            "required": true
           },
           {
             "name": "attemptID",
@@ -7350,8 +7285,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.AttemptID"
             },
-            "required": true,
-            "description": "Command attempt ID, as returned by integration.command.connect."
+            "required": true
           },
           {
             "name": "location",
@@ -7455,8 +7389,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true,
-            "description": "Integration ID, as returned by integration.list."
+            "required": true
           },
           {
             "name": "attemptID",
@@ -7464,8 +7397,7 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.AttemptID"
             },
-            "required": true,
-            "description": "Command attempt ID, as returned by integration.command.connect."
+            "required": true
           },
           {
             "name": "location",
@@ -7635,8 +7567,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "Name to add the MCP server under."
+            "required": true
           },
           {
             "name": "location",
@@ -7737,8 +7668,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "MCP server name, as listed by mcp.list."
+            "required": true
           },
           {
             "name": "location",
@@ -7824,8 +7754,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "MCP server name, as listed by mcp.list."
+            "required": true
           },
           {
             "name": "location",
@@ -7911,8 +7840,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "MCP server name, as listed by mcp.list."
+            "required": true
           },
           {
             "name": "location",
@@ -8121,7 +8049,7 @@
               "type": "string"
             },
             "required": true,
-            "description": "Name of the MCP server the client hosts. Letters, digits, _ and - only."
+            "description": "Name of the MCP server the client hosts."
           }
         ],
         "security": [],
@@ -8226,7 +8154,7 @@
               "type": "string"
             },
             "required": true,
-            "description": "Name of the MCP server the client hosts. Letters, digits, _ and - only."
+            "description": "Name of the MCP server the client hosts."
           },
           {
             "name": "ticket",
@@ -8426,8 +8354,7 @@
             "schema": {
               "$ref": "#/components/schemas/Credential.ID"
             },
-            "required": true,
-            "description": "Credential ID, as returned by credential.list or credential.create."
+            "required": true
           }
         ],
         "security": [],
@@ -8486,8 +8413,7 @@
             "schema": {
               "$ref": "#/components/schemas/Credential.ID"
             },
-            "required": true,
-            "description": "Credential ID, as returned by credential.list or credential.create."
+            "required": true
           }
         ],
         "security": [],
@@ -8531,8 +8457,7 @@
             "schema": {
               "$ref": "#/components/schemas/Credential.ID"
             },
-            "required": true,
-            "description": "Credential ID, as returned by credential.list or credential.create."
+            "required": true
           }
         ],
         "security": [],
@@ -8632,8 +8557,7 @@
             "schema": {
               "$ref": "#/components/schemas/Project.ID"
             },
-            "required": true,
-            "description": "Project ID, as returned by project.list."
+            "required": true
           }
         ],
         "security": [],
@@ -8973,8 +8897,7 @@
             "schema": {
               "$ref": "#/components/schemas/PermissionSaved.ID"
             },
-            "required": true,
-            "description": "Saved permission ID, as returned by permission.saved.list."
+            "required": true
           }
         ],
         "security": [],
@@ -9083,8 +9006,7 @@
             "schema": {
               "$ref": "#/components/schemas/PermissionSaved.ID"
             },
-            "required": true,
-            "description": "Saved permission ID, as returned by permission.saved.list."
+            "required": true
           }
         ],
         "security": [],
@@ -9128,8 +9050,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -9267,8 +9188,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -9346,8 +9266,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "requestID",
@@ -9355,8 +9274,7 @@
             "schema": {
               "$ref": "#/components/schemas/Permission.ID"
             },
-            "required": true,
-            "description": "Permission request ID, as returned by session.permission.list."
+            "required": true
           }
         ],
         "security": [],
@@ -9434,8 +9352,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "requestID",
@@ -9443,8 +9360,7 @@
             "schema": {
               "$ref": "#/components/schemas/Permission.ID"
             },
-            "required": true,
-            "description": "Permission request ID, as returned by session.permission.list."
+            "required": true
           }
         ],
         "security": [],
@@ -10331,8 +10247,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "ID of the RPC a plugin registered."
+            "required": true
           },
           {
             "name": "method",
@@ -10340,8 +10255,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "Name of the method to call on that RPC."
+            "required": true
           },
           {
             "name": "location",
@@ -11022,8 +10936,7 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "PTY ID, as returned by pty.create or pty.list."
+            "required": true
           },
           {
             "name": "location",
@@ -11124,8 +11037,7 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "PTY ID, as returned by pty.create or pty.list."
+            "required": true
           },
           {
             "name": "location",
@@ -11259,8 +11171,7 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "PTY ID, as returned by pty.create or pty.list."
+            "required": true
           },
           {
             "name": "location",
@@ -11346,8 +11257,7 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "PTY ID, as returned by pty.create or pty.list."
+            "required": true
           },
           {
             "name": "x-opencode-ticket",
@@ -11469,8 +11379,7 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "PTY ID, as returned by pty.create or pty.list."
+            "required": true
           },
           {
             "in": "query",
@@ -11573,8 +11482,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           },
           {
             "name": "lines",
@@ -11658,8 +11566,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -11726,8 +11633,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true,
-            "description": "Session ID, as returned by session.create or session.list."
+            "required": true
           }
         ],
         "security": [],
@@ -11910,8 +11816,7 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
+            "required": true
           }
         ],
         "security": [],
@@ -11985,8 +11890,7 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
+            "required": true
           }
         ],
         "security": [],
@@ -12081,8 +11985,7 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
+            "required": true
           }
         ],
         "security": [],
@@ -12144,8 +12047,7 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
+            "required": true
           }
         ],
         "security": [],
@@ -12221,8 +12123,7 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
+            "required": true
           },
           {
             "name": "x-opencode-ticket",
@@ -12317,8 +12218,14 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true,
-            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "attachment_id",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "in": "query",
@@ -12332,14 +12239,6 @@
             "in": "query",
             "name": "role",
             "description": "Attach as controller (the default) or observer.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "attachment_id",
-            "description": "ID for this attachment. Defaults to a random ID.",
             "schema": {
               "type": "string"
             }
@@ -12448,8 +12347,7 @@
             "schema": {
               "$ref": "#/components/schemas/MediaHash"
             },
-            "required": true,
-            "description": "Lowercase hex SHA-256 hash of the media content."
+            "required": true
           }
         ],
         "security": [],
@@ -12511,8 +12409,7 @@
             "schema": {
               "$ref": "#/components/schemas/Blob.ID"
             },
-            "required": true,
-            "description": "Blob ID, such as one from a completed video generation's blobs."
+            "required": true
           }
         ],
         "security": [],
@@ -12750,8 +12647,7 @@
             "schema": {
               "$ref": "#/components/schemas/Automation.ID"
             },
-            "required": true,
-            "description": "Automation ID, as returned by experimental.automation.create or experimental.automation.list."
+            "required": true
           }
         ],
         "security": [],
@@ -12827,8 +12723,7 @@
             "schema": {
               "$ref": "#/components/schemas/Automation.ID"
             },
-            "required": true,
-            "description": "Automation ID, as returned by experimental.automation.create or experimental.automation.list."
+            "required": true
           }
         ],
         "security": [],
@@ -12892,8 +12787,7 @@
             "schema": {
               "$ref": "#/components/schemas/Automation.ID"
             },
-            "required": true,
-            "description": "Automation ID, as returned by experimental.automation.create or experimental.automation.list."
+            "required": true
           }
         ],
         "security": [],
@@ -12971,8 +12865,7 @@
             "schema": {
               "$ref": "#/components/schemas/Automation.ID"
             },
-            "required": true,
-            "description": "Automation ID, as returned by experimental.automation.create or experimental.automation.list."
+            "required": true
           }
         ],
         "security": [],
@@ -13182,8 +13075,7 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": false,
-            "description": "Only artifacts created by this session."
+            "required": false
           },
           {
             "name": "provider",
@@ -13191,8 +13083,7 @@
             "schema": {
               "type": "string"
             },
-            "required": false,
-            "description": "Only artifacts from this provider, as returned by experimental.artifacts.providers."
+            "required": false
           }
         ],
         "security": [],
@@ -13417,8 +13308,7 @@
             "schema": {
               "$ref": "#/components/schemas/Artifact.ID"
             },
-            "required": true,
-            "description": "Artifact ID, as returned by experimental.artifacts.create or experimental.artifacts.list."
+            "required": true
           },
           {
             "name": "location",
@@ -13537,8 +13427,7 @@
             "schema": {
               "$ref": "#/components/schemas/Artifact.ID"
             },
-            "required": true,
-            "description": "Artifact ID, as returned by experimental.artifacts.create or experimental.artifacts.list."
+            "required": true
           },
           {
             "name": "location",
@@ -13670,8 +13559,7 @@
             "schema": {
               "$ref": "#/components/schemas/Artifact.ID"
             },
-            "required": true,
-            "description": "Artifact ID, as returned by experimental.artifacts.create or experimental.artifacts.list."
+            "required": true
           },
           {
             "name": "location",
@@ -13775,8 +13663,7 @@
             "schema": {
               "$ref": "#/components/schemas/Artifact.ID"
             },
-            "required": true,
-            "description": "Artifact ID, as returned by experimental.artifacts.create or experimental.artifacts.list."
+            "required": true
           },
           {
             "name": "location",
@@ -14007,8 +13894,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "Background job ID, as returned by experimental.job.list."
+            "required": true
           }
         ],
         "security": [],
@@ -14244,8 +14130,7 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
-            "description": "Name of the machine to remove."
+            "required": true
           }
         ],
         "security": [],
@@ -14514,8 +14399,7 @@
             "schema": {
               "$ref": "#/components/schemas/Shell.ID"
             },
-            "required": true,
-            "description": "Shell command ID, as returned by shell.create or shell.list."
+            "required": true
           },
           {
             "name": "location",
@@ -14616,8 +14500,7 @@
             "schema": {
               "$ref": "#/components/schemas/Shell.ID"
             },
-            "required": true,
-            "description": "Shell command ID, as returned by shell.create or shell.list."
+            "required": true
           },
           {
             "name": "location",
@@ -14696,8 +14579,7 @@
             "schema": {
               "$ref": "#/components/schemas/Shell.ID"
             },
-            "required": true,
-            "description": "Shell command ID, as returned by shell.create or shell.list."
+            "required": true
           },
           {
             "name": "location",
@@ -14931,8 +14813,7 @@
             "schema": {
               "$ref": "#/components/schemas/Project.ID"
             },
-            "required": true,
-            "description": "Project whose worktrees to list, as returned by project.list."
+            "required": true
           }
         ],
         "security": [],

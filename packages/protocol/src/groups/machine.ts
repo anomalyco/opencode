@@ -111,7 +111,7 @@ export const MachineEndpoints = [
     ),
   ),
   HttpApiEndpoint.delete("machine.remove", "/api/experimental/machine/:name", {
-    params: { name: Schema.String.annotateKey({ description: "Name of the machine to remove." }) },
+    params: { name: Schema.String },
     success: HttpApiSchema.NoContent,
     error: [ForbiddenError, MachineNotFoundError],
   }).annotateMerge(

@@ -8,7 +8,7 @@ export const MediaHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)
 
 /** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
 export const MediaGetEndpoint = HttpApiEndpoint.get("media.get", "/api/experimental/media/:hash", {
-  params: { hash: MediaHash.annotateKey({ description: "Lowercase hex SHA-256 hash of the media content." }) },
+  params: { hash: MediaHash },
   success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
   error: [FileNotFoundError, InvalidRequestError],
 }).annotateMerge(

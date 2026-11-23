@@ -13,8 +13,6 @@ export const PTY_CONNECT_PATH = "/api/pty/:ptyID/connect"
 
 const PTY_CONNECT_URL = /^\/api\/pty\/[^/]+\/connect$/
 
-const params = { ptyID: Pty.ID.annotateKey({ description: "PTY ID, as returned by pty.create or pty.list." }) }
-
 export function hasPtyConnectTicketURL(url: URL) {
   return PTY_CONNECT_URL.test(url.pathname) && !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
 }
@@ -54,7 +52,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.get("pty.get", "/api/pty/:ptyID", {
-        params,
+        params: { ptyID: Pty.ID },
         query: LocationQuery,
         success: Location.response(Pty.Info),
         error: PtyNotFoundError,
@@ -70,7 +68,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.put("pty.update", "/api/pty/:ptyID", {
-        params,
+        params: { ptyID: Pty.ID },
         query: LocationQuery,
         payload: Pty.UpdateInput,
         success: Location.response(Pty.Info),
@@ -87,7 +85,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.delete("pty.remove", "/api/pty/:ptyID", {
-        params,
+        params: { ptyID: Pty.ID },
         query: LocationQuery,
         success: HttpApiSchema.NoContent,
         error: PtyNotFoundError,
@@ -103,7 +101,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.post("pty.connectToken", "/api/pty/:ptyID/connect-token", {
-        params,
+        params: { ptyID: Pty.ID },
         query: LocationQuery,
         headers: Schema.Struct({
           [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String).annotateKey({
@@ -126,7 +124,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     .add(
       // Query fields are decoded in the raw handler before upgrade work.
       HttpApiEndpoint.get("pty.connect", PTY_CONNECT_PATH, {
-        params,
+        params: { ptyID: Pty.ID },
         success: Schema.Boolean,
         error: [ForbiddenError, PtyNotFoundError, LocationNotFoundError],
       }).annotateMerge(

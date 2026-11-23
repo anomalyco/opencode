@@ -5,9 +5,7 @@ import { BlobNotFoundError } from "../errors.js"
 
 /** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
 export const BlobGetEndpoint = HttpApiEndpoint.get("blob.get", "/api/experimental/blob/:id", {
-  params: {
-    id: BlobStore.ID.annotateKey({ description: "Blob ID, such as one from a completed video generation's blobs." }),
-  },
+  params: { id: BlobStore.ID },
   success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
   error: [BlobNotFoundError],
 }).annotateMerge(

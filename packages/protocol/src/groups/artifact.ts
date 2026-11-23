@@ -18,18 +18,12 @@ import { LocationQuery, locationQueryOpenApi } from "./location.js"
 const EXPERIMENTAL =
   "Experimental: needs experimental.artifacts in the Location's config and may change without notice."
 
-const params = {
-  artifactID: Artifact.ID.annotateKey({
-    description: "Artifact ID, as returned by experimental.artifacts.create or experimental.artifacts.list.",
-  }),
-}
+const params = { artifactID: Artifact.ID }
 
 const ListQuery = Schema.Struct({
   ...LocationQuery.fields,
-  sessionID: Schema.optional(Session.ID).annotateKey({ description: "Only artifacts created by this session." }),
-  provider: Schema.optional(Artifact.ProviderID).annotateKey({
-    description: "Only artifacts from this provider, as returned by experimental.artifacts.providers.",
-  }),
+  sessionID: Schema.optional(Session.ID),
+  provider: Schema.optional(Artifact.ProviderID),
 })
 
 const annotations = (identifier: string, summary: string, description: string) =>
@@ -51,9 +45,7 @@ export const ArtifactEndpoints = [
     error: commonErrors,
   })
     .annotateMerge(locationQueryOpenApi)
-    .annotateMerge(
-      annotations("providers", "List artifact providers", "Return active artifact providers and default."),
-    ),
+    .annotateMerge(annotations("providers", "List artifact providers", "Return active artifact providers and default.")),
   HttpApiEndpoint.get("artifacts.list", "/api/experimental/artifacts", {
     query: ListQuery,
     success: Location.response(Schema.Array(Artifact.Info)),
