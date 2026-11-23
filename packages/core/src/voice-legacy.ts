@@ -39,47 +39,65 @@ function pick(models: readonly Model.Info[], id: string) {
 }
 
 /**
- * One entry per voice model ID. Models of providers that can't start voice are listed as unavailable, so old clients
- * can tell a missing key from a server without voice.
+ * One entry per voice model ID, newest first. Models of providers that can't start voice are listed as unavailable, so
+ * old clients can tell a missing key from a server without voice.
  */
-export const models = Effect.fn("VoiceLegacy.models")(function* () {
+const list = Effect.fnUntraced(function* () {
   const catalog = yield* Model.Service
   const providers = yield* Provider.Service
   const startable = yield* catalog.available(["realtime"])
-  const known: Model.Info[] = [...startable]
+  const others: Model.Info[] = []
   for (const record of (yield* providers.snapshot()).records.values()) {
     for (const model of record.models.values()) {
-      if (Voice.engineOf(model)) known.push(model)
+      if (Voice.engineOf(model)) others.push(model)
     }
   }
+  others.sort((left, right) => right.time.released - left.time.released)
+  const known = [...startable, ...others]
 
-  const list: ModelInfo[] = []
+  const result: ModelInfo[] = []
   for (const model of known) {
-    if (list.some((item) => item.model === model.id)) continue
+    if (result.some((item) => item.model === model.id)) continue
     const usable = pick(startable, model.id)
     const picked = usable ?? pick(known, model.id)
     if (!picked) continue
-    list.push({
+    result.push({
       model: picked.id,
       provider: picked.providerID,
       transports: picked.realtime?.transports ?? [],
       available: usable !== undefined,
     })
   }
-  // GPT-Live is the default when it can start, as it was before voice models came from the catalog.
-  const live = startable.find((model) => model.realtime?.protocol === "openai-live")
-  const first = live?.id ?? list.find((item) => item.available)?.model
-  return first ? { models: list, default: first } : { models: list }
+  return result
+})
+
+export const models = Effect.fn("VoiceLegacy.models")(function* () {
+  const result = yield* list()
+  const first = result.find((item) => item.available)?.model
+  return first ? { models: result, default: first } : { models: result }
 })
 
 export const session = Effect.fn("VoiceLegacy.session")(function* (input: SessionInput) {
-  const catalog = yield* Model.Service
   const voice = yield* Voice.Service
-  const model = pick(yield* catalog.available(["realtime"]), input.model)
-  if (!model) return yield* new Voice.UnavailableError({ message: Voice.missingKeyMessage })
-  return yield* voice.connect({
-    model: { id: model.id, providerID: model.providerID },
-    session: input.session,
-    transport: input.transport,
-  })
+  const result = yield* list()
+  const item = result.find((entry) => entry.model === input.model)
+  if (!item)
+    return yield* new Voice.InvalidRequestError({
+      message: `Unsupported voice model: ${input.model}. This server lists ${result.map((entry) => entry.model).join(", ") || "none"}.`,
+    })
+  if (!item.available) return yield* new Voice.UnavailableError({ message: Voice.missingKeyMessage })
+  return yield* voice
+    .connect({
+      model: { id: Model.ID.make(item.model), providerID: Provider.ID.make(item.provider) },
+      session: input.session,
+      transport: input.transport,
+    })
+    .pipe(
+      // This endpoint never answered 404 or 422: a model it can't start needs a key.
+      Effect.mapError((error) =>
+        error._tag === "Voice.InvalidRequestError" || error._tag === "Voice.UnavailableError"
+          ? error
+          : new Voice.UnavailableError({ message: Voice.missingKeyMessage }),
+      ),
+    )
 })

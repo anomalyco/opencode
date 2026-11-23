@@ -6,7 +6,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Effect, Layer } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
-import { ServerFetch } from "../src/fetch"
+import { serveRoutes } from "./fixture/routes"
 
 const voice = makeLocationNode({
   service: Voice.Service,
@@ -21,7 +21,15 @@ const voice = makeLocationNode({
             new Voice.ModelNotFoundError({
               providerID: input.model.providerID,
               modelID: input.model.id,
-              message: "Voice model not found",
+              message: "Model not found: openai/missing",
+            }),
+          )
+        if (input.model.id === "chat")
+          return Effect.fail(
+            new Voice.UnsupportedModelError({
+              providerID: input.model.providerID,
+              modelID: input.model.id,
+              message: "openai/chat is a chat model, not a realtime model",
             }),
           )
         if (input.model.id === "unavailable")
@@ -50,24 +58,23 @@ it.live("routes the voice connect endpoint and the deprecated voice endpoints", 
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-voice-endpoint-")))
     const global = path.join(tmp.path, "global")
     yield* Effect.promise(() => fs.mkdir(global))
-    const handler = yield* ServerFetch.make(
+    const server = yield* serveRoutes(
       {
         database: { path: ":memory:" },
         config: { directory: global },
         fs: { filewatcher: false },
         models: { fetch: false },
       },
-      { overrides: [Voice.node.replace(voice)] },
+      [Voice.node.replace(voice)],
     )
+    yield* server.pluginsLoaded(global)
     const post = (route: string, body: unknown) =>
       Effect.promise(() =>
-        handler(
-          new Request(`http://opencode.local/api/experimental/voice/${route}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-        ),
+        server.fetch(`http://opencode.local/api/experimental/voice/${route}?location[directory]=${global}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
       )
 
     const rtcRes = yield* post("connect", {
@@ -76,8 +83,9 @@ it.live("routes the voice connect endpoint and the deprecated voice endpoints", 
       transport: { type: "webrtc", sdp: "v=0", dcid: 4 },
     })
     expect(rtcRes.status).toBe(200)
-    expect(yield* Effect.promise(() => rtcRes.json())).toEqual({
-      data: { transport: { type: "webrtc", sdp: "answer:opencode/gpt-live-1:v=0" } },
+    expect(yield* Effect.promise(() => rtcRes.json())).toMatchObject({
+      location: { directory: global },
+      data: { type: "webrtc", sdp: "answer:opencode/gpt-live-1:v=0" },
     })
 
     const wsRes = yield* post("connect", {
@@ -85,28 +93,33 @@ it.live("routes the voice connect endpoint and the deprecated voice endpoints", 
       transport: { type: "websocket" },
     })
     expect(wsRes.status).toBe(200)
-    expect(yield* Effect.promise(() => wsRes.json())).toEqual({
+    expect(yield* Effect.promise(() => wsRes.json())).toMatchObject({
       data: {
-        transport: {
-          type: "websocket",
-          url: "wss://api.x.ai/v1/realtime?model=grok-voice-3.0",
-          token: "ek_test",
-          expiresAt: 1760000000,
-        },
+        type: "websocket",
+        url: "wss://api.x.ai/v1/realtime?model=grok-voice-3.0",
+        token: "ek_test",
+        expiresAt: 1760000000,
       },
     })
 
-    const connect = (id: string) => post("connect", { model: { id, providerID: "openai" }, transport: { type: "websocket" } })
+    const connect = (id: string) =>
+      post("connect", { model: { id, providerID: "openai" }, transport: { type: "websocket" } })
     expect((yield* connect("invalid")).status).toBe(400)
     expect((yield* connect("missing")).status).toBe(404)
+    expect((yield* connect("chat")).status).toBe(422)
     expect((yield* connect("unavailable")).status).toBe(503)
 
     // The deprecated endpoints read the real catalog, where nothing is connected.
-    const modelsRes = yield* Effect.promise(() =>
-      handler(new Request("http://opencode.local/api/experimental/voice/models")),
-    )
+    const modelsRes = yield* Effect.promise(() => server.fetch("http://opencode.local/api/experimental/voice/models"))
     expect(modelsRes.status).toBe(200)
-    expect(yield* Effect.promise(() => modelsRes.json())).toEqual({ data: { models: [] } })
+    const models = yield* Effect.promise(() => modelsRes.json())
+    expect(models.data.default).toBeUndefined()
+    expect(models.data.models).toContainEqual({
+      model: "gpt-live-1",
+      provider: "openai",
+      transports: ["webrtc"],
+      available: false,
+    })
     const legacy = yield* post("session", { model: "gpt-live-1", transport: { type: "websocket" } })
     expect(legacy.status).toBe(503)
   }),

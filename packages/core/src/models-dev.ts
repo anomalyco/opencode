@@ -271,12 +271,12 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
         ),
       ]
     })
-    for (const item of voices) {
-      const model = modelInfo(providerID, { packageName, baseURL }, Model.ID.make(item.model.id), {
-        model: item.model,
+    for (const voice of voices) {
+      const model = modelInfo(providerID, { packageName, baseURL }, Model.ID.make(voice.model.id), {
+        model: voice.model,
         route: { package: packageName },
       })
-      models.push({ ...model, realtime: item.realtime })
+      models.push({ ...model, realtime: voice.realtime })
     }
     return [
       {

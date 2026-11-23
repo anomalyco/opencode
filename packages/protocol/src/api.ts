@@ -3,7 +3,7 @@ import { HttpApi, HttpApiGroup, HttpApiMiddleware, OpenApi } from "effect/http-a
 import { SchemaErrorMiddleware } from "./middleware/schema-error.js"
 import { GenerateGroup } from "./groups/generate.js"
 import { ExperimentalGroup } from "./groups/experimental.js"
-import { VoiceGroup } from "./groups/voice.js"
+import { makeVoiceGroup } from "./groups/voice.js"
 import { MessageGroup } from "./groups/message.js"
 import { ModelGroup } from "./groups/model.js"
 import { ProviderGroup } from "./groups/provider.js"
@@ -40,7 +40,6 @@ type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof AgentGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof PluginGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ModelGroup, LocationId>
-  | HttpApiGroup.AddMiddleware<typeof VoiceGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ProviderGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof IntegrationGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof WebSearchGroup, LocationId>
@@ -56,6 +55,10 @@ type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
 
 type PtyGroups<LocationId extends HttpApiMiddleware.AnyId, LocationService> = ReturnType<
   typeof makePtyGroup<LocationId, LocationService>
+>
+
+type VoiceGroups<LocationId extends HttpApiMiddleware.AnyId, LocationService> = ReturnType<
+  typeof makeVoiceGroup<LocationId, LocationService>
 >
 
 type McpGroups<LocationId extends HttpApiMiddleware.AnyId, LocationService> = ReturnType<
@@ -107,6 +110,7 @@ type ApiGroups<
   | LocationGroup<LocationId, LocationService>
   | PtyGroups<LocationId, LocationService>
   | McpGroups<LocationId, LocationService>
+  | VoiceGroups<LocationId, LocationService>
   | FormGroups<LocationId, LocationService>
   | SessionGroups<SessionLocationId, SessionLocationService, FormLocationId, FormLocationService>
   | MixedMiddlewareGroups<LocationId, LocationService, SessionLocationId, SessionLocationService>
@@ -173,7 +177,7 @@ const makeApiFromGroup = <
     .add(MessageGroup)
     .add(ModelGroup.middleware(locationMiddleware))
     .add(GenerateGroup)
-    .add(VoiceGroup.middleware(locationMiddleware))
+    .add(makeVoiceGroup(locationMiddleware))
     .add(ProviderGroup.middleware(locationMiddleware))
     .add(IntegrationGroup.middleware(locationMiddleware))
     .add(makeMcpGroup(locationMiddleware))

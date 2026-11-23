@@ -275,9 +275,9 @@ export class VoiceTransport {
       { signal: this.abort.signal },
     )
 
-    if (response.transport.type !== "webrtc")
+    if (response.data.type !== "webrtc")
       return this.dispatch({ type: "step.failed", step: "negotiating", reason: "connection" })
-    await this.peer.setRemoteDescription({ type: "answer", sdp: response.transport.sdp })
+    await this.peer.setRemoteDescription({ type: "answer", sdp: response.data.sdp })
     this.dispatch({ type: "answer.applied" })
   }
 

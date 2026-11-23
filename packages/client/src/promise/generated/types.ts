@@ -2261,7 +2261,7 @@ export type GenerateDecisionAnswer =
 
 export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
 
-export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string | undefined } }
+export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string } }
 
 export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
 
@@ -4158,30 +4158,21 @@ export type ExperimentalGenerateDecisionsOutput = GenerateDecisionsResponse["dat
 export type ExperimentalVoiceConnectInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
-  readonly session?: { readonly [x: string]: JsonValue } | null | undefined
+  readonly session?: { readonly [x: string]: JsonValue } | undefined
   readonly transport:
-    | {
-        readonly type: "webrtc"
-        readonly sdp: string
-        readonly dcid?: number | "Infinity" | "-Infinity" | "NaN" | null
-      }
+    | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number }
     | { readonly type: "websocket" }
 }
 
-export type ExperimentalVoiceConnectOutput = VoiceSessionResponse["data"]
-
-export type ExperimentalVoiceModelsInput = {
-  readonly location?: { readonly directory?: string | undefined } | undefined
-}
+export type ExperimentalVoiceConnectOutput = { location: LocationPublicRef; data: VoiceTransport }
 
 export type ExperimentalVoiceModelsOutput = VoiceModelsResponse["data"]
 
 export type ExperimentalVoiceSessionInput = {
-  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly model: string
-  readonly session?: { readonly [x: string]: unknown } | undefined
+  readonly session?: { readonly [x: string]: JsonValue } | undefined
   readonly transport:
-    | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number | undefined }
+    | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number }
     | { readonly type: "websocket" }
 }
 
@@ -5112,9 +5103,6 @@ export type GenerateDecisionsInput = ExperimentalGenerateDecisionsInput
 
 /** @deprecated Use `ExperimentalGenerateDecisionsOutput`. Removed in the next minor. */
 export type GenerateDecisionsOutput = ExperimentalGenerateDecisionsOutput
-
-/** @deprecated Use `ExperimentalVoiceModelsInput`. Removed in the next minor. */
-export type VoiceModelsInput = ExperimentalVoiceModelsInput
 
 /** @deprecated Use `ExperimentalVoiceModelsOutput`. Removed in the next minor. */
 export type VoiceModelsOutput = ExperimentalVoiceModelsOutput

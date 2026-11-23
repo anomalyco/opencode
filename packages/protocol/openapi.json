@@ -5773,11 +5773,21 @@
         "security": [],
         "responses": {
           "200": {
-            "description": "VoiceSessionResponse",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VoiceSessionResponse"
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/VoiceTransport"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
                 }
               }
             }
@@ -5819,6 +5829,16 @@
               }
             }
           },
+          "422": {
+            "description": "UnsupportedModelError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedModelErrorEncoded"
+                }
+              }
+            }
+          },
           "503": {
             "description": "ServiceUnavailableError",
             "content": {
@@ -5842,14 +5862,7 @@
                     "$ref": "#/components/schemas/Model.Ref"
                   },
                   "session": {
-                    "anyOf": [
-                      {
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "type": "object"
                   },
                   "transport": {
                     "$ref": "#/components/schemas/VoiceTransportInput"
@@ -5868,31 +5881,7 @@
       "get": {
         "tags": ["voice"],
         "operationId": "experimental.voice.models",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "directory": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "additionalProperties": false
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "200": {
@@ -5955,31 +5944,7 @@
       "post": {
         "tags": ["voice"],
         "operationId": "experimental.voice.session",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "directory": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "additionalProperties": false
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "200": {
@@ -6046,14 +6011,7 @@
                     "type": "string"
                   },
                   "session": {
-                    "anyOf": [
-                      {
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
+                    "type": "object"
                   },
                   "transport": {
                     "$ref": "#/components/schemas/VoiceTransportInput"
@@ -27058,14 +27016,7 @@
                 }
               },
               "default": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "string"
               }
             },
             "required": ["models"],
@@ -27141,18 +27092,9 @@
             "type": "string"
           },
           "dcid": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": ["type", "sdp"],

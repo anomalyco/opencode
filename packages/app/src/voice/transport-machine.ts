@@ -20,7 +20,7 @@ type ConnectStep =
   | { type: "offer"; viewing: VoiceJoinTarget; tail: string }
   /** Waiting for ICE gathering to complete before the offer is sent. */
   | { type: "ice"; viewing: VoiceJoinTarget; tail: string }
-  /** Posting the offer to `voice.session` and applying the answer. */
+  /** Posting the offer to `voice.connect` and applying the answer. */
   | { type: "negotiating" }
   /** The answer is applied; waiting for `session.started` on the data channel. */
   | { type: "awaiting-started" }

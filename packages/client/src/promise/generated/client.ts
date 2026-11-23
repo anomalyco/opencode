@@ -121,7 +121,6 @@ import type {
   ExperimentalGenerateDecisionsOutput,
   ExperimentalVoiceConnectInput,
   ExperimentalVoiceConnectOutput,
-  ExperimentalVoiceModelsInput,
   ExperimentalVoiceModelsOutput,
   ExperimentalVoiceSessionInput,
   ExperimentalVoiceSessionOutput,
@@ -1271,24 +1270,23 @@ export function make(options: ClientOptions) {
       },
       voice: {
         connect: (input: ExperimentalVoiceConnectInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalVoiceConnectOutput }>(
+          request<ExperimentalVoiceConnectOutput>(
             {
               method: "POST",
               path: `/api/experimental/voice/connect`,
               query: { location: input["location"] },
               body: { model: input["model"], session: input["session"], transport: input["transport"] },
               successStatus: 200,
-              declaredStatuses: [400, 401, 404, 503],
+              declaredStatuses: [400, 401, 404, 422, 503],
               empty: false,
             },
             requestOptions,
-          ).then((value) => value.data),
-        models: (input?: ExperimentalVoiceModelsInput, requestOptions?: RequestOptions) =>
+          ),
+        models: (requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalVoiceModelsOutput }>(
             {
               method: "GET",
               path: `/api/experimental/voice/models`,
-              query: { location: input?.["location"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 404, 503],
               empty: false,
@@ -1300,7 +1298,6 @@ export function make(options: ClientOptions) {
             {
               method: "POST",
               path: `/api/experimental/voice/session`,
-              query: { location: input["location"] },
               body: { model: input["model"], session: input["session"], transport: input["transport"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 404, 503],

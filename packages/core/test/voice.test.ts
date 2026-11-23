@@ -71,7 +71,10 @@ const hosted = everything.filter((model) => model.providerID !== "openai")
 
 const catalog = (listed: readonly Model.Info[]) =>
   Layer.mock(Model.Service, {
-    available: (types) => Effect.succeed(types?.includes("realtime") ? listed : []),
+    available: (types) =>
+      Effect.succeed(
+        types?.includes("realtime") ? listed : [Info.make(Info.default(Provider.ID.make("openai"), ID.make("gpt-6")))],
+      ),
   })
 
 // xAI has a key in its provider settings, as `opencode.json` can set. Every provider knows its voice models.
@@ -165,11 +168,16 @@ const start = (
   connections: Partial<Record<string, Integration.Info["connections"]>>,
   requests: HttpClientRequest.HttpClientRequest[],
   listed: readonly Model.Info[] = everything,
+  variant?: string,
 ) =>
   run(
     Effect.flatMap(Voice.Service, (voice) =>
       voice.connect({
-        model: { id: ID.make(model), providerID: Provider.ID.make(provider) },
+        model: {
+          id: ID.make(model),
+          providerID: Provider.ID.make(provider),
+          variant: variant ? Model.VariantID.make(variant) : undefined,
+        },
         transport: transport(model),
       }),
     ),
@@ -182,10 +190,20 @@ it.effect("uses the provider's active connection or configured key, as chat mode
   Effect.gen(function* () {
     yield* TestClock.setTime(1760000000_000)
     const requests: HttpClientRequest.HttpClientRequest[] = []
-    yield* start("openai", "gpt-live-1", { openai: [credential("active", "key"), credential("stored", "key")] }, requests)
+    yield* start(
+      "openai",
+      "gpt-live-1",
+      { openai: [credential("active", "key"), credential("stored", "key")] },
+      requests,
+    )
     const grok = yield* start("xai", "grok-voice-3.0", { xai: [{ type: "env", name: "XAI_API_KEY" }] }, requests)
     yield* start("xai", "grok-voice-3.0", {}, requests)
-    const gemini = yield* start("google", "gemini-3.8-live", { google: [{ type: "env", name: "GEMINI_API_KEY" }] }, requests)
+    const gemini = yield* start(
+      "google",
+      "gemini-3.8-live",
+      { google: [{ type: "env", name: "GEMINI_API_KEY" }] },
+      requests,
+    )
     expect(requests.map((req) => req.headers.authorization ?? req.headers["x-goog-api-key"])).toEqual([
       "Bearer sk-active",
       "Bearer xai-env-key",
@@ -211,6 +229,14 @@ it.effect("uses the provider's active connection or configured key, as chat mode
 
     const unlisted = yield* start("openai", "gpt-live-1", {}, requests, []).pipe(Effect.flip)
     expect(unlisted).toMatchObject({ _tag: "Voice.ModelNotFoundError", providerID: "openai", modelID: "gpt-live-1" })
+    expect(unlisted.message).toBe("Model not found: openai/gpt-live-1")
+    const chat = yield* start("openai", "gpt-6", {}, requests).pipe(Effect.flip)
+    expect(chat).toMatchObject({
+      _tag: "Voice.UnsupportedModelError",
+      message: "openai/gpt-6 is a chat model, not a realtime model",
+    })
+    const variant = yield* start("openai", "gpt-live-1", {}, requests, everything, "high").pipe(Effect.flip)
+    expect(variant).toMatchObject({ _tag: "Voice.InvalidRequestError", field: "model.variant" })
     expect(requests).toHaveLength(4)
   }),
 )
@@ -264,7 +290,7 @@ it.effect("keeps the deprecated voice endpoints' shape, with known models that c
       ["gpt-live-1.1", "openai", false],
       ["gpt-realtime-2.1", "openai", false],
     ])
-    expect(hostedList.default).toBe("gpt-live-1")
+    expect(hostedList.default).toBe("grok-voice-3.0")
 
     const none = yield* list([])
     expect(none.default).toBeUndefined()
@@ -279,6 +305,9 @@ it.effect("keeps the deprecated voice endpoints' shape, with known models that c
       expect(error._tag).toBe("Voice.UnavailableError")
       expect(error.message).toContain("API key")
     }
+    const unknown = yield* session("gpt-4o-realtime", opencode, hosted).pipe(Effect.flip)
+    expect(unknown._tag).toBe("Voice.InvalidRequestError")
+    expect(unknown.message).toContain("Unsupported voice model: gpt-4o-realtime")
     expect(requests).toHaveLength(1)
   }),
 )

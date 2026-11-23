@@ -127,7 +127,6 @@ import type {
   ExperimentalGenerateDecisionsOutput,
   ExperimentalVoiceConnectInput,
   ExperimentalVoiceConnectOutput,
-  ExperimentalVoiceModelsInput,
   ExperimentalVoiceModelsOutput,
   ExperimentalVoiceSessionInput,
   ExperimentalVoiceSessionOutput,
@@ -1017,15 +1016,12 @@ const EndpointExperimentalVoiceConnect = (raw: RawClient["server.voice"]) => (in
     raw["voice.connect"]({
       query: { location: input["location"] },
       payload: { model: input["model"], session: input["session"], transport: input["transport"] },
-    }).pipe(
-      Effect.mapError(mapClientError),
-      Effect.map((value) => value.data),
-    ),
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
-const EndpointExperimentalVoiceModels = (raw: RawClient["server.voice"]) => (input?: ExperimentalVoiceModelsInput) =>
+const EndpointExperimentalVoiceModels = (raw: RawClient["server.voice"]) => () =>
   preserveEffect<ExperimentalVoiceModelsOutput>()(
-    raw["voice.models"]({ query: { location: input?.["location"] } }).pipe(
+    raw["voice.models"]({}).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
     ),
@@ -1034,7 +1030,6 @@ const EndpointExperimentalVoiceModels = (raw: RawClient["server.voice"]) => (inp
 const EndpointExperimentalVoiceSession = (raw: RawClient["server.voice"]) => (input: ExperimentalVoiceSessionInput) =>
   preserveEffect<ExperimentalVoiceSessionOutput>()(
     raw["voice.session"]({
-      query: { location: input["location"] },
       payload: { model: input["model"], session: input["session"], transport: input["transport"] },
     }).pipe(
       Effect.mapError(mapClientError),

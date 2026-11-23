@@ -14,6 +14,7 @@ import { Credential } from "./credential.js"
 import { requestExecutor } from "./effect/app-node-platform.js"
 import { Integration } from "./integration.js"
 import { Model } from "./model.js"
+import { ModelResolver } from "./model-resolver.js"
 import { Provider } from "./provider.js"
 
 export interface ConnectInput {
@@ -24,6 +25,7 @@ export interface ConnectInput {
 
 export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()("Voice.InvalidRequestError", {
   message: Schema.String,
+  field: Schema.optional(Schema.String),
 }) {}
 
 export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Voice.UnavailableError", {
@@ -37,7 +39,13 @@ export class ModelNotFoundError extends Schema.TaggedError<ModelNotFoundError>()
   message: Schema.String,
 }) {}
 
-export type Error = InvalidRequestError | UnavailableError | ModelNotFoundError
+export class UnsupportedModelError extends Schema.TaggedError<UnsupportedModelError>()("Voice.UnsupportedModelError", {
+  providerID: Schema.String,
+  modelID: Schema.String,
+  message: Schema.String,
+}) {}
+
+export type Error = InvalidRequestError | UnavailableError | ModelNotFoundError | UnsupportedModelError
 
 export interface Interface {
   readonly connect: (input: ConnectInput) => Effect.Effect<RealtimeTransport, Error>
@@ -56,18 +64,28 @@ export const layer = Layer.effect(
     const connect = Effect.fn("Voice.connect")(function* (input: ConnectInput) {
       const ref = input.model
       const listed = yield* catalog.available(["realtime"])
-      const model = listed.find((item) => item.providerID === ref.providerID && item.id === ref.id)
-      const engine = model && engineOf(model)
-      if (!model || !engine)
+      const found = listed.find((item) => item.providerID === ref.providerID && item.id === ref.id)
+      const engine = found && engineOf(found)
+      if (!found || !engine) {
+        // A ref no voice model has: another type's model (422) or no model at all (404), as generate answers.
+        const other = (yield* catalog.available(["chat", "image", "video", "decision"])).find(
+          (item) => item.providerID === ref.providerID && item.id === ref.id,
+        )
+        if (other)
+          return yield* new UnsupportedModelError({
+            providerID: ref.providerID,
+            modelID: ref.id,
+            message: `${ref.providerID}/${ref.id} is a ${other.type ?? "chat"} model, not a realtime model`,
+          })
         return yield* new ModelNotFoundError({
           providerID: ref.providerID,
           modelID: ref.id,
-          message: `Voice model not found: ${ref.providerID}/${ref.id}`,
+          message: `Model not found: ${ref.providerID}/${ref.id}`,
         })
-      if (ref.variant !== undefined && ref.variant !== "default" && !model.variants.some((variant) => variant.id === ref.variant))
-        return yield* new InvalidRequestError({
-          message: `Variant unavailable for ${ref.providerID}/${ref.id}: ${ref.variant}`,
-        })
+      }
+      const model = yield* ModelResolver.withVariant(found, ref.variant).pipe(
+        Effect.mapError((error) => new InvalidRequestError({ message: error.message, field: "model.variant" })),
+      )
 
       // The same credential a chat model of this provider uses: its active connection, else a configured key.
       const provider = yield* providers.get(model.providerID)
@@ -77,7 +95,9 @@ export const layer = Layer.effect(
       const resolved = connection
         ? yield* integrations.connection
             .resolve(connection)
-            .pipe(Effect.mapError((error) => new UnavailableError({ service: model.providerID, message: error.message })))
+            .pipe(
+              Effect.mapError((error) => new UnavailableError({ service: model.providerID, message: error.message })),
+            )
         : undefined
       const configured = provider?.settings?.apiKey
       const credential =
@@ -117,8 +137,7 @@ export const node = makeLocationNode({
 })
 
 /** The voice protocol this server speaks for a realtime model, if any. */
-export const engineOf = (model: Model.Info) =>
-  Realtime.engines.find((engine) => engine.id === model.realtime?.protocol)
+export const engineOf = (model: Model.Info) => Realtime.engines.find((engine) => engine.id === model.realtime?.protocol)
 
 /** OpenCode hosts GPT-Live on its OpenAI account, billed to the workspace whose credential starts a session. */
 const openCodeLive = { provider: "opencode", baseURL: "https://opencode.ai/inference/openai/v1" } as const

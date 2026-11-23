@@ -152,6 +152,8 @@ type Listed = Awaited<ReturnType<ModelList>>
 
 type ModelInfo = Listed["data"][number]
 
+type Connected = Awaited<ReturnType<Voice["connect"]>>
+
 // SAFETY: the transport reads only a listed model's id, provider and realtime protocol.
 const live = {
   id: "gpt-live-1",
@@ -172,7 +174,11 @@ function listed(data: ModelInfo[]) {
 }
 
 function open(list: ModelList = () => listed([live])) {
-  const session = jest.fn<Voice["connect"]>(() => Promise.resolve({ transport: { type: "webrtc", sdp: "v=0 answer" } }))
+  const session = jest.fn<Voice["connect"]>(() =>
+    // SAFETY: the transport never reads the location, and the directory brand only marks server paths.
+    Promise.resolve({ location: { directory: "/repo" }, data: { type: "webrtc", sdp: "v=0 answer" } } as Connected),
+  )
+
   const unused = () => Promise.reject(new Error("unused"))
   const voice: Voice = { connect: session, models: unused, session: unused }
 
