@@ -1,0 +1,318 @@
+/* The share icon in section headings, and the share dialog (share.tsx). */
+
+[data-page="stats"] [data-slot="section-actions"] {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
+  margin-top: 9px;
+}
+
+[data-page="stats"] [data-slot="section-actions"] > [data-component="usage-filter"] {
+  margin-top: 0;
+}
+
+[data-page="stats"] [data-component="share-button"] {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--stats-faint);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+
+  /* A 40px target around the 24px icon. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      color: var(--stats-text);
+    }
+  }
+
+  &[aria-expanded="true"] {
+    color: var(--stats-text);
+    background: var(--stats-layer-2);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--stats-accent);
+    outline-offset: 2px;
+  }
+}
+
+[data-page="stats"] [data-component="share-dialog"] {
+  box-sizing: border-box;
+  width: min(1040px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  color: var(--stats-text);
+  background: var(--stats-bg);
+  border: 1px solid var(--stats-line-strong);
+  overflow: auto;
+
+  &[open] {
+    animation: share-dialog-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  &::backdrop {
+    background: rgb(0 0 0 / 0.55);
+  }
+
+  [data-slot="share-panel"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+
+  [data-slot="share-stage"] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: min(720px, calc(100dvh - 34px));
+    padding: 32px;
+    background: var(--stats-layer-2);
+  }
+
+  [data-slot="share-preview"] {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: min(640px, calc(100dvh - 140px));
+    box-shadow: 0 12px 40px rgb(0 0 0 / 0.25);
+  }
+
+  [data-slot="share-side"] {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 24px;
+    border-left: 1px solid var(--stats-line);
+  }
+
+  [data-slot="share-head"] {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+
+    h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 24px;
+    }
+  }
+
+  [data-slot="share-close"] {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    color: var(--stats-faint);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: -8px;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--stats-text);
+      }
+    }
+  }
+
+  [data-slot="share-field"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--stats-faint);
+
+    textarea {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 14px;
+      line-height: 20px;
+      color: var(--stats-text);
+      background: var(--stats-layer);
+      border: 1px solid var(--stats-line-strong);
+      border-radius: 0;
+      resize: vertical;
+
+      &:focus-visible {
+        outline: 2px solid var(--stats-accent);
+        outline-offset: -1px;
+      }
+    }
+  }
+
+  [data-slot="share-actions"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    button {
+      height: 40px;
+      padding: 0 14px;
+      font: inherit;
+      font-size: 14px;
+      text-align: left;
+      color: var(--stats-text);
+      background: var(--stats-layer);
+      border: 1px solid var(--stats-line-strong);
+      border-radius: 0;
+      cursor: pointer;
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover:not(:disabled) {
+          background: var(--stats-layer-2);
+        }
+      }
+
+      &:active:not(:disabled) {
+        background: var(--stats-layer-2);
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: progress;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--stats-accent);
+        outline-offset: 2px;
+      }
+
+      &[data-variant="primary"] {
+        color: var(--stats-on-accent);
+        background: var(--stats-accent);
+        border-color: var(--stats-accent);
+
+        @media (hover: hover) and (pointer: fine) {
+          &:hover:not(:disabled) {
+            background: color-mix(in srgb, var(--stats-accent) 88%, black);
+          }
+        }
+      }
+    }
+  }
+
+  [data-slot="share-status"] {
+    margin: auto 0 0;
+    font-size: 13px;
+    color: var(--stats-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 760px) {
+    [data-slot="share-panel"] {
+      grid-template-columns: 1fr;
+    }
+
+    [data-slot="share-stage"] {
+      min-height: 0;
+      padding: 16px;
+    }
+
+    [data-slot="share-preview"] {
+      max-height: 56dvh;
+    }
+
+    [data-slot="share-side"] {
+      border-left: 0;
+      border-top: 1px solid var(--stats-line);
+    }
+  }
+}
+
+/* Design mode's controls, styled like opencode.ai's (services/site design-mode.css): blue, above the preview. */
+[data-page="stats"] [data-component="share-design"] {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1;
+
+  [data-slot="control"] {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    color: #fff;
+    background: #3b5cf6;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  }
+
+  button {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 100%;
+    padding: 0;
+    font: inherit;
+    font-size: 14px;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: rgb(255 255 255 / 0.18);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid #fff;
+      outline-offset: -3px;
+    }
+  }
+
+  [data-slot="value"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-inline: 2px;
+    white-space: nowrap;
+  }
+
+  [data-slot="label"],
+  [data-slot="count"] {
+    opacity: 0.75;
+  }
+}
+
+@keyframes share-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-page="stats"] [data-component="share-dialog"][open] {
+    animation: none;
+  }
+}
