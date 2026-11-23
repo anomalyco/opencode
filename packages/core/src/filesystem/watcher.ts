@@ -22,13 +22,15 @@ const watcher = lazy((): typeof ParcelWatcher | undefined => {
   }
 })
 
-function getBackend() {
+// @parcel/watcher's native binding accepts "kqueue" on FreeBSD, but its JS
+// BackendType union does not list it yet.
+type Backend = ParcelWatcher.BackendType | "kqueue"
+
+function getBackend(): Backend | undefined {
   if (process.platform === "win32") return "windows"
   if (process.platform === "darwin") return "fs-events"
   if (process.platform === "linux") return "inotify"
-  // @parcel/watcher's FreeBSD build uses KQUEUE; the JS Backend union simply
-  // does not list it yet.
-  if (process.platform === "freebsd") return "kqueue" as any
+  if (process.platform === "freebsd") return "kqueue"
 }
 
 export const hasNativeBinding = () => !!watcher()
@@ -248,7 +250,7 @@ export const node = configured()
 
 function subscribeDirectory(
   native: typeof ParcelWatcher | undefined,
-  backend: ParcelWatcher.BackendType | undefined,
+  backend: Backend | undefined,
   directory: string,
   ignore: readonly string[],
   publish: (update: Update) => void,
@@ -264,7 +266,11 @@ function subscribeDirectory(
   }
   // Copy `ignore`: it aliases the RcMap key, whose structural hash is cached,
   // so the array handed to native code must never be the mutable original.
-  const pending = native.subscribe(directory, callback, { ignore: [...ignore], backend })
+  const pending = native.subscribe(directory, callback, {
+    ignore: [...ignore],
+    // The native FreeBSD binding handles "kqueue"; only the JS types omit it.
+    backend: backend as ParcelWatcher.BackendType,
+  })
   return Effect.promise(() => pending).pipe(
     Effect.map((subscription) => ({ unsubscribe: () => subscription.unsubscribe(), backend })),
     // Interruption (including the timeout below) abandons the pending native
