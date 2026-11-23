@@ -275,6 +275,35 @@ describe("request option precedence", () => {
     }),
   )
 
+  it.effect("flattens namespaces when a flat protocol's body is built directly", () =>
+    Effect.gen(function* () {
+      const body = yield* OpenAIChat.protocol.body.from(
+        ai.request({
+          model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              description: "CRM tools",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up", inputSchema: {} })],
+            }),
+          ],
+          messages: [
+            Message.user("Look up a customer"),
+            Message.assistant(ToolCallPart.make({ id: "call_1", name: "lookup", namespace: "crm", input: {} })),
+          ],
+          toolChoice: "crm.lookup",
+        }),
+      )
+      const json = JSON.stringify(body)
+      expect(json).toContain("crm_lookup")
+      expect(json).not.toContain("crm.lookup")
+      expect(body.messages).toMatchObject([
+        { role: "user" },
+        { role: "assistant", tool_calls: [{ function: { name: "crm_lookup" } }] },
+      ])
+    }),
+  )
+
   it.effect("normalizes tool history before protocol lowering", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

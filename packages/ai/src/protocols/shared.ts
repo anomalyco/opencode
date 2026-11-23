@@ -365,8 +365,8 @@ export const unsupportedOperation = (input: {
 /**
  * Lower namespaces to flat definitions for protocols without a native
  * namespace construct. Leaf names join their namespace path with `_` because
- * `.` is not broadly accepted in provider tool names. A no-op on tools `flattenRequest` already flattened, so adapters
- * call it to type their tools and to keep `body.from` working when called directly.
+ * `.` is not broadly accepted in provider tool names. A no-op on tools `flattenRequest` already flattened; adapters call
+ * it to type their tools.
  */
 export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string> = []) => {
   const flat = tools.flatMap((tool): ReadonlyArray<ToolDefinition> => {
@@ -379,7 +379,8 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
 
 /**
  * The request as a protocol without native namespaces sees it: tools, tool updates, past calls and a forced choice all
- * use flattened names. `prepareRequest` applies it once for such routes, so adapters only see flat requests.
+ * use flattened names. `Protocol.make` applies it before `body.from` for such protocols, so adapters only see flat
+ * requests.
  */
 export const flattenRequest = (request: LLMRequest): LLMRequest => {
   const all = [...request.tools, ...request.messages.flatMap((message) => toolsUpdate(message)?.add ?? [])]
