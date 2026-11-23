@@ -13,6 +13,11 @@ export interface GpuError {
   readonly canvases: ReadonlyArray<string> | "all"
 }
 
+/** The client error a GPU hang stops canvases with (widgets-gpu.md, Errors and device loss). */
+export const GPU_HANG = "the GPU work hung; the canvas is stopped"
+/** Two strikes this close stop a run: device losses while it had GPU work in flight. */
+export const STRIKE_MS = 30_000
+
 export const GPU_LIMITS = {
   ops: 20_000,
   bytes: 4 * 1024 * 1024,
@@ -658,6 +663,13 @@ export function gpuChecks(canvases: () => ReadonlySet<string>) {
     frame: () => {
       state.passes = 0
       state.draws = 0
+    },
+    /** A GPU hang stops every GPU canvas; later batches go unchecked. Given unless every canvas was stopped already. */
+    hung: (): GpuError | undefined => {
+      if (state.all) return undefined
+      state.all = true
+      const fresh = [...canvases()].filter((key) => !stopped.has(key))
+      return fresh.length > 0 || stopped.size === 0 ? { message: GPU_HANG, canvases: "all" } : undefined
     },
     /** The device is lost: every handle is gone; new ones keep counting up. */
     lost: () => {

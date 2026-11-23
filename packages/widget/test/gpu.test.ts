@@ -176,6 +176,25 @@ test("a canvas an error stopped stays stopped: out of the view and back, and on 
   expect(widget.gpuErrors.map((error) => error.canvases)).toEqual([["a"], ["b"]])
 })
 
+test("two strikes 30 s apart or less stop the run's GPU canvases; further apart, they don't", async () => {
+  const { widget, clock } = start(`async function main() {
+  widget.render(ui.canvas({ key: "c", gpu: true, height: 10 }))
+  while (true) await widget.sleep(60000)
+}`)
+  await clock.advance(0)
+  widget.loseDevice("unknown", true)
+  await clock.advance(30_001)
+  widget.loseDevice("unknown", true)
+  widget.loseDevice("unknown")
+  expect(widget.gpuErrors).toEqual([])
+  await clock.advance(30_000)
+  widget.loseDevice("unknown", true)
+  expect(widget.gpuErrors).toEqual([{ message: "the GPU work hung; the canvas is stopped", canvases: "all" }])
+  widget.loseDevice("unknown", true)
+  expect(widget.gpuErrors).toHaveLength(1)
+  await widget.stop()
+})
+
 test("a GPU canvas takes no draw commands, and can't have wgsl too", async () => {
   const { widget } = start(`async function main() {
   widget.render(ui.canvas({ key: "c", gpu: true, height: 10 }))

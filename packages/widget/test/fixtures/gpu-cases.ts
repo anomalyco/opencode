@@ -4,7 +4,7 @@ import path from "node:path"
 // The GPU conformance fixtures' programs (`gpu/*.json`): the example widget templates, run for a few frames, and
 // programs that break the subset's structure, handles or limits. `canvases`: sizes the host sends before the first
 // frame (physical sizes, which it clamps); `inputs`: what the client sends before frame `frame` (an `event`, a
-// `canvas` size, or a device loss, `{ type: "gpu", lost }`), or right after it with `after`.
+// `canvas` size, or a device loss, `{ type: "gpu", lost, inFlight? }`), or right after it with `after`.
 export interface GpuCase {
   readonly name: string
   readonly source: string
@@ -31,6 +31,34 @@ const program = (body: string, keys: ReadonlyArray<string> = ["scene"]) => `asyn
   const view = (key) => contexts[key].getCurrentTexture().createView()
   const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: "clear", storeOp: "store" }] })
 ${body}
+}`
+
+// A live program that makes its device again after a loss and draws a frame at a time.
+const relost = `async function main() {
+  widget.render(ui.canvas({ key: "scene", gpu: true, height: 100 }))
+  const context = widget.gpu.getContext("scene")
+  const format = widget.gpu.getPreferredCanvasFormat()
+  let device
+  let view
+  let lost = false
+  const setup = async () => {
+    device = await widget.gpu.requestDevice()
+    device.lost.then(() => (lost = true))
+    context.configure({ device, format })
+    view = context.getCurrentTexture().createView()
+  }
+  await setup()
+  for (let frame = 0; frame < 4; frame++) {
+    await widget.frame()
+    if (lost) {
+      lost = false
+      await setup()
+    }
+    const encoder = device.createCommandEncoder()
+    encoder.beginRenderPass({ colorAttachments: [{ view, loadOp: "clear", storeOp: "store" }] }).end()
+    device.queue.submit([encoder.finish()])
+  }
+  await widget.frame()
 }`
 
 const scene = [{ key: "scene", width: 200, height: 200 }]
@@ -339,34 +367,29 @@ export const gpuCases: ReadonlyArray<GpuCase> = [
     // The device is lost right after frame 1, before the program learns of it: the batch it posts with that frame
     // names handles from before the loss and is dropped quietly. Then it makes a new device and goes on.
     name: "lost-device-drops-earlier-batches",
-    source: `async function main() {
-  widget.render(ui.canvas({ key: "scene", gpu: true, height: 100 }))
-  const context = widget.gpu.getContext("scene")
-  const format = widget.gpu.getPreferredCanvasFormat()
-  let device
-  let view
-  let lost = false
-  const setup = async () => {
-    device = await widget.gpu.requestDevice()
-    device.lost.then(() => (lost = true))
-    context.configure({ device, format })
-    view = context.getCurrentTexture().createView()
-  }
-  await setup()
-  for (let frame = 0; frame < 4; frame++) {
-    await widget.frame()
-    if (lost) {
-      lost = false
-      await setup()
-    }
-    const encoder = device.createCommandEncoder()
-    encoder.beginRenderPass({ colorAttachments: [{ view, loadOp: "clear", storeOp: "store" }] }).end()
-    device.queue.submit([encoder.finish()])
-  }
-  await widget.frame()
-}`,
+    source: relost,
     canvases: scene,
     inputs: [{ frame: 1, after: true, input: { type: "gpu", lost: "unknown" } }],
+  },
+  {
+    // A device loss while the run has GPU work in flight is a strike; two within 30 s stop every GPU canvas.
+    name: "hang-two-strikes",
+    source: relost,
+    canvases: scene,
+    inputs: [
+      { frame: 1, input: { type: "gpu", lost: "unknown", inFlight: true } },
+      { frame: 3, input: { type: "gpu", lost: "unknown", inFlight: true } },
+    ],
+  },
+  {
+    // A loss with no GPU work in flight is no strike: one strike stops nothing.
+    name: "hang-no-strike-without-work",
+    source: relost,
+    canvases: scene,
+    inputs: [
+      { frame: 1, input: { type: "gpu", lost: "unknown", inFlight: true } },
+      { frame: 3, input: { type: "gpu", lost: "unknown" } },
+    ],
   },
   {
     // A canvas over the texture limit gets its size clamped, aspect ratio kept: 5120 x 2880 is 4096 x 2304, and

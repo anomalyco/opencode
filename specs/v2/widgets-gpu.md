@@ -262,18 +262,14 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
   every canvas it draws into (a pass's color attachment `view` or `resolveTarget`; drawing into none, every GPU canvas
   of the widget, as Which canvases stop says) for the rest of the run, as an error would: a client error with exactly
   this message, `the GPU work hung; the canvas is stopped`, and the placeholder shows. It applies first, whatever the
-  shader's 50 ms rule has counted (`widgets.md`, GPU canvases). (On macOS a shader running for seconds trips the GPU
-  watchdog after about 0.5 s, which may blame another queue, the app's own among them, and lose the device; at 250 ms
-  the host stops a hung widget while its first slow frame still runs.) At a device loss, the oldest unfinished submit on
-  the queue counts as a GPU hang if it had been running at least 250 ms (counted from its submit or, if later, from when
-  the submit before it finished): the canvases it draws into stop the same way, with the same message, and the new
-  device doesn't restart them. It needs no loss reason, so it works the same on Metal, Vulkan and the web (a safety net
-  for when the host didn't check the submit in time). A submit the GPU aborted after executing at least 30 ms counts as
-  a GPU hang too, whatever its time to completion, with the same stop; hosts that can tell (Rune and iOS on Metal,
-  through a host hook) apply it, and the others rely on the time rules. (macOS aborts heavy work about 50 ms in, before
-  any time threshold, and blames other queues; innocent work running alongside executes at most about 21 ms.) (For each
-  rule the queue is the widget's; on a host whose widgets share one device and queue, as Rune and mobile do, it is that
-  shared queue, tracked across runs: only the hung submit's widget stops, and work queued behind it isn't blamed.)
+  shader's 50 ms rule has counted (`widgets.md`, GPU canvases), and catches GPUs without a watchdog. (On a host whose
+  widgets share one device and queue, as Rune and mobile do, only the hung submit's widget stops; work queued behind it
+  isn't blamed.)
+- **Strikes.** At a device loss, a widget run that had GPU work submitted and not yet seen finished gets a strike. A run
+  with two strikes 30 s apart or less is stopped: every GPU canvas of the run stops for the rest of the run with the
+  same message, and no new device restarts them. A run's first strike changes nothing visible: the loss restarts it as
+  usual. (A GPU reset can't be attributed reliably on every platform, so a run present at two resets is treated as
+  their cause, as browsers do.)
 - **Device loss.** When the client loses its device (a reset, the app backgrounded long enough, a live program
   restored from a snapshot), it sends `{ type: "gpu", lost: reason, message? }`; the prelude resolves `device.lost` with
   `{ reason, message }` (`message` `""` when absent) and every handle is gone. While the program has read a live
@@ -360,22 +356,25 @@ follow, in the GPU implementation's wording (Errors and device loss).
 
 `packages/widget/test/fixtures/gpu/*.json` hold programs, the example widget templates among them
 (`test/fixtures/gpu/templates`: a lit rotating cube, a textured quad, render-to-texture with post-processing, a
-first-person maze), and what a host must do with them. Each is `{ name, source, data?, canvases, inputs?, gpu,
-batches?, errors, end }`. The driver: start the live program of `source` (`widgets.md`, Prelude and step ABI) with
-`{ data, gpu }` and no 50 ms slice; send each of `canvases` as a `canvas` message (sizes in physical pixels, clamped
-as Canvas size says); then, while the program asks for a frame (at most 10), send the `inputs` for frame `i` (client
-`event`s, `canvas` messages, and device losses `{ type: "gpu", lost }`, the host's checks losing the device first),
-frame `i` (`t` = `i` / 60, `dt` 1/60, 300 × 200 at scale 2, `pointer` `null`, `dark` `false`), then frame `i`'s
-inputs marked `after: true`, before the program runs on. Timers run on a clock that moves while the program waits.
-`batches` are the batches it posts, in order (`frame`: in a frame request; `bytes` base64, or `null` when the program
-posted something other than an `ArrayBuffer`; `ops` as posted, a list or not, with each number JSON can't hold written
-`{ "$num": "NaN" }`, `{ "$num": "Infinity" }` or `{ "$num": "-Infinity" }`, which a driver that replays `batches` reads
-back as that number), with each frame request that carries no batch in its place as
+first-person maze), and what a host must do with them. Each is
+`{ name, source, data?, canvases, inputs?, gpu,
+batches?, errors, end }`. The driver: start the live program of `source`
+(`widgets.md`, Prelude and step ABI) with `{ data, gpu }` and no 50 ms slice; send each of `canvases` as a `canvas`
+message (sizes in physical pixels, clamped as Canvas size says); then, while the program asks for a frame (at most 10),
+send the `inputs` for frame `i` (client `event`s, `canvas` messages, and device losses
+`{ type: "gpu", lost, inFlight? }`, the host losing the device first, with `inFlight: true` when the run had GPU work in
+flight then, a strike), frame `i` (`t` = `i` / 60, `dt` 1/60, 300 × 200 at scale 2, `pointer` `null`, `dark` `false`),
+then frame `i`'s inputs marked `after: true`, before the program runs on. Timers run on a clock that moves while the
+program waits. `batches` are the batches it posts, in order (`frame`: in a frame request; `bytes` base64, or `null` when
+the program posted something other than an `ArrayBuffer`; `ops` as posted, a list or not, with each number JSON can't
+hold written `{ "$num": "NaN" }`, `{ "$num": "Infinity" }` or `{ "$num": "-Infinity" }`, which a driver that replays
+`batches` reads back as that number), with each frame request that carries no batch in its place as
 `{ frame: true, ops: [], bytes: "" }`, so every frame's end is there (the per-frame counts start again at each
 `frame: true` entry); a repeated frame request while one is pending isn't one (its batch, if any, is recorded with
 `frame: false`). `raw-*` programs post their own and omit them, except one whose batch has the wrong shape (`ops` not a
 list, `bytes` not an `ArrayBuffer`), which keeps them: a driver that replays `batches` makes the batch checks on them as
 a host converting the posted value does. A fixture whose ops are generated and too many to record
 (`error-too-many-draws`) has `"batches": "from-source"`: a driver gets its batches by running `source` as above.
-`errors` are the host checks' program errors, `{ message, canvases }`, with `canvases` the keys stopped or `"all"`.
-`end` is how the run ended (`return`, `stop` when it stays open, or `error: <message>`).
+`errors` are what stopped canvases, `{ message, canvases }`, with `canvases` the keys stopped or `"all"`: the host
+checks' program errors, and a stop by Strikes. `end` is how the run ended (`return`, `stop` when it stays open, or
+`error: <message>`).

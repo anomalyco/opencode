@@ -18,7 +18,7 @@ import type { Capabilities } from "./widget-template.js"
 import { type Tree, tree, unmark, ViewError } from "./tree.js"
 import { compiled } from "./compiled.js"
 import { located, MAX_VALUE_DEPTH, NEWER, OLDER, protocol, PROTOCOL, TYPED_ARRAYS } from "./host.js"
-import { canvasSize, type GpuBatch, type GpuError, gpuChecks } from "./gpu.js"
+import { canvasSize, type GpuBatch, type GpuError, gpuChecks, STRIKE_MS } from "./gpu.js"
 
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
 export type LiveFrame = Omit<Frame, "id">
@@ -141,7 +141,10 @@ export interface LiveWidget {
   readonly frameRequested: boolean
   readonly paused: boolean
   readonly warnings: ReadonlyArray<string>
-  /** The program errors (phase `gpu`) the GPU batches had, each with the canvases it stopped. */
+  /**
+   * What stopped GPU canvases, each with the canvases it stopped: the GPU batches' program errors (phase `gpu`), and a
+   * GPU hang's client error.
+   */
   readonly gpuErrors: ReadonlyArray<GpuError>
   readonly ended: LiveEnd | undefined
   readonly done: Promise<LiveEnd>
@@ -150,8 +153,11 @@ export interface LiveWidget {
   readonly frame: (frame: LiveFrame) => boolean
   /** Tells the program a GPU canvas's size, in physical pixels, clamped to the texture limit (`canvasSize`). */
   readonly canvas: (key: string, width: number, height: number) => void
-  /** Loses the GPU device: every handle is gone, and the program's `device.lost` resolves. */
-  readonly loseDevice: (reason: string) => void
+  /**
+   * Loses the GPU device: every handle is gone, and the program's `device.lost` resolves. `inFlight`: the run had GPU
+   * work submitted and not seen finished, a strike; a second strike within 30 s stops every GPU canvas (a GPU hang).
+   */
+  readonly loseDevice: (reason: string, inFlight?: boolean) => void
   /**
    * Holds everything for the program: events, timer firings and fetch results wait, and `now()` stops, until `resume`,
    * which first delivers `{ type: "resumed", pausedMs }`.
@@ -215,6 +221,8 @@ export const LiveWidget = {
       fetches: { inFlight: 0, starts: [] as number[] },
       // The last rendered view's tree, for `draw` keys.
       tree: undefined as Tree | undefined,
+      // When the run last got a strike (a device loss with GPU work in flight).
+      strike: undefined as number | undefined,
     }
     // Inputs and fetch results that arrive while paused, released in order on resume.
     const held: Array<() => void> = []
@@ -576,7 +584,13 @@ export const LiveWidget = {
         const [width, height] = canvasSize(...size)
         deliver({ type: "canvas", key, width, height })
       },
-      loseDevice: (reason) => {
+      loseDevice: (reason, inFlight = false) => {
+        if (inFlight) {
+          const at = clock.now()
+          const hang = current.strike !== undefined && at - current.strike <= STRIKE_MS ? gpu.hung() : undefined
+          if (hang) gpuErrors.push(hang)
+          current.strike = at
+        }
         gpu.lost()
         deliver({ type: "gpu", lost: reason })
       },
