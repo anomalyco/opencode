@@ -2,7 +2,6 @@ import type { SessionUserActions } from "@opencode/session-ui/message"
 import type { ShellOutputInput } from "@opencode/client/promise"
 import { getFilename, sameDirectory } from "@opencode/util/path"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { focusField, handOffFocus } from "@opencode/ui/context/field-focus"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
@@ -317,9 +316,8 @@ export function createActiveSessionRegion(input: {
     navigateMessageByOffset: input.timeline.actions.navigateMessage,
     jumpToMessage: input.timeline.actions.jumpToMessage,
     revert,
-    // A shortcut moved focus, so the ring shows.
     focusInput: () => {
-      if (promptRef && !input.session.data.isChild()) focusField(promptRef, true)
+      if (promptRef && !input.session.data.isChild()) promptRef.focus()
     },
     model: () => {
       const selection = controls().model.selection
@@ -372,7 +370,7 @@ export function createActiveSessionRegion(input: {
 
   const focusPrompt = () => {
     if (!promptRef) return
-    handOffFocus(promptRef)
+    promptRef.focus()
     setCursorPosition(promptRef, prompt.cursor() ?? promptLength(prompt.current()))
   }
 

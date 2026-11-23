@@ -36,7 +36,6 @@ import { Tabs } from "@opencode/ui/tabs"
 import { TextInput } from "@opencode/ui/text-input"
 import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { createTabStripScroll } from "@/runtime/plugin/tab-strip-scroll"
-import { createFieldFocus } from "@opencode/ui/context/field-focus"
 import { createOverlayFocus } from "@opencode/ui/context/overlay-focus"
 import { installFocusRescue } from "@opencode/ui/context/focus-rescue"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -247,16 +246,6 @@ const surfaces: Surface[] = [
             />
           </div>
         ),
-      },
-      {
-        name: "Composer editor: caret is the only focus cue",
-        failure: "Invisible",
-        target: '[data-component="composer-editor"]',
-        keys: "Focus the preceding button, then press Tab into the prompt. Click inside the prompt to see the ring go away.",
-        sizing: "The editor sits inside a masked scroll viewport.",
-        source: "app/src/composer/editor/editor.css, ui/src/context/field-focus.tsx, context/dialog.tsx",
-        fix: "Draw an inset ring on focus entry except for click-to-type and session autofocus. Returning from a dialog restores the previous ring state.",
-        render: (forced) => <ComposerFocusExample forced={forced()} />,
       },
     ],
     also: [],
@@ -691,16 +680,6 @@ const surfaces: Surface[] = [
             </button>
           </div>
         ),
-      },
-      {
-        name: "Search sessions: Tab shows only a caret",
-        failure: "Invisible",
-        target: "input",
-        keys: "Focus the preceding button and Tab into Search sessions. Click the field to clear the ring.",
-        sizing: "The field spans the Home results column. The ring belongs on the field, not just its editable text.",
-        source: "app/src/home/sessions/view.tsx, view.css, ui/src/context/field-focus.tsx",
-        fix: "Tab, Find and other non-pointer focus entry draw the shared outset ring around the field. Click-to-type keeps the field background and caret without the ring.",
-        render: (forced) => <HomeSearchFocusExample forced={forced()} />,
       },
       {
         name: "Project row: focus looks like selection",
@@ -1658,7 +1637,7 @@ const surfaces: Surface[] = [
     ],
     also: [
       "Reviewed, left as is: the Home browse dialog's fallback focus (home/projects/browse.tsx) runs only when the opener has gone; the mobile panel drawer's Back and the location picker's Choose return follow the key or click that closed them.",
-      "The workspace selector (new-session/workspace/selector.tsx) returns focus to the composer, whose field ring follows field-focus.tsx.",
+      "The workspace selector (new-session/workspace/selector.tsx) returns focus to the composer.",
     ],
   },
   {
@@ -2224,21 +2203,6 @@ function CaseCard(props: { case: Case; number: number; forced: boolean; locator:
   )
 }
 
-function createPreviewFieldFocus(forced: () => boolean) {
-  const focus = createFieldFocus()
-  const [entered, setEntered] = createSignal(false)
-
-  return {
-    visible: () => focus.visible() || (forced() && !entered()) || undefined,
-    enter: (element: HTMLElement) => {
-      setEntered(true)
-      focus.enter(element)
-    },
-    pointer: focus.pointer,
-    leave: focus.leave,
-  }
-}
-
 function SearchHighlightExample(props: { kind: "home-session-search-row" | "palette-menu-row" | "search-list-row" }) {
   const [active, setActive] = createSignal(0)
 
@@ -2336,61 +2300,6 @@ function TreeFocusExample() {
         }
       }}
     />
-  )
-}
-
-function HomeSearchFocusExample(props: { forced: boolean }) {
-  const focus = createPreviewFieldFocus(() => props.forced)
-
-  return (
-    <div class="grid w-[360px] gap-2">
-      <Button class="justify-self-start">Previous control</Button>
-      <label
-        data-slot="home-session-search-field"
-        onPointerDown={focus.pointer}
-        class="flex h-9 items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02/60 ps-3 pe-2 text-v2-icon-icon-muted focus-within:bg-v2-background-bg-layer-02"
-      >
-        <Icon name="magnifying-glass" />
-        <input
-          data-keyboard-focus={focus.visible()}
-          aria-label="Search sessions"
-          placeholder="Search sessions"
-          class="min-w-0 flex-1 border-0 bg-transparent text-v2-text-text-base outline-0"
-          onFocus={(event) => focus.enter(event.currentTarget)}
-          onBlur={focus.leave}
-        />
-      </label>
-    </div>
-  )
-}
-
-function ComposerFocusExample(props: { forced: boolean }) {
-  const focus = createPreviewFieldFocus(() => props.forced)
-
-  return (
-    <div class="grid w-[360px] gap-2">
-      <Button class="justify-self-start">Previous control</Button>
-      <form data-component="composer" class="overflow-clip rounded-xl shadow-[var(--v2-elevation-raised)]">
-        <div data-component="composer-scroll">
-          <div
-            data-component="composer-editor"
-            data-keyboard-focus={focus.visible()}
-            role="textbox"
-            aria-label="Prompt"
-            contenteditable
-            class="px-4 pt-4 pb-2 text-13-regular focus:outline-none"
-            onPointerDown={focus.pointer}
-            onFocus={(event) => focus.enter(event.currentTarget)}
-            onBlur={focus.leave}
-          >
-            Ask anything
-          </div>
-        </div>
-        <div class="p-2">
-          <IconButton type="button" variant="ghost-muted" icon={<Icon name="plus" />} aria-label="Attach" />
-        </div>
-      </form>
-    </div>
   )
 }
 
