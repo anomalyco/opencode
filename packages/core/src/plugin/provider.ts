@@ -1,4 +1,5 @@
 import { AmazonBedrockPlugin } from "./provider/amazon-bedrock.js"
+import { AnthropicPlugin } from "./provider/anthropic.js"
 import { AzurePlugin } from "./provider/azure.js"
 import { CerebrasPlugin } from "./provider/cerebras.js"
 import { ChatGPTPlugin } from "./provider/chatgpt.js"
@@ -32,6 +33,7 @@ import type { PluginInternal } from "./internal.js"
 
 export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   AmazonBedrockPlugin,
+  AnthropicPlugin,
   AzurePlugin,
   CerebrasPlugin,
   ChatGPTPlugin,
