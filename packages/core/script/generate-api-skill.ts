@@ -148,7 +148,7 @@ function renderGroup(name: string, endpoints: ReadonlyArray<Endpoint>, schemas: 
     const description = (operation.description ?? operation.summary ?? "").split("Experimental:")[0]!.trim()
     // Path parameters are named in the path itself, so they're listed only when described.
     const parameters = (operation.parameters ?? []).filter(
-      (parameter) => parameter.name !== "location" && (parameter.in === "query" || describe(parameter)),
+      (parameter) => parameter.name !== "location" && (parameter.in === "query" || describe(parameter, schemas)),
     )
     const body = operation.requestBody?.content?.["application/json"]?.schema
     const bodyObject = body ? resolve(body, schemas) : undefined
@@ -162,7 +162,7 @@ function renderGroup(name: string, endpoints: ReadonlyArray<Endpoint>, schemas: 
         ? [
             "Parameters:",
             ...parameters.map((parameter) =>
-              item(parameter.name, parameter.required ?? false, format(parameter.schema), describe(parameter)),
+              item(parameter.name, parameter.required ?? false, format(parameter.schema), describe(parameter, schemas)),
             ),
             "",
           ]
@@ -170,7 +170,9 @@ function renderGroup(name: string, endpoints: ReadonlyArray<Endpoint>, schemas: 
       ...(fields.length > 0
         ? [
             "Body:",
-            ...fields.map(([field, schema]) => item(field, required.has(field), format(schema), describe({ schema }))),
+            ...fields.map(([field, schema]) =>
+              item(field, required.has(field), format(schema), describe({ schema }, schemas)),
+            ),
             "",
           ]
         : []),
@@ -183,7 +185,15 @@ function renderGroup(name: string, endpoints: ReadonlyArray<Endpoint>, schemas: 
     "",
     sections.join("\n\n"),
     ...(expanded.length > 0
-      ? ["", "## Types", "", ...expanded.map(([type, shape]) => `- \`${type}\`: \`${shape}\``)]
+      ? [
+          "",
+          "## Types",
+          "",
+          ...expanded.map(
+            ([type, shape]) =>
+              `- \`${type}\`: \`${shape}\`${schemas[type]?.description ? ` ${schemas[type]!.description}` : ""}`,
+          ),
+        ]
       : []),
     "",
   ].join("\n")
@@ -210,11 +220,24 @@ function item(name: string, required: boolean, type: string, description: string
   return `- \`${name}${required ? "" : "?"}: ${type}\`${description ? ` ${description}` : ""}`
 }
 
-function describe(input: { readonly description?: string; readonly schema?: Schema }) {
+// Aliases of a primitive, such as Session.ID for a string, read better as the primitive.
+function alias(schema: Schema) {
+  return !schema.$ref && !schema.properties && !schema.items && !schema.anyOf && !schema.oneOf && !schema.allOf
+}
+
+// An inlined alias's description, such as steer vs queue on Session.Inbox.Delivery, belongs on the field; other named
+// types carry theirs in the Types section.
+function describe(
+  input: { readonly description?: string; readonly schema?: Schema },
+  schemas: Readonly<Record<string, Schema>>,
+) {
+  const branches = [input.schema, ...(input.schema?.anyOf ?? [])].filter((branch) => branch !== undefined)
   return (
     input.description ??
-    input.schema?.description ??
-    input.schema?.anyOf?.find((branch) => branch.description)?.description
+    branches.map((branch) => branch.description).find(Boolean) ??
+    branches
+      .map((branch) => (branch.$ref ? schemas[refName(branch.$ref)] : undefined))
+      .find((target) => target?.description && alias(target))?.description
   )
 }
 
@@ -264,17 +287,7 @@ function formatSchema(
   if (!schema) return "unknown"
   if (schema.$ref) {
     const target = schemas[refName(schema.$ref)]
-    // Aliases of a primitive, such as Session.ID for a string, read better as the primitive.
-    if (
-      target &&
-      !target.$ref &&
-      !target.properties &&
-      !target.items &&
-      !target.anyOf &&
-      !target.oneOf &&
-      !target.allOf
-    )
-      return formatSchema(target, schemas, types, depth)
+    if (target && alias(target)) return formatSchema(target, schemas, types, depth)
     types.add(refName(schema.$ref))
     return refName(schema.$ref)
   }

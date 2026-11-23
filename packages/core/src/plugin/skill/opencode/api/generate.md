@@ -29,7 +29,7 @@ Body:
 - `prompt: string`
 - `images?: Generate.File[]`
 - `n?: number`
-- `aspect?: string`
+- `aspect?: string` Aspect ratio as width:height, for example 16:9
 - `resolution?: Generate.ImageResolution`
 
 Returns: `GenerateImageResponse`
@@ -72,8 +72,8 @@ Returns: `GenerateDecisionsResponse`
 
 - `Blob.Info`: `{ id: string; mime: string; bytes: number }`
 - `Generate.ChoiceAnswer`: `{ type: "choice"; name: string; choice: Generate.ChoiceValue; probabilities: { value, probability }[]; confidence: number }`
-- `Generate.ChoiceQuestion`: `{ type: "choice"; name: string; instructions: string; choices: { value, description }[] }`
-- `Generate.ChoiceValue`: `string | boolean`
+- `Generate.ChoiceQuestion`: `{ type: "choice"; name: string; instructions: string; choices: { value, description }[] }` Pick one value from a fixed set
+- `Generate.ChoiceValue`: `string | boolean` Choice values are typed: true and "true" are different values
 - `Generate.DecisionAnswer`: `Generate.PredicateAnswer | Generate.ChoiceAnswer | Generate.ScoreAnswer | Generate.ErrorAnswer`
 - `Generate.DecisionFilePart`: `{ type: "file"; data: string; mime: string; name?: string }`
 - `Generate.DecisionJsonPart`: `{ type: "json"; value: unknown }`
@@ -81,18 +81,18 @@ Returns: `GenerateDecisionsResponse`
 - `Generate.DecisionQuestion`: `Generate.PredicateQuestion | Generate.ChoiceQuestion | Generate.ScoreQuestion`
 - `Generate.DecisionResult`: `{ answers: Generate.DecisionAnswer[]; cost?: number; tokens?: Generate.Usage; native?: Record<string, unknown> }`
 - `Generate.DecisionTextPart`: `{ type: "text"; text: string }`
-- `Generate.ErrorAnswer`: `{ type: "error"; name: string; reason: string; message?: string }`
+- `Generate.ErrorAnswer`: `{ type: "error"; name: string; reason: string; message?: string }` This one question has no answer; the other answers still came back
 - `Generate.File`: `{ data: string; mime: string; name?: string }`
 - `Generate.ImageFile`: `{ data: string; mime: string; name?: string }`
 - `Generate.ImageOutput`: `{ type: "image"; data: string; mime: string; name?: string }`
-- `Generate.ImageResolution`: `"1K" | "2K" | "4K" | string`
+- `Generate.ImageResolution`: `"1K" | "2K" | "4K" | string` Size tier such as 1K, 2K or 4K; 1K is about as many pixels as 1024x1024 at the requested aspect
 - `Generate.ImageResult`: `{ images: Generate.ImageOutput[]; cost?: number; tokens?: Generate.Usage; native?: Record<string, unknown> }`
 - `Generate.PredicateAnswer`: `{ type: "predicate"; name: string; probability: number }`
-- `Generate.PredicateQuestion`: `{ type: "predicate"; name: string; instructions: string; criteria?: { true, false } }`
+- `Generate.PredicateQuestion`: `{ type: "predicate"; name: string; instructions: string; criteria?: { true, false } }` The probability that a statement is true
 - `Generate.ScoreAnswer`: `{ type: "score"; name: string; score: number; probabilities: { value, label, probability }[]; confidence: number }`
-- `Generate.ScoreQuestion`: `{ type: "score"; name: string; instructions: string; levels: { label, description }[] }`
-- `Generate.Usage`: `{ input?: number; output?: number }`
-- `Generate.VideoAspect`: `string | "auto"`
+- `Generate.ScoreQuestion`: `{ type: "score"; name: string; instructions: string; levels: { label, description }[] }` Place the input on ordered levels, lowest first
+- `Generate.Usage`: `{ input?: number; output?: number }` Token counts, when the provider reports them
+- `Generate.VideoAspect`: `string | "auto"` Aspect ratio as width:height, or auto to follow the start image
 - `Generate.VideoCompleted`: `{ id: string; status: "completed"; blobs: Blob.Info[] }`
 - `Generate.VideoError`: `{ id: string; status: "error"; error: string; reason: "failed" | "cancelled" | "expired" | "unknown" }`
 - `Generate.VideoJob`: `Generate.VideoRunning | Generate.VideoCompleted | Generate.VideoError`

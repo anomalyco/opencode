@@ -50,13 +50,13 @@ Returns: `{ data: Automation.Info }`
 
 ## Types
 
-- `Automation.ActionInput`: `Automation.PromptActionInput | Automation.CodeActionInput | Automation.ShellActionInput`
+- `Automation.ActionInput`: `Automation.PromptActionInput | Automation.CodeActionInput | Automation.ShellActionInput` What it does: { type: "prompt", prompt, to? } sends a prompt; { type: "code", code, args? } runs Code Mode; { type: "shell", command } runs a fixed shell command.
 - `Automation.CodeActionInput`: `{ type: "code"; code: string; args?: unknown }`
 - `Automation.Info`: `{ id, name, projectID, sessionID, directory, trigger, tz, action, expires, status, nextDueAt, runCount, lastRunAt, lastOutcome, lastOutput, state, time }`
 - `Automation.PromptActionInput`: `{ type: "prompt"; prompt: string; to?: Automation.Target }`
 - `Automation.ShellActionInput`: `{ type: "shell"; command: string }`
 - `Automation.Target`: `{ session: string; subagent?: unknown } | { subagent: string; session?: unknown }`
-- `Automation.Trigger`: `Automation.Trigger.At | Automation.Trigger.Every | Automation.Trigger.Cron | Automation.Trigger.Event`
+- `Automation.Trigger`: `Automation.Trigger.At | Automation.Trigger.Every | Automation.Trigger.Cron | Automation.Trigger.Event` When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz. Or { type: "event", server, event, args? } for a connected MCP server advertising push delivery.
 - `Automation.Trigger.At`: `{ type: "at"; at: string; tz?: string }`
 - `Automation.Trigger.Cron`: `{ type: "cron"; cron: string; tz?: string }`
 - `Automation.Trigger.Event`: `{ type: "event"; server: string; event: string; args?: Record<string, unknown> }`

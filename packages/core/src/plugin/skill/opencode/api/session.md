@@ -13,7 +13,7 @@ Parameters:
 - `directory?: string`
 - `project?: string`
 - `subpath?: string`
-- `cursor?: string`
+- `cursor?: string` Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.
 
 Returns: `SessionsResponse`
 
@@ -283,6 +283,9 @@ Returns: `{ data: InstructionEntry.Info[] }`
 
 Attach or replace one durable instruction entry. Changes announce as updates at the next step boundary.
 
+Parameters:
+- `key: string` Instruction entry key (lowercase alphanumerics plus . _ -)
+
 Body:
 - `value: unknown`
 
@@ -291,6 +294,9 @@ Returns: nothing
 ## DELETE /api/experimental/session/{sessionID}/instructions/entries/{key} (experimental)
 
 Remove one instruction entry; the removal is announced to the model at the next step boundary.
+
+Parameters:
+- `key: string` Instruction entry key (lowercase alphanumerics plus . _ -)
 
 Returns: nothing
 
