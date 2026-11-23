@@ -532,20 +532,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           set(value: string | undefined) {
             const m = currentSelection()
             if (!m) return
+            // A model's speeds share its variant.
+            const standard = standardModel(m)
             if (route.data.type === "session") {
               setSessionDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
             } else {
               // Keep the choice for this agent's new session; it outranks the agent's configured variant.
+              // The draft names the standard model so the new session follows the remembered speed.
               const current = agent.current()
               if (current)
                 setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), {
-                  providerID: m.providerID,
-                  modelID: m.modelID,
+                  ...standard,
                   variant: value ?? "default",
                 })
             }
-            // A model's speeds share its variant.
-            const standard = standardModel(m)
             setPreferences("variant", modelPreferenceKey(standard), value ?? "default")
             void repository.saveVariant(standard, value).catch(() => undefined)
           },

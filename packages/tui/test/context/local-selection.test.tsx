@@ -96,6 +96,27 @@ test("a variant chosen before the first message outranks the agent's configured 
   expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: undefined })
 })
 
+test("a variant chosen before the first message keeps following the remembered speed", async () => {
+  const fast = {
+    ...model("first-fast", ["low", "high"]),
+    experimental: { speed: { base: "first", id: "fast", faster: true } },
+  }
+  await using setup = await renderLocal({
+    models: [model("first", ["low", "high"]), fast],
+    preferences: { speed: { "provider/first": "fast" } },
+    sessions: [session("ses_first", { providerID: "provider", id: "first-fast" })],
+  })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first-fast", variant: undefined })
+  setup.local.model.variant.set("high")
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first-fast", variant: "high" })
+
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  setup.local.model.speed.set(undefined)
+  setup.route.navigate({ type: "home" })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: "high" })
+})
+
 test("agent and model drafts are isolated across sessions and survive navigation", async () => {
   await using setup = await renderLocal({
     models: [model("first", ["low", "high"]), model("second", ["low", "high"])],
