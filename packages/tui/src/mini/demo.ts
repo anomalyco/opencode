@@ -192,6 +192,8 @@ function showSubagent(
     description: string
     status: "running" | "completed" | "cancelled" | "error"
     title?: string
+    activeTool?: string
+    toolStart?: number
     commits: StreamCommit[]
   },
 ) {
@@ -205,6 +207,8 @@ function showSubagent(
           description: input.description,
           status: input.status,
           title: input.title,
+          activeTool: input.activeTool,
+          toolStart: input.toolStart,
         },
       ],
       details: {
@@ -541,8 +545,10 @@ function emitTask(state: State): void {
     sessionID: "ses_demo_child",
     label: "Explore",
     description: "Scan run/* for reducer touchpoints",
-    status: "completed",
+    status: "running",
     title: "Reducer touchpoints found",
+    activeTool: "read",
+    toolStart: Date.now(),
     commits: [
       {
         kind: "user",
