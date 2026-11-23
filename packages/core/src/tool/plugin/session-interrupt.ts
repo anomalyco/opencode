@@ -48,7 +48,7 @@ export const Plugin = {
           ? Effect.succeed(true)
           : sessions.get(sessionID).pipe(
               Effect.map((session) => session.parentID),
-              Effect.catch(() => Effect.succeed(undefined)),
+              Effect.orElseSucceed(() => undefined),
               Effect.flatMap((parentID) => isSelfOrAncestor(target, parentID)),
             )
 
