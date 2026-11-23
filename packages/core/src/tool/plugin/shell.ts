@@ -402,8 +402,13 @@ export const Plugin = {
     const runSync = Effect.runSyncWith(yield* Effect.context())
     yield* ctx.tool
       .transform((editor) => {
-        // Named in both the direct and the Code Mode description, so a model knows the shell either way.
-        const shellName = ShellSelect.name(runSync(compatibleShell))
+        // Named in both the direct and the Code Mode description, so a model knows the shell either way. Read from this
+        // plugin's own config so a changed shell setting shows up in the same rebuild.
+        const shellName = ShellSelect.name(
+          runSync(
+            shellSelect.resolve({ priority: "compat", configured: Config.latest(loaded.entries, "shell") ?? null }),
+          ),
+        )
         editor.add({
           name,
           // With full_codemode, shell is allowed in Code Mode and pinned so the catalog always lists it.

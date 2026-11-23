@@ -43,6 +43,11 @@ export type Editor = {
 
 export type ResolveInput = {
   priority: "config" | "compat"
+  /**
+   * The configured shell as the caller read it from config, or null for none. A caller that rebuilds on config changes
+   * passes it so its result follows that config instead of depending on this service having reloaded first.
+   */
+  configured?: string | null
 }
 
 export interface Interface extends State.Transformable<Editor> {
@@ -217,7 +222,15 @@ const layer = (options?: Options) =>
       return Service.of({
         transform: state.transform,
         reload: state.reload,
-        resolve: (input) => Effect.sync(() => resolve(input, state.get().shell, options, global.bin)),
+        resolve: (input) =>
+          Effect.sync(() =>
+            resolve(
+              input,
+              input.configured === undefined ? state.get().shell : (input.configured ?? undefined),
+              options,
+              global.bin,
+            ),
+          ),
         list: () => Effect.promise(() => list(options, global.bin)),
       })
     }),
