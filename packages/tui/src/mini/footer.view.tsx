@@ -550,7 +550,12 @@ export function RunFooterView(props: RunFooterViewProps) {
     return rows
   })
   createEffect(() => {
-    props.onRows(promptRows() + (!panel() && !menu() && !inspecting() ? statusRows() : 0) - 1)
+    // Activity rows render above the status line while expanded; count them so the host grows the
+    // footer and the status line is not clipped. toolSummaries() is [] unless expanded, so this is
+    // 0 when collapsed.
+    const bottom = !panel() && !menu()
+    const activityRows = bottom ? toolSummaries().length : 0
+    props.onRows(promptRows() + (bottom && !inspecting() ? statusRows() : 0) + activityRows - 1)
   })
 
   createEffect(() => {
@@ -619,8 +624,6 @@ export function RunFooterView(props: RunFooterViewProps) {
         title: "Toggle agent activity panel",
         group: "Session",
         run: () => {
-          // Don't expand when no agent is currently running a tool; between tool calls the panel would be blank.
-          if (!expanded() && activeToolSummaries(activeTabs(), Date.now()).length === 0) return
           setExpanded((v) => !v)
         },
       },
@@ -628,8 +631,10 @@ export function RunFooterView(props: RunFooterViewProps) {
   }))
 
   createEffect(() => {
-    // Collapse when all agents finish, or when the expanded panel would be empty (agent between tool calls).
-    if (activeTabs().length === 0 || (expanded() && toolSummaries().length === 0)) setExpanded(false)
+    // Expanded is the user's choice; only force-collapse when no subagents are running at all.
+    // The rows block renders only when it has rows, so an expanded panel between tool calls is
+    // just the status line with a "hide" hint — never a blank footer.
+    if (activeTabs().length === 0) setExpanded(false)
   })
 
   Keymap.createLayer(() => ({
