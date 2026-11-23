@@ -1805,6 +1805,8 @@ for (const row of [
     // Anthropic only exists in the integration fixture, so its row proves the integration list has loaded.
     await expect(settings.getByText("Anthropic", { exact: true })).toBeVisible()
     await expect(settings.getByText("OpenCode Console", { exact: true })).toHaveCount(row.console ? 1 : 0)
+    // OpenCode Go connects through OpenCode, so it isn't offered without a saved Go key.
+    await expect(settings.getByText("OpenCode Go", { exact: true })).toHaveCount(0)
   })
 }
 
@@ -1855,7 +1857,16 @@ test("providers: OpenCode Go connects with its own methods, not the Console sign
   const attempts: string[] = []
 
   const { settings } = await open(page, {
-    integrations: consoleIntegrations,
+    // Settings lists OpenCode Go only for people who already saved a Go key.
+    integrations: [
+      ...consoleIntegrations.filter((integration) => integration.id !== "opencode-go"),
+      {
+        id: "opencode-go",
+        name: "OpenCode Go",
+        methods: [{ type: "key" }],
+        connections: [{ type: "credential", id: "cred_go", label: "Go key", method: "key" }],
+      },
+    ],
     onIntegrationOAuth: (input) => {
       attempts.push(input.integrationID)
 
