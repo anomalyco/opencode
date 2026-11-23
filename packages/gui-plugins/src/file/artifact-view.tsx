@@ -96,8 +96,10 @@ export default function ArtifactView(props: {
 
   // Media the browser could not decode falls back to the binary placeholder.
   const kind = createMemo(() => selectArtifactStageKind(viewerState(), props.path, props.content))
+  // HTML opens in the browser pane on the desktop, so the file tab keeps its source.
+  const sourceOnly = () => !!ctx.desktop && kind() === "html"
 
-  const fixedMode = createMemo(() => fixedArtifactMode(props.path, props.content))
+  const fixedMode = createMemo(() => (sourceOnly() ? "source" : fixedArtifactMode(props.path, props.content)))
 
   const mode = () => fixedMode() ?? selectArtifactMode(viewerState(), props.content)
 

@@ -25,7 +25,7 @@ export function parseFileLink(href: string): ParsedFileLink {
 }
 
 export function isAbsoluteLink(path: string) {
-  return /^skill:\/\//i.test(path) || /^[a-z]:\//i.test(path) || path.startsWith("/")
+  return /^skill:\/\//i.test(path) || /^[a-z]:\//i.test(path) || path.startsWith("/") || /^~(?:\/|$)/.test(path)
 }
 
 /**
@@ -63,11 +63,15 @@ export async function checkFileLinkExists(input: {
 }): Promise<boolean> {
   const parsed = parseFileLink(input.href)
 
-  // `~` is the server's home folder, which the app cannot expand. A network share (`//host/share`) would make the
-  // server connect to the host just to answer.
-  if (!parsed.path || parsed.path.startsWith("~") || parsed.path.startsWith("//")) return false
+  // A network share (`//host/share`) would make the server connect to the host just to answer.
+  if (!parsed.path || parsed.path.startsWith("//")) return false
 
-  if (isAbsoluteLink(parsed.path)) return input.files.exists(input.files.resolve(parsed.path))
+  if (isAbsoluteLink(parsed.path)) {
+    const resolved = input.files.resolve(parsed.path)
+
+    // `resolve` expands `~` once the server has reported its home folder; until then the path is unknown.
+    return !resolved.startsWith("~") && input.files.exists(resolved)
+  }
 
   return !!(await findFileLink({ files: input.files, path: parsed.path, signal: input.signal }))
 }

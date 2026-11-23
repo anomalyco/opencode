@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { clampSessionPanelWidth } from "./session-panel-width"
+import { clampSessionPanelWidth, fitsSidePane } from "./session-panel-width"
+
+test("an automatic side pane needs room in the row, excluding the sidebar", () => {
+  expect(fitsSidePane(820 - 240)).toBe(false)
+  expect(fitsSidePane(777)).toBe(false)
+  expect(fitsSidePane(778)).toBe(true)
+})
 
 test.each([
   ["keeps widths already within the limit", 800, 1700, false, false, 800],

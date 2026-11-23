@@ -5,7 +5,6 @@ export default {
   "usage.usage": "사용량",
   "usage.cost": "비용",
   "usage.view": "컨텍스트 사용량 보기",
-  "systemPrompt.title": "시스템 프롬프트",
   "rawMessages.title": "원시 메시지",
   "export.session": "세션 내보내기",
   "stats.session": "세션",

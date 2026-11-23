@@ -8,7 +8,8 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Bom } from "@opencode/util/bom"
 import { Environment } from "./environment/index.js"
 import type { Files } from "./environment/index.js"
-import type { FileAccess } from "./file-access.js"
+import { FileAccess } from "./file-access.js"
+import { AbsolutePath } from "./schema.js"
 
 export type Target = Pick<FileAccess.Target, "absolute" | "resource" | "environment">
 
@@ -34,10 +35,13 @@ export interface TextWriteResult extends WriteResult {
 }
 
 export interface Interface {
-  /** Serialize a complete read/prepare/write mutation transaction by resolved path. */
+  /**
+   * Serialize a complete read/prepare/write mutation transaction by file. A typed path is located first, so it
+   * names its machine when the text does.
+   */
   readonly withLock: (
-    targets: ReadonlyArray<string>,
-  ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+    targets: ReadonlyArray<Environment.Place | string>,
+  ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E | Environment.Failed, R>
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
   /** Add bytes to the end of a file, creating it when missing. */
   readonly append: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
@@ -92,16 +96,31 @@ const transactionLocks = KeyedMutex.makeUnsafe<string>()
  */
 const layer = Layer.effect(
   Service,
-  Effect.sync(() => {
+  Effect.gen(function* () {
+    const access = yield* FileAccess.Service
     const locks = KeyedMutex.makeUnsafe<string>()
     const withLock: Interface["withLock"] = (targets) => (effect) =>
-      [...new Set(targets.map(FSUtil.resolve))]
-        .sort()
-        .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
+      Effect.gen(function* () {
+        const places = yield* Effect.forEach(targets, (target) =>
+          typeof target === "string" ? access.locate(target) : Effect.succeed(target),
+        )
+        return yield* [
+          ...new Set(
+            places.map((target) =>
+              FileAccess.key({
+                absolute: AbsolutePath.make(FSUtil.resolve(target.absolute)),
+                environment: target.environment,
+              }),
+            ),
+          ),
+        ]
+          .sort()
+          .reduceRight((result, file) => transactionLocks.withLock(file)(result), effect)
+      })
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        locks.withLock(target.absolute)(Effect.uninterruptible(effect))
+        locks.withLock(FileAccess.key(target))(Effect.uninterruptible(effect))
 
     const writeResult = (target: Target, existed: boolean): WriteResult => ({
       operation: "write",
@@ -153,7 +172,7 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [] })
+export const node = makeLocationNode({ service: Service, layer, deps: [FileAccess.node] })
 
 /**
  * Deferred until the corresponding integrations exist.

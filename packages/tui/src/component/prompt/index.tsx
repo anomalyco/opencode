@@ -161,14 +161,14 @@ function getEditorRangeLabel(selection: EditorSelection["ranges"][number]) {
 function formatEditorContext(selection: EditorSelection) {
   const selected = selection.ranges.filter(hasEditorRangeSelection)
   if (selected.length === 0)
-    return `<system-reminder>Note: The user opened the file "${selection.filePath}". This may or may not be relevant to the current task.</system-reminder>\n`
+    return `<system-update>Note: The user opened the file "${selection.filePath}". This may or may not be relevant to the current task.</system-update>\n`
 
   const ranges = selected.map((range, index) => {
     const prefix = selected.length > 1 ? `Selection ${index + 1}: ` : ""
     return `Note: The user selected ${prefix}${getEditorRangeLabel(range)} from "${selection.filePath}". \`\`\`${range.text}\`\`\`\n\n`
   })
 
-  return `<system-reminder>${ranges.join("\n")} This may or may not be relevant to the current task.</system-reminder>\n`
+  return `<system-update>${ranges.join("\n")} This may or may not be relevant to the current task.</system-update>\n`
 }
 
 function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
@@ -1543,6 +1543,7 @@ export function Prompt(props: PromptProps) {
     modelLabel: string
     providerLabel: string
     variant: string | undefined
+    speed: string | undefined
   }>(
     (previous) => {
       const location = currentLocation.ref ?? data.location.default()
@@ -1562,6 +1563,7 @@ export function Prompt(props: PromptProps) {
         modelLabel: model.model,
         providerLabel: model.provider,
         variant: local.model.variant.current(),
+        speed: local.model.speed.current(),
       }
     },
     {
@@ -1570,6 +1572,7 @@ export function Prompt(props: PromptProps) {
       modelLabel: local.model.parsed().model,
       providerLabel: local.model.parsed().provider,
       variant: undefined,
+      speed: undefined,
     },
   )
   // What the workspace's limits leave for the selected model, once it is running low. Only OpenCode Console limits
@@ -1868,6 +1871,7 @@ export function Prompt(props: PromptProps) {
                 model={promptDisplay().modelLabel}
                 provider={promptDisplay().providerLabel}
                 variant={promptDisplay().variant}
+                speed={promptDisplay().speed}
                 limit={limit()}
                 muted={!!muted()}
                 highlight={highlight()}

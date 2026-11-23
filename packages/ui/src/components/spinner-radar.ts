@@ -1,6 +1,9 @@
 // Soft Radar, the activity spinner: a 5×5 dot grid whose lit head sweeps clockwise around each square ring, leaving a
-// fading trail, with the centre dot steady. Animation is CSS only; every dot shares one loop, so pinning start times with
-// syncSpinPhase keeps every spinner on screen in phase.
+// fading trail, with the centre dot steady.
+//
+// The browser never runs this file. `script/generate-spinner.ts` bakes it into the APNG frames in `spinner-frames.css`,
+// and `Spinner` only paints those frames. After changing anything here, run `bun run generate:spinner` in packages/ui
+// and commit the regenerated `spinner-frames.css`: `spinner-radar.test.ts` fails until the frames match these dots.
 
 const span = 5
 
@@ -9,8 +12,16 @@ const size = 2
 
 const pitch = 3
 
-/** Seconds per loop at 1×. */
+/** Seconds per loop. */
 export const radarLoop = 1.8
+
+/**
+ * Frames per second baked into the APNG, as smooth as the original 90 fps spinner (#42952). Browsers stretch frames of
+ * 10 ms or less to 100 ms, so 90 fps (11.1 ms a frame) is the fastest rate that plays as written.
+ */
+export const radarFps = 90
+
+export const radarFrameCount = Math.round(radarLoop * radarFps)
 
 /** Resting opacity of an unlit dot. */
 const dim = 0.2
@@ -31,31 +42,24 @@ export type RadarDot = {
   steady: boolean
   /** Opacity for reduced motion: the sweep frozen a fifth of the way into its loop. */
   still: number
-  /** Which of the keyframes the dot runs: radarKeyframes names them `name-0`, `name-1`… */
-  shape: number
+  /** Which of the opacity curves the dot runs. */
+  curve: number
 }
 
 type Cell = { gx: number; gy: number }
 
+const cached = layout()
+
 /** The radar's dots, positioned in a 16-unit viewBox. */
 export function radarDots() {
-  return layout().dots
+  return cached.dots
 }
 
-/** The radar's keyframes, one per shape its dots run, named `name-0`, `name-1`… */
-export function radarKeyframes(name: string) {
-  return layout()
-    .shapes.map((stops, index) => {
-      const frames = stops
-        .map(
-          ([percent, level]) =>
-            `${round(percent)}%{opacity:${round(dim + (1 - dim) * level)};animation-timing-function:linear}`,
-        )
-        .join("")
+/** One dot's opacity (0.2–1) at loop phase 0–1. */
+export function radarOpacity(dot: RadarDot, phase: number) {
+  const level = dot.steady ? trail[0]![1] : levelAt(cached.curves[dot.curve]!, frac(phase - dot.at) * 100)
 
-      return `@keyframes ${name}-${index}{${frames}}`
-    })
-    .join("")
+  return round(dim + (1 - dim) * level)
 }
 
 function layout() {
@@ -73,18 +77,22 @@ function layout() {
     const others = placed.filter((other) => other !== dot && !other.steady && ringOf(other.cell) === ringOf(dot.cell))
     const behind = Math.min(...others.map((other) => frac(dot.at - other.at)))
     const ahead = Math.min(...others.map((other) => frac(other.at - dot.at)))
+
     return `${round(behind)} ${round(ahead)}`
   })
+
   const unique = [...new Set(keys.filter((key) => key !== ""))]
-  const shapes = unique.map((key) => {
+
+  const curves = unique.map((key) => {
     const [behind, ahead] = key.split(" ").map(Number)
+
     return headStops(behind! * 100, ahead! * 100)
   })
 
   const dots = placed.map((dot, index): RadarDot => {
-    const shape = Math.max(0, unique.indexOf(keys[index]!))
+    const curve = Math.max(0, unique.indexOf(keys[index]!))
     // The steady centre glows like the fresh trail, so the head stays the brightest dot.
-    const level = dot.steady ? trail[0]![1] : levelAt(shapes[shape]!, frac(0.22 - dot.at) * 100)
+    const level = dot.steady ? trail[0]![1] : levelAt(curves[curve]!, frac(0.22 - dot.at) * 100)
 
     return {
       x: round(8 + dot.cell.gx * pitch - size / 2),
@@ -93,11 +101,11 @@ function layout() {
       at: round(dot.at),
       steady: dot.steady,
       still: round(dim + (1 - dim) * level),
-      shape,
+      curve,
     }
   })
 
-  return { dots, shapes }
+  return { dots, curves }
 }
 
 // One dot's level through the loop, 0% being the moment the head passes it, with `behind` and `ahead` the percent of

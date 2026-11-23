@@ -8,6 +8,7 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { State } from "@opencode/core/state"
+import { CodeModeJob } from "@opencode/core/codemode/job"
 import { Tool } from "@opencode/core/tool"
 import type { Info } from "@opencode/schema/tool"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -625,6 +626,47 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("runs a call to a Code Mode tool's path or registry ID as a Code Mode call", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make(), "kebab-echo": make() }, { namespace: "acme.tools" })
+      yield* transform(service, {
+        fails: { ...make(), execute: () => Effect.fail(new Tool.Error({ message: "boom" })) },
+      })
+      const snapshot = yield* service.snapshot()
+      for (const name of ["acme.tools.echo", "acme_tools_echo", "acme.tools.kebab-echo"]) {
+        const result = yield* snapshot.execute(call(name))
+        expect(result.output).toEqual({ text: name })
+      }
+      expect((yield* snapshot.execute(call("fails")).pipe(Effect.flip)).message).toContain("boom")
+      // In a session drain it can move to the background, like an execute program, without execute's options.
+      const handoffs: Array<CodeModeJob.Options | undefined> = []
+      const handed = yield* snapshot
+        .execute(call("acme.tools.echo"))
+        .pipe(
+          Effect.provideService(CodeModeJob.Current, (context, run, options) =>
+            Effect.sync(() => handoffs.push(options)).pipe(Effect.andThen(run(context))),
+          ),
+        )
+      expect(handed.output).toEqual({ text: "acme.tools.echo" })
+      expect(handoffs).toEqual([undefined])
+      // Not without execute, and not for a tool this request doesn't offer.
+      const withoutExecute = new Map(
+        snapshot.definitions.flatMap((definition) =>
+          definition.name === "execute" ? [] : [[definition.name, definition] as const],
+        ),
+      )
+      expect(
+        (yield* snapshot.execute({ ...call("acme.tools.echo"), definitions: withoutExecute }).pipe(Effect.flip))
+          .message,
+      ).toContain('No tool named "acme.tools.echo"')
+      const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
+      expect((yield* denied.execute(call("acme.tools.echo")).pipe(Effect.flip)).message).toContain(
+        'No tool named "acme.tools.echo"',
+      )
+    }),
+  )
+
   it.effect("logs invalid tool definitions without dropping healthy tools", () => {
     const output: unknown[] = []
     const logger = Logger.map(Logger.formatStructured, (entry) => {
@@ -1005,6 +1047,22 @@ describe("Tool", () => {
       const hidden = yield* service.snapshot([...denyExecute, { action: "mcp_lookup", resource: "*", effect: "deny" }])
       expect(hidden.definitions.map((tool) => tool.name)).toEqual(["bash"])
       expect(yield* hidden.execute(call("mcp_lookup")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
+    }),
+  )
+
+  it.effect("denies a nested-namespace tool by its flattened name in Code Mode and as a direct tool", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { move: make(), rename: make() }, { namespace: "opencode.session" })
+      const deny: Permission.Ruleset = [{ action: "opencode_session_move", resource: "*", effect: "deny" }]
+
+      const codeMode = yield* service.snapshot(deny)
+      const paths = codeModeListings(codeMode.codeModeCatalog!).map((entry) => entry.path)
+      expect(paths).toContain("opencode.session.rename")
+      expect(paths).not.toContain("opencode.session.move")
+
+      const direct = yield* service.snapshot([...deny, { action: "execute", resource: "*", effect: "deny" }])
+      expect(direct.definitions.map((tool) => tool.name)).toEqual(["opencode_session_rename"])
     }),
   )
 

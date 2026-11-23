@@ -21,6 +21,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/shell/commands/command"
 import { DesktopCommands } from "@/shell/commands/desktop"
+import { KeySequenceHint } from "@/shell/commands/key-sequence"
 import { ProjectIconsProvider } from "@/shell/layout/project-icons"
 import { GlobalProvider } from "@/runtime/server/runtime"
 import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/language"
@@ -30,6 +31,7 @@ import { TabsProvider } from "@/shell/tabs/tabs"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
 import { PluginRoot } from "@/runtime/plugin/root"
+import { baseRouter } from "@/runtime/platform/base-path-router"
 
 export { preloadRoute }
 
@@ -116,6 +118,7 @@ export function AppInterface(props: {
               {rootProps.children}
               <VoiceOverlay />
             </VoiceProvider>
+            <KeySequenceHint />
           </CommandProvider>
         </ProjectIconsProvider>
       </GlobalProvider>
@@ -125,7 +128,7 @@ export function AppInterface(props: {
   return (
     <ServersProvider canonicalLocalServer={props.canonicalLocalServer} servers={props.servers}>
       <SettingsProvider>
-        <Dynamic component={props.router ?? Router} root={Root}>
+        <Dynamic component={props.router ?? baseRouter ?? Router} root={Root}>
           <AppRoutes />
         </Dynamic>
       </SettingsProvider>

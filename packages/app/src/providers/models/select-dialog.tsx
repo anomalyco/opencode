@@ -1,9 +1,11 @@
 import { Popover } from "@kobalte/core/popover"
 import {
+  batch,
   Component,
   ComponentProps,
   createEffect,
   createMemo,
+  createSelector,
   createSignal,
   For,
   JSX,
@@ -52,10 +54,12 @@ import {
   transitionModelDrawer,
   type DialogFlyoutEffect,
   type DialogFlyoutEvent,
+  type FlyoutRect,
   type ModelDrawerEvent,
 } from "./select-dialog-machine"
 import { formatKeybindParts, matchKeybind, parseKeybind } from "@/shell/commands/command"
 import { createEventListener } from "@solid-primitives/event-listener"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { matchesModelSearch } from "./search"
 import { SettingsList } from "@/settings/list"
 import {
@@ -482,7 +486,8 @@ function createModelSelectorController(input: {
     model
       .list()
       .filter((item) => model.visible({ modelID: item.id, providerID: item.provider.id }))
-      .filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
+      .filter((item) => (input.provider() ? item.provider.id === input.provider() : true))
+      .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 
   return {
@@ -490,31 +495,27 @@ function createModelSelectorController(input: {
     models: (search: string) => {
       const query = search.trim()
 
-      const filtered = query
-        ? allModels().filter((item) => matchesModelSearch(query, [item.name, item.id, item.provider.name]))
-        : allModels()
+      if (!query) return allModels()
 
-      return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
+      return allModels().filter((item) => matchesModelSearch(query, [item.name, item.id, item.provider.name]))
     },
-    groups: (models: ModelItem[]) => {
-      const byProvider = new Map<string, ModelItem[]>()
-
-      for (const item of models) {
-        byProvider.set(item.provider.id, [...(byProvider.get(item.provider.id) ?? []), item])
-      }
-
-      return Array.from(byProvider, ([category, items]) => ({ category, items })).sort(sortModelGroups)
-    },
+    groups: (models: ModelItem[]) =>
+      [...Map.groupBy(models, (item) => item.provider.id)]
+        .map(([category, items]) => ({ category, items }))
+        .sort(sortModelGroups),
     current: () => {
-      const value = model.current()
+      const value = model.standard?.() ?? model.current()
 
       return value ? modelKey(value) : undefined
     },
     select: (item: ModelItem, variant?: string | null) => {
-      model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
-
-      if (variant !== undefined) model.variant.set(variant ?? undefined)
+      // Close the picker before updating recent/visibility so the closing list does not reconcile and re-measure.
       input.onSelect()
+      batch(() => {
+        model.set({ modelID: item.id, providerID: item.provider.id }, { recent: true })
+
+        if (variant !== undefined) model.variant.set(variant ?? undefined)
+      })
     },
     variant: (item: ModelItem) => model.variant.current({ providerID: item.provider.id, modelID: item.id }),
     favorites: () => model.favorite.list().filter((item) => !input.provider() || item.provider.id === input.provider()),
@@ -589,7 +590,7 @@ const clamp = (value: number) => Math.max(0, Math.min(1, value))
 
 const round = (value: number) => Math.round(value * 1000) / 1000
 
-type ModelRow = { id: string; item: ModelItem; group: ModelGroup }
+type ModelRow = { id: string; item: ModelItem; section: string; title?: string }
 
 function createChatgptPlan(current: () => string | undefined) {
   const data = useData()
@@ -634,8 +635,16 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   const controller = createModelSelectorController({
     model: props.model,
     provider: () => props.provider,
-    onSelect: () => dialog.close(),
+    onSelect: () => {
+      pendingPlace = undefined
+      dispatch({ type: "dismissed" })
+      dialog.close()
+    },
   })
+
+  // Memoize and fan out current model key once instead of recomputing selection per row on mount.
+  const currentKey = createMemo(() => controller.current())
+  const isSelected = createSelector(currentKey)
 
   const labels = createProviderLabels(controller.all)
   const chatgptPlan = createChatgptPlan(controller.current)
@@ -644,9 +653,13 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   // `navigated`: the arrows have moved through the results since the query last changed.
   const [query, setQuery] = createStore({ search: "", navigated: false })
   const [flyout, setFlyout] = createSignal(createDialogFlyoutState())
+  const [flyoutEl, setFlyoutEl] = createSignal<HTMLDivElement>()
 
   let list: SearchListHandle<ModelRow> | undefined
   let flyoutRef: HTMLDivElement | undefined
+  let cachedFlyoutRect: FlyoutRect | undefined
+  let pendingPlace: { attempt: number; id: string } | undefined
+  let placeScheduled = false
   let scroller: HTMLDivElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let pointer: { x: number; y: number } | undefined
@@ -664,9 +677,21 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     })
   })
 
-  const rows = createMemo(() =>
-    groups().flatMap((group) => group.items.map((item): ModelRow => ({ id: modelKey(item), item, group }))),
-  )
+  // A row that still shows the same model in the same section keeps its object, so a narrower search re-renders none of
+  // the rows that stay.
+  const rows = createMemo((previous: ModelRow[]) => {
+    const kept = new Map(previous.map((row) => [row.id, row]))
+
+    return groups().flatMap((group) =>
+      group.items.map((item): ModelRow => {
+        const row = kept.get(modelKey(item))
+
+        return row?.item === item && row.section === group.category && row.title === group.title
+          ? row
+          : { id: modelKey(item), item, section: group.category, title: group.title }
+      }),
+    )
+  }, [])
 
   const rowItem = (id: string) => rows().find((row) => row.id === id)?.item
   const flyoutId = createMemo(() => selectFlyoutOpenId(flyout()))
@@ -720,7 +745,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     void dialog.show(() => <DialogConnectProvider directory={location().directory} selection={props.model} />)
   }
 
-  const flyoutRect = () => (flyoutRef?.isConnected ? flyoutRef.getBoundingClientRect() : undefined)
+  const flyoutRect = () => cachedFlyoutRect ?? (flyoutRef?.isConnected ? flyoutRef.getBoundingClientRect() : undefined)
 
   const measure = (id: string) => {
     const row = scroller?.querySelector<HTMLElement>(
@@ -743,15 +768,31 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     const rect = rendered.getBoundingClientRect()
     const x = rect.left - parseFloat(rendered.style.left)
     const y = rect.top - parseFloat(rendered.style.top)
+    const placed = x || y ? { left: position.left - x, top: position.top - y } : position
+    const left = placed.left + x
+    const top = placed.top + y
+    cachedFlyoutRect = { left, right: left + rect.width, top, bottom: top + rect.height }
 
-    return x || y ? { left: position.left - x, top: position.top - y } : position
+    return placed
   }
 
   const dispatch = (event: DialogFlyoutEvent) => {
     const next = transitionDialogFlyout(untrack(flyout), event)
-    // Written before the effects run, so a `place` measures the flyout this state renders.
     setFlyout(next.state)
     next.effects.forEach(runFlyoutEffect)
+  }
+
+  const flushPlace = () => {
+    placeScheduled = false
+    const pending = pendingPlace
+    pendingPlace = undefined
+
+    if (!pending || dialog.closing) return
+
+    const state = untrack(flyout)
+
+    if (state.status !== "open" || state.attempt !== pending.attempt) return
+    dispatch({ type: "placed", attempt: pending.attempt, position: measure(pending.id) })
   }
 
   const runFlyoutEffect = (effect: DialogFlyoutEffect) => {
@@ -771,20 +812,32 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
       return
     }
 
-    dispatch({ type: "placed", attempt: effect.attempt, position: measure(effect.id) })
+    // Coalesce placement into one microtask so ArrowDown (claim + highlight + reveal) measures once after scrolling.
+    pendingPlace = { attempt: effect.attempt, id: effect.id }
+
+    if (placeScheduled) return
+    placeScheduled = true
+    queueMicrotask(flushPlace)
   }
 
-  // Placed before the flyout renders its content or position, as from the effect that follows the highlight. Once it
-  // has, before it paints, it is placed again with its real height and where it landed. Settles in one more pass.
   createEffect(() => {
-    const state = flyout()
+    if (flyoutItem()) return
+    flyoutRef = undefined
+    cachedFlyoutRect = undefined
+    setFlyoutEl(undefined)
+  })
 
-    if (state.status !== "open" || !state.position) return
+  // Refine placement once the flyout has laid out or its height changes, without forcing a second synchronous layout.
+  createResizeObserver(flyoutEl, () => {
+    const state = untrack(flyout)
+
+    if (state.status !== "open") return
     dispatch({ type: "placed", attempt: state.attempt, position: measure(state.id) })
   })
 
   onCleanup(() => {
     clearTimeout(timer)
+    pendingPlace = undefined
     dispatch({ type: "disposed" })
   })
 
@@ -792,61 +845,140 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     pointer = { x: event.clientX, y: event.clientY }
   })
 
-  // Scrolling moves rows under a still cursor without a pointer event. A wheel scroll highlights the row that lands
-  // under the cursor and moves the flyout beside it; a keyboard scroll keeps its highlight and closes the flyout,
-  // which would otherwise be left beside a row that moved away.
-  const follow = () => {
-    if (!selectFlyoutFollowsPointer(untrack(flyout))) return dispatch({ type: "scrolled", target: undefined })
-    const point = pointer
+  type HeaderMetric = {
+    header: HTMLElement
+    label: HTMLElement | undefined
+    labelTop: number
+    labelHeight: number
+    headerHeight: number
+    firstRow: Element | null
+    opacity: string
+    stuck: boolean
+    fade: string
+  }
+
+  let viewportEl: HTMLElement | undefined
+  let headerMetrics: HeaderMetric[] | undefined
+  let headersDirty = false
+
+  const readHeaders = () => {
+    const viewport = viewportEl ?? scroller?.querySelector<HTMLElement>('[data-slot="search-list-scroll"]') ?? undefined
+
+    if (!viewport) return undefined
+    viewportEl = viewport
+
+    // At the top, before any scroll has faded a label, the first header is the stuck one and nothing is faded. Marking
+    // it needs no layout read, so opening the dialog or changing its rows does not measure every header.
+    if (!headerMetrics && !headersDirty && viewport.scrollTop === 0) {
+      const first = viewport.querySelector<HTMLElement>('[data-slot="search-list-header"]')
+
+      // A header keeps its element while sections come and go above it, such as Favorites.
+      viewport
+        .querySelectorAll<HTMLElement>('[data-slot="search-list-header"][data-stuck]')
+        .forEach((header) => header.toggleAttribute("data-stuck", header === first))
+      first?.toggleAttribute("data-stuck", true)
+
+      return undefined
+    }
+
+    if (!headerMetrics) {
+      headerMetrics = [...viewport.querySelectorAll<HTMLElement>('[data-slot="search-list-header"]')].map((header) => {
+        const label = header.querySelector<HTMLElement>('[data-slot="model-dialog-header-label"]') ?? undefined
+
+        return {
+          header,
+          label,
+          labelTop: label?.offsetTop ?? 0,
+          labelHeight: label?.offsetHeight ?? 0,
+          headerHeight: header.offsetHeight,
+          firstRow: header.nextElementSibling,
+          opacity: label?.style.opacity || "1",
+          stuck: header.hasAttribute("data-stuck"),
+          fade: header.style.getPropertyValue("--model-dialog-header-fade") || "0",
+        }
+      })
+    }
+
+    const origin = viewport.getBoundingClientRect().top
+    const tops = headerMetrics.map((entry) => entry.header.getBoundingClientRect().top - origin)
+    const stuck = tops.findLastIndex((top) => top < 0.5)
+    const stuckEntry = stuck >= 0 ? headerMetrics[stuck] : undefined
+
+    // How far the rows under the stuck header have scrolled beneath it, from where its first row rests.
+    const hidden =
+      stuckEntry && stuckEntry.firstRow
+        ? stuckEntry.headerHeight + 4 - (stuckEntry.firstRow.getBoundingClientRect().top - origin)
+        : 0
+
+    return { entries: headerMetrics, tops, stuck, hidden }
+  }
+
+  const applyHeaders = (measured: ReturnType<typeof readHeaders>) => {
+    if (!measured) return
+
+    measured.entries.forEach((entry, index) => {
+      if (entry.label) {
+        const nextTop = measured.tops[index + 1]
+        const nextEntry = measured.entries[index + 1]
+
+        const opacity =
+          nextTop === undefined || !nextEntry?.label
+            ? "1"
+            : String(round(clamp((nextTop + nextEntry.labelTop - entry.labelTop - entry.labelHeight) / 16)))
+
+        if (entry.opacity !== opacity) {
+          headersDirty = true
+          entry.opacity = opacity
+          entry.label.style.setProperty("opacity", opacity)
+        }
+      }
+
+      const isStuck = index === measured.stuck
+
+      if (entry.stuck !== isStuck) {
+        headersDirty = true
+        entry.stuck = isStuck
+        entry.header.toggleAttribute("data-stuck", isStuck)
+      }
+
+      if (!isStuck) return
+
+      const fade = String(round(clamp(measured.hidden / 16)))
+
+      if (entry.fade !== fade) {
+        headersDirty = true
+        entry.fade = fade
+        entry.header.style.setProperty("--model-dialog-header-fade", fade)
+      }
+    })
+  }
+
+  // As on the home page, every header sticks for the whole list, so the next one slides over the stuck one while the
+  // stuck label fades out over 16px. The topmost stuck header also fades a gradient in as rows scroll beneath it.
+  const fadeHeaders = () => applyHeaders(readHeaders())
+
+  // Scrolling moves rows under a still cursor without a pointer event. All reads (hit-test + header rects) run first on
+  // clean layout before any style writes or flyout transitions.
+  const onListScroll = () => {
+    const followsPointer = selectFlyoutFollowsPointer(untrack(flyout))
+    const point = followsPointer ? pointer : undefined
 
     const row = point
       ? document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>('[data-slot="search-list-row"]')
       : undefined
 
     const id = row?.dataset.optionKey
-    dispatch({ type: "scrolled", target: point && row && id && scroller?.contains(row) ? { id, point } : undefined })
-  }
+    const target = point && row && id && scroller?.contains(row) ? { id, point } : undefined
+    const measured = readHeaders()
 
-  // As on the home page, every header sticks for the whole list, so the next one slides over the stuck one while the
-  // stuck label fades out over 16px. The topmost stuck header also fades a gradient in as rows scroll beneath it.
-  const fadeHeaders = () => {
-    const viewport = scroller?.querySelector<HTMLElement>('[data-slot="search-list-scroll"]')
-
-    if (!viewport) return
-    const origin = viewport.getBoundingClientRect().top
-    const headers = [...viewport.querySelectorAll<HTMLElement>('[data-slot="search-list-header"]')]
-
-    // Every read before any write, so the scroll lays out once.
-    const tops = headers.map((header) => header.getBoundingClientRect().top - origin)
-    const stuck = tops.findLastIndex((top) => top < 0.5)
-
-    const labelOf = (header: HTMLElement | undefined) =>
-      header?.querySelector<HTMLElement>('[data-slot="model-dialog-header-label"]') ?? undefined
-
-    const labels = headers.map((header, index) => {
-      const label = labelOf(header)
-      const next = tops[index + 1]
-      const nextLabel = labelOf(headers[index + 1])
-
-      if (!label || next === undefined || !nextLabel) return { label, opacity: 1 }
-
-      // Fades out as the next label comes up, gone just as it would touch this one.
-      return { label, opacity: clamp((next + nextLabel.offsetTop - label.offsetTop - label.offsetHeight) / 16) }
-    })
-
-    const header = headers[stuck]
-    const row = header?.nextElementSibling
-    // How far the rows under the stuck header have scrolled beneath it, from where its first row rests.
-    const hidden = header && row ? header.offsetHeight + 4 - (row.getBoundingClientRect().top - origin) : 0
-
-    labels.forEach((item) => item.label?.style.setProperty("opacity", String(round(item.opacity))))
-    headers.forEach((item, index) => item.toggleAttribute("data-stuck", index === stuck))
-    header?.style.setProperty("--model-dialog-header-fade", String(round(clamp(hidden / 16))))
+    applyHeaders(measured)
+    dispatch({ type: "scrolled", target: followsPointer ? target : undefined })
   }
 
   // Results that change without a scroll, such as a narrower search, move the headers too.
   createEffect(
     on(rows, () => {
+      headerMetrics = undefined
       const frame = requestAnimationFrame(fadeHeaders)
       onCleanup(() => cancelAnimationFrame(frame))
     }),
@@ -968,8 +1100,9 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
 
   const Row = (row: { model: ModelRow; attrs: SearchListRow }) => {
     const item = () => row.model.item
-    const selected = () => controller.current() === modelKey(item())
+    const selected = () => isSelected(row.model.id)
     const active = () => row.attrs["data-active"] !== undefined
+    const budget = createMemo(() => usage(item()))
 
     return (
       <button
@@ -1012,7 +1145,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             <SearchHighlight text={item().name} />
           </span>
           {/* Favorites and Recent mix providers, so their rows name one, with its workspace when its header has one. */}
-          <Show when={row.model.group.title}>
+          <Show when={row.model.title}>
             <span class="min-w-0 shrink-[999] truncate text-v2-text-text-faint">{labels.name(item().provider)}</span>
             <Show when={labels.workspace(item().provider)}>
               {(workspace) => <Badge class="shrink-0">{workspace()}</Badge>}
@@ -1026,7 +1159,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
           </Show>
         </span>
         {/* The active row shows its variant instead; its flyout leads with the budget. */}
-        <Show when={!active() && usage(item())}>
+        <Show when={!active() && budget()}>
           {(value) => (
             <span data-slot="model-dialog-variant">
               <ModelUsageTag usage={value()} />
@@ -1058,15 +1191,6 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
           data-owns-escape={menuKeys() !== undefined ? "" : undefined}
           ref={(element) => {
             scroller = element
-            createEventListener(
-              element,
-              "scroll",
-              () => {
-                follow()
-                fadeHeaders()
-              },
-              { capture: true },
-            )
             // A wheel scroll is the pointer's, so the highlight and flyout follow the row under it.
             createEventListener(element, "wheel", () => dispatch({ type: "wheel" }), { passive: true })
             // So is dragging the scrollbar, which would otherwise carry a keyboard flyout away with its row.
@@ -1078,6 +1202,8 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
         >
           <SearchList
             ref={(handle) => (list = handle)}
+            topFade={false}
+            onScroll={onListScroll}
             // The flyout follows the highlight while the keyboard drives it, starting with the row the dialog opens on.
             onActive={(row) => dispatch({ type: "highlighted", id: row?.id })}
             query={query.search}
@@ -1110,11 +1236,11 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             }
             items={rows()}
             key={(row) => row.id}
-            section={(row) => row.group.category}
+            section={(row) => row.section}
             header={(row) => (
               <span data-slot="model-dialog-header-label" class="flex min-w-0 items-center gap-1.5">
-                <span class="min-w-0 truncate">{row.group.title ?? labels.name(row.item.provider)}</span>
-                <Show when={!row.group.title && labels.workspace(row.item.provider)}>
+                <span class="min-w-0 truncate">{row.title ?? labels.name(row.item.provider)}</span>
+                <Show when={!row.title && labels.workspace(row.item.provider)}>
                   {(workspace) => <Badge class="shrink-0">{workspace()}</Badge>}
                 </Show>
               </span>
@@ -1130,97 +1256,103 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
           <ChatgptPlanFooter />
         </Show>
       </DialogBody>
-      <Show when={flyoutItem()}>
-        {(item) => (
-          // Inside the dialog content, so clicks here are not outside clicks that dismiss the dialog.
-          <div
-            ref={(element) => (flyoutRef = element)}
-            data-component="menu-v2-content"
-            data-slot="model-dialog-flyout"
-            style={{
-              left: `${selectFlyoutPosition(flyout())?.left ?? 0}px`,
-              top: `${selectFlyoutPosition(flyout())?.top ?? 0}px`,
-            }}
-            onMouseEnter={() => dispatch({ type: "flyout.entered" })}
-          >
-            <MenuScroll>
-              <Show when={usage(item())}>
-                {(value) => (
-                  <>
-                    <div
-                      data-slot="model-dialog-flyout-usage"
-                      class="cursor-default px-3 py-1.5 font-[440] tabular-nums select-none"
-                    >
+      {/* Stays in the dialog while the flyout comes and goes: adding or removing a child of the dialog restyles every row. */}
+      <div class="contents">
+        <Show when={flyoutItem()}>
+          {(item) => (
+            // Inside the dialog content, so clicks here are not outside clicks that dismiss the dialog.
+            <div
+              ref={(element) => {
+                flyoutRef = element
+                setFlyoutEl(element)
+              }}
+              data-component="menu-v2-content"
+              data-slot="model-dialog-flyout"
+              style={{
+                left: `${selectFlyoutPosition(flyout())?.left ?? 0}px`,
+                top: `${selectFlyoutPosition(flyout())?.top ?? 0}px`,
+              }}
+              onMouseEnter={() => dispatch({ type: "flyout.entered" })}
+            >
+              <MenuScroll>
+                <Show when={usage(item())}>
+                  {(value) => (
+                    <>
                       <div
-                        class="text-[13px] leading-5"
-                        classList={{
-                          "text-v2-state-fg-danger": value().reached,
-                          "text-v2-text-text-base": !value().reached,
-                        }}
+                        data-slot="model-dialog-flyout-usage"
+                        class="cursor-default px-3 py-1.5 font-[440] tabular-nums select-none"
                       >
-                        {value().label}
+                        <div
+                          class="text-[13px] leading-5"
+                          classList={{
+                            "text-v2-state-fg-danger": value().reached,
+                            "text-v2-text-text-base": !value().reached,
+                          }}
+                        >
+                          {value().label}
+                        </div>
+                        <div class="text-[12px] leading-5 text-v2-text-text-muted">
+                          {language.t("usage.footer.resets", { time: value().resets })}
+                        </div>
                       </div>
-                      <div class="text-[12px] leading-5 text-v2-text-text-muted">
-                        {language.t("usage.footer.resets", { time: value().resets })}
-                      </div>
-                    </div>
-                    <div data-slot="menu-v2-separator" role="separator" />
-                  </>
-                )}
-              </Show>
-              {/* A model without variants still lists Default, its only option. */}
-              <For each={menuOptions(item())}>
-                {(value, index) => (
-                  <div
-                    data-component="menu-v2-item"
-                    role="menuitemradio"
-                    aria-checked={controller.variant(item()) === value}
-                    data-checked={controller.variant(item()) === value ? "" : undefined}
-                    data-highlighted={menu() === index() ? "" : undefined}
-                    onMouseEnter={() => dispatch({ type: "menu.highlighted", index: index(), input: "pointer" })}
-                    onMouseLeave={() => dispatch({ type: "menu.highlighted", index: undefined, input: "pointer" })}
-                    onClick={() => activateMenu(item(), index(), "pointer")}
-                  >
-                    <span data-slot="menu-v2-item-content" class="capitalize">
-                      {value ?? language.t("common.default")}
-                    </span>
-                    <span
-                      data-slot="menu-v2-item-indicator"
+                      <div data-slot="menu-v2-separator" role="separator" />
+                    </>
+                  )}
+                </Show>
+                {/* A model without variants still lists Default, its only option. */}
+                <For each={menuOptions(item())}>
+                  {(value, index) => (
+                    <div
+                      data-component="menu-v2-item"
+                      role="menuitemradio"
+                      aria-checked={controller.variant(item()) === value}
                       data-checked={controller.variant(item()) === value ? "" : undefined}
+                      data-highlighted={menu() === index() ? "" : undefined}
+                      onMouseEnter={() => dispatch({ type: "menu.highlighted", index: index(), input: "pointer" })}
+                      onMouseLeave={() => dispatch({ type: "menu.highlighted", index: undefined, input: "pointer" })}
+                      onClick={() => activateMenu(item(), index(), "pointer")}
                     >
-                      <Icon name="check" />
-                    </span>
-                  </div>
-                )}
-              </For>
-              <div data-slot="menu-v2-separator" role="separator" />
-              <div
-                data-component="menu-v2-item"
-                role="menuitem"
-                data-highlighted={menu() === menuOptions(item()).length ? "" : undefined}
-                onMouseEnter={() =>
-                  dispatch({ type: "menu.highlighted", index: menuOptions(item()).length, input: "pointer" })
-                }
-                onMouseLeave={() => dispatch({ type: "menu.highlighted", index: undefined, input: "pointer" })}
-                onClick={() => toggleFavorite(item(), "pointer")}
-              >
-                <span data-slot="menu-v2-item-content">
-                  {favorite(item()) ? language.t("dialog.model.unfavorite") : language.t("dialog.model.favorite")}
-                </span>
-                <Keybind keys={formatKeybindParts("mod+f", language.t)} variant="neutral" class="shrink-0" />
-              </div>
-              <div data-slot="menu-v2-separator" role="separator" />
-              {/* The full name, "Workspace / Provider", where a workspace badge tells the connections apart. */}
-              <ModelDetails
-                model={item()}
-                provider={labels.workspace(item().provider) ? item().provider.name : labels.name(item().provider)}
-                compact
-                standalone
-              />
-            </MenuScroll>
-          </div>
-        )}
-      </Show>
+                      <span data-slot="menu-v2-item-content" class="capitalize">
+                        {value ?? language.t("common.default")}
+                      </span>
+                      <span
+                        data-slot="menu-v2-item-indicator"
+                        data-checked={controller.variant(item()) === value ? "" : undefined}
+                      >
+                        <Icon name="check" />
+                      </span>
+                    </div>
+                  )}
+                </For>
+                <div data-slot="menu-v2-separator" role="separator" />
+                <div
+                  data-component="menu-v2-item"
+                  role="menuitem"
+                  data-highlighted={menu() === menuOptions(item()).length ? "" : undefined}
+                  onMouseEnter={() =>
+                    dispatch({ type: "menu.highlighted", index: menuOptions(item()).length, input: "pointer" })
+                  }
+                  onMouseLeave={() => dispatch({ type: "menu.highlighted", index: undefined, input: "pointer" })}
+                  onClick={() => toggleFavorite(item(), "pointer")}
+                >
+                  <span data-slot="menu-v2-item-content">
+                    {favorite(item()) ? language.t("dialog.model.unfavorite") : language.t("dialog.model.favorite")}
+                  </span>
+                  <Keybind keys={formatKeybindParts("mod+f", language.t)} variant="neutral" class="shrink-0" />
+                </div>
+                <div data-slot="menu-v2-separator" role="separator" />
+                {/* The full name, "Workspace / Provider", where a workspace badge tells the connections apart. */}
+                <ModelDetails
+                  model={item()}
+                  provider={labels.workspace(item().provider) ? item().provider.name : labels.name(item().provider)}
+                  compact
+                  standalone
+                />
+              </MenuScroll>
+            </div>
+          )}
+        </Show>
+      </div>
     </Dialog>
   )
 }

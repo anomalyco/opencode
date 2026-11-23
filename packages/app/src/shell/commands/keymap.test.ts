@@ -118,6 +118,49 @@ test("a focus target's command wins inside the target and is absent outside it",
   expect(ran).toEqual(["prompt.stop", "dialog.close"])
 })
 
+test("chords run from any focus when their first key has a modifier, and only outside text fields otherwise", () => {
+  const ran: string[] = []
+  setup([command("comment.toggle", "mod+k mod+c", ran), command("inbox.go", "g i", ran)])
+  const field = editor()
+
+  press(field, { key: "k", ctrlKey: true })
+  press(field, { key: "c", ctrlKey: true })
+  const typed = press(field, { key: "g" })
+  press(field, { key: "i" })
+  field.blur()
+  press(document.body, { key: "g" })
+  press(document.body, { key: "i" })
+
+  expect(typed.defaultPrevented).toBe(false)
+  expect(ran).toEqual(["comment.toggle", "inbox.go"])
+})
+
+test("Escape cancels a pending chord without running a command, and Backspace takes back its last key", () => {
+  const ran: string[] = []
+
+  const app = setup([
+    command("tab.new", "ctrl+x t", ran),
+    command("tab.close", "ctrl+x w", ran),
+    command("prompt.stop", "escape", ran, { editable: true }),
+  ])
+
+  press(document.body, { key: "x", ctrlKey: true })
+  expect(
+    app.keymap
+      .getActiveKeys()
+      .map((key) => String(key.command))
+      .sort(),
+  ).toEqual(["tab.close", "tab.new"])
+  press(document.body, { key: "Escape" })
+  press(document.body, { key: "t" })
+  expect(ran).toEqual([])
+  expect(app.keymap.getPendingSequence()).toHaveLength(0)
+
+  press(document.body, { key: "x", ctrlKey: true })
+  press(document.body, { key: "Backspace" })
+  expect(app.keymap.getPendingSequence()).toHaveLength(0)
+})
+
 test.each([
   { name: "composing", init: { key: "Escape", isComposing: true } },
   { name: "Safari's composition Enter", init: { key: "Escape", keyCode: 229 } },
@@ -138,6 +181,23 @@ test("keys are left alone while keybinds are blocked", () => {
 
   press(document.body, { key: "k", ctrlKey: true })
   blocked.value = false
+  press(document.body, { key: "k", ctrlKey: true })
+
+  expect(ran).toEqual(["palette"])
+})
+
+// A page prompt in the browser pane is a modal alert dialog; the app's keys stay off inside it and work everywhere else.
+test("a modal alert dialog keeps command keys from running inside it", () => {
+  const ran: string[] = []
+  setup([command("palette", "mod+k", ran)])
+  const prompt = document.createElement("div")
+  prompt.setAttribute("role", "alertdialog")
+  prompt.setAttribute("aria-modal", "true")
+  const field = document.createElement("input")
+  prompt.append(field)
+  document.body.append(prompt)
+
+  press(field, { key: "k", ctrlKey: true })
   press(document.body, { key: "k", ctrlKey: true })
 
   expect(ran).toEqual(["palette"])

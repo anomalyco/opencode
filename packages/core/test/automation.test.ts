@@ -38,7 +38,6 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
-import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 
@@ -72,7 +71,6 @@ const enabledEntries = [
     type: "document",
     info: new Info({
       timezone: "America/New_York",
-      experimental: new ConfigExperimental.Info({ automations: true }),
     }),
   }),
 ]
@@ -80,13 +78,13 @@ const disabledEntries = [
   new Document({
     type: "document",
     info: new Info({
-      experimental: new ConfigExperimental.Info({ automations: false }),
+      automations: false,
     }),
   }),
 ]
 const enabled = Config.testLayer(enabledEntries)
 const disabled = Config.testLayer(disabledEntries)
-/** A location whose flag the test turns on, counting every config read. */
+/** A location whose config the test changes, counting every config read. */
 const toggle = { on: false, reads: 0 }
 const toggled = Layer.succeed(
   Config.Service,
@@ -403,7 +401,9 @@ describe("Automation", () => {
       expect((yield* automations.list({ projectID: (yield* creator).projectID })).map((item) => item.id)).toEqual([
         automation.id,
       ])
-      expect((yield* automations.list({ sessionID: otherID })).map((item) => item.id)).toEqual([])
+      expect(yield* Effect.flip(automations.list({ sessionID: otherID }))).toMatchObject({
+        _tag: "Session.NotFoundError",
+      })
 
       expect((yield* automations.pause(automation.id)).status).toBe("paused")
       yield* TestClock.adjust("150 seconds")
@@ -640,6 +640,16 @@ describe("Automation", () => {
         yield* Effect.flip(
           automations.create({
             name: "x",
+            directory: enabledDirectory,
+            trigger: every("1 hour"),
+            action: { type: "shell", command: "echo x" },
+          }),
+        ),
+      ).toMatchObject({ reason: "A shell action needs a session" })
+      expect(
+        yield* Effect.flip(
+          automations.create({
+            name: "x",
             directory: "relative",
             trigger: every("1 hour"),
             action: { type: "prompt", prompt: "x", to: { session: target } },
@@ -856,7 +866,7 @@ describe("Automation", () => {
     }),
   )
 
-  it.effect("rejects creation when experimental.automations is off", () =>
+  it.effect("rejects creation when automations is false", () =>
     Effect.gen(function* () {
       const automations = yield* setup(disabledDirectory)
       expect(
@@ -869,7 +879,37 @@ describe("Automation", () => {
     }),
   )
 
-  it.effect("rechecks hourly while its location has the flag off, then catches up once it is on", () =>
+  it.effect("hides and refuses automations while their location has automations off", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup(toggleDirectory)
+      toggle.on = true
+      const { id } = yield* automations.create({
+        sessionID,
+        name: "poll",
+        trigger: every("1 minute"),
+        action: prompt("poll"),
+      })
+      expect((yield* automations.list({ directory: toggleDirectory })).map((item) => item.id)).toEqual([id])
+      expect(yield* Effect.flip(automations.list({ directory: "relative" }))).toMatchObject({
+        _tag: "Automation.InvalidError",
+      })
+
+      toggle.on = false
+      expect(yield* automations.list()).toEqual([])
+      expect(yield* Effect.flip(automations.list({ directory: toggleDirectory }))).toMatchObject({
+        _tag: "Automation.DisabledError",
+      })
+      expect(yield* Effect.flip(automations.list({ sessionID }))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* Effect.flip(automations.pause(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* Effect.flip(automations.remove(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+
+      toggle.on = true
+      yield* automations.remove(id)
+      expect(yield* automations.list()).toEqual([])
+    }),
+  )
+
+  it.effect("rechecks hourly while automations are disabled in its location, then catches up when enabled", () =>
     Effect.gen(function* () {
       const automations = yield* setup(toggleDirectory)
       toggle.on = true
@@ -883,17 +923,23 @@ describe("Automation", () => {
       const before = toggle.reads
       yield* TestClock.adjust("1 minute")
       yield* automations.tick
-      expect(yield* automations.get(id)).toMatchObject({ status: "active", runCount: 0, lastOutcome: "disabled" })
+      // Callers can't read an automation while its location has automations off, so read the row.
+      const { db } = yield* Database.Service
+      expect(
+        yield* db.select().from(AutomationTable).where(eq(AutomationTable.id, id)).get().pipe(Effect.orDie),
+      ).toMatchObject({ status: "active", run_count: 0, last_outcome: "disabled" })
+      expect(yield* Effect.flip(automations.get(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* automations.list()).toEqual([])
       expect(yield* pendingIDs).toEqual([])
       const reads = toggle.reads
       expect(reads).toBeGreaterThan(before)
 
-      // Within the hour the location is not booted to read the flag again.
+      // Within the hour the location is not booted to read config again.
       yield* TestClock.adjust("59 minutes")
       yield* automations.tick
       expect(toggle.reads).toBe(reads)
 
-      // Once the flag is on and the hour has passed, the missed slot runs once, late, and keeps the phase.
+      // Once automations are enabled and the hour has passed, the missed slot runs once, late, and keeps the phase.
       toggle.on = true
       yield* TestClock.adjust("2 minutes")
       yield* automations.tick
@@ -1754,7 +1800,7 @@ describe("Automation", () => {
       }),
     )
 
-    it.effect("rejects dynamic tool access, unknown tools, shell, recursive automation tools and denied permissions", () =>
+    it.effect("rejects dynamic tool access, unknown tools, recursive automation tools and denied permissions", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
         const bad = (text: string) =>
@@ -1765,11 +1811,8 @@ describe("Automation", () => {
         expect(yield* bad("return await tools.slack.missing({})")).toMatchObject({
           reason: "Unknown Code Mode tool: slack.missing",
         })
-        expect(yield* bad('await tools.shell({ command: "pwd" })')).toMatchObject({
-          reason: "Tool shell cannot be used inside an automation",
-        })
-        expect(yield* bad("return await tools.opencode.automation_create({})")).toMatchObject({
-          reason: "Tool opencode.automation_create cannot be used inside an automation",
+        expect(yield* bad("return await tools.automation.create({})")).toMatchObject({
+          reason: "Tool automation.create cannot be used inside an automation",
         })
         expect(
           yield* Effect.flip(

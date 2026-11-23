@@ -1076,7 +1076,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<subagent>` report to the parent's inbox and wakes the parent unless it has a staged revert."
+                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<background-result kind=\"subagent\">` report to the parent's inbox and wakes the parent unless it has a staged revert."
                   },
                   "title": {
                     "anyOf": [
@@ -5506,16 +5506,6 @@
               }
             }
           },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
           "404": {
             "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError",
             "content": {
@@ -5567,7 +5557,7 @@
             }
           }
         },
-        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished videos as blobs; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished videos as blobs; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Experimental: may change without compatibility guarantees.",
         "summary": "Create a video generation",
         "requestBody": {
           "content": {
@@ -5627,16 +5617,6 @@
               }
             }
           },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
           "404": {
             "description": "VideoNotFoundError | LocationNotFoundError",
             "content": {
@@ -5655,7 +5635,7 @@
             }
           }
         },
-        "description": "Read a video job: running, completed with its videos' blobs, or error with a reason. Jobs survive a server restart, which resumes polling running ones. A job is not found 24 hours after it finished, or once none of its blobs remain. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "description": "Read a video job: running, completed with its videos' blobs, or error with a reason. Jobs survive a server restart, which resumes polling running ones. A job is not found 24 hours after it finished, or once none of its blobs remain. Experimental: may change without compatibility guarantees.",
         "summary": "Read a video generation"
       }
     },
@@ -12337,7 +12317,7 @@
             }
           }
         },
-        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Blobs are kept until removed. Experimental: may change without compatibility guarantees.",
+        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. A blob is deleted a week after it was stored. Experimental: may change without compatibility guarantees.",
         "summary": "Read a blob"
       }
     },
@@ -12406,7 +12386,7 @@
             }
           }
         },
-        "description": "Create an automation that sends a prompt or runs a Code Mode program at a time, every interval, or on a cron. Creating an MCP event watch requires the automation_create tool in a local session; a session ID over HTTP is not a watch authorization. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Create an automation that sends a prompt, runs a Code Mode program, or runs a shell command at a time, every interval, or on a cron. Creating an MCP event watch requires the automation_create tool in a local session; a session ID over HTTP is not a watch authorization. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "Create automation",
         "requestBody": {
           "content": {
@@ -12513,7 +12493,7 @@
             }
           }
         },
-        "description": "List automations, oldest first. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "List automations, oldest first. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "List automations"
       }
     },
@@ -12591,7 +12571,7 @@
             }
           }
         },
-        "description": "Read one automation. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Read one automation. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "Get automation"
       },
       "delete": {
@@ -12653,7 +12633,7 @@
             }
           }
         },
-        "description": "Delete an automation. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Delete an automation. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "Delete automation"
       }
     },
@@ -12731,7 +12711,7 @@
             }
           }
         },
-        "description": "Stop an automation from running until it is resumed. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Stop an automation from running until it is resumed. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "Pause automation"
       }
     },
@@ -12809,7 +12789,7 @@
             }
           }
         },
-        "description": "Resume a paused automation. A missed `at` runs once; repeating timers resume at their next slot. Event watches request replay from their saved cursor. Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees.",
+        "description": "Resume a paused automation. A missed `at` runs once; repeating timers resume at their next slot. Event watches request replay from their saved cursor. Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access.",
         "summary": "Resume automation"
       }
     },
@@ -13792,6 +13772,262 @@
         },
         "description": "Cancel a running background job, interrupting the work it started. Cancelling a job that already finished does nothing. Experimental: may change without compatibility guarantees.",
         "summary": "Cancel background job"
+      }
+    },
+    "/api/experimental/machine/link": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.machine.link",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Upgrade to a WebSocket that carries a machine's link to this server: binary messages only, each at most 65,535 bytes. It takes no server password. The link's own handshake, which starts with the machine's first message, is the only way in: it admits a key this server has paired or a valid join string, and closes the socket on anything else without saying why. Behind the machines flag; without it the route does not exist. Experimental: may change without compatibility guarantees.",
+        "summary": "Connect a machine",
+        "x-websocket": true
+      }
+    },
+    "/api/experimental/machine": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.machine.list",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Machine.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List known machines and whether each is paired and online. Behind the machines flag. Experimental: may change without compatibility guarantees.",
+        "summary": "List machines"
+      },
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.machine.add",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Machine.Invite"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MachineNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Add a machine by name if it does not exist, then create a single-use join string carrying the given reach addresses. Behind the machines flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Add or invite a machine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Machine.AddPayload"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/machine/{name}": {
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.machine.remove",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MachineNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Forget a machine by name, closing any live link and revoking its key. Behind the machines flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Remove a machine"
       }
     },
     "/api/shell": {
@@ -16370,6 +16606,9 @@
           },
           {
             "$ref": "#/components/schemas/Automation.Action.Code"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.Action.Shell"
           }
         ]
       },
@@ -16405,6 +16644,21 @@
         "required": ["type", "prompt", "to"],
         "additionalProperties": false
       },
+      "Automation.Action.Shell": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["type", "command"],
+        "additionalProperties": false
+      },
       "Automation.ActionInput": {
         "anyOf": [
           {
@@ -16412,9 +16666,12 @@
           },
           {
             "$ref": "#/components/schemas/Automation.CodeActionInput"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.ShellActionInput"
           }
         ],
-        "description": "What it does: { type: \"prompt\", prompt, to? } sends a prompt; { type: \"code\", code, args? } runs Code Mode with no model."
+        "description": "What it does: { type: \"prompt\", prompt, to? } sends a prompt; { type: \"code\", code, args? } runs Code Mode; { type: \"shell\", command } runs a fixed shell command."
       },
       "Automation.CodeActionInput": {
         "type": "object",
@@ -16426,7 +16683,7 @@
           "code": {
             "type": "string",
             "minLength": 1,
-            "description": "Code Mode JavaScript run on each trigger with no model (no fetch; 30s, 20 tool calls, 32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs. Event triggers also receive input.event = { id, timestamp, data }; data follows the event type's payloadSchema. Return nothing, or { state?, done?, send? }. JSON state is kept for the next run; done: true stops. lastOutput shows the delivery target and any logs. Return at most one send per run. { send: { prompt } } steers the creating session; { send: { prompt, to: { subagent } } } starts a permitted child that does not report back. No session IDs. Omit send to stay quiet. A rejected send commits neither state nor done. Example code string: if (runs < 2) return; return { done: true, send: { prompt: \"Three checks elapsed. Review the build.\" } }"
+            "description": "Code Mode JavaScript run on each trigger with no model (32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs. Event triggers also receive input.event = { id, timestamp, data }; data follows the event type's payloadSchema. Return nothing, or { state?, done?, send? }. JSON state is kept for the next run; done: true stops. lastOutput shows the delivery target and any logs. Return at most one send per run. { send: { prompt } } steers the creating session; { send: { prompt, to: { subagent } } } starts a permitted child that does not report back. No session IDs. Omit send to stay quiet. A rejected send commits neither state nor done. Example code string: if (runs < 2) return; return { done: true, send: { prompt: \"Three checks elapsed. Review the build.\" } }"
           },
           "args": {}
         },
@@ -16560,6 +16817,22 @@
         "required": ["type", "prompt"],
         "additionalProperties": false
       },
+      "Automation.ShellActionInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The fixed shell command to run on each trigger without a model."
+          }
+        },
+        "required": ["type", "command"],
+        "additionalProperties": false
+      },
       "Automation.Status": {
         "type": "string",
         "enum": ["active", "paused", "done"]
@@ -16609,7 +16882,7 @@
             "$ref": "#/components/schemas/Automation.Trigger.Event"
           }
         ],
-        "description": "When it runs: { type: \"at\", at: \"in 20 minutes\" | \"2026-10-27T09:00\" }, { type: \"every\", every: \"1 hour\" } or { type: \"cron\", cron: \"0 9 * * 1-5\" }, each with an optional tz. Or { type: \"event\", server, event, args? } for a connected MCP server advertising push delivery (requires mcp_events)."
+        "description": "When it runs: { type: \"at\", at: \"in 20 minutes\" | \"2026-10-27T09:00\" }, { type: \"every\", every: \"1 hour\" } or { type: \"cron\", cron: \"0 9 * * 1-5\" }, each with an optional tz. Or { type: \"event\", server, event, args? } for a connected MCP server advertising push delivery."
       },
       "Automation.Trigger.At": {
         "type": "object",
@@ -17063,6 +17336,9 @@
           "timezone": {
             "type": "string"
           },
+          "automations": {
+            "type": "boolean"
+          },
           "permissions": {
             "$ref": "#/components/schemas/Permission.Ruleset"
           },
@@ -17374,10 +17650,34 @@
               "media_blob": {
                 "type": "boolean"
               },
-              "automations": {
+              "artifacts": {
                 "type": "boolean"
               },
-              "artifacts": {
+              "console_watches": {
+                "type": "boolean"
+              },
+              "recommended_api": {
+                "type": "boolean"
+              },
+              "model_speeds": {
+                "type": "boolean"
+              },
+              "full_codemode": {
+                "type": "boolean"
+              },
+              "machines": {
+                "type": "boolean"
+              },
+              "home_memory": {
+                "type": "boolean"
+              },
+              "project_overlay": {
+                "type": "boolean"
+              },
+              "opencode_api": {
+                "type": "boolean"
+              },
+              "sqlite_fts": {
                 "type": "boolean"
               },
               "video_generate": {
@@ -17419,18 +17719,6 @@
                     "additionalProperties": false
                   }
                 ]
-              },
-              "console_watches": {
-                "type": "boolean"
-              },
-              "mcp_events": {
-                "type": "boolean"
-              },
-              "full_codemode": {
-                "type": "boolean"
-              },
-              "schedules": {
-                "type": "boolean"
               },
               "part_rows": {
                 "type": "boolean"
@@ -21153,6 +21441,150 @@
         "required": ["_tag", "location", "message"],
         "additionalProperties": false
       },
+      "Machine.AddPayload": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "reach": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Machine.Reach"
+            }
+          },
+          "replace": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["name", "reach"],
+        "additionalProperties": false
+      },
+      "Machine.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "paired": {
+            "type": "boolean"
+          },
+          "os": {
+            "type": "string"
+          },
+          "arch": {
+            "type": "string"
+          },
+          "connection": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["websocket", "iroh"]
+              },
+              "path": {
+                "type": "string",
+                "enum": ["direct", "relayed"]
+              },
+              "rtt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "online", "paired"],
+        "additionalProperties": false
+      },
+      "Machine.Invite": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "join": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "reach": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Machine.Reach"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["iroh"]
+                    }
+                  },
+                  "required": ["type"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": ["name", "join", "expires", "reach"],
+        "additionalProperties": false
+      },
+      "Machine.Reach": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["url"]
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "url"],
+        "additionalProperties": false
+      },
+      "MachineNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["MachineNotFoundError"]
+          },
+          "machine": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "machine", "message"],
+        "additionalProperties": false
+      },
       "Mcp.LocalConfigEncoded": {
         "type": "object",
         "properties": {
@@ -21241,7 +21673,7 @@
       "Mcp.Protocol": {
         "type": "string",
         "enum": ["legacy", "auto", "2026-07-28"],
-        "description": "MCP protocol negotiation. \"legacy\" (default) opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. \"auto\" probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. \"2026-07-28\" requires that revision and fails otherwise."
+        "description": "MCP protocol negotiation. \"auto\" (default) probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. \"legacy\" opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. \"2026-07-28\" requires that revision and fails otherwise."
       },
       "Mcp.RemoteConfigEncoded": {
         "type": "object",
@@ -21674,6 +22106,15 @@
               "$ref": "#/components/schemas/Model.Variant"
             }
           },
+          "experimental": {
+            "type": "object",
+            "properties": {
+              "speed": {
+                "$ref": "#/components/schemas/Model.Speed"
+              }
+            },
+            "additionalProperties": false
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -21789,6 +22230,22 @@
             "additionalProperties": {}
           }
         ]
+      },
+      "Model.Speed": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "faster": {
+            "type": "boolean"
+          }
+        },
+        "required": ["base", "id", "faster"],
+        "additionalProperties": false
       },
       "Model.Type": {
         "anyOf": [
@@ -26410,6 +26867,12 @@
           "model": {
             "type": "string"
           },
+          "name": {
+            "type": "string"
+          },
+          "engine": {
+            "type": "string"
+          },
           "provider": {
             "type": "string"
           },
@@ -26423,7 +26886,7 @@
             "type": "boolean"
           }
         },
-        "required": ["model", "provider", "transports", "available"],
+        "required": ["model", "name", "engine", "provider", "transports", "available"],
         "additionalProperties": false
       },
       "VoiceModelsResponse": {

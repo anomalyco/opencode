@@ -918,7 +918,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Anslut",
   "provider.connect.breadcrumb.label": "Anslutningssteg",
   "provider.connect.methods.description": "Välj hur {{provider}} ska anslutas.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Försök igen",
   "provider.connect.console.serviceKeyDescription":

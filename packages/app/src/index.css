@@ -118,7 +118,8 @@
   }
 
   /* Like the composer toolbar, fade only clipped content without reserving layout space.
-     The fade contracts as overflow clears; the second mask preserves the header divider. */
+     The fade contracts as overflow clears; the second mask preserves the header divider.
+     The third keeps the review toggle's slot at the bar's end. */
   #review-panel .session-review-v2-tabs-bar {
     --session-review-header-fade: clamp(0px, calc(100% - 100cqi), 24px);
     mask-image:
@@ -127,7 +128,7 @@
         #000 calc(100cqi - 40px - var(--session-review-header-fade)),
         transparent calc(100cqi - 40px)
       ),
-      linear-gradient(to top, #000 1px, transparent 1px);
+      linear-gradient(to top, #000 1px, transparent 1px), linear-gradient(to left, #000 40px, transparent 40px);
 
     &:dir(rtl) {
       mask-image:
@@ -136,7 +137,7 @@
           #000 calc(100cqi - 40px - var(--session-review-header-fade)),
           transparent calc(100cqi - 40px)
         ),
-        linear-gradient(to top, #000 1px, transparent 1px);
+        linear-gradient(to top, #000 1px, transparent 1px), linear-gradient(to right, #000 40px, transparent 40px);
     }
   }
 

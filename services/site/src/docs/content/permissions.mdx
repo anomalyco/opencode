@@ -119,7 +119,7 @@ currently use these actions and resources:
 | `question`           | `*`                                                                         |
 | `webfetch`           | Requested URL                                                               |
 | `websearch`          | Search query                                                                |
-| `experimental_image_generate` | Selected image model as `providerID/modelID`, plus `#variant` when set |
+| `generate_image` | Selected image model as `providerID/modelID`, plus `#variant` when set |
 | `external_directory` | Canonical external directory boundary, normally ending in `/*`              |
 | `<server>_<tool>`    | `*` for an MCP tool; unsupported characters in both names become `_`        |
 | `opencode_list_mcp_resources` | MCP server name                                                    |
@@ -192,7 +192,7 @@ so authorize only trusted directory boundaries.
 
 ## Scanner
 
-Shell permission checks use OpenCode's built-in shell scanner across Bash, Zsh, POSIX `sh`, and PowerShell. A command with malformed syntax or dynamic evaluation that the scanner cannot safely analyze returns a scanner error rather than executing unverified subcommands.
+Shell permission checks use OpenCode's built-in shell scanner across Bash, Zsh, POSIX `sh`, and PowerShell. Some commands can't be safely analyzed, such as malformed syntax or dynamic evaluation like `eval`. If any `shell` deny rule applies, such a command fails with a scanner error, because its subcommands can't be checked against the deny rule. Otherwise it needs approval for the whole command as one `shell` resource and for `external_directory` `*`. Only a rule allowing every directory, or the user, can grant the second approval, and neither approval is saved as a pattern.
 
 ```jsonc
 {

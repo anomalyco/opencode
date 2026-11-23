@@ -916,7 +916,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "اتصال",
   "provider.connect.breadcrumb.label": "مراحل اتصال",
   "provider.connect.methods.description": "روش اتصال ⁨{{provider}}⁩ را انتخاب کنید.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "تلاش دوباره",
   "provider.connect.console.serviceKeyDescription": "با کلید API حساب سرویس از OpenCode Console متصل شوید.",

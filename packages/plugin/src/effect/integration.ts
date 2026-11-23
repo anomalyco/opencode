@@ -71,6 +71,8 @@ export type IntegrationOAuthMethodRegistration = {
   readonly method: IntegrationOAuthMethod
   readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  /** Signs the credential out remotely before it is removed. A failure is logged and the credential is still removed. */
+  readonly revoke?: (credential: Credential.OAuth) => Effect.Effect<void, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 export type IntegrationMethodRegistration =
