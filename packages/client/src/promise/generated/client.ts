@@ -1216,7 +1216,7 @@ export function make(options: ClientOptions) {
                   resolution: input["resolution"],
                 },
                 successStatus: 200,
-                declaredStatuses: [400, 401, 404, 503],
+                declaredStatuses: [400, 401, 404, 422, 502, 503],
                 empty: false,
               },
               requestOptions,

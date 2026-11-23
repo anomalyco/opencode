@@ -5405,11 +5405,41 @@
             }
           },
           "404": {
-            "description": "LocationNotFoundError",
+            "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ModelNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UnsupportedModelError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedModelErrorEncoded"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ProviderRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRequestErrorEncoded"
                 }
               }
             }
@@ -5425,7 +5455,7 @@
             }
           }
         },
-        "description": "Start generating or editing images with an image model using the server's base configuration and return the job's ID at once, without checking the model first. The server makes the request; an unknown model or a provider failure fails the job and stores the finished images as blobs; read the job with GET /api/experimental/generate/image/:id and each image with GET /api/experimental/blob/:id. Experimental: may change without compatibility guarantees.",
+        "description": "Start generating or editing images with an image model using the server's base configuration and return the job's ID at once. The server makes the request and stores the finished images as blobs; read the job with GET /api/experimental/generate/image/:id and each image with GET /api/experimental/blob/:id. Experimental: may change without compatibility guarantees.",
         "summary": "Create an image generation",
         "requestBody": {
           "content": {

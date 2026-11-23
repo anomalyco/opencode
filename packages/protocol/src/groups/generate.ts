@@ -62,13 +62,13 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
     HttpApiEndpoint.post("generate.image.create", "/api/experimental/generate/image", {
       payload: Generate.ImageRequest,
       success: Schema.Struct({ data: Generate.ImageRunning }).annotate({ identifier: "GenerateImageCreateResponse" }),
-      error: [InvalidRequestError, ServiceUnavailableError, LocationNotFoundError],
+      error: errors,
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "experimental.generate.image.create",
         summary: "Create an image generation",
         description:
-          "Start generating or editing images with an image model using the server's base configuration and return the job's ID at once, without checking the model first. The server makes the request; an unknown model or a provider failure fails the job and stores the finished images as blobs; read the job with GET /api/experimental/generate/image/:id and each image with GET /api/experimental/blob/:id. Experimental: may change without compatibility guarantees.",
+          "Start generating or editing images with an image model using the server's base configuration and return the job's ID at once. The server makes the request and stores the finished images as blobs; read the job with GET /api/experimental/generate/image/:id and each image with GET /api/experimental/blob/:id. Experimental: may change without compatibility guarantees.",
       }),
     ),
   )

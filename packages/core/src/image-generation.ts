@@ -44,14 +44,8 @@ export interface StartOptions {
 }
 
 export interface Interface {
-  /**
-   * Returns at once; this server makes the request and stores the images as blobs. A request that fails, such as for an
-   * unknown model, fails the job. Fails only where blobs can't be stored.
-   */
-  readonly start: (
-    input: ImageRequest,
-    options?: StartOptions,
-  ) => Effect.Effect<ImageRunning, Generate.UnavailableError>
+  /** Returns once the model is known to make images; this server then makes the request and stores them as blobs. */
+  readonly start: (input: ImageRequest, options?: StartOptions) => Effect.Effect<ImageRunning, Generate.Error>
   readonly get: (id: ImageID) => Effect.Effect<ImageJob, NotFoundError>
   /** Waits until the job completes or fails, whichever server reads it. */
   readonly wait: (id: ImageID) => Effect.Effect<ImageCompleted | ImageError, NotFoundError>
@@ -178,6 +172,7 @@ const layer = Layer.effect(
 
     const start = Effect.fn("ImageGeneration.start")(function* (input: ImageRequest, options?: StartOptions) {
       const location = options?.location ?? base
+      yield* generate(location, (service) => service.checkImage(input.model))
       const id = ImageID.create()
       const job = {
         status: "running",

@@ -120,6 +120,8 @@ export type Error =
 export interface Interface {
   readonly text: (input: TextInput) => Effect.Effect<string, Error>
   readonly image: (input: ImageRequest) => Effect.Effect<ImageResult, Error>
+  /** Fails like `image` would when the model can't make images, without making any. */
+  readonly checkImage: (model: Model.Ref) => Effect.Effect<void, Error>
   readonly decisions: (input: DecisionRequest) => Effect.Effect<DecisionResult, Error>
   /**
    * A video is a job: `start` submits it and returns the provider's job ID, which `status`, `result` and `cancel` read.
@@ -207,11 +209,16 @@ export const layer = Layer.effect(
       })
     })
 
-    const image = Effect.fn("Generate.image")(function* (input: ImageRequest) {
+    const imageModel = Effect.fnUntraced(function* (ref: Model.Ref) {
       const model = yield* resolver
-        .resolveImage(input.model)
-        .pipe(Effect.mapError((error) => resolutionError(input.model, "image", error)))
-      if (!model) return yield* missing(input.model, "image")
+        .resolveImage(ref)
+        .pipe(Effect.mapError((error) => resolutionError(ref, "image", error)))
+      if (!model) return yield* missing(ref, "image")
+      return model
+    })
+
+    const image = Effect.fn("Generate.image")(function* (input: ImageRequest) {
+      const model = yield* imageModel(input.model)
       // `ai.image.generate` turns an invalid request into a typed error; building it with `ai.image.request` would throw.
       const response = yield* ai.image
         .generate({
@@ -325,6 +332,7 @@ export const layer = Layer.effect(
     return Service.of({
       text: (input) => credentials(runText(input)),
       image: (input) => credentials(image(input)),
+      checkImage: (model) => credentials(imageModel(model).pipe(Effect.asVoid)),
       decisions: (input) => credentials(decisions(input)),
       video: {
         // Submitting is paid and not idempotent, so it is never retried.

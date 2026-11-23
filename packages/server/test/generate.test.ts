@@ -25,6 +25,7 @@ const generate = makeLocationNode({
             ),
           ),
         image: () => Effect.die("unused"),
+        checkImage: () => Effect.void,
         decisions: () => Effect.die("unused"),
         video: {
           start: () => Effect.die("unused"),
@@ -78,7 +79,7 @@ it.live("uses base configuration without depending on process.cwd()", () =>
   }),
 )
 
-it.live("rejects unknown decision models and duplicate question names", () =>
+it.live("rejects unknown image and decision models and duplicate question names", () =>
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-generate-media-")))
     const handler = yield* ServerFetch.make({
@@ -99,13 +100,14 @@ it.live("rejects unknown decision models and duplicate question names", () =>
           }),
         ),
       )
-    const unknown = yield* post("decisions", {
-      model,
-      input: [{ type: "text", text: "I was charged twice." }],
-      questions: [question],
-    })
-    expect(unknown.status).toBe(404)
-    expect(yield* Effect.promise(() => unknown.json())).toMatchObject({ _tag: "ModelNotFoundError" })
+    for (const [path, body] of [
+      ["image", { model, prompt: "a red square" }],
+      ["decisions", { model, input: [{ type: "text", text: "I was charged twice." }], questions: [question] }],
+    ] as const) {
+      const response = yield* post(path, body)
+      expect(response.status).toBe(404)
+      expect(yield* Effect.promise(() => response.json())).toMatchObject({ _tag: "ModelNotFoundError" })
+    }
     const duplicate = yield* post("decisions", { model, input: [], questions: [question, question] })
     expect(duplicate.status).toBe(400)
   }),
