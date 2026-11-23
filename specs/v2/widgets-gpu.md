@@ -259,11 +259,11 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
 - **Client errors** (not reported, logged in dev mode): no WebGPU, device creation failure, a driver crash or reset,
   running out of GPU memory under the limits. The canvas shows its placeholder.
 - **GPU hang.** A batch, or a `wgsl` shader frame, whose GPU work is still unfinished 1 s after its submit stops every
-  canvas it draws into (a pass's color attachment `view` or `resolveTarget`) for the rest of the run, as an error
-  would: a client error with exactly this message, `the GPU work took over 1 s; the canvas is stopped`, and the
-  placeholder shows. It applies first, whatever the shader's 50 ms rule has counted (`widgets.md`, GPU canvases). (On
-  macOS a shader running for seconds trips the GPU watchdog, which may blame another queue, the app's own among them,
-  and lose the device.)
+  canvas it draws into (a pass's color attachment `view` or `resolveTarget`; drawing into none, every GPU canvas of the
+  widget, as Which canvases stop says) for the rest of the run, as an error would: a client error with exactly this
+  message, `the GPU work took over 1 s; the canvas is stopped`, and the placeholder shows. It applies first, whatever
+  the shader's 50 ms rule has counted (`widgets.md`, GPU canvases). (On macOS a shader running for seconds trips the
+  GPU watchdog, which may blame another queue, the app's own among them, and lose the device.)
 - **Device loss.** When the client loses its device (a reset, the app backgrounded long enough, a live program
   restored from a snapshot), it sends `{ type: "gpu", lost: reason, message? }`; the prelude resolves `device.lost` with
   `{ reason, message }` (`message` `""` when absent) and every handle is gone. While the program has read a live
