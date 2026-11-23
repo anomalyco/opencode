@@ -16,6 +16,7 @@ import { Selection } from "./util/selection"
 import {
   CliRenderEvents,
   createCliRenderer,
+  getTreeSitterClient,
   MouseButton,
   type CliRenderer,
   type CliRendererConfig,
@@ -516,12 +517,28 @@ function App() {
   const clipboard = useClipboard()
   const terminalEnvironment = useTuiTerminalEnvironment()
   let paletteTimer: ReturnType<typeof setTimeout> | undefined
+  let disposed = false
+  // OpenTUI draws Markdown prose natively, so the first thought or code fence would start the tree-sitter worker
+  // and load the markdown grammars itself. Do that once the first frame is out, off the main thread.
+  const warmHighlighter = async () => {
+    if (disposed) return
+    const client = getTreeSitterClient()
+    await client.initialize()
+    for (const filetype of ["markdown", "markdown_inline"]) {
+      if (disposed) return
+      await client.preloadParser(filetype)
+    }
+  }
   const afterFrame = () => {
     // The native writer can still be flushing the frame when FRAME fires. Keep OSC probes behind visible app output.
-    paletteTimer = setTimeout(afterPaint, 50)
+    paletteTimer = setTimeout(() => {
+      afterPaint()
+      warmHighlighter().catch(() => {})
+    }, 50)
   }
   onMount(() => renderer.once(CliRenderEvents.FRAME, afterFrame))
   onCleanup(() => {
+    disposed = true
     renderer.off(CliRenderEvents.FRAME, afterFrame)
     if (paletteTimer) clearTimeout(paletteTimer)
   })
@@ -1019,7 +1036,7 @@ function App() {
         name: "provider.connect",
         title: "Connect an integration",
         suggested: !connected(),
-        slash: { name: "connect" },
+        slash: { name: "connect", aliases: ["login", "auth"] },
         run: () => {
           dialog.replace(() => (
             <DialogIntegration

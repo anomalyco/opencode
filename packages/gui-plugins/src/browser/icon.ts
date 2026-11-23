@@ -1,4 +1,5 @@
 import { nativeImage } from "electron"
+import { ICON_SIZE, iconImage } from "./icon-image"
 import { MAX_ICON_URL } from "./ipc"
 import type { BrowserNetwork } from "./network"
 
@@ -6,7 +7,7 @@ type Fetched = { mime: string; data: Buffer }
 
 /**
  * The first of a page's icon candidates that loads, as a data URL small enough to report and store. An SVG stays as
- * it is; any other format is redrawn as a PNG of at most 32px, which also drops anything that is not an image. Never
+ * it is; a PNG, a JPEG or an `.ico` file is redrawn as a PNG of at most 32px, and anything else is no icon. Never
  * rejects: a candidate that fails falls through to the next.
  */
 export function loadIcon(candidates: readonly string[], network: BrowserNetwork | null) {
@@ -52,16 +53,18 @@ function encode(fetched: Fetched) {
     return url.length <= MAX_ICON_URL ? url : undefined
   }
 
-  const image = nativeImage.createFromBuffer(fetched.data)
+  // `nativeImage` reads PNG and JPEG only, and most sites serve an .ico file.
+  const file = iconImage(fetched.data)
+  const image = file && nativeImage.createFromBuffer(file)
 
-  if (image.isEmpty()) return
+  if (!image || image.isEmpty()) return
   const size = image.getSize()
 
   // The longer side fits 32px; resizing one side keeps the shape.
   const fitted =
-    Math.max(size.width, size.height) <= 32
+    Math.max(size.width, size.height) <= ICON_SIZE
       ? image
-      : image.resize(size.width >= size.height ? { width: 32, quality: "best" } : { height: 32, quality: "best" })
+      : image.resize(size.width >= size.height ? { width: ICON_SIZE, quality: "best" } : { height: ICON_SIZE, quality: "best" })
 
   const url = fitted.toDataURL()
 

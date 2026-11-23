@@ -316,7 +316,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     lowerToolChanges: toolChangeLowering(layout.head.length > 0, custom),
   })
   return {
-    ...conversation,
+    model: conversation.model,
     input: [...layout.head, ...conversation.input],
     ...generation,
     ...Cache.openAIRequestTTL(requestTTL(request)),

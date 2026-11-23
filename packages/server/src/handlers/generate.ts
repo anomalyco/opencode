@@ -1,11 +1,9 @@
-import { Flag } from "@opencode/core/flag"
 import { Generate } from "@opencode/core/generate"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import {
-  ForbiddenError,
   VideoNotFoundError,
   InvalidRequestError,
   ModelNotFoundError,
@@ -19,7 +17,7 @@ import { Model } from "@opencode/schema/model"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
-import { awaitPlugins, locationErrors } from "../location"
+import { locationErrors } from "../location"
 
 export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (handlers) =>
   Effect.gen(function* () {
@@ -29,7 +27,6 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     const services = locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))
     const text = Effect.fn("server.generate.text")(
       function* (request: { readonly payload: { readonly prompt: string; readonly model?: Model.Ref } }) {
-        yield* awaitPlugins
         const generate = yield* Generate.Service
         return { data: { text: yield* generate.text(request.payload).pipe(Effect.mapError(generateError)) } }
       },
@@ -38,7 +35,6 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     )
     const image = Effect.fn("server.generate.image")(
       function* (request: { readonly payload: ImageRequest }) {
-        yield* awaitPlugins
         const generate = yield* Generate.Service
         return { data: yield* generate.image(request.payload).pipe(Effect.mapError(generateError)) }
       },
@@ -53,30 +49,23 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
             message: "Decision question names must be unique",
             field: "questions",
           })
-        yield* awaitPlugins
         const generate = yield* Generate.Service
         return { data: yield* generate.decisions(request.payload).pipe(Effect.mapError(generateError)) }
       },
       Effect.provide(services),
       locationErrors,
     )
-    // The flag is read from the same base configuration generation runs on.
-    const videoEnabled = Effect.gen(function* () {
-      if (yield* Flag.enabled("video_generate")) return
-      return yield* new ForbiddenError({ message: "Video generation is disabled; enable experimental.video_generate" })
-    })
     const videoCreate = Effect.fn("server.generate.video.create")(
       function* (request: { readonly payload: VideoRequest }) {
-        yield* videoEnabled
-        yield* awaitPlugins
-        return { data: yield* videos.start(request.payload).pipe(Effect.mapError(generateError)) }
+        return {
+          data: yield* videos.start(Generate.videoInput(request.payload)).pipe(Effect.mapError(generateError)),
+        }
       },
       Effect.provide(services),
       locationErrors,
     )
     const videoGet = Effect.fn("server.generate.video.get")(
       function* (request: { readonly params: { readonly id: VideoID } }) {
-        yield* videoEnabled
         const job = yield* videos
           .get(request.params.id)
           .pipe(Effect.mapError((error) => new VideoNotFoundError({ videoID: error.id, message: error.message })))

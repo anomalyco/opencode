@@ -1,0 +1,6 @@
+# The quick start in Luau: a command and a footer line that runs it.
+id = "example.luau-hello"
+name = "Hello"
+version = "0.1.0"
+contract = "2.0"
+description = "A command in the palette, and a line in the home footer that runs it"

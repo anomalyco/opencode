@@ -9,6 +9,9 @@ export const FLYOUT_AIM_TIMEOUT_MS = 300
 /** How long after a flyout closes that the next row's flyout still opens at once. */
 export const FLYOUT_WARM_MS = 300
 
+/** How long the arrow keys rest on a row before the flyout moves to it, so holding one down does not flicker. */
+export const FLYOUT_KEYBOARD_DELAY_MS = 100
+
 export const FLYOUT_WIDTH_PX = 160
 
 export const FLYOUT_GAP_PX = 6
@@ -27,23 +30,41 @@ export type FlyoutRect = {
 /** Where the pointer last rested on the flyout's row: the apex of the triangle that keeps the flyout open. */
 type Apex = { x: number; y: number }
 
+/**
+ * What drives the flyout. The keyboard's flyout follows the highlight and ignores where the pointer goes; the
+ * pointer's closes when the pointer leaves it behind.
+ */
+type FlyoutInput = "keyboard" | "pointer"
+
 export type DialogFlyoutState =
   /** `input` is what moved the highlight last; `warm` holds for a moment after a flyout closes under the pointer. */
   | {
       readonly status: "closed"
       readonly attempt: number
-      readonly input: "keyboard" | "pointer"
+      readonly input: FlyoutInput
       readonly warm: boolean
     }
-  /** The pointer rests on row `id`; its flyout opens after the delay. */
-  | { readonly status: "opening"; readonly attempt: number; readonly id: string; readonly apex: Apex }
-  /** `position` is undefined only until the driver measures the row, within the same dispatch. */
+  /** The highlight rests on row `id`; its flyout opens after the delay. `apex` is the pointer's, if it drives. */
+  | {
+      readonly status: "opening"
+      readonly attempt: number
+      readonly id: string
+      readonly input: FlyoutInput
+      readonly apex: Apex | undefined
+    }
+  /**
+   * `position` is undefined only until the driver measures the row (coalesced per microtask) and refines it when the
+   * flyout lays out. `menu` is the highlighted item in the flyout and what moved there: the keys belong to the menu
+   * only once the arrows entered it.
+   */
   | {
       readonly status: "open"
       readonly attempt: number
       readonly id: string
       readonly position: FlyoutPosition | undefined
-      readonly apex: Apex
+      readonly input: FlyoutInput
+      readonly apex: Apex | undefined
+      readonly menu: { readonly index: number; readonly input: FlyoutInput } | undefined
     }
   /** The pointer crossed onto row `target` on its way to the flyout; the flyout stays on `id` while it keeps moving. */
   | {
@@ -57,8 +78,17 @@ export type DialogFlyoutState =
   | { readonly status: "disposed" }
 
 export type DialogFlyoutEvent =
-  /** Arrow keys, typing, a favorite toggled or a variant staged from the keyboard. */
-  | { readonly type: "keyboard" }
+  /**
+   * Arrow keys, typing or a favorite toggled; `id` is the highlighted row as the key is pressed, and `repeat` that the
+   * key is held down.
+   */
+  | { readonly type: "keyboard"; readonly id: string | undefined; readonly repeat: boolean }
+  /** The highlight moved to row `id`. It is the keyboard's when the keyboard drives the flyout. */
+  | { readonly type: "highlighted"; readonly id: string | undefined }
+  /** The forward arrow moved into row `id`'s flyout, onto item `index`. */
+  | { readonly type: "menu.entered"; readonly id: string; readonly index: number }
+  /** The arrow keys or the pointer moved within the flyout; undefined leaves it for the rows. */
+  | { readonly type: "menu.highlighted"; readonly index: number | undefined; readonly input: FlyoutInput }
   | { readonly type: "wheel" }
   | {
       readonly type: "row.moved"
@@ -123,16 +153,74 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
     case "disposed":
       return { state: { status: "disposed" }, effects: cancel }
     case "keyboard":
-      if (state.status === "closed" && state.input === "keyboard" && !state.warm) return same(state)
+      // A held key hides the flyout until the highlight rests, so it does not flicker beside every row it passes.
+      if (event.repeat && event.id !== undefined)
+        return {
+          state: { status: "opening", attempt: state.attempt + 1, id: event.id, input: "keyboard", apex: undefined },
+          effects: [
+            ...cancel,
+            { type: "schedule", kind: "open", attempt: state.attempt + 1, delayMs: FLYOUT_KEYBOARD_DELAY_MS },
+          ],
+        }
 
-      return { state: { status: "closed", attempt, input: "keyboard", warm: false }, effects: cancel }
+      return claim(state, event.id)
+    case "highlighted":
+      if (!keyboardDriven(state)) return same(state)
+
+      return highlight(state, event.id)
+    case "menu.entered": {
+      const menu = { index: event.index, input: "keyboard" as const }
+
+      if (state.status === "open" && state.id === event.id) return same({ ...state, input: "keyboard", menu })
+      const next = state.attempt + 1
+
+      // The flyout is pending, closed or beside another row: it opens now on the highlighted row, with the item.
+      return {
+        state: {
+          status: "open",
+          attempt: next,
+          id: event.id,
+          position: state.status === "open" || state.status === "aiming" ? state.position : undefined,
+          input: "keyboard",
+          apex: undefined,
+          menu,
+        },
+        effects: [...cancel, { type: "place", attempt: next, id: event.id }],
+      }
+    }
+
+    case "menu.highlighted": {
+      if (state.status !== "open") return same(state)
+
+      // The pointer leaving an item does not pull the keyboard out of the menu it entered.
+      if (event.index === undefined && event.input === "pointer" && state.menu?.input === "keyboard") return same(state)
+
+      if (state.menu?.index === event.index && state.menu?.input === event.input) return same(state)
+
+      if (state.menu === undefined && event.index === undefined) return same(state)
+
+      return same({
+        ...state,
+        menu: event.index === undefined ? undefined : { index: event.index, input: event.input },
+      })
+    }
+
     case "wheel":
-      if (state.status !== "closed" || state.input !== "keyboard") return same(state)
+      if (!keyboardDriven(state)) return same(state)
+
+      if (state.status === "opening")
+        return { state: { status: "closed", attempt, input: "pointer", warm: false }, effects: cancel }
+
+      if (state.status === "open") return same({ ...state, input: "pointer", menu: undefined })
+
+      if (state.status !== "closed") return same(state)
 
       return same({ ...state, input: "pointer" })
     case "row.moved":
       return moved(state, event)
     case "row.left": {
+      if (keyboardDriven(state)) return same(state)
+
       if (state.status === "opening")
         return { state: { status: "closed", attempt, input: "pointer", warm: false }, effects: cancel }
 
@@ -141,7 +229,7 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
       // The row the pointer enters decides.
       if (event.into === "row") return same(state)
 
-      if (event.into === "flyout" || inside(event.point, state.apex, event.flyout)) return settle(state)
+      if (event.into === "flyout" || within(event.point, state.apex, event.flyout)) return settle(state)
 
       return cool(state)
     }
@@ -149,7 +237,7 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
     case "pointer.outside":
       if (state.status !== "open" && state.status !== "aiming") return same(state)
 
-      if (inside(event.point, state.apex, event.flyout)) return same(state)
+      if (keyboardDriven(state) || within(event.point, state.apex, event.flyout)) return same(state)
 
       return cool(state)
     case "flyout.entered":
@@ -158,12 +246,15 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
       if (state.status === "closed" && !state.warm) return same(state)
 
       return {
-        state: { status: "closed", attempt, input: state.status === "closed" ? state.input : "pointer", warm: false },
+        state: { status: "closed", attempt, input: inputOf(state), warm: false },
         effects: cancel,
       }
     case "scrolled": {
-      // Scrolled by the arrow keys: the highlight stays, and nothing opens.
-      if (state.status === "closed" && state.input === "keyboard") return same(state)
+      // Scrolled by the arrow keys: the highlight stays, and its flyout moves with its row.
+      if (keyboardDriven(state))
+        return state.status === "open"
+          ? { state, effects: [{ type: "place", attempt: state.attempt, id: state.id }] }
+          : same(state)
 
       if (!event.target) return transitionDialogFlyout(state, { type: "dismissed" })
 
@@ -177,7 +268,7 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
       if (state.status !== "open" || state.attempt !== event.attempt) return same(state)
 
       if (!event.position)
-        return { state: { status: "closed", attempt, input: "pointer", warm: false }, effects: NO_EFFECTS }
+        return { state: { status: "closed", attempt, input: state.input, warm: false }, effects: NO_EFFECTS }
 
       if (state.position?.left === event.position.left && state.position.top === event.position.top) return same(state)
 
@@ -186,7 +277,15 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
       if (state.status !== "opening" || state.attempt !== event.attempt) return same(state)
 
       return {
-        state: { status: "open", attempt: state.attempt, id: state.id, position: undefined, apex: state.apex },
+        state: {
+          status: "open",
+          attempt: state.attempt,
+          id: state.id,
+          position: undefined,
+          input: state.input,
+          apex: state.apex,
+          menu: undefined,
+        },
         effects: [{ type: "place", attempt: state.attempt, id: state.id }],
       }
     case "aim.due": {
@@ -200,7 +299,9 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
           attempt: next,
           id: state.target,
           position: state.position,
+          input: "pointer",
           apex: { x: point.x, y: point.y },
+          menu: undefined,
         },
         effects: [
           { type: "activate", id: state.target },
@@ -216,11 +317,76 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
   }
 }
 
+/** A key was pressed on row `id`: the keyboard drives the flyout from here, keeping one already beside that row. */
+function claim(state: LiveFlyout, id: string | undefined): DialogFlyoutTransition {
+  if ((state.status === "open" || state.status === "aiming") && state.id === id) {
+    const next = state.status === "aiming" ? state.attempt + 1 : state.attempt
+
+    const open =
+      state.status === "open" && state.input === "keyboard" && state.menu === undefined
+        ? state
+        : {
+            status: "open" as const,
+            attempt: next,
+            id,
+            position: state.position,
+            input: "keyboard" as const,
+            apex: undefined,
+            menu: undefined,
+          }
+
+    // Re-measured, as a favorite toggled from the keyboard moves the row.
+    return {
+      state: open,
+      effects: [...(state.status === "aiming" ? CANCEL : NO_EFFECTS), { type: "place", attempt: next, id }],
+    }
+  }
+
+  return highlight(state, id)
+}
+
+/**
+ * The keyboard moved the highlight to row `id`. The flyout follows at once, keeping its place until the row is
+ * measured; while a held key keeps it hidden, it waits for the highlight to rest.
+ */
+function highlight(state: LiveFlyout, id: string | undefined): DialogFlyoutTransition {
+  const cancel = timed(state) ? CANCEL : NO_EFFECTS
+  const attempt = state.attempt + 1
+
+  if (id === undefined) {
+    if (state.status === "closed" && state.input === "keyboard" && !state.warm) return same(state)
+
+    return { state: { status: "closed", attempt, input: "keyboard", warm: false }, effects: cancel }
+  }
+
+  if ((state.status === "open" || state.status === "opening") && state.input === "keyboard" && state.id === id)
+    return same(state)
+
+  if (state.status !== "opening") {
+    const position = state.status === "open" || state.status === "aiming" ? state.position : undefined
+
+    return {
+      state: { status: "open", attempt, id, position, input: "keyboard", apex: undefined, menu: undefined },
+      effects: [...cancel, { type: "place", attempt, id }],
+    }
+  }
+
+  return {
+    state: { status: "opening", attempt, id, input: "keyboard", apex: undefined },
+    effects: [...cancel, { type: "schedule", kind: "open", attempt, delayMs: FLYOUT_KEYBOARD_DELAY_MS }],
+  }
+}
+
 function moved(state: LiveFlyout, event: Extract<DialogFlyoutEvent, { type: "row.moved" }>): DialogFlyoutTransition {
-  const open = state.status === "open" || state.status === "aiming"
+  const apex = state.status === "open" || state.status === "aiming" ? state.apex : undefined
 
   // On its way to the flyout, the pointer crosses other rows without taking the flyout with it.
-  if (open && event.id !== state.id && inside(event.point, state.apex, event.flyout)) {
+  if (
+    (state.status === "open" || state.status === "aiming") &&
+    apex &&
+    event.id !== state.id &&
+    inside(event.point, apex, event.flyout)
+  ) {
     // Each move restarts the wait: the flyout moves only once the pointer rests on the row.
     if (state.status === "aiming" && state.target === event.id)
       return {
@@ -235,7 +401,7 @@ function moved(state: LiveFlyout, event: Extract<DialogFlyoutEvent, { type: "row
         attempt,
         id: state.id,
         position: state.position,
-        apex: state.apex,
+        apex,
         target: event.id,
       },
       effects: [{ type: "schedule", kind: "aim", attempt, delayMs: FLYOUT_AIM_TIMEOUT_MS }],
@@ -244,6 +410,10 @@ function moved(state: LiveFlyout, event: Extract<DialogFlyoutEvent, { type: "row
 
   // Back on the flyout's own row: the pointer becomes the triangle's apex again.
   if ((state.status === "open" || state.status === "opening") && state.id === event.id && event.activeId === event.id) {
+    // Taken from the keyboard once, then moved in place on every move after.
+    if (state.input === "keyboard" || !state.apex)
+      return same({ ...state, input: "pointer", apex: { x: event.point.x, y: event.point.y } })
+
     state.apex.x = event.point.x
     state.apex.y = event.point.y
 
@@ -259,7 +429,9 @@ function moved(state: LiveFlyout, event: Extract<DialogFlyoutEvent, { type: "row
         attempt,
         id: state.id,
         position: state.position,
+        input: "pointer",
         apex: { x: event.point.x, y: event.point.y },
+        menu: undefined,
       },
       effects: event.activeId === event.id ? CANCEL : [...CANCEL, { type: "activate", id: event.id }],
     }
@@ -269,7 +441,7 @@ function moved(state: LiveFlyout, event: Extract<DialogFlyoutEvent, { type: "row
   const attempt = state.attempt + 1
 
   return {
-    state: { status: "opening", attempt, id: event.id, apex: { x: event.point.x, y: event.point.y } },
+    state: { status: "opening", attempt, id: event.id, input: "pointer", apex: { x: event.point.x, y: event.point.y } },
     effects: [
       ...(timed(state) ? CANCEL : NO_EFFECTS),
       { type: "activate", id: event.id },
@@ -284,7 +456,15 @@ function show(state: LiveFlyout, id: string, point: FlyoutPoint): DialogFlyoutTr
   const position = state.status === "open" || state.status === "aiming" ? state.position : undefined
 
   return {
-    state: { status: "open", attempt, id, position, apex: { x: point.x, y: point.y } },
+    state: {
+      status: "open",
+      attempt,
+      id,
+      position,
+      input: "pointer",
+      apex: { x: point.x, y: point.y },
+      menu: undefined,
+    },
     effects: [...(timed(state) ? CANCEL : NO_EFFECTS), { type: "activate", id }, { type: "place", attempt, id }],
   }
 }
@@ -299,7 +479,9 @@ function settle(state: LiveFlyout): DialogFlyoutTransition {
       attempt: state.attempt + 1,
       id: state.id,
       position: state.position,
+      input: "pointer",
       apex: { x: state.apex.x, y: state.apex.y },
+      menu: undefined,
     },
     effects: CANCEL,
   }
@@ -327,6 +509,19 @@ function warm(state: LiveFlyout) {
   return state.status === "open" || state.status === "aiming" || (state.status === "closed" && state.warm)
 }
 
+function inputOf(state: LiveFlyout) {
+  return state.status === "aiming" ? "pointer" : state.input
+}
+
+function keyboardDriven(state: LiveFlyout) {
+  return inputOf(state) === "keyboard"
+}
+
+/** Whether `point` is in the safe triangle; a flyout the keyboard opened has none until the pointer moves on its row. */
+function within(point: FlyoutPoint, apex: FlyoutPoint | undefined, flyout: FlyoutRect | undefined) {
+  return apex !== undefined && inside(point, apex, flyout)
+}
+
 /** The row whose flyout shows, once it has a position. */
 export function selectFlyoutOpenId(state: DialogFlyoutState) {
   if (state.status !== "open" && state.status !== "aiming") return undefined
@@ -334,9 +529,19 @@ export function selectFlyoutOpenId(state: DialogFlyoutState) {
   return state.position ? state.id : undefined
 }
 
+/** The highlighted item in the open flyout, when the arrow keys or the pointer moved into it. */
+export function selectFlyoutMenu(state: DialogFlyoutState) {
+  return state.status === "open" ? state.menu?.index : undefined
+}
+
+/** The flyout item the keys move and choose, once the arrows entered the menu; until then they move the rows. */
+export function selectFlyoutMenuKeys(state: DialogFlyoutState) {
+  return state.status === "open" && state.menu?.input === "keyboard" ? state.menu.index : undefined
+}
+
 /** Whether scrolling moves the highlight and flyout to the row under the pointer; a keyboard scroll keeps both. */
 export function selectFlyoutFollowsPointer(state: DialogFlyoutState) {
-  return state.status !== "disposed" && (state.status !== "closed" || state.input === "pointer")
+  return state.status !== "disposed" && !keyboardDriven(state)
 }
 
 export function selectFlyoutPosition(state: DialogFlyoutState) {
@@ -346,26 +551,28 @@ export function selectFlyoutPosition(state: DialogFlyoutState) {
 }
 
 /**
- * 6px beside the row's end edge, else its start edge, else over the layer: always inside the layer that holds it.
+ * 6px beside the row's end edge, else its start edge, else over the layer, level with the row unless that would cross
+ * the layer's top or bottom edge: always inside the layer that holds it. `height` is the flyout's, 0 until it renders.
  */
-export function placeFlyout(row: FlyoutRect, layer: FlyoutRect | undefined, rtl: boolean): FlyoutPosition {
+export function placeFlyout(
+  row: FlyoutRect,
+  layer: FlyoutRect | undefined,
+  rtl: boolean,
+  height: number,
+): FlyoutPosition {
   const fits = (x: number) => !layer || (x >= layer.left && x + FLYOUT_WIDTH_PX <= layer.right)
   const end = rtl ? row.left - FLYOUT_GAP_PX - FLYOUT_WIDTH_PX : row.right + FLYOUT_GAP_PX
   const start = rtl ? row.right + FLYOUT_GAP_PX : row.left - FLYOUT_GAP_PX - FLYOUT_WIDTH_PX
   const over = layer ? Math.max(layer.left, Math.min(end, layer.right - FLYOUT_WIDTH_PX)) : end
   const left = fits(end) ? end : fits(start) ? start : over
+  const top = row.top - 2
 
-  return { left, top: row.top - 2 }
-}
+  if (!layer) return { left, top }
 
-/**
- * A fixed element is placed against the viewport unless an ancestor contains it, as a component preview that holds
- * its dialogs does. Corrects by where it landed.
- */
-export function correctFlyoutPosition(target: FlyoutPosition, placed: FlyoutPoint): FlyoutPosition {
-  if (placed.x === target.left && placed.y === target.top) return target
-
-  return { left: target.left * 2 - placed.x, top: target.top * 2 - placed.y }
+  return {
+    left,
+    top: Math.max(layer.top + FLYOUT_GAP_PX, Math.min(top, layer.bottom - FLYOUT_GAP_PX - height)),
+  }
 }
 
 /**

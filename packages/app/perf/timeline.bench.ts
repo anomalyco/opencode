@@ -1,9 +1,11 @@
 // One long session (120 turns of markdown, code fences, tool calls and diffs) at normal speed.
 import { bench, web } from "@hona/strobe"
+import { Match } from "effect"
 import { editTools, reviewDiffs } from "./fixtures/diffs"
 import { dragDivider, measureDivider, type Divider } from "./fixtures/drag"
 import { cached } from "./fixtures/mock"
 import { openReview } from "./fixtures/review"
+import { scriptTools } from "./fixtures/scripts"
 import { composer, mockTimelineSession, oldestPrompt, timeline } from "./fixtures/timeline"
 
 const find = '[data-component="timeline-search-bar"] input'
@@ -17,6 +19,14 @@ const diff = '[data-component="apply-patch-file-diff"] diffs-container >>> [data
 
 const drag = "drag the review's edge"
 
+const scripts = "open a group of scripts"
+
+// The turn's one group of scripts, and the calls its scripts list once open.
+const group =
+  '[data-component="collapsed-tool-group"] > [data-component="collapsible"] > [data-slot="collapsible-trigger"]'
+
+const groupList = '[data-component="collapsed-tool-group"] [data-component="execute-tool-calls"]'
+
 // The divider between the session and the side panel, read once the review is open. The session panel keeps at least
 // 400px, the side panel 320px and the 8px gap.
 const handle = '[data-slot="session-chat-panel"] > div > [data-component="resize-handle"]'
@@ -24,9 +34,16 @@ const handle = '[data-slot="session-chat-panel"] > div > [data-component="resize
 let divider: Divider | undefined
 
 export default bench({
-  // The session a case's launch loads: the edits alone, the history beside the review, or the history. Cases with the
-  // same one share a launch.
-  setupKey: (ctx) => (ctx.case === "expand an edit" ? "edits" : ctx.case === drag ? "review" : "history"),
+  // The session a case's launch loads: the edits alone, the scripts alone, the history beside the review, or the history.
+  // Cases with the same one share a launch.
+  setupKey: (ctx) =>
+    ctx.case === "expand an edit"
+      ? "edits"
+      : ctx.case === scripts
+        ? "scripts"
+        : ctx.case === drag
+          ? "review"
+          : "history",
 
   targets: {
     web: web({
@@ -36,9 +53,14 @@ export default bench({
         mockTimelineSession(cached(ctx), {
           server: new URL(ctx.url).origin,
           // The edits alone, so the case measures the diff, not the history around it.
-          historyTurns: ctx.setupKey === "edits" ? 0 : 120,
+          historyTurns: ctx.setupKey === "edits" || ctx.setupKey === "scripts" ? 0 : 120,
           collapsedEdits: ctx.setupKey === "edits",
-          tools: ctx.setupKey === "edits" ? await editTools() : undefined,
+          compact: ctx.setupKey === "scripts",
+          tools: await Match.value(ctx.setupKey).pipe(
+            Match.when("edits", () => editTools()),
+            Match.when("scripts", async () => scriptTools()),
+            Match.orElse(async () => undefined),
+          ),
           vcsDiff: ctx.setupKey === "review" ? reviewDiffs() : undefined,
         }),
       url: ({ prepared }) => prepared.path,
@@ -112,6 +134,21 @@ export default bench({
       },
       async reset({ page }) {
         await page.click(edit)
+        await page.idle()
+      },
+    },
+
+    // 46 Code Mode scripts of one turn folded into one group, six of which read a source tree file by file: 19,039 calls
+    // in all. Opening the group opens each script, as the default timeline detail does.
+    [scripts]: {
+      primary: "main.work",
+      metrics: ["interaction.p50", "run.duration", "main.style", "main.layout", "main.script"],
+      async run({ page }) {
+        await page.click(group, { until: groupList })
+        await page.idle()
+      },
+      async reset({ page }) {
+        await page.click(group)
         await page.idle()
       },
     },

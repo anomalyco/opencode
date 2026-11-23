@@ -3,12 +3,11 @@ import type { FileContent } from "@opencode/plugin/gui"
 import {
   createArtifactViewerState,
   createVideoOverlayState,
+  fixedArtifactMode,
   INITIAL_IMAGE_STAGE_GESTURE_STATE,
   selectArtifactInfo,
   selectArtifactMode,
-  selectArtifactPreviewable,
   selectArtifactReason,
-  selectArtifactShowingPreview,
   selectArtifactStageKind,
   selectStageClickSuppressed,
   selectStageCursor,
@@ -44,15 +43,14 @@ describe("artifact viewer", () => {
     })
 
     expect(selectArtifactStageKind(failed, "broken.svg", content)).toBe("binary")
-    expect(selectArtifactPreviewable("broken.svg", content)).toBe(true)
+    expect(fixedArtifactMode("broken.svg", content)).toBeUndefined()
     expect(selectArtifactReason(failed, content)).toBe("Failed to load")
 
     const source = run(failed, content, { type: "mode.changed", mode: "source" })
     expect(selectArtifactMode(source, content)).toBe("source")
-    expect(selectArtifactShowingPreview(source, "broken.svg", content)).toBe(false)
 
     const back = run(source, content, { type: "mode.changed", mode: "preview" })
-    expect(selectArtifactShowingPreview(back, "broken.svg", content)).toBe(true)
+    expect(selectArtifactMode(back, content)).toBe("preview")
     expect(selectArtifactReason(back, content)).toBe("Failed to load")
     expect(selectArtifactInfo(back, content)).toEqual({})
   })
@@ -76,8 +74,7 @@ describe("artifact viewer", () => {
   test("binary files offer no source", () => {
     const content: FileContent = { type: "binary", content: "AAEC", encoding: "base64" }
 
-    expect(selectArtifactPreviewable("sample.bin", content)).toBe(false)
-    expect(selectArtifactShowingPreview(createArtifactViewerState(content), "sample.bin", content)).toBe(true)
+    expect(fixedArtifactMode("sample.bin", content)).toBe("preview")
     expect(selectArtifactStageKind(createArtifactViewerState(content), "sample.bin", content)).toBe("binary")
   })
 

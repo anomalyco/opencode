@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Düşündiriş ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Teswir goşuň",
+  "ui.lineComment.add": "Teswir goşuň",
+  "ui.lineComment.actions": "Saýlaw amallary",
   "ui.lineComment.contextPlaceholder": "Bu üýtgeşmäniň mazmunyny goşuň",
   "ui.lineComment.submit": "Düşündiriş",
   "ui.lineComment.cancel": "Elatyr",

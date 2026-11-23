@@ -67,7 +67,7 @@ story("replaces hidden switches with solid lines and restores options", async ({
 
   await expect(visibility).toHaveAttribute("aria-pressed", "true")
   await expect(label).toHaveCSS("color", color)
-  await expect(visibility.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-outline-eye")
+  await expect(visibility.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-eye")
   await expect(shell.locator('[data-slot="timeline-detail-unavailable"]')).toHaveCount(0)
   await expect(shell.getByRole("switch", { name: "Shell grouped", exact: true })).toBeEnabled()
   await expect(shell.getByRole("switch", { name: "Shell collapsed", exact: true })).toBeEnabled()

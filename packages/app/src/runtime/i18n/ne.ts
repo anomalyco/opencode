@@ -921,7 +921,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "जडान गर्नुहोस्",
   "provider.connect.breadcrumb.label": "जडानका चरणहरू",
   "provider.connect.methods.description": "{{provider}} कसरी जडान गर्ने छान्नुहोस्।",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "फेरि प्रयास गर्नुहोस्",
   "provider.connect.console.serviceKeyDescription":
@@ -1142,10 +1142,13 @@ export const dict = {
   "session.timeline.status.working": "काम हुँदै छ",
   "session.running.stop.subagent": "उप-एजेन्ट रोक्नुहोस्",
   "session.running.stop.shell": "शेल आदेश बन्द गर्नुहोस्",
+  "session.running.stop.script": "स्क्रिप्ट रद्द गर्नुहोस्",
   "session.activity.subagents.one": "{{count}} उप-एजेन्ट",
   "session.activity.subagents.other": "{{count}} उप-एजेन्टहरू",
   "session.activity.shells.one": "{{count}} शेल",
   "session.activity.shells.other": "{{count}} शेलहरू",
+  "session.activity.scripts.one": "{{count}} स्क्रिप्ट",
+  "session.activity.scripts.other": "{{count}} स्क्रिप्टहरू",
   "session.activity.shell.back": "पृष्ठभूमि काममा फर्कनुहोस्",
   "session.activity.shell.stop": "रोक्नुहोस्",
   "session.activity.shell.stopping": "रोक्दै…",
@@ -1227,11 +1230,6 @@ export const dict = {
   "sidebar.recent.unpin": "पिन हटाउनुहोस्",
   "sidebar.recent.moveUp": "माथि सार्नुहोस्",
   "sidebar.recent.moveDown": "तल सार्नुहोस्",
-  "settings.experimental.row.newIcons.title": "नयाँ आइकनहरू",
-  "settings.experimental.row.newIcons.description": "अद्यावधिक गरिएको आइकन सेटको पूर्वावलोकन गर्नुहोस्",
-  "settings.experimental.row.foldUserMessages.title": "लामा सन्देशहरू खुम्च्याउनुहोस्",
-  "settings.experimental.row.foldUserMessages.description":
-    "१२ लाइनभन्दा लामा तपाईंका सन्देशहरूलाई थप पढ्नुहोस् बटनपछाडि खुम्च्याउनुहोस्",
   "settings.experimental.row.newTimeline.title": "नयाँ समयरेखा",
   "settings.experimental.row.newTimeline.description":
     "एजेन्टले गरेका कामलाई समूहबद्ध गर्ने, पालोको तल एउटा स्थिति लाइनसहितको पुनः डिजाइन गरिएको सत्र समयरेखा",
@@ -1241,14 +1239,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "साइडबारमा सत्रहरू कसरी सूचीबद्ध हुने छान्नुहोस्। साइड ट्याबहरूमा मात्र लागू हुन्छ।",
   "settings.experimental.sidebarOrganize.recent": "हालैका",
-  "settings.experimental.sidebarOrganize.projects": "परियोजनाहरू",
   "settings.experimental.sidebarOrganize.list": "एउटै सूची",
   "settings.experimental.sidebarOrganize.customize": "अनुकूलन गर्नुहोस्",
-  "sidebar.organize.projects": "परियोजनाहरू",
   "sidebar.organize.openTab": "खुला ट्याब",
   "sidebar.organize.showMore": "थप देखाउनुहोस्",
-  "sidebar.organize.showLess": "कम देखाउनुहोस्",
-  "sidebar.organize.empty": "अहिलेसम्म कुनै सत्र छैन",
   "sidebar.view.sessions": "सत्रहरू",
   "sidebar.view.options": "दृश्य विकल्पहरू",
   "sidebar.view.grouping": "समूहबद्ध गर्ने आधार",
@@ -1362,6 +1356,9 @@ export const dict = {
     "उप-एजेन्टहरू छुट्टै देखाउनुहोस्। अन्य गतिविधिलाई विवरण खुम्च्याएर समूहबद्ध गर्नुहोस्।",
   "settings.timeline.description.quiet":
     "उप-एजेन्टहरू छुट्टै देखाउनुहोस् र सम्पादनहरू समूहबद्ध गर्नुहोस्। अन्य गतिविधि लुकाउनुहोस्।",
+  "settings.timeline.row.foldUserMessages.title": "लामा सन्देशहरू खुम्च्याउनुहोस्",
+  "settings.timeline.row.foldUserMessages.description":
+    "१२ लाइनभन्दा लामा तपाईंका सन्देशहरूलाई थप पढ्नुहोस् बटनपछाडि खुम्च्याउनुहोस्",
   "settings.timeline.row.turnDiffs.title": "परिवर्तित फाइलहरू",
   "settings.timeline.row.turnDiffs.description":
     "प्रत्येक पालो सकिँदा त्यसले परिवर्तन गरेका फाइलहरू सूचीबद्ध गर्नुहोस्",

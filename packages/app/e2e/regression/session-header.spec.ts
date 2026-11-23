@@ -43,9 +43,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     expect(heights).toEqual([28, 28, 28, 28, 28, 28])
 
+    const rename = header.getByRole("heading").getByRole("button", { name: fixture.expected.targetTitle, exact: true })
+
     for (const editing of [false, true]) {
       if (editing) {
-        await header.getByRole("heading").click()
+        await project.press("Tab")
+        await expect(rename).toBeFocused()
+        await page.keyboard.press("Enter")
         await expect(header.getByRole("textbox")).toHaveValue(fixture.expected.targetTitle)
         await expect(header.getByRole("textbox")).toBeFocused()
       }
@@ -77,6 +81,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     await header.getByRole("textbox").press("Escape")
     await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
+    await expect(rename).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(project).toBeFocused()
+    await details.press("Tab")
+    await expect(review).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(details).toBeFocused()
 
     // The header stays one row at every width.
     for (const width of [900, 1440]) {
@@ -106,6 +117,10 @@ for (const direction of ["ltr", "rtl"] as const) {
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "true")
     await expect(page.locator("#review-panel")).toBeVisible()
+    // A settled panel shows its own copy of the toggle; a click that starts on the header's copy as they swap misses.
+    await expect(
+      page.locator("#review-panel").getByRole("button", { name: "Toggle review", exact: true }),
+    ).toBeVisible()
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "false")
 
@@ -254,7 +269,12 @@ test.describe("location", () => {
       await expect(usageMenu).toBeVisible({ visible: !state.usage })
       await expect(header.locator(".session-location-worktree-icon")).toBeVisible()
       await expect
-        .poll(() => header.getByRole("heading").evaluate((element) => element.scrollWidth > element.clientWidth))
+        .poll(() =>
+          header
+            .getByRole("heading")
+            .getByRole("button")
+            .evaluate((element) => element.scrollWidth > element.clientWidth),
+        )
         .toBe(state.truncated)
       await expect(header.getByRole("button", { name: "More options", exact: true })).toBeInViewport()
       await header.getByRole("heading").hover()

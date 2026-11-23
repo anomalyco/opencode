@@ -33,6 +33,31 @@ const editor = (page: Page) => page.locator('[data-component="composer-editor"]'
 
 const submit = (page: Page) => page.locator('[data-action="composer-submit"]')
 
+test("new-session project picker and provider tip show keyboard focus", async ({ page }) => {
+  await openDraft(page, { name: "DraftFocus", provider: NO_PROVIDER })
+
+  const projectPicker = newSessionLocation(page)
+
+  const tip = page.locator('[data-component="new-session-tip"]')
+
+  const connect = tip.getByRole("button", { name: /Connect to 75\+ providers/ })
+
+  const dismiss = tip.getByRole("button", { name: "Dismiss", exact: true })
+
+  await newSessionWorktree(page).press("Shift+Tab")
+  await expect(projectPicker).toBeFocused()
+  await expect(projectPicker).toHaveCSS("outline-style", "solid")
+  await expect(projectPicker).not.toHaveCSS("transition-property", /\b(all|outline)\b/)
+
+  await expect(connect).toBeVisible()
+  await dismiss.press("Shift+Tab")
+  await expect(connect).toBeFocused()
+  await expect(connect).toHaveCSS("outline-style", "solid")
+  await page.keyboard.press("Tab")
+  await expect(dismiss).toBeFocused()
+  await expect(dismiss).toHaveCSS("outline-style", "solid")
+})
+
 const tabLink = (page: Page, sessionID: string) =>
   page.locator(`[data-titlebar-tab-link][href="${sessionHref(sessionID)}"]`)
 
@@ -806,18 +831,37 @@ test("a pending worktree session keeps Session as its mobile title until the gen
   await expect(label).toHaveText("Generated session title")
 })
 
-test("the title and message stay stable through worktree creation", async ({ page }) => {
-  const mock = await openWorktreeDraft(page, pendingDraft)
-  const pending = await submitPending(page, mock)
+test("the title and folded message stay stable through worktree creation", async ({ page }) => {
+  const mock = await openWorktreeDraft(page, {
+    ...pendingDraft,
+    seed: { settings: { general: { foldUserMessages: true } } },
+  })
+
+  const wrappedPrompt = `${text} `.repeat(35).trimEnd()
+
+  const [firstHeight, pending] = await Promise.all([
+    page.waitForFunction(() => {
+      const message = document.querySelector('[data-component="session-preparing"] [data-component="user-message"]')
+
+      if (message?.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true })) {
+        return message.getBoundingClientRect().height
+      }
+    }),
+    submitPending(page, mock, wrappedPrompt),
+  ])
+
+  const readMore = pending.message.getByRole("button", { name: "Read more", expanded: false })
+  await expect(readMore).toBeVisible()
   await draftFollowUp(page)
-  await editor(page).press("ControlOrMeta+Home")
+  await editor(page).evaluate((element) => getSelection()!.collapse(element, 0))
   const title = page.locator("[data-session-title]").getByRole("heading", { level: 1 })
   const before = await title.boundingBox()
   const messageBefore = await pending.message.boundingBox()
+  expect(await firstHeight.jsonValue()).toBe(messageBefore?.height)
 
   // Observe painted frames during the handoff, without using frame counts to wait for readiness.
   const observation = await page.evaluateHandle(() => {
-    const frames: { title: string | null; message: boolean; spinner: boolean; draft: string | null }[] = []
+    const frames: { title: string | null; messageHeight: number | null; spinner: boolean; draft: string | null }[] = []
     let frame = 0
 
     const visible = (element: Element | null) =>
@@ -825,10 +869,13 @@ test("the title and message stay stable through worktree creation", async ({ pag
 
     const sample = () => {
       const title = document.querySelector<HTMLElement>("[data-session-title] h1")
+
+      const message = document.querySelector('[data-component="user-message"]')
+
       const editor = document.querySelector('[data-component="composer-editor"]')
       frames.push({
         title: visible(title) ? title!.textContent : null,
-        message: visible(document.querySelector('[data-component="user-message"]')),
+        messageHeight: visible(message) ? message!.getBoundingClientRect().height : null,
         spinner: visible(
           document.querySelector('[data-titlebar-tab-slot][data-active="true"] [data-component="activity-ring"]'),
         ),
@@ -854,7 +901,8 @@ test("the title and message stay stable through worktree creation", async ({ pag
 
   await expect(title).toHaveText("Created workspace session")
   await expect(pending.shimmer).toHaveCount(0)
-  await expect(pending.message.locator('[data-slot="user-message-text"]')).toHaveText(text)
+  await expect(pending.message.locator('[data-slot="user-message-fold"]')).toHaveText(wrappedPrompt)
+  await expect(readMore).toBeVisible()
   await expect(editor(page)).toHaveText(followUp)
   await expect(editor(page)).toBeFocused()
   // The DOM can reach the final state before the sampler's next frame; wait until a sample has observed it.
@@ -866,7 +914,7 @@ test("the title and message stay stable through worktree creation", async ({ pag
   expect(
     frames.filter(
       (frame) =>
-        !frame.message ||
+        frame.messageHeight !== messageBefore?.height ||
         !frame.spinner ||
         frame.draft !== followUp ||
         !["Session", "Created workspace session"].includes(frame.title ?? ""),
@@ -1285,7 +1333,7 @@ test("the location dialog separates added projects from server projects and tags
   await expect(options.nth(0)).toHaveCSS("height", "32px")
   await expect(dialog.locator(".palette-menu-search [data-component='text-input-v2']")).toHaveCSS("height", "28px")
   await expect(dialog.locator(".new-session-location-hints")).toHaveCount(0)
-  await expect(dialog.locator("..")).toHaveCSS("width", "720px")
+  await expect(dialog.locator("..")).toHaveCSS("width", "680px")
   await expect(options.nth(0)).toHaveCSS("display", "flex")
   await expect(names.nth(0).locator(".command-palette-title")).toHaveCSS("font-size", "13px")
   await expect(names.nth(0).locator(".command-palette-title")).toHaveCSS("white-space", "nowrap")
@@ -1558,7 +1606,7 @@ async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openWor
   await expect(editor(page)).toBeEditable()
   await expect(submit(page)).toBeDisabled()
   await expect(preparing.locator('[data-component="user-message"]')).toHaveCount(1)
-  await expect(message.locator('[data-slot="user-message-text"]')).toHaveText(prompt)
+  await expect(message.getByText(prompt, { exact: true })).toBeVisible()
   await expect(message).toHaveAttribute("data-timeline-part-id", /^.+:text:0$/)
   const messageID = (await message.getAttribute("data-timeline-part-id"))!.replace(/:text:0$/, "")
   await expect(shimmer).toContainText("Creating worktree")

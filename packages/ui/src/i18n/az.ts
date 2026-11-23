@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Şərh yazılır: ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Şərh əlavə et",
+  "ui.lineComment.add": "Şərh əlavə et",
+  "ui.lineComment.actions": "Seçim əməliyyatları",
   "ui.lineComment.contextPlaceholder": "Bu dəyişiklik üçün kontekst əlavə et",
   "ui.lineComment.submit": "Şərh et",
   "ui.lineComment.cancel": "Ləğv et",

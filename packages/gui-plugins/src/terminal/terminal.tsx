@@ -21,7 +21,8 @@ import {
 } from "./pane-machine"
 import type { TerminalProps } from "./props"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
-import { consumeTerminalMetaKey, terminalKeyInput } from "./terminal-key-event"
+import { terminalLinkLabel } from "./hover-label"
+import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget } from "./terminal-key-event"
 import { TerminalQuote } from "./quote"
 
 type TerminalColors = {
@@ -156,6 +157,7 @@ export const Terminal = (props: TerminalProps) => {
   const appearance = plugin.appearance
   const keybinds = plugin.keybinds
   const system = plugin.system
+  const links = plugin.links
   const desktop = plugin.desktop
   const theme = useTheme()
   let container!: HTMLDivElement
@@ -307,19 +309,34 @@ export const Terminal = (props: TerminalProps) => {
     focusTerminal(t)
   }
 
-  const handleLinkClick = (t: Term, event: MouseEvent) => {
-    if (!event.shiftKey && !event.ctrlKey && !event.metaKey) return
-
-    if (event.altKey) return
-
-    if (event.button !== 0) return
-
+  const handleLinkClick = async (t: Term, event: MouseEvent) => {
     const text = getHoveredLinkText(t)
+    const target = terminalLinkTarget(event, text)
 
-    if (!text) return
+    if (!text || (!event.ctrlKey && !event.metaKey && !event.shiftKey)) return
 
     event.preventDefault()
     event.stopImmediatePropagation()
+
+    if (!target || target === "blocked") return
+    const session = plugin.sessions.current()
+    const label = terminalLinkLabel(t)
+
+    if (label !== text && !await plugin.dialogs.confirm({title:plugin.t("link.confirm"), description:text, confirm:plugin.t("link.open")})) return
+
+    if (plugin.signal.aborted || session?.key !== plugin.sessions.current()?.key) return
+
+    if (target === "file") {
+      const files = plugin.screen.current()?.file
+      const href = new URL(text).href
+      const path = files?.resolve(href)
+
+      if (path && files && !files.absolute(path) && !path.split(/[\\/]/).includes("..")) links.open({href,session,exact:true})
+
+      return
+    }
+
+    if (target === "app" && links.open({ href: text, session })) return
     system.openExternal(text)
   }
 

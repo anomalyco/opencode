@@ -1,7 +1,9 @@
 import { afterEach, expect, test } from "bun:test"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { Writable } from "node:stream"
 import {
   CliRenderEvents,
+  EmbeddedTerminalRenderable,
   MarkdownRenderable,
   ResourceContext,
   RGBA,
@@ -9,7 +11,7 @@ import {
   TextAttributes,
   TextRenderable,
 } from "@opentui/core"
-import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
+import { ManualClock, MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
 import { monoSnapshot } from "../../src/mini/mono"
 import { RunScrollbackStream } from "../../src/mini/scrollback.surface"
 import { entryLook } from "../../src/mini/scrollback.shared"
@@ -81,6 +83,7 @@ async function setup(
     onThemeRelease?: (theme: RunTheme) => void
     mono?: boolean
     failHighlight?: boolean
+    markdown?: "source" | "rendered"
   } = {},
 ) {
   const out = await createTestRenderer({
@@ -110,6 +113,7 @@ async function setup(
       wrote: input.wrote ?? false,
       onThemeRelease: input.onThemeRelease,
       mono: input.mono,
+      markdown: input.markdown,
     }),
   }
 }
@@ -295,10 +299,17 @@ test.each([false, true])("monochrome switches preserve printed blocks and open f
   }
 })
 
-test.each([false, true])(
-  "monochrome switches finish pending reasoning without repeating it (initial=%s)",
-  async (mono) => {
-    const out = await setup()
+// Source reasoning is a code entry, which a switch finishes; rendered reasoning is Markdown, which a switch rebuilds,
+// as it does answers, and which ends at the next chunk of another kind. Either way each chunk prints once.
+test.each([
+  [false, "source"],
+  [true, "source"],
+  [false, "rendered"],
+  [true, "rendered"],
+] as const)(
+  "monochrome switches finish pending reasoning without repeating it (initial=%s, %s)",
+  async (mono, markdown) => {
+    const out = await setup({ markdown })
     const output: string[] = []
     out.renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, (event) => {
       output.push(decoder.decode(event.snapshot.getRealCharBytes(true)))
@@ -307,7 +318,7 @@ test.each([false, true])(
       await out.scrollback.setMono(mono)
       await out.scrollback.append(reasoning("Before switch"))
       await out.scrollback.setMono(!mono)
-      expect(output.join("")).toContain("Before switch")
+      if (markdown === "source" || mono) expect(output.join("")).toContain("Before switch")
       await out.scrollback.append(reasoning(" after switch"))
       await out.scrollback.complete()
       expect(output.join("").match(/Before switch/g)).toHaveLength(1)
@@ -341,15 +352,9 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
       active && typeof active === "object" && "renderable" in active && active.renderable instanceof MarkdownRenderable
         ? active.renderable
         : undefined
-    expect(renderable?._blockStates.slice(-3).map((state) => state.token.type)).toEqual([
-      "paragraph",
-      "paragraph",
-      "paragraph",
-    ])
-    const link = renderable?._blockStates.at(-1)?.token
-    const tokens = link && "tokens" in link && Array.isArray(link.tokens) ? link.tokens : []
-    const href = tokens.find((token) => "href" in token)
-    expect(href && "href" in href ? href.href : undefined).toBe("https://example.com/café")
+    // Mono mode changes what shows, not what Markdown parses: the bullet, the dashes and the link stay paragraphs.
+    expect(renderable?.blocks.slice(-3).map((block) => block.kind)).toEqual(["paragraph", "paragraph", "paragraph"])
+    expect(renderable?.content.endsWith("[café](https://example.com/café)")).toBe(true)
     await out.scrollback.complete()
     out.renderer.writeToScrollback((ctx) => ({
       root: new TextRenderable(ctx.renderContext, {
@@ -363,7 +368,7 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
     }))
 
     const rendered = output.join("").replace(/ +\n/g, "\n")
-    expect(rendered).toContain("# H?ading ->")
+    expect(rendered).toContain("H?ading ->")
     expect(rendered).toContain('| "quote"')
     expect(rendered).toContain("------------------------------------------------------------")
     expect(rendered).toContain("?  ?")
@@ -375,6 +380,100 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
     out.scrollback.destroy()
     destroy(claim(out.renderer))
   }
+})
+
+// What a terminal shows: the renderer writes to a recorded stdout, and the bytes replay in a VT.
+class Stdout extends Writable {
+  readonly isTTY = true
+  readonly chunks: Buffer[] = []
+  constructor(
+    readonly columns: number,
+    readonly rows: number,
+  ) {
+    super()
+  }
+  override _write(chunk: Uint8Array, _encoding: BufferEncoding, done: () => void) {
+    this.chunks.push(Buffer.from(chunk))
+    done()
+  }
+  getColorDepth() {
+    return 24
+  }
+}
+
+async function terminalText(commits: StreamCommit[], width = 60) {
+  const stdout = new Stdout(width, 16)
+  const out = await createTestRenderer({
+    width,
+    height: 16,
+    screenMode: "split-footer",
+    footerHeight: 6,
+    externalOutputMode: "capture-stdout",
+    consoleMode: "disabled",
+    stdout: stdout as unknown as NodeJS.WriteStream,
+    bufferedOutput: "stdout",
+    remote: true,
+    clock: new ManualClock(),
+  })
+  active.push(out.renderer)
+  const driver = out.renderer.nativeScene.driver
+  const frame = async () => {
+    await out.renderOnce()
+    await driver.idle()
+  }
+  await out.renderer.setupTerminal()
+  await driver.idle()
+  out.renderer.stdin.emit("data", Buffer.from("\x1b[1;1R"))
+  await driver.idle()
+  stdout.chunks.length = 0
+  const treeSitterClient = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  treeSitterClient.setMockResult({ highlights: [] })
+  const scrollback = new RunScrollbackStream(out.renderer, RUN_THEME_FALLBACK, { treeSitterClient, wrote: false })
+  for (const commit of commits) {
+    await scrollback.append(commit)
+    await frame()
+  }
+  await scrollback.complete()
+  await frame()
+  scrollback.destroy()
+  // The caller left the line open (complete(false)); a later write continues it.
+  out.renderer.writeToScrollback(({ renderContext }) => ({
+    root: new TextRenderable(renderContext, { content: "!", width: 1, height: 1 }),
+    startOnNewLine: false,
+    trailingNewline: false,
+  }))
+  await frame()
+  const view = await createTestRenderer({ width, height: 16 })
+  active.push(view.renderer)
+  const vt = new EmbeddedTerminalRenderable(view.renderer, { cols: width, rows: 16 })
+  view.renderer.root.add(vt)
+  vt.write(Buffer.concat(stdout.chunks).toString())
+  await view.renderOnce()
+  return view
+    .captureCharFrame()
+    .split("\n")
+    .map((row) => row.trimEnd())
+    .join("\n")
+}
+
+test("markdown written in several commits keeps its blank rows on the terminal", async () => {
+  const subagent = toolCommit({
+    tool: "subagent",
+    phase: "final",
+    toolState: "completed",
+    state: {
+      status: "completed",
+      input: { description: "Inspect reducer", agent: "explore" },
+      content: [{ type: "text", text: "# Findings\n\n- stable" }],
+      metadata: { sessionID: "ses-child-1", status: "completed", output: "# Findings\n\n- stable" },
+    },
+  })
+  // A finished tool entry ends its line itself.
+  expect(await terminalText([subagent])).toContain("Findings\n\n- stable\n!")
+  const streamed = await terminalText([assistant("A\n\n"), assistant("B\n\n"), assistant("C")])
+  expect(streamed).toContain("A\n\nB\n\nC!")
+  // A heading that was the whole committed text when the entry completed (bigboi-r2-2).
+  expect(await terminalText([assistant("# A\n")])).toContain("A!")
 })
 
 test("renders completed subagent markdown in monochrome mode", async () => {
@@ -401,10 +500,10 @@ test("renders completed subagent markdown in monochrome mode", async () => {
 
     const commits = claim(out.renderer)
     try {
-      expect(commits).toHaveLength(1)
-      expect(commits[0]?.trailingNewline).toBe(true)
+      // The heading is final before the list, so it can go out first.
+      expect(commits.at(-1)?.trailingNewline).toBe(true)
       const output = render(commits)
-      expect(output).toContain("# Findings")
+      expect(output).toContain("Findings\n\n- Caf? -> stable")
       expect(output).toContain("- Caf? -> stable")
       expect(output).not.toMatch(/[^\x00-\x7f]/)
     } finally {

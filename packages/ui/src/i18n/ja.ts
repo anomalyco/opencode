@@ -49,6 +49,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "",
   "ui.lineComment.editorLabel.suffix": "へのコメントを作成中",
   "ui.lineComment.placeholder": "コメントを追加",
+  "ui.lineComment.add": "コメントを追加",
+  "ui.lineComment.actions": "選択範囲の操作",
   "ui.lineComment.contextPlaceholder": "この変更に関するコンテキストを追加",
   "ui.lineComment.submit": "コメント",
   "ui.lineComment.cancel": "キャンセル",

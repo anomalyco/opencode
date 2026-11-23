@@ -85,6 +85,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Kommentoit kohdetta ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Lisää kommentti",
+  "ui.lineComment.add": "Lisää kommentti",
+  "ui.lineComment.actions": "Valinnan toiminnot",
   "ui.lineComment.submit": "Kommentoi",
   "ui.lineComment.cancel": "Peruuta",
   "ui.sessionTurn.steps.show": "Näytä vaiheet",

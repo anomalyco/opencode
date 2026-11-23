@@ -934,7 +934,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "མཐུད།",
   "provider.connect.breadcrumb.label": "མཐུད་ནིའི་རིམ་པ་ཚུ།",
   "provider.connect.methods.description": "{{provider}} ག་དེ་སྦེ་མཐུད་ནི་ཨིན་ན་ གདམ་ཁ་རྐྱབས།",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "ལོག་འབད་རྩོལ་བསྐྱེད།",
   "provider.connect.console.serviceKeyDescription":
@@ -1166,10 +1166,13 @@ export const dict = {
   "session.timeline.status.working": "ལཱ་འབད་དོ།",
   "session.running.stop.subagent": "ཡན་ལག་ལས་ཚབ་བར་ཆད་བཟོ།",
   "session.running.stop.shell": "Shell བརྡ་བཀོད་བཀག",
+  "session.running.stop.script": "Script ཆ་མེད་གཏང་",
   "session.activity.subagents.one": "ཡན་ལག་ལས་ཚབ་ {{count}}",
   "session.activity.subagents.other": "ཡན་ལག་ལས་ཚབ་ {{count}}",
   "session.activity.shells.one": "Shell {{count}}",
   "session.activity.shells.other": "Shell {{count}}",
+  "session.activity.scripts.one": "Script {{count}}",
+  "session.activity.scripts.other": "Script {{count}}",
   "session.activity.shell.back": "རྒྱབ་གཞིའི་ལཱ་ལུ་ལོག",
   "session.activity.shell.stop": "བཀག",
   "session.activity.shell.stopping": "བཀག་དོ…",
@@ -1252,11 +1255,6 @@ export const dict = {
   "sidebar.recent.unpin": "སྦྱར་བཞག་བཏོན།",
   "sidebar.recent.moveUp": "ཡར་སྤོ།",
   "sidebar.recent.moveDown": "མར་སྤོ།",
-  "settings.experimental.row.newIcons.title": "ངོས་དཔར་གསརཔ།",
-  "settings.experimental.row.newIcons.description": "དུས་མཐུན་བཟོ་ཡོད་པའི་ངོས་དཔར་ཚོ་སྡེ་ སྔོན་ལྟ་འབད།",
-  "settings.experimental.row.foldUserMessages.title": "འཕྲིན་དོན་རིངམོ་ཚུ་བསྡམ།",
-  "settings.experimental.row.foldUserMessages.description":
-    "གྲལ་ཐིག་ ༡༢ ལས་ལྷག་པའི་ ཁྱོད་ཀྱི་འཕྲིན་དོན་ཚུ་ མང་སུ་ལྷག་ ཨེབ་རྟ་གི་རྒྱབ་ལུ་བསྡམ།",
   "settings.experimental.row.newTimeline.title": "དུས་ཚོད་ཐིག་གསརཔ།",
   "settings.experimental.row.newTimeline.description":
     "ལས་ཚབ་ཀྱིས་འབད་མི་ཚུ་ སྡེ་ཚན་བཟོ་ཡོད་པའི་ ལཱ་ཡུན་དུས་ཚོད་ཐིག་ལོག་བཟོ་ཡོད་མི་ཅིག་ཨིན་ ཐེངས་ཀྱི་འོག་ལུ་ གནས་སྟངས་གྲལ་ཐིག་གཅིག་ཡོདཔ།",
@@ -1266,14 +1264,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "ཟུར་ཁའི་ཕྲ་རིང་ནང་ ལཱ་ཡུན་ཚུ་ ག་དེ་སྦེ་ཐོ་བཀོད་འབད་ནི་ཨིན་ན་ གདམ་ཁ་རྐྱབས། ཟུར་ཁའི་མཆོང་ལྡེ་ལུ་རྐྱངམ་ཅིག་འཇུགཔ་ཨིན།",
   "settings.experimental.sidebarOrganize.recent": "འཕྲལ་གྱི།",
-  "settings.experimental.sidebarOrganize.projects": "ལས་གཞི་ཚུ།",
   "settings.experimental.sidebarOrganize.list": "ཐོ་ཡིག་གཅིག",
   "settings.experimental.sidebarOrganize.customize": "སྲོལ་སྒྲིག",
-  "sidebar.organize.projects": "ལས་གཞི་ཚུ།",
   "sidebar.organize.openTab": "མཆོང་ལྡེ་ཁ་ཕྱེ།",
   "sidebar.organize.showMore": "མང་སུ་སྟོན།",
-  "sidebar.organize.showLess": "ཉུང་སུ་སྟོན།",
-  "sidebar.organize.empty": "ད་ཚུན་ ལཱ་ཡུན་མེད།",
   "sidebar.view.sessions": "ལཱ་ཡུན་ཚུ།",
   "sidebar.view.options": "མཐོང་སྣང་གདམ་ཁ་ཚུ།",
   "sidebar.view.grouping": "སྡེ་ཚན་བཟོ་ཐངས།",
@@ -1388,6 +1382,9 @@ export const dict = {
   "settings.timeline.description.compact": "ཡན་ལག་ལས་ཚབ་ཚུ་ སོ་སོ་སྦེ་སྟོན། ལས་སྣ་གཞན་ཚུ་ ཁ་གསལ་བསྡམ་སྟེ་ སྡེ་ཚན་བཟོ།",
   "settings.timeline.description.quiet":
     "ཡན་ལག་ལས་ཚབ་ཚུ་ སོ་སོ་སྦེ་སྟོན་ཞིནམ་ལས་ ཞུན་དག་ཚུ་སྡེ་ཚན་བཟོ། ལས་སྣ་གཞན་ཚུ་སྦ་བཞག",
+  "settings.timeline.row.foldUserMessages.title": "འཕྲིན་དོན་རིངམོ་ཚུ་བསྡམ།",
+  "settings.timeline.row.foldUserMessages.description":
+    "གྲལ་ཐིག་ ༡༢ ལས་ལྷག་པའི་ ཁྱོད་ཀྱི་འཕྲིན་དོན་ཚུ་ མང་སུ་ལྷག་ ཨེབ་རྟ་གི་རྒྱབ་ལུ་བསྡམ།",
   "settings.timeline.row.turnDiffs.title": "བསྒྱུར་བཅོས་འབད་ཡོད་པའི་ཡིག་སྣོད་ཚུ།",
   "settings.timeline.row.turnDiffs.description":
     "ཐེངས་རེ་རེ་མཇུག་བསྡུཝ་ད་ དེ་གིས་བསྒྱུར་བཅོས་འབད་མི་ཡིག་སྣོད་ཚུ་ ཐོ་བཀོད་འབད།",

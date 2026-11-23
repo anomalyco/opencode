@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Մեկնաբանում ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Ավելացնել մեկնաբանություն",
+  "ui.lineComment.add": "Ավելացնել մեկնաբանություն",
+  "ui.lineComment.actions": "Ընտրության գործողություններ",
   "ui.lineComment.contextPlaceholder": "Ավելացնել համատեքստ այս փոփոխության համար",
   "ui.lineComment.submit": "Մեկնաբանություն",
   "ui.lineComment.cancel": "Չեղարկել",

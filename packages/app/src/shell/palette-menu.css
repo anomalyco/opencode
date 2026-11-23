@@ -8,7 +8,6 @@
   height: 36px;
   padding-inline-end: 12px;
   border-radius: 6px;
-  outline: 0;
   background: color-mix(in srgb, var(--v2-background-bg-layer-02) 60%, transparent);
   box-shadow: none;
   transition:
@@ -20,6 +19,12 @@
   [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
   background: var(--v2-background-bg-layer-02);
   box-shadow: none;
+}
+
+@media (forced-colors: none) {
+  .palette-menu-search [data-component="text-input-v2"] {
+    outline: 0;
+  }
 }
 
 .palette-menu-search [data-slot="text-input-v2-value"] {
@@ -80,6 +85,17 @@
   letter-spacing: -0.04px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (forced-colors: active) {
+  :is(.palette-menu-row, [data-color-scheme="dark"] .palette-menu-row):is([data-active], :focus-visible) {
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .palette-menu-row:is([data-active], :focus-visible) * {
+    color: inherit;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

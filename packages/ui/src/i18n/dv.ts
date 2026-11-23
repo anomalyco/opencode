@@ -49,6 +49,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "ކޮމެންޓް ކުރަމުންނެވެ ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "ކޮމެންޓް އެޑް ކުރާށެވެ",
+  "ui.lineComment.add": "ކޮމެންޓް އެޑް ކުރާށެވެ",
+  "ui.lineComment.actions": "ސެލެކްޝަން އެކްޝަންތައް",
   "ui.lineComment.contextPlaceholder": "މި ބަދަލަށް ކޮންޓެކްސްޓް އިތުރުކުރުން",
   "ui.lineComment.submit": "ކޮމެންޓް",
   "ui.lineComment.cancel": "ކެންސަލް",

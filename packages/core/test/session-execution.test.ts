@@ -25,11 +25,18 @@ import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Shell } from "@opencode/core/shell"
+import { BlobStore } from "@opencode/core/blob-store"
+import { Environment } from "@opencode/core/environment/index"
+import { VideoGeneration } from "@opencode/core/video-generation"
+import { VideoID } from "@opencode/schema/generate"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { Agent } from "@opencode/core/agent"
 import { ID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { daemonShells } from "./fixture/shell-daemon"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Logger, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Logger, Schedule, Scope, Stream } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -1020,7 +1027,7 @@ describe("SessionRestart background recovery", () => {
         {
           type: "synthetic",
           payload: {
-            text: '<shell id="call-completed-shell" state="completed" command="exit 7">\nExited with code 7\n</shell>',
+            text: '<background-result kind="shell" id="call-completed-shell" state="completed" command="exit 7">\nExited with code 7\n</background-result>',
           },
         },
       ])
@@ -1043,7 +1050,7 @@ describe("SessionRestart background recovery", () => {
       const recovery = (path: string) => ({ kind: "image" as const, sessionID, path, model: "test/painter" })
       yield* jobs.start({
         id: "image_done",
-        type: "experimental_image_generate",
+        type: "generate_image",
         recovery: recovery("/tmp/done.png"),
         run: Effect.succeed("Image request finished. Saved image: /tmp/done.png (test/painter)."),
       })
@@ -1051,7 +1058,7 @@ describe("SessionRestart background recovery", () => {
       yield* jobs.wait({ id: "image_done" })
       yield* jobs.start({
         id: "image_running",
-        type: "experimental_image_generate",
+        type: "generate_image",
         recovery: recovery("/tmp/running.png"),
         run: Effect.never,
       })
@@ -1065,10 +1072,68 @@ describe("SessionRestart background recovery", () => {
 
       const inbox = yield* SessionInbox.list(database.db, sessionID)
       expect(inbox.map((item) => (item.type === "synthetic" ? item.payload.text : undefined)).toSorted()).toEqual([
-        '<image id="image_done" state="completed">\nImage request finished. Saved image: /tmp/done.png (test/painter).\n</image>',
-        '<image id="image_running" state="cancelled">\nImage request for /tmp/running.png was cancelled because the server restarted.\n</image>',
+        '<background-result kind="image" id="image_done" state="completed">\nImage request finished. Saved image: /tmp/done.png (test/painter).\n</background-result>',
+        '<background-result kind="image" id="image_running" state="cancelled">\nImage request for /tmp/running.png was cancelled because the server restarted.\n</background-result>',
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
+    }),
+  )
+
+  it.live("waits again for a running video after a restart, then saves it and delivers the notice", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const jobs = yield* Job.Service
+      const sessionID = Session.ID.make("ses_background_video")
+      yield* seedSessions(database, [sessionID])
+      const videoID = VideoID.create()
+      yield* jobs.start({
+        id: videoID,
+        type: "generate_video",
+        recovery: { kind: "video", sessionID, path: "/tmp/running.mp4", videoID },
+        run: Effect.never,
+      })
+      yield* jobs.background(videoID)
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+      const directory = (yield* tmpdirScoped("opencode-video-restart-")).path
+      const storage = yield* Layer.buildWithScope(
+        AppNodeBuilder.build(LayerNode.group([BlobStore.node, FSUtil.node]), [
+          Global.node.replace(Global.layerWith({ data: directory, config: directory })),
+        ]),
+        scope,
+      )
+      const blob = yield* Context.get(storage, BlobStore.Service).write(Stream.make(Uint8Array.of(1, 2, 3)))
+      // The video service resumed polling on its own; the tool's recovery only waits on the video ID.
+      const waited: VideoID[] = []
+      const videos = VideoGeneration.Service.of({
+        start: () => Effect.die("a recovered video must not be submitted again"),
+        get: () => Effect.die("unused"),
+        wait: (id) => Effect.sync(() => waited.push(id)).pipe(Effect.as({ id, status: "completed", blobs: [blob] })),
+        cancel: () => Effect.die("unused"),
+      })
+      const driver = Environment.makeMemoryDriver()
+      const files = Environment.makeFiles(driver)
+      const location = Layer.mergeAll(
+        Layer.succeed(Environment.Service, Environment.make(Environment.localID, driver)),
+        Layer.succeed(VideoGeneration.Service, videos),
+        Layer.succeedContext(storage),
+      )
+      const context = yield* buildExecution(scope, () => Effect.void, undefined, restarted, undefined, location)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+      yield* restarted.wait({ id: videoID })
+      const texts = yield* SessionInbox.list(database.db, sessionID).pipe(
+        Effect.map((inbox) => inbox.map((item) => (item.type === "synthetic" ? item.payload.text : ""))),
+        Effect.repeat({ until: (texts) => texts.length === 1, schedule: Schedule.spaced("5 millis") }),
+        Effect.timeout("10 seconds"),
+      )
+      expect(texts).toEqual([
+        `<background-result kind="video" id="${videoID}" state="completed">\nVideo request finished. Saved video: /tmp/running.mp4.\n</background-result>`,
+      ])
+      expect(waited).toEqual([videoID])
+      expect((yield* files.read("/tmp/running.mp4")).bytes).toEqual(Uint8Array.of(1, 2, 3))
     }),
   )
 
@@ -1446,7 +1511,7 @@ describe("SessionRestart background recovery", () => {
       expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
         {
           payload: {
-            text: `<subagent sessionID="${child}" state="completed" description="Completed inspection">\n${output}\n</subagent>`,
+            text: `<background-result kind="subagent" sessionID="${child}" state="completed" description="Completed inspection">\n${output}\n</background-result>`,
             metadata: { state: "completed" },
           },
         },
@@ -1500,7 +1565,7 @@ describe("SessionRestart background recovery", () => {
         {
           type: "synthetic",
           payload: {
-            text: `<subagent sessionID="${child}" state="running" description="Outbox inspection">\nStarted tests\n\nBackground work still running:\n- shell (sh_1): bun test\n</subagent>`,
+            text: `<background-result kind="subagent" sessionID="${child}" state="running" description="Outbox inspection">\nStarted tests\n\nBackground work still running:\n- shell (sh_1): bun test\n</background-result>`,
             metadata: { source: "subagent", childID: child, agent: "explore", state: "completed" },
           },
         },
@@ -2115,6 +2180,8 @@ function buildExecution(
   options?: SessionRestart.Options,
   overrideJobs?: Job.Interface,
   shell?: Shell.Interface,
+  // Extra Location services, such as those a recovered video job continues with.
+  extra?: Layer.Layer<never>,
 ) {
   return Effect.gen(function* () {
     const database = yield* Database.Service
@@ -2148,10 +2215,11 @@ function buildExecution(
         () =>
           // The local execution test only needs the Session runner (and the Shell, if given) from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-          (shell ? Layer.merge(runner, Layer.succeed(Shell.Service, shell)) : runner) as unknown as Layer.Layer<
-            LocationServices,
-            FileSystem.DirectoryNotFoundError
-          >,
+          Layer.mergeAll(
+            runner,
+            shell ? Layer.succeed(Shell.Service, shell) : Layer.empty,
+            extra ?? Layer.empty,
+          ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
       ),
     )
     return yield* Layer.buildWithScope(

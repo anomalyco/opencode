@@ -91,11 +91,22 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
 
 export type Error = BlockedError | CorrectedError
 
+/** Actions whose resources are file paths. */
+export const pathActions = ["external_directory", "read", "edit"] as const
+
+/** macOS volumes ignore case by default, so `.OPENCODE/x` opens `.opencode/x`; rules for file paths must match it too. */
+export function ignoresCase(action: string) {
+  return process.platform === "darwin" && pathActions.some((item) => item === action)
+}
+
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
+  const ignoreCase = ignoresCase(action)
   return (
     rulesets
       .flat()
-      .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
+      .findLast(
+        (rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource, ignoreCase),
+      ) ?? {
       action,
       resource: "*",
       effect: "ask",
@@ -339,6 +350,7 @@ const layer = Layer.effect(
             pending.delete(input.requestID)
             for (const [id, item] of pending) {
               if (item.request.sessionID !== existing.request.sessionID) continue
+              if (item.request.source?.messageID !== existing.request.source?.messageID) continue
               yield* bus.publish(Permission.Event.Replied, {
                 sessionID: item.request.sessionID,
                 requestID: item.request.id,
