@@ -1,7 +1,7 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, PlatformError, Schema } from "effect"
-import { ChildProcessSpawner, make as makeSpawner } from "effect/process/ChildProcessSpawner"
+import { ChildProcessSpawner } from "effect/process"
 import { posix, type PlatformPath } from "node:path"
 import type { Driver } from "./driver.js"
 import { Failed, type Files } from "./files.js"
@@ -45,7 +45,7 @@ export interface Facts {
 export interface Interface extends Facts {
   readonly id: ID
   readonly files: Files
-  readonly spawner: ChildProcessSpawner["Service"]
+  readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Environment") {}
@@ -58,7 +58,7 @@ export const make = (id: ID, driver: Driver, facts?: Facts): Interface => ({
 })
 
 /** The computer the server runs on. */
-export const local = (spawner: ChildProcessSpawner["Service"]) =>
+export const local = (spawner: ChildProcessSpawner.ChildProcessSpawner["Service"]) =>
   make(
     localID,
     makeLocalDriver(spawner),
@@ -75,7 +75,7 @@ export const workspace = (id: Workspace.ID, driver: Driver) =>
  * silently falling back to the server host.
  */
 export const unavailable = (id: ID, cause: Error): Interface => {
-  const spawner = makeSpawner(() =>
+  const spawner = ChildProcessSpawner.make(() =>
     Effect.fail(
       PlatformError.systemError({
         _tag: "Unknown",
@@ -131,7 +131,7 @@ export const workingDirectoryResolver = Effect.map(workingDirectory, (fallback) 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const location = yield* Location.Service
     const workspaces = yield* Workspace.Service
     if (!location.workspaceID) return Service.of(local(spawner))

@@ -2,7 +2,6 @@ export * as EnvironmentPath from "./path.js"
 
 import { Effect, Schema } from "effect"
 import { Machines } from "../machine/machines.js"
-import { MachinePath } from "../machine/path.js"
 import { Workspace } from "../workspace.js"
 import { Environment } from "./index.js"
 
@@ -10,6 +9,14 @@ export interface Parsed {
   readonly environment: Environment.ID
   /** The rest as written, `/...` or `~...`: locating a path owner normalizes it. */
   readonly path: string
+}
+
+export class NotAbsolute extends Schema.TaggedError<NotAbsolute>()("Machine.NotAbsolute", {
+  machine: Environment.ID,
+}) {
+  override get message() {
+    return `Machine paths are absolute or start with ~/: write ${this.machine}:/… or ${this.machine}:~/… (for a local folder with that name, start with ./)`
+  }
 }
 
 const isEnvironmentPrefix = (name: string) =>
@@ -51,7 +58,7 @@ export const typed = Effect.fnUntraced(function* (text: string, machines: Machin
     Workspace.isID(named.environment) ||
     (yield* machines.list()).some((info) => info.id === named.environment)
   )
-    return yield* new MachinePath.NotAbsolute({ machine: named.environment })
+    return yield* new NotAbsolute({ machine: named.environment })
 })
 
 /** An environment path's text: what `parse` reads back. */

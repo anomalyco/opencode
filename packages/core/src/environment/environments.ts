@@ -9,8 +9,6 @@ import { Workspace } from "../workspace.js"
 import { Environment } from "./index.js"
 
 export interface Interface {
-  /** The computer this server runs on ("local"). */
-  readonly local: Environment.Interface
   /**
    * Total lookup for any environment ID: local, a paired machine, or a workspace sandbox.
    * Returns a failing handle when a machine was removed instead of falling back to the host.
@@ -43,7 +41,6 @@ const layer = Layer.effect(
     })
 
     return Service.of({
-      local,
       get: Effect.fn("Environments.get")(function* (id: Environment.ID) {
         if (id === Environment.localID) return local
         if (Workspace.isID(id)) return yield* sandbox(id)

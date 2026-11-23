@@ -2,7 +2,11 @@ export * as MachinePath from "./path.js"
 
 import { Effect, Schema } from "effect"
 import { Environment } from "../environment/index.js"
+import { EnvironmentPath } from "../environment/path.js"
 import { Machines } from "./machines.js"
+
+export const NotAbsolute = EnvironmentPath.NotAbsolute
+export type NotAbsolute = EnvironmentPath.NotAbsolute
 
 export interface Parsed {
   readonly machine: Environment.ID
@@ -10,48 +14,28 @@ export interface Parsed {
   readonly path: string
 }
 
-export class NotAbsolute extends Schema.TaggedError<NotAbsolute>()("Machine.NotAbsolute", {
-  machine: Environment.ID,
-}) {
-  override get message() {
-    return `Machine paths are absolute or start with ~/: write ${this.machine}:/… or ${this.machine}:~/… (for a local folder with that name, start with ./)`
-  }
+/** Splits `gpu:/work/a` or `gpu:~/a` into a machine and the rest. A Windows drive, URL, `local:`, or workspace ID is not one. */
+export const parse = (text: string): Parsed | undefined => {
+  const parsed = EnvironmentPath.parse(text)
+  if (!parsed || !Schema.is(Machines.Name)(parsed.environment)) return
+  return { machine: parsed.environment, path: parsed.path }
 }
 
-/** Splits `name:rest` at a name a machine could have. A Windows drive is not one. */
-const split = (text: string): Parsed | undefined => {
-  const colon = text.indexOf(":")
-  if (colon <= 0) return
-  const machine = text.slice(0, colon)
-  if (!Schema.is(Machines.Name)(machine)) return
-  return { machine: Environment.ID.make(machine), path: text.slice(colon + 1) }
-}
-
-const rooted = (path: string) => path.startsWith("/") || path.startsWith("~")
-
-/** Splits `gpu:/work/a` or `gpu:~/a` into a machine and the rest. A Windows drive or any URL is not one. */
-export const parse = (text: string) => {
-  const named = split(text)
-  if (!named || !rooted(named.path) || named.path.startsWith("//")) return
-  return named
-}
-
-/**
- * Reads text someone typed: a machine path, or nothing when it is a path on this server. A machine path is absolute
- * or starts with ~/, so `gpu:work` is no machine path and would quietly be this server's folder. Only a name that is a
- * machine here is refused: another name stays a local folder, as before.
- */
+/** Reads text someone typed as a paired machine path, refusing non-rooted paths for known paired machines. */
 export const typed = Effect.fnUntraced(function* (text: string, machines: Machines.Interface) {
   const parsed = parse(text)
   if (parsed) return parsed
-  const named = split(text)
-  if (!named || rooted(named.path)) return
-  if ((yield* machines.list()).some((info) => info.id === named.machine))
-    return yield* new NotAbsolute({ machine: named.machine })
+  const colon = text.indexOf(":")
+  if (colon <= 0) return
+  const machine = text.slice(0, colon)
+  const rest = text.slice(colon + 1)
+  if (!Schema.is(Machines.Name)(machine) || rest.startsWith("/") || rest.startsWith("~")) return
+  if ((yield* machines.list()).some((info) => info.id === machine))
+    return yield* new NotAbsolute({ machine: Environment.ID.make(machine) })
 })
 
 /** A machine path's text: what `parse` reads back. */
-export const format = (machine: Environment.ID, path: string) => `${machine}:${path}`
+export const format = EnvironmentPath.format
 
-/** A local path's text, kept from reading as a machine path: a folder here can be named like one, and `./` keeps it local. */
+/** A local path's text, kept from reading as a machine path via a leading `./`. */
 export const local = (path: string) => (parse(path) ? `./${path}` : path)

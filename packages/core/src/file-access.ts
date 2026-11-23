@@ -11,7 +11,6 @@ import { EnvironmentPath } from "./environment/path.js"
 import { Flag } from "./flag.js"
 import { Location } from "./location.js"
 import { Machines } from "./machine/machines.js"
-import { MachinePath } from "./machine/path.js"
 import { Permission } from "./permission.js"
 import { Project } from "./project.js"
 import { AbsolutePath } from "./schema.js"
@@ -165,8 +164,8 @@ const layer = Layer.effect(
         } satisfies Environment.Place
       }
       // Another environment's paths follow its own path rules (falling back to POSIX when unknown). Only `~` and `~/`
-      // are expanded: paired machines report their home in hello, `local` uses this server's home, and sandboxes do not
-      // expose a home directory. With the flag off no home is asked for, so a base on another machine refuses every `~`.
+      // are expanded: paired machines report their home in hello, while sandboxes do not expose a home directory.
+      // With the flag off no home is asked for, so a base on another machine refuses every `~`.
       const target = crossEnvironment
         ? yield* environments.lookup(id).pipe(
             Effect.catchTags({
@@ -186,7 +185,7 @@ const layer = Layer.effect(
             )
           : written
       if (rooted.startsWith("~"))
-        return yield* new Environment.Failed({ path: text, cause: new MachinePath.NotAbsolute({ machine: id }) })
+        return yield* new Environment.Failed({ path: text, cause: new EnvironmentPath.NotAbsolute({ machine: id }) })
       // A relative text is relative to the directory it was written in, which is the base when there is one and
       // otherwise the working directory itself: a session cwd in another environment is still a directory there.
       return {

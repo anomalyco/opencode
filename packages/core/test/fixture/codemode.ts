@@ -50,25 +50,10 @@ export const codeModeServices = (
               }),
             ),
             Environments.node.replace(
-              Layer.effect(
-                Environments.Service,
-                Effect.map(Environment.Service, (local) =>
-                  Environments.Service.of({
-                    local,
-                    get: (id) =>
-                      Effect.succeed(
-                        id === Environment.localID
-                          ? local
-                          : Environment.unavailable(id, new Machines.NotFound({ machine: id })),
-                      ),
-                    lookup: (id) =>
-                      id === Environment.localID
-                        ? Effect.succeed(local)
-                        : Effect.fail(new Machines.NotFound({ machine: id })),
-                    ready: () => Effect.succeed(true),
-                  }),
-                ),
-              ).pipe(Layer.provide(hostEnvironmentLayer)),
+              Layer.mock(Environments.Service, {
+                lookup: (id) => Effect.fail(new Machines.NotFound({ machine: id })),
+                ready: () => Effect.succeed(true),
+              }),
             ),
             Permission.node.replace(permissionLayer(permission)),
           ],
