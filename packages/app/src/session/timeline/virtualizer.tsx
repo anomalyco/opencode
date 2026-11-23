@@ -63,14 +63,6 @@ const fallbackItemSize = 60
 
 const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
-// Remounted rows hold their cached height while any async body (deferred disclosure, Pierre file, or Markdown) settles.
-const pendingContent = `[data-disclosure-pending], [data-component="file"]:not([data-file-ready]), ${pendingMarkdown}`
-
-const pendingContentAttributes = ["data-markdown-ready", "data-file-ready", "data-disclosure-pending"]
-
-// Longer than Pierre's 2s row-ready timeout so a slow diff settles naturally while a stuck row still releases.
-const PENDING_HOLD_TIMEOUT_MS = 2_500
-
 const upwardKeys = new Set(["up", "page-up", "home"])
 
 const settledEvent = { type: "scroll.settled", atReachableEnd: false } as const
@@ -152,6 +144,7 @@ type ViewProps = {
   header: JSX.Element
   headerInset?: JSX.Element
   bottomSpacer?: JSX.Element
+  deferred: (row: TimelineRow.TimelineRow) => boolean
   renderRow: (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => JSX.Element
 }
 
@@ -1111,67 +1104,13 @@ export function createTimelineVirtualizer(input: Input) {
       const initial = rowProps.mounted()
       const item = createMemo(() => rowProps.mounted().item)
       const row = createMemo(() => rowProps.mounted().row)
-      // Reserve a previously measured row's height only while it actually mounts pending async content.
-      const cached = virtualizer.itemSizeCache.has(initial.key) && initial.item.size > fallbackItemSize
-      const [holding, setHolding] = createSignal(cached)
+      const [ready, setReady] = createSignal(initial.item.size <= fallbackItemSize || !props.deferred(initial.row))
       let contentMeasureFrame: number | undefined
-      let pendingObserver: MutationObserver | undefined
-      let holdTimer: ReturnType<typeof setTimeout> | undefined
 
-      const stopHoldWatch = () => {
-        pendingObserver?.disconnect()
-        pendingObserver = undefined
-        clearTimeout(holdTimer)
-        holdTimer = undefined
-      }
-
-      const scheduleMeasure = () => {
-        if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
-        contentMeasureFrame = requestAnimationFrame(() => {
-          contentMeasureFrame = undefined
-
-          if (active() && element.isConnected) virtualizer.measureElement(element)
-        })
-      }
-
-      const releaseHold = (measure: boolean) => {
-        stopHoldWatch()
-
-        if (!untrack(holding)) return
-        setHolding(false)
-
-        if (measure) scheduleMeasure()
-      }
-
-      const checkPending = (measure: boolean) => {
-        if (!untrack(holding) || !element) return
-
-        if (!element.querySelector(pendingContent)) releaseHold(measure)
-      }
-
-      onMount(() => {
-        if (cached) {
-          if (!element.querySelector(pendingContent)) setHolding(false)
-
-          if (untrack(holding)) {
-            pendingObserver = new MutationObserver(() => checkPending(true))
-            pendingObserver.observe(element, {
-              childList: true,
-              subtree: true,
-              attributes: true,
-              attributeFilter: pendingContentAttributes,
-            })
-            holdTimer = setTimeout(() => releaseHold(true), PENDING_HOLD_TIMEOUT_MS)
-          }
-        }
-
-        virtualizer.measureElement(element)
-      })
+      onMount(() => virtualizer.measureElement(element))
       // Prepending history changes data-index, not the keyed element's identity.
       // Its observer reads the current index and delivers any actual size change.
       onCleanup(() => {
-        stopHoldWatch()
-
         if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
 
         // A row that leaves the mounted range takes its focused control with it, and Chromium then leaves focus on
@@ -1219,16 +1158,17 @@ export function createTimelineVirtualizer(input: Input) {
               })
             }}
             data-index={item().index}
-            style={{ "min-height": holding() ? `${initial.item.size}px` : undefined }}
+            style={{ "min-height": ready() ? undefined : `${initial.item.size}px` }}
           >
             {props.renderRow(row, () => {
-              if (untrack(holding)) {
-                checkPending(true)
+              setReady(true)
 
-                if (untrack(holding)) return
-              }
+              if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
+              contentMeasureFrame = requestAnimationFrame(() => {
+                contentMeasureFrame = undefined
 
-              scheduleMeasure()
+                if (active() && element.isConnected) virtualizer.measureElement(element)
+              })
             })}
           </div>
         </div>

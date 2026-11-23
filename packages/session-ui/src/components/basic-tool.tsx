@@ -203,9 +203,7 @@ export function BasicTool(props: BasicToolProps) {
         <Show
           when={props.locked && open() && !props.defer}
           fallback={
-            <Collapsible.Content
-              data-disclosure-pending={props.defer && open() && !disclosure.mounted() ? "" : undefined}
-            >
+            <Collapsible.Content>
               <Show when={!props.defer || disclosure.mounted()}>{props.children}</Show>
             </Collapsible.Content>
           }

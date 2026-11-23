@@ -1373,7 +1373,6 @@ export function FileAccordionGroup(props: { children: JSX.Element }) {
 function FileAccordionItem(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  pending?: boolean
   type?: string
   header: JSX.Element
   children: JSX.Element
@@ -1413,7 +1412,6 @@ function FileAccordionItem(props: {
           aria-labelledby={`${id}-trigger`}
           data-slot="accordion-content"
           data-expanded=""
-          data-disclosure-pending={props.pending ? "" : undefined}
         >
           {props.children}
         </div>
@@ -1445,7 +1443,6 @@ function ToolFileAccordion(props: {
       <FileAccordionItem
         open={disclosure.open()}
         onOpenChange={disclosure.setOpen}
-        pending={!!props.defer && !disclosure.mounted()}
         header={
           <div data-slot="apply-patch-trigger-content">
             <div data-slot="apply-patch-file-info">
@@ -2717,7 +2714,6 @@ ToolRegistry.register({
                   <FileAccordionItem
                     open={disclosure.open()}
                     onOpenChange={disclosure.setOpen}
-                    pending={!disclosure.mounted()}
                     type={file().type}
                     header={
                       <div data-slot="apply-patch-trigger-content">

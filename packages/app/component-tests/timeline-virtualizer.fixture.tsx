@@ -139,6 +139,7 @@ export function mountTimelineVirtualizer(input: {
         <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
           <timeline.View
             header={null}
+            deferred={() => false}
             renderRow={(row) => (
               <div
                 data-component="markdown"
@@ -223,6 +224,7 @@ export function mountTimelineRowChanges(ids: string[]) {
       <div style={{ height: "400px", width: "400px" }}>
         <timeline.View
           header={null}
+          deferred={() => false}
           renderRow={(row) => {
             const key = TimelineRow.key(row())
 
@@ -266,168 +268,5 @@ export function mountTimelineRowChanges(ids: string[]) {
         errors.push(String(error))
       }
     },
-  }
-}
-
-export type PendingRowMode = "open-file" | "closed-file" | "multi-file" | "markdown"
-
-/**
- * Mounts a scrollable list whose first row has async content that resets to pending whenever it unmounts and remounts.
- * Lets a test scroll that row out of range, bring it back, and verify the cached height holds until every pending marker
- * clears — and drops immediately when the row remounts closed.
- */
-export function mountTimelinePendingHold(input: {
-  mode: PendingRowMode
-  settledHeight: number
-  collapsedHeight: number
-}) {
-  const host = document.createElement("main")
-  host.dataset.testid = "timeline-pending-hold-fixture"
-  host.style.cssText = "position:fixed;top:24px;right:24px;width:400px;z-index:1000"
-  document.body.appendChild(host)
-
-  const rows = Array.from({ length: 30 }, (_, index) => new TimelineRow.UserMessage({ userMessageID: `row-${index}` }))
-  const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row]))
-  const indexes = new Map(rows.map((row, index) => [row.userMessageID, index]))
-  const targetKey = TimelineRow.key(rows[0]!)
-
-  const [state, setState] = createStore({
-    closed: false,
-    disclosurePending: false,
-    file1Ready: true,
-    file2Ready: true,
-    markdownReady: true,
-  })
-
-  let viewport!: HTMLDivElement
-  let notifySize: (() => void) | undefined
-
-  function Fixture() {
-    const follow = createTimelineFollow(() => "pending-hold-fixture")
-    follow.dispatch({ type: "detach" })
-
-    const timeline = createTimelineVirtualizer({
-      sessionKey: () => `pending-hold-${input.mode}-${Math.random()}`,
-      projection: {
-        rows: () => rows,
-        rowByKey: () => rowByKey,
-        activeMessageID: () => undefined,
-        messageByID: () => new Map(),
-        messageRowIndex: () => indexes,
-        messageLastRowIndex: () => indexes,
-      },
-      showHeader: () => false,
-      follow,
-      scroll: () => ({ overflow: true, jump: false }),
-      setScrollRef: (element) => {
-        if (element) viewport = element
-      },
-      onContentResize: () => {},
-      onScheduleScrollState: () => {},
-      onResumeScroll: () => {},
-      onUserScroll: () => {},
-      onHistoryScroll: () => {},
-      canRenderImmediately: () => true,
-    })
-
-    return (
-      <div style={{ height: "240px", width: "400px" }}>
-        <timeline.View
-          header={null}
-          renderRow={(row, onSizeChange) => {
-            if (TimelineRow.key(row()) !== targetKey)
-              return <div style={{ height: "120px" }}>{row().userMessageID}</div>
-
-            notifySize = onSizeChange
-
-            if (input.mode === "markdown") {
-              return (
-                <div
-                  data-component="markdown"
-                  data-markdown-ready={state.markdownReady ? "" : undefined}
-                  style={{ height: `${state.markdownReady ? input.settledHeight : input.collapsedHeight}px` }}
-                >
-                  markdown
-                </div>
-              )
-            }
-
-            if (input.mode === "multi-file") {
-              const height =
-                input.collapsedHeight +
-                (state.file1Ready ? (input.settledHeight - input.collapsedHeight) / 2 : 0) +
-                (state.file2Ready ? (input.settledHeight - input.collapsedHeight) / 2 : 0)
-
-              return (
-                <div style={{ height: `${height}px` }}>
-                  <div data-component="file" data-file-ready={state.file1Ready ? "" : undefined} />
-                  <div data-component="file" data-file-ready={state.file2Ready ? "" : undefined} />
-                </div>
-              )
-            }
-
-            if (state.closed) return <div style={{ height: `${input.collapsedHeight}px` }}>closed</div>
-
-            return (
-              <div
-                data-disclosure-pending={state.disclosurePending ? "" : undefined}
-                style={{
-                  height: `${!state.disclosurePending && state.file1Ready ? input.settledHeight : input.collapsedHeight}px`,
-                }}
-              >
-                {!state.disclosurePending && (
-                  <div data-component="file" data-file-ready={state.file1Ready ? "" : undefined} />
-                )}
-              </div>
-            )
-          }}
-        />
-      </div>
-    )
-  }
-
-  const disposeRoot = render(
-    () => (
-      <LanguageProvider locale="en">
-        <Fixture />
-      </LanguageProvider>
-    ),
-    host,
-  )
-
-  return {
-    dispose: () => {
-      disposeRoot()
-      host.remove()
-    },
-    scrollTo: (top: number) => {
-      viewport.scrollTop = top
-    },
-    targetMounted: () => !!host.querySelector(`[data-timeline-key="${targetKey}"]`),
-    targetBoxHeight: () =>
-      Math.round(
-        host.querySelector<HTMLElement>(`[data-timeline-key="${targetKey}"]`)?.getBoundingClientRect().height ?? 0,
-      ),
-    targetInnerMinHeight: () =>
-      host.querySelector<HTMLElement>(`[data-timeline-key="${targetKey}"] [data-index]`)?.style.minHeight ?? "",
-    prepareRemount: () => {
-      if (input.mode === "open-file") setState({ disclosurePending: true, file1Ready: false })
-
-      if (input.mode === "closed-file") setState({ closed: true, disclosurePending: false, file1Ready: false })
-
-      if (input.mode === "multi-file") setState({ file1Ready: false, file2Ready: false })
-
-      if (input.mode === "markdown") setState({ markdownReady: false })
-    },
-    mountFile: () => setState("disclosurePending", false),
-    settleFile1: () => {
-      setState("file1Ready", true)
-      notifySize?.()
-    },
-    settleFile2: () => {
-      setState("file2Ready", true)
-      notifySize?.()
-    },
-    settleMarkdown: () => setState("markdownReady", true),
   }
 }
