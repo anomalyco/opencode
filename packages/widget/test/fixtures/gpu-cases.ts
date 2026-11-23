@@ -11,6 +11,8 @@ export interface GpuCase {
   readonly data?: unknown
   readonly canvases: ReadonlyArray<{ readonly key: string; readonly width: number; readonly height: number }>
   readonly inputs?: ReadonlyArray<{ readonly frame: number; readonly after?: boolean; readonly input: unknown }>
+  /** Its batches are too big to record (generated ops): the fixture says `"batches": "from-source"`. */
+  readonly fromSource?: true
 }
 
 const template = (name: string) => readFileSync(path.resolve(import.meta.dir, `gpu/templates/${name}.js`), "utf8")
@@ -215,8 +217,9 @@ export const gpuCases: ReadonlyArray<GpuCase> = [
     canvases: scene,
   },
   {
-    // 10,000 draws a frame are allowed; one more is over, in any of the frame's batches.
+    // 10,000 draws a frame are allowed; one more is over, in any of the frame's batches. Over 20,000 ops: not recorded.
     name: "error-too-many-draws",
+    fromSource: true,
     source: program(`
   const module = device.createShaderModule({ code: "@vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); } @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }" })
   const pipeline = device.createRenderPipeline({ layout: "auto", vertex: { module }, fragment: { module, targets: [{ format }] } })

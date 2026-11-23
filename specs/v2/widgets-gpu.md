@@ -373,8 +373,9 @@ posted something other than an `ArrayBuffer`; `ops` as posted, a list or not, wi
 back as that number), with each frame request that carries no batch in its place as
 `{ frame: true, ops: [], bytes: "" }`, so every frame's end is there (the per-frame counts start again at each
 `frame: true` entry); a repeated frame request while one is pending isn't one (its batch, if any, is recorded with
-`frame: false`). `raw-*` programs post their own and omit them, except one whose batch has the wrong shape (`ops` not
-a list, `bytes` not an `ArrayBuffer`), which keeps them: a driver that replays `batches` makes the batch checks on them
-as a host converting the posted value does.
+`frame: false`). `raw-*` programs post their own and omit them, except one whose batch has the wrong shape (`ops` not a
+list, `bytes` not an `ArrayBuffer`), which keeps them: a driver that replays `batches` makes the batch checks on them as
+a host converting the posted value does. A fixture whose ops are generated and too many to record
+(`error-too-many-draws`) has `"batches": "from-source"`: a driver gets its batches by running `source` as above.
 `errors` are the host checks' program errors, `{ message, canvases }`, with `canvases` the keys stopped or `"all"`.
 `end` is how the run ended (`return`, `stop` when it stays open, or `error: <message>`).

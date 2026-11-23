@@ -93,9 +93,9 @@ export async function run(item: GpuCase): Promise<Recorded> {
 
 // JSON, two spaces deep, with one op per line.
 function format(file: Record<string, unknown>) {
-  const { batches, ...rest } = file as { batches?: Recorded["batches"] }
+  const { batches, ...rest } = file as { batches?: Recorded["batches"] | "from-source" }
+  if (!Array.isArray(batches)) return JSON.stringify(file, null, 2) + "\n"
   const head = JSON.stringify(rest, null, 2).slice(0, -2)
-  if (!batches) return head + "\n}\n"
   const body = batches.map((batch) => {
     const ops = batch.ops
     const list = !Array.isArray(ops)
@@ -117,10 +117,11 @@ if (import.meta.main) {
   for (const item of fixtures()) {
     const recorded = await run(item)
     // A raw case's batch is in its source; one of the wrong shape (ops not a list, bytes not an ArrayBuffer) is kept
-    // too, for drivers that replay batches.
+    // too, for drivers that replay batches. Batches too big to record come from running the source.
     const { batches, ...rest } = recorded
     const shape = batches.some((batch) => batch.bytes === null || !Array.isArray(batch.ops))
-    const file = { ...item, raw: undefined, gpu: GPU, ...(item.raw && !shape ? {} : { batches }), ...rest }
+    const kept = item.raw && !shape ? {} : { batches: item.fromSource ? "from-source" : batches }
+    const file = { ...item, raw: undefined, fromSource: undefined, gpu: GPU, ...kept, ...rest }
     await Bun.write(path.join(dir, `${item.name}.json`), format(file))
   }
   console.log(`wrote ${fixtures().length} fixtures to ${dir}`)

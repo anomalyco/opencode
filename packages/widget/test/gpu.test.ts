@@ -25,7 +25,8 @@ for (const file of files) {
     const item = fixtures().find((candidate) => candidate.name === fixture.name)!
     expect(item.source).toBe(fixture.source)
     const recorded = await run(item)
-    if (fixture.batches) expect(recorded.batches).toEqual(fixture.batches)
+    // "from-source": the batches are the run's own.
+    if (Array.isArray(fixture.batches)) expect(recorded.batches).toEqual(fixture.batches)
     expect(recorded.errors).toEqual(fixture.errors)
     expect(recorded.end).toBe(fixture.end)
   }, 60_000)
