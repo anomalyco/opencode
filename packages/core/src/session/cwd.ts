@@ -9,6 +9,8 @@ import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { Flag } from "../flag.js"
 import { Machines } from "../machine/machines.js"
+import { MachinePath } from "../machine/path.js"
+import { AbsolutePath } from "../schema.js"
 import { CwdError } from "./error.js"
 import type { SessionSchema } from "./schema.js"
 import { SessionTable } from "./sql.js"
@@ -17,6 +19,22 @@ import { SessionTable } from "./sql.js"
 // Stripped from public Session.Info.metadata and preserved across MetadataUpdated.
 const metadataKey = "$opencode_experimental_cwd"
 const decodePlace = Schema.decodeUnknownOption(Environment.Place)
+
+/** A session cwd bound to its environment: where it is, and the files and commands it resolves against. */
+export interface Resolved {
+  readonly absolute: AbsolutePath
+  readonly environment: Environment.Interface
+}
+
+/** A path in a cwd's environment as the model writes it: plain on the Location's own environment, `machine:/path` elsewhere. */
+export const format = (cwd: Resolved, path: string, locationEnvironmentID: Environment.ID) =>
+  cwd.environment.id === locationEnvironmentID ? path : MachinePath.format(cwd.environment.id, path)
+
+/** The cwd as the model writes it, naming the machine when the directory is on a paired machine. */
+export const describe = (cwd: Resolved, locationEnvironmentID: Environment.ID) => ({
+  path: format(cwd, cwd.absolute, locationEnvironmentID),
+  machine: cwd.environment.id === locationEnvironmentID ? undefined : cwd.environment.id,
+})
 
 export function readStored(metadata: SessionSchema.Metadata | null | undefined): {
   readonly cwd: Environment.Place | undefined
