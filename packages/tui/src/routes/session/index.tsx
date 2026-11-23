@@ -103,7 +103,7 @@ import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { Slot } from "../../plugin/render"
-import { usePlugin } from "../../plugin/context"
+import { useOptionalPlugin, usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
   completeGroupBoundary,
@@ -2906,6 +2906,7 @@ type BlockToolProps = {
   title?: string
   path?: { label: string; value: string }
   headerColor?: RGBA
+  gap?: number
   children?: JSX.Element
   onClick?: () => void
   part?: SessionMessageAssistantTool
@@ -2932,7 +2933,7 @@ function BlockTool(props: BlockToolProps) {
       paddingBottom={1}
       paddingLeft={2}
       paddingRight={2}
-      gap={1}
+      gap={props.gap ?? 1}
       backgroundColor={hover() ? theme.decrease(background()) : background()}
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={theme.background.base}
@@ -3006,6 +3007,9 @@ function Shell(props: ToolProps) {
   return (
     <ShellDisplay
       part={props.part}
+      tool={props.tool}
+      input={props.input}
+      metadata={props.metadata}
       shellID={stringValue(props.metadata.shellID)}
       command={stringValue(props.input.command)}
       workdir={stringValue(props.input.workdir)}
@@ -3029,6 +3033,9 @@ function stoppedShell(part: SessionMessageAssistantTool, metadata: Record<string
 
 function ShellDisplay(props: {
   part?: SessionMessageAssistantTool
+  tool?: string
+  input?: Readonly<Record<string, unknown>>
+  metadata?: Readonly<Record<string, unknown>>
   shellID?: string
   command?: string
   workdir?: string
@@ -3038,6 +3045,7 @@ function ShellDisplay(props: {
   error?: string
 }) {
   const theme = useTheme()
+  const plugin = useOptionalPlugin()
   const ctx = use()
   const client = useClient()
   const data = useData()
@@ -3125,7 +3133,24 @@ function ShellDisplay(props: {
   })
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 8 - (isRunning() ? 2 : 0)))
-  const prefix = createMemo(() => (workdir() && workdir() !== "." ? `cd ${workdir()} && ` : ""))
+  const decoration = createMemo(() => {
+    const decorate = plugin?.toolDecorator("shell")
+    if (!decorate) return undefined
+    try {
+      return decorate({
+        tool: props.tool ?? "shell",
+        status: props.status,
+        input: props.input ?? {},
+        metadata: props.metadata ?? {},
+        workdir: workdir() || undefined,
+        shell: props.shellID ? data.shell.get(props.shellID) : undefined,
+      })
+    } catch {
+      return undefined
+    }
+  })
+  const defaultPrefix = createMemo(() => (workdir() && workdir() !== "." ? `cd ${workdir()} && ` : ""))
+  const prefix = createMemo(() => decoration()?.commandPrefix ?? defaultPrefix())
   const input = createMemo(() => (props.command ? `${isRunning() ? "" : "$ "}${prefix()}${props.command}` : ""))
   const collapsed = createMemo(() => collapseShellOutput(input(), output(), maxLines, maxChars()))
   const limitedInput = createMemo(() => (expanded() ? input() : collapsed().input))
@@ -3138,7 +3163,14 @@ function ShellDisplay(props: {
   }
 
   return (
-    <BlockTool part={props.part} error={props.error} onClick={expandable() ? toggle : undefined}>
+    <BlockTool
+      part={props.part}
+      title={decoration()?.title}
+      path={decoration()?.path}
+      gap={decoration()?.gap}
+      error={props.error}
+      onClick={expandable() ? toggle : undefined}
+    >
       <box gap={1}>
         <Show
           when={props.command}

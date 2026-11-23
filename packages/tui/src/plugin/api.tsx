@@ -18,10 +18,12 @@ import type {
   Dialog,
   DialogSelectOptions,
   Page,
+  SettingItem,
   SlotClaim,
   SlotMap,
   SlotPath,
   Toast,
+  ToolDecorator,
 } from "@opencode/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
@@ -65,11 +67,13 @@ const placements = ["prepend", "append", "before", "after", "replace"] as const 
 // route/slot registration lands there, but ordering and lifecycle stay owned
 // by the provider.
 export type Registry = {
-  has(kind: "routes" | "slots" | "markdown", name: string): boolean
+  has(kind: "routes" | "slots" | "markdown" | "settings" | "tools", name: string): boolean
   set(kind: "routes", name: string, page: Page): void
   set(kind: "slots", name: string, claim: RegisteredSlot): void
   set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
-  remove(kind: "routes" | "slots" | "markdown", name: string): void
+  set(kind: "settings", name: string, setting: SettingItem): void
+  set(kind: "tools", name: string, decorator: ToolDecorator): void
+  remove(kind: "routes" | "slots" | "markdown" | "settings" | "tools", name: string): void
   active(): boolean
 }
 
@@ -150,7 +154,7 @@ export function createPluginContext(input: {
   }
   // Unregistering after deactivation is a no-op: deactivate already resets
   // the registration's routes and slots wholesale.
-  const registration = (kind: "routes" | "slots" | "markdown", name: string) => {
+  const registration = (kind: "routes" | "slots" | "markdown" | "settings" | "tools", name: string) => {
     let registered = true
     const unregister = () => {
       if (!registered) return
@@ -258,6 +262,19 @@ export function createPluginContext(input: {
           const current = host.panel?.current()
           if (current?.plugin !== input.id) return
           return { name: current.name, sessionID: current.sessionID }
+        },
+      },
+      settings: {
+        register(setting) {
+          if (input.registry.has("settings", setting.id)) throw new Error(`Setting already registered: ${setting.id}`)
+          input.registry.set("settings", setting.id, setting)
+          return registration("settings", setting.id)
+        },
+      },
+      tools: {
+        decorate(tool, decorator) {
+          input.registry.set("tools", tool, decorator)
+          return registration("tools", tool)
         },
       },
       tabs: {

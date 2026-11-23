@@ -492,6 +492,43 @@ export interface Keymap {
   }
 }
 
+export interface SettingItem {
+  /** Unique ID within this plugin (automatically namespaced by plugin ID in the Settings dialog). */
+  readonly id: string
+  readonly title: string
+  readonly category: string
+  readonly description?: string
+  readonly keywords?: readonly string[]
+  /** Reactive getter for the current value. */
+  readonly value: () => unknown
+  readonly values?: readonly unknown[]
+  readonly labels?: readonly string[]
+  readonly step?: number
+  readonly min?: number
+  readonly max?: number
+  readonly format?: (value: unknown) => string
+  readonly onChange: (next: unknown) => void | Promise<void>
+}
+
+export interface ToolDecorationContext {
+  readonly tool: string
+  readonly status: "streaming" | "running" | "completed" | "error"
+  readonly input: Readonly<Record<string, unknown>>
+  readonly metadata: Readonly<Record<string, unknown>>
+  readonly workdir?: string
+  readonly shell?: ShellInfo
+}
+
+export interface ToolDecoration {
+  readonly title?: string
+  readonly path?: { readonly label: string; readonly value: string }
+  readonly gap?: number
+  /** Overrides the default command prefix (e.g. `cd <dir> && `). Pass `""` to omit it. */
+  readonly commandPrefix?: string
+}
+
+export type ToolDecorator = (context: ToolDecorationContext) => ToolDecoration | undefined
+
 export interface UI {
   readonly dialog: Dialog
   readonly toast: Toast
@@ -510,6 +547,14 @@ export interface UI {
     close(): void
     /** This plugin's active panel, if any. Reactive when read in a Solid computation. */
     current(): { readonly name: string; readonly sessionID: string } | undefined
+  }
+  readonly settings: {
+    /** Registers a reactive setting in the Settings dialog. Removed when disposed or when the plugin deactivates. */
+    register(setting: SettingItem): () => void
+  }
+  readonly tools: {
+    /** Registers a reactive display decorator for a built-in tool card (e.g. "shell"). Last active writer wins. */
+    decorate(tool: string, decorator: ToolDecorator): () => void
   }
   readonly tabs: {
     /** Returns whether session tabs are enabled for this TUI. */
