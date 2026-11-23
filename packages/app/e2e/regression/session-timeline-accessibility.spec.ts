@@ -54,7 +54,6 @@ test("Tab moves between timeline controls without stopping on the timeline itsel
   const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
   const first = scroller.getByRole("button", { name: "More actions", exact: true })
   await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
-  // A Tab stop on the timeline would show no ring, so focus would seem to disappear.
   await expect(scroller).toHaveAttribute("tabindex", "-1")
   await first.press("Shift+Tab")
   await expect(scroller).not.toBeFocused()

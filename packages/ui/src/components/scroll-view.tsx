@@ -448,7 +448,7 @@ export function ScrollView(props: ScrollViewProps) {
   )
 
   // Keybinds implementation
-  // The viewport takes focus from a click (tabindex -1) but is not a Tab stop: Tab moves between the items inside it.
+  // The viewport takes focus from a click but is not a Tab stop
   // Keyboard scrolling jumps immediately, like the wheel, instead of animating.
   const onKeyDown = (e: KeyboardEvent) => {
     // If user is focused on an input inside the scroll view, don't hijack keys

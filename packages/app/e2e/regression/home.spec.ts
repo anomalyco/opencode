@@ -91,7 +91,6 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
 
   await page.setViewportSize({ width: 1280, height: 200 })
   await expect.poll(() => viewport.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
-  // Even while it scrolls, the list is not a Tab stop: Shift+Tab from its first control leaves it.
   await expect(viewport).toHaveAttribute("tabindex", "-1")
   await projects.getByRole("button", { name: "Add project", exact: true }).press("Shift+Tab")
   await expect(viewport).not.toBeFocused()
