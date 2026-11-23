@@ -24,6 +24,12 @@ import { Watcher } from "./watcher.js"
 export const TTL = Duration.hours(24)
 export const SWEEP_INTERVAL = Duration.minutes(5)
 export const MAX_PER_LOCATION = 256
+/** Browsed directories re-arm on every listing, so their watches keep a shorter lease. */
+export const CHILDREN_TTL = Duration.hours(1)
+/** Directory watches take from their own budget so they never evict open-tab file watches. */
+export const MAX_CHILDREN_PER_LOCATION = 64
+/** Directory churn coalesces so clients re-list a browsed directory at most once per window. */
+export const CHILDREN_COALESCE = Duration.millis(250)
 
 export class DisabledError extends Schema.TaggedError<DisabledError>()("FileWatch.DisabledError", {}) {
   override get message() {
@@ -52,7 +58,7 @@ export const Options = Schema.Struct({
 })
 export type Options = typeof Options.Type
 
-type Entry = { expires: number; scope: Scope.Closeable }
+type Entry = { expires: number; type: "file" | "children"; scope: Scope.Closeable }
 
 // Global rather than location-scoped so watches outlive idle location eviction.
 export const layer = (options?: Options) =>
@@ -90,16 +96,50 @@ export const layer = (options?: Options) =>
         const child = yield* Scope.fork(scope)
         yield* Effect.gen(function* () {
           const updates = yield* watcher.subscribe({ path: input.file, type: input.type ?? "file" })
+          const publish = (event: "change" | "unlink") =>
+            bus.publish(FileSystem.Event.Changed, { file: input.file, event }, { location: input.location })
+          // Directory churn (a file written continuously, a burst of creates) coalesces so clients
+          // re-list a browsed directory at most once per window, and the window's last update still
+          // publishes once it ends. A removal ends the watch, so it always publishes immediately.
+          let lastPublished = Number.NEGATIVE_INFINITY
+          let pendingTrailing = false
+          const flush = Effect.suspend(() => {
+            pendingTrailing = false
+            return Effect.gen(function* () {
+              // The directory may be gone by the time the window ends; its removal event publishes the unlink.
+              if (!(yield* fs.existsSafe(input.file))) return
+              lastPublished = yield* Clock.currentTimeMillis
+              yield* publish("change")
+            })
+          })
           yield* Stream.runForEachWhile(updates, () =>
             Effect.gen(function* () {
               const exists = yield* fs.existsSafe(input.file)
-              yield* bus.publish(
-                FileSystem.Event.Changed,
-                { file: input.file, event: exists ? "change" : "unlink" },
-                { location: input.location },
-              )
-              // A removed directory's native watch follows the old inode. A later listing must arm a new one.
-              return input.type !== "children" || exists
+              if (!exists) {
+                yield* publish("unlink")
+                // A removed directory's native watch follows the old inode. A later listing must arm a new one.
+                // A removed file keeps its watch so a recreated file resumes live reload.
+                return input.type !== "children"
+              }
+              if (input.type !== "children") {
+                yield* publish("change")
+                return true
+              }
+              const now = yield* Clock.currentTimeMillis
+              if (now - lastPublished >= Duration.toMillis(CHILDREN_COALESCE)) {
+                lastPublished = now
+                yield* publish("change")
+                return true
+              }
+              if (!pendingTrailing) {
+                pendingTrailing = true
+                yield* Effect.sleep(Duration.toMillis(CHILDREN_COALESCE) - (now - lastPublished)).pipe(
+                  Effect.andThen(flush),
+                  Effect.forkIn(child, { startImmediately: true }),
+                  Effect.asVoid,
+                )
+              }
+              return true
             }),
           )
         }).pipe(
@@ -139,18 +179,23 @@ export const layer = (options?: Options) =>
           lock.withPermit(
             Effect.gen(function* () {
               const key = locationKey(input.location)
-              const expires = (yield* Clock.currentTimeMillis) + Duration.toMillis(TTL)
+              const type = input.type ?? "file"
+              const ttl = type === "children" ? CHILDREN_TTL : TTL
+              const expires = (yield* Clock.currentTimeMillis) + Duration.toMillis(ttl)
               const existing = locations.get(key)?.get(input.file)
               if (existing) {
                 existing.expires = expires
                 return
               }
-              const full = locations.get(key)
-              if (full && full.size >= MAX_PER_LOCATION) {
-                const soonest = [...full].reduce((a, b) => (b[1].expires < a[1].expires ? b : a))
+              // Evict within the watch's own budget only, so a browsing session never
+              // evicts the file watches behind open tabs, which would silently stop their live reload.
+              const budget = type === "children" ? MAX_CHILDREN_PER_LOCATION : MAX_PER_LOCATION
+              const sameType = [...(locations.get(key) ?? [])].filter(([, entry]) => entry.type === type)
+              if (sameType.length >= budget) {
+                const soonest = sameType.reduce((a, b) => (b[1].expires < a[1].expires ? b : a))
                 yield* stop(key, soonest[0])
               }
-              const entry = { expires, scope: yield* start(key, input) }
+              const entry = { expires, type, scope: yield* start(key, input) }
               const files = locations.get(key) ?? new Map<string, Entry>()
               files.set(input.file, entry)
               locations.set(key, files)

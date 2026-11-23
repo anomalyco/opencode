@@ -212,8 +212,11 @@ export const nativeLayer = Layer.succeed(
         const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
         return Effect.try({
           try: () =>
-            watch(directory, { recursive: false }, (_event, file) => {
+            watch(directory, { recursive: false }, (event, file) => {
               if (input.type === "children") {
+                // Content writes leave a directory's entries unchanged; only creation,
+                // deletion, and renames invalidate a listing.
+                if (event === "change") return
                 input.publish({ path: directory, type: "update" })
                 return
               }

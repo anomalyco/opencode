@@ -26,6 +26,7 @@ const describeNative = process.env.CI ? describe.skip : describe
 
 const location = { directory: AbsolutePath.make("/project") }
 const file = (name: string) => ({ location, file: path.join(location.directory, name) })
+const children = (name: string) => ({ location, file: path.join(location.directory, name), type: "children" }) as const
 
 const subscriptions = Effect.gen(function* () {
   const test = yield* Watcher.Test
@@ -33,25 +34,35 @@ const subscriptions = Effect.gen(function* () {
 })
 
 describe("FileWatch", () => {
-  it.live("invalidates a browsed directory for new, renamed, and deleted immediate entries", () =>
+  it.effect("invalidates a browsed directory once per coalesce window", () =>
     Effect.gen(function* () {
       const fileWatch = yield* FileWatch.Service
       const test = yield* Watcher.Test
       const bus = yield* Bus.Service
       const tmp = yield* tmpdirScoped()
       const input = { location: { directory: AbsolutePath.make(tmp.path) }, file: tmp.path, type: "children" } as const
-      const events = yield* bus
-        .subscribe(FileSystem.Event.Changed)
-        .pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      const next = () =>
+        bus
+          .subscribe(FileSystem.Event.Changed)
+          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
       yield* fileWatch.watch(input)
       yield* fileWatch.watch(input)
       expect(yield* test.subscriptions()).toEqual([{ path: tmp.path, type: "children" }])
+
+      // The first update publishes immediately, without waiting for the window.
+      const leading = yield* next()
       yield* test.emit({ path: path.join(tmp.path, "new.txt"), type: "create" })
+      const first = yield* Fiber.join(leading)
+
+      // Churn inside the window coalesces into one trailing publish when the window ends.
+      const trailing = yield* next()
       yield* test.emit({ path: path.join(tmp.path, "renamed.txt"), type: "create" })
       yield* test.emit({ path: path.join(tmp.path, "new.txt"), type: "delete" })
-      const received = yield* Fiber.join(events)
-      expect(received.map((event) => ({ directory: event.location?.directory, ...event.data }))).toEqual(
-        Array.from({ length: 3 }, () => ({ directory: input.location.directory, file: tmp.path, event: "change" })),
+      yield* TestClock.adjust(FileWatch.CHILDREN_COALESCE)
+      const second = yield* Fiber.join(trailing)
+
+      expect([...first, ...second].map((event) => ({ directory: event.location?.directory, ...event.data }))).toEqual(
+        Array.from({ length: 2 }, () => ({ directory: input.location.directory, file: tmp.path, event: "change" })),
       )
     }),
   )
@@ -101,6 +112,41 @@ describe("FileWatch", () => {
       expect(yield* subscriptions).toBe(FileWatch.MAX_PER_LOCATION + 2)
       yield* fileWatch.watch(file("oldest.ts"))
       expect(yield* subscriptions).toBe(FileWatch.MAX_PER_LOCATION + 3)
+    }),
+  )
+
+  it.effect("expires a directory watch after one hour unless it is listed again", () =>
+    Effect.gen(function* () {
+      const fileWatch = yield* FileWatch.Service
+      yield* fileWatch.watch(children("src"))
+      yield* TestClock.adjust(Duration.minutes(59))
+      yield* fileWatch.watch(children("src"))
+      expect(yield* subscriptions).toBe(1)
+      yield* TestClock.adjust(Duration.minutes(61))
+      yield* fileWatch.watch(children("src"))
+      expect(yield* subscriptions).toBe(2)
+    }),
+  )
+
+  it.effect("directory watches never evict open-tab file watches", () =>
+    Effect.gen(function* () {
+      const fileWatch = yield* FileWatch.Service
+      yield* fileWatch.watch(file("open.ts"))
+      yield* Effect.forEach(
+        Array.from({ length: FileWatch.MAX_CHILDREN_PER_LOCATION }, (_, index) => children(`dir-${index}`)),
+        (input) => fileWatch.watch(input),
+        { discard: true },
+      )
+      expect(yield* subscriptions).toBe(FileWatch.MAX_CHILDREN_PER_LOCATION + 1)
+      // One listing past the directory budget evicts the soonest directory watch, so the added watch replaces it.
+      yield* fileWatch.watch(children("another"))
+      expect(yield* subscriptions).toBe(FileWatch.MAX_CHILDREN_PER_LOCATION + 2)
+      // The open tab's watch survived: watching it again resets instead of resubscribing.
+      yield* fileWatch.watch(file("open.ts"))
+      expect(yield* subscriptions).toBe(FileWatch.MAX_CHILDREN_PER_LOCATION + 2)
+      // The evicted watch was the oldest listing, not the file watch.
+      yield* fileWatch.watch(children("dir-0"))
+      expect(yield* subscriptions).toBe(FileWatch.MAX_CHILDREN_PER_LOCATION + 3)
     }),
   )
 
