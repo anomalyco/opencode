@@ -192,12 +192,14 @@ export type CapturedPointer =
   | { readonly kind: "down" | "up"; readonly button: number }
 
 /**
- * A mouse wheel or trackpad scroll over a canvas with `pointer: true` (widgets-input.md, Wheel), summed over a frame, in
- * logical pixels; under pointer capture without `x` and `y`.
+ * The mouse wheel or trackpad scroll while the widget holds pointer capture (widgets-input.md, Wheel), summed over a
+ * frame, in logical pixels.
  */
-export type Wheel =
-  | { readonly kind: "wheel"; readonly x: number; readonly y: number; readonly dx: number; readonly dy: number }
-  | { readonly kind: "wheel"; readonly dx: number; readonly dy: number }
+export interface Wheel {
+  readonly kind: "wheel"
+  readonly dx: number
+  readonly dy: number
+}
 
 /** A key while the widget has keyboard focus; `key` and `code` as in DOM `KeyboardEvent`. Esc is never delivered. */
 export interface Key {

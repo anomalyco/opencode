@@ -12,8 +12,6 @@
       "type": "pointer",
       "value": {
         "kind": "wheel",
-        "x": 4,
-        "y": 5,
         "dx": 0,
         "dy": -120,
         "width": 9
@@ -40,8 +38,6 @@
       "n": 1,
       "p": {
         "kind": "wheel",
-        "x": 4,
-        "y": 5,
         "dx": 0,
         "dy": -120
       }

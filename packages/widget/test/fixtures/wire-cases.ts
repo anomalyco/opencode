@@ -147,8 +147,8 @@ export const cases: ReadonlyArray<{
     source: view(`ui.button("go", { onPress: () => dismiss() })`),
     input: { phase: "event", data: null, state: { n: 1 }, event: { id: "0", type: "press" } },
   },
-  // A wheel goes to `onPointer` as `{ kind, x, y, dx, dy }`, under capture `{ kind, dx, dy }`; other fields are left
-  // out, and a number that isn't one is 0.
+  // A wheel (only under pointer capture) goes to `onPointer` as `{ kind, dx, dy }`; other fields are left out, and a
+  // number that isn't one is 0.
   {
     name: "wheel",
     source: view(`ui.canvas({ height: 10, onPointer: (state, p) => ({ ...state, p }) })`),
@@ -156,7 +156,7 @@ export const cases: ReadonlyArray<{
       phase: "event",
       data: null,
       state: { n: 1 },
-      event: { id: "0", type: "pointer", value: { kind: "wheel", x: 4, y: 5, dx: 0, dy: -120, width: 9 } },
+      event: { id: "0", type: "pointer", value: { kind: "wheel", dx: 0, dy: -120, width: 9 } },
     },
     newer: true,
   },

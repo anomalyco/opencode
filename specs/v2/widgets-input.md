@@ -34,16 +34,13 @@ this. Clients only; the server knows nothing about it.
 
 ## Wheel
 
-- A canvas with `pointer: true` gets the mouse wheel and trackpad scrolling over it as a pointer event to its
-  `onPointer`: `{ id, type: "pointer", value: { kind: "wheel", x, y, dx, dy } }` in the node's logical pixels, `x`, `y`
-  where the pointer is and `dx`, `dy` the scroll, with DOM `WheelEvent`'s signs as the platform reports them (positive
-  `dy` scrolls down, positive `dx` right). Hosts normalise lines and pages to pixels: a line is 40, a page the canvas's
-  logical height (its width for `dx`).
-- Wheel events that arrive in one frame are summed into one event before delivery (`x`, `y` from the last), so a
-  trackpad can't flood the program. Delivery follows `move`'s rules: the node that takes pointer input at the point gets
-  it (`widgets.md`, Stack), at most once per frame. A wheel over a canvas that takes it doesn't scroll what holds the
-  widget. Hosts without a wheel (touch) never send it.
-- Under pointer capture it goes where captured moves go, as `{ kind: "wheel", dx, dy }`.
+- Only while the widget holds pointer capture do the mouse wheel and trackpad scrolling reach the program, where
+  captured moves go: `{ id, type: "pointer", value: { kind: "wheel", dx, dy } }` in logical pixels, with DOM
+  `WheelEvent`'s signs as the platform reports them (positive `dy` scrolls down, positive `dx` right). Hosts normalise
+  lines and pages to pixels: a line is 40, a page the canvas's logical height (its width for `dx`).
+- Wheel events that arrive in one frame are summed into one event before delivery, so a trackpad can't flood the
+  program. Without capture the wheel is never delivered: it scrolls the page or the transcript as it does everywhere
+  else. Touch hosts, which never grant capture, never send it.
 - In live mode `widget.pointer` doesn't change on a wheel: it keeps the last `down`, `move` or `up`.
 
 ## Esc always releases

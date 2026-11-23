@@ -343,7 +343,7 @@ handlers and never see them. The value a client sends, and what the handler gets
 | `select` | `change`, `value: string` or `string[]` when `multiple` | `onChange(state, value)`, only known option values |
 | `input` | `change`, `value: string` (on commit / blur / debounce >= 300 ms) | `onChange(state, text)` |
 | `carousel` | `change`, `value: number` (new page index) | `onChange(state, index)` |
-| `canvas` | `pointer`, `value: { kind, x, y, width, height }` in the node's logical pixels; `move` only while down, at most once per frame (see Canvas); a wheel is `{ kind: "wheel", x, y, dx, dy }` (`widgets-input.md`, Wheel) | `onPointer(state, p)`; under pointer capture `p` is `{ kind, dx, dy, button }`, or a wheel's `{ kind, dx, dy }` |
+| `canvas` | `pointer`, `value: { kind, x, y, width, height }` in the node's logical pixels; `move` only while down, at most once per frame (see Canvas) | `onPointer(state, p)`; under pointer capture `p` is `{ kind, dx, dy, button }`, or a wheel's `{ kind, dx, dy }` (`widgets-input.md`, Wheel) |
 | none (`id: ""`) | `key`, `focus`, `fullscreen`, `capture` | the hooks (Widget template source) |
 
 In live mode the same props take closures that get only the value (`onPress()`, `onChange(value)`,
@@ -498,9 +498,9 @@ type Gradient = { linear: [x1, y1, x2, y2]; stops: [offset: number, color: Color
 ```
 
 Pointer input on a canvas with `pointer: true` goes to its `onPointer` handler: clients send
-`{ id, type: "pointer", value: { kind: "down" | "move" | "up", x, y, width, height } }`, with `move` only while down and
-at most once per frame, and the wheel as `{ kind: "wheel", x, y, dx, dy }` (`widgets-input.md`, Wheel). `width`/`height`
-are the canvas's logical size, so the handler can hit-test a layout that follows the available width.
+`{ id, type: "pointer", value: { kind: "down" | "move" | "up", x, y, width, height } }`, with `move` only while down
+and at most once per frame. `width`/`height` are the canvas's logical size, so the handler can hit-test a layout that
+follows the available width.
 
 The builder methods push one command each and return the builder (`g.save().alpha(0.5)`): `save() restore()
 translate(x, y) rotate(r) scale(sx, sy = sx) alpha(a) rect(x, y, w, h, paint) rrect(x, y, w, h, r, paint)
