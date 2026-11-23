@@ -23,7 +23,7 @@
   -moz-osx-font-smoothing: grayscale;
   text-rendering: geometricPrecision;
 
-  &:focus-visible {
+  &[data-focus-visible] {
     outline: none;
   }
 }

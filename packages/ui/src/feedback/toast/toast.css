@@ -35,7 +35,7 @@
     grid-template-columns: 16px minmax(0, 1fr) 20px;
   }
 
-  &:focus-visible {
+  &[data-focus-visible] {
     box-shadow:
       var(--v2-elevation-floating),
       0 0 0 2px var(--v2-border-border-focus);
@@ -122,7 +122,7 @@
     background: var(--v2-overlay-simple-overlay-pressed);
   }
 
-  > [data-close-button]:focus-visible {
+  > [data-close-button][data-focus-visible] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }

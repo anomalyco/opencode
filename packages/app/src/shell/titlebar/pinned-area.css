@@ -105,8 +105,8 @@
 }
 
 /* The group's outline would cover the edge of an inset ring on its first and last controls. */
-[data-component="pinned-group"] [data-pinned-slot]:has(:focus-visible),
-[data-slot="pinned-group-trigger"]:focus-visible {
+[data-component="pinned-group"] [data-pinned-slot]:has([data-focus-visible]),
+[data-slot="pinned-group-trigger"][data-focus-visible] {
   position: relative;
   z-index: 2;
 }

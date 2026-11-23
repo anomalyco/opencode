@@ -1,17 +1,29 @@
 ---
 name: focus-states
-description: Focus indicators and focus movement in OpenCode Desktop and the web app. Use when adding or reviewing an interactive component, a :focus/:focus-visible/:focus-within rule, an outline on focus, a list/menu/palette row, a text field, a dialog, menu or popover, a selected state, removing or closing a focused item, or anything that moves focus programmatically.
+description: Focus indicators and focus movement in OpenCode Desktop and the web app. Use when adding or reviewing an interactive component, a :focus/:focus-within/[data-focus-visible] rule, an outline on focus, a list/menu/palette row, a text field, a dialog, menu or popover, a selected state, removing or closing a focused item, or anything that moves focus programmatically.
 ---
 
 # Focus States
 
-Use one default ring when someone navigates focus to a control, not when they click or tap it. The exceptions are below. Desktop uses Chromium; on the web, test the browser you’re changing or targeting rather than assuming identical focus behaviour.
+Show one default ring while someone moves through the app with the keyboard, not when they click, tap or type. The app decides this itself, the same way in every browser.
+
+## When the ring shows
+
+`packages/ui/src/context/keyboard-mode.tsx` (installed in `AppBaseProviders` and in the story frame) keeps one keyboard mode for the window and marks the focused element with `data-focus-visible` while it is on. The rules are a pure state machine in `keyboard-mode-machine.ts`.
+
+- On: Tab, an arrow key, Home or End moves focus to another element, or Enter, Space, an arrow key, Home or End is pressed on a focused control (a button, link, tab, menu item or another ARIA widget).
+- Off: a pointer press.
+- No change: typing, shortcuts held with Ctrl, Alt or Meta, lone modifier keys, Escape, keys in a text field or on a scroll region or panel, leaving and returning to the window, and focus the app moves itself (dialogs, menus, focus rescue, autofocus). Focus the app moves shows a ring only if the mode is already on.
+- Settings › Appearance › "Always show focus rings" marks every focused element, a clicked one included.
+- Never use `:focus-visible`, in CSS or in `matches()`. Chromium also matches it after any typed key, for every text field, and for script focus once a key was pressed, which showed rings at random. `base.css` removes the browser's own ring, and `bun run lint` fails on a new use (`script/check-focus-rings.ts`).
+- Don't add ring logic to a component: no pointer or key tracking, no `focus({ focusVisible })`, no ring attribute of its own. The ring bookkeeping still in `field-focus.tsx`, `overlay-focus.tsx`, `dialog.tsx` and `focus-rescue.tsx` no longer affects what shows and is being removed.
+- A custom control needs a widget role (`role="button"`, `role="tab"`, ...) for Enter and Space on it to count, which it needs for assistive technology anyway.
 
 ## The ring
 
-- Use `:focus-visible` for the ring. Don’t use `:focus` to decide whether to show it. The only exception is a custom field that combines `:focus` with its own ring state, as the composer and Home search do (see Text fields). `base.css` supplies `outline: 2px solid var(--v2-border-border-focus); outline-offset: 2px` and a 4px radius for links.
+- Style the ring on `[data-focus-visible]`, or with Tailwind's `focus-visible:`, `group-focus-visible:` and `peer-focus-visible:` variants, which the app redefines to that attribute. Don’t use `:focus` to decide whether to show it. `base.css` supplies `outline: 2px solid var(--v2-border-border-focus); outline-offset: 2px` and a 4px radius for links.
 - Offset: `2px` outward by default. `-2px` inset for full-width rows and for controls flush against an edge that clips or scrolls (segmented items, split buttons, titlebar buttons, clear buttons). No other offsets.
-- Follow the control’s radius; give a square text action or link 4px where appropriate. Use a wrapper with `:has(> trigger:focus-visible)` when the wrapper owns the visible shape or the trigger’s ring would clip, as with tabs and Settings project cards.
+- Follow the control’s radius; give a square text action or link 4px where appropriate. Use a wrapper with `:has(> trigger[data-focus-visible])` when the wrapper owns the visible shape or the trigger’s ring would clip, as with tabs and Settings project cards.
 - Outline only. Don't draw focus with `box-shadow`: Windows High Contrast removes shadows, so the ring disappears, and shadow rings looked different from every other ring.
 - Rings appear and disappear instantly. Draw no outline at rest and leave `outline-color` out of `transition`; animating it from the default colour flashes black. Don't use `outline: 2px solid transparent` at rest: High Contrast turns it into a visible outline on every control.
 - Keep a border that identifies an unfocused control. Where Chromium's forced colours remove the shadow that draws a control's edge, give it a system-colour border in `@media (forced-colors: active)`, separate from the ring, as switches and radios do.
@@ -20,13 +32,9 @@ Use one default ring when someone navigates focus to a control, not when they cl
 
 ## Text fields
 
-Editable fields can match `:focus-visible` after a click, so fields with a custom frame ring (the composer and Home search) decide when focus arrives. Use `packages/ui/src/context/field-focus.tsx`, not a global input tracker.
-
-- Ring by default. Suppress the ring for direct pointer focus and for the composer’s explicit initial autofocus when a session or draft opens, including when it was opened with the keyboard.
-- Tab, shortcuts like Find, and assistive technology moving DOM focus show the ring. Moving a screen reader’s reading cursor alone does not move DOM focus.
-- When a dialog returns focus to a custom field, `packages/ui/src/context/dialog.tsx` restores the field's own ring state; ordinary controls use the browser's `:focus-visible` state. The overlay rules below apply.
-- A `pointerdown` inside a field that already shows the ring clears it immediately; no new focus event fires. Typing never changes the decision, and blur clears it.
-- A click shows the field's normal focused border or background and the caret, with no ring.
+- A click shows the field's normal focused border or background and the caret, with no ring. So does focus the app moves while the keyboard mode is off, such as the composer's autofocus when a session opens or typing that jumps to the composer.
+- Tab into a field shows the ring. A field with a custom frame, like the composer and Home search, draws it on the frame with `:has(field[data-focus-visible])`.
+- Moving a screen reader’s reading cursor alone does not move DOM focus.
 
 ## Rows
 
@@ -39,11 +47,8 @@ Editable fields can match `:focus-visible` after a click, so fields with a custo
 
 ## Overlays and menus
 
-- When an overlay closes and returns focus to its opener:
-  - Pointer dismissals (backdrop click, a close button clicked with the pointer) restore the opener’s ring state from when the overlay opened.
-  - Escape or another keyboard close after a keyboard open shows the ring on the restored control.
-  - Escape after a pointer open restores the no-ring state. Changing that is a deliberate product decision and needs its own test.
-- Dialogs get this from the dialog context and dropdown menus from the `Menu` wrapper. Select, `Menu.Context`, and raw `@kobalte/core/popover` uses get it from `createOverlayFocus` in `packages/ui/src/context/overlay-focus.tsx`: call `openChanged` from `onOpenChange` and `restore(event, trigger)` from `onCloseAutoFocus`. Without a trigger, `restore(event)` returns to whatever had focus when it opened, such as a context menu's row. Never call a bare `trigger.focus()` on close.
+- When an overlay closes and returns focus to its opener, the opener shows a ring only if the keyboard mode is on. A menu the pointer opened and Escape closed returns without one; a menu opened or navigated from the keyboard returns with one. Nothing in the overlay decides this.
+- Dialogs return focus through the dialog context and dropdown menus through the `Menu` wrapper. Select, `Menu.Context`, and raw `@kobalte/core/popover` uses return it with `createOverlayFocus` in `packages/ui/src/context/overlay-focus.tsx`: call `openChanged` from `onOpenChange` and `restore(event, trigger)` from `onCloseAutoFocus`. Without a trigger, `restore(event)` returns to whatever had focus when it opened, such as a context menu's row.
 - Choose the widget by what's inside, not by how it looks. A menu (`Menu`, `role="menu"`) holds only commands: arrow keys, Home/End and typeahead move, Enter chooses, Esc closes, and Tab does nothing, as in native menus. A popover that holds controls (switches, links, buttons in flyouts, like the Extensions panel) must let Tab move through them; arrow keys may be added on top.
 
 ## Clipping and covering
@@ -68,5 +73,6 @@ Editable fields can match `:focus-visible` after a click, so fields with a custo
 ## Verify
 
 - A story is optional, for visual checks such as clipping, colour, and forced colours. Use one if the repo has a suitable focus story, or a local one you don't commit; don't add a case for every fix. Test focus order, removal and restoration in the app with real input, not in a story.
-- Use real keyboard and pointer input for the behaviour you changed. Check Tab and Shift+Tab for order and clipping, arrow keys for composites, and shortcuts for programmatic focus. For overlay return, check keyboard open with Escape, keyboard open with a pointer dismissal, pointer open with a backdrop click, and pointer open with Escape. Forced focus shows appearance, not whether navigation or restoration works.
+- Use real keyboard and pointer input for the behaviour you changed. Check Tab and Shift+Tab for order and clipping, arrow keys for composites, and shortcuts for programmatic focus. For overlay return, check keyboard open with Escape and pointer open with Escape. Forced focus shows appearance, not whether navigation or restoration works.
+- In a test, `locator.focus()` alone shows no ring, because it is focus the app moved. Reach the control with Tab, or press Tab once first to start keyboard navigation. A lone Shift no longer does.
 - Check light, dark, and forced colours when the indicator or its background changes. Report Chromium forced-colours emulation (DevTools → Rendering → `forced-colors: active`) separately from native Windows High Contrast or assistive-technology testing.

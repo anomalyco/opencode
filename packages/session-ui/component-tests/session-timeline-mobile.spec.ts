@@ -130,6 +130,8 @@ story("desktop user message actions still appear on hover and keyboard focus", a
   await expect(actions).toHaveCSS("pointer-events", "auto")
   await page.mouse.move(0, 0)
   await expect(actions).toHaveCSS("opacity", "0")
+  // Tab starts keyboard navigation, so focus on the hidden actions reveals them.
+  await page.keyboard.press("Tab")
   await actions.getByRole("button", { name: "More actions", exact: true }).focus()
   await expect(actions).toHaveCSS("opacity", "1")
   await expect(actions).toHaveCSS("pointer-events", "auto")

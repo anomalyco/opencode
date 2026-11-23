@@ -40,7 +40,7 @@
       transition: opacity 0.15s ease;
 
       &:hover:not(:disabled),
-      &:focus-visible:not(:disabled),
+      &[data-focus-visible]:not(:disabled),
       &:active:not(:disabled) {
         background-color: transparent;
         opacity: 0.7;
@@ -91,7 +91,7 @@
       transition: opacity 0.15s ease;
 
       &:hover:not(:disabled),
-      &:focus-visible:not(:disabled),
+      &[data-focus-visible]:not(:disabled),
       &:active:not(:disabled) {
         background-color: transparent;
         opacity: 0.7;
@@ -300,7 +300,7 @@
           &:active {
             background: var(--surface-raised-base-active);
           }
-          &:focus-visible {
+          &[data-focus-visible] {
             outline: none;
           }
         }

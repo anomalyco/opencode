@@ -97,7 +97,7 @@
     border-radius: 3px;
   }
 
-  &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
+  &:not([data-readonly]) [data-slot="switch-input"][data-focus-visible] ~ [data-slot="switch-control"] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }
@@ -224,7 +224,7 @@
     border-radius: 2px;
   }
 
-  &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
+  &:not([data-readonly]) [data-slot="switch-input"][data-focus-visible] ~ [data-slot="switch-control"] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }

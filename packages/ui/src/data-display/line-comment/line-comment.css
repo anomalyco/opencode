@@ -106,7 +106,7 @@
   outline: none;
 }
 
-[data-slot="line-comment-v2-overflow"]:focus-visible {
+[data-slot="line-comment-v2-overflow"][data-focus-visible] {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }

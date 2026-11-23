@@ -590,7 +590,7 @@ export function SidebarCustomized(props: {
         data-slot="sidebar-project-row"
         class="group/sidebar-group relative flex min-w-0 shrink-0 items-center rounded-[6px] pe-1"
         classList={{
-          "h-7 hover:bg-v2-overlay-simple-overlay-hover has-[:focus-visible]:bg-v2-overlay-simple-overlay-hover":
+          "h-7 hover:bg-v2-overlay-simple-overlay-hover has-[[data-focus-visible]]:bg-v2-overlay-simple-overlay-hover":
             !section(),
           "h-6 mt-2 first:mt-0": section(),
         }}
@@ -630,7 +630,8 @@ export function SidebarCustomized(props: {
             <span
               class="text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint"
               classList={{
-                "group-hover/sidebar-group:invisible group-has-[:focus-visible]/sidebar-group:invisible": !!project(),
+                "group-hover/sidebar-group:invisible group-has-[[data-focus-visible]]/sidebar-group:invisible":
+                  !!project(),
               }}
             >
               {group().open}

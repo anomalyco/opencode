@@ -82,7 +82,7 @@
     background-color: var(--surface-hover);
   }
 
-  &:not([data-readonly]) [data-slot="checkbox-checkbox-input"]:focus-visible + [data-slot="checkbox-checkbox-control"] {
+  &:not([data-readonly]) [data-slot="checkbox-checkbox-input"][data-focus-visible] + [data-slot="checkbox-checkbox-control"] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }

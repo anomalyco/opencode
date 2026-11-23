@@ -324,7 +324,7 @@
 }
 
 .settings-about-version:hover,
-.settings-about-version:focus-visible {
+.settings-about-version[data-focus-visible] {
   color: var(--v2-text-text-base);
   outline: none;
 }
@@ -334,7 +334,7 @@
 }
 
 /* The ring follows the hover background, which reaches past the label. */
-.settings-about-version:focus-visible::before {
+.settings-about-version[data-focus-visible]::before {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }
@@ -395,7 +395,7 @@
 }
 
 .settings-about-content a:hover,
-.settings-about-content a:focus-visible {
+.settings-about-content a[data-focus-visible] {
   color: var(--v2-text-text-base);
   text-decoration: underline;
 }
@@ -411,7 +411,7 @@
 }
 
 .settings-about-link:hover,
-.settings-about-link:focus-visible {
+.settings-about-link[data-focus-visible] {
   color: var(--v2-text-text-base);
   text-decoration: underline;
 }
@@ -570,12 +570,12 @@
 }
 
 .settings-back:hover,
-.settings-back:focus-visible {
+.settings-back[data-focus-visible] {
   background: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);
 }
 
-.settings-back:focus-visible {
+.settings-back[data-focus-visible] {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }
@@ -1179,11 +1179,11 @@
   }
 }
 
-.settings-provider-console-item:focus-visible {
+.settings-provider-console-item[data-focus-visible] {
   background: var(--v2-overlay-simple-overlay-hover);
 }
 
-.settings-provider-console-item:focus-visible .settings-provider-console-item-chevron {
+.settings-provider-console-item[data-focus-visible] .settings-provider-console-item-chevron {
   opacity: 1;
 }
 
@@ -1475,7 +1475,7 @@
 
 /* The row's button opens the project, so the ring goes on the whole row, inset like the other full-width rows. The
    options button keeps its own ring. */
-.settings-project-card:has(> button:first-child:focus-visible) {
+.settings-project-card:has(> button:first-child[data-focus-visible]) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: -2px;
 }
@@ -1509,7 +1509,7 @@
   color: var(--v2-text-text-base);
 }
 
-.settings-models-group-trigger:focus-visible {
+.settings-models-group-trigger[data-focus-visible] {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }
@@ -1634,12 +1634,12 @@
   text-align: start;
 }
 
-.provider-model-group-trigger:focus-visible {
+.provider-model-group-trigger[data-focus-visible] {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: -2px;
 }
 
-.provider-model-group-header:has(:focus-visible) {
+.provider-model-group-header:has([data-focus-visible]) {
   background-color: var(--v2-background-bg-layer-02);
 }
 
@@ -1707,13 +1707,13 @@
   border-top: 0.5px solid var(--v2-border-border-base);
 }
 
-.provider-model-group:has(.provider-model-group-header :focus-visible)
+.provider-model-group:has(.provider-model-group-header [data-focus-visible])
   .provider-model-group-models
   > [data-component="settings-list"] {
   border-top-color: transparent;
 }
 
-.provider-model-group:has(.provider-model-group-header :focus-visible) {
+.provider-model-group:has(.provider-model-group-header [data-focus-visible]) {
   outline: 0.5px solid var(--v2-border-border-muted);
   outline-offset: -0.5px;
 }
@@ -2285,7 +2285,7 @@
   margin-inline: -5px;
 }
 
-.settings-subtabs > [data-slot="tabs-v2-content"]:focus-visible {
+.settings-subtabs > [data-slot="tabs-v2-content"][data-focus-visible] {
   outline-offset: -2px;
 }
 
@@ -2349,7 +2349,7 @@
   color: var(--v2-icon-icon-muted);
 }
 
-.settings-console-name:focus-visible .settings-extension-name {
+.settings-console-name[data-focus-visible] .settings-extension-name {
   text-decoration-color: currentColor;
 }
 
@@ -2376,7 +2376,7 @@
   flex-shrink: 0;
 }
 
-.settings-mcp-source:focus-visible {
+.settings-mcp-source[data-focus-visible] {
   color: var(--v2-text-text-base);
   text-decoration: underline;
 }

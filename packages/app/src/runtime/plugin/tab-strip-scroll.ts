@@ -91,7 +91,7 @@ export const createTabStripScroll = (input: { el: HTMLDivElement; lead: () => bo
   // stay under the fades or the sticky "+". This brings the whole tab, which carries the ring and the close button,
   // into view; the strip's scroll-padding (tabs.css) keeps it clear of both. Clicks already land on a visible tab.
   const onFocusIn = (e: FocusEvent) => {
-    if (!(e.target instanceof HTMLElement) || !e.target.matches('[role="tab"]:focus-visible')) return
+    if (!(e.target instanceof HTMLElement) || !e.target.matches('[role="tab"][data-focus-visible]')) return
     const tab = e.target.closest('[data-slot="tabs-trigger-wrapper"]') ?? e.target
 
     tab.scrollIntoView({ block: "nearest", inline: "nearest" })

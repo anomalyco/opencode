@@ -60,7 +60,7 @@
   scroll-margin: 6px 0;
 }
 
-.palette-menu-row:is([data-active], :focus-visible) {
+.palette-menu-row:is([data-active], [data-focus-visible]) {
   background: var(--v2-overlay-simple-overlay-hover);
   outline: none;
 }
@@ -71,7 +71,7 @@
   scroll-margin-block: 0;
 }
 
-[data-color-scheme="dark"] .palette-menu-row:is([data-active], :focus-visible) {
+[data-color-scheme="dark"] .palette-menu-row:is([data-active], [data-focus-visible]) {
   background: var(--v2-alpha-light-10);
 }
 
@@ -88,12 +88,12 @@
 }
 
 @media (forced-colors: active) {
-  :is(.palette-menu-row, [data-color-scheme="dark"] .palette-menu-row):is([data-active], :focus-visible) {
+  :is(.palette-menu-row, [data-color-scheme="dark"] .palette-menu-row):is([data-active], [data-focus-visible]) {
     background: Highlight;
     color: HighlightText;
   }
 
-  .palette-menu-row:is([data-active], :focus-visible) * {
+  .palette-menu-row:is([data-active], [data-focus-visible]) * {
     color: inherit;
   }
 }

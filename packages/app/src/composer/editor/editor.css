@@ -3,7 +3,7 @@
 }
 
 /* Outline the frame, not the editor inside the masked scroll viewport. */
-[data-component="composer"]:has([data-component="composer-editor"][data-keyboard-focus]:focus) {
+[data-component="composer"]:has([data-component="composer-editor"][data-focus-visible]) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: -2px;
 }
@@ -77,14 +77,14 @@
 /* Toolbar controls keep their ring inside. Send sits outside the scroller with room for the default outset ring. */
 [data-component="composer"]
   :is([data-component="button-v2"], [data-component="icon-button-v2"]):not([data-action="composer-submit"]):is(
-    :focus-visible,
+    [data-focus-visible],
     [data-state="focus"]
   ) {
   outline-offset: -2px;
 }
 
 @media (hover: hover) {
-  [data-component="composer"]:not(:hover) .composer-variant-default:not(:focus-visible, [data-expanded]) {
+  [data-component="composer"]:not(:hover) .composer-variant-default:not([data-focus-visible], [data-expanded]) {
     opacity: 0;
     pointer-events: none;
   }

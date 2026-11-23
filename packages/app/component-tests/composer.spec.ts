@@ -492,13 +492,14 @@ story("keeps toolbar focus rings whole and keyboard-only", async ({ mount, page 
   const agent = controls.getByRole("button", { name: "Choose agent" })
   const variant = controls.getByRole("button", { name: "Choose model variant" })
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  // Tab starts keyboard navigation, so focus moved next shows its ring.
+  await page.keyboard.press("Tab")
 
   // Arriving from the keyboard on a control parked half under the edge scrolls all of it, ring included, into view.
   await controls.evaluate((element) => {
     const control = element.querySelector('[aria-label="Choose agent"]')!.getBoundingClientRect()
     element.scrollLeft = control.width / 2
   })
-  await page.keyboard.press("Shift")
   await agent.focus()
   await expect(agent).toHaveCSS("outline-style", "solid")
   await expect(agent).toHaveCSS("outline-offset", "-2px")

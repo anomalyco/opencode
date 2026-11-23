@@ -61,14 +61,14 @@
   letter-spacing: -0.04px;
 }
 
-[data-component="tabs-v2"] [data-slot="tabs-v2-trigger"]:focus-visible {
+[data-component="tabs-v2"] [data-slot="tabs-v2-trigger"][data-focus-visible] {
   outline: none;
   box-shadow: none;
 }
 
 /* The ring goes on the tab, which has the shape and holds the close button, inset because the tab list scrolls and
    would clip a ring drawn outside it. */
-[data-component="tabs-v2"] [data-slot="tabs-v2-trigger-wrapper"]:has([data-slot="tabs-v2-trigger"]:focus-visible) {
+[data-component="tabs-v2"] [data-slot="tabs-v2-trigger-wrapper"]:has([data-slot="tabs-v2-trigger"][data-focus-visible]) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: -2px;
 }

@@ -42,7 +42,7 @@
   background-color: var(--v2-overlay-simple-overlay-pressed);
 }
 
-[data-component="split-button-v2-action"]:is(:focus-visible, [data-focus]) {
+[data-component="split-button-v2-action"]:is([data-focus-visible], [data-focus]) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: -2px;
   z-index: 1;
@@ -66,7 +66,7 @@
   background-color: var(--v2-overlay-simple-overlay-pressed);
 }
 
-[data-component="split-button-v2-menu-trigger"]:is(:focus-visible, [data-focus]) {
+[data-component="split-button-v2-menu-trigger"]:is([data-focus-visible], [data-focus]) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: -2px;
   z-index: 1;

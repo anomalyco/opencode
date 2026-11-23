@@ -131,7 +131,7 @@
       opacity: 1;
     }
 
-    &:focus-visible {
+    &[data-focus-visible] {
       outline: 2px solid var(--v2-border-border-focus);
       outline-offset: -2px;
     }
@@ -239,7 +239,7 @@
       }
     }
 
-    &:focus-visible {
+    &[data-focus-visible] {
       outline: 2px solid var(--v2-border-border-focus);
       outline-offset: -2px;
     }
@@ -390,7 +390,7 @@
     cursor: pointer;
     touch-action: manipulation;
 
-    &:focus-visible {
+    &[data-focus-visible] {
       outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
     }

@@ -28,7 +28,7 @@
   /* Entrance: instant (trying no animation — may revert to 120ms ease-out). */
   animation: none;
 
-  &:focus-visible,
+  &[data-focus-visible],
   &:focus-within {
     outline: none;
   }

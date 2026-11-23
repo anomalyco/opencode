@@ -25,7 +25,7 @@
     background: var(--v2-background-bg-layer-01);
   }
 
-  &:focus-visible {
+  &[data-focus-visible] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }

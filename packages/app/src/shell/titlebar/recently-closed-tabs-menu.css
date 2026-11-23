@@ -19,7 +19,7 @@
 }
 
 .recently-closed-search
-  [data-slot="text-input-v2-icon-button"][data-variant="clear"]:is(:hover, :active, :focus-visible):not(:disabled) {
+  [data-slot="text-input-v2-icon-button"][data-variant="clear"]:is(:hover, :active, [data-focus-visible]):not(:disabled) {
   background: transparent;
   color: var(--v2-icon-icon-base);
 }

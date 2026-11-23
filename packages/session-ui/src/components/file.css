@@ -2,12 +2,12 @@
   content-visibility: auto;
 }
 
-[data-component="file"]:focus-visible {
+[data-component="file"][data-focus-visible] {
   outline: none;
 }
 
 /* The rendered code fills the viewer to its edges and would paint over a normal inset outline. */
-[data-component="file"]:focus-visible::after {
+[data-component="file"][data-focus-visible]::after {
   content: "";
   position: absolute;
   inset: 0;

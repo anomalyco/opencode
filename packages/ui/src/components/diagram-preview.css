@@ -10,7 +10,7 @@
     inset: 0;
     pointer-events: auto;
 
-    &:focus-visible {
+    &[data-focus-visible] {
       outline: none;
     }
   }

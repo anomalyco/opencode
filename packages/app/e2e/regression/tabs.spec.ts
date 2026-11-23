@@ -1094,6 +1094,8 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await expect(hint.locator('[data-slot="keybind-v2-label"]')).toHaveText(["Ctrl", "Alt", "H"])
   await expect(hint.locator('[data-component="keybind-v2"]')).toHaveCSS("direction", "ltr")
   await expect(hint).toBeHidden()
+  // Tab starts keyboard navigation, so focus on the button shows its shortcut.
+  await page.keyboard.press("Tab")
   await home.focus()
   await expect(hint).toBeVisible()
 

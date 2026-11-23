@@ -174,6 +174,10 @@ export function createAppearanceSettingsController() {
       current: settings.appearance.reduceMotion,
       select: (value: ReduceMotion) => settings.appearance.setReduceMotion(value),
     },
+    focusRings: {
+      always: settings.appearance.alwaysShowFocusRings,
+      select: (value: boolean) => settings.appearance.setAlwaysShowFocusRings(value),
+    },
     fonts: {
       ui: createMemo(() => ({
         value: sansInput(settings.appearance.uiFont()),

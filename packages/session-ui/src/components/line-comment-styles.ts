@@ -50,7 +50,7 @@ export const lineCommentStyles = `
   outline: none;
 }
 
-[data-component="line-comment"] [data-slot="line-comment-button"]:focus-visible {
+[data-component="line-comment"] [data-slot="line-comment-button"][data-focus-visible] {
   box-shadow: var(--shadow-xs-border-focus);
 }
 

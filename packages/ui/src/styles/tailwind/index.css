@@ -21,6 +21,8 @@
 /* The app resolves its reduce motion setting, including the system preference, into this attribute. */
 @custom-variant motion-reduce (&:where(:root[data-motion="reduce"] *));
 @custom-variant motion-safe (&:where(:root:not([data-motion="reduce"]) *));
+/* The app marks the focused element during keyboard navigation (context/keyboard-mode.tsx) in place of :focus-visible. */
+@custom-variant focus-visible (&[data-focus-visible]);
 
 @import "../index.css";
 

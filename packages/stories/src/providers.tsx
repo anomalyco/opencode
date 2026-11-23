@@ -1,6 +1,7 @@
 import { createEffect, onCleanup, onMount, type ParentProps } from "solid-js"
 import { MetaProvider } from "@solidjs/meta"
 import { DialogProvider } from "@opencode/ui/context/dialog"
+import { installKeyboardMode } from "@opencode/ui/context/keyboard-mode"
 import { Font } from "@opencode/ui/font"
 import { ThemeProvider, useTheme, type ColorScheme } from "@opencode/ui/theme"
 import { LanguageProvider, UiI18nBridge, useLanguage } from "@/runtime/i18n/language"
@@ -35,6 +36,9 @@ function Appearance(props: { scheme?: ColorScheme; direction?: string }) {
     document.documentElement.classList.add(theme.mode())
   })
   createEffect(() => language.setDirection(props.direction === "rtl" ? "rtl" : "ltr"))
+
+  // Focus rings read the mark this keeps on the focused element, as they do in the app.
+  onMount(() => onCleanup(installKeyboardMode()))
 
   // The app derives this attribute from its reduce motion setting; stories follow the system preference.
   onMount(() => {

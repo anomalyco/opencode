@@ -2352,7 +2352,7 @@ function HomeSearchFocusExample(props: { forced: boolean }) {
       >
         <Icon name="magnifying-glass" />
         <input
-          data-keyboard-focus={focus.visible()}
+          data-focus-visible={focus.visible()}
           aria-label="Search sessions"
           placeholder="Search sessions"
           class="min-w-0 flex-1 border-0 bg-transparent text-v2-text-text-base outline-0"
@@ -2374,7 +2374,7 @@ function ComposerFocusExample(props: { forced: boolean }) {
         <div data-component="composer-scroll">
           <div
             data-component="composer-editor"
-            data-keyboard-focus={focus.visible()}
+            data-focus-visible={focus.visible()}
             role="textbox"
             aria-label="Prompt"
             contenteditable

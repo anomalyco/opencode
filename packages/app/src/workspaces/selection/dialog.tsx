@@ -515,7 +515,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             var(--v2-background-bg-base) !important;
           color: var(--v2-text-text-base) !important;
         }
-        button[data-type="item"]:focus-visible {
+        button[data-type="item"][data-focus-visible] {
           outline: none !important;
           box-shadow: inset 0 0 0 1px var(--v2-border-border-focus) !important;
         }

@@ -193,6 +193,12 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "animation accessibility",
   },
   {
+    tab: "appearance",
+    label: "settings.appearance.row.focusRings.title",
+    target: "settings-focus-rings",
+    keywords: "outline keyboard accessibility",
+  },
+  {
     tab: "notifications",
     label: "settings.general.notifications.agent.title",
     target: "settings-notifications-agent",

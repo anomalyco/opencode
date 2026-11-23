@@ -6,6 +6,6 @@
 }
 
 /* Items overlap by a pixel, so the next header would paint over the bottom of this one's inset ring. */
-[data-component="sticky-accordion-header"]:has(> [data-slot="accordion-trigger"]:focus-visible) {
+[data-component="sticky-accordion-header"]:has(> [data-slot="accordion-trigger"][data-focus-visible]) {
   z-index: 11;
 }

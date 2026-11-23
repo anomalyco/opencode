@@ -209,7 +209,7 @@
     height: 32px;
     padding-inline: 8px 6px;
 
-    &:is([data-active], :focus-visible) {
+    &:is([data-active], [data-focus-visible]) {
       background: var(--v2-overlay-simple-overlay-hover);
       outline: none;
     }
@@ -234,7 +234,7 @@
   }
 }
 
-[data-color-scheme="dark"] .command-palette-compact [data-slot="search-list-row"]:is([data-active], :focus-visible) {
+[data-color-scheme="dark"] .command-palette-compact [data-slot="search-list-row"]:is([data-active], [data-focus-visible]) {
   background: var(--v2-overlay-simple-overlay-hover);
 }
 

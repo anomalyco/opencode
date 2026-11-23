@@ -108,11 +108,11 @@
 
   /* The fade mask also erases the viewport's own ring, and the header and composer cover its top and bottom edges.
      Draw it on the visible area instead, above the header, rounded like the session frame that clips its corners. */
-  [data-slot="session-timeline-scroll"] > .scroll-view__viewport:focus-visible {
+  [data-slot="session-timeline-scroll"] > .scroll-view__viewport[data-focus-visible] {
     outline: none;
   }
 
-  [data-slot="session-timeline-scroll"]:has(> .scroll-view__viewport:focus-visible)
+  [data-slot="session-timeline-scroll"]:has(> .scroll-view__viewport[data-focus-visible])
     ~ [data-slot="session-timeline-visible"]::after {
     content: "";
     position: absolute;

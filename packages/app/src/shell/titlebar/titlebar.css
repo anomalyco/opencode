@@ -110,7 +110,7 @@
   outline: none;
 }
 
-[data-slot="titlebar-tab-item"]:has(> [data-titlebar-tab-link]:focus-visible) {
+[data-slot="titlebar-tab-item"]:has(> [data-titlebar-tab-link][data-focus-visible]) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: -2px;
 }
@@ -122,29 +122,29 @@
     [data-slot="session-review-panel-toggle"],
     [data-session-title]
   )
-  [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:focus-visible, [data-state="focus"]):not(
+  [data-component="icon-button-v2"][data-variant="ghost-muted"]:is([data-focus-visible], [data-state="focus"]):not(
     :disabled
   ) {
   background-color: var(--v2-overlay-simple-overlay-hover);
 }
 
 [data-slot="titlebar-tab-item"]
-  [data-component="icon-button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
+  [data-component="icon-button-v2"]:is([data-focus-visible], [data-state="focus"]):not(:disabled) {
   opacity: 1;
 }
 
 /* The titlebar row clips its overflow for the tab strip, and its buttons are as tall as the row, so their ring is drawn
    inside. */
-[data-slot="titlebar-v2"] [data-component="icon-button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
+[data-slot="titlebar-v2"] [data-component="icon-button-v2"]:is([data-focus-visible], [data-state="focus"]):not(:disabled) {
   outline-offset: -2px;
 }
 
-[data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"]:focus-visible) [data-slot="titlebar-tab-close"] {
+[data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"][data-focus-visible]) [data-slot="titlebar-tab-close"] {
   right: 0;
   left: auto;
 }
 
-[data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"]:focus-visible)
+[data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"][data-focus-visible])
   [data-slot="titlebar-tab-close-fade"] {
   background-image: var(--active-bg);
 }

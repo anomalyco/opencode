@@ -114,7 +114,7 @@ img[data-slot="artifact-media"] {
 }
 
 [data-slot="artifact-video-fullscreen"]:hover > span,
-[data-slot="artifact-video-fullscreen"]:focus-visible > span {
+[data-slot="artifact-video-fullscreen"][data-focus-visible] > span {
   background-color: rgb(0 0 0 / 0.55);
 }
 
@@ -170,7 +170,7 @@ img[data-slot="artifact-media"] {
   pointer-events: none;
 }
 
-[data-slot="artifact-table-copy"]:focus-visible {
+[data-slot="artifact-table-copy"][data-focus-visible] {
   opacity: 1;
   pointer-events: auto;
 }
@@ -289,7 +289,7 @@ img[data-slot="artifact-media"] {
     color: var(--v2-text-text-base);
   }
 
-  &:focus-visible {
+  &[data-focus-visible] {
     border-radius: 4px;
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;

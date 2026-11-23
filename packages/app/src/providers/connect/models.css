@@ -31,7 +31,7 @@
 }
 
 /* The list clips its rows, so the ring sits inside the row. */
-.connected-model-row:focus-visible {
+.connected-model-row[data-focus-visible] {
   outline-offset: -2px;
 }
 

@@ -75,7 +75,7 @@
     transition: none;
   }
 }
-[data-slot="home-session-search-field"]:has(> input[data-keyboard-focus]:focus) {
+[data-slot="home-session-search-field"]:has(> input[data-focus-visible]) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }
@@ -91,7 +91,7 @@
   }
 }
 
-[data-component="home-session-row"]:focus-visible {
+[data-component="home-session-row"][data-focus-visible] {
   outline-offset: -2px;
 }
 

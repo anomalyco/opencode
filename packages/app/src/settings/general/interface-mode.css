@@ -37,7 +37,7 @@
     border-color: var(--v2-border-border-strong);
   }
 
-  &:has(input:focus-visible) {
+  &:has(input[data-focus-visible]) {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }
@@ -224,7 +224,7 @@
     border-color: var(--v2-border-border-strong);
   }
 
-  &:has(input:focus-visible) {
+  &:has(input[data-focus-visible]) {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }

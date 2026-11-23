@@ -206,7 +206,7 @@
 
 /* Reveal the action while the pointer is anywhere over the tool, including its expanded content. */
 [data-component="collapsible"].tool-collapsible:hover > [data-slot="basic-tool-action"],
-[data-slot="collapsible-trigger"]:focus-visible + [data-slot="basic-tool-action"],
+[data-slot="collapsible-trigger"][data-focus-visible] + [data-slot="basic-tool-action"],
 [data-slot="basic-tool-action"]:hover,
 [data-slot="basic-tool-action"]:focus-within {
   opacity: 1;
@@ -334,7 +334,7 @@
   }
 
   &:hover,
-  &:focus-visible {
+  &[data-focus-visible] {
     border-color: var(--v2-border-border-strong);
     background: color-mix(in srgb, var(--background-stronger) 88%, transparent);
 
@@ -397,7 +397,7 @@
     }
 
     &:hover,
-    &:focus-visible {
+    &[data-focus-visible] {
       border-color: transparent;
       background: transparent;
 
@@ -466,7 +466,7 @@
     }
   }
 
-  &:focus-visible {
+  &[data-focus-visible] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
     border-radius: 4px;

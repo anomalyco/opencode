@@ -52,18 +52,18 @@
   background: var(--v2-overlay-simple-overlay-hover);
 }
 
-.search-list-row:focus-visible {
+.search-list-row[data-focus-visible] {
   background: var(--v2-overlay-simple-overlay-hover);
   outline: none;
 }
 
 @media (forced-colors: active) {
-  .search-list-row:is([data-active], :focus-visible) {
+  .search-list-row:is([data-active], [data-focus-visible]) {
     background: Highlight;
     color: HighlightText;
   }
 
-  .search-list-row:is([data-active], :focus-visible) * {
+  .search-list-row:is([data-active], [data-focus-visible]) * {
     color: inherit;
   }
 }

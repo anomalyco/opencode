@@ -97,7 +97,7 @@
   box-shadow: none;
 }
 
-[data-component="select-v2"]:where(:focus-visible):not([data-disabled], [data-invalid]):not([data-expanded]) {
+[data-component="select-v2"]:where([data-focus-visible]):not([data-disabled], [data-invalid]):not([data-expanded]) {
   outline-color: var(--v2-border-border-focus);
   box-shadow: none;
 }
@@ -219,7 +219,7 @@
   box-shadow: none;
 }
 
-[data-component="select-v2"][data-appearance="inline"]:where(:focus-visible):not([data-disabled], [data-expanded]) {
+[data-component="select-v2"][data-appearance="inline"]:where([data-focus-visible]):not([data-disabled], [data-expanded]) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }

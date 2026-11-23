@@ -61,12 +61,12 @@
     color 150ms ease-out;
 
   &:hover,
-  &:focus-visible {
+  &[data-focus-visible] {
     background-color: var(--v2-overlay-simple-overlay-pressed);
     color: var(--v2-text-text-base);
   }
 
-  &:focus-visible {
+  &[data-focus-visible] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }
@@ -127,11 +127,11 @@
     transition: background-color 150ms ease-out;
 
     &:not(:disabled):hover,
-    &:focus-visible {
+    &[data-focus-visible] {
       background-color: var(--v2-overlay-simple-overlay-hover);
     }
 
-    &:focus-visible {
+    &[data-focus-visible] {
       outline: 2px solid var(--v2-border-border-focus);
       outline-offset: -2px;
     }
@@ -228,11 +228,11 @@
     transition: background-color 150ms ease-out;
 
     &:hover,
-    &:focus-visible {
+    &[data-focus-visible] {
       background-color: var(--v2-overlay-simple-overlay-hover);
     }
 
-    &:focus-visible {
+    &[data-focus-visible] {
       outline: 2px solid var(--v2-border-border-focus);
       outline-offset: -2px;
     }

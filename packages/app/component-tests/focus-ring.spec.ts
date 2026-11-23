@@ -1,5 +1,30 @@
 import { expect, story } from "../../stories/playwright/story"
 
+story("shows rings for keyboard navigation and operation only", async ({ mount, page }) => {
+  await mount("ui-button--icon")
+  const normal = page.getByRole("button", { name: "Normal", exact: true })
+  const large = page.getByRole("button", { name: "Large", exact: true })
+
+  // Typing and lone modifiers are not navigation, so focus the app moves afterwards shows no ring.
+  await page.keyboard.press("a")
+  await page.keyboard.press("Shift")
+  await normal.focus()
+  await expect(normal).toHaveCSS("outline-style", "none")
+
+  // A key that moves focus is, and focus the app moves keeps the ring while the keyboard is in use.
+  await page.keyboard.press("Tab")
+  await expect(large).toBeFocused()
+  await expect(large).toHaveCSS("outline-style", "solid")
+  await normal.focus()
+  await expect(normal).toHaveCSS("outline-style", "solid")
+
+  // A pointer press ends it. Operating the clicked control from the keyboard brings it back.
+  await large.click()
+  await expect(large).toHaveCSS("outline-style", "none")
+  await page.keyboard.press("Space")
+  await expect(large).toHaveCSS("outline-style", "solid")
+})
+
 story("returns focus to a menu trigger without a ring after a pointer open", async ({ mount, page }) => {
   await mount("ui-menu--basic")
   const trigger = page.getByRole("button", { name: "Open menu" })
@@ -17,7 +42,6 @@ story("keeps the ring on a menu trigger after a keyboard open", async ({ mount, 
   await mount("ui-menu--basic")
   const trigger = page.getByRole("button", { name: "Open menu" })
 
-  await page.keyboard.press("Shift")
   await trigger.focus()
   await page.keyboard.press("Enter")
   await expect(page.getByRole("menuitem", { name: "Save" })).toBeVisible()
@@ -26,7 +50,7 @@ story("keeps the ring on a menu trigger after a keyboard open", async ({ mount, 
   await expect(trigger).toHaveCSS("outline-style", "solid")
 })
 
-story("keeps the ring on a menu trigger opened from code after a pointer open", async ({ mount, page }) => {
+story("leaves no ring on a menu trigger that code opens after pointer use", async ({ mount, page }) => {
   await mount("ui-menu--programmatic-and-non-modal")
   const trigger = page.getByRole("button", { name: "Controlled" })
 
@@ -38,7 +62,7 @@ story("keeps the ring on a menu trigger opened from code after a pointer open", 
   await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(trigger).toBeFocused()
-  await expect(trigger).toHaveCSS("outline-style", "solid")
+  await expect(trigger).toHaveCSS("outline-style", "none")
 })
 
 story("leaves focus where an outside click put it when a non-modal menu closes", async ({ mount, page }) => {
@@ -75,7 +99,6 @@ story("keeps the ring on a dialog's trigger after a keyboard open", async ({ mou
   await mount("ui-dialog--opened-from-button")
   const trigger = page.getByRole("button", { name: "Choose model" })
 
-  await page.keyboard.press("Shift")
   await trigger.focus()
   await page.keyboard.press("Enter")
   await expect(page.getByText("Alpha and Beta are available.")).toBeVisible()
@@ -94,19 +117,9 @@ story("keeps queue rings inside controls under the list fade", async ({ mount, p
 
   await expect(list).toHaveCSS("scroll-padding-top", "8px")
   await expect(list).toHaveCSS("scroll-padding-bottom", "12px")
-  await page.keyboard.press("Shift")
+  // Tab starts keyboard navigation, so the ring shows on the control focused next.
+  await page.keyboard.press("Tab")
   await remove.focus()
   await expect(remove).toHaveCSS("outline-style", "solid")
   await expect(remove).toHaveCSS("outline-offset", "-2px")
-})
-
-story("leaves no ring on the review toggle after a pointer click", async ({ mount, page }) => {
-  await mount("app-session-header-actions--review-toggle")
-  const toggle = page.getByRole("button", { name: "Toggle review" })
-
-  await toggle.click()
-  // A later key press makes Chromium ring whatever still holds focus, so the click must not leave it there.
-  await page.keyboard.press("Shift")
-  expect(await toggle.evaluate((element) => element.matches(":focus-visible"))).toBe(false)
-  await expect(toggle).toHaveCSS("outline-style", "none")
 })

@@ -1,13 +1,13 @@
-[data-slot="home-project-nav-button"]:focus-visible {
+[data-slot="home-project-nav-button"][data-focus-visible] {
   outline-offset: -2px;
 }
 
 /* Paint the project's ring above the hover actions without covering their hit targets. */
-[data-home-row] > [data-slot="home-project-nav-button"]:focus-visible {
+[data-home-row] > [data-slot="home-project-nav-button"][data-focus-visible] {
   outline: none;
 }
 
-[data-home-row]:has(> [data-slot="home-project-nav-button"]:focus-visible)::after {
+[data-home-row]:has(> [data-slot="home-project-nav-button"][data-focus-visible])::after {
   content: "";
   position: absolute;
   inset: 0;

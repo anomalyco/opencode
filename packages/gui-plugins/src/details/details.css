@@ -71,16 +71,16 @@
   margin-inline-start: 4px;
 }
 
-.session-summary-row:focus-visible,
-.session-service-config:focus-visible,
-button.session-service-row:focus-visible,
-:is(.session-service-row, .session-mcp-row):has(:focus-visible) {
+.session-summary-row[data-focus-visible],
+.session-service-config[data-focus-visible],
+button.session-service-row[data-focus-visible],
+:is(.session-service-row, .session-mcp-row):has([data-focus-visible]) {
   outline: none;
   background: var(--v2-overlay-simple-overlay-hover);
 }
 
 /* A name that reveals its full text on focus shows that focus on its row, never as a ring of its own. */
-:is(.session-service-pane, .session-service-drawer) [data-component="tooltip-v2-trigger"]:focus-visible {
+:is(.session-service-pane, .session-service-drawer) [data-component="tooltip-v2-trigger"][data-focus-visible] {
   outline: none;
 }
 
@@ -441,7 +441,7 @@ button.session-service-dot {
     inset: -5px;
   }
 
-  &:focus-visible {
+  &[data-focus-visible] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }
@@ -534,7 +534,7 @@ button.session-service-dot {
   border-radius: 4px;
 }
 .session-summary-dismiss:hover,
-.session-summary-dismiss:focus-visible {
+.session-summary-dismiss[data-focus-visible] {
   background: var(--v2-overlay-simple-overlay-hover);
   outline: none;
 }

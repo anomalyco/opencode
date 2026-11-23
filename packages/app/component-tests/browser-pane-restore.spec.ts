@@ -334,8 +334,10 @@ story("keeps in-page shortcuts in the editor and forwards toolbar, review and cl
   await toggle.click()
   await expect(toggle).toBeFocused()
   await expect(toggle).toHaveCSS("outline-style", "none")
+  // A shortcut is not keyboard navigation, so the click's quiet state stays.
   await page.keyboard.press(`${mod}+Shift+m`)
-  await expect(toggle).toHaveCSS("outline-style", "solid")
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(toggle).toHaveCSS("outline-style", "none")
 
   // Shell shortcuts like ⌘⇧R and pane-scoped ⌘W are claimed before the page sees them.
   await editor.press(`${mod}+Shift+r`)

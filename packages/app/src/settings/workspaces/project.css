@@ -208,12 +208,12 @@
 }
 
 .project-settings-server-link:hover,
-.project-settings-server-link:focus-visible {
+.project-settings-server-link[data-focus-visible] {
   color: var(--v2-text-text-base);
   text-decoration: underline;
 }
 
-.project-settings-server-link:focus-visible {
+.project-settings-server-link[data-focus-visible] {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }
@@ -233,7 +233,7 @@
 }
 
 .project-settings-icon--active,
-.project-settings-icon:focus-visible {
+.project-settings-icon[data-focus-visible] {
   outline-color: var(--v2-border-border-focus);
 }
 
@@ -251,7 +251,7 @@
   transition: opacity 120ms ease;
 }
 
-.project-settings-icon:focus-visible .project-settings-icon-overlay {
+.project-settings-icon[data-focus-visible] .project-settings-icon-overlay {
   opacity: 1;
 }
 
@@ -298,7 +298,7 @@
   cursor: pointer;
 }
 
-.project-settings-save-retry:focus-visible {
+.project-settings-save-retry[data-focus-visible] {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }
@@ -332,7 +332,7 @@
     0 0 0 4px var(--v2-border-border-inverse);
 }
 
-.project-settings-color:focus-visible {
+.project-settings-color[data-focus-visible] {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }

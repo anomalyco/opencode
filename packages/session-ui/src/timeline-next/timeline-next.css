@@ -266,7 +266,7 @@
       pointer-events: none;
     }
 
-    &:focus-visible {
+    &[data-focus-visible] {
       outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
       border-radius: 4px;
@@ -620,7 +620,7 @@
 
 /* Keyboard focus rings the row's line of text, rounded, inside its click area. The trigger itself also holds that area
    and, open, the gap below the row, so a ring on it would take in the gap. */
-[data-timeline="next"] [data-slot="collapsible-trigger"]:focus-visible {
+[data-timeline="next"] [data-slot="collapsible-trigger"][data-focus-visible] {
   outline: none;
 
   > [data-component="tool-trigger"] {

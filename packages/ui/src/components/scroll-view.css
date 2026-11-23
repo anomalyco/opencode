@@ -15,7 +15,7 @@
   outline: none;
 }
 
-.scroll-view__viewport:focus-visible {
+.scroll-view__viewport[data-focus-visible] {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: -2px;
 }

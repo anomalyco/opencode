@@ -218,10 +218,10 @@
   &:dir(rtl) {
     --grip-end: -100%;
   }
-  &:is(:hover, :active, :focus-visible) {
+  &:is(:hover, :active, [data-focus-visible]) {
     color: var(--v2-icon-icon-base);
   }
-  &:focus-visible {
+  &[data-focus-visible] {
     /* The translated hit area sits flush with the preview's clipping edge. */
     border-radius: 4px;
     outline: 2px solid var(--v2-border-border-focus);
@@ -520,7 +520,7 @@
       background: var(--v2-overlay-simple-overlay-hover);
     }
 
-    &:focus-visible {
+    &[data-focus-visible] {
       outline: 1px solid var(--v2-border-border-focus);
       outline-offset: -1px;
     }

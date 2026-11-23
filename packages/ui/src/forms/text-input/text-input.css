@@ -171,7 +171,7 @@
     outline: none;
   }
 
-  [data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"]:focus-visible {
+  [data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"][data-focus-visible] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: -2px;
   }

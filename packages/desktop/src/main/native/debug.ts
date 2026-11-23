@@ -100,10 +100,12 @@ function createDriver(contents: WebContents) {
 
     // A timed-out or superseded attempt must not force styles the machine no longer tracks.
     if (!isCurrentForceFocusAttempt(state, attempt)) return nodes.nodeIds
+    // Focus rings read the mark the app keeps on the focused element, not :focus-visible.
     await Promise.allSettled(
-      nodes.nodeIds.map((nodeId) =>
-        debuggerApi.sendCommand("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: ["focus", "focus-visible"] }),
-      ),
+      nodes.nodeIds.flatMap((nodeId) => [
+        debuggerApi.sendCommand("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: ["focus"] }),
+        debuggerApi.sendCommand("DOM.setAttributeValue", { nodeId, name: "data-focus-visible", value: "" }),
+      ]),
     )
 
     return nodes.nodeIds
@@ -111,9 +113,10 @@ function createDriver(contents: WebContents) {
 
   const disable = async (command: Extract<ForceFocusCommand, { type: "disable" }>) => {
     await Promise.allSettled(
-      command.nodeIds.map((nodeId) =>
+      command.nodeIds.flatMap((nodeId) => [
         debuggerApi.sendCommand("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: [] }),
-      ),
+        debuggerApi.sendCommand("DOM.removeAttribute", { nodeId, name: "data-focus-visible" }),
+      ]),
     )
 
     // A later attempt may have attached the debugger again by now.

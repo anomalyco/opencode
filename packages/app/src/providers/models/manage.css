@@ -37,7 +37,7 @@
   border-radius: 0;
 }
 
-.settings-manage-models-dialog .provider-model-group-header:has(:focus-visible) {
+.settings-manage-models-dialog .provider-model-group-header:has([data-focus-visible]) {
   background: transparent;
 }
 
@@ -48,7 +48,7 @@
   border-radius: 6px;
 }
 
-.settings-manage-models-dialog .provider-model-group-header:has(:focus-visible) .provider-model-group-trigger {
+.settings-manage-models-dialog .provider-model-group-header:has([data-focus-visible]) .provider-model-group-trigger {
   background: var(--v2-overlay-simple-overlay-hover);
 }
 

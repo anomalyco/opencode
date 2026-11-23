@@ -112,7 +112,7 @@
   }
 
   [data-slot="checkbox-v2"]:where(:not([data-readonly]))
-    [data-slot="checkbox-v2-input"]:focus-visible
+    [data-slot="checkbox-v2-input"][data-focus-visible]
     ~ [data-slot="checkbox-v2-control-stack"]
     [data-slot="checkbox-v2-control"] {
     outline: 2px solid var(--v2-border-border-focus);

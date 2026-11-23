@@ -129,7 +129,7 @@
 /* The floating file-tree toggle sits just 2px from the mode selector. Its fill can cover an outset ring. */
 [data-component="session-review-v2"][data-sidebar-toggle]
   :is([data-slot="session-review-v2-sidebar-title"], [data-slot="session-review-v2-toolbar-title"])
-  [data-component="select-v2"]:focus-visible {
+  [data-component="select-v2"][data-focus-visible] {
   outline-offset: -2px;
 }
 

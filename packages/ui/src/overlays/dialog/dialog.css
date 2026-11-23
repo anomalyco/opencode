@@ -150,11 +150,11 @@
         flex: 1;
         overflow: hidden;
 
-        &:focus-visible {
+        &[data-focus-visible] {
           outline: none;
         }
       }
-      &:focus-visible {
+      &[data-focus-visible] {
         outline: none;
       }
     }

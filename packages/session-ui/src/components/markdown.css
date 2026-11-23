@@ -17,7 +17,7 @@
   text-underline-offset: 2px;
 }
 
-.markdown-session-link:focus-visible {
+.markdown-session-link[data-focus-visible] {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }
@@ -439,7 +439,7 @@
 
   /* A clicked button keeps focus without a ring, so only keyboard focus keeps the actions shown. */
   [data-component="markdown-code"]:hover > [data-slot="markdown-code-toolbar"],
-  [data-slot="markdown-code-toolbar"]:has(:focus-visible, [data-expanded]) {
+  [data-slot="markdown-code-toolbar"]:has([data-focus-visible], [data-expanded]) {
     opacity: 1;
     pointer-events: auto;
   }

@@ -4,6 +4,7 @@ import { VoiceOverlay } from "@/voice/composer"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { FileComponentProvider } from "@opencode/ui/context/file"
 import { installFocusRescue } from "@opencode/ui/context/focus-rescue"
+import { installKeyboardMode } from "@opencode/ui/context/keyboard-mode"
 import { Font } from "@opencode/ui/font"
 import { ThemeProvider } from "@opencode/ui/theme/context"
 import { MetaProvider, Title } from "@solidjs/meta"
@@ -66,6 +67,7 @@ export function AppBaseProviders(
   }>,
 ) {
   onMount(() => onCleanup(installFocusRescue()))
+  onMount(() => onCleanup(installKeyboardMode()))
 
   return (
     <MetaProvider>

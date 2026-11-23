@@ -3,6 +3,7 @@ import { createEffect, createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
+import { setFocusRingsAlways } from "@opencode/ui/context/keyboard-mode"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -158,6 +159,7 @@ const appearanceSchema = Persistence.struct({
   navigation: Persistence.optional(Schema.Literals(["tabs", "list"])),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
+  alwaysShowFocusRings: Persistence.optional(Schema.Boolean),
 })
 
 const permissionsSchema = Persistence.struct({
@@ -399,6 +401,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       document.documentElement.dataset.motion = reduce ? "reduce" : "full"
     })
 
+    const alwaysShowFocusRings = withFallback(() => store.appearance?.alwaysShowFocusRings, false)
+
+    createEffect(() => setFocusRingsAlways(alwaysShowFocusRings()))
+
     const timelineWidth = withFallback(() => store.general?.timelineWidth, defaultSettings.general.timelineWidth)
 
     // The session column's width token keys off this attribute, so every surface sharing it follows the setting.
@@ -540,6 +546,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         reduceMotion,
         setReduceMotion(value: ReduceMotion) {
           setStore("appearance", "reduceMotion", value)
+        },
+        alwaysShowFocusRings,
+        setAlwaysShowFocusRings(value: boolean) {
+          setStore("appearance", "alwaysShowFocusRings", value)
         },
       },
       keybinds: {

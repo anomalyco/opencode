@@ -97,7 +97,7 @@
   }
 
   &:where(:not([data-readonly]))
-    [data-slot="radio-v2-item-input"]:focus-visible
+    [data-slot="radio-v2-item-input"][data-focus-visible]
     ~ [data-slot="radio-v2-item-control-stack"]
     [data-slot="radio-v2-item-control"] {
     outline: 2px solid var(--v2-border-border-focus);

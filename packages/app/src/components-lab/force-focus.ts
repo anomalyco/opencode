@@ -1,6 +1,6 @@
-// Story-only. Focus rings only show while an element matches :focus-visible, and only one element can. To show many at
-// once, this copies each stylesheet rule that mentions :focus, :focus-visible or :focus-within into a lab-only sheet,
-// with those pseudo-classes replaced by [data-lab-focus] (and :focus-within by the attribute on the element or a
+// Story-only. Focus rings only show on the element the app marks with data-focus-visible, and only one element has
+// focus. To show many at once, this copies each stylesheet rule that mentions :focus, :focus-within or that mark into a
+// lab-only sheet, with each replaced by [data-lab-focus] (and :focus-within by the attribute on the element or a
 // descendant). Marked elements then render with the production declarations and their real cascade layer, specificity
 // and context. Browser default rings (an element with no authored focus rule) are not copied.
 
@@ -31,9 +31,9 @@ export function focusTarget(specimen: HTMLElement) {
 // Copies the rules that style focus, keeping the @layer, @media and nesting they sit in.
 function focusRules(rules: CSSRuleList): string[] {
   return [...rules].flatMap((rule) => {
-    if (!rule.cssText.includes(":focus")) return []
+    if (!stylesFocus(rule.cssText)) return []
 
-    if (rule instanceof CSSStyleRule && rule.selectorText.includes(":focus")) return [forceFocus(rule.cssText)]
+    if (rule instanceof CSSStyleRule && stylesFocus(rule.selectorText)) return [forceFocus(rule.cssText)]
 
     if (rule instanceof CSSStyleRule) return [`${rule.selectorText} { ${focusRules(rule.cssRules).join("\n")} }`]
 
@@ -44,9 +44,13 @@ function focusRules(rules: CSSRuleList): string[] {
   })
 }
 
+function stylesFocus(css: string) {
+  return css.includes(":focus") || css.includes("[data-focus-visible]")
+}
+
 function forceFocus(css: string) {
   return css
     .replaceAll(":focus-within", ":is([data-lab-focus], :has([data-lab-focus]))")
-    .replaceAll(":focus-visible", "[data-lab-focus]")
+    .replaceAll("[data-focus-visible]", "[data-lab-focus]")
     .replace(/:focus(?![-\w])/g, "[data-lab-focus]")
 }

@@ -214,7 +214,7 @@
         text-decoration-color: currentColor;
       }
 
-      &:focus-visible {
+      &[data-focus-visible] {
         outline: 2px solid var(--v2-border-border-focus);
         outline-offset: 2px;
         border-radius: 2px;
@@ -272,7 +272,7 @@
       color: var(--v2-text-text-base);
     }
 
-    &:focus-visible {
+    &[data-focus-visible] {
       outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
       border-radius: 4px;
@@ -424,11 +424,11 @@
   &:not(:has([data-slot="user-message-body"])):hover [data-slot="user-message-copy-wrapper"],
   /* A footer holding its own buttons, as the /btw panel's does, stays reachable anywhere over the message. */
   &:has([data-slot="user-message-copy-wrapper"] button):hover [data-slot="user-message-copy-wrapper"],
-  &:has(:focus-visible) [data-slot="user-message-copy-wrapper"],
+  &:has([data-focus-visible]) [data-slot="user-message-copy-wrapper"],
   [data-slot="user-message-copy-wrapper"]:has([data-expanded], [data-closing]),
   &:has([data-slot="user-message-body"]:hover) [data-slot="user-message-meta-tail"],
   &:has([data-slot="user-message-copy-wrapper"] button):hover [data-slot="user-message-meta-tail"],
-  &:has(:focus-visible) [data-slot="user-message-meta-tail"] {
+  &:has([data-focus-visible]) [data-slot="user-message-meta-tail"] {
     opacity: 1;
     pointer-events: auto;
   }
@@ -456,7 +456,7 @@
 
     &[data-pending]:has([data-slot="user-message-body"]:hover),
     &[data-pending]:not(:has([data-slot="user-message-body"])):hover,
-    &[data-pending]:has(:focus-visible),
+    &[data-pending]:has([data-focus-visible]),
     &[data-pending][data-run-hovered] {
       [data-slot="user-message-meta-label"],
       [data-slot="user-message-pending-separator"] {
@@ -562,7 +562,7 @@
      focus back without a ring, so only keyboard focus keeps the chevron shown. */
   [data-slot="user-message-text"]:hover [data-slot="user-message-menu"],
   &:not(:has([data-slot="user-message-text"])):hover [data-slot="user-message-menu"],
-  &:has(:focus-visible) [data-slot="user-message-menu"],
+  &:has([data-focus-visible]) [data-slot="user-message-menu"],
   [data-slot="user-message-menu"]:has([data-expanded], [data-closing]) {
     opacity: 1;
     pointer-events: auto;
@@ -1059,7 +1059,7 @@
       color: var(--v2-text-text-base);
     }
 
-    &:focus-visible {
+    &[data-focus-visible] {
       outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
       border-radius: 4px;
@@ -1276,7 +1276,7 @@
     text-underline-offset: 2px;
   }
 
-  &:focus-visible {
+  &[data-focus-visible] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
     border-radius: 4px;
@@ -1864,7 +1864,7 @@
     color: var(--v2-text-text-base);
   }
 
-  &:focus-visible {
+  &[data-focus-visible] {
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: -2px;
     border-radius: 4px;
@@ -1935,7 +1935,7 @@
     cursor: pointer;
   }
 
-  &:focus-visible {
+  &[data-focus-visible] {
     outline: none;
     background-color: var(--surface-raised-base-hover);
   }
@@ -1977,7 +1977,7 @@
   }
 
   &:hover [data-slot="read-tool-group-arrow"],
-  &:focus-visible [data-slot="read-tool-group-arrow"] {
+  &[data-focus-visible] [data-slot="read-tool-group-arrow"] {
     opacity: 1;
   }
 

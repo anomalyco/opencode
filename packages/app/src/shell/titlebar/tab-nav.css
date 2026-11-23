@@ -76,12 +76,12 @@
 }
 
 /* Every row, the active one included, shows the close button only on hover or keyboard focus. */
-[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-editing="true"]) [data-slot="tab-close"] > button {
+[data-titlebar-tab]:is(:hover, :has([data-focus-visible]), [data-editing="true"]) [data-slot="tab-close"] > button {
   opacity: 1;
 }
 
 @media (hover: hover) {
-  [data-titlebar-tab]:not(:where([data-slot="mobile-tabs-drawer"] *)):is(:hover, :has(:focus-visible))
+  [data-titlebar-tab]:not(:where([data-slot="mobile-tabs-drawer"] *)):is(:hover, :has([data-focus-visible]))
     [data-slot="tab-close"]:has(> button) [data-slot="tab-status"] {
     opacity: 0;
   }
@@ -138,7 +138,7 @@
 
 [data-titlebar-tab]:not(:where([data-slot="mobile-tabs-drawer"] *)):is(
     :hover,
-    :has(> [data-slot="tab-link"]:focus-visible)
+    :has(> [data-slot="tab-link"][data-focus-visible])
   ):not([data-state="pressed"]):not([data-dragging="true"]):not([data-editing="true"]) {
   --tab-overlay: var(--v2-overlay-simple-overlay-hover);
 }
@@ -147,12 +147,12 @@
   --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
 }
 
-[data-titlebar-tab-action]:is(:hover, :focus-visible) {
+[data-titlebar-tab-action]:is(:hover, [data-focus-visible]) {
   --tab-overlay: var(--v2-overlay-simple-overlay-hover);
 }
 
 /* Full-width rows: the ring sits inside, clear of the sidebar's edges. */
-[data-titlebar-tab-action]:focus-visible {
+[data-titlebar-tab-action][data-focus-visible] {
   outline-offset: -2px;
 }
 
@@ -160,7 +160,7 @@
   --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
 }
 
-[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-state="pressed"], [data-status]) [data-slot="tab-close"] {
+[data-titlebar-tab]:is(:hover, :has([data-focus-visible]), [data-state="pressed"], [data-status]) [data-slot="tab-close"] {
   background: linear-gradient(var(--tab-overlay), var(--tab-overlay)), var(--tab-base);
 }
 
@@ -197,7 +197,7 @@
     [data-titlebar-tab][data-title-overflow="true"]:not(
       [data-editing="true"],
       :hover,
-      :has(:focus-visible),
+      :has([data-focus-visible]),
       [data-status]
     )
     [data-slot="tab-link"] {
@@ -205,7 +205,7 @@
   }
 
   [data-slot="vertical-tabs-sidebar"]
-    [data-titlebar-tab]:not(:hover, :has(:focus-visible), [data-status])
+    [data-titlebar-tab]:not(:hover, :has([data-focus-visible]), [data-status])
     [data-slot="tab-close"] {
     background: transparent;
   }
@@ -272,7 +272,7 @@
 }
 
 [data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]) [data-slot="tab-link"],
-[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-active="true"], [data-status]):not([data-editing="true"])
+[data-titlebar-tab]:is(:hover, :has([data-focus-visible]), [data-active="true"], [data-status]):not([data-editing="true"])
   [data-slot="tab-link"] {
   --tab-title-fade-offset: calc(4px + var(--tab-link-inset, 0px));
   -webkit-mask-image: linear-gradient(
@@ -292,7 +292,7 @@
 }
 
 [data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]):dir(rtl) [data-slot="tab-link"],
-[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-active="true"], [data-status]):not(
+[data-titlebar-tab]:is(:hover, :has([data-focus-visible]), [data-active="true"], [data-status]):not(
     [data-editing="true"]
   ):dir(rtl)
   [data-slot="tab-link"] {
@@ -312,7 +312,7 @@
   );
 }
 
-[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-active="true"], [data-status]):not([data-editing="true"])
+[data-titlebar-tab]:is(:hover, :has([data-focus-visible]), [data-active="true"], [data-status]):not([data-editing="true"])
   [data-slot="tab-link"] {
   --tab-title-fade-offset: calc(24px + var(--tab-link-inset, 0px));
 }
@@ -381,7 +381,7 @@
 @container (44px < width <= 64px) {
   [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-editing="true"]):is(
       :hover,
-      :has(:focus-visible),
+      :has([data-focus-visible]),
       [data-active="true"],
       [data-status]
     )
@@ -392,7 +392,7 @@
 
   [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-editing="true"]):is(
       :hover,
-      :has(:focus-visible),
+      :has([data-focus-visible]),
       [data-active="true"],
       [data-status]
     )
@@ -447,7 +447,7 @@
 
   @media (hover: hover) {
     [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-status="busy"]):not(:hover):not(
-        :has(:focus-visible)
+        :has([data-focus-visible])
       )
       [data-slot="tab-close"] {
       display: none;
@@ -574,7 +574,7 @@
     transition: none;
   }
 }
-[data-slot="sidebar-project-row"]:has(> button:first-child:focus-visible) {
+[data-slot="sidebar-project-row"]:has(> button:first-child[data-focus-visible]) {
   outline: 2px solid var(--v2-border-border-focus);
   outline-offset: -2px;
 }
