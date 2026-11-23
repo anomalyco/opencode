@@ -275,6 +275,14 @@ describe("tool paths", () => {
       expect(yield* removing(["crm"])).toEqual(["other"])
       expect(yield* removing(["crm.lookup"])).toEqual(["crm_deals_get", "other"])
       expect(yield* removing(["crm.deals"])).toEqual(["crm_lookup", "other"])
+
+      // Removing a namespace's last member removes the namespace, so OpenAI Responses doesn't send it empty.
+      const native = yield* compiled({
+        model: responses,
+        tools: [namespace("solo", {}, [lookup]), other],
+        messages: [Message.user("Hi"), Message.tools({ remove: ["solo.lookup"] }), Message.user("Again")],
+      })
+      expect(native.tools.map((item: Body) => item.name)).toEqual(["other"])
     }),
   )
 })

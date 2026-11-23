@@ -169,7 +169,9 @@ const removePaths = <Item extends FoldableTool>(tools: ReadonlyArray<Item>, path
           path.startsWith(`${tool.name}.`) ? [path.slice(tool.name.length + 1)] : [],
         )
         if (inner.length === 0 || tool.type !== "namespace" || tool.tools === undefined) return [tool]
-        return [{ ...tool, tools: removePaths(tool.tools, inner) }]
+        const members = removePaths(tool.tools, inner)
+        // A namespace whose last member is removed goes too, as if removed by its own path.
+        return members.length === 0 ? [] : [{ ...tool, tools: members }]
       })
 
 /** Rewrite the tools each marker adds, keeping the request identity when there are no markers. */
