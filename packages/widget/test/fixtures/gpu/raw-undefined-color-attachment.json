@@ -1,0 +1,17 @@
+{
+  "name": "raw-undefined-color-attachment",
+  "source": "async function main() {\n  widget.render(ui.canvas({ key: \"scene\", gpu: true, height: 100 }))\n  __host.post({ type: \"gpu\", ops: [[\"context\", 1, \"scene\", \"rgba8unorm\", \"opaque\"], [\"view\", 2, 1, { dimension: \"2d\", baseMipLevel: 0, mipLevelCount: 1, baseArrayLayer: 0, arrayLayerCount: 1 }], [\"pass\", { colorAttachments: [undefined, { view: 2, resolveTarget: null, clearValue: [0, 0, 0, 1], loadOp: \"clear\", storeOp: \"store\" }], depthStencilAttachment: null }], [\"end\"]], bytes: new ArrayBuffer(8) })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 100,
+      "height": 100
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [],
+  "end": "return"
+}

@@ -160,6 +160,30 @@ const record = (value: unknown, path: string) =>
     ? (value as Record<string, unknown>)
     : fail(`${path} must be an object`)
 const nullable = <A>(value: unknown, check: (value: unknown) => A) => (value === null ? null : check(value))
+
+// A posted value as JSON reads it (widgets-gpu.md, Transport): an `undefined` list item is null and an `undefined`
+// member is absent; nothing else changes. Copies only what changes.
+const json = (value: unknown): unknown => {
+  if (value === null || typeof value !== "object") return value
+  if (Array.isArray(value)) {
+    let out: unknown[] | undefined
+    for (let i = 0; i < value.length; i++) {
+      const item: unknown = value[i]
+      const read = item === undefined ? null : json(item)
+      if (read !== item) (out ??= value.slice())[i] = read
+    }
+    return out ?? value
+  }
+  let out: Record<string, unknown> | undefined
+  for (const [key, item] of Object.entries(value)) {
+    if (item === undefined) delete (out ??= { ...value })[key]
+    else {
+      const read = json(item)
+      if (read !== item) (out ??= { ...value })[key] = read
+    }
+  }
+  return out ?? value
+}
 const flags = (value: unknown, names: Record<string, number>, path: string) => {
   const all = Object.values(names).reduce((sum, bit) => sum | bit, 0)
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && (value & ~all) === 0
@@ -591,7 +615,7 @@ export function gpuChecks(canvases: () => ReadonlySet<string>) {
       }
       try {
         const batch = record(value, "a batch")
-        const ops = list(batch.ops, "a batch's ops")
+        const ops = list(json(batch.ops), "a batch's ops")
         scoped.keys = rendered(ops)
         if (!(batch.bytes instanceof ArrayBuffer)) fail("a batch's bytes must be an ArrayBuffer")
         const bytes = batch.bytes as ArrayBuffer

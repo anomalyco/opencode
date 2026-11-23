@@ -454,6 +454,16 @@ export const rawCases: ReadonlyArray<GpuCase> = (
       "new Uint8Array(8)",
     ],
     ["ops-not-a-list", `"buffer"`],
+    // Ops read as JSON reads them: an undefined list item is null (a color attachment left out), an undefined member
+    // is absent (the binding is a sampler's). Both are valid.
+    [
+      "undefined-color-attachment",
+      `[["context", 1, "scene", "rgba8unorm", "opaque"], ["view", 2, 1, ${view}], ["pass", { colorAttachments: [undefined, { view: 2, resolveTarget: null, clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" }], depthStencilAttachment: null }], ["end"]]`,
+    ],
+    [
+      "undefined-buffer-binding",
+      `[["bindGroupLayout", 1, { entries: [{ binding: 0, visibility: 2, buffer: null, sampler: { type: "filtering" }, texture: null }] }], ["sampler", 2, { addressModeU: "clamp-to-edge", addressModeV: "clamp-to-edge", addressModeW: "clamp-to-edge", magFilter: "nearest", minFilter: "nearest", mipmapFilter: "nearest", lodMinClamp: 0, lodMaxClamp: 32, compare: null, maxAnisotropy: 1 }], ["bindGroup", 3, { layout: 1, entries: [{ binding: 0, resource: { buffer: undefined, sampler: 2 } }] }]]`,
+    ],
   ] as ReadonlyArray<readonly [string, string, string?]>
 ).map(([name, ops, bytes]) => ({
   name: `raw-${name}`,

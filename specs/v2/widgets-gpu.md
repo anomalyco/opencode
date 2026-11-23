@@ -134,11 +134,14 @@ canvas's texture between frames clears it before the frame's first pass into it.
 ## Transport
 
 A batch is `{ ops: Op[], bytes: ArrayBuffer }`, sent as the frame request `{ type: "frame", gpu: batch }` or on its own
-as `{ type: "gpu", ...batch }`. `ops` are JSON arrays like draw commands. `bytes` is one `ArrayBuffer` the prelude
-assembles from the batch's write data (the raw bytes of the typed arrays passed, in call order), never a JSON array of
-numbers; the host reads it through psychoscript's host bytes API as a borrowed slice, without copying. Ops reference it
-as `[byteOffset, byteLength]`. Handles are integers the prelude assigns per widget, from 1, never reused; a descriptor
-names resources by handle.
+as `{ type: "gpu", ...batch }`. `ops` are JSON arrays like draw commands, and every host reads them as JSON reads them:
+an `undefined` list item is `null`, and an `undefined` object member is absent (so `[undefined]` as color attachments is
+`[null]`, and `{ buffer: undefined, sampler: 2 }` is a sampler). Nothing else changes: numbers are read as they are, so
+`NaN` and infinities fail the check that reads them rather than becoming `null`. `bytes` is one `ArrayBuffer` the
+prelude assembles from the batch's write data (the raw bytes of the typed arrays passed, in call order), never a JSON
+array of numbers; the host reads it through psychoscript's host bytes API as a borrowed slice, without copying. Ops
+reference it as `[byteOffset, byteLength]`. Handles are integers the prelude assigns per widget, from 1, never reused; a
+descriptor names resources by handle.
 
 ```ts
 type Op =
@@ -265,6 +268,12 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
   (not replayed, not reported, no canvas stops). Exactly: a batch whose first failure (Host checks) is `no handle <h>`
   with `h` from 1 to the greatest handle the host had made when it last lost the device. Before any loss no handle
   is, and handle 0 never is: those stay program errors.
+- **A run restored from a snapshot** (`widgets-live.md`, Pause when not visible) is a device loss. A host that
+  snapshots live runs keeps with the snapshot the greatest handle the program had made, and the canvases errors
+  stopped, with their errors. On restoring, it sends `{ type: "gpu", lost: "unknown" }` before the program runs on.
+  Handles up to the kept one count as from before the loss (a batch naming one is dropped quietly, above), and the
+  stopped canvases stay stopped (Stopped stays stopped), their errors not reported again. The TypeScript host
+  (`LiveWidget`) doesn't snapshot runs.
 
 ## The `wgsl` shorthand
 
@@ -277,9 +286,9 @@ where WebGPU is unavailable (a browser without it) the canvas shows its placehol
 ## Host checks
 
 Before it replays a batch (or instead, without a GPU), every host checks it without a GPU, with exactly these rules
-and messages, so all hosts fail the same programs the same way. The first failure is the batch's program error (phase
-`gpu`), and the rest of the batch isn't replayed. Errors from replaying (WebGPU validation) follow, in the GPU
-implementation's wording (Errors and device loss).
+and messages, so all hosts fail the same programs the same way. They read `ops` as Transport says (`undefined` as JSON
+reads it). The first failure is the batch's program error (phase `gpu`), and the rest of the batch isn't replayed.
+Errors from replaying (WebGPU validation) follow, in the GPU implementation's wording (Errors and device loss).
 
 - **The batch:** an object (`a batch must be an object`) with `ops` a list (`a batch's ops must be a list`) of at most
   20,000 (`the number of ops in a batch is over the limit of 20000`) and `bytes` an `ArrayBuffer` (`a batch's bytes
