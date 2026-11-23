@@ -7,7 +7,7 @@ use opencode_ui::fuzzy;
 use opencode_ui::keymap::Slash;
 use opencode_ui::select::{ActionRun, SelectAction};
 
-use crate::local::{Local, is};
+use crate::local::{Local, is, is_speed_in};
 use crate::prelude::*;
 
 pub fn is_free(model: &ModelInfo) -> bool {
@@ -102,7 +102,7 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
     let mut props = SelectProps::dynamic(title, options.clone());
     props.flat = true;
     props.skip_filter = true;
-    props.current = local.current();
+    props.current = local.standard();
     props.search_in_title = true;
     props.title_placeholder = Some("Search models".to_owned());
     props.on_select = Some(Rc::new(bind!(local, |local, option: &SelectOption<Model>| choose(&local, &option.value))));
@@ -200,6 +200,8 @@ impl Catalog {
             .iter()
             .filter(|model| !matches!(model.status, ModelInfoStatus::Deprecated))
             .filter(|model| provider.is_none_or(|id| model.provider_id.0 == id))
+            // A model's faster and slower speeds are chosen with the speed selector.
+            .filter(|model| !is_speed_in(models, model))
             .map(|model| {
                 let value = Model::new(&model.provider_id.0, &model.id);
                 let name = provider_name(&model.provider_id.0);
@@ -363,6 +365,7 @@ pub fn install(tui: &Rc<Tui>) {
         TuiCommand::new(id, bind!(local, |local, _, _| run(&local))).bind(Bind::Off).group("Agent")
     };
     let slash = |name: &str, aliases: &[&str]| Slash::new(name).aliases(aliases.iter().copied());
+    let has_speeds = opentui::keymap::Condition::when(bind!(local, |local| !local.speeds().is_empty()));
     let commands = vec![
         command("model.list", |local| show(local, None))
             .title("Switch model")
@@ -390,6 +393,13 @@ pub fn install(tui: &Rc<Tui>) {
         .title("Switch model variant")
         .palette_when(opentui::keymap::Condition::when(bind!(local, |local| !local.variants().is_empty())))
         .slash(slash("variants", &["thinking", "effort"])),
+        // Only for a model that has other speeds, so nothing about speeds shows for the rest.
+        command("speed.cycle", |local| local.cycle_speed()).title("Speed cycle").palette().enabled(has_speeds.clone()),
+        command("speed.list", crate::dialogs::speed::show)
+            .title("Switch model speed")
+            .palette()
+            .enabled(has_speeds)
+            .slash(slash("speed", &["fast"])),
         command("agent.cycle.reverse", |local| local.move_agent(-1)).title("Agent cycle reverse"),
     ];
     let names: Vec<String> = commands.iter().filter_map(|command| command.id.clone()).collect();
