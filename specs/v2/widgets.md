@@ -605,12 +605,13 @@ Everything else is a **client error**: rendering or translating valid WGSL, a sh
 frame stop, GPU canvases: `the shader took over 50 ms a frame, three frames in a row`), a GPU hang (`widgets-gpu.md`:
 `the GPU work hung; the canvas is stopped`), host internals, transport and RPC failures (a `program` fetch that fails),
 and client bugs. Clients never send client errors with `report`. Each client error, and a GPU canvas's unavailable state
-(`widgets-gpu.md`), has an exact reason: the message this spec gives, else the underlying error's text. Clients log it
-like their other errors; in dev mode (the one that allows local-network fetch, `widgets-live.md`, Capabilities) they
-also show it on the widget, under a canvas's placeholder or, for other client errors, as a small dev line on the widget.
-Outside dev mode the reason isn't shown (a canvas shows only its placeholder). Client errors are bugs to fix in the
-client, not a widget state. A fetch error a live program gets from `widget.fetch` is the program's to handle; only an
-exception it lets escape is a program error.
+(`widgets-gpu.md`), has an exact reason: the message this spec gives, else the underlying error's text. Only in dev mode
+(the one that allows local-network fetch, `widgets-live.md`, Capabilities) do clients log it and show it on the widget,
+under a canvas's placeholder or, for other client errors, as a small dev line on the widget; outside dev mode it is
+neither logged nor shown (a canvas shows only its placeholder). The reason is captured once, when the state changes (a
+canvas becomes unavailable or stops), never formatted or logged per frame, per batch or per call, and with dev mode off
+nothing on a hot path pays for it. Client errors are bugs to fix in the client, not a widget state. A fetch error a live
+program gets from `widget.fetch` is the program's to handle; only an exception it lets escape is a program error.
 
 A client that hits a program error shows it on the widget (error card or inline error) and calls `report` once with
 `{ phase, message, line?, column? }`, positions relative to the widget template's source (the lines of the program before the source subtracted:
