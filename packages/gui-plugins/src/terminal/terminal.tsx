@@ -22,7 +22,7 @@ import {
 import type { TerminalProps } from "./props"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
 import { terminalLinkLabel } from "./hover-label"
-import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget } from "./terminal-key-event"
+import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget, terminalPasteText } from "./terminal-key-event"
 import { TerminalQuote } from "./quote"
 
 type TerminalColors = {
@@ -116,7 +116,7 @@ const useTerminalUiBindings = (input: {
 
     event.preventDefault()
     event.stopPropagation()
-    input.term.paste(text)
+    input.term.paste(terminalPasteText(text))
   }
 
   const handleTextareaFocus = () => {

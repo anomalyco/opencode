@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget } from "./terminal-key-event"
+import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget, terminalPasteText } from "./terminal-key-event"
 
 function keyEvent(init: KeyboardEventInit) {
   return new KeyboardEvent("keydown", { cancelable: true, ...init })
@@ -64,5 +64,16 @@ describe("terminalLinkTarget", () => {
     expect(terminalLinkTarget({ ...click, shiftKey: true }, web)).toBe("system")
     expect(terminalLinkTarget({ ...click, shiftKey: true, ctrlKey: true }, web)).toBe("system")
     expect(terminalLinkTarget({ ...click, shiftKey: true, metaKey: true }, web)).toBe("system")
+  })
+})
+
+describe("terminalPasteText", () => {
+  test("sends each Windows line break as one Enter", () => {
+    expect(terminalPasteText("git status\r\ngit log -1\r\n")).toBe("git status\rgit log -1\r")
+  })
+
+  test("leaves a lone line feed and text without line breaks as they are", () => {
+    expect(terminalPasteText("a\nb")).toBe("a\nb")
+    expect(terminalPasteText("echo hi")).toBe("echo hi")
   })
 })

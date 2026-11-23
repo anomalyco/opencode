@@ -56,3 +56,11 @@ export function terminalLinkTarget(
 
   return "blocked"
 }
+
+/**
+ * Pasted text as the terminal sends it. A Windows clipboard ends each line with CR LF, which a shell reads as Enter and
+ * then a stray line feed, so each pair becomes one CR, as Windows Terminal and xterm send a pasted line break.
+ */
+export function terminalPasteText(text: string) {
+  return text.replaceAll("\r\n", "\r")
+}
