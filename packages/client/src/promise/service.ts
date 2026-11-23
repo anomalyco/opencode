@@ -3,6 +3,7 @@ import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
+import { running } from "../service-process.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
@@ -133,18 +134,13 @@ function signal(pid: number, name: NodeJS.Signals) {
   } catch {}
 }
 
-function stopped(pid: number) {
-  try {
-    process.kill(pid, 0)
-    return false
-  } catch {
-    return true
-  }
+async function stopped(pid: number) {
+  return !(await running(pid))
 }
 
 async function waitUntilStopped(pid: number, timing: EnsureTiming) {
   for (let attempt = 0; attempt <= timing.stopPollAttempts; attempt++) {
-    if (stopped(pid)) return true
+    if (await stopped(pid)) return true
     if (attempt < timing.stopPollAttempts) await delay(timing.stopPollInterval)
   }
   return false

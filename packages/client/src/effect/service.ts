@@ -3,6 +3,7 @@ import type { DiscoverOptions, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
+import { running } from "../service-process.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
@@ -172,10 +173,7 @@ const signal = (pid: number, name: NodeJS.Signals) =>
   Effect.try({ try: () => process.kill(pid, name), catch: (cause) => cause }).pipe(Effect.ignore)
 
 const stopped = Effect.fnUntraced(function* (pid: number) {
-  const running = yield* Effect.try({ try: () => process.kill(pid, 0), catch: () => false }).pipe(
-    Effect.orElseSucceed(() => false),
-  )
-  if (!running) return true
+  if (!(yield* Effect.promise(() => running(pid)))) return true
   return yield* Effect.fail(new Error(`Server process ${pid} is still running`))
 })
 
