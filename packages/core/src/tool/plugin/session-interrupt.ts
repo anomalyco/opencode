@@ -8,6 +8,7 @@ import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { Job } from "../../job.js"
 import { Session } from "../../session.js"
+import { toolFailure } from "../runtime.js"
 
 export const Input = Schema.Struct({
   sessionID: Session.ID.annotate({ description: "The session to interrupt." }),
@@ -28,47 +29,19 @@ export const Plugin = {
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
 
-    // Every page of a session's direct children.
-    const children = (
-      input: { readonly parentID: Session.ID; readonly limit: number } | { readonly cursor: Session.ListCursor },
-    ): Effect.Effect<Session.Info[]> =>
-      sessions.list(input).pipe(
-        Effect.orDie,
-        Effect.flatMap((page) =>
-          page.data.length === 0 || !page.cursor.next
-            ? Effect.succeed(page.data)
-            : children({ cursor: page.cursor.next }).pipe(Effect.map((rest) => [...page.data, ...rest])),
-        ),
-      )
-
-    const isSelfOrAncestor = (target: Session.ID, sessionID: Session.ID | undefined): Effect.Effect<boolean> =>
-      sessionID === undefined
-        ? Effect.succeed(false)
-        : sessionID === target
-          ? Effect.succeed(true)
-          : sessions.get(sessionID).pipe(
-              Effect.map((session) => session.parentID),
-              Effect.orElseSucceed(() => undefined),
-              Effect.flatMap((parentID) => isSelfOrAncestor(target, parentID)),
-            )
-
-    // Cancelled jobs send no completion notice, so nothing wakes an interrupted session again. Jobs are cancelled
-    // before the interrupt, so none finishes and wakes it meanwhile, and again after, for any its last step started.
+    // Cancelled jobs send no completion notice, so nothing wakes these sessions again. They're cancelled before the
+    // interrupt, so none finishes in between, and after it, for any the last step started.
     const stop = (sessionID: Session.ID): Effect.Effect<{ interrupted: number; jobs: number }> =>
       Effect.gen(function* () {
         const before = yield* jobs.cancelSession(sessionID)
         const interrupted = yield* sessions.interrupt(sessionID)
-        const cancelled = [...before, ...(yield* jobs.cancelSession(sessionID))]
-        const below = yield* Effect.forEach(yield* children({ parentID: sessionID, limit: 100 }), (child) =>
-          stop(child.id),
-        )
-        return below.reduce(
-          (total, item) => ({ interrupted: total.interrupted + item.interrupted, jobs: total.jobs + item.jobs }),
-          {
-            interrupted: interrupted ? 1 : 0,
-            jobs: cancelled.length,
-          },
-        )
+        const after = yield* jobs.cancelSession(sessionID)
+        const children = yield* sessions.list({ parentID: sessionID, limit: 1000 }).pipe(Effect.orDie)
+        const below = yield* Effect.forEach(children.data, (child) => stop(child.id))
+        return {
+          interrupted: below.reduce((total, item) => total + item.interrupted, interrupted ? 1 : 0),
+          jobs: below.reduce((total, item) => total + item.jobs, before.length + after.length),
+        }
       })
 
     yield* ctx.tool
@@ -84,20 +57,18 @@ export const Plugin = {
             Effect.gen(function* () {
               yield* sessions.get(input.sessionID)
               // Interrupting the caller or a session above it would stop this call and the caller's own work.
-              if (yield* isSelfOrAncestor(input.sessionID, context.sessionID))
-                return yield* new ToolFailure({ message: "A session can't interrupt itself or a session above it" })
+              let id: Session.ID | undefined = context.sessionID
+              while (id) {
+                if (id === input.sessionID)
+                  return yield* new ToolFailure({ message: "A session can't interrupt itself or a session above it" })
+                id = (yield* sessions.get(id)).parentID
+              }
               const result = yield* stop(input.sessionID)
               return {
                 output: { sessionID: input.sessionID, ...result },
                 content: `Interrupted session ${input.sessionID}: ${result.interrupted} running, ${result.jobs} jobs cancelled.`,
               }
-            }).pipe(
-              Effect.mapError((error) =>
-                error instanceof ToolFailure
-                  ? error
-                  : new ToolFailure({ message: `Unable to interrupt session ${input.sessionID}`, error }),
-              ),
-            ),
+            }).pipe(Effect.mapError(toolFailure(`Unable to interrupt session ${input.sessionID}`))),
         })
       })
       .pipe(Effect.orDie)
