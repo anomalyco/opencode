@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { draw, type Frame, MAX_COMMANDS, program, step, WidgetSession } from "../src/index.js"
+import { STEP } from "./limits.js"
 
 const frame: Frame = { id: "0/:c", t: 0.5, dt: 1 / 60, width: 200, height: 100, scale: 2, pointer: null, dark: true }
 
@@ -13,6 +14,7 @@ const drawn = (body: string) =>
       state: {},
       frame,
     },
+    STEP,
   )
 
 const failure = (body: string) => drawn(body).catch((error: unknown) => error)

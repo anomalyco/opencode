@@ -4,6 +4,7 @@ import { Host, Runtime } from "psychoscript"
 import { builtins, program } from "../src/index.js"
 import { tree } from "../src/tree.js"
 import { examples } from "./fixtures/diagrams.js"
+import { STEP } from "./limits.js"
 
 // The host's tree building (`src/tree.ts`) against the prelude's as it was before it was made faster and then moved to
 // the hosts (one closure per node, a copy of every node, an id table of every path), run on the same view as built:
@@ -68,7 +69,7 @@ const trees = async (source: string, data: unknown) => {
   const crossed: { view?: unknown } = {}
   const result = await Runtime.make({
     typedArrays: true,
-    limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH },
+    limits: { ...STEP, maxValueDepth: MAX_VALUE_DEPTH },
     translate: { functions: "mark" },
     globals: () => ({ __cross: Host.fn(([view]) => void (crossed.view = view)) }),
   }).execute(

@@ -14,6 +14,7 @@ import {
   WidgetSession,
 } from "../src/index.js"
 import { examples } from "./fixtures/diagrams.js"
+import { STEP } from "./limits.js"
 
 type Name = keyof typeof examples
 
@@ -25,7 +26,7 @@ const widgetTemplate = (name: string) => {
 
 const start = async (name: string, data: unknown) => {
   expect(validateData(widgetTemplate(name).data, data)).toEqual([])
-  return WidgetSession.start(program(widgetTemplate(name).source), data)
+  return WidgetSession.start(program(widgetTemplate(name).source), data, STEP)
 }
 
 const nodes = (node: Node): Node[] => [node, ...("children" in node ? node.children.flatMap(nodes) : [])]

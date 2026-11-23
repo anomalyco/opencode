@@ -10,6 +10,7 @@ import {
   program,
   type Transport,
 } from "../src/index.js"
+import { LIVE } from "./limits.js"
 
 const size: LiveFrame = { t: 0, dt: 1 / 60, width: 300, height: 200, scale: 2, pointer: null, dark: true }
 const press = (id: string) => ({ id, type: "press" as const })
@@ -21,6 +22,7 @@ const start = (source: string, options: LiveOptions = {}, data: unknown = {}) =>
   const messages: LiveMessage[] = []
   const widget = LiveWidget.start(program(source, "live"), data, {
     clock,
+    ...LIVE,
     onMessage: (message) => messages.push(message),
     ...options,
   })
@@ -273,8 +275,8 @@ test("a program that runs too long without awaiting is stopped", async () => {
     type: "error",
     error: { kind: "timeout", message: "The program ran more than 50 ms without awaiting" },
   }
-  expect(await start(`async function main() { while (true) {} }`).widget.done).toMatchObject(busy)
-  const later = start(`async function main() { await widget.frame(); while (true) {} }`)
+  expect(await start(`async function main() { while (true) {} }`, { busyMs: 50 }).widget.done).toMatchObject(busy)
+  const later = start(`async function main() { await widget.frame(); while (true) {} }`, { busyMs: 50 })
   await later.widget.when((current) => current.frameRequested)
   later.widget.frame(size)
   expect(await later.widget.done).toMatchObject(busy)
@@ -286,10 +288,11 @@ const rendered = (messages: ReadonlyArray<LiveMessage>) =>
 test("renders over the post rate wait and coalesce: the latest goes out at the next slot, and before an answer", async () => {
   // 8 at once (the burst), then the 22 others replace each other until a token comes, a tenth of a second later.
   const { widget, messages, clock } = start(
-    `async function main() { for (let i = 0; i < 30; i++) widget.render(ui.text(String(i))); await widget.sleep(1000); widget.submit(1) }`,
+    `async function main() { for (let i = 0; i < 30; i++) widget.render(ui.text(String(i))); widget.send("posted"); await widget.sleep(1000); widget.submit(1) }`,
     { postsPerSecond: 10 },
   )
-  await widget.when(() => rendered(messages).length === 8)
+  // Once all 30 are posted (a send goes at once), however long the loop took.
+  await widget.when(() => messages.some((message) => message.type === "send"))
   await clock.advance(99)
   expect(rendered(messages)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7"])
   await clock.advance(1)

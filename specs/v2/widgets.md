@@ -565,8 +565,10 @@ conversion. With `fps: 0` it renders once, and again when its `values` change.
 `widget.pointer` is `(x, y, down, 0)`; `widget.values` carries the node's `values` (up to 16 floats, row-major, zero
 padded), which the widget template sets from state in `view`. Rune passes WGSL to wgpu as is; iOS gets MSL and Android GLSL
 ES 3.00 translated with naga (`psychoscript-mobile`). Source is capped at 16 KB. A shader that fails to compile shows
-`poster` (an image src) or `alt` with the error inline; one that takes over 50 ms per frame three frames in a row stops
-and shows its last frame. The TUI shows `alt` and `poster` for every canvas.
+`poster` (an image src) or `alt` with the error inline. A host never submits a new shader frame while the previous one
+is still drawing. A shader whose frame is still unfinished more than 50 ms after its submit, three frames in a row,
+stops and keeps showing its last frame: a client error (Failures) with exactly this text:
+`the shader took over 50 ms a frame, three frames in a row`. The TUI shows `alt` and `poster` for every canvas.
 
 When a new view changes only a GPU canvas's `values` (same `wgsl`, same place in the tree), clients update its uniforms
 in place: no recompile, no rebuilt view, no restart of `widget.time`. Live programs drive shader games that way,
@@ -586,10 +588,10 @@ A **program error** is the widget template's own code failing or breaking a cont
   rate.)
 
 Everything else is a **client error**: rendering or translating valid WGSL, a shader too slow on this device (the 50 ms
-frame stop), host internals, transport and RPC failures (a `program` fetch that fails), and client bugs. Clients never
-send client errors with `report`; they log them in dev mode like their other errors. Client errors are bugs to fix in
-the client, not a widget state. A fetch error a live program gets from `widget.fetch` is the program's to handle; only
-an exception it lets escape is a program error.
+frame stop, GPU canvases: `the shader took over 50 ms a frame, three frames in a row`), host internals, transport and
+RPC failures (a `program` fetch that fails), and client bugs. Clients never send client errors with `report`; they log
+them in dev mode like their other errors. Client errors are bugs to fix in the client, not a widget state. A fetch error
+a live program gets from `widget.fetch` is the program's to handle; only an exception it lets escape is a program error.
 
 A client that hits a program error shows it on the widget (error card or inline error) and calls `report` once with
 `{ phase, message, line?, column? }`, positions relative to the widget template's source (the lines of the program before the source subtracted:

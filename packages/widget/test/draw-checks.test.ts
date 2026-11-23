@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { checkDraw, draw, LiveWidget, program } from "../src/index.js"
+import { LIVE, STEP } from "./limits.js"
 
 // The shared draw command fixtures (`fixtures/draw.json`, specs/v2/widgets.md, Canvas): every host must give each
 // case's `valid` commands or fail with exactly its `error`. This holds the TypeScript host to them three ways: the
@@ -79,7 +80,7 @@ for (const item of fixture.cases) {
     // A draw step: the commands cross as JSON reads them (undefined items null, non-finite numbers null).
     const source = `function view() { return ui.canvas({ key: "c", height: 1 }) }\nfunction draw() { return ${expression(item)} }`
     const frame = { id: ":c", t: 0, dt: 0, width: 10, height: 10, scale: 1, pointer: null, dark: false }
-    const stepped = await draw(program(source), { data: null, state: {}, frame }, { timeoutMs: 5000 }).then(
+    const stepped = await draw(program(source), { data: null, state: {}, frame }, STEP).then(
       (output) => ({ commands: output.commands }),
       (error: { kind: string; message: string }) => ({ error: error.message }),
     )
@@ -91,6 +92,7 @@ for (const item of fixture.cases) {
         "live",
       ),
       null,
+      LIVE,
     )
     const end = await widget.done
     const posted: unknown =

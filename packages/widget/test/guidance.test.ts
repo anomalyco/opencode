@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { type FetchRequest, LiveWidget, ManualClock, type Node, program, type Transport } from "../src/index.js"
+import { LIVE } from "./limits.js"
 
 // The live guidance's examples, by their heading, so the doc can't drift from what runs.
 const guidance = await Bun.file(path.resolve(import.meta.dir, "../docs/live-guidance.md")).text()
@@ -19,10 +20,7 @@ test("the game example plays and submits its score", async () => {
   const widget = LiveWidget.start(
     program(example("## Example: a small game"), "live"),
     { title: "Catch", seconds: 2 },
-    {
-      clock,
-      busyMs: 2000,
-    },
+    { clock, ...LIVE },
   )
   const taps = { hits: 0 }
   for (let frame = 0; !texts(widget.view).some((text) => text.startsWith("You caught")); frame++) {
@@ -66,7 +64,7 @@ test("the dashboard example polls, refreshes on demand and when resumed, and sho
   const widget = LiveWidget.start(
     program(example("## Example: a live dashboard"), "live"),
     { repo: "anomalyco/opencode", seconds: 30 },
-    { clock, transport, capabilities: { https: { hosts: ["api.github.com"] } } },
+    { clock, ...LIVE, transport, capabilities: { https: { hosts: ["api.github.com"] } } },
   )
   const showing = (text: string) => widget.when((current) => texts(current.view).includes(text))
   await showing("★ 41")

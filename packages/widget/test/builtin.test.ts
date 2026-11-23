@@ -11,6 +11,7 @@ import {
   validateData,
   WidgetSession,
 } from "../src/index.js"
+import { STEP } from "./limits.js"
 
 const widgetTemplate = (name: string) => {
   const found = builtins.find((item) => item.name === name)
@@ -20,7 +21,7 @@ const widgetTemplate = (name: string) => {
 
 const start = async (name: string, data: unknown) => {
   expect(validateData(widgetTemplate(name).data, data)).toEqual([])
-  return WidgetSession.start(program(widgetTemplate(name).source), data)
+  return WidgetSession.start(program(widgetTemplate(name).source), data, STEP)
 }
 
 // Every node in the view, depth first, for asserting on parts of a built-in's view.

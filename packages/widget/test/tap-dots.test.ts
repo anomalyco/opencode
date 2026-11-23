@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { type Command, type LiveFrame, LiveWidget, ManualClock, type Node, program } from "../src/index.js"
+import { LIVE } from "./limits.js"
 
 // A complete live game (not a built-in), run on the reference live host: frames, a canvas handler, timers, pausing.
 const source = await Bun.file(new URL("./fixtures/tap-dots.js", import.meta.url)).text()
@@ -10,8 +11,7 @@ const BOARD = "0/:board"
 
 const play = (data: unknown) => {
   const clock = new ManualClock()
-  // The TypeScript interpreter on a loaded CI runner can take longer than the spec's 50 ms to start the program.
-  const widget = LiveWidget.start(program(source, "live"), data, { clock, busyMs: 2000 })
+  const widget = LiveWidget.start(program(source, "live"), data, { clock, ...LIVE })
   const time = { t: 0 }
   // One display frame 16 ms after the last, once the program asks for it; resolves once it is drawn.
   const frame = async () => {

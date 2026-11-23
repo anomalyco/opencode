@@ -3,6 +3,7 @@ import { Glob } from "bun"
 import path from "node:path"
 import { fixtures, run } from "../script/gpu-conformance.js"
 import { LiveWidget, type LiveMessage, ManualClock, program, step } from "../src/index.js"
+import { LIVE } from "./limits.js"
 
 // The GPU conformance fixtures (`fixtures/gpu/*.json`, widgets-gpu.md): every host posts the same batches for each
 // program, and its checks give the same program errors. This holds the TypeScript host to them.
@@ -37,6 +38,7 @@ const start = (source: string, options: { readonly gpu?: false } = {}) => {
   const sent: unknown[] = []
   const widget = LiveWidget.start(program(source, "live"), null, {
     clock,
+    ...LIVE,
     ...options,
     onMessage: (message) => {
       if (message.type === "gpu" || (message.type === "frame" && message.gpu)) posts.push(message)
@@ -95,6 +97,7 @@ test("canvas sizes, a lost device, and batches before sleeps and at the end", as
     null,
     {
       clock,
+      ...LIVE,
       onMessage: (message) => {
         if (message.type === "send") sent.push(message.value)
         if (message.type === "gpu" || (message.type === "frame" && message.gpu)) posts.push(message)
@@ -228,6 +231,7 @@ test("a GPU batch takes no token but never overtakes a waiting render; a bare fr
     null,
     {
       clock,
+      ...LIVE,
       postsPerSecond: 1,
       onMessage: (message) => order.push(message.type === "render" ? "render" : message.type),
     },

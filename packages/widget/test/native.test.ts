@@ -5,6 +5,7 @@ import { Host, Runtime } from "psychoscript"
 import { checkDraw, draw, LiveWidget, type LiveMessage, Node, program, step, StepOutput } from "../src/index.js"
 import { prune } from "../src/session.js"
 import { fixtures, scriptedProgram } from "../script/conformance.js"
+import { LIVE, STEP } from "./limits.js"
 
 // The TypeScript runtime is a native host (specs/v2/widgets.md, Native hosts). These hold its steps and live runs to
 // the last prelude that built trees itself (`scriptedProgram`, protocol 1's entries, with an id → handler table): the
@@ -14,7 +15,7 @@ import { fixtures, scriptedProgram } from "../script/conformance.js"
 const scripted = async (source: string, input: unknown) => {
   const result = await Runtime.make({
     typedArrays: true,
-    limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH },
+    limits: { ...STEP, maxValueDepth: MAX_VALUE_DEPTH },
   }).execute(scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify(input)})`)
   if (!result.ok) return { error: result.error.message }
   const value = result.value as Record<string, unknown>
@@ -24,7 +25,7 @@ const scripted = async (source: string, input: unknown) => {
 }
 
 const native = (source: string, input: unknown) =>
-  step(program(source), input as Parameters<typeof step>[1], { timeoutMs: 5000 }).then(
+  step(program(source), input as Parameters<typeof step>[1], STEP).then(
     (output) => output,
     (error: Error) => ({ error: error.message }),
   )
@@ -107,7 +108,7 @@ test("a view with a key of another type, or deeper than 100 levels, fails in pha
   ] as const
   for (const [expression, message] of cases) {
     const source = `function view() {\n  return ${expression}\n}`
-    const failed = await step(program(source), { phase: "init", data: null }).catch((error: unknown) => error)
+    const failed = await step(program(source), { phase: "init", data: null }, STEP).catch((error: unknown) => error)
     expect(failed).toMatchObject({ _tag: "Widget.StepError", kind: "invalid", phase: "view", message })
     expect(await scripted(source, { phase: "init", data: null })).toEqual({ error: expect.stringContaining(message) })
   }
@@ -118,7 +119,7 @@ test("a view with a key of another type, or deeper than 100 levels, fails in pha
     [150, "The view nests more than 100 levels"],
   ] as const) {
     const source = `function view() {\n  let node = ui.select([{ value: "a", label: "A", description: "d" }])\n  for (let i = 1; i < ${levels}; i++) node = ui.column([node])\n  return node\n}`
-    const output = await step(program(source), { phase: "init", data: null }).catch((error: unknown) => error)
+    const output = await step(program(source), { phase: "init", data: null }, STEP).catch((error: unknown) => error)
     if (failure) expect(output).toMatchObject({ kind: "invalid", phase: "view", message: failure })
     else expect(output).toEqual(await scripted(source, { phase: "init", data: null }))
   }
@@ -143,7 +144,7 @@ const scriptedLive = async (source: string, events: ReadonlyArray<unknown>) => {
   }
   const result = await Runtime.make({
     typedArrays: true,
-    limits: { timeoutMs: 2000, maxValueDepth: MAX_VALUE_DEPTH },
+    limits: { ...STEP, maxValueDepth: MAX_VALUE_DEPTH },
     globals: () => ({
       __input: Host.fn(() => ({ data: null })),
       __host: {
@@ -160,6 +161,7 @@ const scriptedLive = async (source: string, events: ReadonlyArray<unknown>) => {
 const nativeLive = async (source: string, events: ReadonlyArray<unknown>) => {
   const messages: unknown[] = []
   const widget = LiveWidget.start(program(source, "live"), null, {
+    ...LIVE,
     onMessage: (message: LiveMessage) => messages.push(message),
   })
   events.forEach((event) => widget.event(event as Parameters<LiveWidget["event"]>[0]))
@@ -244,7 +246,11 @@ test("a function posted where none may go fails a native live run at the same li
 
 test("a live render with a key of another type, or deeper than 100 levels, ends the run in phase view", async () => {
   const end = async (expression: string) => {
-    const widget = LiveWidget.start(program(`async function main() {\n  widget.render(${expression})\n}`, "live"), null)
+    const widget = LiveWidget.start(
+      program(`async function main() {\n  widget.render(${expression})\n}`, "live"),
+      null,
+      LIVE,
+    )
     const done = await widget.done
     return done.type === "error" ? done.error : done
   }
@@ -264,7 +270,11 @@ test("a live render with a key of another type, or deeper than 100 levels, ends 
       message: "The view nests more than 100 levels",
     })
   // 100 levels, the deepest prop a node has in its deepest node: the render's value depth is 202 exactly.
-  const widget = LiveWidget.start(program(`async function main() {\n  widget.render(${nested(100)})\n}`, "live"), null)
+  const widget = LiveWidget.start(
+    program(`async function main() {\n  widget.render(${nested(100)})\n}`, "live"),
+    null,
+    LIVE,
+  )
   expect(await widget.done).toEqual({ type: "return" })
   let deepest: unknown = widget.view
   for (let level = 1; level < 100; level++) deepest = (deepest as { children: unknown[] }).children[0]
@@ -284,7 +294,7 @@ test("a live render with a key of another type, or deeper than 100 levels, ends 
 const scriptedDraw = async (source: string, input: Record<string, unknown>) => {
   const result = await Runtime.make({
     typedArrays: true,
-    limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH },
+    limits: { ...STEP, maxValueDepth: MAX_VALUE_DEPTH },
   }).execute(scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify({ phase: "draw", ...input })})`)
   if (!result.ok) return { error: result.error.message }
   const checked = checkDraw(isRecord(result.value) ? result.value.commands : undefined)
@@ -292,7 +302,7 @@ const scriptedDraw = async (source: string, input: Record<string, unknown>) => {
 }
 
 const nativeDraw = (source: string, input: Parameters<typeof draw>[1]) =>
-  draw(program(source), input, { timeoutMs: 5000 }).then(
+  draw(program(source), input, STEP).then(
     (output) => output,
     (error: Error) => ({ error: error.message }),
   )
@@ -302,7 +312,7 @@ test("native draw steps give the commands the run's result gave, and fail as it 
   const drawn = fixtures().filter((fixture) => fixture.builtin !== undefined && /function draw\(/.test(fixture.source))
   expect(drawn.length).toBeGreaterThan(10)
   for (const fixture of drawn) {
-    const init = await step(program(fixture.source), fixture.input as Parameters<typeof step>[1])
+    const init = await step(program(fixture.source), fixture.input as Parameters<typeof step>[1], STEP)
     const input = { data: fixture.input.data, state: init.state, frame }
     expect({ name: fixture.name, output: await nativeDraw(fixture.source, input) }).toEqual({
       name: fixture.name,
