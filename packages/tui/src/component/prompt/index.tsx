@@ -1221,7 +1221,7 @@ export function Prompt(props: PromptProps) {
     let sessionID = props.sessionID
     let session = sessionID ? data.session.get(sessionID) : undefined
     let finishMoveProgress = false
-    // New-session sends wait for creation and environment setup.
+    // New-session sends wait for creation.
     let newSession: { gate: Promise<unknown>; recover: (error: unknown) => void } | undefined
     if (sessionID == null) {
       const directory = await move.getDirectory()
@@ -1254,11 +1254,7 @@ export function Prompt(props: PromptProps) {
       sessionID = created.id
       session = data.session.get(created.id)
       newSession = {
-        gate: created.request.then(async (info) => {
-          if (terminalEnvironment.variables !== undefined) {
-            await client.api.session.environment({ sessionID: created.id, variables: terminalEnvironment.variables })
-          }
-        }),
+        gate: created.request,
         recover: (error) => {
           toast.show({
             title: data.session.get(created.id) ? "Failed to set up session" : "Creating a session failed",
@@ -1283,6 +1279,10 @@ export function Prompt(props: PromptProps) {
     }
 
     const target = sessionID
+    const syncEnvironment = async () => {
+      if (terminalEnvironment.variables === undefined) return
+      await client.api.session.environment({ sessionID: target, variables: terminalEnvironment.variables })
+    }
     const prepareAgent = async () => {
       if (!session) {
         await data.session.sync(target)
@@ -1308,6 +1308,7 @@ export function Prompt(props: PromptProps) {
       // Blank Enter in an existing session commits the composer's agent and
       // model selection, then hands off to the route (queued prompt promotion).
       await attempt("Failed to prepare session", async () => {
+        await syncEnvironment()
         await commitSelection()
         await props.onEmptySubmit?.()
       })
@@ -1316,7 +1317,10 @@ export function Prompt(props: PromptProps) {
     history.append(entry)
     if (currentMode === "shell") {
       move.startSubmit()
-      const send = () => client.api.session.shell({ sessionID: target, command: inputText })
+      const send = async () => {
+        await syncEnvironment()
+        return client.api.session.shell({ sessionID: target, command: inputText })
+      }
       void (newSession ? newSession.gate.then(send) : send()).catch((error) =>
         newSession ? newSession.recover(error) : fail("Failed to run shell command", error),
       )
@@ -1325,6 +1329,7 @@ export function Prompt(props: PromptProps) {
       const send = async () => {
         // Commands inherit the composer selection; command-specific overrides
         // remain server-owned and run after this preparation.
+        await syncEnvironment()
         await commitSelection()
         return client.api.session.command({
           sessionID: target,
@@ -1379,7 +1384,10 @@ export function Prompt(props: PromptProps) {
           // Commit the captured selection after earlier admissions, including
           // compaction setup. Cached state may still precede their SSE echoes;
           // the server makes an unchanged selection a no-op.
-          prepare: commitModel,
+          prepare: async () => {
+            await syncEnvironment()
+            await commitModel()
+          },
         })
         .catch((error) => (newSession ? newSession.recover(error) : fail("Failed to send prompt", error)))
       if (pendingEditorSelection) editor.markSelectionSent()
