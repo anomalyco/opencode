@@ -1,4 +1,4 @@
-//! Recent models, favorites and variants in `<state>/model.json`. Locked updates preserve unrelated fields.
+//! Recent models, favorites, variants and speeds in `<state>/model.json`. Locked updates preserve unrelated fields.
 
 use std::path::{Path, PathBuf};
 
@@ -37,7 +37,20 @@ pub struct Preference {
     pub favorite: Vec<Model>,
     /// Variant by model key; `"default"` is kept, since it overrides an agent's configured variant.
     pub variant: IndexMap<String, String>,
+    /// The speed last chosen for each model by its key; a model without an entry runs at its standard speed.
+    pub speed: IndexMap<String, String>,
 }
+
+/// Which of [`Preference`]'s fields a write replaces.
+#[derive(Clone, Copy, Default)]
+struct Fields {
+    recent: bool,
+    favorite: bool,
+    variant: bool,
+    speed: bool,
+}
+
+const ALL: Fields = Fields { recent: true, favorite: true, variant: true, speed: true };
 
 fn models(value: Option<&Value>) -> Vec<Model> {
     let Some(items) = value.and_then(Value::as_array) else { return Vec::new() };
@@ -61,11 +74,11 @@ fn variants(value: Option<&Value>) -> IndexMap<String, String> {
         .collect()
 }
 
-/// `decodeModelPreference`: the document with sanitized `recent`, `favorite`, and `variant`.
+/// `decodeModelPreference`: the document with sanitized `recent`, `favorite`, `variant`, and `speed`.
 pub fn decode(value: Option<&Value>) -> Map<String, Value> {
     let mut document = value.and_then(Value::as_object).cloned().unwrap_or_default();
     let preference = preference(&document);
-    put(&mut document, &preference, true, true, true);
+    put(&mut document, &preference, ALL);
     document
 }
 
@@ -74,20 +87,26 @@ fn preference(document: &Map<String, Value>) -> Preference {
         recent: models(document.get("recent")),
         favorite: models(document.get("favorite")),
         variant: variants(document.get("variant")),
+        speed: variants(document.get("speed")),
     }
 }
 
-fn put(document: &mut Map<String, Value>, value: &Preference, recent: bool, favorite: bool, variant: bool) {
+fn put(document: &mut Map<String, Value>, value: &Preference, fields: Fields) {
     let list = |models: &[Model]| Value::Array(models.iter().map(Model::to_value).collect());
-    if recent {
+    let map = |map: &IndexMap<String, String>| {
+        Value::Object(map.iter().map(|(key, item)| (key.clone(), Value::String(item.clone()))).collect())
+    };
+    if fields.recent {
         document.insert("recent".into(), list(&value.recent));
     }
-    if favorite {
+    if fields.favorite {
         document.insert("favorite".into(), list(&value.favorite));
     }
-    if variant {
-        let map = value.variant.iter().map(|(key, item)| (key.clone(), Value::String(item.clone()))).collect();
-        document.insert("variant".into(), Value::Object(map));
+    if fields.variant {
+        document.insert("variant".into(), map(&value.variant));
+    }
+    if fields.speed {
+        document.insert("speed".into(), map(&value.speed));
     }
 }
 
@@ -102,10 +121,24 @@ pub fn recent_models(model: &Model, recent: &[Model]) -> Vec<Model> {
     std::iter::once(model).chain(recent).filter(|item| seen.insert(item.key())).take(10).cloned().collect()
 }
 
-/// `favoriteModels`.
-pub fn favorite_models(model: &Model, favorite: &[Model], enabled: bool) -> Vec<Model> {
-    let rest = favorite.iter().filter(|item| item.key() != model.key()).cloned();
+/// `favoriteModels`: `same` names the entries that are `model`, such as the model saved at another speed.
+pub fn favorite_models(model: &Model, favorite: &[Model], enabled: bool, same: impl Fn(&Model) -> bool) -> Vec<Model> {
+    let rest = favorite.iter().filter(|item| !same(item)).cloned();
     if enabled { std::iter::once(model.clone()).chain(rest).collect() } else { rest.collect() }
+}
+
+/// `cycleModelSpeed`: slower speeds, then standard (`None`), then faster ones; wraps around. A speed the model no
+/// longer has restarts from the slowest.
+pub fn cycle_speed(current: Option<&str>, speeds: &[(&str, bool)]) -> Option<String> {
+    let order: Vec<Option<&str>> = speeds
+        .iter()
+        .filter(|speed| !speed.1)
+        .map(|speed| Some(speed.0))
+        .chain([None])
+        .chain(speeds.iter().filter(|speed| speed.1).map(|speed| Some(speed.0)))
+        .collect();
+    let next = order.iter().position(|speed| *speed == current).map_or(0, |at| (at + 1) % order.len());
+    order[next].map(str::to_owned)
 }
 
 /// `cycleModelVariant`: the next named variant, or `None` after the last.
@@ -141,14 +174,15 @@ impl ModelPreferences {
     pub fn add_recent(&self, model: &Model) -> Result<(), lock::Error> {
         self.update(|current| {
             let recent = recent_models(model, &current.recent);
-            (Preference { recent, ..Preference::default() }, (true, false, false))
+            (Preference { recent, ..Preference::default() }, Fields { recent: true, ..Fields::default() })
         })
     }
 
-    pub fn set_favorite(&self, model: &Model, enabled: bool) -> Result<(), lock::Error> {
+    /// `setFavorite`: `same` as in [`favorite_models`].
+    pub fn set_favorite(&self, model: &Model, enabled: bool, same: impl Fn(&Model) -> bool) -> Result<(), lock::Error> {
         self.update(|current| {
-            let favorite = favorite_models(model, &current.favorite, enabled);
-            (Preference { favorite, ..Preference::default() }, (false, true, false))
+            let favorite = favorite_models(model, &current.favorite, enabled, same);
+            (Preference { favorite, ..Preference::default() }, Fields { favorite: true, ..Fields::default() })
         })
     }
 
@@ -164,7 +198,19 @@ impl ModelPreferences {
             let mut variant = current.variant.clone();
             let next = normalize_variant(value).unwrap_or("default");
             variant.insert(model.key(), next.to_string());
-            (Preference { variant, ..Preference::default() }, (false, false, true))
+            (Preference { variant, ..Preference::default() }, Fields { variant: true, ..Fields::default() })
+        })
+    }
+
+    /// `saveSpeed`: `None`, the standard speed, removes the model's entry.
+    pub fn save_speed(&self, model: &Model, value: Option<&str>) -> Result<(), lock::Error> {
+        self.update(|current| {
+            let mut speed = current.speed.clone();
+            match value {
+                Some(value) => speed.insert(model.key(), value.to_owned()),
+                None => speed.shift_remove(&model.key()),
+            };
+            (Preference { speed, ..Preference::default() }, Fields { speed: true, ..Fields::default() })
         })
     }
 
@@ -185,14 +231,14 @@ impl ModelPreferences {
     }
 
     // `update(change)`: the patch replaces only the lists it names, sanitized again.
-    fn update(&self, change: impl FnOnce(&Preference) -> (Preference, (bool, bool, bool))) -> Result<(), lock::Error> {
+    fn update(&self, change: impl FnOnce(&Preference) -> (Preference, Fields)) -> Result<(), lock::Error> {
         lock::with_lock(&self.locks, &self.file.to_string_lossy(), &self.lock, || {
             let mut document = self.read();
-            let (patch, (recent, favorite, variant)) = change(&preference(&document));
-            // As TS `patch()`: an empty ID or variant is dropped rather than written.
+            let (patch, fields) = change(&preference(&document));
+            // As TS `patch()`: an empty ID, variant or speed is dropped rather than written.
             let mut staged = Map::new();
-            put(&mut staged, &patch, true, true, true);
-            put(&mut document, &preference(&staged), recent, favorite, variant);
+            put(&mut staged, &patch, ALL);
+            put(&mut document, &preference(&staged), fields);
             write_json_atomic(&self.file, &Value::Object(document))
         })?
         .map_err(lock::Error::Io)
@@ -219,6 +265,29 @@ mod tests {
         let prefs = ModelPreferences::new(state.path());
         prefs.save_variant(&Model::new("p", "a"), Some("high")).unwrap();
         prefs.save_variant(&Model::new("p", "a"), Some("")).unwrap();
-        assert_eq!(std::fs::read_to_string(prefs.path()).unwrap(), r#"{"recent":[],"favorite":[],"variant":{}}"#);
+        assert_eq!(
+            std::fs::read_to_string(prefs.path()).unwrap(),
+            r#"{"recent":[],"favorite":[],"variant":{},"speed":{}}"#
+        );
+    }
+
+    #[test]
+    fn cycles_speeds_from_slowest_to_fastest_through_the_standard_speed() {
+        let speeds = [("flex", false), ("fast", true), ("ultrafast", true)];
+        assert_eq!(cycle_speed(Some("flex"), &speeds), None);
+        assert_eq!(cycle_speed(None, &speeds).as_deref(), Some("fast"));
+        assert_eq!(cycle_speed(Some("fast"), &speeds).as_deref(), Some("ultrafast"));
+        assert_eq!(cycle_speed(Some("ultrafast"), &speeds).as_deref(), Some("flex"));
+        assert_eq!(cycle_speed(Some("gone"), &speeds).as_deref(), Some("flex"));
+    }
+
+    #[test]
+    fn the_standard_speed_is_the_absence_of_an_entry() {
+        let state = opencode_util::temp::tempdir().unwrap();
+        let prefs = ModelPreferences::new(state.path());
+        prefs.save_speed(&Model::new("openai", "gpt-5"), Some("fast")).unwrap();
+        assert_eq!(prefs.load().speed.get("openai/gpt-5").map(String::as_str), Some("fast"));
+        prefs.save_speed(&Model::new("openai", "gpt-5"), None).unwrap();
+        assert!(prefs.load().speed.is_empty());
     }
 }

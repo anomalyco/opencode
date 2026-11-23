@@ -23,7 +23,7 @@ pub fn show(local: &Rc<Local>) {
             props.description = Some("Connect a provider for access to more models".to_owned());
             props.flat = true;
             props.skip_filter = true;
-            props.current = local.current();
+            props.current = local.standard();
             props.on_select =
                 Some(Rc::new(bind!(local, |local, option: &SelectOption<Model>| model::choose(&local, &option.value))));
             let connect = Rc::new(bind!(local, |local| model::connect(&local)));
@@ -64,6 +64,8 @@ fn options(
         models
             .iter()
             .filter(|model| !matches!(model.status, ModelInfoStatus::Deprecated) && is_free(model))
+            // A model's faster and slower speeds are chosen with the speed selector.
+            .filter(|model| !crate::local::is_speed_in(models, model))
             .map(|model| {
                 let value = Model::new(&model.provider_id.0, &model.id);
                 let mut option = SelectOption::new(model.name.clone(), value.clone());
