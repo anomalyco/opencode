@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "path"
-import { Clock, Deferred, Effect, Fiber, Logger, Stream } from "effect"
+import { Clock, Deferred, Effect, Fiber, Logger, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Command } from "@opencode/core/command"
 import { Bus } from "@opencode/core/bus"
@@ -16,6 +16,7 @@ import { PluginModule } from "@opencode/core/plugin/module"
 import { Session } from "@opencode/core/session"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { Watcher } from "@opencode/core/filesystem/watcher"
+import { Tool } from "@opencode/core/tool"
 import { fromPromise } from "@opencode/plugin/promise/adapter"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
@@ -598,6 +599,65 @@ it.effect("reloading a plugin replaces its command implementation", () =>
     yield* load("2", "after")
     yield* commands.execute(request)
     expect(output).toEqual(["before", "after"])
+  }),
+)
+
+it.effect("does not report a reloading plugin as active while its tools are unregistered", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const entered = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const tool = (name: string) => ({
+      name,
+      description: name,
+      input: Schema.Struct({}),
+      execute: () => Effect.succeed({ content: name }),
+    })
+    const plugin = (id: string, revision: string, pause = false): Plugin.Generation => ({
+      id,
+      revision,
+      effect: (ctx) =>
+        Effect.gen(function* () {
+          if (pause) {
+            yield* Deferred.succeed(entered, undefined)
+            yield* Deferred.await(release)
+          }
+          yield* ctx.tool.transform((editor) => editor.add(tool(`${id}_tool`)))
+        }),
+    })
+
+    yield* plugins.activate([plugin("keep", "1"), plugin("reloading", "1"), plugin("trailing", "1")])
+    expect((yield* tools.list()).map((entry) => entry.name)).toEqual(["keep_tool", "reloading_tool", "trailing_tool"])
+    expect((yield* plugins.list()).map((entry) => `${entry.id}:${entry.state.status}`)).toEqual([
+      "keep:active",
+      "reloading:active",
+      "trailing:active",
+    ])
+
+    const reload = yield* plugins
+      .activate([plugin("keep", "1"), plugin("reloading", "2", true), plugin("trailing", "1")])
+      .pipe(Effect.forkChild({ startImmediately: true }))
+
+    yield* Deferred.await(entered)
+    const during = yield* Effect.ensuring(
+      Effect.all({
+        plugins: plugins.list(),
+        tools: tools.list(),
+      }),
+      Deferred.succeed(release, undefined),
+    )
+
+    expect(during.tools.map((entry) => entry.name)).toEqual(["keep_tool"])
+    expect(during.plugins.map((entry) => `${entry.id}:${entry.state.status}`)).toEqual(["keep:active"])
+
+    yield* Fiber.join(reload)
+    expect((yield* tools.list()).map((entry) => entry.name)).toEqual(["keep_tool", "reloading_tool", "trailing_tool"])
+    expect((yield* plugins.list()).map((entry) => `${entry.id}:${entry.state.status}`)).toEqual([
+      "keep:active",
+      "reloading:active",
+      "trailing:active",
+    ])
   }),
 )
 
