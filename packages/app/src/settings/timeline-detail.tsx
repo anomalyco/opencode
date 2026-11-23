@@ -144,7 +144,7 @@ export function TimelineDetailControl(props: { value: TimelineDetail; onChange: 
                           }}
                           icon={
                             <Icon
-                              name={props.value[category].placement === "hidden" ? "outline-eye-slash" : "outline-eye"}
+                              name={props.value[category].placement === "hidden" ? "outline-eye-slash" : "eye"}
                             />
                           }
                         />

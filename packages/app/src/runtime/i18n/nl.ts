@@ -928,7 +928,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Verbinden",
   "provider.connect.breadcrumb.label": "Verbindingsstappen",
   "provider.connect.methods.description": "Kies hoe je {{provider}} wilt verbinden.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Opnieuw proberen",
   "provider.connect.console.serviceKeyDescription":
@@ -1156,10 +1156,13 @@ export const dict = {
   "session.timeline.status.working": "Bezig",
   "session.running.stop.subagent": "Subagent onderbreken",
   "session.running.stop.shell": "Shell-opdracht beëindigen",
+  "session.running.stop.script": "Script annuleren",
   "session.activity.subagents.one": "{{count}} subagent",
   "session.activity.subagents.other": "{{count}} subagents",
   "session.activity.shells.one": "{{count}} shell",
   "session.activity.shells.other": "{{count}} shells",
+  "session.activity.scripts.one": "{{count}} script",
+  "session.activity.scripts.other": "{{count}} scripts",
   "session.activity.shell.back": "Terug naar achtergrondwerk",
   "session.activity.shell.stop": "Stoppen",
   "session.activity.shell.stopping": "Stoppen…",
@@ -1241,11 +1244,6 @@ export const dict = {
   "sidebar.recent.unpin": "Losmaken",
   "sidebar.recent.moveUp": "Omhoog verplaatsen",
   "sidebar.recent.moveDown": "Omlaag verplaatsen",
-  "settings.experimental.row.newIcons.title": "Nieuwe pictogrammen",
-  "settings.experimental.row.newIcons.description": "Bekijk de vernieuwde pictogramset",
-  "settings.experimental.row.foldUserMessages.title": "Lange berichten inklappen",
-  "settings.experimental.row.foldUserMessages.description":
-    "Klap je berichten na 12 regels in achter een knop Meer lezen",
   "settings.experimental.row.newTimeline.title": "Nieuwe tijdlijn",
   "settings.experimental.row.newTimeline.description":
     "Een vernieuwde sessietijdlijn die groepeert wat de agent deed, met één statusregel onder de beurt",
@@ -1255,14 +1253,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Kies hoe sessies in de zijbalk worden weergegeven. Geldt alleen voor zijtabbladen.",
   "settings.experimental.sidebarOrganize.recent": "Recent",
-  "settings.experimental.sidebarOrganize.projects": "Projecten",
   "settings.experimental.sidebarOrganize.list": "Eén lijst",
   "settings.experimental.sidebarOrganize.customize": "Aanpassen",
-  "sidebar.organize.projects": "Projecten",
   "sidebar.organize.openTab": "Open tabblad",
   "sidebar.organize.showMore": "Meer tonen",
-  "sidebar.organize.showLess": "Minder tonen",
-  "sidebar.organize.empty": "Nog geen sessies",
   "sidebar.view.sessions": "Sessies",
   "sidebar.view.options": "Weergaveopties",
   "sidebar.view.grouping": "Groeperen op",
@@ -1375,6 +1369,9 @@ export const dict = {
     "Subagents afzonderlijk tonen. Andere activiteit groeperen met ingeklapte details.",
   "settings.timeline.description.quiet":
     "Subagents afzonderlijk tonen en bewerkingen groeperen. Andere activiteit verbergen.",
+  "settings.timeline.row.foldUserMessages.title": "Lange berichten inklappen",
+  "settings.timeline.row.foldUserMessages.description":
+    "Klap je berichten na 12 regels in achter een knop Meer lezen",
   "settings.timeline.row.turnDiffs.title": "Gewijzigde bestanden",
   "settings.timeline.row.turnDiffs.description":
     "De bestanden tonen die elke beurt heeft gewijzigd wanneer die klaar is",

@@ -653,7 +653,7 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
+export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
@@ -824,12 +824,15 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
   return input
 })
 
+// The system prompt leads `input` as a developer message: GPT-6.2 models never cache top-level `instructions`.
 export const lowerConversation = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
-  const instructions = ProviderShared.joinText(request.system)
+  const system = ProviderShared.joinText(request.system)
   return {
     model: request.model.id,
-    input: yield* lowerMessages(request, adapter),
-    ...(instructions ? { instructions } : {}),
+    input: [
+      ...(system ? [{ type: "message" as const, role: "developer" as const, content: system }] : []),
+      ...(yield* lowerMessages(request, adapter)),
+    ],
   }
 })
 
@@ -883,23 +886,25 @@ export const allowedToolChoice = (
   }
 }
 
+/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAdapter")(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
-  const projected = ProviderShared.flattenToolRequest(request)
+  const definitions = ProviderShared.flattenTools(request.tools)
   const options = OpenResponsesOptions.resolve(request)
   const custom = OpenAIFreeform.tools(request)
   return {
-    ...(yield* lowerConversation(projected.request, adapter)),
+    ...(yield* lowerConversation(request, adapter)),
     ...lowerGeneration(request, options),
-    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter, custom),
+    tools: definitions.length === 0 ? undefined : yield* lowerTools(definitions, adapter, custom),
     tool_choice:
       allowedToolChoice(options, custom) ??
       (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice, custom) : undefined),
   }
 })
 
+/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(request, BASE_ADAPTER)
 
 // =============================================================================

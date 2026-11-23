@@ -25,7 +25,7 @@ describe("CodeMode", () => {
           description: "Echo text",
           input: Schema.Struct({ text: Schema.String }),
           output: Schema.String,
-          options: { pinned: true },
+          options: { codemode: { pinned: true } },
           execute: ({ text }) => Effect.succeed({ output: text }),
         })
       })

@@ -1,13 +1,33 @@
 import { builtinCatalog } from "@opencode/plugin/gui/builtin"
 import { Plugin, Store } from "@opencode/plugin/gui"
-import { History } from "./history"
+import { Schema } from "effect"
+import { History } from "./history/visits"
 import en from "./i18n/en"
+import { SavedTabs } from "./saved-tabs"
+
+/**
+ * The browser's preferences on this device.
+ * - `links`: web links in a session open in the browser pane.
+ * - `agentPages`: previews and the tabs the agent opens or focuses can open the pane and select their tab; defaults to true. Activity marks are independent.
+ * - `advanced`: Settings › Browser shows its Advanced section open; closed until the person opens it.
+ * - `welcomed`: the user imported sign-ins or declined the pane's offer, so the pane stops offering.
+ */
+const Preferences = Schema.Struct({
+  links: Schema.Boolean,
+  welcomed: Schema.Boolean,
+  agentPages: Schema.optionalKey(Schema.Boolean),
+  advanced: Schema.optionalKey(Schema.Boolean),
+})
 
 export default Plugin.define({
   stores: {
-    // Pages the browser showed, for the new tab page and the address field's suggestions. One list for every
-    // session and server, kept on this device.
+    // The last pages the browser showed, for the new tab page and their icons. One list for every session and server,
+    // kept on this device. The history the address field searches, with every page, is main's (`history/store.ts`).
     history: Store.global(History, { visits: [] }),
+    preferences: Store.global(Preferences, { links: true, welcomed: false }),
+    // Each session's tabs as the desktop last reported them. A global store is loaded before setup, so the side strip
+    // draws its stored tabs with these titles from its first render.
+    tabs: Store.global(SavedTabs, { sessions: [] }),
   },
   i18n: builtinCatalog({
     en,

@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Sedang mengulas pada",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Tambah komen",
+  "ui.lineComment.add": "Tambah komen",
+  "ui.lineComment.actions": "Tindakan pilihan",
   "ui.lineComment.contextPlaceholder": "Tambah konteks untuk perubahan ini",
   "ui.lineComment.submit": "Komen",
   "ui.lineComment.cancel": "Batal",

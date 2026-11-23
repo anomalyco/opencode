@@ -1,0 +1,23 @@
+[1mDESCRIPTION[0m
+  Add an MCP server to your configuration
+
+[1mUSAGE[0m
+  [36mopencode mcp add [flags] <name> [<command...>][0m
+
+[1mARGUMENTS[0m
+  [32mname[0m [2mstring[0m          Name of the MCP server
+  [32mcommand...[0m [2mstring[0m    Command and arguments for a local server, passed after --[2m (optional)[0m
+
+[1mFLAGS[0m
+  [32m--url[0m [2mstring[0m          URL for a remote MCP server
+  [32m--header[0m [2mkey=value[0m    HTTP header for a remote server, as name=value
+  [32m--env[0m [2mkey=value[0m       Environment variable for a local server, as name=value
+  [32m--global[0m              Write to the global config instead of the project config
+
+[1mGLOBAL FLAGS[0m
+  [32m--help[0m, [32m-h[0m                                                          Show help information
+  [32m--version[0m, [32m-v[0m                                                       Show version information
+  [32m--wizard[0m                                                            Start wizard mode for a command
+  [32m--completions[0m [2m<bash|zsh|fish|powershell|sh|pwsh>[0m                    Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)
+  [32m--log-level[0m [2m<all|trace|debug|info|warn|warning|error|fatal|none>[0m    Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)
+  [32m--print-logs[0m                                                        Print logs to stderr (server logs require --standalone)

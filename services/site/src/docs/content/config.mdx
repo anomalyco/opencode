@@ -1,5 +1,6 @@
 ---
 title: "Config"
+description: "Configure OpenCode in opencode.json or opencode.jsonc, and see where config files live, how they take precedence, and how to substitute variables."
 ---
 
 Create `opencode.jsonc` in your project to configure OpenCode. Add the schema for editor validation, then set only the options you need.
@@ -646,7 +647,7 @@ start another subagent.
 
 ### Image generation
 
-`image_generate` sets the default model for the [`experimental_image_generate`](/tools#image-generate) tool, as
+`image_generate` sets the default model for the [`generate_image`](/tools#image-generate) tool, as
 `providerID/modelID`, optionally with `#variant`. When that model isn't available or can't handle a request, OpenCode
 picks another image model automatically.
 

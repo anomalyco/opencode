@@ -109,7 +109,7 @@ export function ProviderModelSections<T extends ModelItem>(props: {
           onClick={() => props.onExpandedChange(input.id, !props.expanded(input.id))}
         >
           <span class="settings-models-group-chevron">
-            <Icon name="chevron-down" size="small" classList={{ collapsed: !props.expanded(input.id) }} />
+            <Icon name="chevron-down" classList={{ collapsed: !props.expanded(input.id) }} />
           </span>
           <span class="settings-models-group-label">
             {input.icon}
@@ -255,7 +255,6 @@ export function ProviderModelGroup(props: {
             <bdi class="provider-model-group-title">{props.name ?? props.provider.name}</bdi>
             <Icon
               name="chevron-down"
-              size="small"
               classList={{ "provider-model-group-chevron": true, collapsed: !props.expanded }}
             />
           </span>

@@ -7,7 +7,6 @@ import { DateTime, Effect, Option, Schema } from "effect"
 import { Automation } from "../../automation.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
-import { Flag } from "../../flag.js"
 import { Permission } from "../../permission.js"
 import PROMPT_AUTOMATION from "../../plugin/command/automation.txt"
 import { Session } from "../../session.js"
@@ -19,13 +18,13 @@ export const View = Schema.Struct({
   name: Schema.String,
   trigger: Automation.Trigger,
   tz: Schema.String,
-  action: Automation.Action,
   status: Automation.Status,
   nextDueAt: Schema.String.pipe(optional),
   expires: Schema.String.pipe(optional),
   runCount: Schema.Number,
   lastRunAt: Schema.String.pipe(optional),
   lastOutcome: Automation.Outcome.pipe(optional),
+  action: Automation.Action,
   lastOutput: Schema.String.pipe(optional),
   state: Schema.Json.pipe(optional),
 })
@@ -37,7 +36,7 @@ const ListOutput = Schema.Struct({
 })
 
 export const IDInput = Schema.Struct({
-  id: Automation.ID.annotate({ description: "Automation id from automation_list." }),
+  id: Automation.ID.annotate({ description: "Automation id from automation.list." }),
 })
 
 const RemoveOutput = Schema.Struct({ id: Automation.ID, removed: Schema.Boolean })
@@ -54,10 +53,9 @@ export const Plugin = {
       ctx.event,
       Effect.andThen(ctx.tool.reload(), ctx.command.reload()),
     )
-    const flags = yield* Flag.Service
-    const enabled = () => flags.resolve(loaded.entries).automations.enabled
+    const enabled = () => Config.latest(loaded.entries, "automations") ?? true
 
-    // A request keeps the tools it started with after config reloads, so each call rechecks the flag where the
+    // A request keeps the tools it started with after config reloads, so each call rechecks config where the
     // calling Session lives, and returns that Session for scoping.
     const caller = (sessionID: SessionSchema.ID) =>
       Effect.gen(function* () {
@@ -81,24 +79,29 @@ export const Plugin = {
     yield* ctx.tool
       .transform((editor) => {
         if (!enabled()) return
-        editor.add({
-          name: "automation_create",
+        editor.namespace({
+          name: "automation",
           description:
-            "Run a prompt or Code Mode action on a timer or a connected MCP server's push event. A prompt can target this session, another session in this project or a new subagent child. Code runs without a model and can return one send: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet.",
+            "Schedule recurring or one-off jobs (cron jobs, timers, reminders). Each one runs a prompt or Code Mode action at a time, every interval, on a cron or when a connected MCP server pushes an event. Use these when the user asks you to schedule, remind, repeat or check back on something, instead of waiting, sleeping or polling.",
+        })
+        editor.add({
+          name: "create",
+          description:
+            "Create an automation that runs a prompt, a Code Mode script, or a shell command once at a set time, on an interval, on a cron, or when an MCP server sends an event.",
           input: Automation.Request,
           output: View,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "automation", codemode: true },
           execute: (input, context) =>
             automations
               .create({ ...input, sessionID: context.sessionID }, Permission.invocation(context))
               .pipe(Effect.map(changed("Created")), Effect.mapError(failure)),
         })
         editor.add({
-          name: "automation_list",
+          name: "list",
           description: "List this project's automations with their status and next run, and the current time.",
           input: Schema.Struct({}),
           output: ListOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "automation", codemode: true },
           execute: (_, context) =>
             Effect.gen(function* () {
               const session = yield* caller(context.sessionID)
@@ -111,11 +114,11 @@ export const Plugin = {
             }).pipe(Effect.mapError(failure)),
         })
         editor.add({
-          name: "automation_pause",
+          name: "pause",
           description: "Pause an automation. It keeps its settings and does not run until resumed.",
           input: IDInput,
           output: View,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "automation", codemode: true },
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.pause(input.id)),
@@ -124,12 +127,12 @@ export const Plugin = {
             ),
         })
         editor.add({
-          name: "automation_resume",
+          name: "resume",
           description:
             "Resume a paused automation. A missed `at` runs once; repeating timers resume at their next slot. Event watches request replay from their saved cursor.",
           input: IDInput,
           output: View,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "automation", codemode: true },
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.resume(input.id)),
@@ -138,11 +141,11 @@ export const Plugin = {
             ),
         })
         editor.add({
-          name: "automation_delete",
+          name: "delete",
           description: "Delete an automation for good.",
           input: IDInput,
           output: RemoveOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "automation", codemode: true },
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.remove(input.id)),
@@ -193,14 +196,16 @@ function summary(view: View) {
   const action =
     view.action.type === "prompt"
       ? `prompt ${view.action.to.session ?? `subagent ${view.action.to.subagent}`}: ${JSON.stringify(clip(view.action.prompt))}`
-      : `code: ${JSON.stringify(
-          clip(
-            view.action.code
-              .split("\n")
-              .find((line) => line.trim() !== "")
-              ?.trim() ?? "",
-          ),
-        )}`
+      : view.action.type === "shell"
+        ? `shell: ${JSON.stringify(clip(view.action.command))}`
+        : `code: ${JSON.stringify(
+            clip(
+              view.action.code
+                .split("\n")
+                .find((line) => line.trim() !== "")
+                ?.trim() ?? "",
+            ),
+          )}`
   return [
     `${view.id} "${view.name}": ${trigger} (${view.tz})`,
     view.status,

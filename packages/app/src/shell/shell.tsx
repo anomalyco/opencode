@@ -8,6 +8,7 @@ import { Titlebar } from "@/shell/titlebar/titlebar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ToastRegion } from "@/shell/notifications/toast"
 import { createTipToasts } from "@/tips/model"
+import { useDeepLinks } from "@/shell/deep-links/deep-links"
 import { UploadToastHost } from "@/composer/attachments/uploads"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
@@ -45,6 +46,8 @@ export default function Layout(props: ParentProps) {
   const mobile = createMediaQuery("(max-width: 767px)")
 
   createTipToasts()
+
+  useDeepLinks()
 
   const [state, setState] = createStore<{
     tabsWidth: number
@@ -246,6 +249,7 @@ export default function Layout(props: ParentProps) {
           <aside
             id="vertical-tabs-sidebar"
             data-slot="vertical-tabs-sidebar"
+            data-focus-scope
             data-state={preferences.appearance.sidebarOpen() ? "open" : "closed"}
             data-peek={peek.shown() ? "" : undefined}
             style={{
@@ -261,6 +265,7 @@ export default function Layout(props: ParentProps) {
             <div
               ref={(element) => setState("tabsPanel", element)}
               data-slot="vertical-tabs-panel"
+              data-floating-overlay={peek.shown() ? "" : undefined}
               class="absolute inset-0 overflow-clip [contain:layout_style_paint] [overflow-clip-margin:var(--sidebar-divider-bleed,0px)]"
               classList={{
                 "z-20": organizedSidebar(),

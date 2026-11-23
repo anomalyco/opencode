@@ -11,6 +11,7 @@ import { FetchHttpClient, HttpClient } from "effect/http"
 import { Agent } from "../agent.js"
 import { App } from "../app.js"
 import { Artifact } from "../artifact.js"
+import { BlobStore } from "../blob-store.js"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
 import { Command } from "../command.js"
@@ -29,12 +30,14 @@ import { ConfigProviderPlugin } from "../config/plugin/provider.js"
 import { ConfigPolicyPlugin } from "../config/plugin/policy.js"
 import { ConfigReferencePlugin } from "../config/plugin/reference.js"
 import { ConfigShellPlugin } from "../config/plugin/shell.js"
+import { ConfigSessionSearchPlugin } from "../config/plugin/session-search.js"
 import { ConfigSnapshotPlugin } from "../config/plugin/snapshot.js"
 import { ConfigSkillPlugin } from "../config/plugin/skill.js"
 import { ConfigCompatibilityPlugin } from "../config/plugin/compatibility.js"
 import { ConfigToolOutputPlugin } from "../config/plugin/tool-output.js"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch.js"
 import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
+import { VideoGeneration } from "../video-generation.js"
 import { Worktree } from "../worktree.js"
 import { WorktreeStrategies } from "../worktree/strategies.js"
 import { Bus } from "../bus.js"
@@ -56,6 +59,7 @@ import { Integration } from "../integration.js"
 import { Job } from "../job.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
+import { Machines } from "../machine/machines.js"
 import { ModelsDev } from "../models-dev.js"
 import { Mcp } from "../mcp/index.js"
 import { Npm } from "@opencode/util/npm"
@@ -67,6 +71,8 @@ import { Automation } from "../automation.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
+import { SessionSearch } from "../session/search.js"
+import { SessionSearchBuild } from "../session/search-build.js"
 import { SubagentJob } from "../session/subagent-job.js"
 import { SharedCache } from "../shared-cache.js"
 import { Shell } from "../shell.js"
@@ -80,14 +86,17 @@ import { EditTool } from "../tool/plugin/edit.js"
 import { GlobTool } from "../tool/plugin/glob.js"
 import { GrepTool } from "../tool/plugin/grep.js"
 import { ImageGenerateTool } from "../tool/plugin/image-generate.js"
+import { VideoGenerateTool } from "../tool/plugin/video-generate.js"
+import { MachineTools } from "../tool/plugin/machine.js"
 import { McpEventTools } from "../tool/plugin/mcp-events.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
 import { OpenCodeTools } from "../tool/plugin/opencode.js"
 import { QuestionTool } from "../tool/plugin/question.js"
-import { ReadToolFileSystem } from "../tool/read-filesystem.js"
 import { ReadTool } from "../tool/plugin/read.js"
 import { ArtifactTools } from "../tool/plugin/artifact.js"
 import { AutomationTools } from "../tool/plugin/automation.js"
+import { SessionInterruptTool } from "../tool/plugin/session-interrupt.js"
+import { SessionSearchTools } from "../tool/plugin/session-search.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
@@ -103,6 +112,7 @@ import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
 import { ForkNoticePlugin } from "./fork-notice.js"
+import { HomeMemoryPlugin } from "./home-memory.js"
 import { PlanPlugin } from "./plan.js"
 import { GoalPlugin } from "./goal.js"
 import { ModelsDevPlugin } from "./models-dev.js"
@@ -127,6 +137,7 @@ const services = [
   FetchHttpClient.Fetch,
   Artifact.Service,
   AppProcess.Service,
+  BlobStore.Service,
   Provider.Service,
   Model.Service,
   Command.Service,
@@ -152,12 +163,12 @@ const services = [
   KV.Service,
   LLMClient.Service,
   Location.Service,
+  Machines.Service,
   ModelsDev.Service,
   Mcp.Service,
   Npm.Service,
   Permission.Service,
   Form.Service,
-  ReadToolFileSystem.Service,
   Reference.Service,
   WebSearch.Service,
   Ripgrep.Service,
@@ -165,6 +176,8 @@ const services = [
   Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
+  SessionSearch.Service,
+  SessionSearchBuild.Service,
   SubagentJob.Service,
   SharedCache.Service,
   Shell.Service,
@@ -176,6 +189,7 @@ const services = [
   ToolOutput.Service,
   Watcher.Service,
   WellKnown.Service,
+  VideoGeneration.Service,
   Worktree.Service,
   WorktreeStrategies.Service,
 ] as const
@@ -187,6 +201,7 @@ export const requirements = LayerNode.group([
   App.node,
   Artifact.node,
   AppProcess.node,
+  BlobStore.node,
   Provider.node,
   Model.node,
   Command.node,
@@ -214,12 +229,12 @@ export const requirements = LayerNode.group([
   KV.node,
   llmClient,
   Location.node,
+  Machines.node,
   ModelsDev.node,
   Mcp.node,
   Npm.node,
   Permission.node,
   Form.node,
-  ReadToolFileSystem.node,
   Reference.node,
   WebSearch.node,
   Ripgrep.node,
@@ -227,6 +242,8 @@ export const requirements = LayerNode.group([
   Session.node,
   SessionCompaction.node,
   SessionInstructions.node,
+  SessionSearch.node,
+  SessionSearchBuild.node,
   SubagentJob.node,
   SharedCache.node,
   Shell.node,
@@ -238,6 +255,7 @@ export const requirements = LayerNode.group([
   ToolOutput.node,
   Watcher.node,
   WellKnown.node,
+  VideoGeneration.node,
   Worktree.node,
   WorktreeStrategies.node,
 ])
@@ -253,6 +271,7 @@ const pre = [
   VcsGitPlugin.Plugin,
   AgentPlugin.Plugin,
   ForkNoticePlugin.Plugin,
+  HomeMemoryPlugin.Plugin,
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
   GoalPlugin.Plugin,
@@ -262,7 +281,6 @@ const pre = [
   ...ProviderPlugins,
   ...WebSearchPlugins,
   PatchTool.Plugin,
-  // Render model prompts after the patch plugin selects the available editing tools.
   ...OptimizePlugin.Plugins,
   VerbosityPlugin.Plugin,
   IdentityPlugin.Plugin,
@@ -270,6 +288,7 @@ const pre = [
   GlobTool.Plugin,
   GrepTool.Plugin,
   ImageGenerateTool.Plugin,
+  VideoGenerateTool.Plugin,
   OpenCodeTools.Plugin,
   McpEventTools.Plugin,
   McpResourceTools.Plugin,
@@ -277,6 +296,9 @@ const pre = [
   ReadTool.Plugin,
   ArtifactTools.Plugin,
   AutomationTools.Plugin,
+  MachineTools.Plugin,
+  SessionInterruptTool.Plugin,
+  SessionSearchTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,
@@ -298,6 +320,7 @@ const post = [
   ConfigImagePlugin.Plugin,
   ConfigLocationWatcherPlugin.Plugin,
   ConfigShellPlugin.Plugin,
+  ConfigSessionSearchPlugin.Plugin,
   ConfigSnapshotPlugin.Plugin,
   ConfigToolOutputPlugin.Plugin,
   ConfigCompatibilityPlugin.Plugin,

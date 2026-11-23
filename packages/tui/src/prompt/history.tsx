@@ -31,6 +31,13 @@ export type PromptPartRef = {
   index: number
 }
 
+// A chip's extmark data. Undo restores it with the mark, so a restored chip keeps its part.
+export type ChipData = {
+  file?: PromptFile
+  agent?: NonNullable<PromptInfo["agents"]>[number]
+  skill?: NonNullable<PromptInfo["skills"]>[number]
+}
+
 export const emptyPrompt = (): PromptInfo => ({ text: "", files: [], agents: [], skills: [], pasted: [] })
 
 // Part ranges are textarea offsets, so shift by the measured offset rather than string length.

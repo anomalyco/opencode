@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Истифода",
   "usage.cost": "Арзиш",
   "usage.view": "Истифодаи контекстро бинед",
-  "systemPrompt.title": "Промпти система",
   "rawMessages.title": "Паёмҳои хом",
   "export.session": "Сеанси содирот",
   "stats.session": "Сессия",
