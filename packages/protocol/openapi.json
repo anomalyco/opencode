@@ -1049,7 +1049,7 @@
             }
           }
         },
-        "description": "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
+        "description": "Create a session. Send it work with session.prompt. With parentID, it creates a child session that runs at the parent's location and reports back to the parent.",
         "summary": "Create session",
         "requestBody": {
           "content": {
@@ -1065,7 +1065,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "ID for the new session. If a session with this ID already exists, it is returned unchanged, so retrying a create is safe."
                   },
                   "parentID": {
                     "anyOf": [
@@ -1076,7 +1077,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<background-result kind=\"subagent\">` report to the parent's inbox and wakes the parent unless it has a staged revert."
+                    "description": "Create a child (subagent) session of this session. The child runs at the parent's location. Each time the child finishes running, it reports its last reply to the parent as a `<background-result kind=\"subagent\">` message and wakes the parent, unless the parent has a staged revert."
                   },
                   "title": {
                     "anyOf": [
@@ -1086,7 +1087,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Session title. When omitted, a title is generated from the first message, except for child sessions."
                   },
                   "agent": {
                     "anyOf": [
@@ -1096,7 +1098,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Agent the session runs. Defaults to the location's default agent."
                   },
                   "model": {
                     "anyOf": [
@@ -1106,7 +1109,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Model the session uses. Defaults to the agent's model, or the configured default model."
                   },
                   "location": {
                     "anyOf": [
@@ -1116,7 +1120,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Directory the session works in. Defaults to the server's working directory. Ignored when parentID is set."
                   },
                   "metadata": {
                     "anyOf": [
@@ -1126,7 +1131,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Your own JSON key-value data, stored on the session and returned with it. Child sessions copy the parent's metadata unless you pass your own."
                   },
                   "permissions": {
                     "anyOf": [
@@ -1136,7 +1142,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Permission rules for this session, applied on top of the agent's rules. Child sessions copy the parent's rules unless you pass your own."
                   }
                 },
                 "additionalProperties": false
@@ -1475,7 +1482,7 @@
             }
           }
         },
-        "description": "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
+        "description": "List the sessions whose agent is running right now in this server process. Sessions missing from the result are idle.",
         "summary": "List active sessions"
       }
     },
@@ -1783,7 +1790,7 @@
             }
           }
         },
-        "description": "Create a child session by copying projected history before a message. Omit before to copy the full history.",
+        "description": "Create a child session with a copy of this session's history up to, but not including, a message. Omit before to copy the full history.",
         "summary": "Fork session",
         "requestBody": {
           "content": {
@@ -1860,7 +1867,7 @@
             }
           }
         },
-        "description": "Switch the agent used by subsequent provider turns.",
+        "description": "Change the agent the session uses from its next model call on.",
         "summary": "Switch session agent",
         "requestBody": {
           "content": {
@@ -1931,7 +1938,7 @@
             }
           }
         },
-        "description": "Switch the model used by subsequent provider turns.",
+        "description": "Change the model the session uses from its next model call on.",
         "summary": "Switch session model",
         "requestBody": {
           "content": {
@@ -2114,7 +2121,7 @@
             }
           }
         },
-        "description": "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+        "description": "Send a user message to the session and start the agent unless resume is false. Returns once the message is in the session's inbox, not when the agent finishes. To wait for the result, call experimental.session.wait or watch for a session.execution.succeeded, failed or interrupted event, then read the reply with session.message.list.",
         "summary": "Send message",
         "requestBody": {
           "content": {
@@ -2130,31 +2137,37 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "ID for the message. Sending the same ID again returns the original item instead of adding a second message, so retries are safe. Reusing an ID from another session or a different kind of item fails with 409."
                   },
                   "text": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "The message text."
                   },
                   "files": {
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/PromptInput.FileAttachment"
-                    }
+                    },
+                    "description": "Files sent to the model with the message. The server reads them when the request arrives."
                   },
                   "agents": {
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/Prompt.AgentAttachment"
-                    }
+                    },
+                    "description": "Agents mentioned in text, kept on the message for display."
                   },
                   "skills": {
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/PromptInput.SkillAttachment"
-                    }
+                    },
+                    "description": "Skills to load with the message. Each skill's instructions are added to what the model sees. An unknown skill ID fails the request."
                   },
                   "metadata": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "Your own JSON data, stored on the message and returned with it. The model doesn't see it."
                   },
                   "delivery": {
                     "anyOf": [
@@ -2164,7 +2177,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "When to hand the item to the agent. steer (the default) delivers it before the agent's next model call, even while the agent is working. queue waits until the agent has finished its current work, then delivers one queued item at a time."
                   },
                   "resume": {
                     "anyOf": [
@@ -2174,7 +2188,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Set to false to only add the message to the inbox without starting the agent. It is delivered the next time the session runs."
                   }
                 },
                 "required": ["text"],
@@ -2256,7 +2271,7 @@
             }
           }
         },
-        "description": "Execute a slash command callback immediately.",
+        "description": "Run a named command in the session. Returns once the command has run. Most commands expand a template and send the result to the session like session.prompt, so the agent may still be working when this returns.",
         "summary": "Run command",
         "requestBody": {
           "content": {
@@ -2265,28 +2280,33 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Command name, as listed by command.list, without the leading slash."
                   },
                   "text": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Arguments for the command, the text a user types after the command name."
                   },
                   "files": {
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/PromptInput.FileAttachment"
-                    }
+                    },
+                    "description": "Files sent to the model with the message. The server reads them when the request arrives."
                   },
                   "agents": {
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/Prompt.AgentAttachment"
-                    }
+                    },
+                    "description": "Agents mentioned in text, kept on the message for display."
                   },
                   "skills": {
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/PromptInput.SkillAttachment"
-                    }
+                    },
+                    "description": "Skills to load with the message. Each skill's instructions are added to what the model sees. An unknown skill ID fails the request."
                   },
                   "delivery": {
                     "anyOf": [
@@ -2296,7 +2316,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "When to hand the item to the agent. steer (the default) delivers it before the agent's next model call, even while the agent is working. queue waits until the agent has finished its current work, then delivers one queued item at a time. Applies to the message the command sends."
                   }
                 },
                 "required": ["name", "text"],
@@ -2473,7 +2494,7 @@
             }
           }
         },
-        "description": "Durably admit synthetic session input and schedule execution unless resume is false.",
+        "description": "Add a message that the model reads as user input but that the user didn't type, such as a notification or a background result. Returns once it is in the inbox, and starts the agent unless resume is false or the session has a staged revert.",
         "summary": "Add synthetic message",
         "requestBody": {
           "content": {
@@ -2489,10 +2510,12 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "ID for the message. Sending the same ID again returns the original item instead of adding a second message, so retries are safe. Reusing an ID from another session or a different kind of item fails with 409."
                   },
                   "text": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Text the model reads, as a user-role message."
                   },
                   "description": {
                     "anyOf": [
@@ -2502,10 +2525,12 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Short label shown in the transcript instead of the full text."
                   },
                   "metadata": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "Your own JSON data, stored on the message and returned with it. The model doesn't see it."
                   },
                   "delivery": {
                     "anyOf": [
@@ -2515,7 +2540,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "When to hand the item to the agent. steer (the default) delivers it before the agent's next model call, even while the agent is working. queue waits until the agent has finished its current work, then delivers one queued item at a time."
                   },
                   "resume": {
                     "anyOf": [
@@ -2525,7 +2551,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Set to false to only add the message to the inbox without starting the agent. It is delivered the next time the session runs."
                   }
                 },
                 "required": ["text"],
@@ -2699,7 +2726,7 @@
             }
           }
         },
-        "description": "Durably admit a session compaction request. Steers by default: it runs at the next step boundary instead of waiting behind queued prompts.",
+        "description": "Ask the session to summarize its history to free up context. Returns once the request is in the inbox. Steers by default: it runs before the next model call instead of waiting behind queued messages.",
         "summary": "Compact session",
         "requestBody": {
           "content": {
@@ -2796,7 +2823,7 @@
             }
           }
         },
-        "description": "Wait for a session agent loop to become idle.",
+        "description": "Wait until the session's agent stops running in this server process. Returns right away when it is already idle, and never starts work. Experimental: may change without compatibility guarantees.",
         "summary": "Wait for session"
       }
     },
@@ -3346,7 +3373,7 @@
             }
           }
         },
-        "description": "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
+        "description": "List items sent to the session that the agent hasn't picked up yet, oldest first: user, synthetic, compaction and move items. Once delivered, an item leaves the inbox and user and synthetic items appear in session.message.list.",
         "summary": "List session inbox"
       }
     },
@@ -3478,7 +3505,7 @@
             }
           }
         },
-        "description": "Change a pending inbox item's delivery mode. Steering wakes session execution.",
+        "description": "Switch a pending inbox item between steer and queue. Switching to steer starts the agent if it is idle.",
         "summary": "Update inbox item",
         "requestBody": {
           "content": {
@@ -4037,7 +4064,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When resume=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
+        "description": "Stop the session's agent if it is running in this server process. Returns interrupted=false when nothing was running. With resume=true, the agent then continues with pending steer items and next-in-line compaction or move requests, while queued messages keep waiting.",
         "summary": "Interrupt session execution"
       }
     },
@@ -4174,7 +4201,7 @@
             }
           }
         },
-        "description": "Retrieve one projected message owned by the Session.",
+        "description": "Retrieve one message of the session by ID.",
         "summary": "Get session message"
       }
     },
@@ -4903,7 +4930,7 @@
             }
           }
         },
-        "description": "Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page.",
+        "description": "List a session's messages, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through them, passing the same type filter on each page. Messages still waiting in the inbox aren't included; see session.inbox.list.",
         "summary": "Get session messages"
       }
     },
@@ -23218,13 +23245,15 @@
         "type": "object",
         "properties": {
           "uri": {
-            "type": "string"
+            "type": "string",
+            "description": "A file: URL to a file or directory on the server (add ?start=N&end=M to send only those lines of a text file), a data: URL with the content inline, or a media: ref read back from a message. Up to 20 MB."
           },
           "source": {
             "$ref": "#/components/schemas/Prompt.FileSource"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "File name shown for the attachment. Defaults to the file's base name for file: URLs."
           },
           "description": {
             "type": "string"

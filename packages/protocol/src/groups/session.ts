@@ -7,7 +7,7 @@ import { TokenUsage } from "@opencode/schema/token-usage"
 import { Money } from "@opencode/schema/money"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Project } from "@opencode/schema/project"
-import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt } from "@opencode/schema/schema"
+import { DateTimeUtcFromMillis, NonNegativeInt, optional, PositiveInt } from "@opencode/schema/schema"
 import { Event } from "@opencode/schema/event"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { Context, Schema, SchemaGetter, Struct } from "effect"
@@ -100,6 +100,9 @@ const FormCreatePayload = Schema.Struct({
   fields: Form.Info.fields.fields,
 }).annotate({ identifier: "Form.CreatePayload" })
 
+const deliveryDescription =
+  "When to hand the item to the agent. steer (the default) delivers it before the agent's next model call, even while the agent is working. queue waits until the agent has finished its current work, then delivers one queued item at a time."
+
 const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
   Schema.decodeTo(Schema.Boolean, {
     decode: SchemaGetter.transform((value) => value === "true"),
@@ -166,17 +169,36 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.create", "/api/session", {
         payload: Schema.Struct({
-          id: Session.ID.pipe(Schema.optional),
+          id: Session.ID.pipe(Schema.optional).annotate({
+            description:
+              "ID for the new session. If a session with this ID already exists, it is returned unchanged, so retrying a create is safe.",
+          }),
           parentID: Session.ID.pipe(Schema.optional).annotate({
             description:
-              "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<background-result kind=\"subagent\">` report to the parent's inbox and wakes the parent unless it has a staged revert.",
+              'Create a child (subagent) session of this session. The child runs at the parent\'s location. Each time the child finishes running, it reports its last reply to the parent as a `<background-result kind="subagent">` message and wakes the parent, unless the parent has a staged revert.',
           }),
-          title: Schema.String.pipe(Schema.optional),
-          agent: Agent.ID.pipe(Schema.optional),
-          model: Model.Ref.pipe(Schema.optional),
-          location: Location.PublicRef.pipe(Schema.optional),
-          metadata: Session.Metadata.pipe(Schema.optional),
-          permissions: Permission.Ruleset.pipe(Schema.optional),
+          title: Schema.String.pipe(Schema.optional).annotate({
+            description:
+              "Session title. When omitted, a title is generated from the first message, except for child sessions.",
+          }),
+          agent: Agent.ID.pipe(Schema.optional).annotate({
+            description: "Agent the session runs. Defaults to the location's default agent.",
+          }),
+          model: Model.Ref.pipe(Schema.optional).annotate({
+            description: "Model the session uses. Defaults to the agent's model, or the configured default model.",
+          }),
+          location: Location.PublicRef.pipe(Schema.optional).annotate({
+            description:
+              "Directory the session works in. Defaults to the server's working directory. Ignored when parentID is set.",
+          }),
+          metadata: Session.Metadata.pipe(Schema.optional).annotate({
+            description:
+              "Your own JSON key-value data, stored on the session and returned with it. Child sessions copy the parent's metadata unless you pass your own.",
+          }),
+          permissions: Permission.Ruleset.pipe(Schema.optional).annotate({
+            description:
+              "Permission rules for this session, applied on top of the agent's rules. Child sessions copy the parent's rules unless you pass your own.",
+          }),
         }),
         success: Schema.Struct({ data: PublicSessionInfo }),
         error: SessionNotFoundError,
@@ -185,7 +207,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.create",
           summary: "Create session",
           description:
-            "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
+            "Create a session. Send it work with session.prompt. With parentID, it creates a child session that runs at the parent's location and reports back to the parent.",
         }),
       ),
     )
@@ -229,7 +251,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.active",
           summary: "List active sessions",
           description:
-            "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
+            "List the sessions whose agent is running right now in this server process. Sessions missing from the result are idle.",
         }),
       ),
     )
@@ -270,7 +292,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.fork",
           summary: "Fork session",
           description:
-            "Create a child session by copying projected history before a message. Omit before to copy the full history.",
+            "Create a child session with a copy of this session's history up to, but not including, a message. Omit before to copy the full history.",
         }),
       ),
     )
@@ -284,7 +306,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "session.switchAgent",
           summary: "Switch session agent",
-          description: "Switch the agent used by subsequent provider turns.",
+          description: "Change the agent the session uses from its next model call on.",
         }),
       ),
     )
@@ -298,7 +320,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "session.switchModel",
           summary: "Switch session model",
-          description: "Switch the model used by subsequent provider turns.",
+          description: "Change the model the session uses from its next model call on.",
         }),
       ),
     )
@@ -342,11 +364,22 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.post("session.prompt", "/api/session/:sessionID/prompt", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
-          id: SessionMessage.ID.pipe(Schema.optional),
+          id: SessionMessage.ID.pipe(Schema.optional).annotate({
+            description:
+              "ID for the message. Sending the same ID again returns the original item instead of adding a second message, so retries are safe. Reusing an ID from another session or a different kind of item fails with 409.",
+          }),
           ...PromptInput.Prompt.fields,
-          metadata: SessionInbox.UserPayload.fields.metadata,
-          delivery: SessionInbox.Delivery.pipe(Schema.optional),
-          resume: Schema.Boolean.pipe(Schema.optional),
+          text: PromptInput.Prompt.fields.text.annotate({ description: "The message text." }),
+          metadata: Schema.Record(Schema.String, Schema.Unknown)
+            .annotate({
+              description: "Your own JSON data, stored on the message and returned with it. The model doesn't see it.",
+            })
+            .pipe(optional),
+          delivery: SessionInbox.Delivery.pipe(Schema.optional).annotate({ description: deliveryDescription }),
+          resume: Schema.Boolean.pipe(Schema.optional).annotate({
+            description:
+              "Set to false to only add the message to the inbox without starting the agent. It is delivered the next time the session runs.",
+          }),
         }),
         success: Schema.Struct({ data: SessionInbox.User }),
         error: [ConflictError, InvalidRequestError, SessionNotFoundError],
@@ -356,7 +389,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "session.prompt",
             summary: "Send message",
-            description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+            description:
+              "Send a user message to the session and start the agent unless resume is false. Returns once the message is in the session's inbox, not when the agent finishes. To wait for the result, call experimental.session.wait or watch for a session.execution.succeeded, failed or interrupted event, then read the reply with session.message.list.",
           }),
         ),
     )
@@ -364,9 +398,16 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.post("session.command", "/api/session/:sessionID/command", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
-          name: Schema.String,
+          name: Schema.String.annotate({
+            description: "Command name, as listed by command.list, without the leading slash.",
+          }),
           ...PromptInput.Prompt.fields,
-          delivery: SessionInbox.Delivery.pipe(Schema.optional),
+          text: PromptInput.Prompt.fields.text.annotate({
+            description: "Arguments for the command, the text a user types after the command name.",
+          }),
+          delivery: SessionInbox.Delivery.pipe(Schema.optional).annotate({
+            description: `${deliveryDescription} Applies to the message the command sends.`,
+          }),
         }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, CommandNotFoundError, CommandExecutionError],
@@ -376,7 +417,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "session.command",
             summary: "Run command",
-            description: "Execute a slash command callback immediately.",
+            description:
+              "Run a named command in the session. Returns once the command has run. Most commands expand a template and send the result to the session like session.prompt, so the agent may still be working when this returns.",
           }),
         ),
     )
@@ -403,12 +445,24 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.post("session.synthetic", "/api/session/:sessionID/synthetic", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
-          id: SessionMessage.ID.pipe(Schema.optional),
-          text: Schema.String,
-          description: Schema.String.pipe(Schema.optional),
-          metadata: SessionMessage.Synthetic.fields.metadata,
-          delivery: SessionInbox.Delivery.pipe(Schema.optional),
-          resume: Schema.Boolean.pipe(Schema.optional),
+          id: SessionMessage.ID.pipe(Schema.optional).annotate({
+            description:
+              "ID for the message. Sending the same ID again returns the original item instead of adding a second message, so retries are safe. Reusing an ID from another session or a different kind of item fails with 409.",
+          }),
+          text: Schema.String.annotate({ description: "Text the model reads, as a user-role message." }),
+          description: Schema.String.pipe(Schema.optional).annotate({
+            description: "Short label shown in the transcript instead of the full text.",
+          }),
+          metadata: Schema.Record(Schema.String, Schema.Unknown)
+            .annotate({
+              description: "Your own JSON data, stored on the message and returned with it. The model doesn't see it.",
+            })
+            .pipe(optional),
+          delivery: SessionInbox.Delivery.pipe(Schema.optional).annotate({ description: deliveryDescription }),
+          resume: Schema.Boolean.pipe(Schema.optional).annotate({
+            description:
+              "Set to false to only add the message to the inbox without starting the agent. It is delivered the next time the session runs.",
+          }),
         }),
         success: Schema.Struct({ data: SessionInbox.Synthetic }),
         error: [ConflictError, SessionNotFoundError],
@@ -416,7 +470,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "session.synthetic",
           summary: "Add synthetic message",
-          description: "Durably admit synthetic session input and schedule execution unless resume is false.",
+          description:
+            "Add a message that the model reads as user input but that the user didn't type, such as a notification or a background result. Returns once it is in the inbox, and starts the agent unless resume is false or the session has a staged revert.",
         }),
       ),
     )
@@ -454,7 +509,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.compact",
           summary: "Compact session",
           description:
-            "Durably admit a session compaction request. Steers by default: it runs at the next step boundary instead of waiting behind queued prompts.",
+            "Ask the session to summarize its history to free up context. Returns once the request is in the inbox. Steers by default: it runs before the next model call instead of waiting behind queued messages.",
         }),
       ),
     )
@@ -467,7 +522,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "experimental.session.wait",
           summary: "Wait for session",
-          description: "Wait for a session agent loop to become idle.",
+          description:
+            "Wait until the session's agent stops running in this server process. Returns right away when it is already idle, and never starts work. Experimental: may change without compatibility guarantees.",
         }),
       ),
     )
@@ -551,7 +607,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.inbox.list",
           summary: "List session inbox",
           description:
-            "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
+            "List items sent to the session that the agent hasn't picked up yet, oldest first: user, synthetic, compaction and move items. Once delivered, an item leaves the inbox and user and synthetic items appear in session.message.list.",
         }),
       ),
     )
@@ -578,7 +634,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "session.inbox.update",
           summary: "Update inbox item",
-          description: "Change a pending inbox item's delivery mode. Steering wakes session execution.",
+          description:
+            "Switch a pending inbox item between steer and queue. Switching to steer starts the agent if it is idle.",
         }),
       ),
     )
@@ -690,7 +747,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.interrupt",
           summary: "Interrupt session execution",
           description:
-            "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When resume=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
+            "Stop the session's agent if it is running in this server process. Returns interrupted=false when nothing was running. With resume=true, the agent then continues with pending steer items and next-in-line compaction or move requests, while queued messages keep waiting.",
         }),
       ),
     )
@@ -717,7 +774,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "session.message.get",
           summary: "Get session message",
-          description: "Retrieve one projected message owned by the Session.",
+          description: "Retrieve one message of the session by ID.",
         }),
       ),
     )
