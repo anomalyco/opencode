@@ -377,9 +377,8 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
     return yield* ProviderShared.invalidRequest(
       "Mistral Chat reasoningEffort and promptMode provider options are mutually exclusive",
     )
-  const flattened = ProviderShared.flattenToolRequest(request)
-  const toolChoice = flattened.request.toolChoice
-    ? yield* ProviderShared.matchToolChoice("Mistral Chat", flattened.request.toolChoice, {
+  const toolChoice = request.toolChoice
+    ? yield* ProviderShared.matchToolChoice("Mistral Chat", request.toolChoice, {
         auto: () => "auto" as const,
         none: () => "none" as const,
         required: () => "any" as const,
@@ -388,8 +387,8 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
     : undefined
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(flattened.request),
-    tools: flattened.tools.length > 0 ? flattened.tools.map(lowerTool) : undefined,
+    messages: yield* lowerMessages(request),
+    tools: request.tools.length > 0 ? ProviderShared.toolDefinitions(request.tools).map(lowerTool) : undefined,
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: request.maxTokens,

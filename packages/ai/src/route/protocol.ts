@@ -46,6 +46,8 @@ export interface Protocol<Body, Frame, Event, State> {
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
   /** Tool changes `body.from` can send in place of `Message.tools(...)` markers; wrappers around another `body.from` must forward it. */
   readonly toolUpdates?: ToolUpdateEncoding
+  /** Whether `body.from` sends tool namespaces natively; otherwise requests arrive flattened. Wrappers around another `body.from` must forward it. */
+  readonly namespaces?: boolean
   /** Tool schema sanitizer for every model on this protocol unless the model's compatibility sets one; wrappers around another `body.from` must forward it. */
   readonly sanitizer?: LanguageModelSanitizerCompatibility
 }

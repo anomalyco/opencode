@@ -67,6 +67,7 @@ export interface Route<
   readonly body: RouteBody<Body>
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
   readonly toolUpdates?: ToolUpdateEncoding
+  readonly namespaces?: boolean
   readonly sanitizer?: LanguageModelSanitizerCompatibility
   readonly with: {
     <Next extends CompactionOperations | undefined>(
@@ -379,6 +380,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       body: protocol.body,
       supportsEffortUpdates: protocol.supportsEffortUpdates,
       toolUpdates: protocol.toolUpdates,
+      namespaces: protocol.namespaces,
       sanitizer: protocol.sanitizer,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { compact, id, provider, providerMetadataKey, auth, transport, endpoint, ...options } = patch
@@ -552,9 +554,10 @@ const prepareRequest = (request: LLMRequest): LLMRequest => {
     )
   const project = (tools: LLMRequest["tools"]) => ToolSchemaProjection.tools(dedupe(tools), sanitized.model)
   const updated = planToolUpdates(sanitized)
-  const resolved = applyCachePolicy(
+  const cached = applyCachePolicy(
     applyEffortUpdates(mapToolUpdates({ ...updated, tools: project(updated.tools) }, project)),
   )
+  const resolved = cached.model.route.namespaces ? cached : ProviderShared.flattenRequest(cached)
   const headers = resolved.model.route.headers?.({ request: resolved })
   return headers === undefined ? resolved : { ...resolved, headers: { ...headers, ...resolved.headers } }
 }

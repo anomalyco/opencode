@@ -145,7 +145,7 @@ const TOOL_CHOICE = { auto: undefined, none: "NONE", required: "REQUIRED", tool:
 
 const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMRequest) {
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
-  const flattened = ProviderShared.flattenToolRequest(request)
+  const definitions = ProviderShared.toolDefinitions(request.tools)
   const messages: (typeof Message.Type)[] = request.system.length
     ? [
         {
@@ -157,7 +157,7 @@ const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMR
         },
       ]
     : []
-  for (const message of flattened.request.messages) {
+  for (const message of request.messages) {
     if (message.role === "system") {
       messages.push({ role: "user", content: (yield* ProviderShared.wrappedSystemUpdate("Cohere Chat", message)).text })
       continue
@@ -210,9 +210,8 @@ const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMR
       tool_plan: plans.length ? plans.join("") : undefined,
     })
   }
-  const choice = flattened.request.toolChoice
-  const selected = choice?.type === "tool" ? choice.name : undefined
-  const tools = selected === undefined ? flattened.tools : flattened.tools.filter((tool) => tool.name === selected)
+  const selected = request.toolChoice?.type === "tool" ? request.toolChoice.name : undefined
+  const tools = selected === undefined ? definitions : definitions.filter((tool) => tool.name === selected)
   if (selected !== undefined && tools.length === 0)
     return yield* ProviderShared.invalidRequest("Cohere Chat tool choice must name an available tool")
   if (tools.some((tool) => tool.native !== undefined))

@@ -890,18 +890,16 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
-  const projected = ProviderShared.flattenToolRequest(request)
+  const definitions = ProviderShared.toolDefinitions(request.tools)
   const options = OpenResponsesOptions.resolve(request)
   const custom = OpenAIFreeform.tools(request)
   return {
-    ...(yield* lowerConversation(projected.request, adapter)),
+    ...(yield* lowerConversation(request, adapter)),
     ...lowerGeneration(request, options),
-    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter, custom),
+    tools: definitions.length === 0 ? undefined : yield* lowerTools(definitions, adapter, custom),
     tool_choice:
       allowedToolChoice(options, custom) ??
-      (projected.request.toolChoice
-        ? yield* lowerToolChoice(adapter.name, projected.request.toolChoice, custom)
-        : undefined),
+      (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice, custom) : undefined),
   }
 })
 

@@ -10,6 +10,7 @@ import {
   AssistantMessage,
   type LLMRequest,
   Message,
+  SystemMessage,
   ToolChoice,
   ToolDefinition,
   ToolMessage,
@@ -25,6 +26,7 @@ import {
 } from "../schema/index.js"
 import { Json, decodeJson, encodeJson } from "../utils/json.js"
 import { isRecord } from "../utils/record.js"
+import { foldTools, toolsUpdate, withdrawnTools } from "../tool-updates.js"
 export { Json, decodeJson, encodeJson, isRecord }
 
 const isJson = Schema.is(Schema.Json)
@@ -374,11 +376,24 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
   return [...new Map(flat.map((tool) => [tool.name, tool])).values()]
 }
 
-export const flattenToolRequest = (request: LLMRequest) => {
-  const tools = flattenTools(request.tools)
-  const declared = new Set(tools.map((tool) => tool.name))
+/**
+ * The request as a protocol without native namespaces sees it: tools, tool updates, past calls and a forced choice all
+ * use flattened names. `prepareRequest` applies it once for such routes, so adapters only see flat requests.
+ */
+export const flattenRequest = (request: LLMRequest): LLMRequest => {
+  const all = [...request.tools, ...request.messages.flatMap((message) => toolsUpdate(message)?.add ?? [])]
+  const declared = new Set(flattenTools(all).map((tool) => tool.name))
   const flatten = <Part extends ToolCallPart | ToolResultPart>(part: Part) => flattenToolName(part, declared)
+  // A tool update that redefines a namespace drops the tools it leaves out, which only the namespace shows, so name
+  // them as explicit removals.
+  let tools = request.tools
   const messages = request.messages.map((message) => {
+    if (message.role === "system" && message.tools !== undefined) {
+      const next = foldTools(tools, message.tools.add, message.tools.remove)
+      const remove = withdrawnTools(tools, next)
+      tools = next
+      return new SystemMessage({ ...message, tools: { add: flattenTools(message.tools.add), remove } })
+    }
     if (message.role === "assistant") {
       const content = message.content.map((part) =>
         part.type === "tool-call" || part.type === "tool-result" ? flatten(part) : part,
@@ -389,23 +404,35 @@ export const flattenToolRequest = (request: LLMRequest) => {
     const content = message.content.map(flatten)
     return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
   })
-  const toolChoice = flattenToolChoice(request, declared)
   return {
-    tools,
-    request:
-      toolChoice === request.toolChoice && messages.every((message, index) => message === request.messages[index])
-        ? request
-        : { ...request, messages, toolChoice },
+    ...request,
+    tools: flattenTools(request.tools),
+    messages,
+    toolChoice: flattenToolChoice(request.toolChoice, all, declared),
   }
 }
 
-// A forced choice names a namespaced tool by its path (`crm.lookup`), including one a tool update adds later; point it
-// at the flattened definition.
-const flattenToolChoice = (request: LLMRequest, declared: ReadonlySet<string>) => {
-  const choice = request.toolChoice
+/** Flattened tools, typed as the definitions they are. */
+export const toolDefinitions = (tools: ReadonlyArray<ToolEntry>) =>
+  tools.filter((tool): tool is ToolDefinition => tool.type === "tool")
+
+/**
+ * @deprecated Routes without native namespaces already receive flattened requests; use `flattenRequest`. Removed in
+ * the next minor.
+ */
+export const flattenToolRequest = (request: LLMRequest) => {
+  const flat = flattenRequest(request)
+  return { tools: toolDefinitions(flat.tools), request: flat }
+}
+
+// A forced choice names a namespaced tool by its path (`crm.lookup`); point it at the flattened definition.
+const flattenToolChoice = (
+  choice: LLMRequest["toolChoice"],
+  tools: ReadonlyArray<ToolEntry>,
+  declared: ReadonlySet<string>,
+) => {
   if (choice?.type !== "tool" || choice.name === undefined || declared.has(choice.name)) return choice
-  const added = request.messages.flatMap((message) => (message.role === "system" ? (message.tools?.add ?? []) : []))
-  const name = new Map(namespacedPaths([...request.tools, ...added])).get(choice.name)
+  const name = new Map(namespacedPaths(tools)).get(choice.name)
   return name === undefined ? choice : new ToolChoice({ ...choice, name })
 }
 

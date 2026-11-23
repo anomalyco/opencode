@@ -488,9 +488,8 @@ function callOptions(
   modelID: ID,
   optionKey: string,
 ): LanguageModelV3CallOptions {
-  const flattened = ProviderShared.flattenToolRequest(request)
   return {
-    prompt: prompt(flattened.request),
+    prompt: prompt(request),
     maxOutputTokens: request.maxTokens,
     temperature: request.temperature,
     stopSequences: request.stop === undefined ? undefined : [...request.stop],
@@ -499,7 +498,7 @@ function callOptions(
     presencePenalty: request.presencePenalty,
     frequencyPenalty: request.frequencyPenalty,
     seed: request.seed,
-    tools: flattened.tools.map(tool),
+    tools: ProviderShared.toolDefinitions(request.tools).map(tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),
