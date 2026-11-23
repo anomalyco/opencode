@@ -35,7 +35,7 @@ describe("run runtime boot", () => {
       }),
     )
 
-    expect(result.theme).toEqual({ mode: "light" })
+    expect(result.theme).toEqual({ mode: "light", name: "opencode-classic" })
     expect(result.leader.timeout).toBe(450)
     expect(result.cursor).toEqual({ style: "underline", blinking: false })
     expect(resolveMiniSettings(result)).toEqual({

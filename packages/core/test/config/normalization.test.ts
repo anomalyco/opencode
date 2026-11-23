@@ -567,7 +567,6 @@ describe("ConfigNormalize", () => {
         experimental: {
           portable_shell_scanner: true,
           todo: true,
-          background_compaction: true,
           media_blob: true,
           part_rows: true,
           image_generate: { model: "openai/gpt-image-2" },
@@ -580,7 +579,6 @@ describe("ConfigNormalize", () => {
       experimental: {
         portable_shell_scanner: true,
         todo: true,
-        background_compaction: true,
         media_blob: true,
         part_rows: true,
         image_generate: { model: { providerID: "openai", model: "gpt-image-2" } },
@@ -616,12 +614,26 @@ describe("ConfigNormalize", () => {
     }
   })
 
-  test("normalizes every registered flag as a boolean", () => {
-    const result = normalized({ experimental: { todo: true, media_blob: false, schedules: "yes" } })
-    expect(result.encoded.experimental).toEqual({ todo: true, media_blob: false })
+  test("normalizes flag booleans and keeps automations at the top level", () => {
+    const result = normalized({
+      automations: false,
+      experimental: {
+        todo: true,
+        media_blob: false,
+        artifacts: "yes",
+        full_codemode: true,
+        automations: false,
+        schedules: false,
+      },
+    })
+    expect(result.encoded.automations).toBe(false)
+    expect(result.encoded.experimental).toEqual({ todo: true, media_blob: false, full_codemode: true })
     expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
-      ["invalid", ["experimental", "schedules"]],
+      ["removed", ["experimental", "automations"]],
+      ["removed", ["experimental", "schedules"]],
+      ["invalid", ["experimental", "artifacts"]],
     ])
+    expect(normalized({ experimental: { automations: false, schedules: false } }).encoded).toEqual({})
   })
 
   test("accepts deprecated codemode_vm and ignores retired codemodeVm without diagnostics", () => {

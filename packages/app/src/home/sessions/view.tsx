@@ -1,6 +1,19 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import { Key } from "@solid-primitives/keyed"
-import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack } from "solid-js"
+import {
+  children,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Index,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  untrack,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { Loader } from "@opencode/ui/loader"
@@ -12,6 +25,7 @@ import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
+import { createFieldFocus } from "@opencode/ui/context/field-focus"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { showToast } from "@/shell/notifications/toast"
@@ -116,6 +130,10 @@ export type HomeSessionsViewProps = {
   onSearchSelectActive: () => void
   onSearchHighlight: (record: HomeSessionRecord) => void
   onSearchSelect: (record: HomeSessionRecord, options?: OpenSessionOptions) => void
+  /** Shown at the end of the search field, such as the project the list is scoped to. */
+  searchScope?: JSX.Element
+  /** The search filters `groups` in place: there is no results panel, and Enter opens the first match. */
+  searchInline?: boolean
 }
 
 export function HomeSessionsView(props: HomeSessionsViewProps) {
@@ -253,6 +271,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
       </div>
       <div
         data-slot="home-sessions-list"
+        data-focus-scope
         data-reveal={skeleton() || undefined}
         class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"
         aria-busy={props.listView.status === "loading"}
@@ -285,6 +304,19 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                 language={props.language}
               />
             )}
+          </Match>
+          <Match
+            when={
+              props.searchInline &&
+              props.searchValue.trim() &&
+              !props.searchLoading &&
+              props.listView.status === "ready" &&
+              props.groups.length === 0
+            }
+          >
+            <div class={`px-2 pt-6 text-[13px] leading-[var(--line-height-compact)] ${HOME_SECTION_LABEL}`}>
+              {props.searchNoResultsLabel}
+            </div>
           </Match>
           <Match when={props.listView.status === "ready" && props.groups.length === 0}>
             <HomeSessionsEmpty
@@ -402,6 +434,10 @@ function HomeSessionSearch(
     onHoverSession: (sessionID: string | undefined) => void
   },
 ) {
+  const scope = children(() => props.searchScope)
+
+  const keyboardFocus = createFieldFocus()
+
   return (
     <div class="w-full">
       <div
@@ -478,6 +514,11 @@ function HomeSessionSearch(
           </div>
         </Show>
         <label
+          data-slot="home-session-search-field"
+          onPointerDown={keyboardFocus.pointer}
+          onClick={(event) => {
+            if (event.detail > 0) keyboardFocus.pointer()
+          }}
           class={`
             relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] py-1 ps-3 pe-2
             bg-v2-background-bg-layer-02/60 text-v2-icon-icon-muted transition-[background-color,box-shadow]
@@ -500,13 +541,26 @@ function HomeSessionSearch(
             aria-activedescendant={
               props.searchActive && props.searchOpen ? `home-session-search-option-${props.searchActive}` : undefined
             }
-            onFocus={props.onSearchFocus}
+            data-field-focus
+            data-keyboard-focus={keyboardFocus.visible() || undefined}
+            onBlur={keyboardFocus.leave}
+            onFocus={(event) => {
+              keyboardFocus.enter(event.currentTarget)
+              props.onSearchFocus()
+            }}
             onInput={(event) => props.onSearchInput(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
                 event.preventDefault()
                 props.onSearchClose()
                 event.currentTarget.blur()
+
+                return
+              }
+
+              if (props.searchInline && event.key === "Enter" && !event.isComposing && props.searchResults.length > 0) {
+                event.preventDefault()
+                props.onSearchSelectActive()
 
                 return
               }
@@ -539,9 +593,11 @@ function HomeSessionSearch(
             <IconButton
               type="button"
               variant="ghost-muted"
-              size="small"
+              size={props.searchInline ? "normal" : "small"}
               class="relative z-20 shrink-0"
-              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
+              icon={
+                <Icon name="close" size={props.searchInline ? "normal" : "large"} class="text-v2-icon-icon-muted" />
+              }
               aria-label={props.searchPlaceholder}
               onClick={() => {
                 props.onSearchClose()
@@ -549,6 +605,10 @@ function HomeSessionSearch(
               }}
             />
           </Show>
+          <Show when={props.searchValue && scope()}>
+            <div aria-hidden="true" class="relative z-20 mx-0.5 h-4 w-px shrink-0 bg-v2-border-border-muted" />
+          </Show>
+          {scope()}
         </label>
       </div>
     </div>
@@ -577,6 +637,7 @@ function HomeSessionSearchResultRow(
       data-component="home-session-search-row"
       data-project-name={!!showProjectName()}
       role="option"
+      tabIndex={-1}
       aria-selected={props.selected}
       class={`
         flex h-10 w-full shrink-0 cursor-default items-center border-0 py-3 pl-[18px] pr-6 text-left text-v2-text-text-muted
@@ -631,9 +692,15 @@ function HomeSessionGroupHeader(props: {
   onSetRef: (element: HTMLDivElement) => void
   elevated?: boolean
 }) {
+  let element!: HTMLDivElement
+
+  // Index reuses a header in place for whichever group lands at its position, so it reports itself again when its
+  // group changes; a one-time ref would leave it registered under the group it was created for.
+  createEffect(() => props.onSetRef(element))
+
   return (
     <div
-      ref={props.onSetRef}
+      ref={element}
       class={`
         pointer-events-none sticky top-[68px] flex h-7 min-w-0 items-center justify-between
         bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[84px] lg:top-[108px]
@@ -753,7 +820,7 @@ function HomeSessionRow(
             flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center rounded-[6px] border-0
             bg-transparent py-3 ps-1.5 pe-3 md:ps-3 text-start text-v2-text-text-muted [font-weight:530]
             transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
-            hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
+            hover:bg-v2-overlay-simple-overlay-hover
           `}
           classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
           onMouseDown={(event) => {
@@ -857,6 +924,13 @@ function HomeSessionRow(
             // closing the menu restores focus to the row instead.
             onCloseAutoFocus={(event) => event.preventDefault()}
           >
+            <Menu.Item onSelect={() => props.onOpenSession(props.record.session)}>
+              {props.language.t("common.open")}
+            </Menu.Item>
+            <Menu.Item onSelect={() => props.onOpenSession(props.record.session, { background: true })}>
+              {props.language.t("home.sessions.openInBackground")}
+            </Menu.Item>
+            <Menu.Separator />
             <Menu.Item
               onSelect={() => props.onRowEvent({ type: "rename.start", sessionID: sessionID(), title: title() })}
             >

@@ -262,6 +262,26 @@ print_progress() {
     printf "\r${ORANGE}%s%s %3d%%${NC}" "$filled" "$empty" "$percent" >&4
 }
 
+install_tmp_dir=""
+download_curl_pid=""
+cursor_hidden=false
+
+cleanup_download() {
+    if [ -n "${download_curl_pid:-}" ]; then
+        kill "$download_curl_pid" 2>/dev/null || true
+        wait "$download_curl_pid" 2>/dev/null || true
+        download_curl_pid=""
+    fi
+    if [ "$cursor_hidden" = "true" ]; then
+        { printf '\033[?25h' >&4; exec 4>&-; } 2>/dev/null || true
+        cursor_hidden=false
+    fi
+    if [ -n "${install_tmp_dir:-}" ]; then
+        rm -rf "$install_tmp_dir"
+        install_tmp_dir=""
+    fi
+}
+
 download_with_progress() {
     local url="$1"
     local output="$2"
@@ -272,20 +292,23 @@ download_with_progress() {
         exec 4>/dev/null
     fi
 
-    local headers="${output}.headers"
-
     # Hide cursor
     printf "\033[?25l" >&4
+    cursor_hidden=true
 
-    trap "trap - RETURN; rm -f \"$headers\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
+    trap 'trap - RETURN; if [ "$cursor_hidden" = "true" ]; then printf "\033[?25h" >&4; exec 4>&-; cursor_hidden=false; fi' RETURN
+
+    local headers="${output}.headers"
 
     # Poll the file size on a timer so rendering cost stays fixed no matter how many bytes arrive.
     # Read the size with ls because busybox wc -c reads the whole file.
-    curl -fsL -D "$headers" -o "$output" "$url" &
-    local curl_pid=$!
+    # Bash opens both files so a confined curl (e.g. snap) with a private /tmp can still write them.
+    # npm's CDN omits content-length on HEAD, so read it from this request's headers.
+    curl -fsL -D /dev/stderr "$url" > "$output" 2> "$headers" &
+    download_curl_pid=$!
 
     local length bytes
-    while kill -0 "$curl_pid" 2>/dev/null; do
+    while kill -0 "$download_curl_pid" 2>/dev/null; do
         if [ -f "$output" ]; then
             length=$(grep -i '^content-length:' "$headers" 2>/dev/null | tail -n 1 | tr -dc '0-9' || true)
             bytes=$(ls -ln "$output" | awk '{print $5}')
@@ -295,7 +318,8 @@ download_with_progress() {
     done
 
     local ret=0
-    wait "$curl_pid" || ret=$?
+    wait "$download_curl_pid" || ret=$?
+    download_curl_pid=""
     if [ "$ret" -eq 0 ]; then
         bytes=$(ls -ln "$output" | awk '{print $5}')
         print_progress "$bytes" "$bytes"
@@ -308,11 +332,16 @@ download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}$APP ${MUTED}version: ${NC}$specific_version"
     local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
     mkdir -p "$tmp_dir"
+    install_tmp_dir="$tmp_dir"
+    trap cleanup_download EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
         local ret=0
-        curl -f -# -L -o "$tmp_dir/$filename" "$url" || ret=$?
+        # Redirect in bash instead of passing -o to curl so confined builds (e.g. snap) don't need host /tmp access.
+        curl -f -# -L "$url" > "$tmp_dir/$filename" || ret=$?
         # curl exits 23 when it cannot write the file, usually because the temporary directory is full.
         if [ "$ret" -eq 23 ]; then
             print_message error "Could not write the download to $tmp_dir. Make sure it has enough free space, or set TMPDIR to another directory, then try again." >&2
@@ -329,7 +358,7 @@ download_and_install() {
     fi
     mv "$tmp_dir/package/bin/$binary_name" "$INSTALL_DIR/$installed_binary"
     chmod 755 "$INSTALL_DIR/$installed_binary"
-    rm -rf "$tmp_dir"
+    cleanup_download
 }
 
 install_from_binary() {

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Utilizare",
   "usage.cost": "Cost",
   "usage.view": "Vezi utilizarea contextului",
-  "systemPrompt.title": "Prompt sistem",
   "rawMessages.title": "Mesaje brute",
   "export.session": "Exportă sesiunea",
   "stats.session": "Sesiune",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sesiunea a fost salvată în {{filename}}",
   "export.failed.title": "Nu s-a putut exporta sesiunea",
   "export.failed.description": "A apărut o eroare la exportarea sesiunii",
+  "usage.toggle": "Comută contextul sesiunii",
 }

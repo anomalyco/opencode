@@ -37,7 +37,6 @@ import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { createModelUsage, ModelUsageTag } from "@/usage/model"
 import {
-  correctFlyoutPosition,
   createDialogFlyoutState,
   createModelDrawerState,
   placeFlyout,
@@ -45,6 +44,8 @@ import {
   selectDrawerOpen,
   selectDrawerRestoreTrigger,
   selectFlyoutFollowsPointer,
+  selectFlyoutMenu,
+  selectFlyoutMenuKeys,
   selectFlyoutOpenId,
   selectFlyoutPosition,
   transitionDialogFlyout,
@@ -194,7 +195,7 @@ const ModelList: Component<{
               data-component="settings-row"
               data-option-key={modelKey(item)}
               aria-pressed={controller.current() === modelKey(item)}
-              class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+              class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
               classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
               onMouseEnter={() => setStore("active", modelKey(item))}
               onMouseLeave={() => setStore("active", "")}
@@ -222,7 +223,7 @@ const ModelList: Component<{
               </div>
               <div data-slot="settings-row-control" class="size-4">
                 <Show when={controller.current() === modelKey(item)}>
-                  <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
+                  <Icon name="check" class="shrink-0 text-v2-icon-icon-base" />
                 </Show>
               </div>
             </button>
@@ -271,7 +272,7 @@ const ModelList: Component<{
           }}
           aria-label={language.t("dialog.model.search.placeholder")}
           showClearButton={!!store.search}
-          clearIcon="circle-xmark"
+          clearIcon="close"
           clearLabel={language.t("common.clear")}
           onClearClick={() => setSearch("")}
         />
@@ -433,7 +434,7 @@ function ModelDrawer(props: {
                 <Button
                   variant="ghost"
                   class="w-full !h-10 !justify-start"
-                  icon="outline-sliders"
+                  icon="sliders"
                   onClick={() => dispatch({ type: "action.selected", action: "manage" })}
                 >
                   {language.t("dialog.model.manage")}
@@ -495,15 +496,10 @@ function createModelSelectorController(input: {
 
       return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
     },
-    groups: (models: ModelItem[]) => {
-      const byProvider = new Map<string, ModelItem[]>()
-
-      for (const item of models) {
-        byProvider.set(item.provider.id, [...(byProvider.get(item.provider.id) ?? []), item])
-      }
-
-      return Array.from(byProvider, ([category, items]) => ({ category, items })).sort(sortModelGroups)
-    },
+    groups: (models: ModelItem[]) =>
+      [...Map.groupBy(models, (item) => item.provider.id)]
+        .map(([category, items]) => ({ category, items }))
+        .sort(sortModelGroups),
     current: () => {
       const value = model.current()
 
@@ -588,7 +584,7 @@ const clamp = (value: number) => Math.max(0, Math.min(1, value))
 
 const round = (value: number) => Math.round(value * 1000) / 1000
 
-type ModelRow = { id: string; item: ModelItem; group: ModelGroup }
+type ModelRow = { id: string; item: ModelItem; section: string; title?: string }
 
 function createChatgptPlan(current: () => string | undefined) {
   const data = useData()
@@ -643,7 +639,6 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   // `navigated`: the arrows have moved through the results since the query last changed.
   const [query, setQuery] = createStore({ search: "", navigated: false })
   const [flyout, setFlyout] = createSignal(createDialogFlyoutState())
-  const [staged, setStaged] = createStore<Record<string, string | null>>({})
 
   let list: SearchListHandle<ModelRow> | undefined
   let flyoutRef: HTMLDivElement | undefined
@@ -664,9 +659,21 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     })
   })
 
-  const rows = createMemo(() =>
-    groups().flatMap((group) => group.items.map((item): ModelRow => ({ id: modelKey(item), item, group }))),
-  )
+  // A row that still shows the same model in the same section keeps its object, so a narrower search re-renders none of
+  // the rows that stay.
+  const rows = createMemo((previous: ModelRow[]) => {
+    const kept = new Map(previous.map((row) => [row.id, row]))
+
+    return groups().flatMap((group) =>
+      group.items.map((item): ModelRow => {
+        const row = kept.get(modelKey(item))
+
+        return row?.item === item && row.section === group.category && row.title === group.title
+          ? row
+          : { id: modelKey(item), item, section: group.category, title: group.title }
+      }),
+    )
+  }, [])
 
   const rowItem = (id: string) => rows().find((row) => row.id === id)?.item
   const flyoutId = createMemo(() => selectFlyoutOpenId(flyout()))
@@ -679,16 +686,32 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
 
   const variantsOf = (item: ModelItem) => Object.keys(item.variants ?? {})
   const favorite = (item: ModelItem) => controller.favorites().some((entry) => modelKey(entry) === modelKey(item))
+  const menu = createMemo(() => selectFlyoutMenu(flyout()))
+  const menuKeys = createMemo(() => selectFlyoutMenuKeys(flyout()))
 
-  const variant = (item: ModelItem) =>
-    modelKey(item) in staged ? (staged[modelKey(item)] ?? undefined) : controller.variant(item)
-
-  const choose = (item: ModelItem, value?: string | null) =>
-    controller.select(item, value === undefined ? staged[modelKey(item)] : value)
+  // The flyout's items: Default, then each variant, then Favorite.
+  const menuOptions = (item: ModelItem) => [undefined, ...variantsOf(item)]
 
   const setSearch = (value: string) => {
     setQuery({ search: value, navigated: false })
-    dispatch({ type: "keyboard" })
+    dispatch({ type: "keyboard", id: list?.active()?.id, repeat: false })
+  }
+
+  // The row moves between Favorites and its group under the same key. From the keys, the highlight and its flyout
+  // follow it; from a click, the flyout would be left beside nothing.
+  const toggleFavorite = (item: ModelItem, input: "keyboard" | "pointer") => {
+    controller.toggleFavorite(item)
+
+    if (input === "pointer") return dispatch({ type: "dismissed" })
+    list?.setActive(modelKey(item))
+    dispatch({ type: "keyboard", id: modelKey(item), repeat: false })
+  }
+
+  const activateMenu = (item: ModelItem, index: number, input: "keyboard" | "pointer") => {
+    const options = menuOptions(item)
+
+    if (index < options.length) return controller.select(item, options[index] ?? null)
+    toggleFavorite(item, input)
   }
 
   const manage = async () => {
@@ -712,12 +735,23 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     )
 
     if (!row?.closest('[data-slot="dialog-container"]')) return undefined
+    const rendered = flyoutRef?.isConnected ? flyoutRef : undefined
 
-    return placeFlyout(
+    const position = placeFlyout(
       row.getBoundingClientRect(),
       row.closest("[data-dialog-layer]")?.getBoundingClientRect(),
       language.direction() === "rtl",
+      rendered?.offsetHeight ?? 0,
     )
+
+    if (!rendered) return position
+    // A fixed element is placed against the viewport unless an ancestor contains it, as a component preview that holds
+    // its dialogs does. Measured against the position it rendered at.
+    const rect = rendered.getBoundingClientRect()
+    const x = rect.left - parseFloat(rendered.style.left)
+    const y = rect.top - parseFloat(rendered.style.top)
+
+    return x || y ? { left: position.left - x, top: position.top - y } : position
   }
 
   const dispatch = (event: DialogFlyoutEvent) => {
@@ -744,17 +778,17 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
       return
     }
 
-    const position = measure(effect.id)
-    dispatch({ type: "placed", attempt: effect.attempt, position })
-    // A fixed element is placed against the viewport unless an ancestor contains it, as a component preview that holds
-    // its dialogs does. Correct by where it landed, before it paints.
-    const placed = position ? flyoutRect() : undefined
-
-    if (!position || !placed) return
-    const corrected = correctFlyoutPosition(position, { x: placed.left, y: placed.top })
-
-    if (corrected !== position) dispatch({ type: "placed", attempt: effect.attempt, position: corrected })
+    dispatch({ type: "placed", attempt: effect.attempt, position: measure(effect.id) })
   }
+
+  // Placed before the flyout renders its content or position, as from the effect that follows the highlight. Once it
+  // has, before it paints, it is placed again with its real height and where it landed. Settles in one more pass.
+  createEffect(() => {
+    const state = flyout()
+
+    if (state.status !== "open" || !state.position) return
+    dispatch({ type: "placed", attempt: state.attempt, position: measure(state.id) })
+  })
 
   onCleanup(() => {
     clearTimeout(timer)
@@ -769,7 +803,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   // under the cursor and moves the flyout beside it; a keyboard scroll keeps its highlight and closes the flyout,
   // which would otherwise be left beside a row that moved away.
   const follow = () => {
-    if (!selectFlyoutFollowsPointer(untrack(flyout))) return
+    if (!selectFlyoutFollowsPointer(untrack(flyout))) return dispatch({ type: "scrolled", target: undefined })
     const point = pointer
 
     const row = point
@@ -874,37 +908,68 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   createEventListener(window, "resize", () => dispatch({ type: "dismissed" }))
 
   const onKeyDown = (event: KeyboardEvent, active: ModelRow | undefined) => {
+    const item = flyoutItem()
+    const index = menuKeys()
+
+    // In the flyout's menu, the arrows move through its items until the back arrow returns to the rows.
+    if (item && index !== undefined && !event.metaKey && !event.altKey && !event.ctrlKey) {
+      const back = language.direction() === "rtl" ? "ArrowRight" : "ArrowLeft"
+      const count = menuOptions(item).length + 1
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault()
+        const step = event.key === "ArrowDown" ? 1 : -1
+        dispatch({ type: "menu.highlighted", index: (index + step + count) % count, input: "keyboard" })
+
+        return
+      }
+
+      // Escape leaves the menu, not the dialog (see `data-owns-escape` on the body).
+      if (event.key === back || event.key === "Escape") {
+        event.preventDefault()
+        dispatch({ type: "menu.highlighted", index: undefined, input: "keyboard" })
+
+        return
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault()
+        activateMenu(item, index, "keyboard")
+
+        return
+      }
+
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") return event.preventDefault()
+    }
+
     if (matchKeybind(favoriteKeybind, event)) {
       if (!active) return
       event.preventDefault()
-      controller.toggleFavorite(active.item)
-      // The model moves between Favorites and its group under the same key, so the highlight follows it.
-      list?.setActive(active.id)
-      dispatch({ type: "keyboard" })
+      toggleFavorite(active.item, "keyboard")
 
       return
     }
 
     if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
       setQuery("navigated", true)
-      dispatch({ type: "keyboard" })
+      dispatch({ type: "keyboard", id: active?.id, repeat: event.repeat })
 
       return
     }
 
     if (event.metaKey || event.altKey || event.ctrlKey) return
 
-    // While searching, left and right edit the query until the arrows have moved through the results.
-    if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && (!query.search || query.navigated)) {
-      const item = active?.item
+    // While searching, the forward arrow edits the query until the arrows have moved through the results.
+    const forward = language.direction() === "rtl" ? "ArrowLeft" : "ArrowRight"
 
-      if (!item || variantsOf(item).length === 0) return
+    if (event.key === forward && active && (!query.search || query.navigated)) {
       event.preventDefault()
-      const options = [undefined, ...variantsOf(item)]
-      const direction = (event.key === "ArrowRight") !== (language.direction() === "rtl") ? 1 : -1
-      const index = options.indexOf(variant(item))
-      setStaged(modelKey(item), options[(index + direction + options.length) % options.length] ?? null)
-      dispatch({ type: "keyboard" })
+      const options = menuOptions(active.item)
+      dispatch({
+        type: "menu.entered",
+        id: active.id,
+        index: Math.max(0, options.indexOf(controller.variant(active.item))),
+      })
     }
   }
 
@@ -912,6 +977,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     const item = () => row.model.item
     const selected = () => controller.current() === modelKey(item())
     const active = () => row.attrs["data-active"] !== undefined
+    const budget = createMemo(() => usage(item()))
 
     return (
       <button
@@ -946,7 +1012,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
       >
         <span data-slot="model-dialog-check">
           <Show when={selected()}>
-            <Icon name="check" size="small" />
+            <Icon name="check" />
           </Show>
         </span>
         <span data-slot="model-dialog-name">
@@ -954,7 +1020,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             <SearchHighlight text={item().name} />
           </span>
           {/* Favorites and Recent mix providers, so their rows name one, with its workspace when its header has one. */}
-          <Show when={row.model.group.title}>
+          <Show when={row.model.title}>
             <span class="min-w-0 shrink-[999] truncate text-v2-text-text-faint">{labels.name(item().provider)}</span>
             <Show when={labels.workspace(item().provider)}>
               {(workspace) => <Badge class="shrink-0">{workspace()}</Badge>}
@@ -967,11 +1033,20 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
           </Show>
         </span>
-        <Show when={usage(item())}>{(value) => <ModelUsageTag usage={value()} />}</Show>
+        {/* The active row shows its variant instead; its flyout leads with the budget. */}
+        <Show when={!active() && budget()}>
+          {(value) => (
+            <span data-slot="model-dialog-variant">
+              <ModelUsageTag usage={value()} />
+              {/* Holds the chevron's space, so the tag ends where the active row's variant label does. */}
+              <Icon name="chevron-right" class="invisible" />
+            </span>
+          )}
+        </Show>
         <Show when={active()}>
           <span data-slot="model-dialog-variant">
-            <span class="truncate capitalize">{variant(item()) ?? language.t("common.default")}</span>
-            <Icon name="chevron-right" size="small" />
+            <span class="truncate capitalize">{controller.variant(item()) ?? language.t("common.default")}</span>
+            <Icon name="chevron-right" />
           </span>
         </Show>
       </button>
@@ -979,14 +1054,16 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
   }
 
   return (
-    <Dialog class="command-palette model-dialog" size="large">
+    <Dialog class="command-palette model-dialog" size="large" fit>
       <div class="sr-only">
         <DialogTitle>{language.t("dialog.model.select.title")}</DialogTitle>
       </div>
       <DialogBody class="command-palette-body">
         {/* Scrolling moves the flyout's row away without a pointer event, which would leave it detached. */}
+        {/* While the flyout's menu is highlighted, Escape leaves it instead of closing the dialog. */}
         <div
           class="contents"
+          data-owns-escape={menuKeys() !== undefined ? "" : undefined}
           ref={(element) => {
             scroller = element
             createEventListener(
@@ -1000,10 +1077,17 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             )
             // A wheel scroll is the pointer's, so the highlight and flyout follow the row under it.
             createEventListener(element, "wheel", () => dispatch({ type: "wheel" }), { passive: true })
+            // So is dragging the scrollbar, which would otherwise carry a keyboard flyout away with its row.
+            createEventListener(element, "pointerdown", (event: PointerEvent) => {
+              if (event.target instanceof Element && event.target.closest('[data-slot="menu-scroll-thumb"]'))
+                dispatch({ type: "wheel" })
+            })
           }}
         >
           <SearchList
             ref={(handle) => (list = handle)}
+            // The flyout follows the highlight while the keyboard drives it, starting with the row the dialog opens on.
+            onActive={(row) => dispatch({ type: "highlighted", id: row?.id })}
             query={query.search}
             onQuery={setSearch}
             placeholder={language.t("dialog.model.search.placeholder")}
@@ -1017,7 +1101,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
                 >
                   <IconButton
                     variant="ghost-muted"
-                    icon={<Icon name="plus" size="small" />}
+                    icon={<Icon name="plus" />}
                     aria-label={language.t("command.provider.connect")}
                     onClick={connect}
                   />
@@ -1025,7 +1109,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
                 <Tooltip placement="top" gutter={4} value={language.t("dialog.model.manage")} ignoreSafeArea={false}>
                   <IconButton
                     variant="ghost-muted"
-                    icon={<Icon name="outline-sliders" size="small" />}
+                    icon={<Icon name="sliders" />}
                     aria-label={language.t("dialog.model.manage")}
                     onClick={manage}
                   />
@@ -1034,17 +1118,17 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             }
             items={rows()}
             key={(row) => row.id}
-            section={(row) => row.group.category}
+            section={(row) => row.section}
             header={(row) => (
               <span data-slot="model-dialog-header-label" class="flex min-w-0 items-center gap-1.5">
-                <span class="min-w-0 truncate">{row.group.title ?? labels.name(row.item.provider)}</span>
-                <Show when={!row.group.title && labels.workspace(row.item.provider)}>
+                <span class="min-w-0 truncate">{row.title ?? labels.name(row.item.provider)}</span>
+                <Show when={!row.title && labels.workspace(row.item.provider)}>
                   {(workspace) => <Badge class="shrink-0">{workspace()}</Badge>}
                 </Show>
               </span>
             )}
             empty={language.t("dialog.model.empty")}
-            onSelect={(row) => choose(row.item)}
+            onSelect={(row) => controller.select(row.item)}
             onKeyDown={onKeyDown}
           >
             {(row, attrs) => <Row model={row()} attrs={attrs} />}
@@ -1054,71 +1138,100 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
           <ChatgptPlanFooter />
         </Show>
       </DialogBody>
-      <Show when={flyoutItem()}>
-        {(item) => (
-          // Inside the dialog content, so clicks here are not outside clicks that dismiss the dialog.
-          <div
-            ref={(element) => (flyoutRef = element)}
-            data-component="menu-v2-content"
-            data-slot="model-dialog-flyout"
-            style={{
-              left: `${selectFlyoutPosition(flyout())?.left ?? 0}px`,
-              top: `${selectFlyoutPosition(flyout())?.top ?? 0}px`,
-            }}
-            onMouseEnter={() => dispatch({ type: "flyout.entered" })}
-          >
-            <MenuScroll>
-              {/* A model without variants still lists Default, its only option. */}
-              <For each={[undefined, ...variantsOf(item())]}>
-                {(value) => (
-                  <div
-                    data-component="menu-v2-item"
-                    role="menuitemradio"
-                    aria-checked={variant(item()) === value}
-                    data-checked={variant(item()) === value ? "" : undefined}
-                    onMouseEnter={(event) => event.currentTarget.setAttribute("data-highlighted", "")}
-                    onMouseLeave={(event) => event.currentTarget.removeAttribute("data-highlighted")}
-                    onClick={() => choose(item(), value ?? null)}
-                  >
-                    <span data-slot="menu-v2-item-content" class="capitalize">
-                      {value ?? language.t("common.default")}
-                    </span>
-                    <span data-slot="menu-v2-item-indicator" data-checked={variant(item()) === value ? "" : undefined}>
-                      <Icon name="check" size="small" />
-                    </span>
-                  </div>
-                )}
-              </For>
-              <div data-slot="menu-v2-separator" role="separator" />
-              <div
-                data-component="menu-v2-item"
-                role="menuitem"
-                onMouseEnter={(event) => event.currentTarget.setAttribute("data-highlighted", "")}
-                onMouseLeave={(event) => event.currentTarget.removeAttribute("data-highlighted")}
-                onClick={() => {
-                  // The row moves between Favorites and its group, so the flyout would be left beside nothing.
-                  controller.toggleFavorite(item())
-                  dispatch({ type: "dismissed" })
-                }}
-              >
-                <span data-slot="menu-v2-item-content">
-                  {favorite(item()) ? language.t("dialog.model.unfavorite") : language.t("dialog.model.favorite")}
-                </span>
-                <Keybind keys={formatKeybindParts("mod+f", language.t)} variant="neutral" class="shrink-0" />
-              </div>
-              <div data-slot="menu-v2-separator" role="separator" />
-              {/* The full name, "Workspace / Provider", where a workspace badge tells the connections apart. */}
-              <ModelDetails
-                model={item()}
-                provider={labels.workspace(item().provider) ? item().provider.name : labels.name(item().provider)}
-                compact
-                standalone
-                usage={usage(item())}
-              />
-            </MenuScroll>
-          </div>
-        )}
-      </Show>
+      {/* Stays in the dialog while the flyout comes and goes: adding or removing a child of the dialog restyles every row. */}
+      <div class="contents">
+        <Show when={flyoutItem()}>
+          {(item) => (
+            // Inside the dialog content, so clicks here are not outside clicks that dismiss the dialog.
+            <div
+              ref={(element) => (flyoutRef = element)}
+              data-component="menu-v2-content"
+              data-slot="model-dialog-flyout"
+              style={{
+                left: `${selectFlyoutPosition(flyout())?.left ?? 0}px`,
+                top: `${selectFlyoutPosition(flyout())?.top ?? 0}px`,
+              }}
+              onMouseEnter={() => dispatch({ type: "flyout.entered" })}
+            >
+              <MenuScroll>
+                <Show when={usage(item())}>
+                  {(value) => (
+                    <>
+                      <div
+                        data-slot="model-dialog-flyout-usage"
+                        class="cursor-default px-3 py-1.5 font-[440] tabular-nums select-none"
+                      >
+                        <div
+                          class="text-[13px] leading-5"
+                          classList={{
+                            "text-v2-state-fg-danger": value().reached,
+                            "text-v2-text-text-base": !value().reached,
+                          }}
+                        >
+                          {value().label}
+                        </div>
+                        <div class="text-[12px] leading-5 text-v2-text-text-muted">
+                          {language.t("usage.footer.resets", { time: value().resets })}
+                        </div>
+                      </div>
+                      <div data-slot="menu-v2-separator" role="separator" />
+                    </>
+                  )}
+                </Show>
+                {/* A model without variants still lists Default, its only option. */}
+                <For each={menuOptions(item())}>
+                  {(value, index) => (
+                    <div
+                      data-component="menu-v2-item"
+                      role="menuitemradio"
+                      aria-checked={controller.variant(item()) === value}
+                      data-checked={controller.variant(item()) === value ? "" : undefined}
+                      data-highlighted={menu() === index() ? "" : undefined}
+                      onMouseEnter={() => dispatch({ type: "menu.highlighted", index: index(), input: "pointer" })}
+                      onMouseLeave={() => dispatch({ type: "menu.highlighted", index: undefined, input: "pointer" })}
+                      onClick={() => activateMenu(item(), index(), "pointer")}
+                    >
+                      <span data-slot="menu-v2-item-content" class="capitalize">
+                        {value ?? language.t("common.default")}
+                      </span>
+                      <span
+                        data-slot="menu-v2-item-indicator"
+                        data-checked={controller.variant(item()) === value ? "" : undefined}
+                      >
+                        <Icon name="check" />
+                      </span>
+                    </div>
+                  )}
+                </For>
+                <div data-slot="menu-v2-separator" role="separator" />
+                <div
+                  data-component="menu-v2-item"
+                  role="menuitem"
+                  data-highlighted={menu() === menuOptions(item()).length ? "" : undefined}
+                  onMouseEnter={() =>
+                    dispatch({ type: "menu.highlighted", index: menuOptions(item()).length, input: "pointer" })
+                  }
+                  onMouseLeave={() => dispatch({ type: "menu.highlighted", index: undefined, input: "pointer" })}
+                  onClick={() => toggleFavorite(item(), "pointer")}
+                >
+                  <span data-slot="menu-v2-item-content">
+                    {favorite(item()) ? language.t("dialog.model.unfavorite") : language.t("dialog.model.favorite")}
+                  </span>
+                  <Keybind keys={formatKeybindParts("mod+f", language.t)} variant="neutral" class="shrink-0" />
+                </div>
+                <div data-slot="menu-v2-separator" role="separator" />
+                {/* The full name, "Workspace / Provider", where a workspace badge tells the connections apart. */}
+                <ModelDetails
+                  model={item()}
+                  provider={labels.workspace(item().provider) ? item().provider.name : labels.name(item().provider)}
+                  compact
+                  standalone
+                />
+              </MenuScroll>
+            </div>
+          )}
+        </Show>
+      </div>
     </Dialog>
   )
 }

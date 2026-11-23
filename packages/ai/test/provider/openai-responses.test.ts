@@ -128,8 +128,10 @@ describe("OpenAI Responses route", () => {
 
       expect(prepared.body).toEqual({
         model: "gpt-4.1-mini",
-        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
-        instructions: "You are concise.",
+        input: [
+          { type: "message", role: "developer", content: "You are concise." },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "Say hello." }] },
+        ],
         store: false,
         include: ["reasoning.encrypted_content"],
         stream: true,
@@ -715,6 +717,56 @@ describe("OpenAI Responses route", () => {
       expect(ProviderShared.decodeJson(create.message)).toMatchObject({
         previous_response_id: "resp_1",
         input: [{ type: "function_call_output", call_id: "call_1", output: '{"temperature":22}' }],
+      })
+    }),
+  )
+
+  it.effect("continues a custom tool call from completed response output", () =>
+    Effect.gen(function* () {
+      const firstRequest = {
+        type: "response.create",
+        model: "gpt-6-astra",
+        store: false,
+        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Run it." }] }],
+      }
+      const first = continuationDriver(firstRequest)
+      const firstCreate = yield* first.create(undefined)
+      const saved = checkpoint(
+        yield* first.observe(
+          firstCreate,
+          ProviderShared.encodeJson({
+            type: "response.completed",
+            response: {
+              id: "resp_1",
+              output: [
+                {
+                  type: "custom_tool_call",
+                  id: "ctc_1",
+                  status: "completed",
+                  call_id: "call_1",
+                  name: "run",
+                  input: "ls",
+                },
+              ],
+            },
+          }),
+        ),
+      )
+      const second = continuationDriver({
+        ...firstRequest,
+        input: [
+          ...firstRequest.input,
+          { type: "custom_tool_call", call_id: "call_1", name: "run", input: "ls" },
+          { type: "custom_tool_call_output", call_id: "call_1", output: "a.txt" },
+        ],
+      })
+
+      const create = yield* second.create(saved)
+
+      expect(create.mode).toBe("incremental")
+      expect(ProviderShared.decodeJson(create.message)).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [{ type: "custom_tool_call_output", call_id: "call_1", output: "a.txt" }],
       })
     }),
   )
@@ -1967,9 +2019,10 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
+      expect(prepared.body).not.toHaveProperty("instructions")
       expect(prepared.body).toMatchObject({
-        instructions: "You are concise. Continue from the provided history.",
         input: [
+          { type: "message", role: "developer", content: "You are concise. Continue from the provided history." },
           {
             type: "message",
             role: "user",

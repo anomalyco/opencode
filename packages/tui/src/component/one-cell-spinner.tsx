@@ -1,5 +1,5 @@
 import { parseColor, RGBA, type ColorInput } from "@opentui/core"
-import { useRenderer } from "@opentui/solid"
+import { onAnimationTick, useRenderer } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { oneCellFrame, type OneCellMotion } from "../ui/one-cell-motion"
 import "./spinner-renderable"
@@ -40,25 +40,24 @@ export function OneCellSpinner(props: {
     props.animations
     setElapsed(props.age ?? 0)
   })
-  createEffect(() => {
+  // Ticks on the shared clock leave idle gaps: mini awaits renderer.idle() to flush and admit prompts. The Solid
+  // hook is not bound to a node's draw: hidden with visible={false} it keeps ticking. Mount under <Show>.
+  const step = createMemo(() => {
     if (!sequenced() || props.animations === false || props.paused || complete()) return
-    let previous = performance.now()
-    // Leave idle gaps: mini awaits renderer.idle() to flush and admit prompts.
-    const timer = setInterval(
-      () => {
-        const now = performance.now()
-        setElapsed((value) => value + (now - previous) * (props.speed ?? 1))
-        previous = now
-      },
-      Math.max(
-        1000 / 60,
-        Math.min(40, props.animation.interval / (props.speed ?? 1) / (props.animation.pace?.initial ?? 1)),
-      ),
+    return Math.max(
+      1000 / 60,
+      Math.min(40, props.animation.interval / (props.speed ?? 1) / (props.animation.pace?.initial ?? 1)),
     )
-    onCleanup(() => {
-      clearInterval(timer)
-      renderer.requestRender()
-    })
+  })
+  onAnimationTick(
+    () => {
+      const ms = step()
+      return ms === undefined ? undefined : 1000 / ms
+    },
+    (_deltaTime, ticks) => setElapsed((value) => value + ticks * step()! * (props.speed ?? 1)),
+  )
+  createEffect(() => {
+    if (step() !== undefined) onCleanup(() => renderer.requestRender())
   })
 
   return (

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Ulanylyşy",
   "usage.cost": "Bahasy",
   "usage.view": "Kontekstiň ulanylyşyny görüň",
-  "systemPrompt.title": "Ulgam prompt-y",
   "rawMessages.title": "Çig habarlar",
   "export.session": "Eksport sessiýasy",
   "stats.session": "Sessiýa",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sessiýa {{filename}}-de saklandy",
   "export.failed.title": "Sessiýa eksport edip bilmedi",
   "export.failed.description": "Sessiýa eksport edilende säwlik ýüze çykdy",
+  "usage.toggle": "Sessiýa kontekstini aç/ýap",
 }

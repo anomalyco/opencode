@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Szerver hozzáadása",
   "menu.delete": "Törlés",
+  "error.unavailable": "Az SSH nem érhető el",
 }

@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Следваща",
   "releaseNotes.action.hideFuture": "Не ги показвайте в бъдеще",
   "releaseNotes.media.alt": "Визуализация на изданието",
+  "action.reload": "Презареждане за актуализация",
+  "action.reloading": "Презареждане…",
+  "web.ready.title": "Актуализацията е готова",
+  "web.ready.message": "Нова версия на OpenCode е готова. Презаредете, за да я използвате във всеки отворен прозорец.",
+  "web.reload": "Презареждане",
+  "web.reset.title": "Презареждане от сървъра",
+  "web.reset.description": "Изчистване на запазеното копие на приложението и зареждане на текущата версия от сървъра",
+  "web.reset.action": "Презареждане от сървъра",
 }

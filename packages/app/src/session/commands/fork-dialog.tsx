@@ -118,7 +118,7 @@ export function ForkDialog(props: {
   }
 
   return (
-    <Dialog class="command-palette command-palette-compact fork-dialog" fit>
+    <Dialog class="command-palette command-palette-compact fork-dialog" size="large" fit>
       <div class="sr-only">
         <DialogTitle>{language.t("command.session.fork")}</DialogTitle>
       </div>
@@ -141,7 +141,7 @@ export function ForkDialog(props: {
             autofocus
             aria-label={language.t("common.search.placeholder")}
             showClearButton={!props.disabled && !!list.filter()}
-            clearIcon="circle-xmark"
+            clearIcon="close"
             clearLabel={language.t("common.clear")}
             onClearClick={() => list.clear()}
           />

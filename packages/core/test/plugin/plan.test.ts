@@ -102,10 +102,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
     }),
   ).pipe(
     Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
-    Effect.provideService(
-      Environment.Service,
-      Environment.Service.of({ files: Environment.makeFiles(driver), spawner: driver.spawner }),
-    ),
+    Effect.provideService(Environment.Service, Environment.make(Environment.localID, driver)),
   )
   if (!contextHook) return yield* Effect.die("plan plugin did not register a context hook")
   if (!toolHook) return yield* Effect.die("plan plugin did not register a tool hook")
@@ -126,6 +123,7 @@ type ToolErrorEvent = Extract<ToolHooks["execute.after"], { readonly status: "er
 
 const toolError = (tool: "edit" | "write" | "patch", error: Tool.Error): ToolErrorEvent => ({
   tool,
+  codemode: false,
   input: {},
   sessionID,
   agent: plan,

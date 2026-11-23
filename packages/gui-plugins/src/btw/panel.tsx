@@ -216,7 +216,7 @@ function CopyButton(props: { text?: string; label: string; copiedLabel: string }
             <IconButton
               size="normal"
               variant="ghost-muted"
-              icon={<Icon name={copy.copied() ? "check" : "outline-copy"} size="small" />}
+              icon={<Icon name={copy.copied() ? "check" : "copy"} />}
               aria-label={label()}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => copy.copy(text)}

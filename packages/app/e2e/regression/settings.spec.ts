@@ -6,6 +6,8 @@ import { mockRemoteServer, mockWorkspace, openSession, openSettings, type Worksp
 import { CONSOLE_URL, consoleGateway, consoleSignIn } from "../utils/console"
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
+import { dict as ar } from "../../src/runtime/i18n/ar"
+import { dict as en } from "../../src/runtime/i18n/en"
 
 const directory = "C:/Projects/settings-demo"
 
@@ -61,6 +63,21 @@ test("settings has its own route and returns through app history", async ({ page
   const { settings } = await open(page)
   const home = page.getByRole("button", { name: "Home", exact: true })
   await expect(page).toHaveURL("/settings")
+  await expect(settings.getByRole("tab")).toHaveText([
+    "Preferences",
+    "Appearance",
+    "Notifications",
+    "Shortcuts",
+    "Providers",
+    "Models",
+    "Extensions",
+    "Projects",
+    "Worktrees",
+    "Server",
+    "Experimental",
+    "About",
+  ])
+  await expect(settings.getByRole("tab", { name: "Preferences", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(home).toHaveAttribute("aria-pressed", "false")
   await settings.getByRole("button", { name: "Back to app", exact: true }).click()
   await expect(page).toHaveURL("/")
@@ -274,8 +291,20 @@ test("request events use real Questions settings without disabling Permissions a
     .toEqual([...previews, expect.stringContaining("alert-01"), expect.stringContaining("alert-01")])
 })
 
-for (const locale of ["en", "ar"]) {
+for (const [locale, dict] of [
+  ["en", en],
+  ["ar", ar],
+] as const) {
   test(`background activity alignment stays physical and persists (${locale})`, async ({ page }) => {
+    const label = dict["settings.timeline.row.backgroundActivity.title"]
+
+    const names = {
+      Hidden: dict["settings.timeline.row.backgroundActivity.off"],
+      Left: dict["settings.timeline.row.backgroundActivity.left"],
+      Center: dict["settings.timeline.row.backgroundActivity.center"],
+      Right: dict["settings.timeline.row.backgroundActivity.right"],
+    }
+
     const id = "ses_activity_settings"
     const childID = "ses_activity_settings_child"
     const stopped: string[] = []
@@ -352,13 +381,13 @@ for (const locale of ["en", "ar"]) {
     for (const value of ["Center", "Right", "Hidden", "Left", "Right"] as const) {
       await page.keyboard.press("Control+,")
       const settings = page.getByTestId("settings-screen")
-      const control = settings.getByLabel("Background activity", { exact: true })
+      const control = settings.getByLabel(label, { exact: true })
       await expect(control).toBeVisible()
       await control.click()
       const options = page.getByRole("listbox")
-      await expect(options.getByRole("option")).toHaveText(["Hidden", "Left", "Center", "Right"])
-      await options.getByRole("option", { name: value, exact: true }).click()
-      await expect(control).toHaveText(value)
+      await expect(options.getByRole("option")).toHaveText([names.Hidden, names.Left, names.Center, names.Right])
+      await options.getByRole("option", { name: names[value], exact: true }).click()
+      await expect(control).toHaveText(names[value])
       await page.goBack()
 
       if (value === "Hidden") {
@@ -413,9 +442,7 @@ for (const locale of ["en", "ar"]) {
       .toBe("right")
     await page.keyboard.press("Control+,")
     await page.reload()
-    await expect(page.getByTestId("settings-screen").getByLabel("Background activity", { exact: true })).toHaveText(
-      "Right",
-    )
+    await expect(page.getByTestId("settings-screen").getByLabel(label, { exact: true })).toHaveText(names.Right)
   })
 }
 
@@ -1141,6 +1168,22 @@ test.describe("pages open before slow data", () => {
     refresh.release()
   })
 
+  test("extensions keeps the empty MCP panel's keyboard ring inside the tabs", async ({ page }) => {
+    const { settings } = await open(page)
+
+    await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+
+    const tab = settings.getByRole("tab", { name: "MCPs", exact: true })
+
+    const panel = settings.getByRole("tabpanel", { name: "Extensions", exact: true }).getByRole("tabpanel")
+
+    await expect(panel.getByText("Available to all projects")).toBeVisible()
+    await tab.press("Tab")
+    await expect(panel).toBeFocused()
+    await expect(panel).toHaveCSS("outline-style", "solid")
+    await expect(panel).toHaveCSS("outline-offset", "-2px")
+  })
+
   test("extensions", async ({ page }) => {
     const { settings } = await open(page, {
       mcp: [{ name: "demo-mcp", status: { status: "connected" } }],
@@ -1771,9 +1814,9 @@ const connectDialog = (page: Page) =>
 const consoleIntegrations = [
   {
     id: "opencode",
-    name: "OpenCode Console",
+    name: "OpenCode",
     methods: [
-      { id: "device", type: "oauth", label: "OpenCode Console account" },
+      { id: "device", type: "oauth", label: "OpenCode account" },
       { type: "key", label: "API key (service account)" },
     ],
     connections: [],
@@ -1788,21 +1831,22 @@ test("providers: OpenCode Console signs in from its method list", async ({ page,
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await settings
-    .locator(".settings-provider-row", { hasText: "OpenCode Console" })
+    .locator(".settings-provider-row")
+    .filter({ has: page.locator(".settings-provider-name", { hasText: /^OpenCode$/ }) })
     .getByRole("button", { name: "Connect", exact: true })
     .click()
-  const methods = page.getByRole("dialog", { name: "Connect OpenCode Console", exact: true })
+  const methods = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
   // The methods come from the integration in the TUI's order: sign-ins first, API keys last.
   await expect(methods.locator('[data-action="provider-connect-method"]')).toHaveText([
-    "OpenCode Console account",
+    "OpenCode account",
     "API key (service account)",
   ])
 
   const popup = page.waitForEvent("popup")
-  await methods.getByRole("button", { name: "OpenCode Console account", exact: true }).click()
+  await methods.getByRole("button", { name: "OpenCode account", exact: true }).click()
   await expect(await popup).toHaveURL(url)
 
-  const signIn = page.getByRole("dialog", { name: "Connect OpenCode Console", exact: true })
+  const signIn = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
   await expect(signIn.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
   await expect(signIn.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
 })
@@ -1826,6 +1870,12 @@ test("providers: OpenCode Go connects with its own methods, not the Console sign
     .click()
   const dialog = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
+
+  const connect = dialog.getByRole("navigation").getByRole("button", { name: "Connect", exact: true })
+
+  await dialog.getByRole("button", { name: "Close", exact: true }).press("Shift+Tab")
+  await expect(connect).toBeFocused()
+  await expect(connect).toHaveCSS("outline-style", "solid")
   expect(attempts).toEqual([])
 })
 
@@ -1903,7 +1953,7 @@ test("providers: Back during a pending API key request does not report the provi
   await expect(dialog.getByPlaceholder("API key")).toHaveValue("")
 })
 
-test("providers: the free tier upsell opens Go on its own, sized to its content", async ({ page }) => {
+test("providers: the free tier upsell opens OpenCode on its own, sized to its content", async ({ page }) => {
   const view = await openSession(page, { name: "FreeTier", integrations: consoleIntegrations })
   await view.push([
     {
@@ -1924,12 +1974,16 @@ test("providers: the free tier upsell opens Go on its own, sized to its content"
     .getByRole("button", { name: "Subscribe", exact: true })
     .click()
 
-  const dialog = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
+  // Go connects through the OpenCode connection, so the upsell opens its sign-in methods.
+  const dialog = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
   const container = page.locator('[data-slot="dialog-container"]')
-  await expect(dialog.getByPlaceholder("API key")).toBeVisible()
-  // Nothing to go back to: the upsell opened the dialog straight on Go.
+  await expect(dialog.locator('[data-action="provider-connect-method"]')).toHaveText([
+    "OpenCode account",
+    "API key (service account)",
+  ])
+  // Nothing to go back to: the upsell opened the dialog straight on OpenCode.
   await expect(dialog.getByRole("navigation").getByRole("button")).toHaveCount(0)
-  await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(512)
+  await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(368)
 })
 
 test("providers: the connect dialog lists connected providers and manages their accounts", async ({ page }) => {
@@ -1981,7 +2035,8 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(dialog.locator('[data-provider-id="linear"]')).toHaveCount(0)
   await expect(dialog.getByText("MCP", { exact: true })).toHaveCount(0)
   const container = page.locator('[data-slot="dialog-container"]')
-  await expect.poll(async () => (await container.boundingBox())?.height).toBe(512)
+  await expect(container).toHaveCSS("width", "680px")
+  await expect(container).toHaveCSS("max-height", "600px")
   const picker = await container.boundingBox()
   await openai.click()
 
@@ -2173,18 +2228,19 @@ test("providers: Back from a Console connection without models returns to its si
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await settings
-    .locator(".settings-provider-row", { hasText: "OpenCode Console" })
+    .locator(".settings-provider-row")
+    .filter({ has: page.locator(".settings-provider-name", { hasText: /^OpenCode$/ }) })
     .getByRole("button", { name: "Connect", exact: true })
     .click()
   const dialog = connectDialog(page)
   const popup = page.waitForEvent("popup")
-  await dialog.getByRole("button", { name: "OpenCode Console account", exact: true }).click()
+  await dialog.getByRole("button", { name: "OpenCode account", exact: true }).click()
   await popup
   await expect(page.getByRole("dialog").getByText("OpenCode connected", { exact: true })).toBeVisible()
 
-  await dialog.getByRole("navigation").getByRole("button", { name: "OpenCode Console", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "OpenCode", exact: true }).click()
   await expect(dialog.locator('[data-action="provider-connect-method"]')).toHaveText([
-    "OpenCode Console account",
+    "OpenCode account",
     "API key (service account)",
   ])
 })
@@ -2250,8 +2306,17 @@ test("providers: the account options rename and remove the active account", asyn
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await expect(trigger).toHaveText("Shared")
 
+  const confirm = page.getByRole("dialog", { name: "Remove Shared?", exact: true })
   await settings.getByRole("button", { name: "Shared options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(confirm).toBeHidden()
+  await expect(trigger).toHaveText("Shared")
+  expect(removed).toEqual([])
+
+  await settings.getByRole("button", { name: "Shared options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await confirm.getByRole("button", { name: "Remove", exact: true }).click()
   await expect.poll(() => removed).toEqual(["cred_work"])
 })
 
@@ -2268,6 +2333,10 @@ test("providers: a disconnect that finds no stored credentials keeps the provide
   await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
 
   await disconnect.click()
+  await page
+    .getByRole("dialog", { name: "Disconnect OpenRouter?", exact: true })
+    .getByRole("button", { name: "Disconnect", exact: true })
+    .click()
   await expect(page.getByText("No removable credentials found for OpenRouter", { exact: true })).toBeVisible()
   await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
   await expect(disconnect).toBeVisible()
@@ -2306,8 +2375,8 @@ test("providers: switching to a Zen API key does not wait for a Console workspac
     integrations: () => [
       {
         id: "opencode",
-        name: "OpenCode Console",
-        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        name: "OpenCode",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode account" }],
         connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
       },
     ],
@@ -2317,7 +2386,7 @@ test("providers: switching to a Zen API key does not wait for a Console workspac
   })
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
-  const trigger = settings.getByRole("button", { name: "Manage OpenCode Console accounts", exact: true })
+  const trigger = settings.getByRole("button", { name: "Manage OpenCode accounts", exact: true })
   await expect(trigger).toHaveText("Anomaly")
   await trigger.click()
 
@@ -2328,7 +2397,7 @@ test("providers: switching to a Zen API key does not wait for a Console workspac
       catalogReads.push(request.url())
   })
   await page.getByRole("menuitemradio", { name: "Zen key", exact: true }).click()
-  await expect(page.getByText("OpenCode Console account switched")).toBeVisible()
+  await expect(page.getByText("OpenCode account switched")).toBeVisible()
   // One refresh after the switch; a Console workspace poll would keep reading the catalog.
   expect(catalogReads).toHaveLength(1)
 })
@@ -2363,8 +2432,8 @@ test("providers: adding a Console account keeps the Console row in place", async
     integrations: () => [
       {
         id: "opencode",
-        name: "OpenCode Console",
-        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        name: "OpenCode",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode account" }],
         connections: [
           { type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" },
           ...(state.authorized ? [{ type: "credential", id: "cred_clara", label: "Clara", method: "oauth" }] : []),
@@ -2385,10 +2454,11 @@ test("providers: adding a Console account keeps the Console row in place", async
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   const connected = settings.locator('[data-component="connected-providers-section"]')
-  await expect(connected.getByText("OpenCode Console", { exact: true })).toBeVisible()
+  const consoleRow = connected.locator(".settings-provider-console")
+  await expect(consoleRow.getByText("OpenCode", { exact: true })).toBeVisible()
   await connected.evaluate((element) => {
     new MutationObserver(() => {
-      if (!element.textContent?.includes("OpenCode Console")) element.dataset.flashed = ""
+      if (!element.querySelector(".settings-provider-console")) element.dataset.flashed = ""
     }).observe(element, { childList: true, subtree: true, characterData: true })
   })
 
@@ -2398,9 +2468,11 @@ test("providers: adding a Console account keeps the Console row in place", async
   const popup = page.waitForEvent("popup")
   await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await popup
-  await expect(page.getByText("OpenCode Console connected", { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole("region", { name: /^Notifications/ }).getByText("OpenCode connected", { exact: true }),
+  ).toBeVisible()
 
-  await expect(connected.getByText("OpenCode Console", { exact: true })).toBeVisible()
+  await expect(consoleRow.getByText("OpenCode", { exact: true })).toBeVisible()
   await expect(connected).not.toHaveAttribute("data-flashed")
 })
 
@@ -2440,8 +2512,8 @@ test("providers: switching Console accounts keeps the list until the new workspa
     integrations: () => [
       {
         id: "opencode",
-        name: "OpenCode Console",
-        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        name: "OpenCode",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode account" }],
         connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
       },
     ],
@@ -2453,7 +2525,7 @@ test("providers: switching Console accounts keeps the list until the new workspa
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   const connected = settings.locator('[data-component="connected-providers-section"]')
-  const trigger = connected.getByRole("button", { name: "Manage OpenCode Console accounts", exact: true })
+  const trigger = connected.getByRole("button", { name: "Manage OpenCode accounts", exact: true })
   await expect(trigger).toHaveText("Clara")
   await connected.evaluate((element) => {
     new MutationObserver(() => {
@@ -2463,7 +2535,7 @@ test("providers: switching Console accounts keeps the list until the new workspa
 
   await trigger.click()
   await page.getByRole("menuitemradio", { name: "Anomaly", exact: true }).click()
-  await expect(page.getByText("OpenCode Console account switched")).toBeVisible()
+  await expect(page.getByText("OpenCode account switched")).toBeVisible()
   await expect(trigger).toHaveText("Anomaly")
   await expect(connected).not.toHaveAttribute("data-flashed")
 })
@@ -2496,8 +2568,8 @@ test("models: a Console provider picked on Providers opens its collapsed group, 
     integrations: [
       {
         id: "opencode",
-        name: "OpenCode Console",
-        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        name: "OpenCode",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode account" }],
         connections: [{ type: "credential", id: "cred_anomaly", label: "Anomaly", method: "oauth" }],
       },
     ],
@@ -2505,7 +2577,7 @@ test("models: a Console provider picked on Providers opens its collapsed group, 
 
   const group = settings
     .locator('[data-component="settings-models-console"]')
-    .getByRole("button", { name: /^OpenCode Console/ })
+    .getByRole("button", { name: "OpenCode Anomaly", exact: true })
 
   await settings.getByRole("tab", { name: "Models", exact: true }).click()
   await group.click()

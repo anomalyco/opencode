@@ -32,7 +32,7 @@ export const layer = Layer.effect(
       status: (model, id) =>
         attach(model, id).pipe(
           Effect.flatMap((route) => route.status),
-          Effect.map((snapshot) => ({ status: snapshot.status, progress: snapshot.progress })),
+          Effect.map((snapshot) => ({ status: snapshot.status, reason: snapshot.reason, progress: snapshot.progress })),
         ),
       result: (model, id) => attach(model, id).pipe(Effect.flatMap((route) => route.result)),
       cancel: (model, id) =>

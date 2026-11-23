@@ -1,11 +1,19 @@
 import { execFile } from "node:child_process"
+import { homedir } from "node:os"
 import util from "node:util"
 import { Effect, FileSystem, Path } from "effect"
+import { detectHex, hexPaths } from "./hex"
 
 const execFilePromise = util.promisify(execFile)
 
+let hex: Promise<boolean> | undefined
+
 export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function* (appName: string) {
-  if (process.platform === "win32") return true
+  if (appName === "hex") {
+    return yield* Effect.promise(() => (hex ??= detectHex(hexPaths(process.platform, homedir(), process.env))))
+  }
+
+  if (process.platform === "win32") return (yield* resolveAppPath(appName)) !== null
 
   if (process.platform === "linux") return true
 
@@ -14,6 +22,11 @@ export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function*
 
 export const resolveAppPath = Effect.fn("DesktopFiles.resolveAppPath")(function* (appName: string) {
   if (process.platform !== "win32") return appName
+
+  // Like Windows Terminal, the PowerShell entry opens PowerShell 7 when it is installed and Windows PowerShell otherwise.
+  if (appName === "powershell") {
+    return (yield* resolveWindowsAppPath("pwsh")) ?? (yield* resolveWindowsAppPath(appName))
+  }
 
   return yield* resolveWindowsAppPath(appName)
 })
@@ -44,7 +57,7 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
     Effect.orElseSucceed(() => undefined),
   )
 
-  if (!result) return null
+  if (!result) return yield* installedAt(appName)
 
   const paths = result.stdout
     .toString()
@@ -149,6 +162,39 @@ const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(fu
   }
 
   return paths[0] ?? null
+})
+
+/** Where each app's installer puts it, for an install that is not on the `PATH`, in the order they are tried. */
+function windowsInstallCandidates(appName: string, env: NodeJS.ProcessEnv) {
+  const under = (root: string | undefined, rel: string) => (root ? [`${root}\\${rel}`] : [])
+  const local = env.LOCALAPPDATA
+  const programs = env.ProgramFiles
+
+  if (appName === "code")
+    return [...under(local, "Programs\\Microsoft VS Code\\Code.exe"), ...under(programs, "Microsoft VS Code\\Code.exe")]
+
+  if (appName === "cursor")
+    return [...under(local, "Programs\\cursor\\Cursor.exe"), ...under(programs, "Cursor\\Cursor.exe")]
+
+  if (appName === "zed") return [...under(local, "Programs\\Zed\\Zed.exe"), ...under(programs, "Zed\\Zed.exe")]
+
+  // The Microsoft Store's execution alias, a zero-byte reparse point that still exists as a file.
+  if (appName === "wt") return under(local, "Microsoft\\WindowsApps\\wt.exe")
+
+  if (appName === "Sublime Text")
+    return [...under(programs, "Sublime Text\\sublime_text.exe"), ...under(programs, "Sublime Text 3\\sublime_text.exe")]
+
+  return []
+}
+
+const installedAt = Effect.fnUntraced(function* (appName: string) {
+  const fs = yield* FileSystem.FileSystem
+
+  for (const candidate of windowsInstallCandidates(appName, process.env)) {
+    if (yield* exists(fs, candidate)) return candidate
+  }
+
+  return null
 })
 
 function exists(fs: FileSystem.FileSystem, path: string) {

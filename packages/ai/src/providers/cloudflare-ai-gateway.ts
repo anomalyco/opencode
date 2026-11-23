@@ -4,7 +4,7 @@ import { CloudflareRunDecisions } from "../protocols/cloudflare-run-decisions.js
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../protocols/index.js"
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
-import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
+import { mergeTransport, ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import { CloudflareShared } from "./cloudflare-shared.js"
@@ -96,6 +96,7 @@ export const configure = (input: Config) => {
     endpoint: { baseURL: baseURL(input) },
     auth: custom ?? credential(input, (credential) => credential.bearer()),
     headers: { "cf-aig-gateway-id": gatewayId(input), ...headers(input) },
+    timeout: input.timeout,
     http: input.http,
     providerOptions: input.providerOptions,
   }
@@ -130,8 +131,7 @@ export const configure = (input: Config) => {
         provider: id,
         endpoint: { baseURL: runBaseURL(input) },
         auth: rest.auth,
-        headers: rest.headers,
-        http: input.http,
+        ...mergeTransport(input, { headers: rest.headers }),
       })
       .model({ id: value, providerOptions })
   return {

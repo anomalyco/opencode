@@ -160,6 +160,7 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
       select={select}
       close={() => dialog.close(layer?.id)}
       busyEntryID={selectSessionRestoreEntryID(searchState())}
+      bare={!props.archived}
       unhide={(entry) => {
         const server = entry.server
         const id = entry.sessionID
