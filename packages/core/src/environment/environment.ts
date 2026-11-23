@@ -60,12 +60,27 @@ export const make = (id: ID, driver: Driver, facts?: Facts): Interface => ({
 export const local = (spawner: ChildProcessSpawner["Service"]) =>
   make(localID, makeLocalDriver(spawner), { hostsServer: true, searchable: true })
 
+/**
+ * A session's own working directory, bound to its environment, provided by the runner around a step.
+ * Absent unless the session sets one, so bare paths and commands stay on the Location's directory.
+ */
+export const CurrentWorkingDirectory = Context.Reference<
+  { readonly absolute: AbsolutePath; readonly environment: Interface } | undefined
+>("@opencode/Environment/CurrentWorkingDirectory", { defaultValue: () => undefined })
+
 /** The place of a path or a command that names no directory: the Location's directory, in its environment. */
 export const workingDirectory = Effect.gen(function* () {
   const location = yield* Location.Service
   const environment = yield* Service
   return { absolute: location.directory, environment }
 })
+
+/** Build once inside a Location layer; resolves CurrentWorkingDirectory per call, falling back to the Location's default. */
+export const workingDirectoryResolver = Effect.map(workingDirectory, (fallback) =>
+  Effect.gen(function* () {
+    return (yield* CurrentWorkingDirectory) ?? fallback
+  }),
+)
 
 const layer = Layer.effect(
   Service,

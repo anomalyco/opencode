@@ -128,13 +128,18 @@ const layer = Layer.effect(
     const environment = yield* Environment.Service
     const exists = (file: string) => Environment.exists(environment.files, file)
     const location = yield* Location.Service
-    const workingDirectory = yield* Environment.workingDirectory
+    const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
     const permission = yield* Permission.Service
     const flags = yield* Flag.Service
     const machines = yield* Machines.Service
 
-    // The flag is read once per operation by `locate` and `resolve`, which both call this.
-    const place = Effect.fnUntraced(function* (text: string, base: Environment.Place | undefined, enabled: boolean) {
+    // The flag and the working directory are read once per operation by `locate` and `resolve`, which both call this.
+    const place = Effect.fnUntraced(function* (
+      text: string,
+      base: Environment.Place | undefined,
+      enabled: boolean,
+      workingDirectory: Environment.Place,
+    ) {
       // Only text the model typed can name a machine: text derived from a target is a plain path on that target's
       // machine, and a shell there does not understand `gpu:`.
       const machine =
@@ -167,29 +172,49 @@ const layer = Layer.effect(
           : written
       if (rooted.startsWith("~"))
         return yield* new Environment.Failed({ path: text, cause: new MachinePath.NotAbsolute({ machine: id }) })
+      // A relative text is relative to the directory it was written in, which is the base when there is one and
+      // otherwise the working directory itself: a session cwd on another machine is still a directory there.
       return {
-        absolute: AbsolutePath.make(base ? rules.resolve(base.absolute, rooted) : rules.normalize(rooted)),
+        absolute: AbsolutePath.make(rules.resolve(from.absolute, rooted)),
         environment: { id },
       } satisfies Environment.Place
     })
 
     const locate = Effect.fn("FileAccess.locate")(function* (text: string, base?: Environment.Place) {
       const enabled = yield* flags.enabled("machines")
-      return yield* place(text, base, enabled)
+      return yield* place(text, base, enabled, yield* currentWorkingDirectory)
     })
 
     const resolve = Effect.fn("FileAccess.resolve")(function* (input: ResolveInput) {
       const enabled = yield* flags.enabled("machines")
-      const located = yield* place(input.path, input.base, enabled)
+      const workingDirectory = yield* currentWorkingDirectory
+      const located = yield* place(input.path, input.base, enabled, workingDirectory)
       // A machine path is another machine's absolute path: it is never internal to this Location and never this server's.
-      if (located.environment.id !== environment.id) return yield* machineTarget(located, input.kind)
+      if (located.environment.id !== environment.id) {
+        const rules = workingDirectory.environment.path ?? path
+        const relative =
+          located.environment.id === workingDirectory.environment.id
+            ? rules.relative(workingDirectory.absolute, located.absolute)
+            : undefined
+        const inside =
+          relative !== undefined &&
+          relative !== ".." &&
+          !relative.startsWith(`..${rules.sep}`) &&
+          !rules.isAbsolute(relative)
+        return yield* machineTarget(located, input.kind, inside)
+      }
       const absolute = located.absolute
       const worktree = path.resolve(location.project.directory)
+      // A path that is textually under a cwd on another machine is still this server's own.
       const internal =
-        FSUtil.contains(workingDirectory.absolute, absolute) ||
+        (located.environment.id === workingDirectory.environment.id &&
+          FSUtil.contains(workingDirectory.absolute, absolute)) ||
         (worktree !== path.parse(worktree).root && FSUtil.contains(worktree, absolute))
       if (internal) {
-        const relative = slash(path.relative(workingDirectory.absolute, absolute) || ".")
+        // The resource stays relative to the directory the path was written in; a cwd on another machine cannot name one.
+        const base =
+          located.environment.id === workingDirectory.environment.id ? workingDirectory.absolute : location.directory
+        const relative = slash(path.relative(base, absolute) || ".")
         return {
           absolute,
           // With machines on, a local folder can be named like a machine path, and its permission name stays its own.
@@ -216,10 +241,14 @@ const layer = Layer.effect(
       } satisfies Target
     })
 
-    // A machine path is always external, and its resources carry the machine name so its rules never settle a local
-    // path's. Type detection runs over the machine's own files; a saved rule is the directory's own glob, which is
-    // what was shown, rather than a search upward from this server's platform.
-    const machineTarget = Effect.fnUntraced(function* (place: Environment.Place, kind: Kind | undefined) {
+    // A machine path carries the machine name in its resources so its rules never settle a local path's. It is
+    // external unless it is inside the Session's own cwd there. Type detection runs over the machine's own files; a
+    // saved rule is the directory's own glob, which is what was shown, rather than a search upward from this platform.
+    const machineTarget = Effect.fnUntraced(function* (
+      place: Environment.Place,
+      kind: Kind | undefined,
+      insideWorkingDirectory: boolean,
+    ) {
       const machineEnvironment = yield* machines
         .get(place.environment.id)
         .pipe(Effect.mapError((cause) => new Environment.Failed({ path: place.absolute, cause })))
@@ -234,7 +263,9 @@ const layer = Layer.effect(
       return {
         absolute: place.absolute,
         resource: MachinePath.format(place.environment.id, place.absolute),
-        externalDirectory: { action: "external_directory", directory, resource: contents, save: contents },
+        ...(insideWorkingDirectory
+          ? {}
+          : { externalDirectory: { action: "external_directory", directory, resource: contents, save: contents } }),
         environment: machineEnvironment,
         machine: place.environment.id,
       } satisfies Target
