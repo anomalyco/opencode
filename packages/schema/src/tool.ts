@@ -3,6 +3,7 @@ export * as Tool from "./tool.js"
 import { Effect, JsonSchema, Schema } from "effect"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
 import type { Agent } from "./agent.js"
+import type { Automation } from "./automation.js"
 import type { Session } from "./session.js"
 import type { SessionMessage } from "./session-message.js"
 
@@ -36,6 +37,11 @@ export interface Context {
   readonly cancel?: Effect.Effect<void>
   /** True when the tool is invoked from inside Code Mode (`execute`). */
   readonly codemode?: boolean
+  /**
+   * Set when an automation's code makes the call. No model waits on it, and nobody hears about work it leaves
+   * running, so a tool must finish its work within the call.
+   */
+  readonly automation?: { readonly id: Automation.ID }
 }
 
 export interface Namespace {

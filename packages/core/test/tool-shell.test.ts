@@ -25,6 +25,7 @@ import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Agent } from "@opencode/core/agent"
+import { Automation } from "@opencode/schema/automation"
 import { Job } from "@opencode/core/job"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -1751,42 +1752,62 @@ describe("ShellTool", () => {
     }),
   )
 
-  // An automation's code runs its tools unattended: nobody is in the session to hear about a backgrounded command.
-  const unattended = Effect.provideService(Permission.Unattended, [])
+  // Runs a program the way an automation does: no model, and the automation named on each tool call.
+  const runAutomationCode = (registry: Tool.Interface, code: string) =>
+    Effect.gen(function* () {
+      yield* registry.transform((editor) =>
+        editor.update("shell", (tool) => {
+          tool.options = { ...tool.options, codemode: true }
+        }),
+      )
+      return yield* registry.check({
+        code,
+        tools: ["shell"],
+        bindings: {},
+        permissions: [{ action: "*", resource: "*", effect: "allow" }],
+        limits: { timeoutMs: 30_000, maxOutputBytes: 32 * 1024 },
+        context: {
+          sessionID,
+          ...toolIdentity,
+          progress: () => Effect.void,
+          automation: { id: Automation.ID.make("aut_shell_test") },
+        },
+      })
+    })
 
-  it.live("stops an unattended command at its timeout instead of moving it to the background", () =>
+  it.live("stops an automation's command at its timeout and fails the call", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
-          const result = yield* executeTool(registry, call({ command: idleCommand, timeout: 50 })).pipe(unattended)
-          expect(result.metadata).toMatchObject({ status: "completed", timeout: true })
-          expect(result.metadata).not.toHaveProperty("shellID")
-          expect(result.output).not.toHaveProperty("shellID")
-          expect(result.content?.at(-1)).toEqual({
-            type: "text",
-            text: expect.stringMatching(
-              new RegExp(`^Command timed out after 0\\.05 seconds\\. [^\\n]+\\nExit code: ${timedOutExit}$`),
+          const result = yield* runAutomationCode(
+            registry,
+            `try { await tools.shell({ command: ${JSON.stringify(idleCommand)}, timeout: 50 }); return "finished" }
+             catch (error) { return error.message }`,
+          )
+          expect(result).toMatchObject({
+            ok: true,
+            value: expect.stringMatching(
+              new RegExp(`Command timed out after 0\\.05 seconds\\. [^\\n]+\\nExit code: ${timedOutExit}`),
             ),
           })
           const shell = yield* Shell.Service
           expect(yield* shell.list()).toEqual([])
-          const jobs = yield* Job.Service
-          expect(yield* jobs.backgroundJobs).toEqual([])
         }),
       )
     }),
   )
 
-  it.live("keeps an unattended command out of reach of the session's move to the background", () =>
+  it.live("keeps an automation's command out of reach of the session's move to the background", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
-          const running = yield* executeTool(
+          const command = JSON.stringify(progressOverflowCommand(0, "release"))
+          const running = yield* runAutomationCode(
             registry,
-            call({ command: progressOverflowCommand(0, "release"), timeout: 10_000 }),
-          ).pipe(unattended, Effect.forkScoped({ startImmediately: true }))
+            `return await tools.shell({ command: ${command}, timeout: 10000 })`,
+          ).pipe(Effect.forkScoped({ startImmediately: true }))
           const shell = yield* Shell.Service
           const [started] = yield* shell
             .list()
@@ -1797,9 +1818,7 @@ describe("ShellTool", () => {
           const jobs = yield* Job.Service
           expect(yield* jobs.backgroundAll({ sessionID })).toEqual([])
           yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
-          const result = yield* Fiber.join(running)
-          expect(result.metadata).toMatchObject({ status: "completed", exit: 0 })
-          expect(result.metadata).not.toHaveProperty("shellID")
+          expect(yield* Fiber.join(running)).toMatchObject({ ok: true, value: { exitCode: 0 } })
           // A finished job stays listed, so this proves the command never had one for the session to take.
           expect(yield* jobs.get(started!.id)).toBeUndefined()
         }),

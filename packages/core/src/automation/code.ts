@@ -43,6 +43,7 @@ const FORBIDDEN_TOOLS = new Set([
 ])
 
 export interface RunInput {
+  readonly automationID: Automation.ID
   readonly messageID: SessionMessage.ID
   readonly state: Schema.Json
   readonly now: number
@@ -238,6 +239,7 @@ export const run = Effect.fnUntraced(
           agent: agent.id,
           messageID: input.messageID,
           progress: () => Effect.void,
+          automation: { id: input.automationID },
         },
       })
       .pipe(Effect.provideService(Permission.Unattended, unattended))

@@ -147,15 +147,12 @@ const configureAgent = Layer.effectDiscard(
             ),
       })
       editor.add({
-        name: "unattended",
-        description: "Whether the call runs with nobody present",
+        name: "automation",
+        description: "The automation making the call, if any",
         input: Schema.Struct({}),
-        output: Schema.Boolean,
+        output: Schema.NullOr(Schema.String),
         options: { namespace: "probe" },
-        execute: () =>
-          Effect.gen(function* () {
-            return { output: (yield* Permission.Unattended) !== undefined }
-          }),
+        execute: (_input, context) => Effect.succeed({ output: context.automation?.id ?? null }),
       })
       editor.add({
         name: "post",
@@ -1248,20 +1245,20 @@ describe("Automation", () => {
       }),
     )
 
-    // Tools rely on this to know nobody is present, e.g. the shell tool stops a timed-out command instead of
+    // Tools rely on this to know no model is waiting, e.g. the shell tool stops a timed-out command instead of
     // moving it to the background.
-    it.effect("runs the program's tools unattended", () =>
+    it.effect("names the automation on each of its program's tool calls", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
         const automation = yield* automations.create({
           sessionID,
           name: "probe",
           trigger: every("1 minute"),
-          action: code(`return { state: await tools.probe.unattended({}) }`),
+          action: code(`return { state: await tools.probe.automation({}) }`),
         })
         yield* TestClock.adjust("1 minute")
         yield* automations.tick
-        expect(yield* automations.get(automation.id)).toMatchObject({ lastOutcome: "fired", state: true })
+        expect(yield* automations.get(automation.id)).toMatchObject({ lastOutcome: "fired", state: automation.id })
       }),
     )
 

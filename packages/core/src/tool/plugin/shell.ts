@@ -446,11 +446,10 @@ export const Plugin = {
                     Effect.fail(new ToolFailure({ message: "Command interrupted by the user before it started." })),
                   ),
                 )
-                // An automation's code runs with nobody present to hear how a backgrounded command ends. There a
-                // timeout stops the command, as it does a background one, and the command gets no job the session
-                // could move to the background or be told about.
-                const unattended = (yield* Permission.Unattended) !== undefined
-                const timeoutBackgrounds = !background && !unattended
+                // An automation's code has nobody to hear how a backgrounded command ends. There a timeout stops the
+                // command and fails the call, and the command gets no job the session could move to the background or
+                // be told about.
+                const timeoutBackgrounds = !background && context.automation === undefined
                 return yield* Effect.gen(function* () {
                   // The same default `Shell.create` gives the hooks, so `prepare` can tell whether one moved it.
                   const cwd = input.workdir ?? workingDirectory.absolute
@@ -490,10 +489,14 @@ export const Plugin = {
                   )
                   yield* context.progress({ shellID: info.id })
 
-                  if (unattended)
-                    return yield* restore(finished(shell, info)).pipe(
+                  if (context.automation) {
+                    const output = yield* restore(finished(shell, info)).pipe(
                       Effect.onInterrupt(() => shell.stop(info.id, "killed").pipe(Effect.ignore)),
                     )
+                    if (output.timeout)
+                      return yield* new ToolFailure({ message: resultMessages(output, finalTimeout).join("\n\n") })
+                    return output
+                  }
 
                   const { job, settled } = yield* startJob(jobs, shell, {
                     sessionID: context.sessionID,
