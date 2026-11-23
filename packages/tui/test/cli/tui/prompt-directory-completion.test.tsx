@@ -22,8 +22,8 @@ test("completes a /cd directory argument with the picker's separator", async () 
 
   await setup.mockInput.typeText("/cd pac")
   await setup.waitFor(() => setup.captureCharFrame().includes("packages/"))
-  // The autocomplete layer takes effect one tick after the popup opens.
-  await Bun.sleep(50)
+  // The autocomplete keymap layer is pushed in an effect, so render the popup frame before Tab.
+  await setup.renderOnce()
 
   setup.mockInput.pressTab()
   await setup.waitForVisualIdle()
