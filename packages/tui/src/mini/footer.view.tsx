@@ -35,7 +35,7 @@ import { footerStatuslinePolicy } from "./footer.width"
 import { Keymap } from "../context/keymap"
 import type { ClipboardService } from "../context/clipboard"
 import { modelInfo } from "./variant.shared"
-import { descendantActivityModel } from "./session-data"
+import { activeToolSummaries, descendantActivityModel } from "./session-data"
 import { monoShortcut } from "./mono"
 import { stringWidth } from "../util/string-width"
 import { formatContextUsage } from "../util/session"
@@ -362,6 +362,11 @@ export function RunFooterView(props: RunFooterViewProps) {
     openTab(next.sessionID)
   }
   const [promptRows, setPromptRows] = createSignal(1)
+  const [expanded, setExpanded] = createSignal(false)
+  const toolSummaries = createMemo(() =>
+    expanded() ? activeToolSummaries(tabs(), performance.now()) : [],
+  )
+  const activityShortcut = () => shortcut("session.child.activity")
   const composer = createPromptState({
     directory: props.directory,
     findFiles: props.findFiles,
@@ -457,7 +462,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return []
     }
 
-    const items: Array<{ id: "queued" | "subagents"; key: string; label: string; expanded?: string }> = []
+    const items: Array<{ id: "queued" | "subagents" | "activity"; key: string; label: string; expanded?: string }> = []
     if (queuedPrompts().length > 0 && queuedShortcut()) {
       items.push({ id: "queued", key: queuedShortcut(), label: `${queuedPrompts().length} pending` })
     }
@@ -467,6 +472,13 @@ export function RunFooterView(props: RunFooterViewProps) {
         key: subagentShortcut(),
         label: `${activeTabs().length} sub`,
         expanded: `${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}`,
+      })
+    }
+    if (activeTabs().length > 0) {
+      items.push({
+        id: "activity" as const,
+        key: "e",
+        label: expanded() ? "hide" : "agents",
       })
     }
     return items
@@ -487,7 +499,10 @@ export function RunFooterView(props: RunFooterViewProps) {
         expanded: footerDetails() && busy() && interruptLabel() ? `${interruptLabel()} interrupt` : undefined,
       },
       escape: shell() && !takeover() ? { key: "esc", label: "normal" } : undefined,
-      work: contextHintCandidates(),
+      work: contextHintCandidates().filter(
+        (item): item is typeof item & { id: "queued" | "subagents" } =>
+          item.id === "queued" || item.id === "subagents",
+      ),
       model: info ? { name: info.model, variant: info.variant } : undefined,
       agent: agentStatus(),
       context:
@@ -587,6 +602,23 @@ export function RunFooterView(props: RunFooterViewProps) {
       },
     ],
   }))
+
+  Keymap.createLayer(() => ({
+    enabled: active().type === "prompt" && route().type === "composer" && activeTabs().length > 0,
+    commands: [
+      {
+        id: "session.child.activity",
+        title: "Toggle agent activity panel",
+        group: "Session",
+        bind: "e",
+        run: () => { setExpanded((v) => !v) },
+      },
+    ],
+  }))
+
+  createEffect(() => {
+    if (activeTabs().length === 0) setExpanded(false)
+  })
 
   Keymap.createLayer(() => ({
     enabled: active().type === "prompt" && route().type === "composer" && queuedPrompts().length > 0,
@@ -957,43 +989,90 @@ export function RunFooterView(props: RunFooterViewProps) {
             </Show>
 
             <Show when={!panel() && !menu()}>
-              <box
-                id="mini-statusline"
-                width="100%"
-                flexDirection="row"
-                gap={1}
-                flexShrink={0}
-                backgroundColor="transparent"
-              >
-                <Show when={busy()}>
-                  <box id="mini-work-spinner" width={1} flexShrink={0}>
-                    <OneCellSpinner
-                      animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
-                      color={agentColor()}
-                      animations={props.tuiConfig.animations}
-                      glow={!props.mono}
-                      still={props.mono ? "*" : undefined}
-                      age={performance.now() - (started() ?? performance.now())}
-                    />
+              <Show
+                when={expanded() && activeTabs().length > 0}
+                fallback={
+                  <box
+                    id="mini-statusline"
+                    width="100%"
+                    flexDirection="row"
+                    gap={1}
+                    flexShrink={0}
+                    backgroundColor="transparent"
+                  >
+                    <Show when={busy()}>
+                      <box id="mini-work-spinner" width={1} flexShrink={0}>
+                        <OneCellSpinner
+                          animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
+                          color={agentColor()}
+                          animations={props.tuiConfig.animations}
+                          glow={!props.mono}
+                          still={props.mono ? "*" : undefined}
+                          age={performance.now() - (started() ?? performance.now())}
+                        />
+                      </box>
+                    </Show>
+                    <Show when={statusSections().length > 0}>
+                      <text fg={statusColor()} wrapMode="word" width={statusWidth()} flexShrink={0} height={statusRows()}>
+                        <For each={statusSections()}>
+                          {(section, index) => (
+                            <>
+                              <Show when={index() > 0}>
+                                <span style={{ fg: theme().muted }}>{props.mono ? " - " : " · "}</span>
+                              </Show>
+                              <For each={section.parts}>
+                                {(part) => <span style={{ fg: statusColors()[part.tone] }}>{part.text}</span>}
+                              </For>
+                            </>
+                          )}
+                        </For>
+                      </text>
+                    </Show>
+                    <Show when={activeTabs().length > 0 && footerDetails() && prompt() && !shell() && activityShortcut()}>
+                      <text fg={theme().muted} flexShrink={0}>
+                        {`${activityShortcut()} ${expanded() ? "hide" : "agents"}`}
+                      </text>
+                    </Show>
                   </box>
-                </Show>
-                <Show when={statusSections().length > 0}>
-                  <text fg={statusColor()} wrapMode="word" width={statusWidth()} flexShrink={0} height={statusRows()}>
-                    <For each={statusSections()}>
-                      {(section, index) => (
-                        <>
-                          <Show when={index() > 0}>
-                            <span style={{ fg: theme().muted }}>{props.mono ? " - " : " · "}</span>
-                          </Show>
-                          <For each={section.parts}>
-                            {(part) => <span style={{ fg: statusColors()[part.tone] }}>{part.text}</span>}
-                          </For>
-                        </>
-                      )}
-                    </For>
-                  </text>
-                </Show>
-              </box>
+                }
+              >
+                <box
+                  id="mini-agent-activity"
+                  width="100%"
+                  flexDirection="column"
+                  flexShrink={0}
+                  backgroundColor="transparent"
+                >
+                  <For each={toolSummaries()}>
+                    {(row) => (
+                      <box width="100%" flexDirection="row" gap={1} flexShrink={0}>
+                        <text fg={theme().text} flexShrink={0}>
+                          {row.label}
+                        </text>
+                        <text fg={theme().muted} flexShrink={0}>
+                          {props.mono ? " - " : " · "}
+                        </text>
+                        <text fg={row.tool ? theme().text : theme().muted} flexShrink={0}>
+                          {row.tool || "—"}
+                        </text>
+                        <text fg={theme().muted} flexShrink={1} wrapMode="none">
+                          {row.elapsedMs > 0 ? `  ${Math.round(row.elapsedMs / 1000)}s` : ""}
+                        </text>
+                        <box width={1} flexShrink={0}>
+                          <OneCellSpinner
+                            animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
+                            color={agentColor()}
+                            animations={props.tuiConfig.animations}
+                            glow={!props.mono}
+                            still={props.mono ? "*" : undefined}
+                            age={performance.now() - (started() ?? performance.now())}
+                          />
+                        </box>
+                      </box>
+                    )}
+                  </For>
+                </box>
+              </Show>
             </Show>
           </box>
         }
