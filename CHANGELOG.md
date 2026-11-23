@@ -20,7 +20,7 @@ Release notes for OpenCode V2, newest first.
 
 - Fixed assistant messages failing to save on macOS 12 because its system SQLite does not support the JSON operator used in v2.4.0. ([#65771](https://github.com/anomalyco/opencode/pull/65771))
 - Fixed compaction retaining more recent history than `keep.tokens`, including when a single newest message already exceeds the allowance. ([#65768](https://github.com/anomalyco/opencode/pull/65768))
-- Fixed goal reminders invalidating the model cache on every step after compaction. ([#65788](https://github.com/anomalyco/opencode/pull/65788))
+- Fixed occasional extra cache cost in long goal sessions after a compaction. ([#65788](https://github.com/anomalyco/opencode/pull/65788))
 
 ### TUI
 
