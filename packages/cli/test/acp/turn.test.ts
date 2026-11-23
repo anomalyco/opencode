@@ -268,6 +268,27 @@ describe("acp turn events over the wire", () => {
     expect(await steer()).toEqual({ outcome: "injected" })
     expect(acp.server.prompts).toEqual([expect.objectContaining({ text: "redirect", delivery: "steer", resume: false })])
   })
+
+  test("presents a slash-command failure as a message chunk and ends the turn", async () => {
+    await using acp = await startSession({
+      fetch: (request) =>
+        request.path.startsWith("/api/session/") && request.path.endsWith("/command")
+          ? Response.json(
+              { _tag: "CommandExecutionError", command: "review", message: "Usage: /review <pr>" },
+              { status: 500 },
+            )
+          : undefined,
+    })
+
+    const response = await acp.prompt(acp.sessionId, "/review")
+
+    expect(response.stopReason).toBe("end_turn")
+    const update = await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
+    expect(update.update).toMatchObject({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: "Usage: /review <pr>" },
+    })
+  })
 })
 
 function turnUpdates(updates: readonly SessionNotification[]) {
