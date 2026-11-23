@@ -1,0 +1,64 @@
+{
+  "name": "error-keeps-the-ops-before-it",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"a\", gpu: true, height: 100 }), ui.canvas({ key: \"b\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"a\",\"b\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  await widget.frame()\n  const buffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.VERTEX })\n  const gone = device.createBuffer({ size: 16, usage: GPUBufferUsage.VERTEX })\n  gone.destroy()\n  const draw = (key, vertices) => {\n    const encoder = device.createCommandEncoder()\n    const pass = encoder.beginRenderPass(clear(key))\n    pass.setVertexBuffer(0, vertices)\n    pass.end()\n    device.queue.submit([encoder.finish()])\n  }\n  draw(\"a\", gone)\n  await widget.sleep(1)\n  draw(\"b\", buffer)\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "a",
+      "width": 100,
+      "height": 100
+    },
+    {
+      "key": "b",
+      "width": 100,
+      "height": 100
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 5: handle 4 was destroyed",
+      "canvases": [
+        "a"
+      ]
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"a","rgba8unorm","opaque"],
+        ["context",2,"b","rgba8unorm","opaque"]
+      ]
+    },
+    {
+      "frame": false,
+      "bytes": "",
+      "ops": [
+        ["buffer",3,16,32],
+        ["buffer",4,16,32],
+        ["destroy",4],
+        ["view",5,1,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["pass",{"colorAttachments":[{"view":5,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["setVertexBuffer",0,4,0,-1],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["view",6,2,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["pass",{"colorAttachments":[{"view":6,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["setVertexBuffer",0,3,0,-1],
+        ["end"],
+        ["submit"]
+      ]
+    }
+  ]
+}

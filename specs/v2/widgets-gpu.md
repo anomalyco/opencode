@@ -302,10 +302,13 @@ where WebGPU is unavailable (a browser without it) the canvas shows its placehol
 
 ## Host checks
 
-Before it replays a batch (or instead, without a GPU), every host checks it without a GPU, with exactly these rules
-and messages, so all hosts fail the same programs the same way. They read `ops` as Transport says (`undefined` as JSON
-reads it). The first failure is the batch's program error (phase `gpu`), and the rest of the batch isn't replayed.
-Errors from replaying (WebGPU validation) follow, in the GPU implementation's wording (Errors and device loss).
+Before it replays a batch (or instead, without a GPU), every host checks it without a GPU, with exactly these rules and
+messages, so all hosts fail the same programs the same way. They read `ops` as Transport says (`undefined` as JSON reads
+it). The first failure is the batch's program error (phase `gpu`), and the rest of the batch isn't replayed. When it
+fails at op `i`, ops 0 to `i` − 1 take effect, as separate WebGPU calls would (the resources they create, their writes,
+the submits they make), and an encoder or pass still open at op `i` is dropped without being submitted; the host checks'
+handle state does the same, so a later batch may use a handle those ops made. Errors from replaying (WebGPU validation)
+follow, in the GPU implementation's wording (Errors and device loss).
 
 - **The batch:** an object (`a batch must be an object`) with `ops` a list (`a batch's ops must be a list`) of at most
   20,000 (`the number of ops in a batch is over the limit of 20000`) and `bytes` an `ArrayBuffer` (`a batch's bytes

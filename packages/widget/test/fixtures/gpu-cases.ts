@@ -268,6 +268,34 @@ export const gpuCases: ReadonlyArray<GpuCase> = [
     ],
   },
   {
+    // A batch that fails at an op keeps what the ops before it did: "a"'s batch makes a buffer and fails in its pass
+    // (stopping "a", the pass dropped); "b"'s next batch draws with that buffer and passes.
+    name: "error-keeps-the-ops-before-it",
+    source: program(
+      `
+  await widget.frame()
+  const buffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.VERTEX })
+  const gone = device.createBuffer({ size: 16, usage: GPUBufferUsage.VERTEX })
+  gone.destroy()
+  const draw = (key, vertices) => {
+    const encoder = device.createCommandEncoder()
+    const pass = encoder.beginRenderPass(clear(key))
+    pass.setVertexBuffer(0, vertices)
+    pass.end()
+    device.queue.submit([encoder.finish()])
+  }
+  draw("a", gone)
+  await widget.sleep(1)
+  draw("b", buffer)
+  await widget.frame()`,
+      ["a", "b"],
+    ),
+    canvases: [
+      { key: "a", width: 100, height: 100 },
+      { key: "b", width: 100, height: 100 },
+    ],
+  },
+  {
     // A pass renders into a canvas through its resolve target too: "a"'s multisampled batch fails on frame 1 and stops
     // only "a".
     name: "error-isolated-through-a-resolve-target",
