@@ -1066,6 +1066,26 @@
     }
   }
 
+  /* Lines up with the calls' names, past their markers. */
+  [data-slot="execute-tool-call-more"] {
+    all: unset;
+    width: fit-content;
+    margin-inline-start: 20px;
+    cursor: pointer;
+    color: var(--v2-text-text-faint);
+    user-select: none;
+
+    &:hover {
+      color: var(--v2-text-text-base);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+  }
+
   [data-slot="execute-tool-call-input"] {
     display: flex;
     flex-direction: column;
