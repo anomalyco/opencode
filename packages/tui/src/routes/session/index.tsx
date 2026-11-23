@@ -128,6 +128,7 @@ import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { parseTodos } from "../../util/todo"
+import { sessionTreeIDs } from "../../util/session"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
@@ -204,20 +205,24 @@ export function Session(props: {
     epilogue.session({ title, sessionID: session()?.id })
   })
   onCleanup(() => epilogue.session())
-  const descendantSessionIDs = createMemo(() => {
-    if (session()?.parentID) return []
-    return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
-  })
-  const permissions = createMemo(() => {
-    return [route.sessionID, ...descendantSessionIDs()].flatMap(
-      (sessionID) => data.session.permission.list(sessionID) ?? [],
+  const treeSessionIDs = createMemo(() => {
+    const currentID = route.sessionID
+    const family = data.session.family(currentID)
+    const known = family.includes(currentID) ? family : [currentID, ...family]
+    return sessionTreeIDs(
+      known.map((id) => ({ id, parentID: data.session.get(id)?.parentID })),
+      currentID,
     )
   })
+  const descendantSessionIDs = createMemo(() => treeSessionIDs().filter((id) => id !== route.sessionID))
+  // Retain the viewed session and its descendants, keeping ancestors and siblings isolated.
+  const permissions = createMemo(() =>
+    treeSessionIDs().flatMap((sessionID) => data.session.permission.list(sessionID) ?? []),
+  )
   const promptedPermissions = createMemo(() => (local.permission.mode === "autoaccept" ? [] : permissions()))
   const forms = createMemo(() => {
     const global = data.session.form.list("global", location()) ?? []
-    if (session()?.parentID) return global
-    return [route.sessionID, ...descendantSessionIDs()]
+    return treeSessionIDs()
       .flatMap((sessionID) => data.session.form.list(sessionID) ?? [])
       .concat(global)
   })

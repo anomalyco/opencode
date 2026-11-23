@@ -1,6 +1,6 @@
 import type { JobInfo, SessionMessageInfo } from "@opencode/client"
 import { describe, expect, test } from "bun:test"
-import { sessionFamily, ownedJobs, scriptLabel } from "../../src/util/session"
+import { sessionFamily, sessionTreeIDs, ownedJobs, scriptLabel } from "../../src/util/session"
 
 describe("util.session", () => {
   test("flattens nested subagents from any session in the family", () => {
@@ -22,6 +22,51 @@ describe("util.session", () => {
       { session: sessions[5], prefix: "" },
       { session: sessions[6], prefix: "└─ " },
     ])
+  })
+
+  describe("sessionTreeIDs", () => {
+    const sessions = [
+      { id: "root" },
+      { id: "child-a", parentID: "root" },
+      { id: "grandchild-a", parentID: "child-a" },
+      { id: "great-grandchild-a", parentID: "grandchild-a" },
+      { id: "grandchild-a2", parentID: "child-a" },
+      { id: "child-b", parentID: "root" },
+      { id: "grandchild-b", parentID: "child-b" },
+    ]
+
+    test("root session returns itself and all descendants", () => {
+      expect(sessionTreeIDs(sessions, "root")).toEqual([
+        "root",
+        "child-a",
+        "child-b",
+        "grandchild-a",
+        "grandchild-a2",
+        "grandchild-b",
+        "great-grandchild-a",
+      ])
+    })
+
+    test("child session returns itself and its own descendants excluding parent, siblings, and unrelated branches", () => {
+      expect(sessionTreeIDs(sessions, "child-a")).toEqual([
+        "child-a",
+        "grandchild-a",
+        "grandchild-a2",
+        "great-grandchild-a",
+      ])
+    })
+
+    test("empty list returns [sessionID]", () => {
+      expect(sessionTreeIDs([], "root")).toEqual(["root"])
+    })
+
+    test("handles cycles without infinite loop", () => {
+      const cyclic = [
+        { id: "a", parentID: "b" },
+        { id: "b", parentID: "a" },
+      ]
+      expect(sessionTreeIDs(cyclic, "a")).toEqual(["a", "b"])
+    })
   })
 })
 
