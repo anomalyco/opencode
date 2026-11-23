@@ -2045,6 +2045,33 @@ test("the Windows menu shares the vertical sidebar's icon lane", async ({ page }
   await expect.poll(async () => [(await menu.boundingBox())?.x, (await home.boundingBox())?.x]).toEqual([19, 19])
 })
 
+// #65864: Linux hides the top titlebar in vertical tabs and Inbox, so the app menu moves into the sidebar header.
+test("the Linux app menu renders in the vertical sidebar header without duplicating", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "LinuxMenu",
+    sessions: [],
+    seed: { settings: { appearance: { tabLayout: "inbox" } } },
+  })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER, os: "linux" })}`)
+
+  const button = page
+    .locator('[data-slot="sidebar-header"]')
+    .getByRole("button", { name: "OpenCode menu", exact: true })
+
+  const home = page.locator('[data-action="vertical-tabs-home"] svg')
+  await expect(home).toBeVisible()
+  await expect(button).toBeVisible()
+  await expect(page.locator('[data-component="desktop-icon-button"]')).toHaveCount(1)
+  await expect
+    .poll(async () => [(await button.locator("svg").boundingBox())?.x, (await home.boundingBox())?.x])
+    .toEqual([19, 19])
+
+  await button.click()
+  await page.getByRole("menuitem", { name: "File", exact: true }).click()
+  await page.getByRole("menuitem", { name: /^Settings/ }).click()
+  await expect(page.getByRole("heading", { name: "General" })).toBeVisible()
+})
+
 for (const row of [
   { name: "left tabs", width: 1280, settings: { appearance: { tabLayout: "vertical" } }, position: { x: 20, y: 25 } },
   { name: "top tabs", width: 1280, settings: { appearance: { tabLayout: "horizontal" } }, position: { x: 14, y: 15 } },
