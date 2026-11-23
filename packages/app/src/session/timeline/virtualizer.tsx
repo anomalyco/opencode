@@ -1085,6 +1085,11 @@ export function createTimelineVirtualizer(input: Input) {
       // Its observer reads the current index and delivers any actual size change.
       onCleanup(() => {
         if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
+
+        // A row that leaves the mounted range takes its focused control with it, and Chromium then leaves focus on
+        // <body>. The focus rescue would move it to a control in another row, and focusing that scrolls the timeline
+        // to it. The viewport takes focus instead, without scrolling, so the scroll keys keep working.
+        if (element.contains(document.activeElement)) listRoot()?.focus({ preventScroll: true })
         queueMicrotask(() => virtualizer.measureElement(null))
       })
 
