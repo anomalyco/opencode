@@ -12,7 +12,6 @@ import { Schema } from "effect"
 import { Frontend, Handshake } from "@opencode/protocol/simulation"
 import { applyMasks } from "../lib/app"
 import { writeFixture, type Fixture } from "../lib/cells"
-import { freePort } from "../lib/port"
 import { buildRust, command, parseSides, parityRoot, sandbox, type Sandbox, type Side } from "../cli/client"
 import { startBackend, type Invocation, type Reply } from "./backend"
 import { allows, compareFixtures, compareRequests, text, toFixture } from "./compare"
@@ -189,24 +188,23 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
     const cmd = command(side, args)
     return side === "ts" && scenario.now !== undefined ? [cmd[0]!, `--preload=${CLOCK}`, ...cmd.slice(1)] : cmd
   }
-  const [serverPort, backendPort, serverUiPort] = Array.from({ length: 3 }, freePort)
-  const backendUrl = `ws://127.0.0.1:${backendPort}`
   const viewport = { cols: scenario.width ?? 100, rows: scenario.height ?? 30 }
+  // Every endpoint asks the kernel for its port at bind time: a port checked and then bound seconds later can be taken
+  // in between by another parity run (flakes-n). Each process prints the endpoint it bound, and the runner reads it
+  // there. The server's own UI endpoint is unused, but the manifest schema requires it.
   await Bun.write(
     path.join(registry, "server.json"),
-    JSON.stringify({ endpoints: { ui: `ws://127.0.0.1:${serverUiPort}`, backend: backendUrl } }),
+    JSON.stringify({ endpoints: { ui: "ws://127.0.0.1:0", backend: "ws://127.0.0.1:0" } }),
   )
-  // The client binds its own drive endpoint: port 0 asks the kernel for one, so no other process can take it between
-  // this side's choice and the bind, which happens seconds later, after the server and its sessions (flakes-n).
   await Bun.write(
     path.join(registry, `${side}.json`),
-    JSON.stringify({ endpoints: { ui: "ws://127.0.0.1:0", backend: backendUrl }, viewport }),
+    JSON.stringify({ endpoints: { ui: "ws://127.0.0.1:0", backend: "ws://127.0.0.1:0" }, viewport }),
   )
   const log = (file: string) => path.join(box.root, `${label}.${file}`)
   const stopped: (() => void)[] = []
   const debug: { screen?: () => Promise<Fixture>; model?: unknown; requests?: Logged[] } = {}
   try {
-    const server = spawn(start("ts", ["serve", "--port", String(serverPort)]), box, log("server.stderr"), {
+    const server = spawn(start("ts", ["serve", "--port", "0"]), box, log("server.stderr"), log("server.stdout"), {
       ...clock,
       OPENCODE_SIMULATE: "1",
       OPENCODE_DRIVE: "server",
@@ -215,9 +213,16 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
       OPENCODE_CONFIG_DIR: configDir,
     })
     stopped.push(() => server.kill(9))
-    const serverUrl = `http://127.0.0.1:${serverPort}`
-    await waitFor(
+    const serverUrl = await waitFor(
       `${label} server`,
+      async () => {
+        const match = /server listening on (http:\/\/\S+)/.exec(await readText(log("server.stdout")))
+        return match?.[1] ?? false
+      },
+      60_000,
+    )
+    await waitFor(
+      `${label} server health`,
       () =>
         fetch(`${serverUrl}/api/health`).then(
           () => true,
@@ -225,9 +230,12 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
         ),
       60_000,
     )
-    await waitFor(
+    const backendUrl = await waitFor(
       `${label} backend endpoint`,
-      async () => (await readText(log("server.stderr"))).includes("opencode drive backend websocket:"),
+      async () => {
+        const match = /opencode drive backend websocket: (ws:\/\/\S+)/.exec(await readText(log("server.stderr")))
+        return match?.[1] ?? false
+      },
       60_000,
     )
     const model: { url: string; kind: string; reply: number | null; tools?: string[] }[] = []
@@ -250,13 +258,19 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
     const args = (scenario.args ?? []).map((arg) =>
       arg.startsWith("$session:") ? sessions[Number(arg.slice("$session:".length))] : arg,
     )
-    const client = spawn(start(side, [...args, "--server", proxy.url]), box, log("client.stderr"), {
-      ...clock,
-      OPENCODE_DRIVE: side,
-      DRIVE_REGISTRY_DIR: registry,
-      OPENCODE_DRIVE_RENDERER: "headless",
-      TERM: "xterm-256color",
-    })
+    const client = spawn(
+      start(side, [...args, "--server", proxy.url]),
+      box,
+      log("client.stderr"),
+      log("client.stdout"),
+      {
+        ...clock,
+        OPENCODE_DRIVE: side,
+        DRIVE_REGISTRY_DIR: registry,
+        OPENCODE_DRIVE_RENDERER: "headless",
+        TERM: "xterm-256color",
+      },
+    )
     stopped.push(() => client.kill(9))
     // Both clients print the endpoint they bound, which is the kernel's port now that the manifest asks for 0.
     const driveUrl = await waitFor(
@@ -453,12 +467,12 @@ function toolNames(invocation: Invocation) {
   return (body?.tools ?? []).flatMap((tool) => (tool.function?.name ? [tool.function.name] : []))
 }
 
-function spawn(cmd: string[], box: Sandbox, stderr: string, env: Record<string, string>) {
+function spawn(cmd: string[], box: Sandbox, stderr: string, stdout: string, env: Record<string, string>) {
   const child = Bun.spawn(cmd, {
     cwd: box.cwd,
     env: { ...box.env, ...env },
     stdin: "ignore",
-    stdout: "ignore",
+    stdout: Bun.file(stdout),
     stderr: Bun.file(stderr),
   })
   children.add(child)

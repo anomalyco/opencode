@@ -66,33 +66,35 @@ test("accepts an explicit port 0, which asks the endpoint for a port of its own"
 })
 
 test("reports schema-invalid manifests as typed decode failures", async () => {
-  const error = await Effect.runPromise(
-    DriveManifest.resolve().pipe(
-      Effect.flip,
-      Effect.provide(
-        Layer.merge(
-          FileSystem.layerNoop({
-            readFileString: () =>
-              Effect.succeed(
-                JSON.stringify({
-                  endpoints: {
-                    ui: "https://example.com",
-                    backend: "ws://127.0.0.1:41050",
-                  },
-                }),
-              ),
-          }),
-          ConfigProvider.layer(
-            ConfigProvider.fromUnknown({
-              OPENCODE_DRIVE: "test-instance",
-              DRIVE_REGISTRY_DIR: "/tmp/drive",
+  for (const ui of ["https://example.com", "ws://127.0.0.1"]) {
+    const error = await Effect.runPromise(
+      DriveManifest.resolve().pipe(
+        Effect.flip,
+        Effect.provide(
+          Layer.merge(
+            FileSystem.layerNoop({
+              readFileString: () =>
+                Effect.succeed(
+                  JSON.stringify({
+                    endpoints: {
+                      ui,
+                      backend: "ws://127.0.0.1:41050",
+                    },
+                  }),
+                ),
             }),
+            ConfigProvider.layer(
+              ConfigProvider.fromUnknown({
+                OPENCODE_DRIVE: "test-instance",
+                DRIVE_REGISTRY_DIR: "/tmp/drive",
+              }),
+            ),
           ),
         ),
       ),
-    ),
-  )
+    )
 
-  expect(error).toBeInstanceOf(DriveManifest.ResolveError)
-  expect(error.reason).toBe("decode")
+    expect(error).toBeInstanceOf(DriveManifest.ResolveError)
+    expect(error.reason).toBe("decode")
+  }
 })
