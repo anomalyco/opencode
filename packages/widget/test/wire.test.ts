@@ -41,6 +41,7 @@ const __shape = (entry) =>
 const handlers = async (source: string, input: { data: unknown }) => {
   const run = async (code: string) => {
     const result = await Runtime.make({
+      typedArrays: true,
       limits: { timeoutMs: 60_000, maxValueDepth: MAX_VALUE_DEPTH },
       globals: () => ({ __input: Host.fn(() => input) }),
     }).execute(code)

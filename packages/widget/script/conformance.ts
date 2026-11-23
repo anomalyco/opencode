@@ -67,7 +67,10 @@ const data: Record<string, unknown> = {
 // The step with the prelude building the tree, as hosts of protocol 1 ran it (on `scriptedProgram`): the view, its handlers' events and its
 // canvas ids by key (from the next state's view), and the rest of the step output, all through the run's result.
 export const scripted = async (source: string, input: Input): Promise<Outcome> => {
-  const result = await Runtime.make({ limits: { timeoutMs: 10_000, maxValueDepth: MAX_VALUE_DEPTH } }).execute(
+  const result = await Runtime.make({
+    typedArrays: true,
+    limits: { timeoutMs: 10_000, maxValueDepth: MAX_VALUE_DEPTH },
+  }).execute(
     scriptedProgram(source) +
       `
       const __input_ = ${JSON.stringify(input)}

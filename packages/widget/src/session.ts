@@ -13,7 +13,7 @@ import {
 import { json, tree, unmark, ViewError } from "./tree.js"
 import { compiled } from "./compiled.js"
 import { checkDraw } from "./draw.js"
-import { located, MAX_VALUE_DEPTH, NEWER, OLDER, protocol, PROTOCOL } from "./host.js"
+import { located, MAX_VALUE_DEPTH, NEWER, OLDER, protocol, PROTOCOL, TYPED_ARRAYS } from "./host.js"
 
 /** The most a step may run; clients may pass a smaller `timeoutMs`. */
 export const TIMEOUT_MS = 250
@@ -94,6 +94,7 @@ export async function run(program: string, input: StepInput, timeoutMs: number, 
   }
   const result = await Runtime.make({
     limits: { timeoutMs, maxValueDepth: MAX_VALUE_DEPTH },
+    typedArrays: TYPED_ARRAYS,
     translate: { functions: "mark" },
     globals: () => ({ __input: Host.fn(() => input), __widget_emit: located(emit) }),
   }).execute(compiled(program + "\nreturn __widget_native_step(__input())"))

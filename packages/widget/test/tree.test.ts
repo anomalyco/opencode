@@ -67,6 +67,7 @@ function __reference_tree(root) {
 const trees = async (source: string, data: unknown) => {
   const crossed: { view?: unknown } = {}
   const result = await Runtime.make({
+    typedArrays: true,
     limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH },
     translate: { functions: "mark" },
     globals: () => ({ __cross: Host.fn(([view]) => void (crossed.view = view)) }),

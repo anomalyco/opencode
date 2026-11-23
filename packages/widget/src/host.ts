@@ -13,6 +13,9 @@ export const PROTOCOL = 2
  */
 export const MAX_VALUE_DEPTH = 202
 
+/** Widget programs have typed arrays (specs/v2/widgets.md, Prelude and step ABI): psychoscript's opt-in. */
+export const TYPED_ARRAYS = true
+
 /** Why a host refuses a program built for another contract: a program error for an older one, a client error otherwise. */
 export const OLDER = "This widget was built with an older widget runtime; ask the agent to post it again"
 export const NEWER = "This widget needs a newer version of this app"

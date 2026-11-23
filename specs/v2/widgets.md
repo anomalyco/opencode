@@ -153,6 +153,12 @@ return __widget_native_step(__input())
 
 with two global sync host functions, `__input` returning the step input and `__widget_emit` taking the view (Native
 hosts), and reruns it per step. No other globals.
+
+**Typed arrays.** Every widget run (steps, draws and live runs) has PsychoScript's typed arrays, which hosts turn on
+(`Runtime.make({ typedArrays: true })`; Rust `Runtime::typed_arrays(true)`): the globals `ArrayBuffer`, `Uint8Array`,
+`Uint16Array`, `Uint32Array`, `Int32Array`, `Float32Array` and `Float64Array`. They are for building data in a program
+and for `widget.gpu`'s writes (`widgets-gpu.md`); the run's result can't hold one, so a step whose `state`, `submit` or
+`send` holds one fails, as before.
 Limits: 250 ms timeout per step; a client may use smaller limits. (`@opencode/widget` compiles each program text once,
 with `Runtime.compile`, and keeps the 32 last used.)
 

@@ -17,7 +17,7 @@ import {
 import type { Capabilities } from "./widget-template.js"
 import { type Tree, tree, unmark, ViewError } from "./tree.js"
 import { compiled } from "./compiled.js"
-import { located, MAX_VALUE_DEPTH, NEWER, OLDER, protocol, PROTOCOL } from "./host.js"
+import { located, MAX_VALUE_DEPTH, NEWER, OLDER, protocol, PROTOCOL, TYPED_ARRAYS } from "./host.js"
 import { type GpuBatch, type GpuError, gpuChecks } from "./gpu.js"
 
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
@@ -608,6 +608,7 @@ export const LiveWidget = {
     arm()
     Runtime.make({
       limits: { maxValueDepth: MAX_VALUE_DEPTH },
+      typedArrays: TYPED_ARRAYS,
       globals: () => ({
         __input: Host.fn(() =>
           options?.gpu === false

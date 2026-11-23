@@ -12,9 +12,10 @@ import { fixtures, scriptedProgram } from "../script/conformance.js"
 
 // A step with the prelude building the tree, read as `step` reads one.
 const scripted = async (source: string, input: unknown) => {
-  const result = await Runtime.make({ limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH } }).execute(
-    scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify(input)})`,
-  )
+  const result = await Runtime.make({
+    typedArrays: true,
+    limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH },
+  }).execute(scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify(input)})`)
   if (!result.ok) return { error: result.error.message }
   const value = result.value as Record<string, unknown>
   const warnings: string[] = []
@@ -141,6 +142,7 @@ const scriptedLive = async (source: string, events: ReadonlyArray<unknown>) => {
     return message
   }
   const result = await Runtime.make({
+    typedArrays: true,
     limits: { timeoutMs: 2000, maxValueDepth: MAX_VALUE_DEPTH },
     globals: () => ({
       __input: Host.fn(() => ({ data: null })),
@@ -280,9 +282,10 @@ test("a live render with a key of another type, or deeper than 100 levels, ends 
 
 // A draw with the prelude giving its commands as the run's result, read as `draw` reads one.
 const scriptedDraw = async (source: string, input: Record<string, unknown>) => {
-  const result = await Runtime.make({ limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH } }).execute(
-    scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify({ phase: "draw", ...input })})`,
-  )
+  const result = await Runtime.make({
+    typedArrays: true,
+    limits: { timeoutMs: 5000, maxValueDepth: MAX_VALUE_DEPTH },
+  }).execute(scriptedProgram(source) + `\nreturn __widget_step(${JSON.stringify({ phase: "draw", ...input })})`)
   if (!result.ok) return { error: result.error.message }
   const checked = checkDraw(isRecord(result.value) ? result.value.commands : undefined)
   return "error" in checked ? { error: checked.error } : checked
