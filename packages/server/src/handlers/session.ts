@@ -67,9 +67,27 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.list",
         Effect.fn(function* (ctx) {
+          const startedAt = performance.now()
           return yield* session
             .list(ctx.query)
             .pipe(
+              Effect.tap((result) => {
+                const durationMs = Math.round(performance.now() - startedAt)
+                if (durationMs < 1_000) return Effect.void
+                const memory = process.memoryUsage()
+                return Effect.logWarning("slow session list", {
+                  durationMs,
+                  resultCount: result.data.length,
+                  rssBytes: memory.rss,
+                  heapUsedBytes: memory.heapUsed,
+                })
+              }),
+              Effect.tapError((error) =>
+                Effect.logError("session list failed", {
+                  durationMs: Math.round(performance.now() - startedAt),
+                  errorType: error instanceof Error ? error.name : typeof error,
+                }),
+              ),
               Effect.catchTag(
                 "Session.InvalidListCursorError",
                 (error) => new InvalidCursorError({ message: error.message }),
