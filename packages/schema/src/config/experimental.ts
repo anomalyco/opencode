@@ -19,9 +19,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   }),
   ...Record.map(ConfigFlag.registry, (description, key) =>
     Schema.Boolean.pipe(optional).annotate({
-      description: ConfigFlag.optInOnly.has(key)
-        ? description
-        : `${description} Defaults to on in local and dev builds and off in releases.`,
+      description:
+        ConfigFlag.optInOnly.has(key) || ConfigFlag.localOnly.has(key)
+          ? description
+          : `${description} Defaults to on in local and dev builds and off in releases.`,
     }),
   ),
   video_generate: Schema.Union([

@@ -7,9 +7,17 @@ import { PERSISTENT_PTY_CONNECT_PATH } from "@opencode/protocol/groups/persisten
 import { MCP_CLIENT_PATH } from "@opencode/protocol/groups/mcp"
 import { isWebSocketUpgrade, MACHINE_LINK_PATH } from "@opencode/protocol/groups/machine"
 import { PAIRING_CONNECT_PATH } from "@opencode/protocol/groups/server"
-import { Effect, Layer, Redacted } from "effect"
+import { Context, Effect, Layer, Redacted } from "effect"
 import { Base64 } from "effect/encoding"
 import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
+
+/**
+ * Set only on requests the server sends to its own router in-process, such as Code Mode `opencode://` fetches, which
+ * skip the password check. It is a context value, not a header, so nothing arriving over the network can set it.
+ */
+export const InternalRequest = Context.Reference<boolean>("@opencode/Server/InternalRequest", {
+  defaultValue: () => false,
+})
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const WWW_AUTHENTICATE = 'Basic realm="Secure Area"'
@@ -79,6 +87,7 @@ export const authorizationLayer = Layer.effect(
     if (!ServerAuth.required(config)) return Authorization.of((effect) => effect)
     return Authorization.of((effect) =>
       Effect.gen(function* () {
+        if (yield* InternalRequest) return yield* effect
         const request = yield* HttpServerRequest.HttpServerRequest
         const route = yield* HttpRouter.RouteContext
         // Ticketed PTY and client MCP connects (browsers cannot set headers on WebSocket upgrades) and pairing links

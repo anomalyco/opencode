@@ -17671,6 +17671,9 @@
               "project_overlay": {
                 "type": "boolean"
               },
+              "opencode_api": {
+                "type": "boolean"
+              },
               "sqlite_fts": {
                 "type": "boolean"
               },
