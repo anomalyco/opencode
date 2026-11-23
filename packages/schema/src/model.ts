@@ -50,9 +50,9 @@ export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
 /** What a model produces, from models.dev. Open-ended: new types keep being added. Only chat models are offered for sessions; an unset type means chat. */
-export type Type = "chat" | "decision" | "image" | "video" | (string & {})
+export type Type = "chat" | "decision" | "image" | "video" | "realtime" | (string & {})
 export const Type: Schema.Codec<Type> = Schema.Union([
-  Schema.Literals(["chat", "decision", "image", "video"]),
+  Schema.Literals(["chat", "decision", "image", "video", "realtime"]),
   Schema.String,
 ]).annotate({ identifier: "Model.Type" })
 

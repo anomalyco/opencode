@@ -499,7 +499,8 @@ export const OpencodePlugin = define<
       )
       if (hasKey) return
       for (const model of models.list(item.provider.id)) {
-        if (!model.cost.some((cost) => cost.input > 0)) continue
+        // Voice models are billed per minute, so having no token price doesn't make them free.
+        if (model.type !== "realtime" && !model.cost.some((cost) => cost.input > 0)) continue
         models.update(item.provider.id, model.id, (draft) => {
           draft.enabled = false
         })

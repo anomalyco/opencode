@@ -8,8 +8,6 @@ export const VoiceTransportType = Schema.Literals(["webrtc", "websocket"]).annot
 
 export const VoiceModel = Schema.Struct({
   model: Schema.String,
-  name: Schema.String,
-  engine: Schema.String,
   provider: Schema.String,
   transports: Schema.Array(VoiceTransportType),
   available: Schema.Boolean,

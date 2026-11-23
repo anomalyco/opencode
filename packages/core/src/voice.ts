@@ -15,12 +15,10 @@ import { Context, Effect, Layer, Redacted, Schema } from "effect"
 import { Credential } from "./credential.js"
 import { requestExecutor } from "./effect/app-node-platform.js"
 import { Integration } from "./integration.js"
-import { ModelsDev } from "./models-dev.js"
+import { Model } from "./model.js"
 
 export interface ModelInfo {
   readonly model: string
-  readonly name: string
-  readonly engine: string
   readonly provider: string
   readonly transports: readonly RealtimeTransportType[]
   readonly available: boolean
@@ -60,7 +58,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
     const integrations = yield* Integration.Service
-    const modelsDev = yield* ModelsDev.Service
+    const catalog = yield* Model.Service
 
     // Integration lists the active credential first, then newer stored credentials, then non-empty env vars.
     const findConnection = (provider: string, methods: readonly string[] = ["key"]) =>
@@ -70,67 +68,49 @@ export const layer = Layer.effect(
           Effect.map((info) => info?.connections.find((item) => item.type === "env" || methods.includes(item.method))),
         )
 
-    // Where an engine's sessions start: its provider with the server's key or, for GPT-Live without an OpenAI key,
-    // OpenCode's hosted GPT-Live with the server's OpenCode Console connection, whose sign-in works as well as a key.
-    const source = Effect.fnUntraced(function* (engine: RealtimeEngine) {
-      const connection = yield* findConnection(engine.provider)
-      if (connection) return { provider: engine.provider, connection }
-      if (engine.id !== "openai-live") return undefined
-      const hosted = yield* findConnection(openCodeLive.provider, ["key", "oauth"])
-      return hosted && { provider: openCodeLive.provider, connection: hosted }
-    })
-
-    // Each engine's models.dev voice models from the provider that would start them, newest first.
+    // Each engine's listed voice models, newest first: from its own provider when connected, else GPT-Live from
+    // OpenCode's hosted endpoint with the server's OpenCode Console connection.
     const offered = Effect.fnUntraced(function* () {
-      const catalog = yield* modelsDev.get()
-      const lists = yield* Effect.forEach(Realtime.engines, (engine) =>
-        source(engine).pipe(
-          Effect.map((found) => {
-            const provider = found?.provider ?? engine.provider
-            return (catalog.find((item) => item.info.id === provider)?.voices ?? [])
-              .filter((voice) => voice.api === engine.api)
-              .toSorted((a, b) => b.releaseDate.localeCompare(a.releaseDate))
-              .map((voice) => ({
-                engine,
-                found,
-                info: {
-                  model: voice.id,
-                  name: voice.name,
-                  engine: engine.id,
-                  provider,
-                  transports: engine.transports,
-                  available: found !== undefined,
-                },
-              }))
-          }),
-        ),
-      )
-      return lists.flat()
+      const listed = yield* catalog.available(["realtime"])
+      const result: { engine: RealtimeEngine; model: Model.Info }[] = []
+      for (const engine of Realtime.engines) {
+        const matching = listed.filter((model) => model.package === engine.id)
+        const own = matching.filter((model) => model.providerID === engine.provider)
+        for (const model of own.length > 0 ? own : matching) result.push({ engine, model })
+      }
+      return result
     })
 
     const models = Effect.fn("Voice.models")(function* () {
-      const list = (yield* offered()).map((item) => item.info)
-      const first = list.find((item) => item.available)?.model
+      const list = (yield* offered()).map((item) => ({
+        model: item.model.id,
+        provider: item.model.providerID,
+        transports: item.engine.transports,
+        available: true,
+      }))
+      const first = list[0]?.model
       return first ? { models: list, default: first } : { models: list }
     })
 
     const session = Effect.fn("Voice.session")(function* (input: SessionInput) {
       const list = yield* offered()
-      const offer = list.find((item) => item.info.model === input.model)
+      const offer = list.find((item) => item.model.id === input.model)
       if (!offer)
         return yield* new InvalidRequestError({
-          message: `Unsupported voice model: ${input.model}. This server lists ${list.map((item) => item.info.model).join(", ") || "none"}.`,
+          message: `Unsupported voice model: ${input.model}. This server lists ${list.map((item) => item.model.id).join(", ") || "none"}.`,
         })
 
       const engine = offer.engine
-      const found = offer.found
-      const credential = found
+      const provider = offer.model.providerID
+      // An OpenCode Console sign-in works as well as a key; a ChatGPT sign-in can't start voice sessions.
+      const connection = yield* findConnection(provider, provider === openCodeLive.provider ? ["key", "oauth"] : ["key"])
+      const credential = connection
         ? yield* integrations.connection
-            .resolve(found.connection)
-            .pipe(Effect.mapError((error) => new UnavailableError({ service: found.provider, message: error.message })))
+            .resolve(connection)
+            .pipe(Effect.mapError((error) => new UnavailableError({ service: provider, message: error.message })))
         : undefined
-      const access = found && credential && sessionAccess(found.provider, credential)
-      if (found === undefined || access === undefined)
+      const access = credential && sessionAccess(provider, credential)
+      if (access === undefined)
         return yield* new UnavailableError({
           service: engine.provider,
           message: engine.id === "openai-live" ? missingLiveKeyMessage : missingKeyMessage[engine.provider],
@@ -148,7 +128,7 @@ export const layer = Layer.effect(
           (error: AIError): Error =>
             error.reason._tag === "InvalidRequest" || error.reason._tag === "UnsupportedOperation"
               ? new InvalidRequestError({ message: error.message })
-              : new UnavailableError({ message: error.message, service: found.provider }),
+              : new UnavailableError({ message: error.message, service: provider }),
         ),
       )
     })
@@ -160,7 +140,7 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Integration.node, ModelsDev.node, requestExecutor],
+  deps: [Integration.node, Model.node, requestExecutor],
 })
 
 /** OpenCode hosts GPT-Live on its OpenAI account, billed to the workspace whose credential starts a session. */

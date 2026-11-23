@@ -576,7 +576,7 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.effect("keeps realtime models that answer in speech and call tools as voice models, not chat models", () =>
+  it.effect("keeps realtime models that answer in speech and call tools, with their voice engine as package", () =>
     Effect.gen(function* () {
       const realtime = (id: string, input: Record<string, unknown> = {}) =>
         sourceModel(id, {
@@ -586,13 +586,15 @@ describe("ModelsDev Service", () => {
           api: { live: { base_url: "https://api.acme.test/v1", sdk: { opencodeai: "none" } } },
           ...input,
         })
-      const [acme] = yield* ModelsDev.decodeSnapshot(
+      const [openai] = yield* ModelsDev.decodeSnapshot(
         JSON.stringify({
-          acme: {
+          openai: {
             ...fixture.acme,
+            id: "openai",
             models: {
               chat: sourceModel("chat"),
-              voice: realtime("voice", { name: "Voice 1" }),
+              voice: realtime("voice"),
+              unknown: realtime("unknown", { api: { sessions: { base_url: "https://api.acme.test/v1" } } }),
               translate: realtime("translate", { capabilities: { tools: { supported: false } } }),
               streaming: realtime("streaming", { modalities: { input: ["audio/pcm"], output: ["text"] } }),
               retired: realtime("retired", { status: "deprecated" }),
@@ -600,8 +602,10 @@ describe("ModelsDev Service", () => {
           },
         }),
       )
-      expect(acme?.models.map((item) => item.id)).toEqual([Model.ID.make("chat")])
-      expect(acme?.voices).toEqual([{ id: "voice", name: "Voice 1", api: "live", releaseDate: "2026-09-10" }])
+      expect(openai?.models.map((item) => [item.id, item.type, item.package ?? openai.info.package])).toEqual([
+        [Model.ID.make("chat"), "chat", "@opencode/ai/providers/openai-compatible"],
+        [Model.ID.make("voice"), "realtime", "openai-live"],
+      ])
     }),
   )
 

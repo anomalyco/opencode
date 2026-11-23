@@ -178,7 +178,7 @@ export type SessionMessageToolStateRunning1 = {
   metadata: { [x: string]: JsonValue }
 }
 
-export type ModelType = "chat" | "decision" | "image" | "video" | (string & {})
+export type ModelType = "chat" | "decision" | "image" | "video" | "realtime" | (string & {})
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
@@ -768,14 +768,7 @@ export type GenerateChoiceAnswer = {
   confidence: number
 }
 
-export type VoiceModel = {
-  model: string
-  name: string
-  engine: string
-  provider: string
-  transports: Array<VoiceTransportType>
-  available: boolean
-}
+export type VoiceModel = { model: string; provider: string; transports: Array<VoiceTransportType>; available: boolean }
 
 export type VoiceTransport = VoiceWebRTCTransport | VoiceWebSocketTransport
 
@@ -4081,7 +4074,7 @@ export type MessageListOutput = SessionMessagesResponse
 
 export type ModelListInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | "video" | (string & {})> | undefined
+  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | "video" | "realtime" | (string & {})> | undefined
 }
 
 export type ModelListOutput = { location: LocationPublicRef; data: Array<ModelInfo> }

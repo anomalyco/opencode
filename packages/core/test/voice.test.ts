@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { RequestExecutor } from "@opencode/ai/route"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
-import { ModelsDev } from "@opencode/core/models-dev"
+import { ID, Info, Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Voice } from "@opencode/core/voice"
 import { Effect, Layer } from "effect"
@@ -47,33 +47,27 @@ const resolveCredential: Integration.Interface["connection"]["resolve"] = (conne
 
 const unused = () => Effect.die("unused")
 
-const voice = (id: string, name: string, api: string, releaseDate: string) => ({ id, name, api, releaseDate })
+// A realtime catalog model whose package names the voice engine that speaks to it.
+const voice = (provider: string, id: string, engine: string) =>
+  Info.make({ ...Info.default(Provider.ID.make(provider), ID.make(id)), type: "realtime", package: engine })
 
-const modelsDev = Layer.mock(ModelsDev.Service, {
-  get: () =>
-    Effect.succeed(
-      Object.entries({
-        openai: [
-          voice("gpt-live-1", "GPT-Live 1", "live", "2026-09-10"),
-          voice("gpt-realtime-2.1", "GPT-Realtime-2.1", "realtime", "2026-07-06"),
-          voice("gpt-live-1.1", "GPT-Live 1.1", "live", "2026-11-19"),
-        ],
-        xai: [voice("grok-voice-3.0", "Grok Voice 3.0", "realtime", "2026-10-14")],
-        google: [voice("gemini-3.8-live", "Gemini 3.8 Live", "bidi-generate-content", "2026-09-15")],
-        opencode: [voice("gpt-live-1", "GPT-Live 1", "live", "2026-09-10")],
-      }).map(([id, voices]) => ({
-        info: {
-          id: Provider.ID.make(id),
-          name: id,
-          activation: "auto" as const,
-          package: "@opencode/ai/providers/openai",
-        },
-        models: [],
-        voices,
-        environment: [],
-      })),
-    ),
-})
+// What Model lists with every provider connected, newest first.
+const everything = [
+  voice("openai", "gpt-live-1.1", "openai-live"),
+  voice("xai", "grok-voice-3.0", "xai-realtime"),
+  voice("google", "gemini-3.8-live", "gemini-live"),
+  voice("openai", "gpt-live-1", "openai-live"),
+  voice("opencode", "gpt-live-1", "openai-live"),
+  voice("openai", "gpt-realtime-2.1", "openai-realtime"),
+]
+
+// Without an OpenAI key, OpenAI's GPT-Live models aren't listed, but OpenCode's are with a Console connection.
+const hosted = everything.filter((model) => model.providerID !== "openai" || model.package !== "openai-live")
+
+const catalog = (listed: readonly Model.Info[]) =>
+  Layer.mock(Model.Service, {
+    available: (types) => Effect.succeed(types?.includes("realtime") ? listed : []),
+  })
 
 const mockIntegration = (
   connections: (id: Integration.ID) => Integration.Info["connections"],
@@ -101,6 +95,7 @@ const start = (
   model: string,
   connections: Partial<Record<string, Integration.Info["connections"]>>,
   requests: HttpClientRequest.HttpClientRequest[],
+  listed: readonly Model.Info[] = everything,
 ) =>
   Effect.flatMap(Voice.Service, (voice) =>
     voice.session({
@@ -115,7 +110,7 @@ const start = (
       Voice.layer.pipe(
         Layer.provide(
           Layer.mergeAll(
-            modelsDev,
+            catalog(listed),
             mockIntegration((id) => connections[id] ?? [], resolveCredential),
             RequestExecutor.layer.pipe(
               Layer.provide(
@@ -190,8 +185,8 @@ it.effect(
       const requests: HttpClientRequest.HttpClientRequest[] = []
       const opencode = { opencode: [credential("console", "oauth")] }
 
-      yield* start("gpt-live-1", { openai: [credential("chatgpt", "oauth")], ...opencode }, requests)
-      yield* start("gpt-live-1", { opencode: [{ type: "env", name: "OPENCODE_API_KEY" }] }, requests)
+      yield* start("gpt-live-1", { openai: [credential("chatgpt", "oauth")], ...opencode }, requests, hosted)
+      yield* start("gpt-live-1", { opencode: [{ type: "env", name: "OPENCODE_API_KEY" }] }, requests, hosted)
       yield* start("gpt-live-1", { openai: [credential("active", "key")], ...opencode }, requests)
       expect(
         requests.map((req): (string | undefined)[] => [
@@ -205,10 +200,10 @@ it.effect(
         ["https://api.openai.com/v1/live/sessions", "Bearer sk-active", undefined],
       ])
 
-      const realtime = yield* start("gpt-realtime-2.1", opencode, requests).pipe(Effect.flip)
+      const realtime = yield* start("gpt-realtime-2.1", opencode, requests, hosted).pipe(Effect.flip)
       expect(realtime).toMatchObject({ _tag: "Voice.UnavailableError", service: "openai" })
 
-      const unlisted = yield* start("gpt-live-1.1", opencode, requests).pipe(Effect.flip)
+      const unlisted = yield* start("gpt-live-1.1", opencode, requests, hosted).pipe(Effect.flip)
       expect(unlisted).toMatchObject({ _tag: "Voice.InvalidRequestError" })
       expect(unlisted.message).toBe(
         "Unsupported voice model: gpt-live-1.1. This server lists gpt-live-1, gpt-realtime-2.1, grok-voice-3.0, gemini-3.8-live.",
@@ -217,116 +212,39 @@ it.effect(
     }),
 )
 
-it.effect("lists voice models with availability and default without resolving credentials", () =>
+it.effect("lists the catalog's voice models with their transports, preferring a provider's own GPT-Live", () =>
   Effect.gen(function* () {
-    const list = (connections: Partial<Record<string, Integration.Info["connections"]>>) =>
+    const list = (listed: readonly Model.Info[]) =>
       Effect.flatMap(Voice.Service, (voice) => voice.models()).pipe(
         Effect.provide(
           Voice.layer.pipe(
             Layer.provide(
-              Layer.mergeAll(
-                modelsDev,
-                mockIntegration((id) => connections[id] ?? []),
-                Layer.mock(RequestExecutor.Service, {}),
-              ),
+              Layer.mergeAll(catalog(listed), mockIntegration(() => []), Layer.mock(RequestExecutor.Service, {})),
             ),
           ),
         ),
       )
 
-    // Each model's provider and availability, and the default, for one set of connections.
-    const summary = (connections: Partial<Record<string, Integration.Info["connections"]>>) =>
-      list(connections).pipe(
-        Effect.map((result) => ({
-          models: result.models.map((item) => [item.model, item.provider, item.available]),
-          default: result.default,
-        })),
-      )
-
-    expect(yield* list({ openai: [credential("active", "key")] })).toEqual({
+    expect(yield* list(everything)).toEqual({
       models: [
-        {
-          model: "gpt-live-1.1",
-          name: "GPT-Live 1.1",
-          engine: "openai-live",
-          provider: "openai",
-          transports: ["webrtc"],
-          available: true,
-        },
-        {
-          model: "gpt-live-1",
-          name: "GPT-Live 1",
-          engine: "openai-live",
-          provider: "openai",
-          transports: ["webrtc"],
-          available: true,
-        },
-        {
-          model: "gpt-realtime-2.1",
-          name: "GPT-Realtime-2.1",
-          engine: "openai-realtime",
-          provider: "openai",
-          transports: ["webrtc", "websocket"],
-          available: true,
-        },
-        {
-          model: "grok-voice-3.0",
-          name: "Grok Voice 3.0",
-          engine: "xai-realtime",
-          provider: "xai",
-          transports: ["websocket"],
-          available: false,
-        },
-        {
-          model: "gemini-3.8-live",
-          name: "Gemini 3.8 Live",
-          engine: "gemini-live",
-          provider: "google",
-          transports: ["websocket"],
-          available: false,
-        },
+        { model: "gpt-live-1.1", provider: "openai", transports: ["webrtc"], available: true },
+        { model: "gpt-live-1", provider: "openai", transports: ["webrtc"], available: true },
+        { model: "gpt-realtime-2.1", provider: "openai", transports: ["webrtc", "websocket"], available: true },
+        { model: "grok-voice-3.0", provider: "xai", transports: ["websocket"], available: true },
+        { model: "gemini-3.8-live", provider: "google", transports: ["websocket"], available: true },
       ],
       default: "gpt-live-1.1",
     })
 
-    expect(
-      yield* summary({
-        openai: [credential("chatgpt", "oauth")],
-        xai: [{ type: "env", name: "XAI_API_KEY" }],
-        google: [credential("gemini", "key")],
-      }),
-    ).toEqual({
-      models: [
-        ["gpt-live-1.1", "openai", false],
-        ["gpt-live-1", "openai", false],
-        ["gpt-realtime-2.1", "openai", false],
-        ["grok-voice-3.0", "xai", true],
-        ["gemini-3.8-live", "google", true],
-      ],
-      default: "grok-voice-3.0",
-    })
+    const opencode = yield* list(hosted)
+    expect(opencode.models.map((item) => [item.model, item.provider])).toEqual([
+      ["gpt-live-1", "opencode"],
+      ["gpt-realtime-2.1", "openai"],
+      ["grok-voice-3.0", "xai"],
+      ["gemini-3.8-live", "google"],
+    ])
+    expect(opencode.default).toBe("gpt-live-1")
 
-    expect(
-      yield* summary({ openai: [credential("chatgpt", "oauth")], opencode: [credential("console", "oauth")] }),
-    ).toEqual({
-      models: [
-        ["gpt-live-1", "opencode", true],
-        ["gpt-realtime-2.1", "openai", false],
-        ["grok-voice-3.0", "xai", false],
-        ["gemini-3.8-live", "google", false],
-      ],
-      default: "gpt-live-1",
-    })
-
-    expect(yield* summary({ openai: [credential("chatgpt", "oauth")] })).toEqual({
-      models: [
-        ["gpt-live-1.1", "openai", false],
-        ["gpt-live-1", "openai", false],
-        ["gpt-realtime-2.1", "openai", false],
-        ["grok-voice-3.0", "xai", false],
-        ["gemini-3.8-live", "google", false],
-      ],
-      default: undefined,
-    })
+    expect(yield* list([])).toEqual({ models: [] })
   }),
 )
