@@ -1,10 +1,11 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer, Option, PlatformError, Stream } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Option, PlatformError, Stream } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FileSystem } from "@opencode/core/filesystem"
+import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Workspace } from "@opencode/core/workspace"
@@ -14,7 +15,7 @@ import { it } from "./lib/effect"
 
 const provide = (directory: string, workspaceID?: Workspace.ID) =>
   Effect.provide(
-    LayerNode.compile(FileSystem.node, {
+    LayerNode.compile(LayerNode.group([FileSystem.node, Bus.node]), {
       replacements: [
         Location.node.replace(
           Layer.succeed(
@@ -61,6 +62,26 @@ describe("FileSystem", () => {
           { path: RelativePath.make("src" + path.sep), type: "directory" },
           { path: RelativePath.make("README.md"), type: "file" },
         ])
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("listing a non-git directory reports subsequent entry changes", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const filesystem = yield* FileSystem.Service
+        const bus = yield* Bus.Service
+        const changed = yield* bus.subscribe(FileSystem.Event.Changed).pipe(
+          Stream.filter((event) => event.data.file === directory),
+          Stream.take(1),
+          Stream.runCollect,
+          Effect.forkScoped({ startImmediately: true }),
+        )
+        yield* filesystem.list()
+        yield* Effect.promise(() => fs.mkdir(path.join(directory, "created")))
+        const events = yield* Fiber.join(changed).pipe(Effect.timeout("5 seconds"))
+        expect(events.map((event) => event.data)).toEqual([{ file: directory, event: "change" }])
+        expect((yield* filesystem.list()).map((entry) => entry.path)).toEqual([RelativePath.make("created" + path.sep)])
       }).pipe(provide(directory)),
     ),
   )

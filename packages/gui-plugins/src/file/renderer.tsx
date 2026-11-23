@@ -265,7 +265,8 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     layout.open(key(screen.file, path), session, options)
 
     if (options?.tab !== "append") dispatchPicker({ type: "file.opened", sessionKey: session.key })
-    void screen.file.sync(path)
+    // Closed tabs are unwatched, so their cached content may have changed before reopening.
+    void screen.file.sync(path, { force: true })
   }
 
   // The file tab an agent's show request put in front of the person (`arrival-guard-machine.ts`).

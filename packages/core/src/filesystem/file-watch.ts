@@ -33,8 +33,10 @@ export class DisabledError extends Schema.TaggedError<DisabledError>()("FileWatc
 
 export type Input = {
   readonly location: Location.Ref
-  /** Absolute path of the file to watch. */
+  /** Absolute path of the file or directory to watch. */
   readonly file: string
+  /** Watch a directory's immediate entries rather than one file. Defaults to "file". */
+  readonly type?: "file" | "children"
 }
 
 export interface Interface {
@@ -87,8 +89,8 @@ export const layer = (options?: Options) =>
       const start = Effect.fnUntraced(function* (key: string, input: Input) {
         const child = yield* Scope.fork(scope)
         yield* Effect.gen(function* () {
-          const updates = yield* watcher.subscribe({ path: input.file, type: "file" })
-          yield* Stream.runForEach(updates, () =>
+          const updates = yield* watcher.subscribe({ path: input.file, type: input.type ?? "file" })
+          yield* Stream.runForEachWhile(updates, () =>
             Effect.gen(function* () {
               const exists = yield* fs.existsSafe(input.file)
               yield* bus.publish(
@@ -96,6 +98,8 @@ export const layer = (options?: Options) =>
                 { file: input.file, event: exists ? "change" : "unlink" },
                 { location: input.location },
               )
+              // A removed directory's native watch follows the old inode. A later listing must arm a new one.
+              return input.type !== "children" || exists
             }),
           )
         }).pipe(

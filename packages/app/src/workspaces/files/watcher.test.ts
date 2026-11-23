@@ -12,6 +12,20 @@ const filesystemEvent = (file: string, event: FilesystemEvent["data"]["event"]):
 })
 
 describe("file watcher invalidation", () => {
+  test("refreshes the loaded workspace root when its entries change", () => {
+    const refresh: string[] = []
+    invalidateFromWatcher(filesystemEvent("/repo", "change"), {
+      normalize: () => "",
+      hasFile: () => false,
+      loadFile: () => {},
+      node: () => undefined,
+      isDirLoaded: (path) => path === "",
+      refreshDir: (path) => refresh.push(path),
+    })
+
+    expect(refresh).toEqual([""])
+  })
+
   test("reloads open files and refreshes loaded parent on add", () => {
     const loads: string[] = []
     const refresh: string[] = []

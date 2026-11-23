@@ -33,6 +33,29 @@ const subscriptions = Effect.gen(function* () {
 })
 
 describe("FileWatch", () => {
+  it.live("invalidates a browsed directory for new, renamed, and deleted immediate entries", () =>
+    Effect.gen(function* () {
+      const fileWatch = yield* FileWatch.Service
+      const test = yield* Watcher.Test
+      const bus = yield* Bus.Service
+      const tmp = yield* tmpdirScoped()
+      const input = { location: { directory: AbsolutePath.make(tmp.path) }, file: tmp.path, type: "children" } as const
+      const events = yield* bus
+        .subscribe(FileSystem.Event.Changed)
+        .pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      yield* fileWatch.watch(input)
+      yield* fileWatch.watch(input)
+      expect(yield* test.subscriptions()).toEqual([{ path: tmp.path, type: "children" }])
+      yield* test.emit({ path: path.join(tmp.path, "new.txt"), type: "create" })
+      yield* test.emit({ path: path.join(tmp.path, "renamed.txt"), type: "create" })
+      yield* test.emit({ path: path.join(tmp.path, "new.txt"), type: "delete" })
+      const received = yield* Fiber.join(events)
+      expect(received.map((event) => ({ directory: event.location?.directory, ...event.data }))).toEqual(
+        Array.from({ length: 3 }, () => ({ directory: input.location.directory, file: tmp.path, event: "change" })),
+      )
+    }),
+  )
+
   it.effect("shares one watch per file and resubscribes after unwatch", () =>
     Effect.gen(function* () {
       const fileWatch = yield* FileWatch.Service

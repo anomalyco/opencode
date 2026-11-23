@@ -16,7 +16,12 @@ type WatcherOps = {
 export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   const path = ops.normalize(event.data.file)
 
-  if (!path) return
+  if (!path) {
+    // The normalized workspace root is "", and has no node in the tree.
+    if (event.data.event === "change" && ops.isDirLoaded(path)) ops.refreshDir(path)
+
+    return
+  }
 
   if (path.startsWith(".git/") || path.startsWith(".git\\")) return
 

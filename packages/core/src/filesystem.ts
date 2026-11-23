@@ -8,6 +8,7 @@ import { Environment } from "./environment/index.js"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
 import { FileSystemSearch } from "./filesystem/search.js"
+import { FileWatch } from "./filesystem/file-watch.js"
 import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
@@ -113,6 +114,7 @@ const baseLayer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const search = yield* FileSystemSearch.Service
+    const fileWatch = yield* FileWatch.Service
     // Directories outside the server host do not live on the host filesystem,
     // so a host realpath probe at boot would consult the wrong filesystem and
     // block construction when no matching local directory exists. Treat the
@@ -180,6 +182,15 @@ const baseLayer = Layer.effect(
           ),
         )
         if (info.type !== "Directory") return yield* missing
+        // Watch only browsed directories, not a recursive workspace tree (which may be the user's home).
+        // Arm before reading so a change during the listing can invalidate that snapshot.
+        yield* fileWatch
+          .watch({
+            location: { directory: location.directory, workspaceID: location.workspaceID },
+            file: directory,
+            type: "children",
+          })
+          .pipe(Effect.catchTag("FileWatch.DisabledError", () => Effect.void))
         return yield* fs.readDirectoryEntries(directory).pipe(
           Effect.orDie,
           Effect.map((items) =>
@@ -214,5 +225,5 @@ const baseLayer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer: baseLayer,
-  deps: [Environment.node, FSUtil.node, Location.node, FileSystemSearch.node],
+  deps: [Environment.node, FSUtil.node, Location.node, FileSystemSearch.node, FileWatch.node],
 })
