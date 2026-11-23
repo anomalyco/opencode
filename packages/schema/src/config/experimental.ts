@@ -36,7 +36,7 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     .pipe(optional)
     .annotate({
       description:
-        "Settings for the experimental_video_generate tool, which is offered while a connected provider has a video model. Set false to turn it off.",
+        "Settings for the experimental_video_generate tool, which is offered while a connected provider has a video model.",
     }),
   part_rows: Schema.Boolean.pipe(optional).annotate({
     description:
