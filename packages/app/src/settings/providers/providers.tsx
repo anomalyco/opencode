@@ -232,10 +232,12 @@ export const SettingsProviders: Component<{
     // key, including one imported from a v1 auth.json, makes Zen "connected" without any account, so
     // the Popular list keeps the sign-in row until the active credential is an OAuth grant. Until the
     // integration list arrives the row is still the models.dev Zen provider, so dedupe it as before.
+    // OpenCode Go connects through OpenCode, so it's never offered here: a saved Go key lists it as connected.
     const account = integrations.list().find((entry) => entry.id === CONSOLE_INTEGRATION)
 
     const items = providers
       .popular()
+      .filter((p) => p.id !== "opencode-go")
       .filter((p) => {
         if (p.id !== CONSOLE_INTEGRATION || !account) return !connectedIDs.has(p.id)
 
@@ -640,7 +642,7 @@ export const SettingsProviders: Component<{
                     <div class="settings-provider-copy">
                       <div class="settings-provider-main">
                         <span class="settings-provider-name">{item.name}</span>
-                        <Show when={item.id === "opencode" || item.id === "opencode-go"}>
+                        <Show when={item.id === "opencode"}>
                           <Badge>{language.t("dialog.provider.tag.recommended")}</Badge>
                         </Show>
                       </div>
