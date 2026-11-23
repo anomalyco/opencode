@@ -147,8 +147,9 @@ fn slash_lists_commands_and_enter_runs_one_without_arguments() {
     assert!(setup.requests("POST", "/prompt").is_empty());
 }
 
-/// Commands absent from this fixture's session route.
-const SLASH_ELSEWHERE: &[&str] = &["restart", "update", "highlights", "redo", "terminal"];
+/// Commands absent from this fixture's session route. `/speed` needs a model with other speeds
+/// (`models::a_speed_switches_the_model_and_shows_beside_its_name`).
+const SLASH_ELSEWHERE: &[&str] = &["restart", "update", "highlights", "redo", "terminal", "speed"];
 
 // Compare registered slash names and aliases with their declarations in the reference client.
 #[test]

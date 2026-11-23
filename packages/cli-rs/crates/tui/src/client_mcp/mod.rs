@@ -183,16 +183,17 @@ fn terminal_for(tui: &Tui, called_by: Option<String>, done: impl FnOnce(&Tui, Re
         if !tui.terminals.available() {
             return done(tui, Err(ToolResult::error("This server does not support terminals")));
         }
-        let (root, routed_root) = tui.data.read(|state| {
-            let routed = match tui.route() {
-                Route::Session { id } => Some((id.clone(), state.root(&id))),
+        let (root, routed) = tui.data.read(|state| {
+            let root = state.root(&called_by);
+            let routed = match &*tui.route() {
+                Route::Session { id } if state.root(id) == root => Some(id.clone()),
                 _ => None,
             };
-            (state.root(&called_by), routed)
+            (SessionID::from(root), routed)
         });
         // Terminal panes render for the routed session; tabs hold root sessions, which become routed when selected.
-        let target = match routed_root {
-            Some((routed, routed_root)) if routed_root == root => Some(routed),
+        let target = match routed {
+            Some(routed) => Some(routed),
             _ if crate::tabs::Tabs::enabled(tui) && tui.tabs.open_ids(tui).contains(&root.0) => Some(root),
             _ => None,
         };

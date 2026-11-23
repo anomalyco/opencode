@@ -401,7 +401,9 @@ describe("Automation", () => {
       expect((yield* automations.list({ projectID: (yield* creator).projectID })).map((item) => item.id)).toEqual([
         automation.id,
       ])
-      expect((yield* automations.list({ sessionID: otherID })).map((item) => item.id)).toEqual([])
+      expect(yield* Effect.flip(automations.list({ sessionID: otherID }))).toMatchObject({
+        _tag: "Session.NotFoundError",
+      })
 
       expect((yield* automations.pause(automation.id)).status).toBe("paused")
       yield* TestClock.adjust("150 seconds")
@@ -877,6 +879,36 @@ describe("Automation", () => {
     }),
   )
 
+  it.effect("hides and refuses automations while their location has automations off", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup(toggleDirectory)
+      toggle.on = true
+      const { id } = yield* automations.create({
+        sessionID,
+        name: "poll",
+        trigger: every("1 minute"),
+        action: prompt("poll"),
+      })
+      expect((yield* automations.list({ directory: toggleDirectory })).map((item) => item.id)).toEqual([id])
+      expect(yield* Effect.flip(automations.list({ directory: "relative" }))).toMatchObject({
+        _tag: "Automation.InvalidError",
+      })
+
+      toggle.on = false
+      expect(yield* automations.list()).toEqual([])
+      expect(yield* Effect.flip(automations.list({ directory: toggleDirectory }))).toMatchObject({
+        _tag: "Automation.DisabledError",
+      })
+      expect(yield* Effect.flip(automations.list({ sessionID }))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* Effect.flip(automations.pause(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* Effect.flip(automations.remove(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+
+      toggle.on = true
+      yield* automations.remove(id)
+      expect(yield* automations.list()).toEqual([])
+    }),
+  )
+
   it.effect("rechecks hourly while automations are disabled in its location, then catches up when enabled", () =>
     Effect.gen(function* () {
       const automations = yield* setup(toggleDirectory)
@@ -891,7 +923,13 @@ describe("Automation", () => {
       const before = toggle.reads
       yield* TestClock.adjust("1 minute")
       yield* automations.tick
-      expect(yield* automations.get(id)).toMatchObject({ status: "active", runCount: 0, lastOutcome: "disabled" })
+      // Callers can't read an automation while its location has automations off, so read the row.
+      const { db } = yield* Database.Service
+      expect(
+        yield* db.select().from(AutomationTable).where(eq(AutomationTable.id, id)).get().pipe(Effect.orDie),
+      ).toMatchObject({ status: "active", run_count: 0, last_outcome: "disabled" })
+      expect(yield* Effect.flip(automations.get(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* automations.list()).toEqual([])
       expect(yield* pendingIDs).toEqual([])
       const reads = toggle.reads
       expect(reads).toBeGreaterThan(before)

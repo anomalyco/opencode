@@ -150,13 +150,17 @@ const layer = Layer.effect(
           absolute: AbsolutePath.make(resolvePath(from.absolute, text)),
           environment: { id },
         } satisfies Environment.Place
-      // A machine's paths use POSIX rules rather than this server's, and `~` there is that machine's home, never this
-      // server's. Only `~` and `~/` are read: another user's home or a shell's `~+` is not known here. With the flag
-      // off no home is asked for, so a base on another machine refuses every `~`.
+      // Another environment's paths follow its own path rules (falling back to POSIX when unknown), and `~` there is
+      // that machine's home, never this server's. Only `~` and `~/` are read: another user's home or a shell's `~+` is
+      // not known here. With the flag off no home is asked for, so a base on another machine refuses every `~`.
+      const target = enabled
+        ? yield* machines.get(id).pipe(Effect.catchTag("Machines.NotFound", () => Effect.undefined))
+        : undefined
+      const rules = target ? (target.path ?? path) : path.posix
       const written = machine?.path ?? text
       const rooted =
         enabled && (written === "~" || written.startsWith("~/"))
-          ? path.posix.join(
+          ? rules.join(
               yield* machines.home(id).pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause }))),
               written.slice(1),
             )
@@ -164,7 +168,7 @@ const layer = Layer.effect(
       if (rooted.startsWith("~"))
         return yield* new Environment.Failed({ path: text, cause: new MachinePath.NotAbsolute({ machine: id }) })
       return {
-        absolute: AbsolutePath.make(base ? path.posix.resolve(base.absolute, rooted) : path.posix.normalize(rooted)),
+        absolute: AbsolutePath.make(base ? rules.resolve(base.absolute, rooted) : rules.normalize(rooted)),
         environment: { id },
       } satisfies Environment.Place
     })
@@ -219,13 +223,14 @@ const layer = Layer.effect(
       const machineEnvironment = yield* machines
         .get(place.environment.id)
         .pipe(Effect.mapError((cause) => new Environment.Failed({ path: place.absolute, cause })))
+      const rules = machineEnvironment.path ?? path
       const type =
         kind ??
         (yield* Environment.typeFollowing(machineEnvironment.files, place.absolute).pipe(
           Effect.catchTag("Environment.NotFound", () => Effect.undefined),
         ))
-      const directory = AbsolutePath.make(type === "directory" ? place.absolute : path.posix.dirname(place.absolute))
-      const contents = MachinePath.format(place.environment.id, path.posix.join(directory, "*"))
+      const directory = AbsolutePath.make(type === "directory" ? place.absolute : rules.dirname(place.absolute))
+      const contents = MachinePath.format(place.environment.id, rules.join(directory, "*"))
       return {
         absolute: place.absolute,
         resource: MachinePath.format(place.environment.id, place.absolute),
@@ -256,18 +261,19 @@ const layer = Layer.effect(
     ) {
       // A local sibling keeps the Location's resolution exactly as without recovery; a machine's candidate has no
       // Location to resolve against, so it takes the machine and the sibling's directory.
+      const siblingPath = options?.siblingOf.environment.path ?? path
       const base =
         options === undefined || options.siblingOf.environment.id === environment.id
           ? undefined
           : {
-              absolute: AbsolutePath.make(path.dirname(options.siblingOf.absolute)),
+              absolute: AbsolutePath.make(siblingPath.dirname(options.siblingOf.absolute)),
               environment: options.siblingOf.environment,
             }
       const target = yield* resolve({ path: file, base, kind: options ? "file" : undefined })
       const sibling =
         options !== undefined &&
         target.environment.id === options.siblingOf.environment.id &&
-        path.dirname(target.absolute) === path.dirname(options.siblingOf.absolute)
+        (target.environment.path ?? path).dirname(target.absolute) === siblingPath.dirname(options.siblingOf.absolute)
 
       // Filename recovery shares the directory approval, but checks the recovered file's own read rules.
       if (!sibling) yield* authorizeExternal([target], context)

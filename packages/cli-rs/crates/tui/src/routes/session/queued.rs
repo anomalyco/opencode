@@ -178,7 +178,7 @@ impl Queued {
     /// Follows the session's inbox. `blocked` is true while a permission or form replaces the prompt, which hides
     /// the dock as well (`disabled()`).
     pub fn sync(&self, tui: &Tui, changes: &Changes, blocked: bool) {
-        if changes.pending(&self.0.session) {
+        if changes.has(&self.0.session, Touched::PENDING) {
             self.0.update(tui);
         }
         self.0.root.visible(self.0.count.get() > 0 && !blocked);
@@ -267,7 +267,7 @@ impl Inner {
             }
             super::actions::append_prompt(tui, &session, restored.clone());
             tui.dialogs.clear();
-            if tui.route() == (crate::routes::Route::Session { id: session }) {
+            if *tui.route() == (crate::routes::Route::Session { id: session }) {
                 tui.app.focus(&prompt.textarea);
             }
         });

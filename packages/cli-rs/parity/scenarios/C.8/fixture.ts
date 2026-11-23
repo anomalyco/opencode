@@ -17,12 +17,12 @@ export async function writeConfig(root: string, config: unknown) {
   await writeFile(path.join(root, configFile), JSON.stringify(config, null, 2) + "\n", { mode: 0o600 })
 }
 
-export async function register(root: string, server: string | undefined) {
-  if (server === undefined) throw new Error("register needs a fake server")
+export async function register(root: string, server: string | undefined, password: string | undefined) {
+  if (server === undefined || password === undefined) throw new Error("register needs the fake server")
   await mkdir(path.join(root, "home/.local/state/opencode"), { recursive: true })
   await writeFile(
     path.join(root, "home/.local/state/opencode/service-local.json"),
-    JSON.stringify({ id: "fake", version: "local", url: server, pid: process.pid, password: "private" }),
+    JSON.stringify({ id: "fake", version: "local", url: server, pid: process.pid, password }),
     { mode: 0o600 },
   )
 }

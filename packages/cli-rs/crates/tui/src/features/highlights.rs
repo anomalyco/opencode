@@ -47,7 +47,7 @@ pub fn startup(tui: &Tui, release: &Release, continue_: bool) {
         return;
     }
     let typed = tui.textarea.borrow().as_ref().is_some_and(|textarea| !textarea.text().is_empty());
-    if tui.route() != Route::Home || tui.dialogs.is_open() || typed {
+    if *tui.route() != Route::Home || tui.dialogs.is_open() || typed {
         return;
     }
     let args = &tui.startup.args;

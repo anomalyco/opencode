@@ -73,11 +73,17 @@ export async function startFakeServer(options: Options = {}) {
       streams.forEach((controller) => controller.close())
       streams.clear()
     })
+  const password = crypto.randomUUID()
+  const authorization = "Basic " + Buffer.from(`opencode:${password}`).toString("base64")
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     idleTimeout: 0,
     async fetch(request) {
+      // A request without this run's credential belongs to no side of the scenario: another run's client, or a
+      // live service client that reconnected to the port the kernel recycled for this server. Answer it, but
+      // keep it out of the log a scenario compares (M.2/shell: a drive client's goal read).
+      if (request.headers.get("authorization") !== authorization) return new Response(null, { status: 401 })
       const url = new URL(request.url)
       const entry = await logEntry(request, url)
       requests.push(entry)
@@ -109,6 +115,8 @@ export async function startFakeServer(options: Options = {}) {
   })
   return {
     url: `http://127.0.0.1:${server.port}`,
+    // This run's server password: the runner puts it in its clients' environment, and no one else has it.
+    password,
     requests,
     // Pushes events to every open `events` stream, as a route's `then` does.
     push,

@@ -174,11 +174,11 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             });
         }
         HostRequest::Models { location } => {
-            return read(ctx, &mut |read| serde_json::to_value(read.models(location.as_ref())));
+            return read(ctx, &mut |read| serde_json::to_value(read.models(location.as_ref()).as_deref()));
         }
         HostRequest::Model => return read(ctx, &mut |read| serde_json::to_value(read.model())),
         HostRequest::Limits => return read(ctx, &mut |read| serde_json::to_value(read.limits())),
-        HostRequest::Providers => return read(ctx, &mut |read| serde_json::to_value(read.providers())),
+        HostRequest::Providers => return read(ctx, &mut |read| serde_json::to_value(read.providers().as_deref())),
         HostRequest::Info => return read(ctx, &mut |read| serde_json::to_value(read.info())),
         HostRequest::Plugins => return read(ctx, &mut |read| serde_json::to_value(read.plugins())),
         HostRequest::Setting { name } => return read(ctx, &mut |read| serde_json::to_value(read.setting(&name))),
@@ -204,10 +204,10 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         }
         HostRequest::SetSetting { name, value } => ctx.effects.push(Effect::Setting(name, value)),
         HostRequest::McpServers { location } => {
-            return read(ctx, &mut |read| serde_json::to_value(read.mcp_servers(location.as_ref())));
+            return read(ctx, &mut |read| serde_json::to_value(read.mcp_servers(location.as_ref()).as_deref()));
         }
         HostRequest::Integrations { location } => {
-            return read(ctx, &mut |read| serde_json::to_value(read.integrations(location.as_ref())));
+            return read(ctx, &mut |read| serde_json::to_value(read.integrations(location.as_ref()).as_deref()));
         }
         HostRequest::Vcs { location } => {
             return read(ctx, &mut |read| serde_json::to_value(read.vcs(location.as_ref())));

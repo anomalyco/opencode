@@ -4,27 +4,35 @@ use opencode_api::generated::*;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
 
-use crate::state::{Data, Error, MESSAGE_PAGE, OVERLAY_LIMIT, State, Task, evict_missing};
+use crate::changes::Touched;
+use crate::core::{Delta, Effect, Head, Ticket};
+use crate::sessions::SessionKey;
+use crate::state::{Error, OVERLAY_LIMIT, State};
 
-/// One session's loaded messages, oldest first, with an index by ID.
+/// A message's key in its transcript, never given to another message of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MessageKey(pub u32);
+
+/// One session's loaded messages, oldest first, found by ID or by key.
 #[derive(Debug, Clone, Default)]
 pub struct Transcript {
     items: Vec<SessionMessageInfo>,
+    /// The key of each item.
+    keys: Vec<MessageKey>,
+    /// The position of each key's item, by key; `u32::MAX` once it left. The next key is its length.
+    positions: Vec<u32>,
     index: HashMap<String, usize>,
 }
 
 impl Transcript {
-    pub(crate) fn new(items: Vec<SessionMessageInfo>) -> Self {
-        let mut transcript = Self { items, index: HashMap::new() };
-        transcript.reindex(0);
-        transcript
-    }
-
     pub fn items(&self) -> &[SessionMessageInfo] {
         &self.items
+    }
+
+    /// The key of each item.
+    pub fn keys(&self) -> &[MessageKey] {
+        &self.keys
     }
 
     pub fn get(&self, id: &str) -> Option<&SessionMessageInfo> {
@@ -35,13 +43,77 @@ impl Transcript {
         self.index.contains_key(id)
     }
 
+    /// The key of message `id`.
+    pub fn key(&self, id: &str) -> Option<MessageKey> {
+        self.index.get(id).map(|&position| self.keys[position])
+    }
+
+    /// Where the message of `key` is.
+    pub fn position(&self, key: MessageKey) -> Option<usize> {
+        self.positions.get(key.0 as usize).filter(|position| **position != u32::MAX).map(|position| *position as usize)
+    }
+
+    pub fn by_key(&self, key: MessageKey) -> Option<&SessionMessageInfo> {
+        self.position(key).map(|position| &self.items[position])
+    }
+
     pub(crate) fn get_mut(&mut self, id: &str) -> Option<&mut SessionMessageInfo> {
         let position = *self.index.get(id)?;
         self.items.get_mut(position)
     }
 
-    pub(crate) fn items_mut(&mut self) -> &mut Vec<SessionMessageInfo> {
+    /// The items to change in place: their number and order stay.
+    pub(crate) fn items_mut(&mut self) -> &mut [SessionMessageInfo] {
         &mut self.items
+    }
+
+    fn mint(&mut self) -> MessageKey {
+        self.positions.push(u32::MAX);
+        MessageKey(self.positions.len() as u32 - 1)
+    }
+
+    /// Replaces every item. One that was here by ID keeps its key, so its rows stay.
+    pub(crate) fn replace(&mut self, items: Vec<SessionMessageInfo>) {
+        for key in &self.keys {
+            self.positions[key.0 as usize] = u32::MAX;
+        }
+        let mut keys = Vec::with_capacity(items.len());
+        for (position, item) in items.iter().enumerate() {
+            let kept = self.index.get(item.id()).map(|&old| self.keys[old]);
+            let key = match kept.filter(|key| self.positions[key.0 as usize] == u32::MAX) {
+                Some(key) => key,
+                None => self.mint(),
+            };
+            self.positions[key.0 as usize] = position as u32;
+            keys.push(key);
+        }
+        (self.items, self.keys) = (items, keys);
+        self.index.clear();
+        self.reindex(0);
+    }
+
+    /// Puts `older` before the items, each under a new key.
+    pub(crate) fn prepend(&mut self, mut older: Vec<SessionMessageInfo>) {
+        let mut keys: Vec<MessageKey> = (0..older.len()).map(|_| self.mint()).collect();
+        keys.append(&mut self.keys);
+        older.append(&mut self.items);
+        (self.items, self.keys) = (older, keys);
+        self.reindex(0);
+    }
+
+    /// Keeps only the items `keep` accepts, with their keys, and gives back the room of the rest.
+    pub(crate) fn retain(&mut self, keep: impl Fn(&SessionMessageInfo) -> bool) {
+        for (item, key) in self.items.iter().zip(&self.keys) {
+            if !keep(item) {
+                self.positions[key.0 as usize] = u32::MAX;
+            }
+        }
+        self.keys.retain(|key| self.positions[key.0 as usize] != u32::MAX);
+        self.items.retain(keep);
+        self.index = HashMap::new();
+        self.reindex(0);
+        self.items.shrink_to_fit();
+        self.keys.shrink_to_fit();
     }
 
     /// Appends unless the ID is present; reports whether it did.
@@ -49,8 +121,11 @@ impl Transcript {
         if self.index.contains_key(item.id()) {
             return false;
         }
+        let key = self.mint();
+        self.positions[key.0 as usize] = self.items.len() as u32;
         self.index.insert(item.id().to_owned(), self.items.len());
         self.items.push(item);
+        self.keys.push(key);
         true
     }
 
@@ -67,6 +142,8 @@ impl Transcript {
     pub(crate) fn remove(&mut self, id: &str) -> Option<SessionMessageInfo> {
         let position = self.index.remove(id)?;
         let item = self.items.remove(position);
+        let key = self.keys.remove(position);
+        self.positions[key.0 as usize] = u32::MAX;
         self.reindex(position);
         Some(item)
     }
@@ -76,11 +153,16 @@ impl Transcript {
         let Some(position) = self.index.get(id).copied() else { return };
         let item = self.items.remove(position);
         self.items.push(item);
+        let key = self.keys.remove(position);
+        self.keys.push(key);
         self.reindex(position);
     }
 
     /// Drops every item from `position` on.
     pub(crate) fn truncate(&mut self, position: usize) {
+        for key in self.keys.drain(position..) {
+            self.positions[key.0 as usize] = u32::MAX;
+        }
         for item in self.items.drain(position..) {
             self.index.remove(item.id());
         }
@@ -88,7 +170,13 @@ impl Transcript {
 
     fn reindex(&mut self, start: usize) {
         for (position, item) in self.items.iter().enumerate().skip(start) {
-            self.index.insert(item.id().to_owned(), position);
+            match self.index.get_mut(item.id()) {
+                Some(at) => *at = position,
+                None => {
+                    self.index.insert(item.id().to_owned(), position);
+                }
+            }
+            self.positions[self.keys[position].0 as usize] = position as u32;
         }
     }
 
@@ -198,35 +286,32 @@ fn omit_message_file_data(message: &mut SessionMessageInfo) {
     }
 }
 
-/// Options of [`Data::message_load_more`].
-#[derive(Debug, Clone, Default)]
-pub struct LoadMore {
-    /// Loads every older page in one publication.
-    pub all: bool,
-    /// Cancels the wait and the request (the TS `signal`).
-    pub cancel: Option<CancellationToken>,
-}
-
 impl State {
     pub fn messages(&self, session: &SessionID) -> &[SessionMessageInfo] {
-        self.messages.get(session).map(Transcript::items).unwrap_or_default()
+        self.transcript(session).map(Transcript::items).unwrap_or_default()
     }
 
     pub fn transcript(&self, session: &SessionID) -> Option<&Transcript> {
-        self.messages.get(session)
+        self.sessions.get(session)?.transcript.as_ref()
     }
 
     pub fn message(&self, session: &SessionID, message: &str) -> Option<&SessionMessageInfo> {
-        self.messages.get(session)?.get(message)
+        self.transcript(session)?.get(message)
     }
 
     /// True while older pages remain (`message.more`).
     pub fn has_more_messages(&self, session: &SessionID) -> bool {
-        self.cursor.contains_key(session)
+        self.sessions.get(session).is_some_and(|session| session.cursor.is_some())
+    }
+
+    /// The newest page of `session` is read, and no invalidation came after.
+    pub fn messages_read(&self, session: &SessionID) -> bool {
+        let read = crate::reads::Read::Session(session.as_str(), crate::reads::SessionRead::Messages);
+        matches!(self.read_state(read), Some(crate::reads::ReadState::Done))
     }
 
     pub fn messages_loading(&self, session: &SessionID) -> bool {
-        self.loading.contains(session)
+        self.sessions.get(session).is_some_and(|session| session.loading)
     }
 
     pub(crate) fn stored(&self, mut message: SessionMessageInfo) -> SessionMessageInfo {
@@ -238,24 +323,27 @@ impl State {
 
     /// The transcript of `session`, created empty when missing (`draft[sessionID] ??= []`).
     pub(crate) fn transcript_mut(&mut self, session: &SessionID) -> &mut Transcript {
-        self.messages.entry(session.clone()).or_default()
-    }
-
-    pub(crate) fn message_changed(&mut self, session: &SessionID, message: &SessionMessageID) {
-        self.log.message(session, message);
+        self.sessions.get_or_insert(session).transcript.get_or_insert_default()
     }
 
     /// Appends `item` unless present (`message.insert`).
     pub(crate) fn insert_message(&mut self, session: &SessionID, item: SessionMessageInfo) {
         // A session the store found missing shows nothing, whatever arrives late (model O9).
-        if self.missing.contains(session) {
+        if self.is_missing(session) {
             return;
         }
-        let id = item.id().to_owned();
-        if self.transcript_mut(session).append(item) {
-            self.created(session, &id);
-            self.log.messages(session);
+        let key = self.sessions.entry(session);
+        let record = &mut self.sessions[key];
+        let transcript = record.transcript.get_or_insert_default();
+        if !transcript.append(item) {
+            return;
         }
+        if let Some(read) = &mut record.head_read
+            && let Some(item) = transcript.items().last()
+        {
+            read.record_created(self.event_seq, item.id());
+        }
+        self.touch_key(key, Touched::SHAPE);
     }
 
     pub(crate) fn upsert_message(&mut self, session: &SessionID, item: SessionMessageInfo) {
@@ -267,20 +355,24 @@ impl State {
             return;
         }
         transcript.append(item);
-        self.log.messages(session);
+        self.touch(session, Touched::SHAPE);
     }
 
     /// Records a row the current event created, with its `durable.seq`, for the head read in flight.
     pub(crate) fn created(&mut self, session: &SessionID, id: &str) {
-        let (Some(seq), Some(read)) = (self.event_seq, self.head_reads.get_mut(session)) else { return };
-        if read.room() {
-            read.created.push((id.to_owned(), seq));
+        if let Some(read) = self.sessions.get_mut(session).and_then(|session| session.head_read.as_mut()) {
+            read.record_created(self.event_seq, id);
         }
     }
 
     /// Records a durable edit for the head read of its session in flight, to replay onto the page.
     pub(crate) fn record_edit(&mut self, event: &V2Event) {
-        let Some(read) = edit_session(event).and_then(|session| self.head_reads.get_mut(session)) else { return };
+        let Some(read) = edit_session(event)
+            .and_then(|session| self.sessions.get_mut(session))
+            .and_then(|session| session.head_read.as_mut())
+        else {
+            return;
+        };
         if read.room() {
             read.edits.push(event.clone());
         }
@@ -326,11 +418,9 @@ impl State {
             .collect();
         // A read racing an admission must not wipe its local transcript row.
         let admitted: HashSet<&str> = self
-            .pending
-            .get(session)
-            .into_iter()
-            .flatten()
-            .filter(|item| matches!(item.tag(), "user" | "synthetic"))
+            .pending(session)
+            .iter()
+            .filter(|item| matches!(item, SessionInboxInfo::User(_) | SessionInboxInfo::Synthetic(_)))
             .map(|item| item.id())
             .collect();
         let local: Vec<_> = self
@@ -352,32 +442,38 @@ impl State {
             self.outbox.remove(id);
             self.remove_pending(session, id);
         }
-        let paged = self.cursor.contains_key(session) == next.is_some();
-        match next {
-            Some(next) => self.cursor.insert(session.clone(), next),
-            None => self.cursor.remove(session),
-        };
+        let key = self.sessions.entry(session);
+        let record = &mut self.sessions[key];
+        let paged = record.cursor.is_some() == next.is_some();
+        record.cursor = next;
         // Like TS `reconcile`: the same IDs in the same order only update the changed messages.
-        let current = self.messages.get_mut(session).filter(|transcript| {
+        let current = record.transcript.as_mut().filter(|transcript| {
             paged
                 && transcript.items().iter().map(SessionMessageInfo::id).eq(messages.iter().map(SessionMessageInfo::id))
         });
         match current {
             None => {
-                self.messages.insert(session.clone(), Transcript::new(messages));
-                self.log.messages(session);
+                record.transcript.get_or_insert_default().replace(messages);
+                self.touch_key(key, Touched::SHAPE);
             }
             Some(transcript) => {
-                for (item, message) in transcript.items_mut().iter_mut().zip(messages) {
-                    if *item != message {
-                        self.log.message(session, &SessionMessageID(message.id().to_owned()));
-                        *item = message;
+                let mut changed = false;
+                for (position, message) in messages.into_iter().enumerate() {
+                    if transcript.items()[position] != message {
+                        self.log.message(key, transcript.keys()[position]);
+                        transcript.items_mut()[position] = message;
+                        changed = true;
                     }
+                }
+                if changed {
+                    self.touch_key(key, Touched::CONTENT);
                 }
             }
         }
+        // A replayed edit already asked for what it reads when it arrived.
+        let mut ignored = Vec::new();
         for event in &read.edits {
-            self.apply_event(event);
+            self.apply(event, &mut ignored);
         }
         unknown
     }
@@ -385,24 +481,40 @@ impl State {
     /// Edits one loaded assistant message; drops the edit when it is not loaded (`editAssistant`).
     pub(crate) fn edit_assistant(
         &mut self,
-        session: &SessionID,
-        message: &SessionMessageID,
+        session: &(impl AsRef<str> + ?Sized),
+        message: &(impl AsRef<str> + ?Sized),
         f: impl FnOnce(&mut SessionMessageAssistant),
     ) {
-        let Some(SessionMessageInfo::Assistant(assistant)) =
-            self.messages.get_mut(session).and_then(|transcript| transcript.get_mut(&message.0))
-        else {
-            return;
-        };
+        let Some((key, position)) = self.edited(session.as_ref(), message.as_ref()) else { return };
+        let Some(transcript) = &mut self.sessions[key].transcript else { return };
+        let SessionMessageInfo::Assistant(assistant) = &mut transcript.items_mut()[position] else { return };
         f(assistant);
-        self.message_changed(session, message);
+        let message = transcript.keys()[position];
+        self.touch_message(key, message);
+    }
+
+    /// Where `message` of `session` is. A run of deltas edits one message, so the last place found is checked first:
+    /// two ID comparisons in place of two hashes.
+    fn edited(&mut self, session: &str, message: &str) -> Option<(SessionKey, usize)> {
+        if let Some((key, position)) = self.last_edited
+            && let Some(record) = self.sessions.live(key)
+            && record.id.as_str() == session
+            && record.transcript.as_ref()?.items().get(position).is_some_and(|item| item.id() == message)
+        {
+            return Some((key, position));
+        }
+        let key = self.sessions.key(session)?;
+        let transcript = self.sessions[key].transcript.as_ref()?;
+        let position = transcript.position(transcript.key(message)?)?;
+        self.last_edited = Some((key, position));
+        Some((key, position))
     }
 
     /// Edits the latest tool part with `tool` (`editTool`).
     fn edit_tool(
         &mut self,
-        session: &SessionID,
-        message: &SessionMessageID,
+        session: &(impl AsRef<str> + ?Sized),
+        message: &(impl AsRef<str> + ?Sized),
         tool: &str,
         f: impl FnOnce(&mut SessionMessageAssistantTool),
     ) {
@@ -420,8 +532,8 @@ impl State {
     /// Edits the latest text part (`editText`).
     fn edit_text(
         &mut self,
-        session: &SessionID,
-        message: &SessionMessageID,
+        session: &(impl AsRef<str> + ?Sized),
+        message: &(impl AsRef<str> + ?Sized),
         f: impl FnOnce(&mut SessionMessageAssistantText),
     ) {
         self.edit_assistant(session, message, |assistant| {
@@ -438,8 +550,8 @@ impl State {
     /// Edits the latest reasoning part that has not completed (`editReasoning`).
     fn edit_reasoning(
         &mut self,
-        session: &SessionID,
-        message: &SessionMessageID,
+        session: &(impl AsRef<str> + ?Sized),
+        message: &(impl AsRef<str> + ?Sized),
         f: impl FnOnce(&mut SessionMessageAssistantReasoning),
     ) {
         self.edit_assistant(session, message, |assistant| {
@@ -461,7 +573,7 @@ impl State {
         let data = &event.data;
         let session = &data.session_id;
         let started = data.started as f64;
-        if self.missing.contains(session) {
+        if self.is_missing(session) {
             return;
         }
         let transcript = self.transcript_mut(session);
@@ -491,7 +603,7 @@ impl State {
         }
         let assistant = SessionMessageAssistant {
             id: data.assistant_message_id.clone(),
-            r#type: "assistant".into(),
+            r#type: tag::Assistant,
             agent: data.agent.clone(),
             model: data.model.clone(),
             metadata: event.metadata.clone(),
@@ -563,14 +675,10 @@ impl State {
                 return;
             }
             assistant.content.push(SessionMessageAssistantContentItem::Text(SessionMessageAssistantText {
-                r#type: "text".into(),
+                r#type: tag::Text,
                 ..Default::default()
             }));
         });
-    }
-
-    pub(crate) fn on_text_delta(&mut self, data: &SessionTextDeltaData) {
-        self.edit_text(&data.session_id, &data.assistant_message_id, |text| text.text.push_str(&data.delta));
     }
 
     pub(crate) fn on_text_ended(&mut self, data: &SessionTextEndedData) {
@@ -589,17 +697,11 @@ impl State {
                 return;
             }
             assistant.content.push(SessionMessageAssistantContentItem::Reasoning(SessionMessageAssistantReasoning {
-                r#type: "reasoning".into(),
+                r#type: tag::Reasoning,
                 text: String::new(),
                 native: data.native.clone(),
                 time: Some(SessionMessageShellTime { created: event.created, completed: None }),
             }));
-        });
-    }
-
-    pub(crate) fn on_reasoning_delta(&mut self, data: &SessionTextDeltaData) {
-        self.edit_reasoning(&data.session_id, &data.assistant_message_id, |reasoning| {
-            reasoning.text.push_str(&data.delta)
         });
     }
 
@@ -628,25 +730,17 @@ impl State {
                 return;
             }
             assistant.content.push(SessionMessageAssistantContentItem::Tool(SessionMessageAssistantTool {
-                r#type: "tool".into(),
+                r#type: tag::Tool,
                 id: data.id.clone(),
                 name: data.name.clone(),
                 executed: None,
                 native: None,
                 time: SessionMessageAssistantToolTime { created: event.created, ..Default::default() },
                 state: SessionMessageAssistantToolState::Streaming(SessionMessageToolStateStreaming {
-                    status: "streaming".into(),
+                    status: tag::Streaming,
                     input: String::new(),
                 }),
             }));
-        });
-    }
-
-    pub(crate) fn on_tool_input_delta(&mut self, data: &SessionToolInputDeltaData) {
-        self.edit_tool(&data.session_id, &data.assistant_message_id, &data.id, |tool| {
-            if let SessionMessageAssistantToolState::Streaming(state) = &mut tool.state {
-                state.input.push_str(&data.delta);
-            }
         });
     }
 
@@ -665,7 +759,7 @@ impl State {
             tool.executed = Some(data.executed);
             tool.native = data.native.clone();
             tool.state = SessionMessageAssistantToolState::Running(SessionMessageToolStateRunning {
-                status: "running".into(),
+                status: tag::Running,
                 input: data.input.clone(),
                 metadata: Default::default(),
             });
@@ -690,7 +784,7 @@ impl State {
                 omit_file_data(&mut content);
             }
             tool.state = SessionMessageAssistantToolState::Completed(SessionMessageToolStateCompleted {
-                status: "completed".into(),
+                status: tag::Completed,
                 input: state.input.clone(),
                 metadata: data.metadata.clone(),
                 content,
@@ -715,7 +809,7 @@ impl State {
                 omit_file_data(content);
             }
             tool.state = SessionMessageAssistantToolState::Error(SessionMessageToolStateError {
-                status: "error".into(),
+                status: tag::Error,
                 error: data.error.clone(),
                 input,
                 metadata: data.metadata.clone(),
@@ -771,7 +865,7 @@ impl State {
         }
         let message = SessionMessageShell {
             id: from_event(&event.id),
-            r#type: "shell".into(),
+            r#type: tag::Shell,
             shell_id: shell.id.clone(),
             command: shell.command.clone(),
             status: shell.status.clone(),
@@ -785,7 +879,9 @@ impl State {
 
     pub(crate) fn on_shell_ended(&mut self, event: &SessionShellEnded) {
         let session = &event.data.session_id;
-        let Some(transcript) = self.messages.get_mut(session) else { return };
+        let Some(transcript) = self.sessions.get_mut(session).and_then(|session| session.transcript.as_mut()) else {
+            return;
+        };
         let Some(shell) = transcript.items_mut().iter_mut().rev().find_map(|item| match item {
             SessionMessageInfo::Shell(shell) if shell.shell_id == event.data.shell.id => Some(shell),
             _ => None,
@@ -805,19 +901,39 @@ impl State {
         let transcript = self.transcript_mut(session);
         let Some(position) = transcript.items().iter().position(|item| item.id() >= to.as_str()) else { return };
         transcript.truncate(position);
-        self.log.messages(session);
+        self.touch(session, Touched::SHAPE);
     }
 
-    pub(crate) fn on_compaction_delta(&mut self, data: &SessionCompactionDeltaData) {
-        let session = &data.session_id;
-        let Some(transcript) = self.messages.get_mut(session) else { return };
+    /// Applies a streaming delta: it appends to the part it names.
+    pub(crate) fn apply_delta(&mut self, delta: Delta<'_>) {
+        self.event_seq = None;
+        match delta {
+            Delta::Text { session, message, delta } => {
+                self.edit_text(session, message, |text| text.text.push_str(delta))
+            }
+            Delta::Reasoning { session, message, delta } => {
+                self.edit_reasoning(session, message, |reasoning| reasoning.text.push_str(delta))
+            }
+            Delta::ToolInput { session, message, tool, delta } => self.edit_tool(session, message, tool, |tool| {
+                if let SessionMessageAssistantToolState::Streaming(state) = &mut tool.state {
+                    state.input.push_str(delta);
+                }
+            }),
+            Delta::Compaction { session, text } => self.on_compaction_delta(session, text),
+        }
+    }
+
+    fn on_compaction_delta(&mut self, session: &str, text: &str) {
+        let Some(transcript) = self.sessions.get_mut(session).and_then(|session| session.transcript.as_mut()) else {
+            return;
+        };
         let Some(running) = running_compaction(transcript) else { return };
         let SessionMessageInfo::Compaction(SessionMessageCompaction::Running(current)) =
             &mut transcript.items_mut()[running]
         else {
             return;
         };
-        current.summary.push_str(&data.text);
+        current.summary.push_str(text);
         let id = current.id.clone();
         self.message_changed(session, &id);
     }
@@ -828,11 +944,11 @@ impl State {
         let transcript = self.transcript_mut(session);
         let completed = |id: SessionMessageID, metadata, time| {
             SessionMessageInfo::Compaction(SessionMessageCompaction::Completed(SessionMessageCompactionCompleted {
-                r#type: "compaction".into(),
+                r#type: tag::Compaction,
                 id,
                 metadata,
                 time,
-                status: "completed".into(),
+                status: tag::Completed,
                 reason: data.reason.clone(),
                 model: data.model.clone(),
                 native: data.native.clone(),
@@ -869,11 +985,11 @@ impl State {
         });
         let failed = |id, metadata, time| {
             SessionMessageInfo::Compaction(SessionMessageCompaction::Failed(SessionMessageCompactionFailed {
-                r#type: "compaction".into(),
+                r#type: tag::Compaction,
                 id,
                 metadata,
                 time,
-                status: "failed".into(),
+                status: tag::Failed,
                 reason: data.reason.clone(),
                 error: data.error.clone(),
                 cost: data.cost,
@@ -918,10 +1034,15 @@ pub(crate) struct HeadRead {
 impl HeadRead {
     /// Ends the read `ticket` of `session`: its records, while that read is still the current one.
     fn take(state: &mut State, session: &SessionID, ticket: u64) -> Option<Self> {
-        if state.head_reads.get(session)?.ticket != ticket {
-            return None;
+        state.sessions.get_mut(session)?.head_read.take_if(|read| read.ticket == ticket)
+    }
+
+    /// Records a row the event being applied created, with its `durable.seq`.
+    fn record_created(&mut self, seq: Option<i64>, id: &str) {
+        let Some(seq) = seq else { return };
+        if self.room() {
+            self.created.push((id.to_owned(), seq));
         }
-        state.head_reads.remove(session)
     }
 
     /// False once overflowed; it then records nothing more.
@@ -957,253 +1078,179 @@ fn edit_session(event: &V2Event) -> Option<&SessionID> {
     })
 }
 
-impl Data {
-    /// Reads the newest transcript page once per invalidation. Merge concurrent events by `durable.seq`; see
-    /// [`State::publish_head`].
-    pub fn message_sync(&self, session: &SessionID) -> Task<()> {
-        let key = format!("session.message:{}", session.0);
-        let begin = session.clone();
-        let session = session.clone();
-        let limit = self.inner.options.initial_message_limit.unwrap_or(MESSAGE_PAGE);
-        self.sync_start(
-            key.clone(),
-            move |state| {
-                let ticket = state.token();
-                state.head_reads.insert(begin.clone(), HeadRead { ticket, ..HeadRead::default() });
-                (state.incarnation(&begin), ticket)
-            },
-            move |data, (incarnation, ticket)| async move {
-                let input = MessageListInput {
-                    session_id: session.clone(),
-                    limit: Some(limit),
-                    order: Some(MessageListInputOrder::Desc),
-                    ..Default::default()
-                };
-                let response = match data.client().message_list(&input).await {
-                    Ok(response) => response,
-                    Err(error) => {
-                        data.write(|state| HeadRead::take(state, &session, ticket));
-                        return Err(evict_missing(&data, error));
-                    }
-                };
-                let reread = data.write(|state| {
-                    // Deletion and eviction drop the read; a revert ends the window under it, so it reads again.
-                    let Some(read) = HeadRead::take(state, &session, ticket) else { return false };
-                    let reread = state.incarnation(&session) != incarnation
-                        || state.publish_head(&session, read, response.data, response.cursor.next.flatten());
-                    if reread {
-                        state.syncs.invalidate(&key);
-                    }
-                    reread
+impl State {
+    /// Begins a read of the newest transcript page of the session of `ticket`, opening a log of what overtakes it.
+    pub(crate) fn begin_messages(&mut self, ticket: Ticket) -> Head {
+        let read = self.token();
+        let record = &mut self.sessions[ticket.session()];
+        record.head_read = Some(HeadRead { ticket: read, ..HeadRead::default() });
+        Head { ticket, session: record.id.clone(), read, incarnation: record.incarnation }
+    }
+
+    /// Publishes the newest transcript page read `read` fetched, unless deletion or eviction dropped the read. A
+    /// revert ends the window under it, and an order [`State::publish_head`] cannot know, read it again.
+    pub(crate) fn complete_messages(
+        &mut self,
+        head: Head,
+        result: Result<SessionMessagesResponse, Error>,
+        effects: &mut Vec<Effect>,
+    ) {
+        let session = &head.session;
+        let read = HeadRead::take(self, session, head.read);
+        let response = match result {
+            Ok(response) => response,
+            Err(error) => return self.evict_missing(&error),
+        };
+        let Some(read) = read else { return };
+        let reread = self.incarnation(session) != head.incarnation
+            || self.publish_head(session, read, response.data, response.cursor.next.flatten());
+        if reread {
+            self.invalidate_key(head.ticket.key);
+            effects.push(Effect::Messages(head.session));
+        }
+    }
+
+    /// Upserts one projected message (the `session.model.selected` read), unless a head read dropped the row as older
+    /// than its page or the transcript window it was asked in ended (deviation O6-held-message-read).
+    pub(crate) fn complete_message(&mut self, session: &SessionID, incarnation: u64, item: SessionMessageInfo) {
+        if self.incarnation(session) != incarnation || self.message(session, item.id()).is_none() {
+            return;
+        }
+        let item = self.stored(item);
+        self.upsert_message(session, item);
+    }
+
+    /// The loaded messages whose tool file data was dropped, by session, for a client that starts showing tool files.
+    pub(crate) fn dropped_files(&self) -> Vec<(SessionID, Vec<SessionMessageID>)> {
+        self.sessions
+            .iter()
+            .filter_map(|session| {
+                let ids: Vec<_> = session
+                    .transcript
+                    .as_ref()?
+                    .items()
+                    .iter()
+                    .filter(|message| has_dropped_file_data(message))
+                    .map(|message| SessionMessageID(message.id().to_owned()))
+                    .collect();
+                (!ids.is_empty()).then(|| (session.id.clone(), ids))
+            })
+            .collect()
+    }
+
+    /// Copies back only the emptied tool files of a message read again: live events may have moved the message on
+    /// since the server read it.
+    pub(crate) fn restore_files(&mut self, session: &SessionID, message: &SessionMessageID, item: SessionMessageInfo) {
+        let SessionMessageInfo::Assistant(fetched) = item else { return };
+        if self.omit_file_data {
+            return;
+        }
+        self.edit_assistant(session, message, |assistant| {
+            for part in &mut assistant.content {
+                let SessionMessageAssistantContentItem::Tool(tool) = part else { continue };
+                if !has_dropped_file(tool) {
+                    continue;
+                }
+                let content = fetched.content.iter().rev().find_map(|other| match other {
+                    SessionMessageAssistantContentItem::Tool(other) if other.id == tool.id => Some(other),
+                    _ => None,
                 });
-                if reread {
-                    data.refresh(|data| data.message_sync(&session));
+                let Some(content) = content.and_then(tool_content) else { continue };
+                match &mut tool.state {
+                    SessionMessageAssistantToolState::Completed(state) => state.content = content.to_vec(),
+                    SessionMessageAssistantToolState::Error(state) => state.content = Some(content.to_vec()),
+                    _ => {}
                 }
-                Ok(())
-            },
-        )
-    }
-
-    pub fn message_invalidate(&self, session: &SessionID) {
-        self.write(|state| state.syncs.invalidate(&format!("session.message:{}", session.0)));
-    }
-
-    /// Follows a setting that changes while the client runs (`omitToolFileData` as a function): it applies to messages
-    /// and events stored from now on. Turning it off does not bring back dropped payloads; see [`Data::restore_files`].
-    pub fn set_omit_tool_file_data(&self, omit: bool) {
-        self.lock().omit_file_data = omit;
-    }
-
-    /// Re-reads every loaded message whose tool file data was dropped, for a client that starts showing tool files
-    /// (`message.restoreFiles`). Each session's messages are re-read one at a time, so many screenshots don't fan out
-    /// at once.
-    pub fn restore_files(&self) {
-        let sessions: Vec<(SessionID, Vec<SessionMessageID>)> = self.read(|state| {
-            state
-                .messages
-                .iter()
-                .filter_map(|(session, transcript)| {
-                    let ids: Vec<_> = transcript
-                        .items()
-                        .iter()
-                        .filter(|message| has_dropped_file_data(message))
-                        .map(|message| SessionMessageID(message.id().to_owned()))
-                        .collect();
-                    (!ids.is_empty()).then(|| (session.clone(), ids))
-                })
-                .collect()
-        });
-        for (session, ids) in sessions {
-            let data = self.clone();
-            self.runtime().spawn(async move {
-                for message in ids {
-                    if let Err(error) = data.restore_message_files(&session, message).await {
-                        data.refresh_failed(&error);
-                    }
-                }
-            });
-        }
-    }
-
-    /// Copies back only the emptied tool files: live events may have moved the message on since the server read it.
-    async fn restore_message_files(&self, session: &SessionID, message: SessionMessageID) -> Result<(), Error> {
-        let item = self
-            .client()
-            .session_message_get(&SessionMessageGetInput { session_id: session.clone(), message_id: message.clone() })
-            .await
-            .map_err(Error::new)?;
-        self.write(|state| {
-            let SessionMessageInfo::Assistant(fetched) = item else { return };
-            if state.omit_file_data {
-                return;
             }
-            state.edit_assistant(session, &message, |assistant| {
-                for part in &mut assistant.content {
-                    let SessionMessageAssistantContentItem::Tool(tool) = part else { continue };
-                    if !has_dropped_file(tool) {
-                        continue;
-                    }
-                    let content = fetched.content.iter().rev().find_map(|other| match other {
-                        SessionMessageAssistantContentItem::Tool(other) if other.id == tool.id => Some(other),
-                        _ => None,
-                    });
-                    let Some(content) = content.and_then(tool_content) else { continue };
-                    match &mut tool.state {
-                        SessionMessageAssistantToolState::Completed(state) => state.content = content.to_vec(),
-                        SessionMessageAssistantToolState::Error(state) => state.content = Some(content.to_vec()),
-                        _ => {}
-                    }
-                }
-            });
         });
-        Ok(())
     }
 
-    /// Loads older pages (`message.loadMore`). Joins a load in flight; with `all`, it then
-    /// continues to the oldest page.
-    pub async fn message_load_more(&self, session: &SessionID, options: LoadMore) -> Result<(), Error> {
-        let cancelled = || options.cancel.as_ref().is_some_and(|token| token.is_cancelled());
-        if cancelled() {
-            return Ok(());
-        }
-        loop {
-            let Some(pending) = self.read(|state| state.message_loads.get(session).map(|(_, task)| task.clone()))
-            else {
-                break;
-            };
-            let published = match &options.cancel {
-                None => pending.await?,
-                Some(token) => tokio::select! {
-                    result = pending => match result {
-                        Ok(published) => published,
-                        Err(_) if token.is_cancelled() => return Ok(()),
-                        Err(error) => return Err(error),
-                    },
-                    _ = token.cancelled() => return Ok(()),
-                },
-            };
-            if (!options.all && published) || cancelled() {
-                return Ok(());
-            }
-        }
-        if cancelled() {
-            return Ok(());
-        }
-        match self.start_load(session, options) {
-            Some(task) => task.await.map(|_| ()),
-            None => Ok(()),
-        }
-    }
-
-    /// Starts an older-page load from the current cursor, if any, and registers it for joiners.
-    fn start_load(&self, session: &SessionID, options: LoadMore) -> Option<Task<bool>> {
-        let mut state = self.lock();
-        let cursor = state.cursor.get(session).cloned()?;
-        let incarnation = state.incarnation(session);
+    /// Begins an older-page load of `session` from its cursor, if any, registering it for joiners.
+    pub(crate) fn begin_older(&mut self, session: &SessionID) -> Option<(u64, Page)> {
+        let key = self.sessions.key(session)?;
+        let cursor = self.sessions[key].cursor.clone()?;
+        let token = self.token();
+        let record = &mut self.sessions[key];
         // No view reads `messages_loading` (the transcript keeps its own flag), so it logs no change.
-        state.loading.insert(session.clone());
-        let token = state.token();
-        let data = self.clone();
-        let id = session.clone();
-        let all = options.all;
-        let cancel = options.cancel.clone();
-        let task = self.spawn(async move {
-            let result = load_pages(&data, &id, (cursor, incarnation), all, cancel.as_ref()).await;
-            data.write(|state| {
-                state.loading.remove(&id);
-                if state.message_loads.get(&id).is_some_and(|(current, _)| *current == token) {
-                    state.message_loads.remove(&id);
-                }
-            });
-            match result {
-                Err(_) if cancel.as_ref().is_some_and(CancellationToken::is_cancelled) => Ok(false),
-                result => result,
-            }
-        });
-        state.message_loads.insert(session.clone(), (token, task.clone()));
-        self.flush(&mut state);
-        Some(task)
+        record.loading = true;
+        record.message_load = Some(token);
+        Some((token, Page { cursor, incarnation: record.incarnation }))
+    }
+
+    /// Where a load that read from `page` goes on: `None` while `page` is current, so its pages publish; else from
+    /// the cursor a refresh left, `Some(None)` when none is left.
+    pub(crate) fn page_moved(&self, session: &SessionID, page: &Page) -> Option<Option<Page>> {
+        let current = self.sessions.get(session).and_then(|session| session.cursor.as_ref());
+        let incarnation = self.incarnation(session);
+        if current == Some(&page.cursor) && incarnation == page.incarnation {
+            return None;
+        }
+        Some(current.map(|cursor| Page { cursor: cursor.clone(), incarnation }))
+    }
+
+    /// Publishes older pages read from `page`, oldest last in `fetched`, while `page` is current.
+    pub(crate) fn complete_older(
+        &mut self,
+        session: &SessionID,
+        page: &Page,
+        fetched: Vec<SessionMessageInfo>,
+        next: Option<String>,
+    ) {
+        if self.page_moved(session, page).is_some() {
+            return;
+        }
+        let fetched: Vec<_> = fetched.into_iter().map(|item| self.stored(item)).collect();
+        let record = self.sessions.get_or_insert(session);
+        let transcript = record.transcript.get_or_insert_default();
+        let older = fetched.into_iter().rev().filter(|item| !transcript.contains(item.id())).collect();
+        transcript.prepend(older);
+        record.cursor = next;
+        self.touch(session, Touched::SHAPE);
+    }
+
+    /// Ends the older-page load `token` of `session`.
+    pub(crate) fn end_older(&mut self, session: &SessionID, token: u64) {
+        let Some(session) = self.sessions.get_mut(session) else { return };
+        session.loading = false;
+        session.message_load.take_if(|current| *current == token);
     }
 }
 
-/// Publishes older pages once. If a refresh changes the cursor, restart from the new cursor to avoid a gap. Returns
-/// false on cancellation before publication.
-async fn load_pages(
-    data: &Data,
-    session: &SessionID,
-    (mut cursor, mut incarnation): (String, u64),
-    all: bool,
-    cancel: Option<&CancellationToken>,
-) -> Result<bool, Error> {
-    loop {
-        let mut fetched = Vec::new();
-        let mut next = Some(cursor.clone());
-        while let Some(page) = next {
-            let input = MessageListInput {
-                session_id: session.clone(),
-                limit: Some(if all { 200 } else { MESSAGE_PAGE }),
-                cursor: Some(page),
-                ..Default::default()
-            };
-            let request = data.client().message_list(&input);
-            let response = match cancel {
-                None => request.await,
-                Some(token) => tokio::select! {
-                    response = request => response,
-                    _ = token.cancelled() => return Ok(false),
-                },
-            }
-            .map_err(Arc::new)?;
-            if cancel.is_some_and(CancellationToken::is_cancelled) {
-                return Ok(false);
-            }
-            fetched.extend(response.data);
-            next = response.cursor.next.flatten();
-            if !all {
-                break;
-            }
+/// Where an older-page load reads from: a cursor of the transcript window it began in.
+#[derive(Debug, Clone)]
+pub(crate) struct Page {
+    pub(crate) cursor: String,
+    pub(crate) incarnation: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn message(id: &str) -> SessionMessageInfo {
+        serde_json::from_value(serde_json::json!({ "id": id, "type": "user", "text": "", "time": { "created": 1 } }))
+            .unwrap()
+    }
+
+    /// A message keeps its key while it stays, also through a reload of its page, so its rows stay; a key that left
+    /// is never given to another message.
+    #[test]
+    fn keys_follow_their_messages() {
+        let mut transcript = Transcript::default();
+        for id in ["a", "b", "c"] {
+            transcript.append(message(id));
         }
-        let stale = data.write(|state| {
-            if state.cursor.get(session) != Some(&cursor) || state.incarnation(session) != incarnation {
-                return Some(state.cursor.get(session).cloned().map(|cursor| (cursor, state.incarnation(session))));
-            }
-            let fetched: Vec<_> = fetched.into_iter().map(|item| state.stored(item)).collect();
-            let transcript = state.transcript_mut(session);
-            let mut messages: Vec<_> =
-                fetched.into_iter().rev().filter(|item| !transcript.contains(item.id())).collect();
-            messages.append(transcript.items_mut());
-            *transcript = Transcript::new(messages);
-            match &next {
-                Some(next) => state.cursor.insert(session.clone(), next.clone()),
-                None => state.cursor.remove(session),
-            };
-            state.log.messages(session);
-            None
-        });
-        match stale {
-            None => return Ok(true),
-            Some(None) => return Ok(false),
-            Some(Some(current)) => (cursor, incarnation) = current,
+        let [a, b, c] = ["a", "b", "c"].map(|id| transcript.key(id).unwrap());
+        transcript.remove("a");
+        transcript.prepend(vec![message("z")]);
+        let z = transcript.key("z").unwrap();
+        transcript.replace(vec![message("b"), message("d"), message("c")]);
+        assert_eq!((transcript.key("b"), transcript.key("c")), (Some(b), Some(c)));
+        let d = transcript.key("d").unwrap();
+        assert!(![a, b, c, z].contains(&d));
+        assert_eq!((transcript.position(a), transcript.position(z)), (None, None));
+        for (position, key) in transcript.keys().iter().enumerate() {
+            assert_eq!(transcript.position(*key), Some(position));
         }
     }
 }

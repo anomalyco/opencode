@@ -11,9 +11,9 @@ export default defineCli({
     version: false,
     routes: [info(["http://127.0.0.1:4096", "https://0123456789abcdef.t1.opentunnel.test"]), pairRoute],
   },
-  setup: async (root, server) => {
+  setup: async (root, server, password) => {
     await writeConfig(root, { remote: { route: "0123456789abcdef" } })
     await tunnel(root, "t1.opentunnel.test")
-    await register(root, server)
+    await register(root, server, password)
   },
 })

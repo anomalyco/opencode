@@ -1,5 +1,6 @@
 //! Shows paths relative to the working directory where possible.
 
+use std::borrow::Cow;
 use std::path::Path;
 
 pub use opencode_util::path::Flavor;
@@ -17,7 +18,15 @@ pub fn abbreviate_home(input: &str, home: &str) -> String {
     if flavor.outside(&relative) {
         return input.to_owned();
     }
-    format!("~/{}", relative.split(flavor.sep()).collect::<Vec<_>>().join("/"))
+    let mut out = String::with_capacity(relative.len() + 2);
+    out.push_str("~/");
+    for (index, part) in relative.split(flavor.sep()).enumerate() {
+        if index > 0 {
+            out.push('/');
+        }
+        out.push_str(part);
+    }
+    out
 }
 
 /// `formatPath`: `input` relative to `base` when inside it (`.` for `base` itself), else abbreviated with `home`
@@ -28,12 +37,13 @@ pub fn format_path(input: &str, base: &str, home: Option<&str>, forward_slashes:
     }
     let flavor = Flavor::of(base);
     let slashes = |text: String| {
-        if forward_slashes { text.replace('\\', "/") } else { text }
+        if forward_slashes && text.contains('\\') { text.replace('\\', "/") } else { text }
     };
     if flavor == Flavor::Posix && Flavor::of(input) == Flavor::Windows {
         return slashes(input.to_owned());
     }
-    let absolute = if flavor.is_absolute(input) { input.to_owned() } else { flavor.resolve(&[base, input]) };
+    let absolute =
+        if flavor.is_absolute(input) { Cow::Borrowed(input) } else { Cow::Owned(flavor.resolve(&[base, input])) };
     let relative = flavor.relative(base, &absolute);
     let formatted = if relative.is_empty() {
         ".".to_owned()
@@ -42,7 +52,7 @@ pub fn format_path(input: &str, base: &str, home: Option<&str>, forward_slashes:
     } else {
         match home {
             Some(home) if !home.is_empty() => abbreviate_home(&absolute, home),
-            _ => absolute,
+            _ => absolute.into_owned(),
         }
     };
     slashes(formatted)
@@ -53,7 +63,7 @@ pub fn format_path(input: &str, base: &str, home: Option<&str>, forward_slashes:
 pub fn format(input: &str, directory: Option<&str>, cwd: &Path, home: Option<&Path>) -> String {
     let cwd = cwd.to_string_lossy();
     let base = directory.filter(|directory| !directory.is_empty()).unwrap_or(&cwd);
-    let home = home.map(|home| home.to_string_lossy().into_owned());
+    let home = home.map(Path::to_string_lossy);
     format_path(input, base, home.as_deref(), false)
 }
 

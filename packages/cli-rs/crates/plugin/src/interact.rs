@@ -32,25 +32,17 @@ pub(crate) type Reveal = Rc<dyn Fn(&str, &AnyWidget)>;
 /// What one owner holds of the input.
 pub struct Owner {
     plugin: String,
-    /// The surface a mount shows; empty for an activation.
-    surface: String,
     host: Weak<dyn Host>,
-    /// The mount's handler, which its nodes' pointer and hover and its overlays' closes reach; `None` for an
-    /// activation, whose layers each have their own.
-    deliver: Option<Deliver>,
-    /// The mount's surface root; `None` for an activation.
-    root: Option<View>,
+    /// What a mount's owner holds of its mount; `None` for an activation, whose layers each have their own handler.
+    mounted: Option<Mounted>,
     /// Where a layer of its surface's own scope holds (`LayerScope::Surface`).
     held: RefCell<Held>,
-    lookup: Option<Lookup>,
-    nearest: Option<Nearest>,
-    alive: Cell<bool>,
-    /// What it held is gone.
-    ended: Cell<bool>,
+    life: Cell<Life>,
     /// It has a layer of the composer, so its mode holds while the composer has the focus.
     composer: Cell<bool>,
-    /// A dialog surface's mount: its layers of no mode are the host dialogs' mode's, and it sets no mode of its own.
-    dialog: Cell<bool>,
+    /// A dialog surface's mount, and when it began: its layers of no mode are the host dialogs' mode's, it sets no
+    /// mode of its own, and input waits for its focus only that soon after ([`OPENING`]).
+    dialog: Cell<Option<std::time::Instant>>,
     /// Brings a widget of the mount's tree into view in the scrolls of the tree that hold it.
     reveal: RefCell<Option<Reveal>>,
     /// What waits for the mount's first tree of the plugin's, and the focus it asked for with it, or for the mount's
@@ -58,8 +50,6 @@ pub struct Owner {
     focus_waiters: RefCell<Vec<Box<dyn FnOnce()>>>,
     /// The mount showed a tree of the plugin's, not only the pipe's stand-in.
     viewed: Cell<bool>,
-    /// When a dialog surface's mount began: input waits for its focus only that soon after ([`OPENING`]).
-    born: Cell<Option<std::time::Instant>>,
     layers: RefCell<Vec<Disposer>>,
     mode: RefCell<Option<Mode>>,
     /// The ids of its tree's nodes, and of its focusable ones.
@@ -69,10 +59,29 @@ pub struct Owner {
     /// one call, and the focus applies before the view that shows it. It waits for the mount's next view and no
     /// longer ([`Owner::settle_pending`]), one at a time.
     pending: RefCell<Option<Pending>>,
-    /// The mount it holds the input of, as long as it lives; `None` for an activation.
-    mount: Option<Weak<()>>,
+}
+
+/// A mount's surface, its lookups, and its handler: its nodes' pointer and hover and its overlays' closes reach it.
+struct Mounted {
+    surface: String,
+    root: View,
+    lookup: Lookup,
+    nearest: Nearest,
+    deliver: Option<Deliver>,
+    /// The mount it holds the input of, as long as it lives.
+    mount: Weak<()>,
     /// That mount's ID, which a call for it names to the plugin.
-    id: Option<opencode_plugin_abi::v2::MountId>,
+    id: opencode_plugin_abi::v2::MountId,
+}
+
+/// Where an owner is in its life, in order.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Life {
+    Alive,
+    /// Its handlers stopped; [`Owner::end`] follows.
+    Revoked,
+    /// What it held is gone.
+    Ended,
 }
 
 struct Mode {
@@ -238,55 +247,46 @@ impl Owner {
         deliver: Option<Deliver>,
         (id, mount): (opencode_plugin_abi::v2::MountId, Weak<()>),
     ) -> Rc<Self> {
-        let mut owner = Self::new(plugin, surface, host, Some(root), Some((lookup, nearest)), deliver, Some(mount));
-        owner.id = Some(id);
-        Rc::new(owner)
+        let surface = surface.to_owned();
+        Rc::new(Self::new(plugin, host, Some(Mounted { surface, root, lookup, nearest, deliver, mount, id })))
     }
 
     /// An activation's owner, which has no surface.
     pub(crate) fn activation(plugin: &str, host: Weak<dyn Host>) -> Rc<Self> {
-        Rc::new(Self::new(plugin, "", host, None, None, None, None))
+        Rc::new(Self::new(plugin, host, None))
     }
 
-    fn new(
-        plugin: &str,
-        surface: &str,
-        host: Weak<dyn Host>,
-        root: Option<View>,
-        lookups: Option<(Lookup, Nearest)>,
-        deliver: Option<Deliver>,
-        mount: Option<Weak<()>>,
-    ) -> Self {
-        let (lookup, nearest) = lookups.unzip();
+    fn new(plugin: &str, host: Weak<dyn Host>, mounted: Option<Mounted>) -> Self {
         Self {
             plugin: plugin.to_owned(),
-            surface: surface.to_owned(),
             host,
-            deliver,
-            held: RefCell::new(root.clone().map_or(Held::Route, Held::Within)),
-            root,
-            lookup,
-            nearest,
-            alive: Cell::new(true),
-            ended: Cell::new(false),
+            held: RefCell::new(mounted.as_ref().map_or(Held::Route, |mounted| Held::Within(mounted.root.clone()))),
+            mounted,
+            life: Cell::new(Life::Alive),
             composer: Cell::new(false),
-            dialog: Cell::new(false),
+            dialog: Cell::new(None),
             reveal: RefCell::default(),
             focus_waiters: RefCell::default(),
             viewed: Cell::new(false),
-            born: Cell::new(None),
             layers: RefCell::default(),
             mode: RefCell::default(),
             ids: RefCell::default(),
             focusable: RefCell::default(),
             pending: RefCell::default(),
-            mount,
-            id: None,
         }
     }
 
     pub fn alive(&self) -> bool {
-        self.alive.get()
+        self.life.get() == Life::Alive
+    }
+
+    /// The mount's surface root; `None` for an activation.
+    fn root(&self) -> Option<&View> {
+        self.mounted.as_ref().map(|mounted| &mounted.root)
+    }
+
+    fn lookup(&self, id: &str) -> Option<AnyWidget> {
+        (self.mounted.as_ref()?.lookup)(id)
     }
 
     /// The scope of the surface is the focus in `view`, the container the host shows it in: a panel, an overlay.
@@ -298,8 +298,7 @@ impl Owner {
 
     /// A dialog surface's mount, before its layers register: they hold in the host dialogs' mode.
     pub(crate) fn mark_dialog(&self) {
-        self.dialog.set(true);
-        self.born.set(Some(std::time::Instant::now()));
+        self.dialog.set(Some(std::time::Instant::now()));
     }
 
     /// The scope of the surface is the dialog whose body is `view`, while it is on top.
@@ -321,7 +320,7 @@ impl Owner {
 
     /// Whether a focus may go to it now: it lives and no host dialog but its own is over it.
     pub(crate) fn eligible(&self, host: &dyn Host) -> bool {
-        self.alive() && self.root.is_some() && !self.modal_over(host)
+        self.alive() && self.root().is_some() && !self.modal_over(host)
     }
 
     /// Whether its tree names a node: the pipe's mount shows a placeholder of none until the JS host's first revision.
@@ -348,14 +347,14 @@ impl Owner {
 
     /// The scope of the surface is the focus in its root: a slot claim.
     pub(crate) fn hold_root(&self) {
-        if let Some(root) = self.root.clone() {
-            self.hold_in(root);
+        if let Some(root) = self.root() {
+            self.hold_in(root.clone());
         }
     }
 
     /// The scope of the surface is its route's showing; a paste in it is its.
     pub(crate) fn hold_route(&self) {
-        if let Some(root) = &self.root {
+        if let Some(root) = self.root() {
             self.pastes_in(root);
         }
         *self.held.borrow_mut() = Held::Route;
@@ -378,7 +377,7 @@ impl Owner {
     /// The view whose focus is the surface's, if its scope is one.
     fn within(&self) -> Option<View> {
         match &*self.held.borrow() {
-            Held::Within(view) | Held::Dialog(view) if self.root.is_some() => Some(view.clone()),
+            Held::Within(view) | Held::Dialog(view) if self.root().is_some() => Some(view.clone()),
             _ => None,
         }
     }
@@ -386,7 +385,7 @@ impl Owner {
     /// Whether the focus is in the surface's scope, or its route shows with no dialog or overlay over it, or its
     /// dialog is on top.
     fn in_surface(&self, host: &dyn Host) -> bool {
-        match (&*self.held.borrow(), &self.root) {
+        match (&*self.held.borrow(), self.root()) {
             (_, None) => false,
             (Held::Within(view), Some(_)) => focus_within(host.app(), view.id()),
             (Held::Route, Some(_)) => !host.modal_open() && !host.router().is_some_and(|router| router.overlaid(host)),
@@ -396,7 +395,7 @@ impl Owner {
 
     /// The view the focus is in while it is in the surface: its container, or its root.
     fn scope_view(&self) -> Option<View> {
-        self.within().or_else(|| self.root.clone())
+        self.within().or_else(|| self.root().cloned())
     }
 
     /// Registers `layers`, whose keys reach `deliver`.
@@ -413,7 +412,7 @@ impl Owner {
             router.owners.borrow_mut().push(me.clone());
         }
         for layer in layers {
-            if matches!((&layer.scope, &self.root), (LayerScope::Surface | LayerScope::Node(_), None)) {
+            if matches!((&layer.scope, self.root()), (LayerScope::Surface | LayerScope::Node(_), None)) {
                 log::warn!("plugin {}: a layer of setup has no surface; use the composer or global scope", self.plugin);
                 continue;
             }
@@ -478,7 +477,7 @@ impl Owner {
     /// Whether `bind` of a dialog surface's layer would take escape, which closes the dialog as it closes the host's own:
     /// such a bind is left out.
     fn closing_key(&self, host: &dyn Host, bind: &Bind) -> bool {
-        let closes = self.dialog.get() && escapes(host, &bind.key);
+        let closes = self.dialog.get().is_some() && escapes(host, &bind.key);
         if closes {
             log::warn!("plugin {}: a dialog surface's bind may not take escape, which closes the dialog", self.plugin);
         }
@@ -523,7 +522,7 @@ impl Owner {
         match mode {
             Some(mode) => format!("{}:{mode}", self.plugin),
             // A dialog's own keys hold in the mode its dialog pushed, beside its escape and `ctrl+c`.
-            None if self.dialog.get() => MODAL_MODE.to_owned(),
+            None if self.dialog.get().is_some() => MODAL_MODE.to_owned(),
             None => BASE_MODE.to_owned(),
         }
     }
@@ -542,17 +541,14 @@ impl Owner {
             LayerScope::Global => !host.router().is_some_and(|router| router.overlaid_by_other(&*host, &self.plugin)),
             LayerScope::Composer => host.composer_focused(),
             LayerScope::Surface => self.in_surface(&*host),
-            LayerScope::Node(id) => {
-                let node = self.lookup.as_ref().and_then(|lookup| lookup(id));
-                node.is_some_and(|node| focus_within(host.app(), node.id()))
-            }
+            LayerScope::Node(id) => self.lookup(id).is_some_and(|node| focus_within(host.app(), node.id())),
         }
     }
 
     /// The scope a mode set now holds in: the surface while the focus is in it, else the composer for an owner with a
     /// layer there while it has the focus, else everywhere for an activation with no composer layer.
     fn mode_scope(&self) -> Option<LayerScope> {
-        match (&self.root, self.composer.get()) {
+        match (self.root(), self.composer.get()) {
             (Some(_), _) if self.holds(&LayerScope::Surface) => Some(LayerScope::Surface),
             (_, true) if self.holds(&LayerScope::Composer) => Some(LayerScope::Composer),
             (None, false) if self.holds(&LayerScope::Global) => Some(LayerScope::Global),
@@ -577,7 +573,7 @@ impl Owner {
             old.disposer.dispose();
         }
         // A mode over the host dialogs' would take their escape and `ctrl+c`.
-        if mode.is_some() && self.dialog.get() {
+        if mode.is_some() && self.dialog.get().is_some() {
             log::warn!("plugin {}: a dialog surface sets no mode", self.plugin);
             return;
         }
@@ -612,7 +608,7 @@ impl Owner {
 
     /// Where the node with id `id` is.
     pub fn rect(&self, id: &str) -> Option<input::Rect> {
-        let widget = self.lookup.as_ref()?(id)?;
+        let widget = self.lookup(id)?;
         let rect = widget.rect();
         Some(input::Rect {
             x: rect.screen_x as i32,
@@ -624,13 +620,13 @@ impl Owner {
 
     /// Where the focus is, for this owner.
     pub fn focused(&self) -> input::Focused {
-        let (Some(host), Some(_), Some(nearest)) = (self.host.upgrade(), &self.root, &self.nearest) else {
+        let (Some(host), Some(mounted)) = (self.host.upgrade(), &self.mounted) else {
             return input::Focused::default();
         };
         let path: Vec<u32> =
             std::iter::successors(host.app().focused(), |widget| widget.parent()).map(|widget| widget.id()).collect();
         // The nearest node with an id that holds the focus.
-        let node = nearest(&path);
+        let node = (mounted.nearest)(&path);
         input::Focused { node, surface: self.scope_view().is_some_and(|view| path.contains(&view.id())) }
     }
 
@@ -641,7 +637,7 @@ impl Owner {
             return;
         }
         let kept = node.filter(|id| self.focusable.borrow().iter().any(|known| known == id));
-        match kept.and_then(|id| self.lookup.as_ref()?(id)) {
+        match kept.and_then(|id| self.lookup(id)) {
             Some(widget) => host.app().focus(&widget),
             None => {
                 if let Some(view) = self.within() {
@@ -682,7 +678,7 @@ impl Owner {
             return;
         }
         let focusable = self.focusable.borrow().iter().any(|known| known == id);
-        match self.lookup.as_ref().and_then(|lookup| lookup(id)).filter(|_| focusable && self.alive()) {
+        match self.lookup(id).filter(|_| focusable && self.alive()) {
             Some(widget) => {
                 refocus(host, || host.app().focus(&widget));
                 // What takes the focus shows: the scrolls of the tree that hold it, then the host's around the mount.
@@ -694,7 +690,7 @@ impl Owner {
             }
             // A node the tree does not hold yet waits for the mount's next view, which may show it; one it holds that
             // takes no focus (a text, a node in a hidden box) is refused.
-            None if self.alive() && self.lookup.is_some() && !self.has(id) => {
+            None if self.alive() && self.mounted.is_some() && !self.has(id) => {
                 *self.pending.borrow_mut() = Some(Pending { id: id.to_owned(), from: focused(host.app()) });
             }
             None => log::warn!("plugin {}: {id:?} is not a focusable node of its mount", self.plugin),
@@ -731,7 +727,7 @@ impl Owner {
     pub(crate) fn blur(&self, host: &dyn Host) {
         self.pending.borrow_mut().take();
         let Some(view) = self.scope_view().filter(|view| focus_within(host.app(), view.id())) else { return };
-        match self.dialog.get() {
+        match self.dialog.get().is_some() {
             true => refocus(host, || host.app().focus(&view)),
             false => host.focus_composer(),
         }
@@ -744,12 +740,12 @@ impl Owner {
 
     /// The mount it holds the input of; `None` for an activation.
     pub(crate) fn mounted(&self) -> Option<Weak<()>> {
-        self.mount.clone()
+        self.mounted.as_ref().map(|mounted| mounted.mount.clone())
     }
 
     /// The ID of the mount it holds the input of; `None` for an activation.
     pub(crate) fn id(&self) -> Option<&opencode_plugin_abi::v2::MountId> {
-        self.id.as_ref()
+        self.mounted.as_ref().map(|mounted| &mounted.id)
     }
 
     /// Calls the mount's handler with what one of its widgets or scrolls sends: an edit, a scroll.
@@ -761,7 +757,7 @@ impl Owner {
 
     /// Calls the mount's handler with `event`.
     fn send(self: &Rc<Self>, host: &dyn Host, event: &Event) -> Handled {
-        match (&self.deliver, self.alive()) {
+        match (self.mounted.as_ref().and_then(|mounted| mounted.deliver.as_ref()), self.alive()) {
             // What the handler asks for is one deeper than what made the router send it.
             (Some(deliver), true) => crate::deeper(|| delivered(deliver, host, self, event)),
             _ => Handled::Pass,
@@ -771,15 +767,15 @@ impl Owner {
     /// Stops the owner's handlers at once: its plugin failed or left `active`. [`Owner::end`] follows once the event
     /// that ended it is handled.
     pub(crate) fn revoke(&self) {
-        self.alive.set(false);
+        self.life.set(self.life.get().max(Life::Revoked));
     }
 
     /// Ends the owner: everything it holds of the input goes. The host gives a focus that was inside it to the
     /// composer as it mounts the route again, and an overlay's close does too.
     pub(crate) fn end(self: &Rc<Self>) {
-        self.alive.set(false);
+        let life = self.life.replace(Life::Ended);
         self.focused_now();
-        if self.ended.replace(true) {
+        if life == Life::Ended {
             return;
         }
         let Some(host) = self.host.upgrade() else { return };
@@ -912,7 +908,8 @@ impl Router {
             visited.push(address);
             *self.listened.borrow_mut() = Some((*event, visited.clone()));
             // A dialog surface's listener hears escape and does not take it: it closes the dialog as the host's own.
-            if delivered(&deliver, host, &owner, &key) == Handled::Consume && !(escape && owner.dialog.get()) {
+            if delivered(&deliver, host, &owner, &key) == Handled::Consume && !(escape && owner.dialog.get().is_some())
+            {
                 taken = true;
                 break;
             }
@@ -1136,7 +1133,7 @@ impl Router {
         let owners: Vec<Rc<Owner>> = self.owners.borrow().iter().filter_map(Weak::upgrade).collect();
         owners.into_iter().rev().find(|owner| {
             owner.alive()
-                && owner.born.get().is_some_and(|born| born.elapsed() < OPENING)
+                && owner.dialog.get().is_some_and(|born| born.elapsed() < OPENING)
                 && !owner.viewed.get()
                 && owner.on_top(host)
         })
@@ -1188,17 +1185,20 @@ impl Router {
             std::iter::successors(Some(source.clone()), |widget| widget.parent()).map(|widget| widget.id()).collect();
         let owners: Vec<Rc<Owner>> = self.owners.borrow().iter().filter_map(Weak::upgrade).collect();
         owners.into_iter().filter(|owner| owner.alive() && owner.plugin == plugin).find_map(|owner| {
-            let node = owner.nearest.as_ref()?(&path)?;
-            Some(input::Dragged { surface: owner.surface.clone(), node })
+            let mounted = owner.mounted.as_ref()?;
+            Some(input::Dragged { surface: mounted.surface.clone(), node: (mounted.nearest)(&path)? })
         })
     }
 
     /// The area of `plugin`'s surface `surface` on the screen, if it shows.
     fn area(&self, plugin: &str, surface: &str) -> Option<(u16, u16, u16, u16)> {
         let owners: Vec<Rc<Owner>> = self.owners.borrow().iter().filter_map(Weak::upgrade).collect();
-        let owner =
-            owners.into_iter().find(|owner| owner.alive() && owner.plugin == plugin && owner.surface == surface)?;
-        let view = owner.within().or_else(|| owner.root.clone())?;
+        let owner = owners.into_iter().find(|owner| {
+            owner.alive()
+                && owner.plugin == plugin
+                && owner.mounted.as_ref().is_some_and(|mounted| mounted.surface == surface)
+        })?;
+        let view = owner.within().or_else(|| owner.root().cloned())?;
         let rect = view.rect();
         let clamp = |value: f64| value.max(0.0).min(f64::from(u16::MAX)) as u16;
         Some((clamp(rect.screen_x), clamp(rect.screen_y), clamp(f64::from(rect.width)), clamp(f64::from(rect.height))))
@@ -1214,7 +1214,7 @@ impl Router {
     fn prune_capture(&self, host: &dyn Host) {
         let stale = self.capture.borrow().as_ref().is_some_and(|capture| {
             let Some(owner) = capture.owner.upgrade().filter(|owner| owner.alive()) else { return true };
-            let node = owner.lookup.as_ref().and_then(|lookup| lookup(&capture.node));
+            let node = owner.lookup(&capture.node);
             node.is_none() || owner.modal_over(host) || host.app().focused().map(|widget| widget.id()) != capture.focus
         });
         if stale {

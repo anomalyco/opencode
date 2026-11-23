@@ -13,6 +13,8 @@ pub mod directories;
 pub mod elicitation;
 pub mod error;
 pub mod paths;
+#[cfg(test)]
+mod perf;
 pub mod permission;
 pub mod prompt;
 pub mod replay;
@@ -21,6 +23,7 @@ pub mod sessions;
 pub mod tools;
 pub mod translate;
 pub mod turn;
+pub mod update;
 
 use std::ffi::OsString;
 use std::path::Path;

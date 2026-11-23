@@ -12,7 +12,7 @@ use opencode_api::generated::{
     SessionMessageAssistantContentItem as ContentItem, SessionMessageAssistantToolState,
     SessionMessageAssistantToolState as ToolPartState, SessionMessageAssistantToolTime, SessionMessageCompaction,
     SessionMessageShellExit, SessionMessageShellOutput, SessionMessageToolStateCompleted, SessionMessageToolStateError,
-    SessionMessageToolStateRunning, SessionMessageToolStateStreaming, SessionStructuredError,
+    SessionMessageToolStateRunning, SessionMessageToolStateStreaming, SessionStructuredError, tag,
 };
 use opentui::app::ProxyError;
 use serde::Deserialize;
@@ -32,17 +32,41 @@ pub const RESIZE_DELAY: Duration = Duration::from_millis(250);
 /// Maximum events buffered during a resize replay.
 pub const RELIST_LIMIT: usize = 4096;
 
-/// A part of a message whose text arrives in pieces (`FragmentRef`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Fragment {
-    pub message_id: String,
-    pub part_id: String,
+/// The part of a message whose text arrives in pieces, displayed as its part ID (`text:0`, `compaction:summary`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PartRef {
+    Text(u32),
+    Reasoning(u32),
+    Summary,
 }
 
-impl Fragment {
-    pub fn new(message_id: &str, kind: &str, ordinal: u64) -> Self {
-        Self { message_id: message_id.to_owned(), part_id: format!("{kind}:{ordinal}") }
+impl PartRef {
+    /// The part of an ID this client displayed.
+    fn parse(id: &str) -> Option<Self> {
+        Some(match id.split_once(':')? {
+            ("text", ordinal) => Self::Text(ordinal.parse().ok()?),
+            ("reasoning", ordinal) => Self::Reasoning(ordinal.parse().ok()?),
+            ("compaction", "summary") => Self::Summary,
+            _ => return None,
+        })
     }
+}
+
+impl std::fmt::Display for PartRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text(ordinal) => write!(f, "text:{ordinal}"),
+            Self::Reasoning(ordinal) => write!(f, "reasoning:{ordinal}"),
+            Self::Summary => f.write_str("compaction:summary"),
+        }
+    }
+}
+
+/// A fragment (`FragmentRef`): the message's index in [`Fragments`]' table and the part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct Fragment {
+    message: u32,
+    part: PartRef,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -70,12 +94,6 @@ impl FragmentState {
     }
 }
 
-/// What a fragment held before an update.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Update {
-    pub previous: String,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Restore {
     Append(String),
@@ -84,27 +102,40 @@ pub enum Restore {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct Fragments(HashMap<Fragment, FragmentState>);
+pub struct Fragments {
+    /// Each message's index, which its fragments are keyed by.
+    messages: HashMap<String, u32>,
+    states: HashMap<Fragment, FragmentState>,
+}
 
 impl Fragments {
     pub fn clear(&mut self) {
-        self.0.clear();
+        self.messages.clear();
+        self.states.clear();
     }
 
-    pub fn value(&self, fragment: &Fragment) -> Option<&str> {
-        self.0.get(fragment).map(|state| state.text.as_str())
+    fn key(&mut self, id: &str, part: PartRef) -> Fragment {
+        let next = self.messages.len() as u32;
+        let message = self.messages.get(id).copied().unwrap_or_else(|| *self.messages.entry(id.into()).or_insert(next));
+        Fragment { message, part }
     }
 
-    /// The fragment's whole text from a list; `visible` when it was shown.
-    pub fn project(&mut self, fragment: &Fragment, text: &str, visible: bool) -> Update {
-        let current = self.0.remove(fragment).unwrap_or_default();
+    pub fn value(&self, message: &str, part: PartRef) -> Option<&str> {
+        let message = *self.messages.get(message)?;
+        self.states.get(&Fragment { message, part }).map(|state| state.text.as_str())
+    }
+
+    /// The fragment's whole text from a list; `visible` when it was shown. Returns the text it held.
+    pub fn project(&mut self, message: &str, part: PartRef, text: &str, visible: bool) -> String {
+        let fragment = self.key(message, part);
+        let current = self.states.remove(&fragment).unwrap_or_default();
         let state = if visible {
             FragmentState::listed(text)
         } else {
             FragmentState { text: text.to_owned(), projected: current.projected }
         };
-        self.0.insert(fragment.clone(), state);
-        Update { previous: current.text }
+        self.states.insert(fragment, state);
+        current.text
     }
 
     /// A live delta: the length of the text before it and the text to show, or `None` when there is nothing to show
@@ -112,8 +143,9 @@ impl Fragments {
     ///
     /// TS drops a delta found anywhere in the listed text, so a list of "a b" and the deltas " " and "c" showed
     /// "a bc" (`parity/deviations/M06-mini-covered-deltas.md`).
-    pub fn delta<'a>(&mut self, fragment: &Fragment, delta: &'a str) -> Option<(usize, Cow<'a, str>)> {
-        let state = self.0.entry(fragment.clone()).or_default();
+    pub fn delta<'a>(&mut self, message: &str, part: PartRef, delta: &'a str) -> Option<(usize, Cow<'a, str>)> {
+        let fragment = self.key(message, part);
+        let state = self.states.entry(fragment).or_default();
         let shown = match &mut state.projected {
             None => Cow::Borrowed(delta),
             Some(projected) => {
@@ -135,26 +167,24 @@ impl Fragments {
         Some((previous, shown))
     }
 
-    /// The final text of a fragment.
-    pub fn end(&mut self, fragment: &Fragment, text: &str) -> Update {
-        let previous = self
-            .0
-            .insert(fragment.clone(), FragmentState { text: text.to_owned(), projected: None })
-            .map(|state| state.text)
-            .unwrap_or_default();
-        Update { previous }
+    /// The final text of a fragment. Returns the text it held.
+    pub fn end(&mut self, message: &str, part: PartRef, text: &str) -> String {
+        let fragment = self.key(message, part);
+        let state = FragmentState { text: text.to_owned(), projected: None };
+        self.states.insert(fragment, state).map(|state| state.text).unwrap_or_default()
     }
 
     /// A locally printed text, replayed after the list (`restore`). The deltas that waited for the list may repeat
     /// its end, as they may a listed text's.
-    pub fn restore(&mut self, fragment: &Fragment, text: &str) -> Restore {
-        let Some(current) = self.0.get(fragment) else {
-            self.0.insert(fragment.clone(), FragmentState::listed(text));
+    pub fn restore(&mut self, message: &str, part: PartRef, text: &str) -> Restore {
+        let fragment = self.key(message, part);
+        let Some(current) = self.states.get(&fragment) else {
+            self.states.insert(fragment, FragmentState::listed(text));
             return Restore::Append(text.to_owned());
         };
         if let Some(suffix) = text.strip_prefix(current.text.as_str()) {
             let suffix = suffix.to_owned();
-            self.0.insert(fragment.clone(), FragmentState::listed(text));
+            self.states.insert(fragment, FragmentState::listed(text));
             return Restore::Append(suffix);
         }
         if current.text.starts_with(text) {
@@ -168,7 +198,7 @@ impl Fragments {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Patch {
     pub running: Option<bool>,
-    pub status: Option<String>,
+    pub status: Option<Cow<'static, str>>,
     pub usage: Option<Option<Usage>>,
 }
 
@@ -200,9 +230,9 @@ impl Output {
         Self { commits, ..Self::default() }
     }
 
-    fn patch(running: bool, status: &str) -> Self {
+    pub(crate) fn patch(running: bool, status: impl Into<Cow<'static, str>>) -> Self {
         Self {
-            patch: Some(Patch { running: Some(running), status: Some(status.to_owned()), usage: None }),
+            patch: Some(Patch { running: Some(running), status: Some(status.into()), usage: None }),
             ..Self::default()
         }
     }
@@ -237,10 +267,7 @@ pub struct Transcript {
     pub tools: bool,
     pub replay: bool,
     pub replay_limit: u32,
-    /// The first hydration has not happened yet; its rows are not remembered locally.
-    pub initial: bool,
-    pub connected: bool,
-    pub root_active: bool,
+    pub link: Link,
     message_ids: HashSet<String>,
     errors: HashSet<String>,
     fragments: Fragments,
@@ -258,9 +285,9 @@ pub struct Transcript {
     local: Vec<Commit>,
     /// With tools hidden, a message's text waits for its step to end, and is dropped when the message turns out
     /// to call tools (`quietText`, `toolMessages`).
-    quiet: Vec<(String, Vec<(String, String)>)>,
+    quiet: Vec<(String, Vec<(PartRef, String)>)>,
     /// With tools hidden, the length of the text a list showed per part: an end buffers only what follows it.
-    quiet_shown: HashMap<String, usize>,
+    quiet_shown: HashMap<(String, PartRef), usize>,
     tool_messages: HashSet<String>,
     /// The session's directory, which tool paths are shown relative to.
     pub directory: Option<String>,
@@ -277,6 +304,15 @@ pub struct Transcript {
     admitted: HashSet<String>,
     /// The prompt turn this client waits for (`state.wait`).
     wait: Option<Wait>,
+}
+
+/// Where the stream stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Link {
+    /// The first hydration has not happened yet; its rows are not remembered locally.
+    Initial,
+    Connected,
+    Disconnected,
 }
 
 /// A resize replay in flight. Its read applies only while it holds the current ticket.
@@ -331,9 +367,7 @@ impl Transcript {
             tools,
             replay,
             replay_limit: replay_limit.unwrap_or(DEFAULT_REPLAY_LIMIT),
-            initial: true,
-            connected: false,
-            root_active: false,
+            link: Link::Initial,
             message_ids: HashSet::new(),
             errors: HashSet::new(),
             fragments: Fragments::default(),
@@ -410,7 +444,7 @@ impl Transcript {
     /// The first or a reconnecting hydration (`hydrate`): every listed message, shown unless this is the first
     /// hydration and replay is off. A reconnect's rows are remembered as live rows are.
     pub fn hydrate(&mut self, messages: &[SessionMessageInfo], active: bool) -> Output {
-        let reconnect = !self.initial;
+        let reconnect = self.link != Link::Initial;
         let output = self.list(messages, active);
         if reconnect {
             self.remember_all(&output.commits);
@@ -430,19 +464,13 @@ impl Transcript {
     }
 
     fn list(&mut self, messages: &[SessionMessageInfo], active: bool) -> Output {
-        let render = !self.initial || self.replay;
+        let render = self.link != Link::Initial || self.replay;
         let mut output = Output::default();
         for message in messages {
             output.extend(self.message(message, render));
         }
-        self.root_active = active;
-        self.initial = false;
-        self.connected = true;
-        output.patch = Some(Patch {
-            running: Some(active),
-            status: Some(if active { "assistant responding" } else { "" }.to_owned()),
-            usage: None,
-        });
+        self.link = Link::Connected;
+        output.extend(Output::patch(active, if active { "assistant responding" } else { "" }));
         output
     }
 
@@ -484,7 +512,7 @@ impl Transcript {
     /// The stream dropped. A resize replay in flight is abandoned, with its events, as TS abandons one of a stale
     /// attempt: the reconnect lists everything again, and a resize relist must not apply its older list after it.
     pub fn disconnected(&mut self) {
-        self.connected = false;
+        self.link = Link::Disconnected;
         self.relist = None;
     }
 
@@ -554,16 +582,15 @@ impl Transcript {
             return self.image_ids.insert(part_key(message, part)).then(|| commit.clone());
         }
         if let (Some(message), Some(part), EntryKind::Assistant | EntryKind::Reasoning) =
-            (&commit.message_id, &commit.part_id, commit.kind)
+            (&commit.message_id, commit.part_id.as_deref().and_then(PartRef::parse), commit.kind)
         {
             let prefix = if commit.kind == EntryKind::Reasoning { "Thinking: " } else { "" };
             let text = commit.text.strip_prefix(prefix).unwrap_or(&commit.text);
-            let fragment = Fragment { message_id: message.clone(), part_id: part.clone() };
             // The list shows this message without the part, as it shows an aborted compaction.
-            if self.message_ids.contains(message) && self.fragments.value(&fragment).is_none() {
+            if self.message_ids.contains(message) && self.fragments.value(message, part).is_none() {
                 return None;
             }
-            match self.fragments.restore(&fragment, text) {
+            match self.fragments.restore(message, part, text) {
                 Restore::Covered => return None,
                 Restore::Append(suffix) if suffix.is_empty() => return None,
                 Restore::Append(suffix) if suffix == text => return Some(commit.clone()),
@@ -602,13 +629,13 @@ impl Transcript {
 
     /// Commits of a live event remembered as local rows: streamed text is remembered whole.
     fn remember_all(&mut self, commits: &[Commit]) {
-        if self.initial || self.relist.is_some() {
+        if self.link == Link::Initial || self.relist.is_some() {
             return;
         }
         for commit in commits {
-            let whole = match (&commit.message_id, &commit.part_id, commit.kind) {
+            let whole = match (&commit.message_id, commit.part_id.as_deref().and_then(PartRef::parse), commit.kind) {
                 (Some(message), Some(part), EntryKind::Assistant | EntryKind::Reasoning) => {
-                    self.fragments.value(&Fragment { message_id: message.clone(), part_id: part.clone() })
+                    self.fragments.value(message, part)
                 }
                 _ => None,
             };
@@ -701,7 +728,7 @@ impl Transcript {
         self.quiet.retain(|(id, _)| id != message);
     }
 
-    fn buffer_quiet(&mut self, message: &str, part: &str, text: &str, replace: bool) {
+    fn buffer_quiet(&mut self, message: &str, part: PartRef, text: &str, replace: bool) {
         if text.is_empty() || self.tool_messages.contains(message) {
             return;
         }
@@ -712,10 +739,10 @@ impl Transcript {
                 &mut self.quiet.last_mut().expect("just pushed").1
             }
         };
-        match parts.iter_mut().find(|(id, _)| id == part) {
+        match parts.iter_mut().find(|(id, _)| *id == part) {
             Some((_, current)) if replace => *current = text.to_owned(),
             Some((_, current)) => current.push_str(text),
-            None => parts.push((part.to_owned(), text.to_owned())),
+            None => parts.push((part, text.to_owned())),
         }
     }
 
@@ -732,7 +759,7 @@ impl Transcript {
             .map(|(part, text)| {
                 Commit::new(EntryKind::Assistant, Source::Assistant, Phase::Progress, text)
                     .message(message)
-                    .part_id(part)
+                    .part_id(part.to_string())
             })
             .collect()
     }
@@ -780,7 +807,7 @@ impl Transcript {
             let ready = name != "websearch" || state.metadata.get("provider").is_some_and(Value::is_string);
             if render && !started && ready {
                 result.commits.push(crate::tools::commit(part, message, Phase::Start, None, directory, version));
-                result.extend(Output::patch(true, &format!("running {name}")));
+                result.extend(Output::patch(true, format!("running {name}")));
             }
             if render && !delta.is_empty() {
                 result.commits.push(crate::tools::commit(
@@ -901,36 +928,25 @@ impl Transcript {
         if visible {
             return Output::default();
         }
-        let header = || {
-            let mut commit = Commit::new(EntryKind::System, Source::System, Phase::Start, "Compaction")
-                .message(id)
-                .part_id("compaction:header");
-            commit.compaction = true;
-            commit
-        };
         if let SessionMessageCompaction::Failed(failed) = message {
             if !render || failed.error.r#type == "aborted" {
                 return Output::default();
             }
             self.errors.insert(id.to_owned());
             let error = Commit::error(&failed.error.message).message(id).part_id("compaction:error");
-            return Output::commits(vec![header(), error]);
+            return Output::commits(vec![compaction_header(id), error]);
         }
         let show = render || matches!(message, SessionMessageCompaction::Running(_));
-        let fragment = Fragment { message_id: id.to_owned(), part_id: "compaction:summary".into() };
-        self.fragments.project(&fragment, summary, show);
+        self.fragments.project(id, PartRef::Summary, summary, show);
         if !show {
             return Output::default();
         }
-        let part = |text: &str, phase| {
-            Commit::new(EntryKind::Assistant, Source::Assistant, phase, text).message(id).part_id("compaction:summary")
-        };
-        let mut commits = vec![header()];
+        let mut commits = vec![compaction_header(id)];
         if !summary.is_empty() {
-            commits.push(part(summary, Phase::Progress));
+            commits.push(compaction_summary(id, summary, Phase::Progress));
         }
         if completed {
-            commits.push(part("", Phase::Final));
+            commits.push(compaction_summary(id, "", Phase::Final));
         }
         Output::commits(commits)
     }
@@ -948,29 +964,29 @@ impl Transcript {
             match item {
                 ContentItem::Text(part) => {
                     let text = part.text.as_str();
-                    let fragment = Fragment::new(id, "text", text_ordinal);
+                    let fragment = PartRef::Text(text_ordinal);
                     text_ordinal += 1;
                     let visible = render && (self.tools || !has_tools);
-                    let update = self.fragments.project(&fragment, text, visible);
-                    if visible && text.len() > update.previous.len() {
-                        commits.push(text_commit(&fragment, suffix(text, &update.previous)));
+                    let previous = self.fragments.project(id, fragment, text, visible);
+                    if visible && text.len() > previous.len() {
+                        commits.push(text_commit(id, fragment, suffix(text, &previous)));
                     }
                     if visible && !self.tools {
-                        self.quiet_shown.insert(part_key(id, &fragment.part_id), text.len());
+                        self.quiet_shown.insert((id.to_owned(), fragment), text.len());
                     }
                 }
                 ContentItem::Reasoning(part) => {
                     let text = part.text.as_str();
-                    let fragment = Fragment::new(id, "reasoning", reasoning_ordinal);
+                    let fragment = PartRef::Reasoning(reasoning_ordinal);
                     reasoning_ordinal += 1;
-                    let update = self.fragments.project(&fragment, text, render);
-                    if render && self.thinking && text.len() > update.previous.len() {
-                        let delta = if update.previous.is_empty() {
+                    let previous = self.fragments.project(id, fragment, text, render);
+                    if render && self.thinking && text.len() > previous.len() {
+                        let delta = if previous.is_empty() {
                             format!("Thinking: {text}")
                         } else {
-                            suffix(text, &update.previous).to_owned()
+                            suffix(text, &previous).to_owned()
                         };
-                        commits.push(reasoning_commit(&fragment, delta));
+                        commits.push(reasoning_commit(id, fragment, delta));
                     }
                 }
                 ContentItem::Tool(tool) => commits.extend(self.render_tool(id, tool, render).commits),
@@ -1051,38 +1067,38 @@ impl Transcript {
             V2Event::SessionTextDelta(delta) => {
                 let data = &delta.data;
                 let message = data.assistant_message_id.as_str();
-                let fragment = Fragment::new(message, "text", data.ordinal as u64);
-                let Some((_, shown)) = self.fragments.delta(&fragment, &data.delta) else {
+                let fragment = PartRef::Text(data.ordinal as u32);
+                let Some((_, shown)) = self.fragments.delta(message, fragment, &data.delta) else {
                     return Output::default();
                 };
                 if !self.tools {
-                    self.buffer_quiet(message, &fragment.part_id, &shown, false);
+                    self.buffer_quiet(message, fragment, &shown, false);
                     return Output::default();
                 }
-                Output::commits(vec![text_commit(&fragment, shown)])
+                Output::commits(vec![text_commit(message, fragment, shown)])
             }
             V2Event::SessionTextEnded(ended) => {
                 let data = &ended.data;
                 let message = data.assistant_message_id.as_str();
-                let fragment = Fragment::new(message, "text", data.ordinal as u64);
-                let update = self.fragments.end(&fragment, &data.text);
+                let fragment = PartRef::Text(data.ordinal as u32);
+                let previous = self.fragments.end(message, fragment, &data.text);
                 if !self.tools {
-                    let shown = self.quiet_shown.get(&part_key(message, &fragment.part_id)).copied().unwrap_or(0);
-                    self.buffer_quiet(message, &fragment.part_id, data.text.get(shown..).unwrap_or_default(), true);
+                    let shown = self.quiet_shown.get(&(message.to_owned(), fragment)).copied().unwrap_or(0);
+                    self.buffer_quiet(message, fragment, data.text.get(shown..).unwrap_or_default(), true);
                     return Output::default();
                 }
-                if data.text.len() <= update.previous.len() {
+                if data.text.len() <= previous.len() {
                     return Output::default();
                 }
-                Output::commits(vec![text_commit(&fragment, suffix(&data.text, &update.previous))])
+                Output::commits(vec![text_commit(message, fragment, suffix(&data.text, &previous))])
             }
             V2Event::SessionReasoningDelta(delta) => {
                 let data = &delta.data;
-                let fragment = Fragment::new(data.assistant_message_id.as_str(), "reasoning", data.ordinal as u64);
-                match self.fragments.delta(&fragment, &data.delta) {
+                let (message, fragment) = (data.assistant_message_id.as_str(), PartRef::Reasoning(data.ordinal as u32));
+                match self.fragments.delta(message, fragment, &data.delta) {
                     Some((previous, shown)) if self.thinking => {
                         let text = if previous == 0 { format!("Thinking: {shown}") } else { shown.into_owned() };
-                        Output::commits(vec![reasoning_commit(&fragment, text)])
+                        Output::commits(vec![reasoning_commit(message, fragment, text)])
                     }
                     _ => Output::default(),
                 }
@@ -1090,17 +1106,14 @@ impl Transcript {
             V2Event::SessionReasoningEnded(ended) => {
                 let data = &ended.data;
                 let text = data.text.as_str();
-                let fragment = Fragment::new(data.assistant_message_id.as_str(), "reasoning", data.ordinal as u64);
-                let update = self.fragments.end(&fragment, text);
-                if !self.thinking || text.len() <= update.previous.len() {
+                let (message, fragment) = (data.assistant_message_id.as_str(), PartRef::Reasoning(data.ordinal as u32));
+                let previous = self.fragments.end(message, fragment, text);
+                if !self.thinking || text.len() <= previous.len() {
                     return Output::default();
                 }
-                let text = if update.previous.is_empty() {
-                    format!("Thinking: {text}")
-                } else {
-                    suffix(text, &update.previous).to_owned()
-                };
-                Output::commits(vec![reasoning_commit(&fragment, text)])
+                let text =
+                    if previous.is_empty() { format!("Thinking: {text}") } else { suffix(text, &previous).to_owned() };
+                Output::commits(vec![reasoning_commit(message, fragment, text)])
             }
             V2Event::SessionStepEnded(ended) => {
                 let data = &ended.data;
@@ -1131,13 +1144,11 @@ impl Transcript {
                 Output::commits(commits)
             }
             V2Event::SessionExecutionStarted(_) => {
-                self.root_active = true;
                 Output { patch: Some(Patch { running: Some(true), ..Patch::default() }), ..Output::default() }
             }
             V2Event::SessionExecutionSucceeded(_)
             | V2Event::SessionExecutionFailed(_)
             | V2Event::SessionExecutionInterrupted(_) => {
-                self.root_active = false;
                 let messages: Vec<String> = self.quiet.iter().map(|(id, _)| id.clone()).collect();
                 let commits = messages.iter().flat_map(|id| self.flush_quiet(id)).collect();
                 if let Some(wait) = &mut self.wait {
@@ -1224,21 +1235,19 @@ impl Transcript {
             }
             V2Event::SessionCompactionDelta(delta) => {
                 let mut output = footer();
-                let Some(message) = self.active_compaction.clone() else { return output };
-                let fragment = Fragment { message_id: message.clone(), part_id: "compaction:summary".into() };
-                if let Some((_, shown)) = self.fragments.delta(&fragment, &delta.data.text) {
-                    output.commits.push(compaction_summary(&message, &shown, Phase::Progress));
+                let Some(message) = self.active_compaction.as_deref() else { return output };
+                if let Some((_, shown)) = self.fragments.delta(message, PartRef::Summary, &delta.data.text) {
+                    output.commits.push(compaction_summary(message, &shown, Phase::Progress));
                 }
                 output
             }
             V2Event::SessionCompactionEnded(ended) => {
                 let mut output = footer();
                 let Some(message) = self.active_compaction.take() else { return output };
-                let fragment = Fragment { message_id: message.clone(), part_id: "compaction:summary".into() };
                 let text = &ended.data.text;
-                let update = self.fragments.end(&fragment, text);
-                if text.len() > update.previous.len() {
-                    output.commits.push(compaction_summary(&message, suffix(text, &update.previous), Phase::Progress));
+                let previous = self.fragments.end(&message, PartRef::Summary, text);
+                if text.len() > previous.len() {
+                    output.commits.push(compaction_summary(&message, suffix(text, &previous), Phase::Progress));
                 }
                 output.commits.push(compaction_summary(&message, "", Phase::Final));
                 output
@@ -1280,7 +1289,7 @@ impl Transcript {
         };
         let tool =
             |id: &str, name: String, state: SessionMessageAssistantToolState, time| SessionMessageAssistantTool {
-                r#type: "tool".into(),
+                r#type: tag::Tool,
                 id: id.to_owned(),
                 name,
                 executed: None,
@@ -1297,7 +1306,7 @@ impl Transcript {
             V2Event::SessionToolInputStarted(started) => {
                 let data = &started.data;
                 let state = ToolPartState::Streaming(SessionMessageToolStateStreaming {
-                    status: "streaming".into(),
+                    status: tag::Streaming,
                     input: String::new(),
                 });
                 tool(&data.id, data.name.clone(), state, time(started.created, None, None))
@@ -1323,7 +1332,7 @@ impl Transcript {
                 }
                 let part = current(&data.id);
                 let state = ToolPartState::Running(SessionMessageToolStateRunning {
-                    status: "running".into(),
+                    status: tag::Running,
                     input: data.input.clone(),
                     metadata: Default::default(),
                 });
@@ -1341,7 +1350,7 @@ impl Transcript {
                 }
                 let part = current(&data.id);
                 let state = ToolPartState::Running(SessionMessageToolStateRunning {
-                    status: "running".into(),
+                    status: tag::Running,
                     input: input_of(&part),
                     metadata: data.metadata.clone(),
                 });
@@ -1357,7 +1366,7 @@ impl Transcript {
                 let data = &success.data;
                 let part = current(&data.id);
                 let state = ToolPartState::Completed(SessionMessageToolStateCompleted {
-                    status: "completed".into(),
+                    status: tag::Completed,
                     input: input_of(&part),
                     content: data.content.clone(),
                     metadata: data.metadata.clone(),
@@ -1369,7 +1378,7 @@ impl Transcript {
                 let data = &failed.data;
                 let part = current(&data.id);
                 let state = ToolPartState::Error(SessionMessageToolStateError {
-                    status: "error".into(),
+                    status: tag::Error,
                     input: input_of(&part),
                     error: data.error.clone(),
                     content: data.content.clone(),
@@ -1402,7 +1411,7 @@ impl Transcript {
             None => previous,
         };
         SessionMessageAssistantTool {
-            r#type: "tool".into(),
+            r#type: tag::Tool,
             id: id.to_owned(),
             name: part.as_ref().map_or("tool".into(), |part| part.name.clone()),
             executed: None,
@@ -1478,16 +1487,16 @@ fn suffix<'a>(text: &'a str, previous: &str) -> &'a str {
     text.get(previous.len()..).unwrap_or_default()
 }
 
-fn text_commit(fragment: &Fragment, text: impl Into<String>) -> Commit {
+pub(crate) fn text_commit(message: &str, part: PartRef, text: impl Into<String>) -> Commit {
     Commit::new(EntryKind::Assistant, Source::Assistant, Phase::Progress, text)
-        .message(&fragment.message_id)
-        .part_id(&fragment.part_id)
+        .message(message)
+        .part_id(part.to_string())
 }
 
-fn reasoning_commit(fragment: &Fragment, text: impl Into<String>) -> Commit {
+pub(crate) fn reasoning_commit(message: &str, part: PartRef, text: impl Into<String>) -> Commit {
     Commit::new(EntryKind::Reasoning, Source::Reasoning, Phase::Progress, text)
-        .message(&fragment.message_id)
-        .part_id(&fragment.part_id)
+        .message(message)
+        .part_id(part.to_string())
 }
 
 /// `errorMessage`: the message, else a fallback (the structured error has no `_tag`).
@@ -2355,7 +2364,7 @@ mod tests {
 
             /// `Mini::replay_on_resize`.
             fn resize(&mut self) {
-                if !self.transcript.replay || !self.transcript.connected {
+                if !self.transcript.replay || self.transcript.link != Link::Connected {
                     return;
                 }
                 if self.transcript.replaying() {

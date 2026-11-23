@@ -5,6 +5,7 @@ import { Permission } from "../permission.js"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
+import { CodeModeApi } from "../codemode/api.js"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { CodeModeTool } from "../codemode/tool.js"
 import { Database } from "../database/database.js"
@@ -101,6 +102,7 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
     const services = yield* CodeModeTool.services
+    const api = yield* CodeModeApi.Service
     const websearch = yield* WebSearch.Service
 
     const resolveModel = (
@@ -156,11 +158,12 @@ const layer = Layer.effect(
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
       const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
-      const [selected, hasWebSearch, fullCodeMode] = yield* Effect.all(
+      const [selected, hasWebSearch, fullCodeMode, opencodeApi] = yield* Effect.all(
         [
           models.select(session, model.available).pipe(Effect.orElseSucceed(() => undefined)),
           websearch.available(),
           flags.enabled("full_codemode"),
+          flags.enabled("opencode_api"),
         ],
         { concurrency: "unbounded" },
       )
@@ -168,6 +171,9 @@ const layer = Layer.effect(
       const policyModel = selected?.info ?? (fallbackRef && Model.Info.default(fallbackRef.providerID, fallbackRef.id))
       const tools = yield* registry.snapshot(permissions, {
         services,
+        api: Context.make(CodeModeApi.Service, opencodeApi ? api : CodeModeApi.disabled).pipe(
+          Context.add(Location.Service, location),
+        ),
         // An agent that can't run `execute` (such as explore) keeps every tool direct, so give it the flag-off policy.
         tools: modelTools({
           model: policyModel,
@@ -249,6 +255,7 @@ export const node = makeLocationNode({
   layer,
   deps: [
     Agent.node,
+    CodeModeApi.node,
     Model.node,
     Database.node,
     FileAccess.node,

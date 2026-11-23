@@ -2,7 +2,6 @@ import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Bus } from "@opencode/core/bus"
-import { Flag } from "@opencode/core/flag"
 import { Generate } from "@opencode/core/generate"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
@@ -19,14 +18,12 @@ import { Effect, Layer, Schedule, Stream } from "effect"
 import { advance } from "./lib/clock"
 import { elsewhere } from "./fixture/target-environment"
 import { withTempDir } from "./fixture/tmpdir"
-import { testEffect } from "./lib/effect"
+import { it } from "./lib/effect"
 import { executeTool, toolIdentity } from "./lib/tool"
 import { makePluginTestLayer } from "./plugin/fixture"
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 const MP4 = Uint8Array.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0])
-
-const it = testEffect(Layer.succeed(Flag.Overrides, "video_generate"))
 
 const imageProvider = (requests: ImageRequest[]) =>
   Layer.succeed(
@@ -127,7 +124,7 @@ const setup = () =>
     return { run, notice, notices, session }
   })
 
-describe("experimental_image_generate", () => {
+describe("generate_image", () => {
   it.live("reads its input and saves its output in the resolved target's environment, not the session's", () =>
     withTempDir((tmp) => {
       const other = elsewhere(tmp.path)
@@ -187,7 +184,7 @@ describe("experimental_image_generate", () => {
   )
 })
 
-describe("experimental_video_generate", () => {
+describe("generate_video", () => {
   it.effect("reads its input and saves its output in the resolved target's environment, not the session's", () =>
     withTempDir((tmp) => {
       const other = elsewhere(tmp.path)

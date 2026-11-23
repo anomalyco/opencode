@@ -61,7 +61,7 @@ export const SettingsModels: Component<{
   const sections = new Map<string, HTMLElement>()
 
   const list = useFilteredList<ModelItem>({
-    items: (_filter) => models.list(),
+    items: (_filter) => models.listed(),
     key: (x) => `${x.provider.id}:${x.id}`,
     filterKeys: ["provider.name", "name", "id"],
     sortBy: (a, b) => a.name.localeCompare(b.name),
@@ -85,7 +85,7 @@ export const SettingsModels: Component<{
     },
   })
 
-  const managed = createMemo(() => consoleModelGroup(models.list()))
+  const managed = createMemo(() => consoleModelGroup(models.listed()))
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]
 

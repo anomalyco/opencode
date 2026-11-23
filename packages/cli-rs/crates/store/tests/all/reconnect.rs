@@ -120,7 +120,8 @@ async fn the_event_stream_follows_a_service_that_crashed_and_was_replaced() {
     };
     let connection = connect::resolve(services.clone(), &paths, &env, &connect::Options::default()).await.unwrap();
     let client = follow::client(services.clone(), &connection, &paths, &env).unwrap();
-    let (connection, _batches) = events::connect(Events { client }, events::Options::default());
+    let (connection, _batches) =
+        events::connect(Events { client, wanted: Default::default() }, events::Options::default());
     let mut state = connection.watch();
     state.wait_for(|state| state.status == Status::Connected).await.unwrap();
 

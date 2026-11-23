@@ -199,12 +199,23 @@ fn switch_label(model: &ModelRef, models: &[ModelInfo], previous: Option<&ModelR
     {
         return format!("Switched variant to {}", model.variant.as_deref().unwrap_or("default"));
     }
-    let display = models.iter().find(|item| item.provider_id == model.provider_id && item.id == model.id);
-    let Some(display) = display else {
+    let find = |at: &ModelRef| models.iter().find(|item| item.provider_id == at.provider_id && item.id == at.id);
+    let Some(display) = find(model) else {
         let mut parts = vec![model.provider_id.as_str(), model.id.as_str()];
         parts.extend(model.variant.as_deref());
         return format!("Switched model to {}", parts.join("/"));
     };
+    // A model's faster and slower speeds are models of their own ("gpt-5.5-fast"), so moving between them is a
+    // change of speed.
+    let speed = |info: &ModelInfo| info.experimental.as_ref().and_then(|experimental| experimental.speed.clone());
+    let base = |info: &ModelInfo| speed(info).map_or_else(|| info.id.clone(), |speed| speed.base);
+    let before = previous.filter(|previous| previous.provider_id == model.provider_id);
+    if let Some(before) = before.and_then(find)
+        && base(before) == base(display)
+    {
+        let id = speed(display).map_or_else(|| "standard".to_owned(), |speed| speed.id);
+        return format!("Switched speed to {id}");
+    }
     let variant = match model.variant.as_deref() {
         Some(variant) if variant != "default" => format!(" ({variant})"),
         _ => String::new(),
@@ -234,4 +245,39 @@ pub fn truncate_width(text: &str, width: usize) -> String {
     }
     out.push('…');
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opencode_api::generated::ProviderID;
+
+    fn model(id: &str, name: &str, speed: Option<(&str, &str)>) -> ModelInfo {
+        let mut value = serde_json::json!({
+            "id": id, "modelID": id, "providerID": "openai", "name": name,
+            "capabilities": { "input": ["text"], "output": ["text"], "tools": true }, "variants": [],
+            "time": { "released": 0 }, "cost": [], "status": "active", "enabled": true,
+            "limit": { "context": 1, "output": 1 },
+        });
+        if let Some((base, speed)) = speed {
+            value["experimental"] = serde_json::json!({ "speed": { "base": base, "id": speed, "faster": true } });
+        }
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn a_switch_between_a_models_speeds_reads_as_a_change_of_speed() {
+        let models = [
+            model("gpt-5.5", "GPT-5.5", None),
+            model("gpt-5.5-fast", "GPT-5.5 Fast", Some(("gpt-5.5", "fast"))),
+            model("gpt-5.5-flex", "GPT-5.5 Flex", Some(("gpt-5.5", "flex"))),
+            model("gpt-6", "GPT-6", None),
+        ];
+        let at = |id: &str| ModelRef { id: id.to_owned(), provider_id: ProviderID("openai".to_owned()), variant: None };
+        let label = |model: &str, previous: &str| switch_label(&at(model), &models, Some(&at(previous)));
+        assert_eq!(label("gpt-5.5-fast", "gpt-5.5"), "Switched speed to fast");
+        assert_eq!(label("gpt-5.5-flex", "gpt-5.5-fast"), "Switched speed to flex");
+        assert_eq!(label("gpt-5.5", "gpt-5.5-fast"), "Switched speed to standard");
+        assert_eq!(label("gpt-5.5-fast", "gpt-6"), "Switched model to GPT-5.5 Fast");
+    }
 }

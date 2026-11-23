@@ -114,6 +114,7 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Mistral Large 4             | mistral-large-4             | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | GPT 6 Luna Decision         | gpt-6-luna-decision         | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | Gemini Decision 1           | gemini-decision-1           | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
+| Jev 1.14                    | jev-1.14                    | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | Jev 1.13                    | jev-1.13                    | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | Jev 1.13 Free               | jev-1.13-free               | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | GPT Image 2.5 Sunburst      | gpt-image-2.5-sunburst      | `https://opencode.ai/inference/openai/v1/images/generations`                                | `@ai-sdk/openai`            |
@@ -176,7 +177,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
   -H "Authorization: Bearer $OPENCODE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "jev-1.13",
+    "model": "jev-1.14",
     "state": "My payments have failed for three days and I am losing sales. Please help now.",
     "questions": {
       "is_urgent": {
@@ -194,7 +195,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
   -H "Authorization: Bearer $OPENCODE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "jev-1.13",
+    "model": "jev-1.14",
     "state": "My order arrived late and the item is damaged. I want a refund.",
     "questions": {
       "department": {
@@ -215,7 +216,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
   }'
 ```
 
-Use `jev-1.13-free` instead of `jev-1.13` to use the limited-time free model. See the [TypeSafe AI documentation](https://docs.typesafe.ai/) for details about question types and response fields.
+Use `jev-1.13-free` to use the limited-time free model, which runs Jev 1.13. See the [TypeSafe AI documentation](https://docs.typesafe.ai/) for details about question types and response fields.
 
 ### GPT 6 Luna Decision and Gemini Decision 1
 
@@ -241,7 +242,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
 
 `gpt-image-2.5-sunburst`, `gemini-nano-banana-2.1`, and `grok-imagine-image-2.0` generate and edit images. They aren't chat models, so they never appear in `/models` or the models endpoint,
 and `opencode/<model-id>` doesn't select them. Call them on their native API with a Console key, or let OpenCode's
-[`experimental_image_generate`](/tools#image-generate) tool use an image model by setting
+[`generate_image`](/tools#image-generate) tool use an image model by setting
 `experimental.image_generate.model`, for example `opencode/gpt-image-2.5-sunburst`.
 
 ```bash
@@ -303,6 +304,7 @@ noted.
 | Nemotron 3.5 Lightning Free         | Free            | Free              | Free               | -            |
 | Nemotron 3.5 Super VL Free          | Free            | Free              | Free               | -            |
 | Jev 1.13 Free                       | Free            | Free              | -                  | -            |
+| Jev 1.14                            | $0.042          | Free              | -                  | -            |
 | Jev 1.13                            | $0.042          | Free              | -                  | -            |
 | Gemini Decision 1                   | $0.10           | Free              | -                  | -            |
 | GPT 6 Luna Decision (≤ 272K tokens) | $0.10           | Free              | $0.01              | $0.125       |
@@ -466,17 +468,11 @@ To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free
 
 | Model                   | Deprecation date  |
 | ----------------------- | ----------------- |
-| LongCat 2.5 Free        | November 22, 2026 |
 | LongCat-2.0             | November 22, 2026 |
-| Inkling 2 Small Free    | November 19, 2026 |
 | GLM 5.2                 | November 19, 2026 |
 | GLM 5.1                 | November 19, 2026 |
-| GLM-5.3-Flash Free      | November 18, 2026 |
 | Gemini 3.1 Pro          | November 17, 2026 |
 | Gemini 3 Flash          | November 17, 2026 |
-| MiniMax M3.1 Flash Free | November 17, 2026 |
-| Crouton Alpha Free      | November 9, 2026  |
-| Pulse Alpha Free        | November 6, 2026  |
 | DeepSeek V4 Flash       | October 26, 2026  |
 | GPT 5.2 Codex           | July 23, 2026     |
 | GPT 5.1 Codex           | July 23, 2026     |

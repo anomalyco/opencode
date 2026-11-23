@@ -8,7 +8,7 @@ mock.module("@/runtime/i18n/language", () => ({
   useLanguage: () => ({ t, activitySummary: () => "work" }),
 }))
 
-const { formatElapsed } = await import("@/session/composer/activity-chips")
+const { formatElapsed, reuseActivityItems } = await import("@/session/composer/activity-chips")
 
 describe("formatElapsed", () => {
   test.each([
@@ -21,4 +21,42 @@ describe("formatElapsed", () => {
     [3_720_000, "1h 02m"],
     [-5_000, "0s"],
   ])("%p ms reads %p", (ms, expected) => expect(formatElapsed(ms, t)).toBe(expected))
+})
+
+describe("reuseActivityItems", () => {
+  const subagent = (key: string, label: string, jobs?: readonly string[]) => {
+    const base = {
+      type: "subagent" as const,
+      key,
+      target: key,
+      sessionID: key,
+      agent: "general",
+      label,
+      started: 1_000,
+    }
+
+    if (!jobs) return base
+
+    return { ...base, jobs }
+  }
+
+  test("returns the same array and item references when every row matches", () => {
+    const first = [subagent("ses_1", "Alpha", ["job_1"]), subagent("ses_2", "Beta")]
+    const next = [subagent("ses_1", "Alpha", ["job_1"]), subagent("ses_2", "Beta")]
+
+    const merged = reuseActivityItems(first, next)
+    expect(merged).toBe(first)
+    expect(merged[0]).toBe(first[0])
+    expect(merged[1]).toBe(first[1])
+  })
+
+  test("reuses unchanged rows while replacing only modified ones", () => {
+    const first = [subagent("ses_1", "Alpha"), subagent("ses_2", "Beta")]
+    const next = [subagent("ses_1", "Alpha"), subagent("ses_2", "Beta updated")]
+
+    const merged = reuseActivityItems(first, next)
+    expect(merged).not.toBe(first)
+    expect(merged[0]).toBe(first[0])
+    expect(merged[1]).toBe(next[1])
+  })
 })

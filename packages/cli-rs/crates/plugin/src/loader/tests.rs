@@ -229,7 +229,11 @@ impl Host for TestHost {
         self.attention.borrow_mut().push(attention.clone());
     }
 
-    fn on_event(&self, _types: &[String], run: Rc<dyn Fn(&abi::types::V2Event)>) -> Option<opentui::keymap::Disposer> {
+    fn on_event(
+        &self,
+        _: crate::EventKinds,
+        run: Rc<dyn Fn(&abi::types::V2Event)>,
+    ) -> Option<opentui::keymap::Disposer> {
         self.events.borrow_mut().push(run.clone());
         let events = Rc::downgrade(&self.events);
         Some(opentui::keymap::Disposer::new(move || {

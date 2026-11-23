@@ -122,7 +122,7 @@ impl Sidebar {
     }
 
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
-        if changes.session(&self.inner.session) {
+        if changes.has(&self.inner.session, Touched::INFO) {
             self.inner.retitle(tui);
         }
         self.inner.layout(tui);
@@ -244,7 +244,7 @@ impl Inner {
 }
 
 fn setting(tui: &Tui) -> SidebarSetting {
-    tui.settings.info().session.and_then(|session| session.sidebar).unwrap_or(SidebarSetting::Auto)
+    tui.config().info.session.as_ref().and_then(|session| session.sidebar).unwrap_or(SidebarSetting::Auto)
 }
 
 /// `session.sidebar.toggle` in the palette, and Escape or Ctrl+C to close the overlay while no dialog is open.

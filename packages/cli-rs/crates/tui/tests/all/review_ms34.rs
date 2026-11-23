@@ -303,7 +303,7 @@ fn session_new_keeps_the_location_agent_and_model_and_closes_dialogs() {
     h.wait("the help dialog", || h.tui.dialogs.is_open());
 
     h.tui.keymap.dispatch("session.new", None);
-    h.wait("home", || h.tui.route() == Route::Home);
+    h.wait("home", || *h.tui.route() == Route::Home);
     assert!(!h.tui.dialogs.is_open(), "the dialog stayed open");
     assert_eq!(
         opencode_tui::features::location::current(&h.tui).map(|location| location.directory),
@@ -358,6 +358,34 @@ fn console_limits_load_show_in_the_prompt_reload_after_a_turn_and_warn_once() {
     h.wait_for("Limit reached");
     h.wait_for("Big Pickle limit reached");
     assert_eq!(h.writes(), Vec::<String>::new());
+}
+
+#[test]
+fn a_model_another_client_selects_warns_of_its_limits() {
+    let h = mount(session_route("ses_a"), Args::default(), animations_off());
+    h.wait_for("Running low on Big Pickle");
+    let event = |seq: u64, kind: &str, data: Value| {
+        json!({
+            "id": format!("evt_{seq}"), "created": seq, "type": kind,
+            "durable": { "aggregateID": "ses_a", "seq": seq, "version": 1 },
+            "location": { "directory": DIRECTORY }, "data": data,
+        })
+    };
+    let select = |seq, provider: &str, id: &str| {
+        let model = json!({ "sessionID": "ses_a", "model": { "providerID": provider, "id": id } });
+        h.server.memory.emit(&event(seq, "session.model.selected", model));
+        h.wait("the other client's model", || h.tui.local.current() == Some(Model::new(provider, id)));
+    };
+    select(1, "demo", "other");
+    // The limits run out while the session is on a model they do not cover: the reload warns of nothing.
+    *h.server.limits.lock().unwrap() = limits(10.0);
+    h.tui.local.load_usage(true);
+    h.wait("the reload", || h.count("GET", LIMITS) == 2);
+    h.settle();
+    assert!(!h.app.text().contains("Big Pickle limit reached"), "{}", h.app.text());
+    // Only the store's sync of the session's selection warns now.
+    select(2, "opencode", "big");
+    h.wait_for("Big Pickle limit reached");
 }
 
 #[test]

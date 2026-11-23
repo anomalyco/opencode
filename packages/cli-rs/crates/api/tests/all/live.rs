@@ -9,7 +9,6 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use opencode_api::client::{Auth, Client};
 use opencode_api::error::Error;
-use opencode_api::events::Event;
 use opencode_api::generated::*;
 
 #[derive(Default)]
@@ -209,7 +208,7 @@ async fn live_reads_decode() {
         let first = tokio::time::timeout(Duration::from_secs(10), events.next()).await;
         match first {
             Ok(Some(Ok(event))) => {
-                report.rows.push(("event.subscribe first".to_owned(), format!("ok {}", event.kind())))
+                report.rows.push(("event.subscribe first".to_owned(), format!("ok {}", event.tag())))
             }
             other => report.failures.push(format!("event.subscribe first: {other:?}")),
         }

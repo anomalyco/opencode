@@ -4,6 +4,7 @@
 pub mod heap;
 pub mod ide;
 pub mod model;
+pub mod probe;
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -304,6 +305,20 @@ pub fn roots(paths: Paths, channel: &str) -> Option<Roots> {
 }
 
 /// Clear with the dark page background so dialog backdrop blending matches the fixture.
+/// A store the thread of `app` owns, drained in `app`'s turns.
+pub fn store(app: &App, client: Client, options: opencode_store::Options) -> opencode_store::Data {
+    struct Mail;
+    let proxy = app.proxy();
+    let data = opencode_store::Data::new(client, options, app.runtime(), move || match proxy.send(Mail) {
+        Ok(()) => Ok(()),
+        Err(opentui::app::ProxyError::Full) => Err(opencode_store::Unwoken::Busy),
+        Err(opentui::app::ProxyError::Closed) => Err(opencode_store::Unwoken::Gone),
+    });
+    let owner = data.clone();
+    app.on_message(move |_, _: &Mail| owner.drain());
+    data
+}
+
 pub fn dark_app(width: u16, height: u16) -> TestApp {
     let theme =
         opencode_ui::theme::Catalog::default().load("opencode", opencode_ui::theme::ThemeMode::Dark).unwrap().theme;
@@ -639,7 +654,7 @@ fn switch_theme(harness: &impl Mounted, remount: bool) {
     assert!(tui.theme.borrow_mut().set(SWITCHED));
     tui.theme_changed();
     if remount {
-        tui.navigate(tui.route());
+        tui.navigate(Route::clone(&tui.route()));
     }
     harness.app().advance(Duration::from_millis(1));
 }

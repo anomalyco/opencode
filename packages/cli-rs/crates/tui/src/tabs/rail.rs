@@ -141,8 +141,8 @@ impl Rail {
     fn items(&self, tui: &Tui) -> Vec<Item> {
         let tabs = tui.tabs.tabs(tui);
         let tabs = match &self.preview {
-            Some((session, index)) => model::reorder(&tabs, session, *index).unwrap_or(tabs),
-            None => tabs,
+            Some((session, index)) => model::reorder(&tabs, session, *index).unwrap_or_else(|| tabs.to_vec()),
+            None => tabs.to_vec(),
         };
         let active = if tui.tabs.new_tab() { None } else { tui.tabs.current(tui) };
         let statuses: Vec<Status> = tabs.iter().map(|tab| tui.tabs.status(tui, &tab.session_id)).collect();
@@ -150,7 +150,7 @@ impl Rail {
             tabs.into_iter()
                 .zip(statuses)
                 .map(|(tab, status)| {
-                    let session = state.session(&SessionID(tab.session_id.clone()));
+                    let session = state.session(&tab.session_id);
                     let title = session
                         .and_then(|session| session.title.clone())
                         .or_else(|| tab.title.clone())
@@ -348,7 +348,10 @@ impl Component for Rail {
             if spinner {
                 spinning.push(session.to_owned());
             }
-            let glyph_text = |idle: &str| indicator(&status, &label, idle, numbers, animations, faded.is_some(), step);
+            let glyph_text = |idle: &str| {
+                let (glyph, unread) = indicator(&status, &label, idle, numbers, animations, faded.is_some(), step);
+                (glyph.to_owned(), unread)
+            };
             let unread = glyph_text("").1;
             rows.push((y, if compact { 1 } else { 2 }, Some(session.to_owned())));
             if compact {
@@ -520,14 +523,14 @@ impl Component for Rail {
             let parts = if scrolling {
                 marquee::text_parts(&item.title, title_width, self.marquee.offset())
             } else {
-                take_width(&item.title, title_width).into_iter().map(|character| (character, false)).collect()
+                take_width(&item.title, title_width).map(|character| (character, false)).collect()
             };
             let visible: Vec<char> = parts.iter().map(|(character, _)| *character).collect();
             let leading = if scrolling { self.marquee.leading(now) } else { 0.0 };
             let fades = marquee::overflows(&item.title, title_width) && title_width > FADE_WIDTH;
             let length = visible.len();
             let glow_text = f64::from(u8::from(item.glows));
-            draw_chars(painter, prefix as i32, y, &visible, |character| {
+            draw_chars(painter, prefix as i32, y, visible, |character| {
                 let color = if glow_text == 0.0 {
                     foreground
                 } else {
@@ -559,10 +562,10 @@ impl Component for Rail {
             );
             paint_cells(painter, y + 1, pulse::paint(&detail_pulse, &detail_colors, None, width as usize));
             let detail_color = tint(theme.text.muted, pulse_bg, 0.35);
-            let visible = take_width(&item.detail, title_width);
+            let visible: Vec<char> = take_width(&item.detail, title_width).collect();
             let fades = item.detail.width() > title_width && title_width > FADE_WIDTH;
             let length = visible.len();
-            draw_chars(painter, prefix as i32, y + 1, &visible, |character| {
+            draw_chars(painter, prefix as i32, y + 1, visible, |character| {
                 Style::new().fg(if fades { fade(detail_color, pulse_bg, character, length, 0.0) } else { detail_color })
             });
         }

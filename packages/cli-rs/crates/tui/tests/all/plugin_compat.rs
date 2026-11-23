@@ -588,7 +588,7 @@ fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
     pipe.retired();
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
     let screen = pipe.harness.app.text();
-    assert_eq!(pipe.harness.tui.route(), Route::Plugin { id: PROBE.to_owned(), name: "page".to_owned() });
+    assert_eq!(*pipe.harness.tui.route(), Route::Plugin { id: PROBE.to_owned(), name: "page".to_owned() });
     assert!(screen.contains("╭─Page") && screen.contains("data n=3"), "{screen}");
     assert!(screen.contains("line 4") && !screen.contains("line 9"), "{screen}");
     let (x, y) = pipe.harness.find("line 2");
@@ -758,17 +758,37 @@ fn a_page_whose_commands_have_no_id_draws_and_settles() {
 fn a_page_that_names_its_commands_anew_each_mount_settles() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe(config);
-    pipe.harness.tui.keymap.dispatch("v2probe.churn", None);
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    tui.keymap.dispatch("v2probe.churn", None);
     pipe.retired();
+    // Each registration reload mounts the page again, and its next mount names its next command anew. Keep the host and
+    // the app's frames in step until neither a tree nor that name changes and nothing waits: a loaded machine reaches
+    // that in more frames, not in more seconds (flakes-q: one more mount crossed past a 400 ms sleep).
+    let churn = || {
+        tui.keymap
+            .commands()
+            .iter()
+            .filter_map(|command| command.id.strip_prefix("v2probe.churn-")?.parse::<u32>().ok())
+            .max()
+    };
+    let mut settled = (opencode_plugin::pipe::crossed().trees, churn());
+    for _ in 0..200 {
+        app.advance(Duration::from_millis(16));
+        pipe.settle();
+        let now = opencode_plugin::pipe::crossed();
+        if (now.trees, churn()) == settled && pipe.scripts().idle() {
+            break;
+        }
+        settled = (now.trees, churn());
+    }
     let quiet = opencode_plugin::pipe::crossed();
-    std::thread::sleep(Duration::from_millis(400));
     for _ in 0..5 {
-        pipe.harness.app.advance(Duration::from_millis(16));
+        app.advance(Duration::from_millis(16));
     }
     let after = opencode_plugin::pipe::crossed();
     assert_eq!((after.received, after.trees), (quiet.received, quiet.trees), "the page did not settle");
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
-    assert!(pipe.harness.app.text().contains("churn page"), "{}", pipe.harness.app.text());
+    assert!(app.text().contains("churn page"), "{}", app.text());
 }
 
 #[test]
@@ -815,7 +835,7 @@ fn a_session_panel_stays_open_across_a_reload() {
     let pipe = crate::plugin_pipe::open_on(&[("v2probe", Some(options))], config, (120, 30), Vec::new(), server);
     pipe.active(PROBE);
     pipe.harness.tui.navigate(Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) });
-    pipe.until("the session shows", || matches!(pipe.harness.tui.route(), Route::Session { .. }));
+    pipe.until("the session shows", || matches!(&*pipe.harness.tui.route(), Route::Session { .. }));
     pipe.settle();
     pipe.harness.tui.keymap.dispatch("v2probe.panel", None);
     assert_eq!(logged(&pipe, &log, 1), [json!({ "opened": true })]);
@@ -835,7 +855,7 @@ fn a_session_panel_toggles_focuses_and_closes_itself() {
     let pipe = crate::plugin_pipe::open_on(&[("v2probe", Some(options))], config, (120, 30), Vec::new(), server);
     pipe.active(PROBE);
     pipe.harness.tui.navigate(Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) });
-    pipe.until("the session shows", || matches!(pipe.harness.tui.route(), Route::Session { .. }));
+    pipe.until("the session shows", || matches!(&*pipe.harness.tui.route(), Route::Session { .. }));
     pipe.settle();
     pipe.harness.tui.keymap.dispatch("v2probe.panel", None);
     assert_eq!(logged(&pipe, &log, 1), [json!({ "opened": true })]);

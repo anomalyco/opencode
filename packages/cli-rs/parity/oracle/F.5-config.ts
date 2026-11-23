@@ -173,6 +173,7 @@ if (command === "model") {
         if (op.recent) return repository.addRecent(op.recent)
         if (op.favorite) return repository.setFavorite(op.favorite, op.enabled)
         if (op.variant) return repository.saveVariant(op.variant, op.value ?? undefined)
+        if (op.speed) return repository.saveSpeed(op.speed, op.value ?? undefined)
         return repository.load()
       }),
     )

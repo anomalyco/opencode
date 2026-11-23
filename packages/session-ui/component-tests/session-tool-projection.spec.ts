@@ -252,6 +252,23 @@ story("keeps long execute calls inside the tool and shows the script output", as
   expect(overflow).toBeLessThanOrEqual(0)
 })
 
+story("lists a long script's latest calls and reveals earlier ones on request", async ({ mount }) => {
+  const timeline = await mount("current-session-terminal-work--execute-many-calls")
+  const tool = timeline.locator('[data-timeline-part-id="tool_execute_many_calls"]')
+  const rows = tool.locator('[data-slot="execute-tool-call"]:not([data-kind="output"])')
+  await expect(rows).toHaveCount(10)
+  await expect(rows.first()).toContainText("module-65.ts")
+
+  await tool.getByRole("button", { name: "+65 more" }).click()
+  await expect(rows).toHaveCount(60)
+
+  // The last reveal removes the button, so focus moves on to the first call instead of the page.
+  await tool.getByRole("button", { name: "+15 more" }).press("Enter")
+  await expect(rows).toHaveCount(75)
+  await expect(rows.first()).toContainText("module-0.ts")
+  await expect(rows.first()).toBeFocused()
+})
+
 story("opens execute rows while a text field elsewhere keeps its selection", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-code")
   const rows = timeline.locator('[data-timeline-part-id="tool_execute_long_call"] [data-slot="execute-tool-call"]')

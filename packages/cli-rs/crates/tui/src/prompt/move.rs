@@ -309,29 +309,38 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
     let session = prompt.session_info(tui);
     let lost = prompt.session.is_some() && session.is_none();
     let location = session.map_or_else(|| home_location(tui, prompt), |session| Location::from(&session.location));
-    let data = tui.data.clone();
+    let remote = tui.data.remote();
     tui.app.spawn(
         async move {
             if lost {
                 return Err("Unable to determine current session location".to_owned());
             }
-            if data.read(|state| state.location(Some(&location)).and_then(|d| d.info.clone())).is_none() {
-                data.location_sync_info(Some(&location)).await.map_err(|error| error.tui_message())?;
+            let at = location.clone();
+            let info = remote.call(move |data| {
+                let known = data.read(|state| state.location(Some(&at)).is_some_and(|d| d.info.is_some()));
+                (!known).then(|| data.location_sync_info(Some(&at)))
+            });
+            if let Some(info) = info.await.map_err(|error| error.tui_message())? {
+                info.await.map_err(|error| error.tui_message())?;
             }
-            let project = data
-                .read(|state| {
+            let project = remote.call(move |data| {
+                data.read(|state| {
                     state.location(Some(&location)).and_then(|d| d.info.as_ref()).map(|info| info.project.id.clone())
                 })
+            });
+            let project = project
+                .await
+                .map_err(|error| error.tui_message())?
                 .ok_or_else(|| "Unable to determine current project".to_owned())?;
             let input = WorktreeCreateInput { project_id: project, name: Some(name), ..WorktreeCreateInput::default() };
             let directory =
-                data.client().worktree_create(&input).await.map_err(|error| error.tui_message())?.directory.0;
+                remote.client().worktree_create(&input).await.map_err(|error| error.tui_message())?.directory.0;
             if directory.is_empty() {
                 return Err("No worktree directory returned".to_owned());
             }
-            data.location_sync_info(Some(&Location::new(directory.clone())))
-                .await
-                .map_err(|error| error.tui_message())?;
+            let at = Location::new(directory.clone());
+            let info = remote.call(move |data| data.location_sync_info(Some(&at)));
+            info.await.map_err(|error| error.tui_message())?.await.map_err(|error| error.tui_message())?;
             Ok(directory)
         },
         bind!(prompt.this, |prompt, _, result| {

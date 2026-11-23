@@ -1,6 +1,6 @@
 //! Todo tool summary and checklist.
 
-use opencode_ui::tool_info::{Todo as Item, TodoStatus, parse_todos, todo_marker};
+use opencode_ui::tool_info::{Todo as Item, TodoInput, TodoStatus, todo_marker};
 
 use super::dispatch::{Block, BlockTool, Header, Inline, InlineTool, Props, Status, content_width};
 use crate::prelude::*;
@@ -33,7 +33,7 @@ impl Todo {
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
         let status = props.status();
-        let todos = parse_todos(props.input.get("todos").unwrap_or(&Value::Null));
+        let todos = TodoInput(props.input).items();
         let listed = status == Status::Completed && !todos.is_empty();
         self.inline.root().visible(!listed);
         self.block.root().visible(listed);

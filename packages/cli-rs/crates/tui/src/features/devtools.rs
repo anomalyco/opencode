@@ -121,7 +121,7 @@ pub fn enabled(info: &Info) -> bool {
 }
 
 fn shown(tui: &Tui, info: &Info) -> bool {
-    enabled(info) && !matches!(tui.route(), Route::Plugin { id, .. } if id == "opencode.stats")
+    enabled(info) && !matches!(&*tui.route(), Route::Plugin { id, .. } if id == "opencode.stats")
 }
 
 thread_local! {
@@ -623,8 +623,8 @@ impl Bar {
         self.dumping.set(true);
         *self.dump.borrow_mut() = None;
         self.render(tui);
-        let session = match tui.route() {
-            Route::Session { id } => Some(id),
+        let session = match &*tui.route() {
+            Route::Session { id } => Some(id.clone()),
             _ => None,
         };
         let state = self.state.borrow().clone();

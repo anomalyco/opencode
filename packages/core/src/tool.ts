@@ -3,7 +3,7 @@ export { CallID, Content, Error, FileContent, TextContent } from "@opencode/sche
 export type { Context, Info, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
-import { toolExpression, type CodeMode } from "@opencode/codemode"
+import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
 import { isRecord } from "@opencode/util/record"
 import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
@@ -71,6 +71,8 @@ export interface SnapshotOptions {
    * session's Location and file services.
    */
   readonly services?: Context.Context<CodeModeTool.Services>
+  /** What `opencode://` fetch sends requests through; see the `opencode_api` flag. */
+  readonly api?: Context.Context<CodeModeTool.Api>
   readonly tools?: Policy
 }
 
@@ -114,11 +116,6 @@ export interface Snapshot {
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
-  /**
-   * The expression a Code Mode program calls a tool by (`tools.opencode.session.search`), when `name` is the path or
-   * registry ID of one of this snapshot's Code Mode tools.
-   */
-  readonly codeModeExpression?: (name: string) => string | undefined
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Tool") {}
@@ -355,6 +352,7 @@ const layer = Layer.effect(
                   (name, item, input, context) => run(inventory.tools, item, name, input, context),
                   permission,
                   full ? options.services : undefined,
+                  options?.api,
                 )
                 const entry = cached ?? {
                   inventory,
@@ -371,15 +369,7 @@ const layer = Layer.effect(
                 return { tool, inventory, catalog: entry.value, definition: entry.definition }
               })()
           return {
-            ...(codemode === undefined
-              ? {}
-              : {
-                  codeModeCatalog: codemode.catalog,
-                  codeModeExpression: (name: string) => {
-                    const found = CodeModeTool.find(codemode.inventory, name)
-                    return found && toolExpression(CodeModeTool.qualifiedName(found.registration))
-                  },
-                }),
+            ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog }),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
@@ -403,11 +393,24 @@ const layer = Layer.effect(
               if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codemode) {
-                const run = (ctx: Tool.Context) => executeTool(codemode.tool, name, event.input, ctx)
+              // A tool this request only offers inside Code Mode, called by the model at the top level or renamed there by
+              // a plugin, runs as a Code Mode call when the request offered execute.
+              const found =
+                codemode &&
+                name !== "execute" &&
+                !direct.has(name) &&
+                (!input.definitions || Array.from(input.definitions.values()).some((item) => item.name === "execute"))
+                  ? CodeModeTool.find(codemode.inventory, name)
+                  : undefined
+              if (codemode && (name === "execute" || found)) {
+                // Like an execute program, it moves to the background when it runs long.
+                const run = (ctx: Tool.Context) =>
+                  found
+                    ? executeTool(found.registration, found.id, event.input, { ...ctx, codemode: true })
+                    : executeTool(codemode.tool, name, event.input, ctx)
                 const background = yield* CodeModeJob.Current
                 return yield* background
-                  ? background(context, run, full ? executeOptions(event.input) : undefined)
+                  ? background(context, run, full && !found ? executeOptions(event.input) : undefined)
                   : run(context)
               }
               const tool = direct.get(name)

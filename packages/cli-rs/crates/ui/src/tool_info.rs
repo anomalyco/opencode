@@ -1,6 +1,8 @@
 //! One-line tool summaries shared by `run`, mini and the full TUI.
 
-use opencode_api_types::js::{js_string, truthy};
+use indexmap::IndexMap;
+use opencode_api_types::js::js_string;
+pub use opencode_api_types::tool::*;
 use opencode_api_types::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
 use opencode_util::json_object;
 use serde_json::{Map, Value};
@@ -19,37 +21,27 @@ pub struct ToolInline {
 /// The summary of `part`. Paths are shown relative to `directory`, else to the current directory.
 pub fn tool_inline_info(part: &SessionMessageAssistantTool, directory: Option<&str>) -> ToolInline {
     let frame = Frame::new(part, directory);
-    let draw = match frame.name {
-        "invalid" => run_invalid,
-        "shell" => run_shell,
-        "write" => run_write,
-        "edit" => run_edit,
-        "patch" => run_patch,
-        "batch" => run_batch,
-        "subagent" => run_task,
-        "todowrite" => run_todo,
-        "question" => run_question,
-        "read" => run_read,
-        "glob" => run_glob,
-        "grep" => run_grep,
-        "list" => run_list,
-        "lsp" => run_lsp,
-        "webfetch" => run_webfetch,
-        "websearch" => run_web_search,
-        "skill" => run_skill,
+    let draw = match frame.kind {
+        ToolKind::Invalid => run_invalid,
+        ToolKind::Shell => run_shell,
+        ToolKind::Write => run_write,
+        ToolKind::Edit => run_edit,
+        ToolKind::Patch => run_patch,
+        ToolKind::Batch => run_batch,
+        ToolKind::Subagent => run_task,
+        ToolKind::Todo => run_todo,
+        ToolKind::Question => run_question,
+        ToolKind::Read => run_read,
+        ToolKind::Glob => run_glob,
+        ToolKind::Grep => run_grep,
+        ToolKind::List => run_list,
+        ToolKind::Lsp => run_lsp,
+        ToolKind::WebFetch => run_webfetch,
+        ToolKind::WebSearch => run_web_search,
+        ToolKind::Skill => run_skill,
         _ => return fallback_inline(&frame),
     };
     draw(&frame).unwrap_or_else(|| fallback_inline(&frame))
-}
-
-/// The current name of a tool whose persisted name is a legacy alias.
-pub fn canonical_tool_name(name: &str) -> &str {
-    match name {
-        "bash" => "shell",
-        "task" => "subagent",
-        "apply_patch" => "patch",
-        _ => name,
-    }
 }
 
 pub fn finite_number(value: &Value) -> Option<f64> {
@@ -57,9 +49,9 @@ pub fn finite_number(value: &Value) -> Option<f64> {
 }
 
 /// `[key=value, …]` over the string, number, and boolean entries of `input`, in wire order.
-pub fn primitive_input_summary(input: &Map<String, Value>, omit: &[&str]) -> String {
+pub fn primitive_input_summary<'a>(input: impl IntoIterator<Item = (&'a String, &'a Value)>, omit: &[&str]) -> String {
     let entries: Vec<_> = input
-        .iter()
+        .into_iter()
         .filter(|(key, value)| {
             !omit.contains(&key.as_str()) && matches!(value, Value::String(_) | Value::Number(_) | Value::Bool(_))
         })
@@ -108,13 +100,16 @@ pub fn execute_calls(value: &Value) -> Vec<ExecuteCall> {
 }
 
 pub fn execute_call_summary(call: &ExecuteCall) -> String {
-    let args = primitive_input_summary(call.input.as_ref().unwrap_or(&Map::new()), &[]);
-    let args = args.split(char::is_whitespace).filter(|part| !part.is_empty());
-    let args = args.collect::<Vec<_>>().join(" ");
+    call_summary(&call.tool, call.input.iter().flatten())
+}
+
+/// `tool [key=value …]`: a call by its name and the primitive entries of its input, on one line.
+pub fn call_summary<'a>(tool: &str, input: impl IntoIterator<Item = (&'a String, &'a Value)>) -> String {
+    let args = primitive_input_summary(input, &[]).split_whitespace().collect::<Vec<_>>().join(" ");
     if args.is_empty() {
-        return call.tool.clone();
+        return tool.to_owned();
     }
-    format!("{} {args}", call.tool)
+    format!("{tool} {args}")
 }
 
 pub fn web_search_provider_name(provider: &Value) -> String {
@@ -145,7 +140,7 @@ pub fn tool_display_metadata(state: &SessionMessageAssistantToolState) -> Map<St
             if state.get("status").is_none() {
                 return Map::new();
             }
-            return dict(state.get("metadata"));
+            return state.get("metadata").and_then(Value::as_object).cloned().unwrap_or_default();
         }
     };
     metadata
@@ -178,9 +173,9 @@ pub fn tool_output_text(name: &str, content: &[ToolContent]) -> String {
             _ => None,
         }
     }
-    let name = canonical_tool_name(name);
+    let kind = ToolKind::of(name);
     // V2 shell content appends model-only status after the user-visible command output.
-    if name == "shell" {
+    if kind == ToolKind::Shell {
         return content.iter().find_map(text_of).flatten().unwrap_or_default().to_owned();
     }
     let joined = content
@@ -189,66 +184,19 @@ pub fn tool_output_text(name: &str, content: &[ToolContent]) -> String {
         .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join("\n");
-    if name == "read" {
+    if kind == ToolKind::Read {
         return read_display_text(&joined).unwrap_or(joined);
     }
     joined
 }
 
-/// Read's model content is a JSON page envelope; this unwraps the human-facing text.
-pub fn read_display_text(text: &str) -> Option<String> {
-    if !text.starts_with('{') {
-        return None;
-    }
-    let envelope = dict(serde_json::from_str::<Value>(text).ok().as_ref());
-    if let Some(content) = envelope.get("content").and_then(Value::as_str) {
-        let page = envelope.get("type").and_then(Value::as_str) == Some("text-page");
-        if page || envelope.get("encoding").and_then(Value::as_str) == Some("utf8") {
-            return Some(content.to_owned());
-        }
-    }
-    let entries = envelope.get("entries")?.as_array()?;
-    let lines: Vec<_> =
-        entries.iter().filter_map(|entry| entry.as_str().or_else(|| entry.get("path")?.as_str())).collect();
-    Some(lines.join("\n"))
-}
-
 /// Show paths inside the working directory as relative paths; leave outside paths absolute.
 pub fn tool_path(input: &str, directory: Option<&str>, home: Option<&str>) -> String {
-    let cwd = std::env::current_dir().map(|dir| dir.to_string_lossy().into_owned()).unwrap_or_default();
-    crate::path::format_path(input, directory.unwrap_or(&cwd), home, true)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TodoStatus {
-    Pending,
-    InProgress,
-    Completed,
-    Cancelled,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Todo {
-    pub content: String,
-    pub status: TodoStatus,
-}
-
-/// The items of a `todowrite` input; an unknown status reads as pending.
-pub fn parse_todos(value: &Value) -> Vec<Todo> {
-    let Some(items) = value.as_array() else { return Vec::new() };
-    items
-        .iter()
-        .filter_map(|item| {
-            let content = item.as_object()?.get("content")?.as_str().filter(|content| !content.is_empty())?;
-            let status = match item.get("status").and_then(Value::as_str) {
-                Some("in_progress") => TodoStatus::InProgress,
-                Some("completed") => TodoStatus::Completed,
-                Some("cancelled") => TodoStatus::Cancelled,
-                _ => TodoStatus::Pending,
-            };
-            Some(Todo { content: content.to_owned(), status })
-        })
-        .collect()
+    if let Some(directory) = directory {
+        return crate::path::format_path(input, directory, home, true);
+    }
+    let cwd = std::env::current_dir().unwrap_or_default();
+    crate::path::format_path(input, &cwd.to_string_lossy(), home, true)
 }
 
 pub fn todo_marker(status: TodoStatus, ascii: bool) -> &'static str {
@@ -266,7 +214,8 @@ pub fn todo_marker(status: TodoStatus, ascii: bool) -> &'static str {
 struct Frame<'a> {
     directory: Option<&'a str>,
     name: &'a str,
-    input: Map<String, Value>,
+    kind: ToolKind,
+    input: ToolInput<'a>,
     meta: Map<String, Value>,
     status: &'a str,
     output: String,
@@ -274,20 +223,15 @@ struct Frame<'a> {
 
 impl<'a> Frame<'a> {
     fn new(part: &'a SessionMessageAssistantTool, directory: Option<&'a str>) -> Self {
-        let name = canonical_tool_name(&part.name);
-        let status = part.state.tag();
-        if let SessionMessageAssistantToolState::Streaming(_) = part.state {
-            return Frame { directory, name, input: Map::new(), meta: Map::new(), status, output: String::new() };
-        }
-        // Read the input as JSON so that a member this client does not know reads like a known one.
-        let state = serde_json::to_value(&part.state).unwrap_or_default();
+        let kind = ToolKind::of(&part.name);
         Frame {
             directory,
-            name,
-            input: normalize_input(name, state.get("input")),
-            meta: normalize_metadata(name, tool_display_metadata(&part.state)),
-            status,
-            output: tool_output_text(name, &tool_display_content(&part.state)),
+            name: canonical_tool_name(&part.name),
+            kind,
+            input: ToolInput::of(&part.state),
+            meta: normalize_metadata(kind, tool_display_metadata(&part.state)),
+            status: part.state.tag(),
+            output: tool_output_text(&part.name, &tool_display_content(&part.state)),
         }
     }
 
@@ -296,37 +240,17 @@ impl<'a> Frame<'a> {
     }
 
     /// `displayPath(p, value)`: `None` where the TS would throw on a value that is not a string.
-    fn path(&self, value: Option<&Value>) -> Option<String> {
-        if !value.is_some_and(truthy) {
+    fn path(&self, value: Field) -> Option<String> {
+        if !value.truthy() {
             return Some(String::new());
         }
-        Some(tool_path(value?.as_str()?, self.directory, None))
+        Some(tool_path(value.str()?, self.directory, None))
     }
-}
-
-/// `normalizeInput`: legacy `filePath` and `subagent_type` as `path` and `agent`.
-pub fn normalize_input(name: &str, value: Option<&Value>) -> Map<String, Value> {
-    let mut input = dict(value);
-    let path = match input.get("path") {
-        Some(Value::String(path)) => path.clone(),
-        _ => text(input.get("filePath")).to_owned(),
-    };
-    let agent = match input.get("agent") {
-        Some(Value::String(agent)) => agent.clone(),
-        _ => text(input.get("subagent_type")).to_owned(),
-    };
-    if ["read", "write", "edit", "lsp"].contains(&name) && !path.is_empty() {
-        input.insert("path".to_owned(), Value::String(path));
-    }
-    if name == "subagent" && !agent.is_empty() {
-        input.insert("agent".to_owned(), Value::String(agent));
-    }
-    input
 }
 
 /// `normalizeMetadata`: the files of edit and patch metadata with legacy field names mapped.
-pub fn normalize_metadata(name: &str, mut metadata: Map<String, Value>) -> Map<String, Value> {
-    if !["edit", "patch"].contains(&name) {
+pub fn normalize_metadata(kind: ToolKind, mut metadata: Map<String, Value>) -> Map<String, Value> {
+    if !matches!(kind, ToolKind::Edit | ToolKind::Patch) {
         return metadata;
     }
     if let Some(Value::Array(files)) = metadata.get("files") {
@@ -338,7 +262,7 @@ pub fn normalize_metadata(name: &str, mut metadata: Map<String, Value>) -> Map<S
 
 /// A file of edit or patch metadata, with legacy field names mapped to `file`, `status`, and `from`.
 fn normalize_file(value: &Value) -> Option<Value> {
-    let field = |key| text(value.get(key));
+    let field = |key| value.get(key).and_then(Value::as_str).unwrap_or_default();
     let name = [field("file"), field("relativePath"), field("filePath")].into_iter().find(|name| !name.is_empty())?;
     let status = match (field("status"), field("type")) {
         ("", "add") => "added",
@@ -358,11 +282,8 @@ fn normalize_file(value: &Value) -> Option<Value> {
 }
 
 fn fallback_inline(frame: &Frame) -> ToolInline {
-    let input = if frame.input.is_empty() {
-        "Unknown".to_owned()
-    } else {
-        serde_json::to_string(&frame.input).unwrap_or_default()
-    };
+    let input = frame.input.iter().collect::<IndexMap<_, _>>();
+    let input = if input.is_empty() { "Unknown".to_owned() } else { serde_json::to_string(&input).unwrap_or_default() };
     inline("⚙", format!("{} {input}", frame.name))
 }
 
@@ -375,8 +296,8 @@ fn run_grep(frame: &Frame) -> Option<ToolInline> {
 }
 
 fn search(frame: &Frame, label: &str, metadata: &str) -> Option<ToolInline> {
-    let root = frame.input.get("path").filter(|root| !root.is_null());
-    let suffix = if root.is_some_and(truthy) { format!("in {}", frame.path(root)?) } else { String::new() };
+    let root = frame.input.path();
+    let suffix = if root.truthy() { format!("in {}", frame.path(root)?) } else { String::new() };
     let description = match frame.meta.get(metadata) {
         None => suffix,
         Some(matches) => {
@@ -385,12 +306,12 @@ fn search(frame: &Frame, label: &str, metadata: &str) -> Option<ToolInline> {
             format!("{suffix}{separator}{} match{plural}", js_string(matches))
         }
     };
-    let title = format!("{label} \"{}\"", or_empty(frame.input.get("pattern")));
+    let title = format!("{label} \"{}\"", SearchInput(frame.input).pattern().js());
     Some(ToolInline { description: non_empty(description), ..inline("✱", title) })
 }
 
 fn run_list(frame: &Frame) -> Option<ToolInline> {
-    let dir = text(frame.input.get("path"));
+    let dir = frame.input.path().text();
     if dir.is_empty() {
         return Some(inline("→", "List".to_owned()));
     }
@@ -398,59 +319,63 @@ fn run_list(frame: &Frame) -> Option<ToolInline> {
 }
 
 fn run_read(frame: &Frame) -> Option<ToolInline> {
-    let file = frame.path(frame.input.get("path"))?;
-    let description = non_empty(primitive_input_summary(&frame.input, &["path"]));
+    let file = frame.path(frame.input.legacy_path())?;
+    let description = non_empty(primitive_input_summary(frame.input.iter(), &["path"]));
     Some(ToolInline { description, ..inline("→", format!("Read {file}")) })
 }
 
 fn run_write(frame: &Frame) -> Option<ToolInline> {
-    let title = format!("Write {}", frame.path(frame.input.get("path"))?);
+    let title = format!("Write {}", frame.path(frame.input.legacy_path())?);
     Some(block("←", title, frame.completed_output()))
 }
 
 fn run_webfetch(frame: &Frame) -> Option<ToolInline> {
-    let url = frame.input.get("url");
-    if !url.is_some_and(truthy) {
+    let url = WebFetchInput(frame.input).url();
+    if !url.truthy() {
         return Some(inline("%", "WebFetch".to_owned()));
     }
-    Some(inline("%", format!("WebFetch {}", or_empty(url))))
+    Some(inline("%", format!("WebFetch {}", url.js())))
 }
 
 fn run_edit(frame: &Frame) -> Option<ToolInline> {
     let file = frame.meta.get("files").and_then(Value::as_array).and_then(|files| files.first());
     let patch = file.and_then(|file| file.get("patch")).filter(|patch| !patch.is_null());
     let body = patch.or_else(|| frame.meta.get("diff")).and_then(Value::as_str).map(str::to_owned);
-    let title = format!("Edit {}", frame.path(frame.input.get("path"))?);
+    let title = format!("Edit {}", frame.path(frame.input.legacy_path())?);
     Some(block("←", title, body))
 }
 
 fn run_web_search(frame: &Frame) -> Option<ToolInline> {
     let title = web_search_provider_label(frame.meta.get("provider").unwrap_or(&Value::Null));
-    let query = frame.input.get("query");
-    if !query.is_some_and(truthy) {
+    let query = WebSearchInput(frame.input).query();
+    if !query.truthy() {
         return Some(inline("◈", title));
     }
-    Some(inline("◈", format!("{title} \"{}\"", or_empty(query))))
+    Some(inline("◈", format!("{title} \"{}\"", query.js())))
 }
 
 fn run_task(frame: &Frame) -> Option<ToolInline> {
-    let agent = frame.input.get("agent");
-    let kind = titlecase(if agent.is_some_and(truthy) { agent?.as_str()? } else { "unknown" });
+    let input = SubagentInput(frame.input);
+    let agent = input.legacy_agent();
+    let kind = titlecase(if agent.truthy() { agent.str()? } else { "unknown" });
     let icon = match frame.status {
         "error" => "✗",
         "running" => "•",
         _ => "✓",
     };
-    let description = frame.input.get("description");
-    if !description.is_some_and(truthy) {
+    let description = input.description();
+    if !description.truthy() {
         return Some(inline(icon, format!("{kind} Subagent")));
     }
-    Some(ToolInline { description: Some(format!("{kind} Agent")), ..inline(icon, or_empty(description)) })
+    Some(ToolInline { description: Some(format!("{kind} Agent")), ..inline(icon, description.js()) })
 }
 
 fn run_skill(frame: &Frame) -> Option<ToolInline> {
-    let name = [frame.meta.get("name"), frame.input.get("id")].into_iter().flatten().find(|name| !name.is_null());
-    Some(inline("→", format!("Skill \"{}\"", or_empty(name))))
+    let name = [frame.meta.get("name"), SkillInput(frame.input).id().value()]
+        .into_iter()
+        .flatten()
+        .find(|name| !name.is_null());
+    Some(inline("→", format!("Skill \"{}\"", name.map(js_string).unwrap_or_default())))
 }
 
 fn run_patch(frame: &Frame) -> Option<ToolInline> {
@@ -467,8 +392,8 @@ fn run_patch(frame: &Frame) -> Option<ToolInline> {
 }
 
 fn run_todo(frame: &Frame) -> Option<ToolInline> {
-    let todos = parse_todos(frame.input.get("todos").unwrap_or(&Value::Null));
-    let body = todos
+    let body = TodoInput(frame.input)
+        .items()
         .iter()
         .map(|todo| format!("{} {}", todo_marker(todo.status, false), todo.content))
         .collect::<Vec<_>>()
@@ -477,7 +402,7 @@ fn run_todo(frame: &Frame) -> Option<ToolInline> {
 }
 
 fn run_question(frame: &Frame) -> Option<ToolInline> {
-    let total = list_len(frame.input.get("questions"));
+    let total = QuestionInput(frame.input).questions().array().len();
     Some(inline("→", format!("Asked {total} question{}", plural(total))))
 }
 
@@ -486,29 +411,29 @@ fn run_invalid(frame: &Frame) -> Option<ToolInline> {
 }
 
 fn run_batch(frame: &Frame) -> Option<ToolInline> {
-    let calls = list_len(frame.input.get("tool_calls"));
+    let calls = BatchInput(frame.input).tool_calls().array().len();
     let title = if calls > 0 { format!("Batch {calls} tool{}", plural(calls)) } else { "Batch".to_owned() };
     Some(block("#", title, frame.completed_output()))
 }
 
 fn run_lsp(frame: &Frame) -> Option<ToolInline> {
-    let operation = frame.input.get("operation");
-    let operation = if operation.is_some_and(truthy) { or_empty(operation) } else { "request".to_owned() };
-    let file = frame.path(frame.input.get("path"))?;
+    let input = LspInput(frame.input);
+    let operation = if input.operation().truthy() { input.operation().js() } else { "request".to_owned() };
+    let file = frame.path(frame.input.legacy_path())?;
     if file.is_empty() {
         return Some(inline("→", format!("LSP {operation}")));
     }
-    let number = |key| frame.input.get(key).filter(|value| value.is_number());
-    let position = match (number("line"), number("character")) {
-        (Some(line), Some(character)) => format!(":{}:{}", js_string(line), js_string(character)),
+    let number = |value: Option<&Value>| value.filter(|value| value.is_number()).map(js_string);
+    let position = match (number(input.line().value()), number(input.character().value())) {
+        (Some(line), Some(character)) => format!(":{line}:{character}"),
         _ => String::new(),
     };
     Some(inline("→", format!("LSP {operation} {file}{position}")))
 }
 
 fn run_shell(frame: &Frame) -> Option<ToolInline> {
-    let command = frame.input.get("command");
-    let title = if command.is_some_and(truthy) { or_empty(command) } else { String::new() };
+    let command = ShellInput(frame.input).command();
+    let title = if command.truthy() { command.js() } else { String::new() };
     let body = (frame.status == "completed").then(|| frame.output.trim().to_owned());
     Some(block("$", title, body))
 }
@@ -527,23 +452,6 @@ fn plural(count: usize) -> &'static str {
 
 fn non_empty(text: String) -> Option<String> {
     (!text.is_empty()).then_some(text)
-}
-
-fn dict(value: Option<&Value>) -> Map<String, Value> {
-    value.and_then(Value::as_object).cloned().unwrap_or_default()
-}
-
-fn text(value: Option<&Value>) -> &str {
-    value.and_then(Value::as_str).unwrap_or_default()
-}
-
-fn list_len(value: Option<&Value>) -> usize {
-    value.and_then(Value::as_array).map_or(0, Vec::len)
-}
-
-/// `${value ?? ""}` in a template literal.
-fn or_empty(value: Option<&Value>) -> String {
-    value.filter(|value| !value.is_null()).map(js_string).unwrap_or_default()
 }
 
 /// `Locale.titlecase`: uppercases every ASCII word character that starts a word.

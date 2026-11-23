@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-// P-COMP fixtures for the model, agent, variant, usage, model usage, and Go upsell dialogs (E.16):
+// P-COMP fixtures for the model, agent, variant, speed, usage, model usage, and Go upsell dialogs (E.16):
 // crates/tui/tests/all/models.rs. Each dialog opens over the real TUI providers, LocalProvider included, against
 // the routes in parity/fixtures/E.16/server.json and the model.json below, which the Rust test serves too. Times
 // render in UTC here; the Rust test shifts each `resetsAt` by its local offset.
@@ -14,6 +14,7 @@ import type { JSX } from "solid-js"
 import { DialogAgent } from "../../../tui/src/component/dialog-agent"
 import { DialogGoUpsell } from "../../../tui/src/component/dialog-go-upsell"
 import { DialogModel } from "../../../tui/src/component/dialog-model"
+import { DialogSpeed } from "../../../tui/src/component/dialog-speed"
 import { DialogVariant } from "../../../tui/src/component/dialog-variant"
 import { DialogUsage, DialogUsageModel } from "../../../tui/src/component/usage"
 import { ConfigProvider } from "../../../tui/src/config"
@@ -44,7 +45,12 @@ const model = (
   id: string,
   name: string,
   cost: number,
-  extra: { variants?: string[]; context?: number; status?: string } = {},
+  extra: {
+    variants?: string[]
+    context?: number
+    status?: string
+    speed?: { base: string; id: string; faster: boolean }
+  } = {},
 ) => ({
   id,
   modelID: id,
@@ -57,6 +63,7 @@ const model = (
   limit: { context: extra.context ?? 200_000, output: 32_000 },
   time: { released: 0 },
   variants: (extra.variants ?? []).map((id) => ({ id })),
+  ...(extra.speed ? { experimental: { speed: extra.speed } } : {}),
 })
 
 const provider = (id: string, name: string, integrationID?: string) => ({
@@ -97,6 +104,15 @@ const budget = (id: string, extra: Record<string, unknown>) => ({
 export const server = {
   "/api/model": [
     model("anthropic", "claude-sonnet", "Claude Sonnet", 3, { variants: ["low", "high"] }),
+    // Claude Sonnet served slower and faster: speeds of it, which the model list leaves out.
+    model("anthropic", "claude-sonnet-flex", "Claude Sonnet Flex", 1.5, {
+      variants: ["low", "high"],
+      speed: { base: "claude-sonnet", id: "flex", faster: false },
+    }),
+    model("anthropic", "claude-sonnet-fast", "Claude Sonnet Fast", 6, {
+      variants: ["low", "high"],
+      speed: { base: "claude-sonnet", id: "fast", faster: true },
+    }),
     model("anthropic", "claude-haiku", "Claude Haiku", 1),
     model("openai", "gpt-5", "GPT-5", 1.25),
     model("openai", "gpt-4", "GPT-4", 30, { status: "deprecated" }),
@@ -261,6 +277,7 @@ await capture({
 })
 await capture({ ...size, fixture: "agent", dialog: () => <DialogAgent />, ready: (f) => f.includes("plan") })
 await capture({ ...size, fixture: "variant", dialog: () => <DialogVariant />, ready: (f) => f.includes("high") })
+await capture({ ...size, fixture: "speed", dialog: () => <DialogSpeed />, ready: (f) => f.includes("Standard") })
 await capture({ ...size, fixture: "usage", dialog: () => <DialogUsage />, ready: (f) => f.includes("left") })
 await capture({
   ...size,

@@ -558,6 +558,12 @@ fn open_dialog_reads_worktrees_and_creates_one() {
     kit.app.press("right");
     kit.wait_for("App / Worktrees");
     kit.wait_for("app-feature    ");
+    // The list draws from the GET's answer and the refresh goes out after it, so wait for the fixture to see
+    // the request rather than for the screen.
+    let refreshed = kit.app.wait_until(WAIT, || {
+        kit.requests().iter().any(|(method, url, _)| method == "POST" && url == "/api/worktree/refresh")
+    });
+    assert!(refreshed, "the fixture never saw the worktree refresh: {:?}", kit.requests());
     // Only the worktree requests: the prompt's catalog reads after connect are not ordered against them.
     let requests: Vec<(String, String)> = kit
         .requests()
@@ -588,7 +594,7 @@ fn open_dialog_reads_worktrees_and_creates_one() {
         kit.mutations(),
         [("POST".to_owned(), "/api/worktree".to_owned(), Some(json!({ "projectID": "proj_app", "name": "spike" })))]
     );
-    assert_eq!(kit.tui.route(), Route::Home);
+    assert_eq!(*kit.tui.route(), Route::Home);
 }
 
 #[test]
@@ -598,5 +604,5 @@ fn open_dialog_opens_a_session() {
     kit.wait_for("Other project");
     kit.app.press("down");
     kit.app.press("enter");
-    assert!(kit.app.wait_until(WAIT, || { kit.tui.route() == Route::Session { id: SessionID("ses_r2".into()) } }));
+    assert!(kit.app.wait_until(WAIT, || { *kit.tui.route() == Route::Session { id: SessionID("ses_r2".into()) } }));
 }

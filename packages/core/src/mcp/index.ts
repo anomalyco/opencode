@@ -39,7 +39,7 @@ import { Hash } from "@opencode/util/hash"
 import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
-import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-errors.js"
+import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-stream.js"
 import { canonicalJson } from "../util/canonical-json.js"
 import { McpConnection } from "./connection.js"
 import { McpPool } from "./pool.js"
@@ -643,7 +643,7 @@ export const layer = (options?: Options) =>
         const pooled =
           config.pool === true &&
           config.protocol !== "legacy" &&
-          (config.type === "remote" || location.workspaceID === undefined)
+          (config.type === "remote" || environment.hostsServer === true)
         const share = (input: McpConnection.Input) =>
           pool.connection({
             ...input,
