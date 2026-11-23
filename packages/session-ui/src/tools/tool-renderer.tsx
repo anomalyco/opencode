@@ -1722,7 +1722,7 @@ ToolRegistry.register({
           <div
             data-component="tool-output"
             data-scrollable
-            tabIndex={0}
+            tabIndex={-1}
             role="region"
             aria-label={i18n.t("ui.scrollView.ariaLabel")}
           >
@@ -1755,7 +1755,7 @@ ToolRegistry.register({
           <div
             data-component="tool-output"
             data-scrollable
-            tabIndex={0}
+            tabIndex={-1}
             role="region"
             aria-label={i18n.t("ui.scrollView.ariaLabel")}
           >
@@ -1793,7 +1793,7 @@ ToolRegistry.register({
           <div
             data-component="tool-output"
             data-scrollable
-            tabIndex={0}
+            tabIndex={-1}
             role="region"
             aria-label={i18n.t("ui.scrollView.ariaLabel")}
           >
@@ -1985,7 +1985,7 @@ export function ConsoleOutput(props: { command?: string; output: string }) {
       <div
         data-slot="bash-scroll"
         data-scrollable
-        tabIndex={0}
+        tabIndex={-1}
         role="region"
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
       >

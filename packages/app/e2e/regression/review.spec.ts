@@ -73,9 +73,18 @@ test("review rings stay visible on the mode trigger and file tree, and none surr
 
   const diff = panel.locator('[data-component="file"][data-mode="diff"]')
 
-  await diff.press("Shift+Tab")
+  // The diff has no ring, so it is not a Tab stop: Tab passes over it in both directions.
+  await expect(diff).toHaveAttribute("tabindex", "-1")
+  await mode.focus()
   await page.keyboard.press("Tab")
-  // The diff takes focus so the keyboard can scroll and search it, without a ring around the whole viewer.
+  await expect(diff).not.toBeFocused()
+  await page.keyboard.press("Shift+Tab")
+  await expect(diff).not.toBeFocused()
+
+  // It still takes focus so the keyboard can scroll and search it, without a ring around the whole viewer. A click on a diff line opens the comment editor, so focus it directly.
+  await diff.focus()
+  await expect(diff).toBeFocused()
+  await page.keyboard.press("ArrowDown")
   await expect(diff).toBeFocused()
   await expect(diff).toHaveCSS("outline-style", "none")
   await expect.poll(() => diff.evaluate((element) => getComputedStyle(element, "::after").outlineStyle)).toBe("none")
