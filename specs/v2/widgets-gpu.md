@@ -258,19 +258,19 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
   is a bug in the program, and a new device doesn't fix it.
 - **Client errors** (not reported, logged in dev mode): no WebGPU, device creation failure, a driver crash or reset,
   running out of GPU memory under the limits. The canvas shows its placeholder.
-- **GPU hang.** A batch, or a `wgsl` shader frame, whose GPU work is still unfinished 1 s after its submit stops every
-  canvas it draws into (a pass's color attachment `view` or `resolveTarget`; drawing into none, every GPU canvas of the
-  widget, as Which canvases stop says) for the rest of the run, as an error would: a client error with exactly this
-  message, `the GPU work took over 1 s; the canvas is stopped`, and the placeholder shows. It applies first, whatever
-  the shader's 50 ms rule has counted (`widgets.md`, GPU canvases). (On macOS a shader running for seconds trips the
-  GPU watchdog, which may blame another queue, the app's own among them, and lose the device.)
-  At a device loss, the oldest unfinished submit on the queue counts as a GPU hang if it had been running at
-  least 250 ms (counted from its submit or, if later, from when the submit before it finished): the canvases it draws
-  into stop the same way, with the same message, and the new device doesn't restart them. It needs no loss reason, so
-  it works the same on Metal, Vulkan and the web (the macOS watchdog kills hung work after about 0.5 s, before the 1 s
-  rule). (For both rules the queue is the widget's; on a host whose widgets share one device and queue, as Rune and
-  mobile do, it is that shared queue, tracked across runs: only the hung submit's widget stops, and work queued behind
-  it isn't blamed.)
+- **GPU hang.** A batch, or a `wgsl` shader frame, whose GPU work is still unfinished 250 ms after its submit stops
+  every canvas it draws into (a pass's color attachment `view` or `resolveTarget`; drawing into none, every GPU canvas
+  of the widget, as Which canvases stop says) for the rest of the run, as an error would: a client error with exactly
+  this message, `the GPU work took over 250 ms; the canvas is stopped`, and the placeholder shows. It applies first,
+  whatever the shader's 50 ms rule has counted (`widgets.md`, GPU canvases). (On macOS a shader running for seconds
+  trips the GPU watchdog after about 0.5 s, which may blame another queue, the app's own among them, and lose the
+  device; at 250 ms the host stops a hung widget while its first slow frame still runs.) At a device loss, the oldest
+  unfinished submit on the queue counts as a GPU hang if it had been running at least 250 ms (counted from its submit
+  or, if later, from when the submit before it finished): the canvases it draws into stop the same way, with the same
+  message, and the new device doesn't restart them. It needs no loss reason, so it works the same on Metal, Vulkan and
+  the web (a safety net for when the host didn't check the submit in time). (For both rules the queue is the widget's;
+  on a host whose widgets share one device and queue, as Rune and mobile do, it is that shared queue, tracked across
+  runs: only the hung submit's widget stops, and work queued behind it isn't blamed.)
 - **Device loss.** When the client loses its device (a reset, the app backgrounded long enough, a live program
   restored from a snapshot), it sends `{ type: "gpu", lost: reason, message? }`; the prelude resolves `device.lost` with
   `{ reason, message }` (`message` `""` when absent) and every handle is gone. While the program has read a live
