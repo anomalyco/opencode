@@ -3,16 +3,10 @@ import { getOwner, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { type ServerSDK } from "./client"
-import {
-  bootstrapGlobal,
-  loadGlobalConfigQuery,
-  loadPathQuery,
-  loadProjects,
-  loadProjectsQuery,
-} from "./global-sync/bootstrap"
+import { bootstrapGlobal, createGlobalQueries, loadProjects, loadProjectsQuery } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import type { GlobalStore, ProjectMeta } from "./global-sync/types"
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { normalizeProjectInfo, updateProjectInfo } from "./global-sync/utils"
 import { persisted } from "@/runtime/persistence/storage"
 import { createConnectionSync } from "./server-sync/connection"
@@ -27,27 +21,16 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   const connected = () => serverSDK.connection.status() === "connected"
 
-  const [configQuery, pathQuery] = useQueries(() => ({
-    queries: [
-      { ...loadGlobalConfigQuery(serverSDK.scope), enabled: connected() },
-      { ...loadPathQuery(serverSDK.scope, null, serverSDK.api.location), enabled: connected() },
-    ],
-  }))
+  const globalQueries = createGlobalQueries({ scope: serverSDK.scope, location: serverSDK.api.location, connected })
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     project: [],
     provider_auth: {},
     get path() {
-      const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
-
-      if (pathQuery.isPending) return EMPTY
-
-      return pathQuery.data ?? EMPTY
+      return globalQueries.path()
     },
     get config() {
-      if (configQuery.isPending) return {}
-
-      return configQuery.data ?? {}
+      return globalQueries.config()
     },
   })
 
