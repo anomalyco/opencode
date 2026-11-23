@@ -23132,7 +23132,7 @@
         },
         "required": ["name"],
         "additionalProperties": false,
-        "description": "An agent the prompt mentions, such as @explore, to point the model at using it. It doesn't change the session's own agent."
+        "description": "An agent @-mentioned in the prompt, such as @explore, to suggest the model use it. Only the @name in text reaches the model; this records which agent it names and doesn't change the session's own agent."
       },
       "Prompt.Base64": {
         "type": "string",

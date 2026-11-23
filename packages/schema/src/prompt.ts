@@ -84,7 +84,7 @@ export const AgentAttachment = Schema.Struct({
 }).annotate({
   identifier: "Prompt.AgentAttachment",
   description:
-    "An agent the prompt mentions, such as @explore, to point the model at using it. It doesn't change the session's own agent.",
+    "An agent @-mentioned in the prompt, such as @explore, to suggest the model use it. Only the @name in text reaches the model; this records which agent it names and doesn't change the session's own agent.",
 })
 
 export interface SkillAttachment extends Schema.Schema.Type<typeof SkillAttachment> {}
