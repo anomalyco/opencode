@@ -79,7 +79,7 @@ test("review rings stay visible on the mode trigger and file tree, and none surr
   await page.keyboard.press("Tab")
   await expect(diff).not.toBeFocused()
   await page.keyboard.press("Shift+Tab")
-  await expect(diff).not.toBeFocused()
+  await expect(mode).toBeFocused()
 
   // It still takes focus so the keyboard can scroll and search it, without a ring around the whole viewer. A click on a diff line opens the comment editor, so focus it directly.
   await diff.focus()
