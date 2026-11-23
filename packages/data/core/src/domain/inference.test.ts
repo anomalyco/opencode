@@ -90,6 +90,8 @@ describe("inference stat normalization", () => {
     expect(statProvider("OMEN-ALPHA-free:global", "gpt-test-model", "test-provider")).toBe("unknown")
     expect(statProvider("omen-alpha", "", "test-provider")).toBe("unknown")
     expect(statProvider("exo-free", "gpt-test-model", "hidden-provider")).toBe("unknown")
+    expect(statProvider("hungerg-free", "hidden-route-model", "hidden-provider")).toBe("unknown")
+    expect(statModel("hungerg-free", "")).toBe("hungerg")
 
     const exo = { ...aggregate("exo-free", "hidden-provider"), provider_model: "hidden-route-model" }
     expect(toModelAggregate(exo)).toMatchObject([{ model: "exo", provider: "unknown", requests: 1 }])
@@ -311,7 +313,7 @@ describe("inference stat normalization", () => {
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
       expect(query).toContain(
-        "CASE\n      WHEN lower(model) IN ('exo', 'frantic-ferret', 'iceman', 'iceman-contributor', 'omen-alpha', 'pulse-alpha', 'tidepool-alpha', 'union-alpha') THEN 'unknown'\n",
+        "CASE\n      WHEN lower(model) IN ('exo', 'frantic-ferret', 'hungerg', 'iceman', 'iceman-contributor', 'omen-alpha', 'pulse-alpha', 'tidepool-alpha', 'union-alpha') THEN 'unknown'\n",
       )
       expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
@@ -401,7 +403,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]?.query).toContain("AND product IN ('go', 'go-plus', 'go-teams')")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
     expect(queries[0]?.query).toContain(
-      "CASE\n      WHEN lower(model) IN ('exo', 'frantic-ferret', 'iceman', 'iceman-contributor', 'omen-alpha', 'pulse-alpha', 'tidepool-alpha', 'union-alpha') THEN 'unknown'\n",
+      "CASE\n      WHEN lower(model) IN ('exo', 'frantic-ferret', 'hungerg', 'iceman', 'iceman-contributor', 'omen-alpha', 'pulse-alpha', 'tidepool-alpha', 'union-alpha') THEN 'unknown'\n",
     )
     expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
