@@ -403,7 +403,7 @@ for (const direction of ["ltr", "rtl"]) {
         await expect(controls).toHaveAttribute("data-overflow-end", "true")
         await expect(controls).toHaveCSS(
           "mask-image",
-          `linear-gradient(to ${direction === "ltr" ? "right" : "left"}, rgba(0, 0, 0, 0), rgb(0, 0, 0) 0px, rgb(0, 0, 0) calc(100% - 16px), rgba(0, 0, 0, 0))`,
+          `linear-gradient(to ${direction === "ltr" ? "right" : "left"}, rgba(0, 0, 0, 0) 0px, rgb(0, 0, 0) 0px, rgb(0, 0, 0) calc(100% - 24px), rgba(0, 0, 0, 0) calc(100% - 12px))`,
         )
         const first = await agent.boundingBox()
 
@@ -476,6 +476,54 @@ for (const direction of ["ltr", "rtl"]) {
   }
 }
 
+for (const direction of ["ltr", "rtl"]) {
+  story(`pages overflowing controls with edge buttons in ${direction}`, async ({ mount, page }) => {
+    const component = await mount("opencode-composer-flow--toolbar-overflow", {
+      args: { alternate: "none" },
+      globals: { direction },
+    })
+
+    const controls = component.locator('[data-slot="composer-controls"]')
+    const start = component.locator('[data-slot="composer-controls-scroll"][data-edge="start"]')
+    const end = component.locator('[data-slot="composer-controls-scroll"][data-edge="end"]')
+    const input = component.getByRole("textbox", { name: "Prompt", exact: true })
+    const distance = () => controls.evaluate((element) => Math.abs(element.scrollLeft))
+    await page.evaluate(() => document.fonts.ready.then(() => undefined))
+    await page.setViewportSize({ width: 360, height: 720 })
+
+    // Only the edge with hidden controls offers a button, on the side it scrolls toward.
+    await expect(start).toHaveCount(0)
+    await expect(end).toBeVisible()
+    const viewport = (await controls.boundingBox())!
+    const edge = (await end.boundingBox())!
+    expect(direction === "ltr" ? edge.x : viewport.x + viewport.width / 2).toBeGreaterThan(
+      direction === "ltr" ? viewport.x + viewport.width / 2 : edge.x + edge.width,
+    )
+    // The buttons are for the pointer: keyboard and screen reader users reach every control by focus.
+    await expect(end).toHaveAttribute("tabindex", "-1")
+    await expect(end).toHaveAttribute("aria-hidden", "true")
+
+    await input.focus()
+    await end.click()
+    await expect(input).toBeFocused()
+    await expect.poll(distance).toBeGreaterThan(0)
+    await expect(start).toBeVisible()
+    await start.click()
+    await expect.poll(distance).toBe(0)
+    await expect(start).toHaveCount(0)
+
+    // Paging reaches the last control, and the button leaves with the hidden controls.
+    await expect(async () => {
+      if (await end.count()) await end.click()
+      await expect(end).toHaveCount(0, { timeout: 500 })
+    }).toPass()
+    await expect(start).toBeVisible()
+    expect(await distance()).toBeGreaterThanOrEqual(
+      (await controls.evaluate((element) => element.scrollWidth - element.clientWidth)) - 1,
+    )
+  })
+}
+
 story("does not mask or pad controls when they fit", async ({ mount }) => {
   const component = await mount("opencode-composer-flow--model-and-variant")
   const controls = component.locator('[data-slot="composer-controls"]')
@@ -484,6 +532,7 @@ story("does not mask or pad controls when they fit", async ({ mount }) => {
   await expect(controls).toHaveCSS("mask-image", "none")
   await expect(controls).toHaveCSS("padding-inline-start", "0px")
   await expect(controls).toHaveCSS("padding-inline-end", "0px")
+  await expect(component.locator('[data-slot="composer-controls-scroll"]')).toHaveCount(0)
 })
 
 story("keeps toolbar focus rings whole and keyboard-only", async ({ mount, page }) => {

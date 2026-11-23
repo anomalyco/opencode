@@ -147,6 +147,16 @@ export function ComposerEditor(props: ComposerEditorProps) {
     })
   }
 
+  // Pages most of the visible width toward the start (-1) or end (1), whichever way the writing direction runs.
+  const scrollControls = (toward: -1 | 1) => {
+    const rtl = controlsViewport.matches(":dir(rtl)")
+
+    controlsViewport.scrollBy({
+      left: toward * (rtl ? -1 : 1) * controlsViewport.clientWidth * 0.75,
+      behavior: "smooth",
+    })
+  }
+
   // The bottom fade shrinks with the remaining scroll so the last line ends clear of it.
   const [fadeBottom, setFadeBottom] = createSignal(0)
 
@@ -485,47 +495,82 @@ export function ComposerEditor(props: ComposerEditorProps) {
             </div>
           </Show>
           <div
-            ref={controlsViewport}
-            data-slot="composer-controls"
-            data-overflow-start={overflow.start}
-            data-overflow-end={overflow.end}
-            class="h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain no-scrollbar"
+            class="relative h-full min-w-0 flex-1"
             classList={{ "ms-1 me-3": !touch() }}
-            onScroll={updateOverflow}
-            // Chromium leaves a partly visible control where it is when it takes focus, cut off by the edge.
-            onFocusIn={() => document.activeElement?.scrollIntoView({ block: "nearest", inline: "nearest" })}
             aria-hidden={mode() === "shell"}
             inert={mode() === "shell" ? true : undefined}
             style={buttons()}
           >
-            <div ref={controlsContent} class="flex h-full w-max min-w-full items-center gap-0.5">
-              <Show when={view.agent} keyed>
-                {(control) => (
-                  <ComposerEditorConfiguredSelect
-                    fitMenuToOptions
-                    title={i18n.t("ui.promptInput.chooseAgent")}
-                    keybind={["Mod", "."]}
-                    control={control}
-                  />
-                )}
-              </Show>
-              <Show when={props.modelControlsVisible ?? true}>
-                {props.modelControl}
-                <Show when={view.variant} keyed>
+            <div
+              ref={controlsViewport}
+              data-slot="composer-controls"
+              data-overflow-start={overflow.start}
+              data-overflow-end={overflow.end}
+              class="h-full overflow-x-auto overscroll-x-contain no-scrollbar"
+              onScroll={updateOverflow}
+              // Chromium leaves a partly visible control where it is when it takes focus, cut off by the edge.
+              onFocusIn={() => document.activeElement?.scrollIntoView({ block: "nearest", inline: "nearest" })}
+            >
+              <div ref={controlsContent} class="flex h-full w-max min-w-full items-center gap-0.5">
+                <Show when={view.agent} keyed>
                   {(control) => (
-                    <Show when={control.options().length > 1}>
-                      <ComposerEditorConfiguredSelect
-                        mobileDrawer
-                        title={i18n.t("ui.promptInput.chooseVariant")}
-                        keybind={["Shift", "Mod", "D"]}
-                        control={control}
-                        class={control.current() === "default" ? "composer-variant-default" : undefined}
-                      />
-                    </Show>
+                    <ComposerEditorConfiguredSelect
+                      fitMenuToOptions
+                      title={i18n.t("ui.promptInput.chooseAgent")}
+                      keybind={["Mod", "."]}
+                      control={control}
+                    />
                   )}
                 </Show>
-              </Show>
+                <Show when={props.modelControlsVisible ?? true}>
+                  {props.modelControl}
+                  <Show when={view.variant} keyed>
+                    {(control) => (
+                      <Show when={control.options().length > 1}>
+                        <ComposerEditorConfiguredSelect
+                          mobileDrawer
+                          title={i18n.t("ui.promptInput.chooseVariant")}
+                          keybind={["Shift", "Mod", "D"]}
+                          control={control}
+                          class={control.current() === "default" ? "composer-variant-default" : undefined}
+                        />
+                      </Show>
+                    )}
+                  </Show>
+                </Show>
+              </div>
             </div>
+            {/* The fade only says something is cut off; these also page there. Keyboard and screen reader users already reach
+          every control by focus, which scrolls it into view, so the buttons stay out of the tab order and the tree. */}
+            <Show when={overflow.start}>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden="true"
+                data-slot="composer-controls-scroll"
+                data-edge="start"
+                class="absolute inset-y-0 -start-0.5 z-10 flex w-6 items-center justify-start text-v2-icon-icon-muted"
+                // Keep focus in the prompt.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => scrollControls(-1)}
+              >
+                <Icon name="chevron-left" class="translate-y-[0.5px] rtl:rotate-180" />
+              </button>
+            </Show>
+            <Show when={overflow.end}>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden="true"
+                data-slot="composer-controls-scroll"
+                data-edge="end"
+                class="absolute inset-y-0 -end-1 z-10 flex w-6 items-center justify-end text-v2-icon-icon-muted"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => scrollControls(1)}
+              >
+                <Icon name="chevron-right" class="translate-y-[0.5px] rtl:rotate-180" />
+              </button>
+            </Show>
           </div>
           <Show when={!touch()}>
             <div data-slot="composer-actions" class="flex shrink-0 items-center">
@@ -1724,10 +1769,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
           onClick={() => props.controller.submit()}
         >
           {label()}
-          <Show
-            when={busy()}
-            fallback={<Icon name={props.controller.mode() === "shell" ? "enter" : "arrow-up"} />}
-          >
+          <Show when={busy()} fallback={<Icon name={props.controller.mode() === "shell" ? "enter" : "arrow-up"} />}>
             <Loader class="size-4" />
           </Show>
         </Button>
