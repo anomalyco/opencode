@@ -351,6 +351,47 @@ export const gpuCases: ReadonlyArray<GpuCase> = [
     canvases: [{ key: "scene", width: 5120, height: 2880 }],
     inputs: [{ frame: 1, input: { type: "canvas", key: "scene", width: 9000, height: 1000 } }],
   },
+  // A canvas's texture is only rendered into: copied from, copied into, written or bound, it is an error naming the
+  // canvas.
+  {
+    name: "error-canvas-texture-copied-from",
+    source: program(`
+  await widget.frame()
+  const texture = device.createTexture({ size: [200, 200], format, usage: GPUTextureUsage.COPY_DST })
+  const encoder = device.createCommandEncoder()
+  encoder.copyTextureToTexture({ texture: contexts.scene.getCurrentTexture() }, { texture }, [200, 200])
+  device.queue.submit([encoder.finish()])
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-canvas-texture-copied-into",
+    source: program(`
+  await widget.frame()
+  const buffer = device.createBuffer({ size: 1024, usage: GPUBufferUsage.COPY_SRC })
+  const encoder = device.createCommandEncoder()
+  encoder.copyBufferToTexture({ buffer, bytesPerRow: 256 }, { texture: contexts.scene.getCurrentTexture() }, [4, 4])
+  device.queue.submit([encoder.finish()])
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-canvas-texture-written",
+    source: program(`
+  await widget.frame()
+  device.queue.writeTexture({ texture: contexts.scene.getCurrentTexture() }, new Uint8Array(64), { bytesPerRow: 16 }, [4, 4])
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-canvas-texture-bound",
+    source: program(`
+  await widget.frame()
+  const layout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: {} }] })
+  device.createBindGroup({ layout, entries: [{ binding: 0, resource: view("scene") }] })
+  await widget.frame()`),
+    canvases: scene,
+  },
   {
     // A frame request without a batch ends the frame too: 10 passes before a sleep, then 10 in the next frame.
     name: "frame-counts-reset-at-a-bare-frame",

@@ -234,6 +234,15 @@ export function gpuChecks(canvases: () => ReadonlySet<string>) {
     if (found.destroyed) fail(`handle ${h} was destroyed`)
     return found
   }
+  // A canvas's texture has usage RENDER_ATTACHMENT alone: no copy, write or binding may use it.
+  const notCanvas = (found: Handle | undefined, path: string) => {
+    if (found?.kind === "context") fail(`${path} uses canvas "${found.key}"'s texture, which can only be rendered into`)
+  }
+  // A texture a copy or a write takes.
+  const copied = (value: unknown, path: string) => {
+    notCanvas(handles.get(whole(value, path)), path)
+    return find(value, path, "texture")
+  }
   const create = (value: unknown, path: string, made: Handle) => {
     const h = whole(value, path)
     if (h <= state.last) fail(`handle ${h} was already used`)
@@ -371,7 +380,8 @@ export function gpuChecks(canvases: () => ReadonlySet<string>) {
             whole(r.offset, `${at}.resource.offset`)
             wholeOrAll(r.size, `${at}.resource.size`)
           } else if ("sampler" in r) find(r.sampler, `${at}.resource.sampler`, "sampler")
-          else if ("view" in r) find(r.view, `${at}.resource.view`, "view")
+          else if ("view" in r)
+            notCanvas(handles.get(find(r.view, `${at}.resource.view`, "view").texture!), `${at}.resource.view`)
           else fail(`${at}.resource must be a buffer binding, a sampler or a view`)
         })
         return create(o[1], a(1), { kind: "bindGroup" })
@@ -385,7 +395,7 @@ export function gpuChecks(canvases: () => ReadonlySet<string>) {
         whole(o[2], a(2))
         return range(whole(o[3], a(3)), whole(o[4], a(4)), bytes)
       case "writeTexture":
-        find(o[1], a(1), "texture")
+        copied(o[1], a(1))
         whole(o[2], a(2))
         triple(o[3], a(3))
         range(whole(o[4], a(4)), whole(o[5], a(5)), bytes)
@@ -403,15 +413,15 @@ export function gpuChecks(canvases: () => ReadonlySet<string>) {
         whole(o[2], a(2))
         whole(o[3], a(3))
         nullable(o[4], (value) => whole(value, a(4)))
-        find(o[5], a(5), "texture")
+        copied(o[5], a(5))
         whole(o[6], a(6))
         triple(o[7], a(7))
         return triple(o[8], a(8))
       case "copyTextureToTexture":
-        find(o[1], a(1), "texture")
+        copied(o[1], a(1))
         whole(o[2], a(2))
         triple(o[3], a(3))
-        find(o[4], a(4), "texture")
+        copied(o[4], a(4))
         whole(o[5], a(5))
         triple(o[6], a(6))
         return triple(o[7], a(7))

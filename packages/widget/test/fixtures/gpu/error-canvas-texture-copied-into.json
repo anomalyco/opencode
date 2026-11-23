@@ -1,0 +1,40 @@
+{
+  "name": "error-canvas-texture-copied-into",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  await widget.frame()\n  const buffer = device.createBuffer({ size: 1024, usage: GPUBufferUsage.COPY_SRC })\n  const encoder = device.createCommandEncoder()\n  encoder.copyBufferToTexture({ buffer, bytesPerRow: 256 }, { texture: contexts.scene.getCurrentTexture() }, [4, 4])\n  device.queue.submit([encoder.finish()])\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 1: \"copyBufferToTexture\" argument 5 uses canvas \"scene\"'s texture, which can only be rendered into",
+      "canvases": "all"
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["buffer",2,1024,4],
+        ["copyBufferToTexture",2,0,256,null,1,0,[0,0,0],[4,4,1]],
+        ["submit"]
+      ]
+    }
+  ]
+}

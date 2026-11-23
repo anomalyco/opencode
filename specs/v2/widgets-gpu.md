@@ -86,8 +86,12 @@ the resource (a handle):
 
 `context.getCurrentTexture()` returns the canvas's texture (the same object every frame; it stands for whatever surface
 texture the client presents next). Render into `getCurrentTexture().createView()` to draw the canvas; render into your
-own textures and bind them for render-to-texture. `getCurrentTexture()` before `configure` throws; destroying the
-canvas's texture does nothing. A texture's views with equal descriptors are one view (one handle), so a per-frame
+own textures and bind them for render-to-texture. A canvas's texture can only be rendered into (a pass's color
+attachment `view` or `resolveTarget`): its usage is `RENDER_ATTACHMENT` (16), as `usage` reads, and copying it, copying
+or writing into it, or binding a view of it is a program error (Host checks). `configure` takes `device`, `format`
+and `alphaMode`; other members, `usage` among them, are ignored. A host may give its canvas textures more usages for its
+own work; the program can't use them. `getCurrentTexture()` before `configure` throws; destroying the canvas's texture
+does nothing. A texture's views with equal descriptors are one view (one handle), so a per-frame
 `createView()` costs nothing; so is `pipeline.getBindGroupLayout(index)` per index. `requestDevice()` while a device
 lives returns it. Nothing else from WebGPU exists (no compute, no queries, no error
 scopes, no 3D textures, no compressed formats, no optional features).
@@ -305,6 +309,12 @@ implementation's wording (Errors and device loss).
   `sampler`, `shader`, `bindGroupLayout`, `pipelineLayout`, `renderPipeline`, `bindGroup`; a view's texture may be a
   context) and isn't destroyed (`handle <h> was destroyed`; destroying a texture destroys its views). A `context` op's
   key is a `gpu: true` canvas of the last render posted (`no GPU canvas with key "<key>"`).
+- **Canvas textures** are only rendered into. A texture argument of `writeTexture`, `copyBufferToTexture` or
+  `copyTextureToTexture` that is a context's handle fails `<path> uses canvas "<key>"'s texture, which can only be
+  rendered into` (checked in place of its kind, so this and not `handle <h> is a context, not a texture`); so does a
+  bind group entry's `resource.view` whose texture is a context's, once the view itself passed. `<key>` is the
+  context's canvas key, as in `"copyTextureToTexture" argument 1 uses canvas "scene"'s texture, which can only be
+  rendered into`.
 - **Bytes:** `writeBuffer` and `writeTexture` read inside the batch's bytes (`bytes [<start>, <end>) are outside the
   batch's <n> bytes`).
 - **Limits** (`<what> is over the limit of <n>`): a buffer's size (`"buffer" argument 2`, 67108864), a texture's width
