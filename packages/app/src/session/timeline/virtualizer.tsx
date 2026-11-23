@@ -28,7 +28,7 @@ import { Key } from "@solid-primitives/keyed"
 import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
-import { filterVirtualIndexes } from "./virtual-items"
+import { filterVirtualIndexes, isAboveFold } from "./virtual-items"
 import {
   ACTIVATED,
   CHECK_REQUESTED,
@@ -516,11 +516,11 @@ export function createTimelineVirtualizer(input: Input) {
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, delta, instance) => {
     // Prepended rows can resize more than once as deferred content mounts. Keep
     // compensating while they remain entirely above the visible content fold.
-    const first = instance.range?.startIndex
+    const offset = (instance.scrollOffset ?? 0) + instance.scrollAdjustments
 
     const adjust = addedKeys.has(String(item.key))
-      ? item.end <= (instance.scrollOffset ?? 0) + instance.scrollAdjustments + instance.options.scrollMargin
-      : first !== undefined && item.index < first
+      ? item.end <= offset + instance.options.scrollMargin
+      : isAboveFold(item, instance.range?.startIndex, offset + instance.options.scrollPaddingStart)
 
     if (!defersAdjustments(input.follow.peek())) return adjust
 
