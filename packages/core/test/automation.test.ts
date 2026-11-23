@@ -147,6 +147,14 @@ const configureAgent = Layer.effectDiscard(
             ),
       })
       editor.add({
+        name: "automation",
+        description: "The automation making the call, if any",
+        input: Schema.Struct({}),
+        output: Schema.NullOr(Schema.String),
+        options: { namespace: "probe" },
+        execute: (_input, context) => Effect.succeed({ output: context.automation?.id ?? null }),
+      })
+      editor.add({
         name: "post",
         description: "Post a message",
         input: Schema.Struct({ text: Schema.String, channel: Schema.optional(Schema.String) }),
@@ -1272,6 +1280,23 @@ describe("Automation", () => {
           nextDueAt: undefined,
           state: { replies: 4, runs: 1 },
         })
+      }),
+    )
+
+    // Tools rely on this to know no model is waiting, e.g. the shell tool stops a timed-out command instead of
+    // moving it to the background.
+    it.effect("names the automation on each of its program's tool calls", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const automation = yield* automations.create({
+          sessionID,
+          name: "probe",
+          trigger: every("1 minute"),
+          action: code(`return { state: await tools.probe.automation({}) }`),
+        })
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(yield* automations.get(automation.id)).toMatchObject({ lastOutcome: "fired", state: automation.id })
       }),
     )
 
