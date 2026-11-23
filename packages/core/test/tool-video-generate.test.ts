@@ -16,11 +16,12 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { Tool } from "@opencode/core/tool"
 import { OpenCodeTools } from "@opencode/core/tool/plugin/opencode"
 import { VideoGenerateTool } from "@opencode/core/tool/plugin/video-generate"
+import { VideoGeneration } from "@opencode/core/video-generation"
 import { Effect, Layer, Stream } from "effect"
 import { advance } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { executeTool, toolIdentity } from "./lib/tool"
+import { executeTool, toolDefinitions, toolIdentity } from "./lib/tool"
 import { makePluginTestLayer } from "./plugin/fixture"
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -69,6 +70,13 @@ const it = testEffect(
       }),
     ),
   ).pipe(Layer.provide(Layer.succeed(Flag.Overrides, "video_generate"))),
+)
+
+// Where videos can't be stored, such as workerd.
+const unsupported = testEffect(
+  makePluginTestLayer(undefined, undefined, [VideoGeneration.node.replace(VideoGeneration.unsupportedLayer)]).pipe(
+    Layer.provide(Layer.succeed(Flag.Overrides, "video_generate")),
+  ),
 )
 
 const videoModel = (providerID: string, id: string) =>
@@ -127,6 +135,15 @@ const setup = (providerID = "test") =>
 const kinds = (assets: ReadonlyArray<Media.Asset> | undefined) => assets?.map((asset) => asset.mediaType)
 
 describe("experimental_video_generate", () => {
+  unsupported.effect("is not offered where videos can't be stored", () =>
+    Effect.gen(function* () {
+      yield* videoModel("test", "director")
+      yield* setup()
+      const tools = yield* Tool.Service.use((registry) => toolDefinitions(registry))
+      expect(tools.some((tool) => tool.name === VideoGenerateTool.name)).toBe(false)
+    }),
+  )
+
   it.effect("starts the job, saves every video it returns and lists them all in the notice", () =>
     Effect.gen(function* () {
       yield* videoModel("test", "director")

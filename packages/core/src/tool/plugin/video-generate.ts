@@ -190,7 +190,8 @@ export const Plugin = {
     const models = yield* Model.Service
     const permission = yield* Permission.Service
     const config = yield* Config.Service
-    if (!(yield* Flag.enabled("video_generate"))) return
+    // Not offered where videos can't be stored, so agents never see a tool that always fails.
+    if (!videos.supported || !(yield* Flag.enabled("video_generate"))) return
 
     const resolveModel = Effect.fn("VideoGenerateTool.resolveModel")(function* (
       input: string | undefined,

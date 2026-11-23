@@ -47,6 +47,8 @@ export interface StartOptions {
 }
 
 export interface Interface {
+  /** False where videos can't be stored, such as a Durable Object, which has no local disk. */
+  readonly supported: boolean
   /** Returns once the provider accepted the job; the server then polls it and stores the videos as blobs. */
   readonly start: (input: Generate.VideoInput, options?: StartOptions) => Effect.Effect<VideoRunning, Generate.Error>
   readonly get: (id: VideoID) => Effect.Effect<VideoJob, NotFoundError>
@@ -314,7 +316,7 @@ const layer = Layer.effect(
       Effect.forkScoped,
     )
 
-    return Service.of({ start, get, wait, cancel })
+    return Service.of({ supported: true, start, get, wait, cancel })
   }),
 )
 
@@ -328,6 +330,7 @@ function expired(job: Job, now: number) {
 export const unsupportedLayer = Layer.succeed(
   Service,
   Service.of({
+    supported: false,
     start: () =>
       Effect.fail(new Generate.UnavailableError({ message: "Video generation is not supported in this runtime" })),
     get: (id) => Effect.fail(new NotFoundError({ id, message: `Video not found: ${id}` })),

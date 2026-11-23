@@ -1108,6 +1108,7 @@ describe("SessionRestart background recovery", () => {
       // The video service resumed polling on its own; the tool's recovery only waits on the video ID.
       const waited: VideoID[] = []
       const videos = VideoGeneration.Service.of({
+        supported: true,
         start: () => Effect.die("a recovered video must not be submitted again"),
         get: () => Effect.die("unused"),
         wait: (id) => Effect.sync(() => waited.push(id)).pipe(Effect.as({ id, status: "completed", blobs: [blob] })),
