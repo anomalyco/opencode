@@ -14,6 +14,8 @@ const parsePartialInput = Option.liftThrowable(parse)
 export interface PendingTool extends ToolAccumulator {
   readonly providerExecuted?: boolean
   readonly providerMetadata?: ProviderMetadata
+  /** Why `input` was rejected before JSON parsing, which finishes the call as a tool input error. */
+  readonly error?: string
 }
 
 /**
@@ -78,6 +80,10 @@ const inputDelta = (tool: PendingTool, text: string): LLMEvent => {
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
   const raw = inputOverride ?? tool.input
+  if (tool.error !== undefined)
+    return Effect.succeed(
+      LLMEvent.toolInputError({ id: tool.id, name: tool.name, namespace: tool.namespace, raw, message: tool.error }),
+    )
   return parseToolInput(route, tool.name, raw).pipe(
     Effect.map(
       (input): ToolCall =>

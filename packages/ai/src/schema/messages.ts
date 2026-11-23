@@ -393,9 +393,9 @@ const toolChanges = (input: ToolChangesInput): ToolChanges => ({
 })
 
 /**
- * Raw-text wire encoding for a tool with exactly one required string parameter, or one plus optional ones written on
- * an options line. Models that accept the format write that parameter's value directly instead of JSON arguments;
- * calls still decode to the normal object input.
+ * Raw-text wire encoding for a tool with exactly one required string parameter, or the one its `field` names among
+ * others. Models that accept the format write that parameter's value directly instead of JSON arguments, after a
+ * first line holding the others; calls still decode to the normal object input.
  */
 export const Freeform = Tool.Freeform
 export type Freeform = Tool.Freeform
@@ -428,17 +428,15 @@ export namespace ToolDefinition {
   export const make = (input: Input) => (input instanceof ToolDefinition ? input : new ToolDefinition(input))
 
   /**
-   * The parameter a freeform call fills: a required string, named by the format's `field` when it has an options
-   * line (every other property must then be optional), otherwise the input schema's only property.
+   * The parameter a freeform call fills, when it is a required string: the one the format's `field` names, otherwise
+   * the input schema's only property.
    */
   export const freeformField = (schema: JsonSchema, freeform?: Freeform) => {
     const properties = Object.entries(Schema.is(JsonSchema)(schema.properties) ? schema.properties : {})
-    const required = Array.isArray(schema.required) ? schema.required : []
-    const named = freeform !== undefined && "options" in freeform ? freeform.field : undefined
-    if (named === undefined ? properties.length !== 1 : required.some((name) => name !== named)) return undefined
-    const [name, property] = named === undefined ? properties[0] : (properties.find(([name]) => name === named) ?? [])
+    if (freeform?.field === undefined && properties.length !== 1) return undefined
+    const [name, property] = properties.find(([name]) => (freeform?.field ?? name) === name) ?? []
     if (name === undefined || !Schema.is(JsonSchema)(property) || property.type !== "string") return undefined
-    return required.includes(name) ? name : undefined
+    return Array.isArray(schema.required) && schema.required.includes(name) ? name : undefined
   }
 }
 

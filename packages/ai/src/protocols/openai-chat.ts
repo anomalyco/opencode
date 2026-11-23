@@ -450,7 +450,10 @@ const lowerToolCall = (part: ToolCallPart, options: MessageLoweringOptions): Ope
     return {
       id: options.toolCallID?.(part.id) ?? part.id,
       type: "custom",
-      custom: { name: part.name, input: OpenAIFreeform.toRaw(custom, part.input) },
+      custom: {
+        name: part.name,
+        input: OpenAIFreeform.toRaw(custom, part.input, part.providerMetadata?.[options.providerMetadataKey]?.header),
+      },
     }
   return {
     id: options.toolCallID?.(part.id) ?? part.id,
@@ -1288,7 +1291,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       !incompleteTools &&
       state.finishReason === undefined &&
       Object.keys(tools).length > 0
-        ? yield* finishTools(tools, customCalls, state.custom)
+        ? yield* finishTools(state, tools, customCalls)
         : undefined
 
     return [
@@ -1318,11 +1321,11 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
 // Custom calls close their JSON fragment before every pending call finishes.
 const finishTools = Effect.fnUntraced(function* (
+  state: ParserState,
   tools: ParserState["tools"],
   customCalls: ReadonlySet<number>,
-  custom: ParserState["custom"],
 ) {
-  const closed = OpenAIFreeform.close(tools, customCalls, custom)
+  const closed = OpenAIFreeform.close(tools, customCalls, state.custom, state.providerMetadataKey)
   const finished = yield* ToolStream.finishAll(ADAPTER, closed.tools)
   return { tools: finished.tools, events: [...closed.events, ...finished.events] }
 })
@@ -1339,7 +1342,7 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
   const events: LLMEvent[] = []
   const toolCallEvents =
     state.finishReason === undefined && Object.keys(state.tools).length > 0
-      ? (yield* finishTools(state.tools, state.customCalls, state.custom)).events
+      ? (yield* finishTools(state, state.tools, state.customCalls)).events
       : state.toolCallEvents
   const hasToolCalls = toolCallEvents.length > 0
   const reason = state.finishReason

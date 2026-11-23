@@ -240,6 +240,8 @@ export const ToolInputError = Schema.Struct({
   name: Schema.String,
   namespace: Schema.optional(Schema.String),
   raw: Schema.String,
+  /** What is wrong with `raw`, when it is not just invalid JSON. */
+  message: Schema.optional(Schema.String),
 }).annotate({ identifier: "LLM.Event.ToolInputError" })
 export type ToolInputError = Schema.Schema.Type<typeof ToolInputError>
 

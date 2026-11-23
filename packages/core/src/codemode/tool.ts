@@ -12,7 +12,7 @@ import type {
   Result,
 } from "@opencode/schema/tool"
 import { Identifier } from "@opencode/schema/identifier"
-import { CallID, type Freeform } from "@opencode/schema/tool"
+import { CallID } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
@@ -131,33 +131,17 @@ const description = (full: boolean) =>
       : []),
   ].join("\n")
 
-const TIMEOUT = `Optional time in milliseconds to wait for the script before moving it to the background (default ${2 * 60 * 1_000}). The script keeps running in the background after that; it is never stopped. With \`background: true\` the call returns immediately instead.`
-const BACKGROUND =
-  "Run the script in the background and return immediately with its job ID (useful for long-running work). You will be notified when it completes. DO NOT poll for completion."
-
 // Mirrors the shell tool's `timeout` and `background`; only with `full_codemode`, where every script runs as a job.
 export const FullInput = Schema.Struct({
   ...CodeMode.Input.fields,
-  timeout: Schema.optionalKey(PositiveInt).annotate({ description: TIMEOUT }),
-  background: Schema.optionalKey(Schema.Boolean).annotate({ description: BACKGROUND }),
+  timeout: Schema.optionalKey(PositiveInt).annotate({
+    description: `Optional time in milliseconds to wait for the script before moving it to the background (default ${2 * 60 * 1_000}). The script keeps running in the background after that; it is never stopped. With \`background: true\` the call returns immediately instead.`,
+  }),
+  background: Schema.optionalKey(Schema.Boolean).annotate({
+    description:
+      "Run the script in the background and return immediately with its job ID (useful for long-running work). You will be notified when it completes. DO NOT poll for completion.",
+  }),
 })
-
-// Models that take the code as raw text set `timeout` and `background` on a first line instead of JSON fields.
-const FULL_FREEFORM: Freeform = {
-  type: "lark",
-  field: "code",
-  options: {
-    prefix: "// @options:",
-    description: [
-      "To set `timeout` or `background`, start the code with a `// @options:` line holding a JSON object, for example:",
-      '// @options: {"background":true}',
-      'await tools.shell({ command: "bun test" })',
-      "Leave the line out to use the defaults.",
-      `- \`timeout\`: ${TIMEOUT}`,
-      `- \`background\`: ${BACKGROUND}`,
-    ].join("\n"),
-  },
-}
 
 export const create = (
   inventory: Inventory,
@@ -172,7 +156,7 @@ export const create = (
     name: "execute",
     description: description(services !== undefined),
     input: services ? FullInput : CodeMode.Input,
-    freeform: services ? FULL_FREEFORM : { type: "text" },
+    freeform: { type: "text", field: "code" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {

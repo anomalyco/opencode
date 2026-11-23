@@ -25,15 +25,20 @@ describe("OpenAI freeform tools", () => {
       OpenAIFreeform.resolve(tool({ inputSchema: { ...inputSchema, properties: { code: { type: "number" } } } })),
     ).toBeUndefined()
     expect(OpenAIFreeform.resolve(tool({ inputSchema: { ...inputSchema, required: [] } }))).toBeUndefined()
+    // Naming the only field changes nothing.
+    expect(OpenAIFreeform.resolve(tool({ freeform: { type: "text", field: "code" } }))).toEqual({
+      field: "code",
+      format: { type: "text", field: "code" },
+    })
   })
 
   test("converts between raw text and the JSON input", () => {
     for (const raw of RAW) {
-      const json = OpenAIFreeform.fromRaw(custom, raw)
-      expect(JSON.parse(json)).toEqual({ code: raw })
-      expect(OpenAIFreeform.toRaw(custom, JSON.parse(json))).toBe(raw)
+      const parsed = OpenAIFreeform.parse(custom, raw)
+      expect("input" in parsed && JSON.parse(parsed.input)).toEqual({ code: raw })
+      expect(OpenAIFreeform.toRaw(custom, { code: raw })).toBe(raw)
     }
-    expect(OpenAIFreeform.fromRaw(undefined, "x")).toBe('{"input":"x"}')
+    expect(OpenAIFreeform.parse(undefined, "x")).toEqual({ input: '{"input":"x"}' })
     expect(OpenAIFreeform.toRaw(custom, { code: 1 })).toBe('{"code":1}')
   })
 
@@ -47,22 +52,24 @@ describe("OpenAI freeform tools", () => {
         name: "run",
         input: fragments.join(""),
       })
-      const closed = OpenAIFreeform.close(started, ["ctc_1"], customs, raw)
+      const closed = OpenAIFreeform.close(started, ["ctc_1"], customs, "openai", raw)
       expect(closed.events).toMatchObject([{ type: "tool-input-delta", text: '"}' }])
       expect(JSON.parse(closed.tools.ctc_1?.input ?? "")).toEqual({ code: raw })
     }
   })
 
-  test("leaves a call open when the final input disagrees with the streamed one", () => {
+  test("takes the final input when it disagrees with the streamed one", () => {
     const tools = ToolStream.start(ToolStream.empty<string>(), "ctc_1", {
       id: "call_1",
       name: "run",
       input: OpenAIFreeform.streamStart(custom, "partial"),
     })
-    const closed = OpenAIFreeform.close(tools, ["ctc_1", "missing"], customs, "different")
+    const closed = OpenAIFreeform.close(tools, ["ctc_1", "missing"], customs, "openai", "different")
     expect(closed.events).toEqual([])
-    expect(closed.tools).toBe(tools)
-    expect(OpenAIFreeform.close(tools, ["ctc_1"], customs).events.filter(LLMEvent.is.toolInputDelta)).toHaveLength(1)
+    expect(JSON.parse(closed.tools.ctc_1?.input ?? "")).toEqual({ code: "different" })
+    expect(
+      OpenAIFreeform.close(tools, ["ctc_1"], customs, "openai").events.filter(LLMEvent.is.toolInputDelta),
+    ).toHaveLength(1)
   })
 
   test("keeps an item id only while the call type is unchanged", () => {
@@ -76,94 +83,207 @@ describe("OpenAI freeform tools", () => {
   })
 })
 
-describe("OpenAI freeform tools with an options line", () => {
-  const optionsSchema = {
+describe("OpenAI freeform tools with other parameters", () => {
+  const schema = (properties: Record<string, unknown>, required = ["code"]) => ({
     type: "object",
-    properties: {
-      code: { type: "string" },
-      timeout: { type: "integer", exclusiveMinimum: 0 },
-      background: { type: "boolean" },
-    },
-    required: ["code"],
+    properties: { code: { type: "string" }, ...properties },
+    required,
+  })
+  const executeSchema = schema({
+    timeout: { type: "integer", exclusiveMinimum: 0, description: "How long to wait." },
+    background: { type: "boolean" },
+  })
+  const format = { type: "text", field: "code" } as const
+  const options = OpenAIFreeform.resolve(tool({ inputSchema: executeSchema, freeform: format }))!
+  const parsed = (raw: string, definition = options) => {
+    const result = OpenAIFreeform.parse(definition, raw)
+    return "input" in result ? { input: JSON.parse(result.input), header: result.header } : result
   }
-  const format = {
-    type: "lark",
-    field: "code",
-    options: { prefix: "// @options:", description: "Settings go on a first line." },
-  } as const
-  const options = OpenAIFreeform.resolve(tool({ inputSchema: optionsSchema, freeform: format }))!
 
-  test("resolves the optional parameters and a grammar for the line", () => {
-    // Keys are sorted by name, whatever order the schema lists them in.
-    expect(options.options?.fields).toEqual(["background", "timeout"])
+  test("sends an order-free grammar and a description built from the schema", () => {
     expect(options.options?.grammar).toBe(
       [
-        "start: options_line body | plain",
-        'options_line: "// @options: {" (option_0 | option_1) "}\\n"',
-        'option_0: pair_0 ("," pair_1)?',
-        "option_1: pair_1",
-        'pair_0: "\\"background\\":" ("true" | "false")',
-        'pair_1: "\\"timeout\\":" /[1-9][0-9]{0,14}/',
-        "body: /[\\s\\S]+/",
-        String.raw`plain: /(?:[^\/]|\/[^\/]|\/\/[^ ]|\/\/ [^@]|\/\/ @[^o]|\/\/ @o[^p]|\/\/ @op[^t]|\/\/ @opt[^i]|\/\/ @opti[^o]|\/\/ @optio[^n]|\/\/ @option[^s]|\/\/ @options[^:])[\s\S]*|\/|\/\/|\/\/ |\/\/ @|\/\/ @o|\/\/ @op|\/\/ @opt|\/\/ @opti|\/\/ @optio|\/\/ @option|\/\/ @options/`,
+        "start: ff_line ff_body | ff_plain",
+        'ff_line: "// @options:" " "* "{" " "* ff_object " "* "}" "\\n"',
+        "ff_object: ff_pair_0 ff_rest_1 | ff_pair_1 ff_rest_2",
+        'ff_rest_1: ("," " "* ff_pair_1)?',
+        'ff_rest_2: ("," " "* ff_pair_0)?',
+        'ff_pair_0: "\\"timeout\\"" " "* ":" " "* /[1-9][0-9]*/',
+        'ff_pair_1: "\\"background\\"" " "* ":" " "* ("true" | "false")',
+        "ff_body: /[\\s\\S]+/",
+        String.raw`ff_plain: /(?:[^\/]|\/[^\/]|\/\/[^ ]|\/\/ [^@]|\/\/ @[^o]|\/\/ @o[^p]|\/\/ @op[^t]|\/\/ @opt[^i]|\/\/ @opti[^o]|\/\/ @optio[^n]|\/\/ @option[^s]|\/\/ @options[^:])[\s\S]*|\/|\/\/|\/\/ |\/\/ @|\/\/ @o|\/\/ @op|\/\/ @opt|\/\/ @opti|\/\/ @optio|\/\/ @option|\/\/ @options/`,
       ].join("\n"),
     )
-    // The tool's own grammar constrains the body instead.
-    const body = OpenAIFreeform.resolve(
-      tool({ inputSchema: optionsSchema, freeform: { ...format, grammar: 'body: "ZZ" /[0-9]{3}/' } }),
+    expect(OpenAIFreeform.description(tool(), options)).toBe(
+      [
+        "Run code",
+        "",
+        "To set `timeout` or `background`, start with a `// @options:` line holding a JSON object of them, then write `code` from the next line. Leave the line out to use the defaults.",
+        "- `timeout` (positive integer): How long to wait.",
+        "- `background` (boolean)",
+        "For example:",
+        '// @options: {"background": true}',
+        "<code>",
+      ].join("\n"),
     )
-    expect(body?.options?.grammar.split("\n").at(0)).toBe("start: options_line body | body")
-    expect(body?.options?.grammar.split("\n").at(-1)).toBe('body: "ZZ" /[0-9]{3}/')
   })
 
-  test("stays a JSON tool when it can't be written as a line", () => {
-    const schema = (properties: Record<string, unknown>, required = ["code"]) => ({
-      ...optionsSchema,
-      properties: { code: { type: "string" }, ...properties },
-      required,
-    })
-    // An optional parameter without an exact-replay grammar, a second required one, no optional ones, or a missing field.
-    for (const type of ["object", "number"])
-      expect(OpenAIFreeform.resolve(tool({ inputSchema: schema({ env: { type } }), freeform: format }))).toBeUndefined()
-    expect(
-      OpenAIFreeform.resolve(
-        tool({ inputSchema: schema({ background: { type: "boolean" } }, ["code", "background"]), freeform: format }),
-      ),
-    ).toBeUndefined()
-    expect(OpenAIFreeform.resolve(tool({ inputSchema, freeform: format }))).toBeUndefined()
-    expect(
-      OpenAIFreeform.resolve(tool({ inputSchema: optionsSchema, freeform: { ...format, field: "script" } })),
-    ).toBeUndefined()
-  })
-
-  test("reads the line into fields and writes it back exactly", () => {
+  test("reads keys in any order, with spaces, and replays the line as written", () => {
     const cases = [
       ['// @options: {"timeout":5000}\nawait build()', { code: "await build()", timeout: 5000 }],
-      ['// @options: {"background":true,"timeout":1}\nx', { code: "x", timeout: 1, background: true }],
+      ['// @options: { "timeout": 1, "background": true }\nx', { code: "x", timeout: 1, background: true }],
+      ['// @options:{"background" :false,"timeout":2}\r\nx', { code: "x", timeout: 2, background: false }],
       ["await build()", { code: "await build()" }],
     ] as const
     for (const [raw, input] of cases) {
-      expect(JSON.parse(OpenAIFreeform.fromRaw(options, raw))).toEqual(input)
-      expect(OpenAIFreeform.toRaw(options, input)).toBe(raw)
+      const result = parsed(raw)
+      expect(result).toEqual({ input, header: raw.startsWith("//") ? raw.slice(0, raw.indexOf("\n")) : undefined })
+      expect(OpenAIFreeform.toRaw(options, input, "header" in result ? result.header : undefined)).toBe(raw)
     }
-    // A Claude-written call with options replays with the line.
-    expect(OpenAIFreeform.toRaw(options, { background: true, code: "x" })).toBe('// @options: {"background":true}\nx')
   })
 
-  test("leaves a bad line as raw text, so the call fails as malformed", () => {
-    for (const raw of ["// @options: {timeout: 1}\nx", '// @options: {"env":{}}\nx', "// @options: 1\nx"])
-      expect(OpenAIFreeform.fromRaw(options, raw)).toBe(raw)
+  test("writes a fresh line when the input no longer matches the saved one, or there is none", () => {
+    const header = '// @options: { "background": true }'
+    expect(OpenAIFreeform.toRaw(options, { code: "x", background: true, timeout: 9 }, header)).toBe(
+      '// @options: {"timeout":9,"background":true}\nx',
+    )
+    expect(OpenAIFreeform.toRaw(options, { code: "x", background: true })).toBe('// @options: {"background":true}\nx')
+    expect(OpenAIFreeform.toRaw(options, { code: "x" }, header)).toBe("x")
   })
 
-  test("closes a streamed call with the parsed fields as its input", () => {
-    const raw = '// @options: {"background":true}\nx'
+  test("says what is wrong with a bad line", () => {
+    const allowed =
+      "Start the raw text with `// @options:` and a JSON object of `timeout` (positive integer), `background` (boolean), then write `code` from the next line."
+    const cases = [
+      ["// @options: {timeout: 1}\nx", "it does not hold a JSON object"],
+      ['// @options: {"env":{}}\nx', "`env` is not one of its parameters"],
+      ['// @options: {"timeout":"5"}\nx', "`timeout` has the wrong type (positive integer)"],
+      // A line with nothing after it is not a call with empty code.
+      ['// @options: {"background":true}', "`code` must start on the next line"],
+    ]
+    for (const [raw, problem] of cases)
+      expect(parsed(raw)).toEqual({ error: `Invalid \`// @options:\` line: ${problem}. ${allowed}` })
+  })
+
+  test("takes number, string and enum values", () => {
+    const definition = OpenAIFreeform.resolve(
+      tool({
+        inputSchema: schema({
+          ratio: { type: "number" },
+          cwd: { type: "string" },
+          mode: { type: "string", enum: ["fast", "safe"] },
+        }),
+        freeform: format,
+      }),
+    )!
+    expect(definition.options?.grammar).toContain(
+      'ff_pair_0: "\\"ratio\\"" " "* ":" " "* /-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/',
+    )
+    expect(definition.options?.grammar).toContain(
+      'ff_pair_1: "\\"cwd\\"" " "* ":" " "* /"(?:[^"\\\\\\x00-\\x1f]|\\\\["\\\\\\/bfnrt]|\\\\u[0-9a-fA-F]{4})*"/',
+    )
+    expect(definition.options?.grammar).toContain('ff_pair_2: "\\"mode\\"" " "* ":" " "* ("\\"fast\\"" | "\\"safe\\"")')
+    // Three keys in any order: one rule per subset of them.
+    expect(definition.options?.grammar.split("\n").filter((line) => line.startsWith("ff_rest_"))).toHaveLength(6)
+    const raw = '// @options: {"mode": "safe", "ratio": 1.5e2, "cwd": "C:\\\\src"}\nls'
+    expect(parsed(raw, definition)).toMatchObject({ input: { code: "ls", mode: "safe", ratio: 150, cwd: "C:\\src" } })
+    expect(parsed('// @options: {"mode": "slow"}\nls', definition)).toMatchObject({
+      error: expect.stringContaining('`mode` has the wrong type (one of "fast", "safe")'),
+    })
+  })
+
+  test("requires the line when a parameter is required", () => {
+    const definition = OpenAIFreeform.resolve(
+      tool({ inputSchema: schema({ path: { type: "string" } }, ["code", "path"]), freeform: format }),
+    )!
+    expect(definition.options?.grammar?.split("\n").slice(0, 3)).toEqual([
+      "start: ff_line ff_body",
+      'ff_line: "// @options:" " "* "{" " "* ff_object " "* "}" "\\n"',
+      "ff_object: ff_pair_0",
+    ])
+    expect(parsed("x", definition)).toMatchObject({ error: expect.stringContaining("the line is missing") })
+    expect(parsed("// @options: {}\nx", definition)).toMatchObject({
+      error: expect.stringContaining("`path` is missing"),
+    })
+    expect(parsed('// @options: {"path": "a.ts"}\nx', definition)).toMatchObject({ input: { code: "x", path: "a.ts" } })
+  })
+
+  test("follows schema order past four parameters", () => {
+    const definition = OpenAIFreeform.resolve(
+      tool({
+        inputSchema: schema(Object.fromEntries(["a", "b", "c", "d", "e"].map((name) => [name, { type: "boolean" }])), [
+          "code",
+          "c",
+        ]),
+        freeform: format,
+      }),
+    )!
+    expect(definition.options?.grammar?.split("\n").slice(2, 13)).toEqual([
+      "ff_object: ff_first_0",
+      "ff_first_0: ff_pair_0 ff_rest_1 | ff_first_1",
+      "ff_first_1: ff_pair_1 ff_rest_2 | ff_first_2",
+      "ff_first_2: ff_pair_2 ff_rest_3",
+      "ff_first_3: ff_pair_3 ff_rest_4 | ff_first_4",
+      "ff_first_4: ff_pair_4",
+      'ff_rest_1: ("," " "* ff_pair_1)? ff_rest_2',
+      'ff_rest_2: "," " "* ff_pair_2 ff_rest_3',
+      'ff_rest_3: ("," " "* ff_pair_3)? ff_rest_4',
+      'ff_rest_4: ("," " "* ff_pair_4)?',
+      'ff_pair_0: "\\"a\\"" " "* ":" " "* ("true" | "false")',
+    ])
+    expect(definition.options?.description).toContain("Write the keys in the order listed.")
+  })
+
+  test("composes a tool's own grammar as the body without name collisions", () => {
+    const grammar = ["start: ff_line LF", 'ff_line: "*** " /(.+)/ -> line', "%import common.LF"].join("\n")
+    const definition = OpenAIFreeform.resolve(
+      tool({ inputSchema: executeSchema, freeform: { type: "lark", grammar, field: "code" } }),
+    )!
+    expect(definition.options?.grammar?.split("\n").at(0)).toBe("start: ff_line fb_start | fb_start")
+    expect(definition.options?.grammar?.split("\n").slice(-3)).toEqual([
+      "fb_start: fb_ff_line LF",
+      'fb_ff_line: "*** " /(.+)/ -> line',
+      "%import common.LF",
+    ])
+  })
+
+  test("parses the line without a grammar for a model that only takes text", () => {
+    const definition = OpenAIFreeform.resolve(tool({ inputSchema: executeSchema, freeform: format }), false)!
+    expect(OpenAIFreeform.grammar(definition)).toBeUndefined()
+    expect(definition.options?.description).toBe(options.options?.description)
+    expect(parsed('// @options: {"background": true}\nx', definition)).toMatchObject({
+      input: { code: "x", background: true },
+    })
+    // Without Lark, only a raw text body can share the wire with the line.
+    expect(
+      OpenAIFreeform.resolve(
+        tool({ inputSchema: executeSchema, freeform: { type: "lark", grammar: "start: /x/", field: "code" } }),
+        false,
+      ),
+    ).toBeUndefined()
+  })
+
+  test("stays a JSON tool when a parameter can't go on the line", () => {
+    for (const property of [{ type: "object" }, { type: ["string", "null"] }, { enum: [] }])
+      expect(OpenAIFreeform.resolve(tool({ inputSchema: schema({ env: property }), freeform: format }))).toBeUndefined()
+    expect(
+      OpenAIFreeform.resolve(tool({ inputSchema: executeSchema, freeform: { ...format, field: "script" } })),
+    ).toBeUndefined()
+  })
+
+  test("closes a streamed call with the parsed input and its line in the metadata", () => {
+    const raw = '// @options: {"background": true}\nx'
     const started = ToolStream.start(ToolStream.empty<number>(), 0, {
       id: "call_1",
       name: "run",
       input: OpenAIFreeform.streamStart(options, raw),
+      providerMetadata: { openai: { itemId: "ctc_1", custom: true } },
     })
-    const closed = OpenAIFreeform.close(started, [0], new Map([["run", options]]))
+    const closed = OpenAIFreeform.close(started, [0], new Map([["run", options]]), "openai")
     expect(closed.events).toMatchObject([{ type: "tool-input-delta", text: '"}' }])
     expect(JSON.parse(closed.tools[0]?.input ?? "")).toEqual({ code: "x", background: true })
+    expect(closed.tools[0]?.providerMetadata).toEqual({
+      openai: { itemId: "ctc_1", custom: true, header: '// @options: {"background": true}' },
+    })
   })
 })

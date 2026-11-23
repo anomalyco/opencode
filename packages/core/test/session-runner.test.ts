@@ -2097,9 +2097,7 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(last)).toEqual(["First", "Fourth"])
     expect(last.system.map((part) => part.text).join("\n")).not.toContain("Entered mode")
     // Clients still see every message; only the model context hides the stale update.
-    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([
-      { text: "Entered mode" },
-    ])
+    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([{ text: "Entered mode" }])
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
@@ -7195,6 +7193,41 @@ describe("SessionRunnerLLM", () => {
       })
     })
   }
+
+  scenario("reports the parser's reason for malformed tool input", function* (s) {
+    const raw = "// @options: {background: true}\nx"
+    const reason = "Invalid `// @options:` line: it does not hold a JSON object."
+    yield* s.llm.push(
+      TestLLM.complete(
+        { reason: { normalized: "tool-calls" } },
+        LLMEvent.toolInputStart({ id: "call-malformed", name: "echo" }),
+        LLMEvent.toolInputError({ id: "call-malformed", name: "echo", raw, message: reason }),
+      ),
+      TestLLM.stop(),
+    )
+
+    yield* s.runPrompt("Recover malformed tool input")
+
+    expect(s.executions).toEqual([])
+    const failed = (yield* s.context).find(
+      (message): message is SessionMessage.Assistant =>
+        message.type === "assistant" && message.content.some((item) => item.type === "tool"),
+    )
+    expect(failed).toMatchObject({
+      content: [
+        Expected.failedTool(
+          { id: "call-malformed", executed: false },
+          {
+            input: {},
+            error: {
+              type: "tool.input-json",
+              message: `${reason}\n\nInput excerpt (first ${raw.length} of ${raw.length} characters):\n${raw}`,
+            },
+          },
+        ),
+      ],
+    })
+  })
 
   scenario("settles a valid sibling before recovering malformed tool input", function* (s) {
     yield* s.admit("Run parallel tools")

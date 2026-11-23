@@ -29,7 +29,7 @@ export const pendingCalls = (response: LLMResponse, answerTool?: string): Readon
     ...response.toolCalls.filter((call) => call.providerExecuted !== true).map((call) => ({ call })),
     ...response.events.filter(LLMEvent.is.toolInputError).map((event) => ({
       call: invalidCall(event),
-      error: `Invalid tool arguments: the input is not valid JSON. Received: ${event.raw}`,
+      error: `${event.message ?? "Invalid tool arguments: the input is not valid JSON."} Received: ${event.raw}`,
     })),
   ]
 }

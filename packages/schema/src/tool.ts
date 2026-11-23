@@ -9,29 +9,22 @@ import type { SessionMessage } from "./session-message.js"
 
 export type Metadata = Readonly<Record<string, any>>
 
+const field = Schema.optionalKey(Schema.String)
+
 /**
  * Optional wire encoding of a tool's single required string field. Execution still receives the object.
  *
- * The `lark` form with `options` also allows optional fields besides `field`: the model writes them as JSON on a
- * first line that starts with `options.prefix`, then `field`'s raw value. The grammar for that line is derived from
- * the optional fields' schemas; `grammar`, when given, constrains the raw value and must define a `body` rule.
- * `options.description` tells the model how to write the line, and is only sent with this encoding.
+ * `field` names that required string field, so the tool can have other parameters. Models that take raw text then set
+ * those on an optional first line, which the AI package describes and parses; the format constrains the rest.
  */
 export const Freeform = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text") }),
-  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
-  // Before the plain `lark` form, which would otherwise match a grammar with options and drop them.
-  Schema.Struct({
-    type: Schema.Literal("lark"),
-    field: Schema.String,
-    options: Schema.Struct({ prefix: Schema.String, description: Schema.String }),
-    grammar: Schema.optionalKey(Schema.String),
-  }),
-  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("text"), field }),
+  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String, field }),
+  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String, field }),
 ]).annotate({ identifier: "Tool.Freeform" })
 export type Freeform = typeof Freeform.Type
 
-export const FreeformFormat = Schema.Literals(["text", "regex", "lark"]).annotate({
+export const FreeformFormat = Schema.Literals(Freeform.members.map((member) => member.fields.type.literal)).annotate({
   identifier: "Tool.FreeformFormat",
 })
 
