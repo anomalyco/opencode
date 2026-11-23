@@ -22,14 +22,14 @@ Returns: `SessionsResponse`
 Create a session at the requested location. A parentID creates a linked child session at its parent's location.
 
 Body:
-- `id?: string`
-- `parentID?: string` Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<background-result kind="subagent">` report to the parent's inbox and wakes the parent unless it has a staged revert.
+- `id?: string` If a session with this ID already exists, it is returned unchanged, so retries are safe.
+- `parentID?: string` Creates a child session at the parent's location. Each time the child finishes running, it sends its last reply to the parent as a `<background-result kind="subagent">` message and wakes the parent, unless the parent has a staged revert.
 - `title?: string`
 - `agent?: string`
 - `model?: Model.Ref`
-- `location?: Location.PublicRef`
-- `metadata?: Record<string, unknown>`
-- `permissions?: Permission.Ruleset`
+- `location?: Location.PublicRef` Defaults to the server's working directory. Ignored when parentID is set.
+- `metadata?: Record<string, unknown>` Opaque to OpenCode. Child sessions inherit the parent's metadata unless you pass your own.
+- `permissions?: Permission.Ruleset` Applied on top of the agent's rules. Child sessions inherit the parent's rules unless you pass your own.
 
 Returns: `{ data: Session.Info }`
 
@@ -68,7 +68,7 @@ Returns: `{ data: SessionTransfer.Data }`
 
 ## GET /api/session/active
 
-Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.
+List the sessions whose agent is running right now in this server process. Sessions missing from the result are idle.
 
 Returns: `{ data: Record<string, unknown> }`
 
@@ -98,7 +98,7 @@ Returns: nothing
 
 ## POST /api/session/{sessionID}/fork
 
-Create a child session by copying projected history before a message. Omit before to copy the full history.
+Create a child session with this session's history before a message. Omit before to copy the full history.
 
 Body:
 - `before?: string`
@@ -107,7 +107,7 @@ Returns: `{ data: Session.Info }`
 
 ## POST /api/session/{sessionID}/agent
 
-Switch the agent used by subsequent provider turns.
+Change the agent the session uses from its next model call on.
 
 Body:
 - `agent: string`
@@ -116,7 +116,7 @@ Returns: nothing
 
 ## POST /api/session/{sessionID}/model
 
-Switch the model used by subsequent provider turns.
+Change the model the session uses from its next model call on.
 
 Body:
 - `model: Model.Ref`
@@ -129,37 +129,37 @@ Move a session to another project directory at the requested delivery boundary.
 
 Body:
 - `directory: string`
-- `delivery?: "steer" | "queue"`
+- `delivery?: "steer" | "queue"` steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer.
 
 Returns: nothing
 
 ## POST /api/session/{sessionID}/prompt
 
-Durably admit one session input and schedule agent-loop execution unless resume is false.
+Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with experimental.session.wait or the session.execution.* events, then read the reply with session.message.list.
 
 Body:
-- `id?: string`
+- `id?: string` Sending the same ID again returns the original item instead of adding a second one, so retries are safe. Reusing it in another session or for another kind of item fails with 409.
 - `text: string`
 - `files?: PromptInput.FileAttachment[]`
 - `agents?: Prompt.AgentAttachment[]`
 - `skills?: PromptInput.SkillAttachment[]`
-- `metadata?: Record<string, unknown>`
-- `delivery?: "steer" | "queue"`
-- `resume?: boolean`
+- `metadata?: Record<string, unknown>` Stored on the message. The model doesn't see it.
+- `delivery?: "steer" | "queue"` steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer.
+- `resume?: boolean` false adds the message to the inbox without starting the agent; it is delivered the next time the session runs.
 
 Returns: `{ data: Session.Inbox.User }`
 
 ## POST /api/session/{sessionID}/command
 
-Execute a slash command callback immediately.
+Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes.
 
 Body:
 - `name: string`
-- `text: string`
+- `text: string` The command's arguments.
 - `files?: PromptInput.FileAttachment[]`
 - `agents?: Prompt.AgentAttachment[]`
 - `skills?: PromptInput.SkillAttachment[]`
-- `delivery?: "steer" | "queue"`
+- `delivery?: "steer" | "queue"` steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer.
 
 Returns: nothing
 
@@ -175,15 +175,15 @@ Returns: nothing
 
 ## POST /api/session/{sessionID}/synthetic
 
-Durably admit synthetic session input and schedule execution unless resume is false.
+Add a message the model reads as user input but the user didn't type, such as a notification. Starts the agent unless resume is false or the session has a staged revert.
 
 Body:
-- `id?: string`
+- `id?: string` Sending the same ID again returns the original item instead of adding a second one, so retries are safe. Reusing it in another session or for another kind of item fails with 409.
 - `text: string`
-- `description?: string`
-- `metadata?: Record<string, unknown>`
-- `delivery?: "steer" | "queue"`
-- `resume?: boolean`
+- `description?: string` Short label shown in the transcript instead of the full text.
+- `metadata?: Record<string, unknown>` Stored on the message. The model doesn't see it.
+- `delivery?: "steer" | "queue"` steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer.
+- `resume?: boolean` false adds the message to the inbox without starting the agent; it is delivered the next time the session runs.
 
 Returns: `{ data: Session.Inbox.Synthetic }`
 
@@ -199,17 +199,17 @@ Returns: nothing
 
 ## POST /api/session/{sessionID}/compact
 
-Durably admit a session compaction request. Steers by default: it runs at the next step boundary instead of waiting behind queued prompts.
+Queue a summary of the session's history. Steers by default: it runs before the next model call, ahead of queued messages.
 
 Body:
 - `id?: string`
-- `delivery?: "steer" | "queue"`
+- `delivery?: "steer" | "queue"` steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer.
 
 Returns: `{ data: Session.Inbox.Compaction }`
 
 ## POST /api/experimental/session/{sessionID}/wait (experimental)
 
-Wait for a session agent loop to become idle.
+Wait until the session's agent stops running in this server process. Returns at once when idle.
 
 Returns: nothing
 
@@ -254,7 +254,7 @@ Returns: `{ data: FileDiff.Info[] }`
 
 ## GET /api/session/{sessionID}/inbox
 
-List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.
+List user, synthetic, compaction and move items not yet delivered to the agent, oldest first. Delivered user and synthetic items move to session.message.list.
 
 Returns: `{ data: Session.Inbox.Info[] }`
 
@@ -263,7 +263,7 @@ Returns: `{ data: Session.Inbox.Info[] }`
 Change a pending inbox item's delivery mode. Steering wakes session execution.
 
 Body:
-- `delivery: "steer" | "queue"`
+- `delivery: "steer" | "queue"` steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer.
 
 Returns: nothing
 
@@ -321,7 +321,7 @@ Returns: an event stream
 
 ## POST /api/session/{sessionID}/interrupt
 
-Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When resume=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.
+Stop the session's agent if it is running in this server process; interrupted=false means nothing was running. With resume=true it continues with pending steer items, compaction and moves, while queued messages keep waiting.
 
 Parameters:
 - `resume?: "true" | "false"`
@@ -336,7 +336,7 @@ Returns: nothing
 
 ## GET /api/session/{sessionID}/message/{messageID}
 
-Retrieve one projected message owned by the Session.
+Retrieve one message of the session by ID.
 
 Returns: `{ data: Session.Message.Info }`
 
@@ -402,7 +402,7 @@ Returns: nothing
 
 ## GET /api/session/{sessionID}/message
 
-Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page.
+List a session's messages, optionally filtered by type. Follow cursor.next or cursor.previous with the same type filter. Items still in the inbox aren't included.
 
 Parameters:
 - `limit?: string` Maximum number of messages to return. When omitted, the endpoint returns its default page size.
@@ -490,7 +490,7 @@ Returns: `{ data: PersistentPty.Info }`
 - `Permission.Source`: `{ type: "tool"; messageID: string; id: string }`
 - `PersistentPty.Info`: `{ id, title, command, args, cwd, status, pid, exitCode, sessionID, userTitle, foregroundProcess, size, output }`
 - `PersistentPty.ReadResult`: `{ ptyID: string; title: string; cwd: string; foregroundProcess: string; screen: { text, cols, rows, cursor } }`
-- `Prompt.AgentAttachment`: `{ name: string; mention?: Prompt.Mention }`
+- `Prompt.AgentAttachment`: `{ name: string; mention?: Prompt.Mention }` An agent @-mentioned in the prompt, such as @explore, to suggest the model use it. Only the @name in text reaches the model; this records which agent it names and doesn't change the session's own agent.
 - `Prompt.FileAttachment`: `{ data: string; mime: string; source: Prompt.FileSource; name?: string; description?: string; mention?: Prompt.Mention }`
 - `Prompt.FileSource`: `{ type: "inline" } | { type: "uri"; uri: string }`
 - `Prompt.Mention`: `{ start: number; end: number; text: string }`
