@@ -482,7 +482,8 @@ function cacheWrite(cache: typeof CachePrices.Type | undefined) {
 }
 
 // A mode (a speed, or a mode listed as its own model) without its own cost takes the base prices scaled by its
-// service tier's multiplier (the mode name by default). The base context tiers are kept unscaled.
+// service tier's multiplier (the mode name by default), or else the tier's own prices. The base context tiers are kept
+// as they are.
 function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mode: SourceMode): Model.Info["cost"] {
   const [baseDefault, ...baseTiers] = base
   if (mode.cost) return [cost(mode.cost)[0], ...baseTiers]
@@ -502,7 +503,8 @@ function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mo
       (date.gte === undefined || today >= date.gte)
     )
   })?.factor
-  if (factor === undefined || !baseDefault) return base
+  if (!baseDefault) return base
+  if (factor === undefined) return [tierPrices(model.cost, baseDefault, tier), ...baseTiers]
   const scale = (price: Money.USDPerMillionTokens, path: readonly string[]) =>
     Money.USDPerMillionTokens.make(Math.round(price * factorAt(factor, path) * 1e10) / 1e10)
   return [
@@ -516,6 +518,19 @@ function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mo
     },
     ...baseTiers,
   ]
+}
+
+// Hosts such as DigitalOcean list a tier's prices instead of a multiplier, as overrides of the base prices.
+function tierPrices(source: SourceCost | undefined, base: Model.Info["cost"][number], tier: string) {
+  const matches = (when: Record<string, unknown>) =>
+    Object.keys(when).length === 1 && Option.getOrUndefined(decodeServiceTier(when.service_tier))?.equals === tier
+  const input = source?.text?.input?.overrides?.find((override) => matches(override.when))
+  const output = source?.text?.output?.overrides?.find((override) => matches(override.when))
+  return {
+    input: input?.price ?? base.input,
+    output: output?.price ?? base.output,
+    cache: { read: input?.cache?.read ?? base.cache.read, write: cacheWrite(input?.cache) ?? base.cache.write },
+  }
 }
 
 const decodeServiceTier = Schema.decodeUnknownOption(Schema.Struct({ equals: Schema.optional(Schema.String) }))

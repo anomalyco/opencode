@@ -6,6 +6,7 @@ import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { EnvironmentUnavailable } from "../src/environment/unavailable"
 import {
+  Environment,
   execDefaults,
   Failed,
   makeFiles,
@@ -43,6 +44,14 @@ describe("no execution plane", () => {
 
       expect(error._tag).toBe("PlatformError")
       expect(error.message).toContain("location has no execution plane")
+    }),
+  )
+
+  it.effect("omits host and search capabilities when local has no execution plane", () =>
+    Effect.sync(() => {
+      const unavailable = Environment.local(EnvironmentUnavailable.spawner)
+      expect(unavailable.hostsServer).toBeUndefined()
+      expect(unavailable.searchable).toBeUndefined()
     }),
   )
 })

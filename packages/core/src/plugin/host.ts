@@ -13,6 +13,7 @@ import { AISDK } from "../aisdk.js"
 import { Automation } from "../automation.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
+import { Environment } from "../environment/index.js"
 import { Bus } from "../bus.js"
 import { Integration } from "../integration.js"
 import { IntegrationConnection } from "../integration/connection.js"
@@ -64,6 +65,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const integration = yield* Integration.Service
   const kv = yield* KV.Service
   const mcp = yield* Mcp.Service
+  const environment = yield* Environment.Service
   const location = yield* Location.Service
   const reference = yield* Reference.Service
   const rpc = yield* Rpc.Service
@@ -81,7 +83,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const locations = yield* LocationServiceMap.Service
   const worktrees = yield* Worktree.Service
   const worktreeStrategies = yield* WorktreeStrategies.Service
-  const currentWorktreeStrategies = location.workspaceID ? undefined : worktreeStrategies
+  const currentWorktreeStrategies = environment.hostsServer ? worktreeStrategies : undefined
   const locationInfo = (current: Location.Interface = location) =>
     new Location.Info({
       directory: current.directory,
@@ -651,6 +653,7 @@ export const requirements = LayerNode.group([
   Integration.node,
   KV.node,
   Mcp.node,
+  Environment.node,
   Location.node,
   Reference.node,
   Rpc.node,

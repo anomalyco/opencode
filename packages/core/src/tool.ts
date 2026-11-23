@@ -27,7 +27,6 @@ import {
   normalizedName,
   normalizeContent,
 } from "./tool/runtime.js"
-import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
   name: Schema.String,
@@ -324,7 +323,7 @@ const layer = Layer.effect(
           const codemodeEntries: Array<[string, Tool.Info]> = []
           for (const [name, tool] of data.tools) {
             if (hidden?.has(name)) continue
-            if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
+            if (Permission.isActionDenied(tool.options?.permission ?? name, rules)) continue
             if (codeModeEnabled && defaultCodeMode(tool) && !keepDirect?.has(name)) {
               codemodeEntries.push([name, tool])
               continue
@@ -423,7 +422,7 @@ const layer = Layer.effect(
         }),
       ),
       check: Effect.fn("Tool.check")(function* (input) {
-        if (whollyDisabled("execute", input.permissions)) {
+        if (Permission.isActionDenied("execute", input.permissions)) {
           return {
             ok: false,
             error: { kind: "ExecutionFailure", message: "Code Mode is disabled for this agent" },
@@ -433,7 +432,7 @@ const layer = Layer.effect(
         const data = state.get()
         const tools = new Map(
           codeModeTools(data.tools, input.tools)
-            .filter(([, tool]) => !whollyDisabled(tool.options?.permission ?? tool.id, input.permissions))
+            .filter(([, tool]) => !Permission.isActionDenied(tool.options?.permission ?? tool.id, input.permissions))
             .map(([, tool]) => [tool.id, tool] as const),
         )
         const callSeq = yield* Ref.make(0)
@@ -497,13 +496,8 @@ function* codeModeTools(registered: Data["tools"], paths: ReadonlyArray<string>)
   }
 }
 
-const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
-  const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
-  return rule?.resource === "*" && rule.effect === "deny"
-}
-
 /** Whether the rules leave Code Mode's `execute` reachable, as `snapshot` decides it. */
-export const codeModeAvailable = (rules: Permission.Ruleset) => !whollyDisabled("execute", rules)
+export const codeModeAvailable = (rules: Permission.Ruleset) => !Permission.isActionDenied("execute", rules)
 
 const CATALOG_CACHE_LIMIT = 5
 

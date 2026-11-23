@@ -607,6 +607,7 @@ const layer = Layer.effect(
             "The session that authorized this automation's tools moved to another project",
           )
         const outcome = yield* AutomationCode.run(owner, action, {
+          automationID: row.id,
           messageID: SessionMessage.ID.make(id),
           state: row.state,
           now,

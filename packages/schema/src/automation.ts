@@ -170,6 +170,7 @@ export const CodeActionInput = Schema.Struct({
     description: [
       "Code Mode JavaScript run on each trigger with no model (32 KB output cap).",
       'Call tools statically as tools.<ns>.<tool>(...) or tools["ns-name"].tool(...); each is authorized once at creation to run unattended.',
+      "A shell command still running at its timeout is stopped and the call throws; it never moves to the background.",
       "Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs.",
       "Event triggers also receive input.event = { id, timestamp, data }; data follows the event type's payloadSchema.",
       "Return nothing, or { state?, done?, send? }. JSON state is kept for the next run; done: true stops. lastOutput shows the delivery target and any logs.",

@@ -35,6 +35,7 @@ import { ImagePreview } from "@opencode/ui/image-preview"
 import { getFilename } from "@opencode/util/path"
 import { AttachmentCard } from "./attachment-card"
 import { CommentCard, commentCardTarget, quoteTooltip } from "./comment-card"
+import { UserMessageQuotes } from "./user-message-quotes"
 import { TimelineSeparator } from "../components/timeline-separator"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -276,6 +277,8 @@ export function CurrentUserMessageDisplay(props: {
   /** Whether a folded message is open. The timeline owns it so it survives row recycling. */
   expanded?: boolean
   onExpandedChange?: (expanded: boolean) => void
+  /** Shows quotes and comments inside the bubble, after the text, instead of as cards. */
+  inlineQuotes?: boolean
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -301,6 +304,9 @@ export function CurrentUserMessageDisplay(props: {
   const inlineFiles = createMemo(() => files().filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
+  const inline = createMemo(() => !!props.inlineQuotes && comments().length > 0)
+  // Inline quotes give a message without text a bubble of its own.
+  const bubble = createMemo(() => !!props.text || inline())
   const copyText = () => (props.voice ? props.text : props.message.text)
 
   // Mobile shows the current agent and model in the composer and switch notices, so repeating them per message is noise.
@@ -343,10 +349,10 @@ export function CurrentUserMessageDisplay(props: {
 
   // In a run, only the last message keeps the meta line; every bubble offers its actions from its own chevron.
   // Bubble corners tighten where two bubbles meet, as in the iOS app's grouped corners.
-  const folded = createMemo(() => !!props.run?.below && !!props.text)
+  const folded = createMemo(() => !!props.run?.below && bubble())
 
   const meetsAbove = createMemo(
-    () => !!props.run?.above && !!props.text && attachments().length === 0 && references().length === 0,
+    () => !!props.run?.above && bubble() && attachments().length === 0 && references().length === 0,
   )
 
   const runPose = () => ({
@@ -642,6 +648,18 @@ export function CurrentUserMessageDisplay(props: {
     </Show>
   )
 
+  // Inline quotes follow the text inside the fold, so Collapse long messages folds the whole bubble.
+  const renderBody = () => (
+    <>
+      <Show when={props.text}>
+        <CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />
+      </Show>
+      <Show when={inline()}>
+        <UserMessageQuotes comments={comments()} />
+      </Show>
+    </>
+  )
+
   return (
     <div
       ref={root}
@@ -660,7 +678,7 @@ export function CurrentUserMessageDisplay(props: {
     >
       {renderAttachments()}
       <Show
-        when={props.text}
+        when={bubble()}
         fallback={
           <Show when={comments().length > 0}>
             <UserMessageComments comments={comments()} bounded={false} />
@@ -678,23 +696,20 @@ export function CurrentUserMessageDisplay(props: {
           <div
             data-slot="user-message-text"
             dir="auto"
-            data-comments={comments().length > 0 ? "true" : undefined}
+            data-comments={comments().length > 0 && !inline() ? "true" : undefined}
             onCopy={copySessionReferences}
           >
-            <Show
-              when={props.fold}
-              fallback={<CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />}
-            >
+            <Show when={props.fold} fallback={renderBody()}>
               <UserMessageFold
                 id={`${props.message.id}-text`}
                 text={props.text}
                 expanded={expanded()}
                 onExpandedChange={setExpanded}
               >
-                <CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />
+                {renderBody()}
               </UserMessageFold>
             </Show>
-            <Show when={comments().length > 0}>
+            <Show when={comments().length > 0 && !inline()}>
               <UserMessageComments comments={comments()} bounded />
             </Show>
             {renderMenu()}
@@ -702,7 +717,7 @@ export function CurrentUserMessageDisplay(props: {
         </div>
       </Show>
       {/* Like the TUI, a pending steer of only attachments still offers its actions. */}
-      <Show when={props.text || comments().length > 0 || pending()}>
+      <Show when={bubble() || comments().length > 0 || pending()}>
         <div data-slot="user-message-copy-wrapper">
           <span data-slot="user-message-meta-wrap">
             <span data-slot="user-message-meta">
@@ -722,7 +737,7 @@ export function CurrentUserMessageDisplay(props: {
               </UserMessageTransition>
             </span>
           </span>
-          <Show when={!props.text}>{renderMenu()}</Show>
+          <Show when={!bubble()}>{renderMenu()}</Show>
         </div>
       </Show>
     </div>
