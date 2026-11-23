@@ -10,15 +10,3 @@ export const shareTracks: ShareTrack[] = [
   { id: "usage", name: "Daily Active", mood: "Vibraphone and scratches", bpm: 94 },
   { id: "cache", name: "Cache Hit", mood: "Minimal, sine bleeps", bpm: 86 },
 ].map((track) => ({ ...track, url: `${import.meta.env.BASE_URL}share-music/${track.id}.mp3` }))
-
-// The track that fits each section best, marked in the picker.
-export const suggestedTrack: Record<string, string> = {
-  "top-models": "tokens",
-  "unique-users": "usage",
-  retention: "models",
-  "session-cost": "cache",
-  "token-cost": "cache",
-  "cache-ratio": "cache",
-  "market-share": "market",
-  "geo-breakdown": "market",
-}

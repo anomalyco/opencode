@@ -2,7 +2,7 @@ import "./share.css"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { drawShareCard, loadShareFonts, shareDuration, shareSizes, type ShareCard, type ShareOptions } from "./card"
 import { cycleShareOption, designMode, designOnly, setShareOption, shareControls, shareOptions } from "./design"
-import { shareTracks, suggestedTrack, type ShareTrack } from "./music"
+import { shareTracks, type ShareTrack } from "./music"
 
 export type ShareDraft = Omit<ShareCard, "updatedAt" | "url">
 
@@ -390,30 +390,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 </Show>
               </div>
               <div data-slot="editor-toolbar">
-                <Show when={format() === "video"}>
-                  <button
-                    type="button"
-                    data-slot="icon-button"
-                    aria-label={playing() ? "Pause preview" : "Play preview"}
-                    onClick={() => setPlaying(!playing())}
-                  >
-                    <Show
-                      when={playing()}
-                      fallback={
-                        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                          <path d="M5 3.5v9l7-4.5-7-4.5Z" fill="currentColor" />
-                        </svg>
-                      }
-                    >
-                      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                        <path d="M5 3.5h2v9H5zM9 3.5h2v9H9z" fill="currentColor" />
-                      </svg>
-                    </Show>
-                  </button>
-                </Show>
                 <span data-slot="editor-meta" role="status" aria-live="polite">
-                  {notice() ??
-                    `${size()[0]} × ${size()[1]}${format() === "video" ? ` · ${Math.round(shareDuration(value(), options()))}s · ${music()?.name ?? "No music"}` : ""}`}
+                  {notice() ?? `${size()[0]} × ${size()[1]}`}
                 </span>
               </div>
             </div>
@@ -549,7 +527,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                         <TrackOption
                           name={item.name}
                           detail={`${item.mood} · ${item.bpm} BPM`}
-                          suggested={suggestedTrack[value().id] === item.id}
                           selected={track() === item.id}
                           playing={playing()}
                           onSelect={() => chooseTrack(item.id)}
@@ -592,7 +569,6 @@ function TrackOption(props: {
   detail: string
   selected: boolean
   playing?: boolean
-  suggested?: boolean
   onSelect: () => void
 }) {
   return (
@@ -634,12 +610,7 @@ function TrackOption(props: {
         </Show>
       </i>
       <span>
-        <strong>
-          {props.name}
-          <Show when={props.suggested}>
-            <em>Suggested</em>
-          </Show>
-        </strong>
+        <strong>{props.name}</strong>
         <small>{props.detail}</small>
       </span>
     </button>

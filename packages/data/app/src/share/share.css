@@ -373,21 +373,14 @@
     }
   }
 
+  /* The card's size in plain grey under it, on a fixed-height line so the stage never shifts. */
   [data-slot="editor-toolbar"] {
     display: flex;
     flex: none;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
+    height: 20px;
     max-width: 100%;
-    padding: 4px;
-    background: var(--stats-bg);
-    border: 1px solid var(--stats-line-strong);
-    box-shadow: 0 4px 16px rgb(0 0 0 / 0.08);
-
-    [data-slot="icon-button"] {
-      width: 32px;
-      height: 32px;
-    }
   }
 
   [data-slot="editor-meta"] {
@@ -625,16 +618,6 @@
       font-weight: 500;
     }
 
-    em {
-      padding: 1px 5px;
-      font-size: 10px;
-      font-style: normal;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--stats-accent-text);
-      background: color-mix(in srgb, var(--stats-accent) 12%, transparent);
-    }
-
     small {
       font-size: 11px;
       color: var(--stats-faint);
@@ -746,19 +729,6 @@
     [data-slot="editor-stage"] {
       gap: 10px;
       padding: 16px 16px 12px;
-    }
-
-    [data-slot="editor-toolbar"] {
-      width: 100%;
-      box-sizing: border-box;
-
-      [data-slot="segmented"] button {
-        height: 32px;
-      }
-    }
-
-    [data-slot="editor-meta"] {
-      margin-left: auto;
     }
 
     [data-slot="editor-inspector"] {
