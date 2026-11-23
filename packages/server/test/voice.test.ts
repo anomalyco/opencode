@@ -13,47 +13,28 @@ const voice = makeLocationNode({
   layer: Layer.succeed(
     Voice.Service,
     Voice.Service.of({
-      models: () =>
-        Effect.succeed({
-          models: [
-            {
-              model: "gpt-live-1",
-              provider: "openai",
-              transports: ["webrtc"],
-              available: true,
-            },
-            {
-              model: "gpt-realtime-2.1",
-              provider: "openai",
-              transports: ["webrtc", "websocket"],
-              available: true,
-            },
-            {
-              model: "grok-voice-3.0",
-              provider: "xai",
-              transports: ["websocket"],
-              available: true,
-            },
-            {
-              model: "gemini-3.8-live",
-              provider: "google",
-              transports: ["websocket"],
-              available: true,
-            },
-          ],
-          default: "gpt-live-1",
-        }),
-      session: (input) => {
-        if (input.model === "invalid")
-          return Effect.fail(new Voice.InvalidRequestError({ message: "Unsupported voice model" }))
-        if (input.model === "unavailable")
+      connect: (input) => {
+        if (input.model.id === "invalid")
+          return Effect.fail(new Voice.InvalidRequestError({ message: "Variant unavailable" }))
+        if (input.model.id === "missing")
+          return Effect.fail(
+            new Voice.ModelNotFoundError({
+              providerID: input.model.providerID,
+              modelID: input.model.id,
+              message: "Voice model not found",
+            }),
+          )
+        if (input.model.id === "unavailable")
           return Effect.fail(new Voice.UnavailableError({ message: "OpenAI API key is required", service: "openai" }))
         return Effect.succeed(
           input.transport.type === "webrtc"
-            ? { type: "webrtc" as const, sdp: `answer:${input.provider}/${input.model}:${input.transport.sdp}` }
+            ? {
+                type: "webrtc" as const,
+                sdp: `answer:${input.model.providerID}/${input.model.id}:${input.transport.sdp}`,
+              }
             : {
                 type: "websocket" as const,
-                url: `wss://api.x.ai/v1/realtime?model=${input.model}`,
+                url: `wss://api.x.ai/v1/realtime?model=${input.model.id}`,
                 token: "ek_test",
                 expiresAt: 1760000000,
               },
@@ -64,7 +45,7 @@ const voice = makeLocationNode({
   deps: [],
 })
 
-it.live("routes experimental voice models and session endpoints", () =>
+it.live("routes the voice connect endpoint and the deprecated voice endpoints", () =>
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-voice-endpoint-")))
     const global = path.join(tmp.path, "global")
@@ -78,46 +59,10 @@ it.live("routes experimental voice models and session endpoints", () =>
       },
       { overrides: [Voice.node.replace(voice)] },
     )
-    const modelsRes = yield* Effect.promise(() =>
-      handler(new Request("http://opencode.local/api/experimental/voice/models")),
-    )
-    expect(modelsRes.status).toBe(200)
-    expect(yield* Effect.promise(() => modelsRes.json())).toEqual({
-      data: {
-        models: [
-          {
-            model: "gpt-live-1",
-            provider: "openai",
-            transports: ["webrtc"],
-            available: true,
-          },
-          {
-            model: "gpt-realtime-2.1",
-            provider: "openai",
-            transports: ["webrtc", "websocket"],
-            available: true,
-          },
-          {
-            model: "grok-voice-3.0",
-            provider: "xai",
-            transports: ["websocket"],
-            available: true,
-          },
-          {
-            model: "gemini-3.8-live",
-            provider: "google",
-            transports: ["websocket"],
-            available: true,
-          },
-        ],
-        default: "gpt-live-1",
-      },
-    })
-
-    const post = (body: unknown) =>
+    const post = (route: string, body: unknown) =>
       Effect.promise(() =>
         handler(
-          new Request("http://opencode.local/api/experimental/voice/session", {
+          new Request(`http://opencode.local/api/experimental/voice/${route}`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
@@ -125,9 +70,8 @@ it.live("routes experimental voice models and session endpoints", () =>
         ),
       )
 
-    const rtcRes = yield* post({
-      model: "gpt-live-1",
-      provider: "opencode",
+    const rtcRes = yield* post("connect", {
+      model: { id: "gpt-live-1", providerID: "opencode" },
       session: { voice: "marin" },
       transport: { type: "webrtc", sdp: "v=0", dcid: 4 },
     })
@@ -136,7 +80,10 @@ it.live("routes experimental voice models and session endpoints", () =>
       data: { transport: { type: "webrtc", sdp: "answer:opencode/gpt-live-1:v=0" } },
     })
 
-    const wsRes = yield* post({ model: "grok-voice-3.0", transport: { type: "websocket" } })
+    const wsRes = yield* post("connect", {
+      model: { id: "grok-voice-3.0", providerID: "xai" },
+      transport: { type: "websocket" },
+    })
     expect(wsRes.status).toBe(200)
     expect(yield* Effect.promise(() => wsRes.json())).toEqual({
       data: {
@@ -149,7 +96,18 @@ it.live("routes experimental voice models and session endpoints", () =>
       },
     })
 
-    expect((yield* post({ model: "invalid", transport: { type: "websocket" } })).status).toBe(400)
-    expect((yield* post({ model: "unavailable", transport: { type: "websocket" } })).status).toBe(503)
+    const connect = (id: string) => post("connect", { model: { id, providerID: "openai" }, transport: { type: "websocket" } })
+    expect((yield* connect("invalid")).status).toBe(400)
+    expect((yield* connect("missing")).status).toBe(404)
+    expect((yield* connect("unavailable")).status).toBe(503)
+
+    // The deprecated endpoints read the real catalog, where nothing is connected.
+    const modelsRes = yield* Effect.promise(() =>
+      handler(new Request("http://opencode.local/api/experimental/voice/models")),
+    )
+    expect(modelsRes.status).toBe(200)
+    expect(yield* Effect.promise(() => modelsRes.json())).toEqual({ data: { models: [] } })
+    const legacy = yield* post("session", { model: "gpt-live-1", transport: { type: "websocket" } })
+    expect(legacy.status).toBe(503)
   }),
 )

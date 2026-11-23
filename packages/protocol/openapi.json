@@ -5741,6 +5741,129 @@
         }
       }
     },
+    "/api/experimental/voice/connect": {
+      "post": {
+        "tags": ["voice"],
+        "operationId": "experimental.voice.connect",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "VoiceSessionResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ModelNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ModelNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Start a voice session with a realtime model from model.list, using the provider's credentials on the server, and return the WebRTC SDP answer or WebSocket ephemeral token. Experimental: may change without compatibility guarantees.",
+        "summary": "Connect a voice session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "$ref": "#/components/schemas/Model.Ref"
+                  },
+                  "session": {
+                    "anyOf": [
+                      {
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "transport": {
+                    "$ref": "#/components/schemas/VoiceTransportInput"
+                  }
+                },
+                "required": ["model", "transport"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/experimental/voice/models": {
       "get": {
         "tags": ["voice"],
@@ -5823,8 +5946,9 @@
             }
           }
         },
-        "description": "List the voice models the server can start, one per model ID, and their transports. Every model listed is available. New clients should list realtime models with model.list instead.",
-        "summary": "List voice models"
+        "description": "Deprecated: list realtime models with model.list instead.",
+        "summary": "List voice models (deprecated)",
+        "deprecated": true
       }
     },
     "/api/experimental/voice/session": {
@@ -5909,8 +6033,9 @@
             }
           }
         },
-        "description": "Create a server-brokered voice session using the server's configured provider credentials and return the WebRTC SDP answer or WebSocket ephemeral token.",
-        "summary": "Create voice session",
+        "description": "Deprecated: use POST /api/experimental/voice/connect instead.",
+        "summary": "Create voice session (deprecated)",
+        "deprecated": true,
         "requestBody": {
           "content": {
             "application/json": {
@@ -5919,17 +6044,6 @@
                 "properties": {
                   "model": {
                     "type": "string"
-                  },
-                  "provider": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "The model's provider. Without it, the model's own provider is preferred, then OpenCode."
                   },
                   "session": {
                     "anyOf": [

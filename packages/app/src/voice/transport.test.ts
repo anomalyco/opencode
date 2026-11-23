@@ -172,8 +172,9 @@ function listed(data: ModelInfo[]) {
 }
 
 function open(list: ModelList = () => listed([live])) {
-  const session = jest.fn<Voice["session"]>(() => Promise.resolve({ transport: { type: "webrtc", sdp: "v=0 answer" } }))
-  const voice: Voice = { models: () => Promise.reject(new Error("unused")), session }
+  const session = jest.fn<Voice["connect"]>(() => Promise.resolve({ transport: { type: "webrtc", sdp: "v=0 answer" } }))
+  const unused = () => Promise.reject(new Error("unused"))
+  const voice: Voice = { connect: session, models: unused, session: unused }
 
   const dropped = jest.fn()
   const transport = new VoiceTransport({ model: { list }, voice, event: () => {}, levels: () => {}, dropped })
@@ -209,8 +210,7 @@ test("a call starts the newest GPT-Live model the server lists", async () => {
   await settle()
 
   expect(result.session.mock.calls[0][0]).toMatchObject({
-    model: "gpt-live-2",
-    provider: "opencode",
+    model: { id: "gpt-live-2", providerID: "opencode" },
     session: { model: "gpt-live-2" },
   })
 })

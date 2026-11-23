@@ -6,6 +6,7 @@ import { Integration } from "@opencode/core/integration"
 import { ID, Info, Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Voice } from "@opencode/core/voice"
+import { VoiceLegacy } from "@opencode/core/voice-legacy"
 import { Effect, Layer } from "effect"
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
@@ -73,12 +74,21 @@ const catalog = (listed: readonly Model.Info[]) =>
     available: (types) => Effect.succeed(types?.includes("realtime") ? listed : []),
   })
 
-// xAI has a key in its provider settings, as `opencode.json` can set.
+// xAI has a key in its provider settings, as `opencode.json` can set. Every provider knows its voice models.
 const providers = Layer.mock(Provider.Service, {
   get: (id) =>
     Effect.succeed(
       id === "xai" ? { ...Provider.Info.empty(id), settings: { apiKey: "xai-config-key" } } : Provider.Info.empty(id),
     ),
+  snapshot: () => {
+    const records = new Map<Provider.ID, Provider.Definition>()
+    for (const model of everything) {
+      const models = new Map(records.get(model.providerID)?.models)
+      models.set(model.id, model)
+      records.set(model.providerID, { provider: Provider.Info.empty(model.providerID), models })
+    }
+    return Effect.succeed({ records, available: [], providers: [] })
+  },
 })
 
 const mockIntegration = (
@@ -102,27 +112,17 @@ const mockIntegration = (
     command: { connect: unused, status: unused, cancel: unused },
   })
 
-// Starts a session with each integration's connections, recording the requests it sends upstream.
-const start = (
-  model: string,
+// Runs a voice effect with each integration's connections, recording the requests it sends upstream.
+const run = <A, E>(
+  effect: Effect.Effect<A, E, Voice.Service | Model.Service | Provider.Service>,
   connections: Partial<Record<string, Integration.Info["connections"]>>,
   requests: HttpClientRequest.HttpClientRequest[],
-  listed: readonly Model.Info[] = everything,
-  provider?: string,
+  listed: readonly Model.Info[],
 ) =>
-  Effect.flatMap(Voice.Service, (voice) =>
-    voice.session({
-      model,
-      provider,
-      transport:
-        model.startsWith("grok-") || model.startsWith("gemini-")
-          ? { type: "websocket" }
-          : { type: "webrtc", sdp: "v=0" },
-    }),
-  ).pipe(
+  effect.pipe(
     Effect.provide(
       Voice.layer.pipe(
-        Layer.provide(
+        Layer.provideMerge(
           Layer.mergeAll(
             catalog(listed),
             providers,
@@ -136,10 +136,10 @@ const start = (
                       requests.push(req)
                       return HttpClientResponse.fromWeb(
                         req,
-                        model.startsWith("gemini-")
-                          ? Response.json({ name: "auth_tokens/ek_gemini" })
-                          : model.startsWith("grok-")
-                            ? Response.json({ value: "ek_xai", expires_at: 1760000999 })
+                        req.url.includes("x.ai")
+                          ? Response.json({ value: "ek_xai", expires_at: 1760000999 })
+                          : req.url.includes("googleapis")
+                            ? Response.json({ name: "auth_tokens/ek_gemini" })
                             : Response.json({ transport: { sdp: "v=0\r\no=answer\r\n" } }),
                       )
                     }),
@@ -153,17 +153,39 @@ const start = (
     ),
   )
 
+const transport = (model: string) =>
+  model.startsWith("grok-") || model.startsWith("gemini-")
+    ? { type: "websocket" as const }
+    : { type: "webrtc" as const, sdp: "v=0" }
+
+// Connects the exact catalog model.
+const start = (
+  provider: string,
+  model: string,
+  connections: Partial<Record<string, Integration.Info["connections"]>>,
+  requests: HttpClientRequest.HttpClientRequest[],
+  listed: readonly Model.Info[] = everything,
+) =>
+  run(
+    Effect.flatMap(Voice.Service, (voice) =>
+      voice.connect({
+        model: { id: ID.make(model), providerID: Provider.ID.make(provider) },
+        transport: transport(model),
+      }),
+    ),
+    connections,
+    requests,
+    listed,
+  )
+
 it.effect("uses the provider's active connection or configured key, as chat models do", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(1760000000_000)
     const requests: HttpClientRequest.HttpClientRequest[] = []
-    const call = (model: string, connections: Partial<Record<string, Integration.Info["connections"]>>) =>
-      start(model, connections, requests)
-
-    yield* call("gpt-live-1", { openai: [credential("active", "key"), credential("stored", "key")] })
-    const grok = yield* call("grok-voice-3.0", { xai: [{ type: "env", name: "XAI_API_KEY" }] })
-    yield* call("grok-voice-3.0", {})
-    const gemini = yield* call("gemini-3.8-live", { google: [{ type: "env", name: "GEMINI_API_KEY" }] })
+    yield* start("openai", "gpt-live-1", { openai: [credential("active", "key"), credential("stored", "key")] }, requests)
+    const grok = yield* start("xai", "grok-voice-3.0", { xai: [{ type: "env", name: "XAI_API_KEY" }] }, requests)
+    yield* start("xai", "grok-voice-3.0", {}, requests)
+    const gemini = yield* start("google", "gemini-3.8-live", { google: [{ type: "env", name: "GEMINI_API_KEY" }] }, requests)
     expect(requests.map((req) => req.headers.authorization ?? req.headers["x-goog-api-key"])).toEqual([
       "Bearer sk-active",
       "Bearer xai-env-key",
@@ -183,27 +205,24 @@ it.effect("uses the provider's active connection or configured key, as chat mode
       expiresAt: 1760000060,
     })
 
-    const missingGoogle = yield* call("gemini-3.8-live", {}).pipe(Effect.flip)
+    const missingGoogle = yield* start("google", "gemini-3.8-live", {}, requests).pipe(Effect.flip)
     expect(missingGoogle).toMatchObject({ _tag: "Voice.UnavailableError", service: "google" })
     expect(missingGoogle.message).toContain("API key")
 
-    const nothingConnected = yield* start("gpt-live-1", {}, requests, []).pipe(Effect.flip)
-    expect(nothingConnected._tag).toBe("Voice.UnavailableError")
-    expect(nothingConnected.message).toContain("API key")
+    const unlisted = yield* start("openai", "gpt-live-1", {}, requests, []).pipe(Effect.flip)
+    expect(unlisted).toMatchObject({ _tag: "Voice.ModelNotFoundError", providerID: "openai", modelID: "gpt-live-1" })
     expect(requests).toHaveLength(4)
   }),
 )
 
-it.effect("starts GPT-Live on OpenCode's hosted endpoint for OpenCode's model, or for a bare ID OpenAI doesn't list", () =>
+it.effect("starts OpenCode's GPT-Live on OpenCode's hosted endpoint", () =>
   Effect.gen(function* () {
     const requests: HttpClientRequest.HttpClientRequest[] = []
-    const opencode = { opencode: [credential("console", "oauth")] }
-    const both = { openai: [credential("active", "key")], ...opencode }
+    const both = { openai: [credential("active", "key")], opencode: [credential("console", "oauth")] }
 
-    yield* start("gpt-live-1", opencode, requests, hosted)
-    yield* start("gpt-live-1", { opencode: [{ type: "env", name: "OPENCODE_API_KEY" }] }, requests, hosted)
-    yield* start("gpt-live-1", both, requests)
-    yield* start("gpt-live-1", both, requests, everything, "opencode")
+    yield* start("opencode", "gpt-live-1", both, requests)
+    yield* start("opencode", "gpt-live-1", { opencode: [{ type: "env", name: "OPENCODE_API_KEY" }] }, requests, hosted)
+    yield* start("openai", "gpt-live-1", both, requests)
     expect(
       requests.map((req): (string | undefined)[] => [
         req.url,
@@ -214,34 +233,17 @@ it.effect("starts GPT-Live on OpenCode's hosted endpoint for OpenCode's model, o
       ["https://opencode.ai/inference/openai/v1/live/sessions", "Bearer console-access", "wrk_console"],
       ["https://opencode.ai/inference/openai/v1/live/sessions", "Bearer opencode-env-key", undefined],
       ["https://api.openai.com/v1/live/sessions", "Bearer sk-active", undefined],
-      ["https://opencode.ai/inference/openai/v1/live/sessions", "Bearer console-access", "wrk_console"],
     ])
-
-    const unlisted = yield* start("gpt-realtime-2.1", opencode, requests, hosted).pipe(Effect.flip)
-    expect(unlisted._tag).toBe("Voice.UnavailableError")
-    const wrongProvider = yield* start("gpt-live-1", both, requests, everything, "xai").pipe(Effect.flip)
-    expect(wrongProvider).toMatchObject({ _tag: "Voice.UnavailableError", service: "xai" })
-    expect(requests).toHaveLength(4)
   }),
 )
 
-it.effect("lists one entry per voice model ID, preferring the model's own provider, with GPT-Live as default", () =>
+it.effect("keeps the deprecated voice endpoints' shape, with known models that can't start listed as unavailable", () =>
   Effect.gen(function* () {
-    const list = (listed: readonly Model.Info[]) =>
-      Effect.flatMap(Voice.Service, (voice) => voice.models()).pipe(
-        Effect.provide(
-          Voice.layer.pipe(
-            Layer.provide(
-              Layer.mergeAll(
-                catalog(listed),
-                providers,
-                mockIntegration(() => []),
-                Layer.mock(RequestExecutor.Service, {}),
-              ),
-            ),
-          ),
-        ),
-      )
+    const requests: HttpClientRequest.HttpClientRequest[] = []
+    const opencode = { opencode: [credential("console", "oauth")] }
+    const list = (listed: readonly Model.Info[]) => run(VoiceLegacy.models(), {}, requests, listed)
+    const session = (model: string, connections: typeof opencode | {}, listed: readonly Model.Info[]) =>
+      run(VoiceLegacy.session({ model, transport: transport(model) }), connections, requests, listed)
 
     expect(yield* list(everything)).toEqual({
       models: [
@@ -254,14 +256,29 @@ it.effect("lists one entry per voice model ID, preferring the model's own provid
       default: "gpt-live-1.1",
     })
 
-    const opencode = yield* list(hosted)
-    expect(opencode.models.map((item) => [item.model, item.provider])).toEqual([
-      ["grok-voice-3.0", "xai"],
-      ["gemini-3.8-live", "google"],
-      ["gpt-live-1", "opencode"],
+    const hostedList = yield* list(hosted)
+    expect(hostedList.models.map((item) => [item.model, item.provider, item.available])).toEqual([
+      ["grok-voice-3.0", "xai", true],
+      ["gemini-3.8-live", "google", true],
+      ["gpt-live-1", "opencode", true],
+      ["gpt-live-1.1", "openai", false],
+      ["gpt-realtime-2.1", "openai", false],
     ])
-    expect(opencode.default).toBe("gpt-live-1")
+    expect(hostedList.default).toBe("gpt-live-1")
 
-    expect(yield* list([])).toEqual({ models: [] })
+    const none = yield* list([])
+    expect(none.default).toBeUndefined()
+    expect(none.models.every((item) => !item.available)).toBe(true)
+    expect(none.models.map((item) => item.model)).toContain("gpt-live-1")
+
+    // A bare ID starts on the model's own provider first, then OpenCode's.
+    yield* session("gpt-live-1", opencode, hosted)
+    expect(requests.map((req) => req.url)).toEqual(["https://opencode.ai/inference/openai/v1/live/sessions"])
+    for (const model of ["gpt-live-1", "gpt-realtime-2.1", "gemini-3.8-live"]) {
+      const error = yield* session(model, {}, []).pipe(Effect.flip)
+      expect(error._tag).toBe("Voice.UnavailableError")
+      expect(error.message).toContain("API key")
+    }
+    expect(requests).toHaveLength(1)
   }),
 )

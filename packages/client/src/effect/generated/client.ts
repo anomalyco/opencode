@@ -125,6 +125,8 @@ import type {
   ExperimentalGenerateVideoGetOutput,
   ExperimentalGenerateDecisionsInput,
   ExperimentalGenerateDecisionsOutput,
+  ExperimentalVoiceConnectInput,
+  ExperimentalVoiceConnectOutput,
   ExperimentalVoiceModelsInput,
   ExperimentalVoiceModelsOutput,
   ExperimentalVoiceSessionInput,
@@ -1010,6 +1012,17 @@ const adaptGroupExperimentalGenerate = (raw: RawClient["server.generate"]) => ({
   decisions: EndpointExperimentalGenerateDecisions(raw),
 })
 
+const EndpointExperimentalVoiceConnect = (raw: RawClient["server.voice"]) => (input: ExperimentalVoiceConnectInput) =>
+  preserveEffect<ExperimentalVoiceConnectOutput>()(
+    raw["voice.connect"]({
+      query: { location: input["location"] },
+      payload: { model: input["model"], session: input["session"], transport: input["transport"] },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointExperimentalVoiceModels = (raw: RawClient["server.voice"]) => (input?: ExperimentalVoiceModelsInput) =>
   preserveEffect<ExperimentalVoiceModelsOutput>()(
     raw["voice.models"]({ query: { location: input?.["location"] } }).pipe(
@@ -1022,12 +1035,7 @@ const EndpointExperimentalVoiceSession = (raw: RawClient["server.voice"]) => (in
   preserveEffect<ExperimentalVoiceSessionOutput>()(
     raw["voice.session"]({
       query: { location: input["location"] },
-      payload: {
-        model: input["model"],
-        provider: input["provider"],
-        session: input["session"],
-        transport: input["transport"],
-      },
+      payload: { model: input["model"], session: input["session"], transport: input["transport"] },
     }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
@@ -1035,6 +1043,7 @@ const EndpointExperimentalVoiceSession = (raw: RawClient["server.voice"]) => (in
   )
 
 const adaptGroupExperimentalVoice = (raw: RawClient["server.voice"]) => ({
+  connect: EndpointExperimentalVoiceConnect(raw),
   models: EndpointExperimentalVoiceModels(raw),
   session: EndpointExperimentalVoiceSession(raw),
 })

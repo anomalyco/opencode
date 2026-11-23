@@ -220,11 +220,11 @@ export type GenerateScoreAnswer = {
 
 export type GenerateErrorAnswer = { type: "error"; name: string; reason: string; message?: string }
 
-export type VoiceTransportType = "webrtc" | "websocket"
-
 export type VoiceWebRTCTransport = { type: "webrtc"; sdp: string }
 
 export type VoiceWebSocketTransport = { type: "websocket"; url: string; token: string; expiresAt: number }
+
+export type VoiceTransportType = "webrtc" | "websocket"
 
 export type IntegrationID = string
 
@@ -770,9 +770,9 @@ export type GenerateChoiceAnswer = {
   confidence: number
 }
 
-export type VoiceModel = { model: string; provider: string; transports: Array<VoiceTransportType>; available: boolean }
-
 export type VoiceTransport = VoiceWebRTCTransport | VoiceWebSocketTransport
+
+export type VoiceModel = { model: string; provider: string; transports: Array<VoiceTransportType>; available: boolean }
 
 export type IntegrationCommandMethod = {
   id: IntegrationMethodID
@@ -2259,9 +2259,9 @@ export type GenerateDecisionAnswer =
   | GenerateScoreAnswer
   | GenerateErrorAnswer
 
-export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string | undefined } }
-
 export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
+
+export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string | undefined } }
 
 export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
 
@@ -4155,6 +4155,21 @@ export type ExperimentalGenerateDecisionsInput = {
 
 export type ExperimentalGenerateDecisionsOutput = GenerateDecisionsResponse["data"]
 
+export type ExperimentalVoiceConnectInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+  readonly session?: { readonly [x: string]: JsonValue } | null | undefined
+  readonly transport:
+    | {
+        readonly type: "webrtc"
+        readonly sdp: string
+        readonly dcid?: number | "Infinity" | "-Infinity" | "NaN" | null
+      }
+    | { readonly type: "websocket" }
+}
+
+export type ExperimentalVoiceConnectOutput = VoiceSessionResponse["data"]
+
 export type ExperimentalVoiceModelsInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
 }
@@ -4164,7 +4179,6 @@ export type ExperimentalVoiceModelsOutput = VoiceModelsResponse["data"]
 export type ExperimentalVoiceSessionInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly model: string
-  readonly provider?: string | undefined
   readonly session?: { readonly [x: string]: unknown } | undefined
   readonly transport:
     | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number | undefined }

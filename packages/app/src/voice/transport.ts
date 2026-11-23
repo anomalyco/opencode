@@ -253,10 +253,9 @@ export class VoiceTransport {
   }
 
   private async negotiate(viewing: VoiceJoinTarget, tail: string) {
-    const response = await this.inputOptions.voice.session(
+    const response = await this.inputOptions.voice.connect(
       {
-        model: this.model,
-        provider: this.provider,
+        model: { id: this.model, providerID: this.provider },
         session: {
           model: this.model,
           instructions: liveInstructions,

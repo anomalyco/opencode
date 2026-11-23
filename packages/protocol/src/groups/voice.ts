@@ -1,6 +1,7 @@
+import { Model } from "@opencode/schema/model"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
-import { InvalidRequestError, LocationNotFoundError, ServiceUnavailableError } from "../errors.js"
+import { InvalidRequestError, LocationNotFoundError, ModelNotFoundError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const VoiceTransportType = Schema.Literals(["webrtc", "websocket"]).annotate({
@@ -46,7 +47,37 @@ export const VoiceTransport = Schema.Union([
   VoiceWebSocketTransport,
 ]).annotate({ identifier: "VoiceTransport" })
 
+const session = Schema.optional(Schema.Record(Schema.String, Schema.Unknown))
+
+const sessionResponse = Schema.Struct({
+  data: Schema.Struct({
+    transport: VoiceTransport,
+  }),
+}).annotate({ identifier: "VoiceSessionResponse" })
+
 export const VoiceGroup = HttpApiGroup.make("server.voice")
+  .add(
+    HttpApiEndpoint.post("voice.connect", "/api/experimental/voice/connect", {
+      query: LocationQuery,
+      payload: Schema.Struct({
+        model: Model.Ref,
+        session,
+        transport: VoiceTransportInput,
+      }),
+      success: sessionResponse,
+      error: [InvalidRequestError, ModelNotFoundError, ServiceUnavailableError, LocationNotFoundError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.voice.connect",
+          summary: "Connect a voice session",
+          description:
+            "Start a voice session with a realtime model from model.list, using the provider's credentials on the server, and return the WebRTC SDP answer or WebSocket ephemeral token. Experimental: may change without compatibility guarantees.",
+        }),
+      ),
+  )
+  // Kept only for clients built before voice models were in the model list; delete with core/src/voice-legacy.ts.
   .add(
     HttpApiEndpoint.get("voice.models", "/api/experimental/voice/models", {
       query: LocationQuery,
@@ -62,9 +93,9 @@ export const VoiceGroup = HttpApiGroup.make("server.voice")
       .annotateMerge(
         OpenApi.annotations({
           identifier: "experimental.voice.models",
-          summary: "List voice models",
-          description:
-            "List the voice models the server can start, one per model ID, and their transports. Every model listed is available. New clients should list realtime models with model.list instead.",
+          summary: "List voice models (deprecated)",
+          description: "Deprecated: list realtime models with model.list instead.",
+          deprecated: true,
         }),
       ),
   )
@@ -73,26 +104,19 @@ export const VoiceGroup = HttpApiGroup.make("server.voice")
       query: LocationQuery,
       payload: Schema.Struct({
         model: Schema.String,
-        provider: Schema.optional(Schema.String).annotate({
-          description: "The model's provider. Without it, the model's own provider is preferred, then OpenCode.",
-        }),
-        session: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+        session,
         transport: VoiceTransportInput,
       }),
-      success: Schema.Struct({
-        data: Schema.Struct({
-          transport: VoiceTransport,
-        }),
-      }).annotate({ identifier: "VoiceSessionResponse" }),
+      success: sessionResponse,
       error: [InvalidRequestError, ServiceUnavailableError, LocationNotFoundError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
           identifier: "experimental.voice.session",
-          summary: "Create voice session",
-          description:
-            "Create a server-brokered voice session using the server's configured provider credentials and return the WebRTC SDP answer or WebSocket ephemeral token.",
+          summary: "Create voice session (deprecated)",
+          description: "Deprecated: use POST /api/experimental/voice/connect instead.",
+          deprecated: true,
         }),
       ),
   )

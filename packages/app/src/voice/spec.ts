@@ -1,5 +1,7 @@
 // Desktop voice contract v1. Adapted from the OpenCode iOS app's VoiceDelegator.swift, VoiceInstructions
 // (VoiceTranscript.swift) and docs/voice-gpt-live.md; no runtime Swift dependency.
+import type { JsonValue } from "@opencode/client/promise"
+
 export const version = 1
 
 export const liveInstructions = `You are OpenCode's voice assistant, GPT-Live. Speak naturally and briefly.
@@ -39,7 +41,12 @@ const session = { session_id: { type: "string", description: "Omit for the viewe
 
 const limit = { type: "integer", minimum: 1, maximum: 100 }
 
-const definitions = [
+const definitions: {
+  name: string
+  description: string
+  properties: Record<string, JsonValue>
+  required: string[]
+}[] = [
   { name: "list_sessions", description: "List recent sessions and their status.", properties: { limit }, required: [] },
   {
     name: "search_sessions",

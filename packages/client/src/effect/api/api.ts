@@ -1562,6 +1562,23 @@ export interface ExperimentalGenerateApi<E = never> {
   readonly decisions: ExperimentalGenerateDecisionsOperation<E>
 }
 
+export type ExperimentalVoiceConnectInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly model: Model.Ref
+  readonly session?: { readonly [x: string]: unknown } | undefined
+  readonly transport:
+    | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number | undefined }
+    | { readonly type: "websocket" }
+}
+export type ExperimentalVoiceConnectOutput = {
+  readonly transport:
+    | { readonly type: "webrtc"; readonly sdp: string }
+    | { readonly type: "websocket"; readonly url: string; readonly token: string; readonly expiresAt: number }
+}
+export type ExperimentalVoiceConnectOperation<E = never> = (
+  input: ExperimentalVoiceConnectInput,
+) => Effect.Effect<ExperimentalVoiceConnectOutput, E>
+
 export type ExperimentalVoiceModelsInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
 }
@@ -1581,7 +1598,6 @@ export type ExperimentalVoiceModelsOperation<E = never> = (
 export type ExperimentalVoiceSessionInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly model: string
-  readonly provider?: string | undefined
   readonly session?: { readonly [x: string]: unknown } | undefined
   readonly transport:
     | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number | undefined }
@@ -1597,6 +1613,7 @@ export type ExperimentalVoiceSessionOperation<E = never> = (
 ) => Effect.Effect<ExperimentalVoiceSessionOutput, E>
 
 export interface ExperimentalVoiceApi<E = never> {
+  readonly connect: ExperimentalVoiceConnectOperation<E>
   readonly models: ExperimentalVoiceModelsOperation<E>
   readonly session: ExperimentalVoiceSessionOperation<E>
 }
