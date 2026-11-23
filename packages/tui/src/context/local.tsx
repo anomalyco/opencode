@@ -161,7 +161,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         speed: {},
       })
       const [selectionState, setSelectionState] = createStore<{
-        newSessionModelByLocationAgent: Record<string, ModelPreferenceModel | undefined>
+        newSessionModelByLocationAgent: Record<string, ModelSelection | undefined>
         selectionBySessionAgent: Record<string, Record<string, ModelSelection | undefined> | undefined>
       }>({
         newSessionModelByLocationAgent: {},
@@ -262,16 +262,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return `${JSON.stringify([ref.directory, ref.workspaceID])}:${agentID}`
       }
 
-      function preferredSelection(model: ModelPreferenceModel): ModelSelection {
+      function preferredSelection(model: ModelSelection): ModelSelection {
         const configured = agent.current()?.model
         const fallback = configuredModel()
         // A model's speeds share its variant.
         const preferred = preferences.variant[modelPreferenceKey(standardModel(model))]
+        // An explicit choice wins, then the agent's own variant for its model, then the remembered one.
         const variant = normalizeModelVariant(
-          preferred ??
+          model.variant ??
             (configured?.providerID === model.providerID && configured.id === model.modelID
               ? configured.variant
               : undefined) ??
+            preferred ??
             (fallback?.providerID === model.providerID && fallback.modelID === model.modelID
               ? fallback.variant
               : undefined),
@@ -532,6 +534,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (!m) return
             if (route.data.type === "session") {
               setSessionDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
+            } else {
+              // Keep the choice for this agent's new session; it outranks the agent's configured variant.
+              const current = agent.current()
+              if (current)
+                setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), {
+                  providerID: m.providerID,
+                  modelID: m.modelID,
+                  variant: value ?? "default",
+                })
             }
             // A model's speeds share its variant.
             const standard = standardModel(m)
@@ -583,7 +594,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               if (route.data.type === "session") return setSessionDraft(route.data.sessionID, { ...m, modelID: target })
               // A new session starts on the model, which runs at the speed just saved for it.
               const current = agent.current()
-              if (current) setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), standard)
+              if (current) {
+                const key = locationAgentKey(current.id)
+                const variant = selectionState.newSessionModelByLocationAgent[key]?.variant
+                setSelectionState("newSessionModelByLocationAgent", key, { ...standard, variant })
+              }
             })
           },
           cycle() {
