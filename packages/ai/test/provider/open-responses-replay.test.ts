@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Message } from "../../src/effect.js"
-import { OpenAI } from "../../src/providers.js"
+import { Meta, OpenAI } from "../../src/providers.js"
 import { configure } from "../../src/providers/openai-compatible-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -11,6 +11,7 @@ import { sseEvents } from "../lib/sse.js"
 for (const model of [
   OpenAI.configure({ apiKey: "test-key" }).responses("example-model"),
   configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),
+  Meta.configure({ apiKey: "test-key" }).responses("muse-ember-1.0"),
 ]) {
   describe(`${model.route.protocol} message replay`, () => {
     const key = model.route.providerMetadataKey ?? "openresponses"
@@ -67,6 +68,71 @@ for (const model of [
             },
           ]),
           { type: "message", role: "user", status: "incomplete", content: [{ type: "input_text", text: "Continue" }] },
+        ])
+      }),
+    )
+
+    it.effect("replays commentary after a tool call in the same turn without its phase", () =>
+      Effect.gen(function* () {
+        const call = (id: string, input: Record<string, unknown>) => ({
+          type: "tool-call" as const,
+          id,
+          name: "execute",
+          input,
+          providerMetadata: { [key]: { itemId: `fc_${id}` } },
+        })
+        const prepared = yield* compileRequest(
+          ai.request({
+            model,
+            messages: [
+              Message.user("Check the fillet"),
+              Message.make({
+                role: "assistant",
+                content: [
+                  {
+                    type: "text",
+                    text: "Reading the schematic.",
+                    providerMetadata: { [key]: { itemId: "msg_before", phase: "commentary" } },
+                  },
+                  call("call_a", {}),
+                  {
+                    type: "text",
+                    text: "Checking the fillet.",
+                    providerMetadata: { [key]: { itemId: "msg_after", phase: "commentary" } },
+                  },
+                  call("call_b", { code: "1" }),
+                ],
+              }),
+              Message.make({
+                role: "tool",
+                content: [
+                  { type: "tool-result", id: "call_a", name: "execute", result: { type: "error", value: "Bad input" } },
+                  { type: "tool-result", id: "call_b", name: "execute", result: { type: "text", value: "1" } },
+                ],
+              }),
+            ],
+          }),
+        )
+        expect(prepared.body.input.slice(1)).toEqual([
+          {
+            type: "message",
+            role: "assistant",
+            id: "msg_before",
+            phase: "commentary",
+            status: "completed",
+            content: [{ type: "output_text", text: "Reading the schematic." }],
+          },
+          { type: "function_call", id: "fc_call_a", call_id: "call_a", name: "execute", arguments: "{}" },
+          {
+            type: "message",
+            role: "assistant",
+            id: "msg_after",
+            status: "completed",
+            content: [{ type: "output_text", text: "Checking the fillet." }],
+          },
+          { type: "function_call", id: "fc_call_b", call_id: "call_b", name: "execute", arguments: '{"code":"1"}' },
+          { type: "function_call_output", call_id: "call_a", output: "Bad input" },
+          { type: "function_call_output", call_id: "call_b", output: "1" },
         ])
       }),
     )

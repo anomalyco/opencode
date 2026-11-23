@@ -701,6 +701,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
       const content: TextPart[] = []
       const reasoningItems: Record<string, OpenResponsesReasoningInput> = {}
       const hostedToolItems = new Set<string>()
+      let calledTool = false
       const flushText = () => {
         if (content.length === 0) return
         const groups = content.reduce<
@@ -709,7 +710,10 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
           const partMetadata = part.providerMetadata?.[providerMetadataKey]
           const id = itemID(part.providerMetadata, providerMetadataKey) ?? metadata?.itemId
           const partPhase = messagePhase(partMetadata?.phase)
-          const phase = partPhase === undefined ? metadata?.phase : partPhase
+          const declared = partPhase === undefined ? metadata?.phase : partPhase
+          // A call's output only follows the whole assistant turn, and Meta's Muse rejects a commentary message
+          // replayed while a call is waiting for it. Text after a call keeps its place without the phase.
+          const phase = calledTool && declared === "commentary" ? undefined : declared
           const group = groups.at(-1)
           if (group && group.id === id && group.phase === phase) group.parts.push(part)
           else groups.push({ id, phase, parts: [part] })
@@ -761,6 +765,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
           flushText()
           if (part.providerExecuted === true) continue
           input.push(lowerToolCall(part, providerMetadataKey, customTool(part)))
+          calledTool = true
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
