@@ -10,8 +10,13 @@ type Selected = typeof Selected.Type
 const key = Instructions.Key.make("core/agent")
 const codec = Schema.toCodecJson(Selected)
 
+// Both texts name the agent: models only reliably drop the right instructions on leaving when the instructions were
+// introduced under the agent's name, since the plugin's own text often doesn't mention it.
+const active = (current: Selected) =>
+  `You are the ${current.name} agent. Follow these instructions while you are the ${current.name} agent:\n\n${current.text}`
+
 const inactive = (previous: Selected) =>
-  `The ${previous.name} agent is no longer selected. Its instructions from earlier in this conversation no longer apply.`
+  `You are no longer the ${previous.name} agent. The instructions you followed as the ${previous.name} agent no longer apply. Do not keep following them.`
 
 // One key for every agent: switching between two agents with instructions is one update.
 export const make = (agent: Agent.Info): Instructions.List =>
@@ -22,11 +27,11 @@ export const make = (agent: Agent.Info): Instructions.List =>
       agent.instructions ? { id: agent.id, name: agent.name, text: agent.instructions } : Instructions.removed,
     ),
     render: {
-      initial: (current) => current.text,
+      initial: active,
       changed: (previous, current) =>
         previous.id === current.id
-          ? `The ${current.name} agent's instructions changed. These replace the previous ones:\n\n${current.text}`
-          : `${inactive(previous)}\n\n${current.text}`,
+          ? `Your instructions as the ${current.name} agent changed. These replace the previous ones:\n\n${current.text}`
+          : `${inactive(previous)}\n\n${active(current)}`,
       removed: inactive,
     },
   })

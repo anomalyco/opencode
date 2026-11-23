@@ -2103,7 +2103,8 @@ describe("SessionRunnerLLM", () => {
     const plan = Agent.ID.make("plan")
     const build = Agent.ID.make("build")
     const orchestrator = Agent.ID.make("orchestrator")
-    const leftPlan = "The Plan agent is no longer selected."
+    const leftPlan = "You are no longer the Plan agent."
+    const enteredPlan = "You are the Plan agent. Follow these instructions while you are the Plan agent:\n\nPlan rules"
 
     const defineAgents = Effect.fnUntraced(function* (rules = "Plan rules") {
       const agent = yield* Agent.Service
@@ -2130,7 +2131,7 @@ describe("SessionRunnerLLM", () => {
       yield* select(s, plan)
       yield* s.runPrompt("First")
 
-      expect(prompt(s.requests.at(-1))).toContain("Plan rules")
+      expect(prompt(s.requests.at(-1))).toContain(enteredPlan)
       expect(systemTexts(s.requests.at(-1)!)).toEqual([])
     })
 
@@ -2142,7 +2143,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(s.requests[1]?.system).toEqual(s.requests[0]?.system)
       expect(prompt(s.requests[1])).not.toContain("Plan rules")
-      expect(texts(s.requests[1]!)).toEqual(["First", "Plan rules", "Second"])
+      expect(texts(s.requests[1]!)).toEqual(["First", enteredPlan, "Second"])
     })
 
     scenario("withdraws instructions when switching to an agent without any", function* (s) {
@@ -2189,7 +2190,7 @@ describe("SessionRunnerLLM", () => {
       yield* s.runPrompt("Second")
 
       expect(systemTexts(s.requests[1]!)).toEqual([
-        "The Plan agent's instructions changed. These replace the previous ones:\n\nNew plan rules",
+        "Your instructions as the Plan agent changed. These replace the previous ones:\n\nNew plan rules",
       ])
     })
 
