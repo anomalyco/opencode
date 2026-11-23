@@ -1,7 +1,7 @@
 export * as SessionInbox from "./inbox.js"
 
 import { and, asc, eq, or } from "drizzle-orm"
-import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import {
   Compaction,
@@ -19,6 +19,8 @@ import {
   User,
   UserPayload,
 } from "@opencode/schema/session-inbox"
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
@@ -27,7 +29,7 @@ import { SessionBlob } from "./blob.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStored } from "./stored.js"
-import { SessionInboxTable, SessionMessageTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -66,6 +68,18 @@ const decodeCompaction = Schema.decodeUnknownSync(CompactionPayload)
 const encodeCompaction = Schema.encodeSync(CompactionPayload)
 const decodeMove = Schema.decodeUnknownSync(MovePayload)
 const encodeMove = Schema.encodeSync(MovePayload)
+
+// A client records the selection it will want when a queued prompt is finally delivered.
+// `modelID` is the wire name the App writes; `id` is accepted for other clients.
+const ModelSelection = Schema.Struct({
+  providerID: Schema.String,
+  id: Schema.String.pipe(Schema.optional),
+  modelID: Schema.String.pipe(Schema.optional),
+  variant: Schema.String.pipe(Schema.optional),
+})
+const decodeModelSelection = Schema.decodeUnknownOption(ModelSelection)
+const decodeAgentID = Schema.decodeUnknownOption(Agent.ID)
+const decodeModelRef = Schema.decodeUnknownOption(Model.Ref)
 const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
 
@@ -526,6 +540,54 @@ const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E,
     Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
   )
 
+const sameModel = (
+  a: { readonly providerID: string; readonly id: string; readonly variant?: string } | undefined,
+  b: { readonly providerID: string; readonly id: string; readonly variant?: string } | undefined,
+) => a?.providerID === b?.providerID && a?.id === b?.id && (a?.variant ?? "default") === (b?.variant ?? "default")
+
+/**
+ * The selection the client recorded when it queued the prompt. It applies at delivery, never at
+ * admission: a queued follow-up must not reconfigure the turn it waits behind.
+ */
+const queuedSelection = (row: typeof SessionInboxTable.$inferSelect) => {
+  // Synthetic deliveries (subagent completions, automations) carry their own metadata.agent for
+  // provenance; only a person's prompt can select the Session's agent.
+  if (row.type !== "user") return
+  const metadata = decodeUser(row.payload).metadata
+  if (!metadata) return
+  const agent = Option.getOrUndefined(decodeAgentID(metadata.agent))
+  const parsed = Option.getOrUndefined(decodeModelSelection(metadata.model))
+  const modelID = parsed?.id ?? parsed?.modelID
+  const model =
+    parsed && modelID
+      ? Option.getOrUndefined(decodeModelRef({ providerID: parsed.providerID, id: modelID, variant: parsed.variant }))
+      : undefined
+  if (agent === undefined && model === undefined) return
+  return { agent, model }
+}
+
+const applySelection = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  bus: Bus.Interface,
+  sessionID: SessionSchema.ID,
+  selected: { readonly agent?: Agent.ID; readonly model?: Model.Ref },
+) {
+  const current = yield* db
+    .select({ agent: SessionTable.agent, model: SessionTable.model })
+    .from(SessionTable)
+    .where(eq(SessionTable.id, sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  if (selected.agent !== undefined && selected.agent !== current?.agent)
+    yield* bus.publish(SessionEvent.AgentSelected, {
+      sessionID,
+      agent: selected.agent,
+      previous: current?.agent ?? undefined,
+    })
+  if (selected.model !== undefined && !sameModel(selected.model, current?.model ?? undefined))
+    yield* bus.publish(SessionEvent.ModelSelected, { sessionID, model: selected.model })
+})
+
 const publish = Effect.fn("SessionInbox.publish")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
@@ -537,21 +599,25 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
     (row) => {
       if (row.type !== "move" && row.type !== "user" && row.type !== "synthetic")
         return Effect.die(new LifecycleConflict({ id: row.id }))
-      return bus
-        .publish(SessionEvent.InboxDelivered, {
-          sessionID,
-          inboxID: row.id,
-        })
-        .pipe(
-          Effect.catchDefect((defect) =>
-            defect instanceof LifecycleConflict
-              ? promotedFromMessage(db, sessionID, row.id, row.delivery).pipe(
-                  Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
-                  Effect.orDie,
-                )
-              : Effect.die(defect),
-          ),
-        )
+      return Effect.gen(function* () {
+        const selected = queuedSelection(row)
+        if (selected) yield* applySelection(db, bus, sessionID, selected)
+        yield* bus
+          .publish(SessionEvent.InboxDelivered, {
+            sessionID,
+            inboxID: row.id,
+          })
+          .pipe(
+            Effect.catchDefect((defect) =>
+              defect instanceof LifecycleConflict
+                ? promotedFromMessage(db, sessionID, row.id, row.delivery).pipe(
+                    Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
+                    Effect.orDie,
+                  )
+                : Effect.die(defect),
+            ),
+          )
+      })
     },
     { discard: true },
   )

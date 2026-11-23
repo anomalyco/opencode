@@ -190,7 +190,7 @@ const layer = Layer.effect(
               }
               const ready = yield* restore(
                 Effect.gen(function* () {
-                  const selected = yield* prepareContext(sessionID)
+                  let selected = yield* prepareContext(sessionID)
                   const promoted = yield* SessionInbox.promote(
                     db,
                     bus,
@@ -204,6 +204,20 @@ const layer = Layer.effect(
                       onlyIfMissing: true,
                     })
                   if (promoted > 0) step = 1
+                  // A delivered prompt applies the agent and model it queued with, so the boundary
+                  // has to resolve again and run the promoted prompt with its recorded selection.
+                  if (promoted > 0) {
+                    const current = yield* store.get(sessionID)
+                    const model = selected.session.model
+                    if (
+                      current?.agent !== undefined &&
+                      (current.agent !== selected.agent.id ||
+                        current.model?.providerID !== model?.providerID ||
+                        current.model?.id !== model?.id ||
+                        (current.model?.variant ?? "default") !== (model?.variant ?? "default"))
+                    )
+                      selected = yield* prepareContext(sessionID)
+                  }
                   return { _tag: "Ready" as const, context: yield* context.load(selected) }
                 }),
               )

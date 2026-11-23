@@ -1433,6 +1433,30 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("applies a queued prompt's recorded selection when it is delivered", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const { db } = yield* Database.Service
+
+      yield* session.prompt({
+        sessionID,
+        text: "Queued with a selection",
+        delivery: "queue",
+        metadata: { agent: "plan" },
+        resume: false,
+      })
+
+      const before = (yield* store.get(sessionID))?.agent
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "steer")).toBe(0)
+      expect((yield* store.get(sessionID))?.agent).toBe(before)
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "input")).toBe(1)
+      expect((yield* store.get(sessionID))?.agent).toBe(Agent.ID.make("plan"))
+    }),
+  )
+
   it.effect("promotes prompt and synthetic steers in admission order", () =>
     Effect.gen(function* () {
       yield* setup
