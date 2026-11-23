@@ -338,9 +338,12 @@ as Canvas size says); then, while the program asks for a frame (at most 10), sen
 `event`s, `canvas` messages, and device losses `{ type: "gpu", lost }`, the host's checks losing the device first),
 frame `i` (`t` = `i` / 60, `dt` 1/60, 300 × 200 at scale 2, `pointer` `null`, `dark` `false`), then frame `i`'s
 inputs marked `after: true`, before the program runs on. Timers run on a clock that moves while the program waits.
-`batches` are the batches it posts, in order (`frame`: in a frame request; `bytes` base64), with each frame request that
-carries no batch in its place as `{ frame: true, ops: [], bytes: "" }`, so every frame's end is there (the per-frame
-counts start again at each `frame: true` entry); a repeated frame request while one is pending isn't one (its batch, if
-any, is recorded with `frame: false`). `raw-*` programs post their own and omit them. `errors` are the host checks'
-program errors, `{ message, canvases }`, with `canvases` the keys stopped or `"all"`. `end` is how the run ended
-(`return`, `stop` when it stays open, or `error: <message>`).
+`batches` are the batches it posts, in order (`frame`: in a frame request; `bytes` base64, or `null` when the program
+posted something other than an `ArrayBuffer`; `ops` as posted, a list or not), with each frame request that carries no
+batch in its place as `{ frame: true, ops: [], bytes: "" }`, so every frame's end is there (the per-frame counts start
+again at each `frame: true` entry); a repeated frame request while one is pending isn't one (its batch, if any, is
+recorded with `frame: false`). `raw-*` programs post their own and omit them, except one whose batch has the wrong shape
+(`ops` not a list, `bytes` not an `ArrayBuffer`), which keeps them: a driver that replays `batches` makes the batch
+checks on them as a host converting the posted value does. `errors` are the host checks' program errors, `{ message,
+canvases }`, with `canvases` the keys stopped or `"all"`. `end` is how the run ended (`return`, `stop` when it stays
+open, or `error: <message>`).

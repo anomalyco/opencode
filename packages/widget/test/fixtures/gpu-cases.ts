@@ -412,10 +412,10 @@ export const gpuCases: ReadonlyArray<GpuCase> = [
 ]
 
 // Batches a program posts itself, which the prelude never makes, one fixture each: a JavaScript expression for the
-// batch's ops, posted with 8 bytes.
-const raw = (ops: string) => `async function main() {
+// batch's ops, posted with `bytes` (8 bytes in an ArrayBuffer by default).
+const raw = (ops: string, bytes = "new ArrayBuffer(8)") => `async function main() {
   widget.render(ui.canvas({ key: "scene", gpu: true, height: 100 }))
-  __host.post({ type: "gpu", ops: ${ops}, bytes: new ArrayBuffer(8) })
+  __host.post({ type: "gpu", ops: ${ops}, bytes: ${bytes} })
   await widget.frame()
 }`
 const view = `{ dimension: "2d", baseMipLevel: 0, mipLevelCount: 1, baseArrayLayer: 0, arrayLayerCount: 1 }`
@@ -446,9 +446,17 @@ export const rawCases: ReadonlyArray<GpuCase> = (
     ["shader-over-256-kb", `[["shader", 1, "x".repeat(256 * 1024 + 1)]]`],
     ["ops-over-20000", `Array.from({ length: 20001 }, (_, i) => ["shader", i + 1, ""])`],
     ["handles-over-4096", `Array.from({ length: 4097 }, (_, i) => ["shader", i + 1, ""])`],
-  ] as const
-).map(([name, ops]) => ({
+    // The batch's shape: valid ops that render into "scene" with bytes that aren't an ArrayBuffer stop "scene"; ops
+    // that aren't a list render into nothing and stop every canvas.
+    [
+      "bytes-not-an-array-buffer",
+      `[["context", 1, "scene", "rgba8unorm", "opaque"], ["view", 2, 1, ${view}], ["pass", { colorAttachments: [{ view: 2, resolveTarget: null, clearValue: [0, 0, 0, 1], loadOp: "clear", storeOp: "store" }], depthStencilAttachment: null }], ["end"]]`,
+      "new Uint8Array(8)",
+    ],
+    ["ops-not-a-list", `"buffer"`],
+  ] as ReadonlyArray<readonly [string, string, string?]>
+).map(([name, ops, bytes]) => ({
   name: `raw-${name}`,
-  source: raw(ops),
+  source: raw(ops, bytes),
   canvases: [{ key: "scene", width: 100, height: 100 }],
 }))

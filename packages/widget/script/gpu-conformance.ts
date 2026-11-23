@@ -16,7 +16,8 @@ const frame = (i: number) => ({ t: i / 60, dt: 1 / 60, width: 300, height: 200, 
 const FRAMES = 10
 
 export interface Recorded {
-  readonly batches: ReadonlyArray<{ readonly frame: boolean; readonly ops: unknown; readonly bytes: string }>
+  /** `bytes`: base64, or null when the program posted something other than an `ArrayBuffer`; `ops` as posted. */
+  readonly batches: ReadonlyArray<{ readonly frame: boolean; readonly ops: unknown; readonly bytes: string | null }>
   readonly errors: ReadonlyArray<{ readonly message: string; readonly canvases: ReadonlyArray<string> | "all" }>
   readonly end: string
 }
@@ -28,7 +29,7 @@ export interface Recorded {
  */
 export async function run(item: GpuCase): Promise<Recorded> {
   const clock = new ManualClock()
-  const batches: Array<{ frame: boolean; ops: unknown; bytes: string }> = []
+  const batches: Array<{ frame: boolean; ops: unknown; bytes: string | null }> = []
   const widget = LiveWidget.start(program(item.source, "live"), item.data ?? null, {
     clock,
     // GPU programs, not budgets: no 50 ms slice.
@@ -46,7 +47,7 @@ export async function run(item: GpuCase): Promise<Recorded> {
         batches.push({
           frame: message.type === "frame",
           ops: batch.ops,
-          bytes: Buffer.from(batch.bytes).toString("base64"),
+          bytes: batch.bytes instanceof ArrayBuffer ? Buffer.from(batch.bytes).toString("base64") : null,
         })
     },
   })
@@ -88,8 +89,12 @@ function format(file: Record<string, unknown>) {
   const head = JSON.stringify(rest, null, 2).slice(0, -2)
   if (!batches) return head + "\n}\n"
   const body = batches.map((batch) => {
-    const ops = batch.ops as ReadonlyArray<unknown>
-    const list = ops.length === 0 ? "[]" : `[\n${ops.map((op) => `        ${JSON.stringify(op)}`).join(",\n")}\n      ]`
+    const ops = batch.ops
+    const list = !Array.isArray(ops)
+      ? JSON.stringify(ops)
+      : ops.length === 0
+        ? "[]"
+        : `[\n${ops.map((op) => `        ${JSON.stringify(op)}`).join(",\n")}\n      ]`
     return `    {\n      "frame": ${batch.frame},\n      "bytes": ${JSON.stringify(batch.bytes)},\n      "ops": ${list}\n    }`
   })
   return `${head},\n  "batches": [\n${body.join(",\n")}\n  ]\n}\n`
@@ -103,9 +108,11 @@ export const fixtures = (): ReadonlyArray<GpuCase & { readonly raw: boolean }> =
 if (import.meta.main) {
   for (const item of fixtures()) {
     const recorded = await run(item)
-    // A raw case's batch is in its source.
+    // A raw case's batch is in its source; one of the wrong shape (ops not a list, bytes not an ArrayBuffer) is kept
+    // too, for drivers that replay batches.
     const { batches, ...rest } = recorded
-    const file = { ...item, raw: undefined, gpu: GPU, ...(item.raw ? {} : { batches }), ...rest }
+    const shape = batches.some((batch) => batch.bytes === null || !Array.isArray(batch.ops))
+    const file = { ...item, raw: undefined, gpu: GPU, ...(item.raw && !shape ? {} : { batches }), ...rest }
     await Bun.write(path.join(dir, `${item.name}.json`), format(file))
   }
   console.log(`wrote ${fixtures().length} fixtures to ${dir}`)

@@ -1,0 +1,34 @@
+{
+  "name": "raw-ops-not-a-list",
+  "source": "async function main() {\n  widget.render(ui.canvas({ key: \"scene\", gpu: true, height: 100 }))\n  __host.post({ type: \"gpu\", ops: \"buffer\", bytes: new ArrayBuffer(8) })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 100,
+      "height": 100
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "a batch's ops must be a list",
+      "canvases": "all"
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": false,
+      "bytes": "AAAAAAAAAAA=",
+      "ops": "buffer"
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": []
+    }
+  ]
+}
