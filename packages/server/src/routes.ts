@@ -47,11 +47,12 @@ import { FileWatch } from "@opencode/core/filesystem/file-watch"
 import { HttpEffect, HttpRouter } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Context, Effect, Layer, Option } from "effect"
+import { Base64 } from "effect/encoding"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
 import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
-import { authorizationLayer, InternalRequest } from "./middleware/authorization"
+import { authorizationLayer } from "./middleware/authorization"
 import { schemaErrorLayer } from "./middleware/schema-error"
 import { defectResponseLayer } from "./middleware/defect-response"
 import { ServerPairing } from "./pairing"
@@ -114,14 +115,7 @@ export function createRoutes(
   serviceURLs: () => ReadonlyArray<string> = () => [],
   overrides: LayerNode.Replacements = [],
 ) {
-  return makeRoutes(
-    options.password
-      ? ServerAuth.Config.configLayer({ password: Option.some(options.password) })
-      : ServerAuth.Config.layer,
-    options,
-    serviceURLs,
-    overrides,
-  )
+  return makeRoutes(options.password ? Option.some(options.password) : Option.none(), options, serviceURLs, overrides)
 }
 
 type InstanceNode = (
@@ -133,18 +127,21 @@ export function createEmbeddedRoutes(
   overrides: LayerNode.Replacements = [],
   instances?: InstanceNode,
 ) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides, instances)
+  return makeRoutes(Option.none(), options, () => [], overrides, instances)
 }
 
-function makeRoutes<AuthError, AuthServices>(
-  auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
+function makeRoutes(
+  password: Option.Option<string>,
   options: ServerOptions,
   serviceURLs: () => ReadonlyArray<string>,
   // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
   overrides: LayerNode.Replacements,
   instances?: InstanceNode,
 ) {
-  // Code Mode `opencode://` fetches go straight to this router, set once the router below is built.
+  const auth = ServerAuth.Config.configLayer({ password })
+  // Code Mode `opencode://` fetches go straight to this router, set once the router below is built. They carry the
+  // server's own credential, added here after the script handed the request over, so the script never sees it.
+  const credential = Option.map(password, (value) => `Basic ${Base64.encode(`opencode:${value}`)}`)
   let internal: ((request: Request) => Promise<Response>) | undefined
   const standard: LayerNode.Replacements = [
     CodeModeApi.node.replace(
@@ -155,6 +152,7 @@ function makeRoutes<AuthError, AuthServices>(
             Effect.suspend(() => {
               const handle = internal
               if (!handle) return Effect.fail(new Error("The OpenCode API is not ready yet."))
+              if (Option.isSome(credential)) request.headers.set("authorization", credential.value)
               return Effect.tryPromise({
                 try: () => handle(request),
                 catch: (error) => (error instanceof Error ? error : new Error(String(error))),
@@ -247,7 +245,7 @@ function makeRoutes<AuthError, AuthServices>(
           Effect.sync(() => {
             internal = Context.get(context, HttpRouter.HttpRouter)
               .asHttpEffect()
-              .pipe(Effect.provideService(InternalRequest, true), HttpEffect.toWebHandlerWith(context))
+              .pipe(HttpEffect.toWebHandlerWith(context))
           }),
         ),
       )
