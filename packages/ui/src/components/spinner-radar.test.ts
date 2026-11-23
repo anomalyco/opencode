@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { radarDots, radarFrames, radarOpacity, radarSpriteSvg, radarStylesheet } from "./spinner-radar"
+import { inflateSync } from "node:zlib"
+import { radarDots, radarFps, radarFrameCount, radarOpacity } from "./spinner-radar"
 
 test("the radar's dots fit the viewBox and light within one loop", () => {
   const dots = radarDots()
@@ -52,13 +53,51 @@ test("the radar's brightest dot is never more than half a dot from its head", ()
   })
 })
 
-test("the sprite strip bakes every frame into one vertical SVG mask", () => {
-  const svg = radarSpriteSvg()
-  const css = radarStylesheet("radar")
+// The committed frames must be the radar's: run `bun run generate:spinner` after changing spinner-radar.ts.
+test("spinner-frames.css holds the radar's frames as a looping 90 fps APNG", async () => {
+  const css = await Bun.file(new URL("./spinner-frames.css", import.meta.url)).text()
+  const png = Buffer.from(/--spinner-frames: url\("data:image\/png;base64,([^"]+)"\)/.exec(css)![1]!, "base64")
 
-  expect(svg).toContain(`viewBox='0 0 16 ${radarFrames * 16}'`)
-  expect(svg).toContain("fill-opacity='1'")
-  expect((svg.match(/<rect /g) ?? []).length).toBe(radarFrames * 25)
-  expect(css).toContain("@keyframes radar{")
-  expect(css).toContain(`steps(${radarFrames},end)`)
+  const chunks = Array.from({ length: png.length }).reduce<{ offset: number; list: { type: string; data: Buffer }[] }>(
+    (state) => {
+      if (state.offset >= png.length) return state
+      const length = png.readUInt32BE(state.offset)
+
+      return {
+        offset: state.offset + length + 12,
+        list: [
+          ...state.list,
+          {
+            type: png.toString("ascii", state.offset + 4, state.offset + 8),
+            data: png.subarray(state.offset + 8, state.offset + 8 + length),
+          },
+        ],
+      }
+    },
+    { offset: 8, list: [] },
+  ).list
+
+  const animation = chunks.find((chunk) => chunk.type === "acTL")!
+  expect(animation.data.readUInt32BE(0)).toBe(radarFrameCount)
+  expect(animation.data.readUInt32BE(4)).toBe(0)
+
+  const controls = chunks.filter((chunk) => chunk.type === "fcTL")
+  expect(controls).toHaveLength(radarFrameCount)
+  controls.forEach((control) => {
+    expect(control.data.readUInt16BE(20) / control.data.readUInt16BE(22)).toBe(1 / radarFps)
+  })
+
+  const frames = chunks
+    .filter((chunk) => chunk.type === "IDAT" || chunk.type === "fdAT")
+    .map((chunk) => inflateSync(chunk.type === "IDAT" ? chunk.data : chunk.data.subarray(4)))
+
+  expect(frames).toHaveLength(radarFrameCount)
+
+  // Each dot owns a 3×3 block of a 15×15 grey-alpha frame; read the alpha at its centre texel.
+  const dots = radarDots()
+
+  frames.forEach((frame, index) => {
+    const alpha = dots.map((_, dot) => frame[(Math.floor(dot / 5) * 3 + 1) * 31 + 1 + ((dot % 5) * 3 + 1) * 2 + 1])
+    expect(alpha).toEqual(dots.map((dot) => Math.round(radarOpacity(dot, index / radarFrameCount) * 255)))
+  })
 })
