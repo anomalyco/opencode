@@ -1,3 +1,4 @@
+import { loopback } from "../address"
 import { cookieDetails, cookieURL, fromElectron, PROBE_COOKIE, type ImportedCookie } from "./cookie"
 import {
   agreementKnown,
@@ -41,6 +42,16 @@ const WRITE_BATCH = 16
 
 /** Lets the main process's other work run. */
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve))
+
+/**
+ * Whether a cookie crosses between the stores. The probe never does. Nor does a loopback host's: each store's
+ * localhost is its own machine, so a remote server's localhost:3000 is not the one on the user's computer.
+ */
+const shared = (cookie: Electron.Cookie) => {
+  const host = cookie.domain?.replace(/^\./, "") ?? ""
+
+  return host !== PROBE_COOKIE.host && !loopback(host)
+}
 
 /**
  * Keeps a remote server's partition (`other`) and the profile holding the same cookies, both ways, while the user
@@ -154,7 +165,7 @@ export function createCookieMirror(input: { profile: MirroredSession; other: Mir
       // An overwrite removes the old value just before it inserts the new one, whose event follows.
       if (cause === "overwrite" || cause === "expired-overwrite") return
 
-      if (cookie.domain?.replace(/^\./, "") === PROBE_COOKIE.host) return
+      if (!shared(cookie)) return
       const change: CookieChange = { side, cookie: fromElectron(cookie), removed }
 
       // The echo of one of the mirror's own writes, or a cookie set to the value it has: nothing to read or write.
@@ -169,9 +180,7 @@ export function createCookieMirror(input: { profile: MirroredSession; other: Mir
   input.other.cookies.on("changed", toProfile)
 
   const list = async (side: LinkSide) =>
-    (await sessions[side].cookies.get({})).flatMap((cookie) =>
-      cookie.domain?.replace(/^\./, "") === PROBE_COOKIE.host ? [] : [fromElectron(cookie)],
-    )
+    (await sessions[side].cookies.get({})).filter(shared).map(fromElectron)
 
   const copyStores = async () => {
     input.log("info", "browser sign-in copy started", { copy })

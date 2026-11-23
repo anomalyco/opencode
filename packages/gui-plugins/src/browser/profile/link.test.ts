@@ -207,6 +207,44 @@ test("a sign-in only the partition holds goes to the profile, and where both hol
   await mirror.stop(false)
 })
 
+// A remote server's partition reaches localhost on the server's machine, so a loopback host names a different machine
+// in each store.
+test("a loopback host's sign-in stays in its own store: in the first copy, when a page sets one, and when sharing stops", async () => {
+  const local = (host: string, value: string) => cookie(0, value, { domain: host, hostOnly: true, secure: false })
+
+  const valueAt = async (store: ReturnType<typeof createStore>, host: string) =>
+    (await store.session.cookies.get({ domain: host, path: "/", name: "sid" }))[0]?.value
+
+  const hosts = ["localhost", "app.localhost", "127.0.0.1", "[::1]", "::1"]
+  const profile = createStore([...hosts.map((host) => local(host, "computer")), cookie(1, "profile")])
+  const other = createStore([local("localhost", "server")])
+  const { mirror, logged } = mirrored(profile, other)
+  await mirror.started
+  await settled(profile, other)
+
+  expect([profile.size(), other.size(), other.value(1)]).toEqual([6, 2, "profile"])
+  expect(logged[1]?.data).toMatchObject({ profile: 1, remote: 0, toRemote: 1, toProfile: 0 })
+
+  // Pages on both sides sign in to a loopback host: neither store is asked or written anything.
+  const before = { profile: { ...profile.calls }, other: { ...other.calls } }
+  profile.page.set(local("localhost", "computer-2"))
+  other.page.set(local("127.0.0.1", "server-2"))
+  await settled(profile, other)
+
+  expect([profile.calls, other.calls]).toEqual([before.profile, before.other])
+
+  // No longer sharing removes the shared sign-in only; the server's own loopback sign-ins stay.
+  await mirror.stop(true)
+  await settled(profile, other)
+
+  expect([profile.size(), other.size(), other.value(1)]).toEqual([6, 2, undefined])
+  expect(await Promise.all([valueAt(profile, "localhost"), valueAt(other, "localhost"), valueAt(other, "127.0.0.1")])).toEqual([
+    "computer-2",
+    "server",
+    "server-2",
+  ])
+})
+
 test.each([10, 3_000])("a page changes one of %i sign-ins: each store is asked for that one site's cookie, once", async (count) => {
   const profile = createStore(many(count))
   const other = createStore()
