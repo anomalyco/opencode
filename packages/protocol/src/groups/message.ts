@@ -83,6 +83,9 @@ export const PublicMediaSessionMessage = Schema.Union([
   SessionMessage.Idle,
 ]).annotate({ identifier: "Session.Message.MediaInfo" })
 
+export const MediaRefsDescription =
+  " Experimental: with `X-OpenCode-Capabilities: experimental-media-uri` and `experimental.media_blob` on in the session's location, stored user files come back as `media:` refs (the second response shape), which may change without compatibility guarantees."
+
 const MessagesCursor = Schema.Struct({
   previous: Schema.String.pipe(Schema.optional),
   next: Schema.String.pipe(Schema.optional),
@@ -92,27 +95,33 @@ const MessagesCursor = Schema.Struct({
 export const SessionMediaMessagesResponse = Schema.Struct({
   data: Schema.Array(PublicMediaSessionMessage),
   cursor: MessagesCursor,
-})
+}).annotate({ identifier: "SessionMediaMessagesResponse" })
 
 /** Experimental: the `session.message` response for clients that opt into `experimental-media-uri`. */
-export const SessionMediaMessageResponse = Schema.Struct({ data: PublicMediaSessionMessage })
+export const SessionMediaMessageResponse = Schema.Struct({ data: PublicMediaSessionMessage }).annotate({
+  identifier: "SessionMediaMessageResponse",
+})
 
 export const MessageGroup = HttpApiGroup.make("server.message")
   .add(
     HttpApiEndpoint.get("session.messages", "/api/session/:sessionID/message", {
       params: { sessionID: Session.ID },
       query: SessionMessagesQuery,
-      success: Schema.Struct({
-        data: Schema.Array(PublicSessionMessage),
-        cursor: MessagesCursor,
-      }).annotate({ identifier: "SessionMessagesResponse" }),
+      success: [
+        Schema.Struct({
+          data: Schema.Array(PublicSessionMessage),
+          cursor: MessagesCursor,
+        }).annotate({ identifier: "SessionMessagesResponse" }),
+        SessionMediaMessagesResponse,
+      ],
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "session.message.list",
         summary: "Get session messages",
         description:
-          "Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page.",
+          "Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page." +
+          MediaRefsDescription,
       }),
     ),
   )

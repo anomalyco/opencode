@@ -38,7 +38,7 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Form } from "@opencode/schema/form"
-import { PublicSessionMessage } from "./message.js"
+import { MediaRefsDescription, PublicSessionMessage, SessionMediaMessageResponse } from "./message.js"
 
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
@@ -78,7 +78,7 @@ export const SessionMediaInboxResponse = Schema.Struct({
       identifier: "Session.Inbox.MediaInfo",
     }),
   ),
-})
+}).annotate({ identifier: "SessionMediaInboxResponse" })
 
 // Transcripts exported before v2.1 carry older names for native data. The wire stays plain JSON so any export file
 // is accepted; decoding upgrades those names and then validates the current message shape.
@@ -544,14 +544,15 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.get("session.inbox.list", "/api/session/:sessionID/inbox", {
         params: { sessionID: Session.ID },
-        success: Schema.Struct({ data: Schema.Array(PublicInboxInfo) }),
+        success: [Schema.Struct({ data: Schema.Array(PublicInboxInfo) }), SessionMediaInboxResponse],
         error: SessionNotFoundError,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.inbox.list",
           summary: "List session inbox",
           description:
-            "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
+            "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items." +
+            MediaRefsDescription,
         }),
       ),
     )
@@ -711,13 +712,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.get("session.message", "/api/session/:sessionID/message/:messageID", {
         params: { sessionID: Session.ID, messageID: SessionMessage.ID },
-        success: Schema.Struct({ data: PublicSessionMessage }),
+        success: [Schema.Struct({ data: PublicSessionMessage }), SessionMediaMessageResponse],
         error: [SessionNotFoundError, MessageNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.message.get",
           summary: "Get session message",
-          description: "Retrieve one projected message owned by the Session.",
+          description: "Retrieve one projected message owned by the Session." + MediaRefsDescription,
         }),
       ),
     )

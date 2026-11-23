@@ -105,6 +105,11 @@ export const deprecatedClientPaths = new Set([
   "voice.session",
 ])
 
+// Reads that answer with a second, experimental shape when the request has `X-OpenCode-Capabilities:
+// experimental-media-uri`. The document lists both; the generated methods send no capability, so they are typed with
+// the first.
+export const alternateSuccessEndpoints = new Set(["session.messages", "session.message", "session.inbox.list"])
+
 export const promiseOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",

@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { compile, emitEffectImported, emitEffectShape, emitPromise, write } from "@opencode/httpapi-codegen"
 import {
+  alternateSuccessEndpoints,
   ClientApi,
   clientNamespace,
   deprecatedClientPaths,
@@ -59,12 +60,14 @@ const promiseContract = compile(ClientApi, {
   omitEndpoints: promiseOmitEndpoints,
   namespace: clientNamespace,
   aliases: deprecatedClientPaths,
+  alternateSuccesses: alternateSuccessEndpoints,
 })
 const effectContract = compile(ClientApi, {
   groupNames,
   omitEndpoints: effectOmitEndpoints,
   namespace: clientNamespace,
   aliases: deprecatedClientPaths,
+  alternateSuccesses: alternateSuccessEndpoints,
 })
 const effectTypeReferences = [
   ...namespaceTypes("Agent", "@opencode/schema/agent", Agent),

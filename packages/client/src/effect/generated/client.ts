@@ -654,7 +654,7 @@ const EndpointSessionInboxList = (raw: RawClient["server.session"]) => (input: S
   preserveEffect<SessionInboxListOutput>()(
     raw["session.inbox.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
       Effect.mapError(mapClientError),
-      Effect.map((value) => value.data),
+      Effect.map((value) => value.data as SessionInboxListOutput),
     ),
   )
 
@@ -697,7 +697,7 @@ const EndpointSessionMessageGet = (raw: RawClient["server.session"]) => (input: 
   preserveEffect<SessionMessageGetOutput>()(
     raw["session.message"]({ params: { sessionID: input["sessionID"], messageID: input["messageID"] } }).pipe(
       Effect.mapError(mapClientError),
-      Effect.map((value) => value.data),
+      Effect.map((value) => value.data as SessionMessageGetOutput),
     ),
   )
 
@@ -912,7 +912,10 @@ const EndpointMessageList = (raw: RawClient["server.message"]) => (input: Messag
     raw["session.messages"]({
       params: { sessionID: input["sessionID"] },
       query: { limit: input["limit"], order: input["order"], cursor: input["cursor"], type: input["type"] },
-    }).pipe(Effect.mapError(mapClientError)),
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value as MessageListOutput),
+    ),
   )
 
 const adaptGroupMessage = (raw: RawClient["server.message"]) => ({ list: EndpointMessageList(raw) })

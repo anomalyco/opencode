@@ -85,6 +85,8 @@ export type Endpoint = {
   readonly unwrapData: boolean
   readonly errors: ReadonlyArray<{ readonly status: number; readonly schema: Schema.Top }>
   readonly successes: ReadonlyArray<Schema.Top>
+  /** The endpoint declares alternate success shapes (see `alternateSuccesses`); the client is typed with the first. */
+  readonly alternateSuccesses: boolean
   readonly effectPortable: boolean
 }
 
@@ -129,6 +131,11 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
      * Endpoints added after the move have no old path to keep.
      */
     readonly aliases?: ReadonlySet<string>
+    /**
+     * Endpoints whose success schemas after the first are alternate responses the server sends only when a request
+     * opts in, such as with a capability header. They stay in the OpenAPI document; the client is typed with the first.
+     */
+    readonly alternateSuccesses?: ReadonlySet<string>
   },
 ): Contract {
   const endpoints: Array<Endpoint> = []
@@ -162,7 +169,8 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
 
       const successSchemas = Array.from(endpoint.success)
       if (successSchemas.length === 0) successSchemas.push(HttpApiSchema.NoContent)
-      if (successSchemas.length > 1) throw new GenerationError({ reason: `Multiple success schemas: ${name}` })
+      if (successSchemas.length > 1 && !options?.alternateSuccesses?.has(endpoint.identifier))
+        throw new GenerationError({ reason: `Multiple success schemas: ${name}` })
 
       const params = normalizeTransport(endpoint.params, "params", endpoint, name)
       const query = normalizeTransport(endpoint.query, "query", endpoint, name)
@@ -235,6 +243,7 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
         clientPath,
         unwrapData: isDataEnvelope(success.schema),
         successes: [success.schema],
+        alternateSuccesses: successSchemas.length > 1,
         errors: errorSchemas.map((item) => ({ status: item.status, schema: item.schema })),
         effectPortable,
         operation: {
@@ -848,7 +857,9 @@ function renderImportedEffectFiles(
       // HttpApiClient distributes union payloads into union request objects, while rebuilding a flattened input
       // produces one object containing a union value. The shapes are equivalent but TypeScript cannot correlate them.
       const rawCall = `raw[${JSON.stringify(item.endpoint.identifier)}]({ ${request} }${isOpaquePayload(item) ? ` as ${prefix}Request` : ""})`
-      const mapped = `${rawCall}.pipe(Effect.mapError(mapClientError)${item.unwrapData ? ", Effect.map((value) => value.data)" : ""})`
+      // The raw client decodes every declared success shape; endpoints with alternate shapes are typed with the first.
+      const narrowed = item.alternateSuccesses && options.shapeModule !== undefined ? ` as ${prefix}Output` : ""
+      const mapped = `${rawCall}.pipe(Effect.mapError(mapClientError)${item.unwrapData ? `, Effect.map((value) => value.data${narrowed})` : narrowed === "" ? "" : `, Effect.map((value) => value${narrowed})`})`
       const result =
         item.operation.success === "stream"
           ? `Stream.unwrap(${rawCall}.pipe(Effect.mapError(mapClientError), Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError)))))`
