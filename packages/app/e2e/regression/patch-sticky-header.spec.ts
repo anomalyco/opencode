@@ -177,7 +177,7 @@ for (const scenario of scenarios) {
       const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
       const toolTitle = scroller.locator('[data-slot="collapsible-trigger"][data-locked]')
       await expect(toolTitle).toHaveCount(scenario.title ? 1 : 0)
-      await expect(scroller.locator("[data-session-title]")).toHaveCount(width >= 768 ? 1 : 0)
+      await expect(page.locator("[data-session-title]")).toHaveCount(width >= 768 ? 1 : 0)
 
       for (const file of scenario.files) {
         const name = new RegExp(`${file}\\.ts`)
@@ -187,6 +187,7 @@ for (const scenario of scenarios) {
         await trigger.click()
         await expect(trigger).toHaveAttribute("aria-expanded", "true")
         const content = patch.getByRole("region", { name })
+        await content.getByRole("button", { name: "Show more" }).click()
         await expect
           .poll(() => content.evaluate((element) => element.getBoundingClientRect().height))
           .toBeGreaterThan(900)
@@ -218,7 +219,7 @@ for (const scenario of scenarios) {
             .poll(() =>
               header.evaluate((element) => {
                 const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
-                const title = viewport.querySelector("[data-session-title]")?.firstElementChild
+                const title = viewport.ownerDocument.querySelector("[data-session-title]")?.firstElementChild
 
                 const toolTitle = element
                   .closest('[data-component="edit-tool"]')
@@ -229,7 +230,7 @@ for (const scenario of scenarios) {
                   .closest('[data-component="collapsed-tool-group"]')
                   ?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
 
-                const sessionTop = viewport.getBoundingClientRect().top + (title?.getBoundingClientRect().height ?? 0)
+                const sessionTop = title?.getBoundingClientRect().bottom ?? viewport.getBoundingClientRect().top
                 const top = sessionTop + (group?.getBoundingClientRect().height ?? 0)
                 const rect = element.getBoundingClientRect()
                 const trigger = element.querySelector("button")!

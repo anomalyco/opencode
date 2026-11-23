@@ -38,7 +38,6 @@ export const AutomationTable = sqliteTable(
     event_position: text({ mode: "json" }).$type<{
       agent: Agent.ID
       cursor?: string | null
-      id?: string
     }>(),
     ...Timestamps,
   },

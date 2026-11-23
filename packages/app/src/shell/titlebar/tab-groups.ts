@@ -37,6 +37,7 @@ export const TabGroupsStateSchema = Persistence.struct({
   overrides: Persistence.record(TabGroupOverrideSchema),
   manualGroups: Persistence.array(ManualTabGroupSchema),
   manualAssignments: Persistence.record(Schema.String),
+  colors: Persistence.optional(Persistence.record(Schema.Literals(TAB_GROUP_COLORS))),
 })
 
 export type TabGroupsState = typeof TabGroupsStateSchema.Type
@@ -48,6 +49,7 @@ export const DEFAULT_TAB_GROUPS_STATE: TabGroupsState = {
   overrides: {},
   manualGroups: [],
   manualAssignments: {},
+  colors: {},
 }
 
 export type ResolvedTabMeta = {
@@ -72,6 +74,7 @@ export type ComputedTabGroup = {
   name: string
   hasCustomOverride: boolean
   color: TabGroupColor
+  defaultColor: TabGroupColor
   collapsed: boolean
   allTabs: Tab[]
   visibleTabs: Tab[]
@@ -111,16 +114,17 @@ export function nextManualGroupNumber(
 }
 
 /**
- * Assigns default colors in lexicographically sorted seed order first, and applies explicit user overrides afterwards,
- * so recoloring one group, reordering groups/tabs, or filtering never mutates another group's color.
+ * Keeps the default color each group was first given (`remembered`), and picks one for a new group in sorted seed order,
+ * avoiding colors the other present groups already use. Recoloring, reordering, filtering or closing one group never
+ * changes another group's color.
  */
 export function assignStableGroupColors(
   seeds: readonly string[],
   prefix: "server:" | "project:",
-  overrides: Readonly<Record<string, TabGroupOverride>>,
+  remembered: Readonly<Record<string, TabGroupColor>>,
 ): Map<string, TabGroupColor> {
   const unique = [...new Set(seeds)].toSorted()
-  const used = new Set<TabGroupColor>()
+  const used = new Set(unique.flatMap((seed) => remembered[`${prefix}${seed}`] ?? []))
   const out = new Map<string, TabGroupColor>()
 
   unique.forEach((seed) => {
@@ -130,20 +134,40 @@ export function assignStableGroupColors(
       return
     }
 
+    const saved = remembered[`${prefix}${seed}`]
+
+    if (saved) {
+      out.set(seed, saved)
+
+      return
+    }
+
     const picked = hashGroupColor(seed, used)
     used.add(picked)
     out.set(seed, picked)
   })
 
-  unique.forEach((seed) => {
-    const explicit = overrides[`${prefix}${seed}`]?.color
-
-    if (explicit) {
-      out.set(seed, explicit)
-    }
-  })
-
   return out
+}
+
+/**
+ * Records the position and default color of each automatic group the first time it appears. Without this, group order
+ * follows the first tab of each group in tab order and colors depend on which groups are open, so closing one tab could
+ * reorder or recolor the groups that remain.
+ */
+export function rememberAutoGroups(groups: readonly ComputedTabGroup[] | undefined, state: TabGroupsState) {
+  const auto = (groups ?? []).filter((group) => group.kind === "server" || group.kind === "project")
+  const order = state.groupOrder ?? []
+  const known = new Set(order)
+  const added = auto.filter((group) => !known.has(group.key))
+  const uncolored = auto.filter((group) => !state.colors?.[group.key])
+
+  if (!added.length && !uncolored.length) return undefined
+
+  return {
+    groupOrder: [...order, ...added.map((group) => group.key)],
+    colors: { ...state.colors, ...Object.fromEntries(uncolored.map((group) => [group.key, group.defaultColor])) },
+  }
 }
 
 export function matchesTabFilter(meta: ResolvedTabMeta, rawQuery: string) {
@@ -304,6 +328,7 @@ export function buildComputedTabGroups(input: {
         name: "",
         hasCustomOverride: false,
         color: "gray",
+        defaultColor: "gray",
         collapsed: false,
         allTabs: filtered.map((item) => item.tab),
         visibleTabs: filtered.map((item) => item.tab),
@@ -316,7 +341,7 @@ export function buildComputedTabGroups(input: {
     const colorMap = assignStableGroupColors(
       [...(input.knownServers ?? []), ...input.items.map((item) => item.server)],
       "server:",
-      input.state.overrides,
+      input.state.colors ?? {},
     )
 
     const buckets = [...Map.groupBy(filtered, (item) => item.server)]
@@ -325,7 +350,7 @@ export function buildComputedTabGroups(input: {
       const key = `server:${server}`
       const defaultName = rows[0]?.serverLabel ?? server
       const override = input.state.overrides[key]
-      const color = colorMap.get(server) ?? "blue"
+      const defaultColor = colorMap.get(server) ?? "blue"
       const collapsed = searching ? false : !!input.state.collapsed[key]
       const allTabs = rows.map((row) => row.tab)
 
@@ -337,7 +362,8 @@ export function buildComputedTabGroups(input: {
         defaultName,
         name: override?.name?.trim() || defaultName,
         hasCustomOverride: !!(override?.name?.trim() || override?.color),
-        color,
+        color: override?.color ?? defaultColor,
+        defaultColor,
         collapsed,
         allTabs,
         visibleTabs: collapsed ? [] : allTabs,
@@ -350,7 +376,7 @@ export function buildComputedTabGroups(input: {
 
   const projectSeedOf = (item: ResolvedTabMeta) => item.projectID ?? item.directory ?? "other"
 
-  const colorMap = assignStableGroupColors(input.items.map(projectSeedOf), "project:", input.state.overrides)
+  const colorMap = assignStableGroupColors(input.items.map(projectSeedOf), "project:", input.state.colors ?? {})
 
   const buckets = [...Map.groupBy(filtered, projectSeedOf)]
 
@@ -358,7 +384,7 @@ export function buildComputedTabGroups(input: {
     const key = `project:${projectKey}`
     const defaultName = rows[0]?.projectName ?? input.labels.other
     const override = input.state.overrides[key]
-    const color = colorMap.get(projectKey) ?? "gray"
+    const defaultColor = colorMap.get(projectKey) ?? "gray"
     const collapsed = searching ? false : !!input.state.collapsed[key]
     const allTabs = rows.map((row) => row.tab)
 
@@ -370,7 +396,8 @@ export function buildComputedTabGroups(input: {
       defaultName,
       name: override?.name?.trim() || defaultName,
       hasCustomOverride: !!(override?.name?.trim() || override?.color),
-      color,
+      color: override?.color ?? defaultColor,
+      defaultColor,
       collapsed,
       allTabs,
       visibleTabs: collapsed ? [] : allTabs,
@@ -420,6 +447,7 @@ function buildManualGroups(
       name: "",
       hasCustomOverride: false,
       color: "gray",
+      defaultColor: "gray",
       collapsed: false,
       allTabs,
       visibleTabs: allTabs,
@@ -454,6 +482,7 @@ function buildManualGroups(
       name: manual.name,
       hasCustomOverride: false,
       color: manual.color,
+      defaultColor: manual.color,
       collapsed,
       allTabs,
       visibleTabs: collapsed ? [] : allTabs,

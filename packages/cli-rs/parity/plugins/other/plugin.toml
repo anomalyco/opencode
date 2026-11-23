@@ -1,0 +1,6 @@
+# The views machine's distractor for opencode-native (`init.luau`), beside its TypeScript side (`tui.tsx`).
+id = "parity.other"
+name = "Other"
+version = "0.1.0"
+contract = "2.0"
+description = "The distractor of the views machine of parity/machines/plugins.json"

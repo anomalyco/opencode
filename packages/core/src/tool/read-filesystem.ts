@@ -13,6 +13,7 @@ export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
 export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const FIRST_CHUNK = 256 * 1024
+const MAX_SCAN_CHUNK = 4 * 1024 * 1024
 const TAIL_LINES = 100
 const MAX_LINE_LENGTH = 2_000
 // Enough UTF-8 bytes for the clamped prefix, including a BOM and a partial code point at the end.
@@ -73,29 +74,29 @@ export type PageInput = typeof PageInput.Type
 
 export const TextContent = Schema.Struct({
   type: Schema.Literal("text"),
-  content: Schema.String,
   offset: PositiveInt,
   lineCount: NonNegativeInt,
   next: Schema.optionalKey(PositiveInt).annotate({
     description: "The line to continue reading from. Absent when the content reaches the end of the file.",
   }),
+  content: Schema.String,
 }).annotate({ identifier: "ReadTool.TextContent" })
 export type TextContent = typeof TextContent.Type
 
 export const DirectoryContent = Schema.Struct({
   type: Schema.Literal("directory"),
-  entries: Schema.Array(Schema.String),
   next: Schema.optionalKey(PositiveInt).annotate({
     description: "The entry to continue reading from. Absent when the listing reaches the last entry.",
   }),
+  entries: Schema.Array(Schema.String),
 }).annotate({ identifier: "ReadTool.DirectoryContent" })
 export type DirectoryContent = typeof DirectoryContent.Type
 
 export const MediaContent = Schema.Struct({
   type: Schema.Literal("media"),
-  uri: Schema.String,
   mime: Schema.String,
   name: Schema.optionalKey(Schema.String),
+  uri: Schema.String,
 }).annotate({ identifier: "ReadTool.MediaContent" })
 export type MediaContent = typeof MediaContent.Type
 
@@ -278,7 +279,12 @@ const textPage = Effect.fnUntraced(function* (
     if (next === undefined && (entries.length >= limit || size >= MAX_READ_BYTES) && consumed < byte)
       next = requested + entries.length
     if (next !== undefined || byte >= first.info.size) break
-    const more = yield* range(byte, FIRST_CHUNK)
+    // Grow only while skipping lines; keep page reads (including an unfinished selected line) small.
+    const length =
+      entries.length > 0 || (requested > 0 && total >= requested - 1)
+        ? FIRST_CHUNK
+        : Math.max(FIRST_CHUNK, Math.min(chunk.length * 4, MAX_SCAN_CHUNK))
+    const more = yield* range(byte, Math.min(length, first.info.size - byte))
     if (more.bytes.length === 0) break
     chunk = more.bytes
   }

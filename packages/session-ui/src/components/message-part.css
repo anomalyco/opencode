@@ -970,6 +970,42 @@
   justify-content: center;
 }
 
+[data-component="file-counts"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--v2-text-text-base);
+
+  [data-slot="file-counts-name"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot="file-counts-directory"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-component="diff-changes"] {
+    flex-shrink: 0;
+  }
+
+  [data-component="diff-changes"] [data-empty] {
+    display: none;
+  }
+}
+
+/* A script's changes are each their own card, set apart by the gap between a turn's items, so two changes to one file
+   read as two. The New timeline spaces them its own way. */
+[data-script-change="patch"] + [data-script-change="patch"] {
+  margin-top: 12px;
+}
+
 [data-component="execute-tool-calls"] {
   display: flex;
   flex-direction: column;
@@ -1125,6 +1161,8 @@
   gap: 16px;
   width: 100%;
   min-width: 0;
+  /* Code and output share the dialog's height and scroll in their own boxes, so the bottom padding always shows. */
+  min-height: 0;
   padding: 0 16px 16px;
 
   [data-slot="execute-details-section"] {
@@ -1132,6 +1170,7 @@
     flex-direction: column;
     gap: 6px;
     min-width: 0;
+    min-height: 0;
   }
 
   [data-slot="execute-details-section-header"] {
@@ -1777,6 +1816,58 @@
 
   [data-slot="apply-patch-change"][data-type="modified"] {
     color: var(--icon-diff-modified-base);
+  }
+}
+
+/* A folded diff fades out under its toggle, which lies over the last of it. */
+[data-slot="file-diff-fold"] {
+  overflow: hidden;
+  border-radius: inherit;
+
+  &[data-folded] {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 72px), transparent calc(100% - 24px));
+  }
+}
+
+[data-slot="file-diff-fold-toggle"] {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 530;
+  line-height: var(--line-height-compact);
+  white-space: nowrap;
+  user-select: none;
+  color: var(--v2-text-text-muted);
+
+  [data-slot="icon-svg"] {
+    color: var(--v2-icon-icon-muted);
+  }
+
+  &[aria-expanded="false"] {
+    margin-top: -32px;
+  }
+
+  &[aria-expanded="true"] [data-slot="icon-svg"] {
+    transform: rotate(180deg);
+  }
+
+  &:hover {
+    color: var(--v2-text-text-base);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: -2px;
+    border-radius: 4px;
   }
 }
 

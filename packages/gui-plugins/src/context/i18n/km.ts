@@ -5,7 +5,6 @@ export default {
   "usage.usage": "ការប្រើប្រាស់",
   "usage.cost": "តម្លៃ",
   "usage.view": "មើលការប្រើប្រាស់បរិបទ",
-  "systemPrompt.title": "ប្រអប់បញ្ចូលប្រព័ន្ធ",
   "rawMessages.title": "សារឆៅ",
   "export.session": "សម័យនាំចេញ",
   "stats.session": "សម័យ",

@@ -58,10 +58,17 @@
 }
 
 [data-slot="pinned-group-name"] [data-component="text-input-v2"] {
+  width: 100%;
   height: 28px;
   padding-inline-end: 6px;
   background: transparent;
   box-shadow: none;
+}
+
+@media (forced-colors: none) {
+  [data-slot="pinned-group-name"] [data-component="text-input-v2"] {
+    outline: 0;
+  }
 }
 
 [data-slot="pinned-group-name"] [data-slot="text-input-v2-value"] {

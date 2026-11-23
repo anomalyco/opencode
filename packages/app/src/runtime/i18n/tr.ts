@@ -991,7 +991,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Bağlan",
   "provider.connect.breadcrumb.label": "Bağlantı adımları",
   "provider.connect.methods.description": "{{provider}} için bağlantı yöntemini seçin.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Tekrar dene",
   "provider.connect.console.serviceKeyDescription":

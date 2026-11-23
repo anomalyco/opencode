@@ -916,7 +916,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Միացում",
   "provider.connect.breadcrumb.label": "Միացման քայլեր",
   "provider.connect.methods.description": "Ընտրեք, թե ինչպես միացնել {{provider}}-ը։",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Կրկին փորձել",
   "provider.connect.console.serviceKeyDescription": "Միացեք OpenCode Console-ի ծառայողական հաշվի API բանալիով։",

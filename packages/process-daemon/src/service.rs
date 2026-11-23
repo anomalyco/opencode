@@ -379,15 +379,15 @@ impl TerminalService {
             .cloned()
             .collect::<Vec<_>>();
         handles.sort_by_key(|terminal| terminal.order);
-        handles
+        Ok(handles
             .into_iter()
             .map(|terminal| terminal.refreshed_info())
-            .collect()
+            .collect())
     }
 
     /// One process of either mode.
     pub fn get(&self, id: TerminalId) -> Result<ProcessInfo> {
-        self.handle(id)?.refreshed_info()
+        Ok(self.handle(id)?.refreshed_info())
     }
 
     /// Registers a waiter for a pipe process's exit. If it has already exited,
@@ -901,14 +901,16 @@ impl TerminalHandle {
     }
 
     /// The info, with a PTY's foreground process refreshed first.
-    fn refreshed_info(&self) -> Result<ProcessInfo> {
+    fn refreshed_info(&self) -> ProcessInfo {
         // Windows has no foreground query; do not wait behind actor
         // backpressure just to read its already-cached metadata.
+        // The refresh fails only once the actor has stopped, as when `terminate`
+        // runs after `list` or `get` took this handle; the cached info is then final.
         #[cfg(not(windows))]
         if self.mode.is_pty() {
-            self.request(|reply| ActorMessage::RefreshForegroundProcess { reply })?;
+            let _ = self.request(|reply| ActorMessage::RefreshForegroundProcess { reply });
         }
-        Ok(self.info())
+        self.info()
     }
 
     fn request<T>(&self, make: impl FnOnce(Reply<Result<T>>) -> ActorMessage) -> Result<T> {
@@ -2289,14 +2291,14 @@ mod tests {
     }
 
     #[test]
-    #[cfg(windows)]
-    fn windows_list_reads_metadata_without_an_actor_request() {
+    fn list_reads_cached_metadata_of_a_stopped_actor() {
         let (actor, _writer) = test_actor();
         actor.shutdown().unwrap();
         let service = TerminalService::default();
         service.terminals.lock().unwrap().insert(1, Arc::new(actor));
 
-        // Even a closed actor channel is irrelevant to cached Windows metadata.
+        // A concurrent `terminate` stops the actor of a handle `list` already
+        // cloned; that must not fail the whole listing.
         let terminals = service.list(ProcessMode::Pty).unwrap();
         assert_eq!(terminals.len(), 1);
         assert_eq!(terminals[0].id, 1);

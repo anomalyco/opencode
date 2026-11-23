@@ -401,7 +401,7 @@ export function createTimelineQuote(input: {
 
 export type TimelineQuoteController = ReturnType<typeof createTimelineQuote>
 
-export function TimelineQuote(props: { controller: TimelineQuoteController }) {
+export function TimelineQuote(props: { controller: Pick<TimelineQuoteController, "toolbar" | "setElement" | "add"> }) {
   const language = useLanguage()
   const quote = props.controller
   // Touch screens show their own menu over the selection.
@@ -427,6 +427,7 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
               onCleanup(() => quote.setElement(undefined))
             }}
             data-component="timeline-quote"
+            data-floating-overlay
             data-prevent-autofocus
             role="toolbar"
             aria-label={language.t("session.quote.actions")}

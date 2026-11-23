@@ -83,6 +83,8 @@ const ModelEntry = Schema.Struct({
 })
 
 const ModelsOutput = Schema.Struct({
+  total: Schema.Int.annotate({ description: "Number of matching models across all pages." }),
+  next: Schema.NullOr(Schema.Int).annotate({ description: "Offset of the next page, or null on the last page." }),
   providers: Schema.Array(
     Schema.Struct({
       id: Schema.String,
@@ -90,8 +92,6 @@ const ModelsOutput = Schema.Struct({
       models: Schema.Array(ModelEntry).annotate({ description: "Newest first." }),
     }),
   ).annotate({ description: "Matching models grouped by provider. Your own provider comes first." }),
-  total: Schema.Int.annotate({ description: "Number of matching models across all pages." }),
-  next: Schema.NullOr(Schema.Int).annotate({ description: "Offset of the next page, or null on the last page." }),
 })
 
 export const Plugin = {
@@ -103,7 +103,7 @@ export const Plugin = {
       Effect.sync(() => {
         const text =
           "execute" in event.tools
-            ? "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory."
+            ? "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session.move` and make the worktree the session's working directory."
             : "opencode_session_move" in event.tools
               ? "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider calling `opencode_session_move` to make the worktree the session's working directory."
               : undefined
@@ -120,12 +120,12 @@ export const Plugin = {
             "Tools for managing OpenCode itself, such as working with sessions and worktrees, searching the available models, and reading MCP resources.",
         })
         draft.add({
-          name: "session_rename",
+          name: "rename",
           description:
             "Rename a session, or omit sessionID to rename the current session. Use a short, specific title that summarizes the work being done.",
           input: RenameInput,
           output: RenameOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "opencode.session", codemode: true },
           execute: (input, context) => {
             const sessionID = input.sessionID ?? context.sessionID
             const title = input.title.trim()
@@ -140,12 +140,12 @@ export const Plugin = {
           },
         })
         draft.add({
-          name: "session_move",
+          name: "move",
           description:
             "Move a session to another directory, or omit sessionID to move the current session. The current session moves at the next safe boundary; do not run destination-dependent tools in the same execute call.",
           input: MoveInput,
           output: MoveOutput,
-          options: { namespace: "opencode", codemode: { pinned: true } },
+          options: { namespace: "opencode.session", codemode: { pinned: true } },
           execute: (input, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID
@@ -216,7 +216,7 @@ export const Plugin = {
               yield* permission.assert({
                 action: "edit",
                 resources: [target.resource],
-                save: ["*"],
+                save: [FileAccess.always(target)],
                 ...Permission.invocation(context),
               })
               yield* ctx.worktree
@@ -235,7 +235,7 @@ export const Plugin = {
         draft.add({
           name: "models",
           description:
-            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first.",
+            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first. Prefer the standard offering unless the user explicitly requests another tier. Use the listed pricing to compare costs when available; missing pricing does not mean free.",
           input: ModelsInput,
           output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },
@@ -264,13 +264,14 @@ export const Plugin = {
                     left.providerID.localeCompare(right.providerID) ||
                     right.time.released - left.time.released,
                 )
-                .filter((model, index, sorted) => {
-                  if (input.all || model.family === undefined) return true
-                  return (
-                    sorted.findIndex(
-                      (other) => other.providerID === model.providerID && other.family === model.family,
-                    ) === index
+                // When browsing, hide older versions only: a family's same-day siblings, like free and paid offerings,
+                // stay listed. A search lists every match, so a version the user names is never hidden.
+                .filter((model, _, sorted) => {
+                  if (input.all || terms.length > 0 || model.family === undefined) return true
+                  const newest = sorted.find(
+                    (other) => other.providerID === model.providerID && other.family === model.family,
                   )
+                  return newest?.time.released === model.time.released
                 })
               const page = matching.slice(offset, offset + limit)
               const providers = Array.from(new Set(page.map((model) => model.providerID))).map((id) => ({

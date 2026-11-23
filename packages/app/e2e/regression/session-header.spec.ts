@@ -117,6 +117,10 @@ for (const direction of ["ltr", "rtl"] as const) {
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "true")
     await expect(page.locator("#review-panel")).toBeVisible()
+    // A settled panel shows its own copy of the toggle; a click that starts on the header's copy as they swap misses.
+    await expect(
+      page.locator("#review-panel").getByRole("button", { name: "Toggle review", exact: true }),
+    ).toBeVisible()
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "false")
 

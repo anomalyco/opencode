@@ -990,7 +990,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Poveži",
   "provider.connect.breadcrumb.label": "Koraci povezivanja",
   "provider.connect.methods.description": "Odaberite kako povezati {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Pokušaj ponovo",
   "provider.connect.console.serviceKeyDescription":

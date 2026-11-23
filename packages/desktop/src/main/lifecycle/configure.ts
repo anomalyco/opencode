@@ -5,8 +5,8 @@ import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { app } from "electron"
 import { debugBuild, memoryLogInterval } from "@opencode/gui-plugins/debug/options"
-import { APP_ID, APP_NAME, CHANNEL } from "../constants"
-import { remoteDebuggingPort } from "../diagnostics/options"
+import { APP_ID, APP_NAME, APP_USER_MODEL_ID, CHANNEL } from "../constants"
+import { debuggingSwitches } from "../diagnostics/options"
 
 const testOnboarding = process.env.OPENCODE_TEST_ONBOARDING === "1"
 
@@ -23,7 +23,7 @@ export function configureApplication() {
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
   app.setName(APP_NAME)
-  app.setAppUserModelId(APP_ID)
+  app.setAppUserModelId(APP_USER_MODEL_ID)
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
@@ -32,12 +32,19 @@ export function configureApplication() {
   if (process.platform === "linux") app.commandLine.appendSwitch("disable-smooth-scrolling")
 
   const build = { packaged: app.isPackaged, channel: CHANNEL }
-  const debugPort = remoteDebuggingPort(build, process.env.OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT)
 
-  if (debugPort) app.commandLine.appendSwitch("remote-debugging-port", debugPort)
+  const debug = debuggingSwitches(build, process.env.OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT,
+    app.commandLine.hasSwitch("remote-debugging-port") ? app.commandLine.getSwitchValue("remote-debugging-port") : undefined,
+    app.commandLine.hasSwitch("remote-debugging-pipe"))
 
-  if (app.commandLine.hasSwitch("remote-debugging-port"))
+  for (const name of ["remote-debugging-port", "remote-debugging-pipe", "remote-debugging-address"]) app.commandLine.removeSwitch(name)
+
+  if (debug.pipe) app.commandLine.appendSwitch("remote-debugging-pipe")
+
+  if (debug.port !== undefined) {
+    app.commandLine.appendSwitch("remote-debugging-port", debug.port)
     app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1")
+  }
 
   // Precise heap sizes need a launch switch. The debug bar's toggle starts the log without one.
   if (debugBuild(build) && memoryLogInterval(process.env.OPENCODE_DESKTOP_MEMORY_LOG) !== undefined)

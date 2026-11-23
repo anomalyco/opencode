@@ -2,6 +2,7 @@
 import { marks } from "./lifecycle/marks"
 import { app } from "electron"
 import { acquireApplicationLock, configureApplication } from "./lifecycle/configure"
+import { captureLaunchLinks } from "./lifecycle/launch-links"
 import { startSidecarProbe } from "./service/sidecar-probe"
 import { registerStorageSnapshotHandler } from "./storage/snapshot"
 import { createEarlyWindow, earlyWindowClosed } from "./windows/early"
@@ -15,6 +16,7 @@ import { registerRendererScheme } from "./windows/scheme"
 configureApplication()
 
 if (acquireApplicationLock()) {
+  captureLaunchLinks()
   registerRendererScheme()
   // Window first, then the bundle: starting the import before ready delays ready itself, because the
   // module graph evaluates on the same thread Chromium needs to finish initialising.

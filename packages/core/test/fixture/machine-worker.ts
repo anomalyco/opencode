@@ -1,6 +1,6 @@
 import { Environment } from "@opencode/core/environment/index"
 import { Machine } from "@opencode/core/machine/index"
-import { Cause, Effect, Fiber, Queue, Stream } from "effect"
+import { Cause, Deferred, Effect, Fiber, Queue, Stream } from "effect"
 
 /** A process the fake worker ran. The test decides what it prints and when it exits. */
 export interface Run {
@@ -11,13 +11,18 @@ export interface Run {
   readonly env: Readonly<Record<string, string>>
   /** Signals the process ignores. */
   readonly traps: Set<string>
-  readonly print: (output: string | Uint8Array) => Effect.Effect<void>
+  readonly input: Uint8Array[]
+  /** Settles after the first accepted stdin request has been recorded. */
+  readonly inputReceived: Deferred.Deferred<void>
+  inputClosed: boolean
+  readonly print: (output: string | Uint8Array, stream?: "stderr") => Effect.Effect<void>
   readonly exit: (code: number) => Effect.Effect<void>
 }
 
 interface Process {
   readonly run: Run
   output: Uint8Array
+  chunks: Array<{ offset: number; data: Uint8Array; stream: "stdout" | "stderr" }>
   ended?: { readonly code: number } | { readonly code: null; readonly signal: string }
   /** Bytes sent on the current connection; absent when not attached. */
   sent?: number
@@ -28,7 +33,7 @@ type Message = Exclude<Machine.FromWorker, Machine.Hello>
 interface Link {
   open: boolean
   readonly queue: Queue.Queue<Message, Cause.Done>
-  fiber?: Fiber.Fiber<void>
+  fiber?: Fiber.Fiber<void, unknown>
 }
 
 type Direction = "home" | "worker"
@@ -38,7 +43,9 @@ type Direction = "home" | "worker"
  * cut, restore and redial the connection, drop the next message of a type heading either way, and restart. Its
  * connections are served in the caller's scope.
  */
-export const makeWorker = (machine: Machine.Interface) =>
+export const makeWorker = (host: {
+  readonly connect: (connection: Machine.Connection) => Effect.Effect<void, unknown>
+}) =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope
     const files = Environment.makeMemoryDriver()
@@ -68,8 +75,17 @@ export const makeWorker = (machine: Machine.Interface) =>
       if (process.sent === undefined) return
       const from = process.sent
       process.sent = process.output.length
-      if (process.output.length > from)
-        emit({ type: "output", id: process.run.id, offset: from, data: process.output.subarray(from) })
+      for (const chunk of process.chunks) {
+        if (chunk.offset + chunk.data.length <= from) continue
+        const skip = Math.max(0, from - chunk.offset)
+        emit({
+          type: "output",
+          id: process.run.id,
+          ...chunk,
+          offset: chunk.offset + skip,
+          data: chunk.data.subarray(skip),
+        })
+      }
       if (!process.ended) return
       process.sent = undefined
       emit({ type: "exit", id: process.run.id, bytes: process.output.length, ...process.ended })
@@ -79,6 +95,7 @@ export const makeWorker = (machine: Machine.Interface) =>
       if (table.has(message.id)) return emit({ type: "failed", id: message.id, request: "start", message: "exists" })
       const process: Process = {
         output: new Uint8Array(),
+        chunks: [],
         sent: 0,
         run: {
           id: message.id,
@@ -87,9 +104,13 @@ export const makeWorker = (machine: Machine.Interface) =>
           cwd: message.cwd,
           env: message.env,
           traps: new Set(),
-          print: (output) =>
+          input: [],
+          inputReceived: Deferred.makeUnsafe(),
+          inputClosed: !message.stdin,
+          print: (output, stream) =>
             Effect.sync(() => {
               const bytes = typeof output === "string" ? new TextEncoder().encode(output) : output
+              process.chunks.push({ offset: process.output.length, data: bytes, stream: stream ?? "stdout" })
               const next = new Uint8Array(process.output.length + bytes.length)
               next.set(process.output)
               next.set(bytes, process.output.length)
@@ -111,7 +132,7 @@ export const makeWorker = (machine: Machine.Interface) =>
     const answer = (
       message: Machine.FileCall,
     ): Effect.Effect<
-      Extract<Machine.FromWorker, { ok: true }>["result"],
+      Extract<Machine.FromWorker, { type: "fs"; ok: true }>["result"],
       Environment.NotFound | Environment.WrongKind | Environment.Failed
     > => {
       switch (message.call) {
@@ -165,6 +186,15 @@ export const makeWorker = (machine: Machine.Interface) =>
         return
       }
       const process = table.get(message.id)
+      if (message.type === "stdin") {
+        if (!process || process.run.inputClosed || process.ended)
+          return emit({ type: "stdin", id: message.id, req: message.req, ok: false, message: "Broken pipe" })
+        if (message.data === null) process.run.inputClosed = true
+        else process.run.input.push(message.data)
+        emit({ type: "stdin", id: message.id, req: message.req, ok: true })
+        Deferred.doneUnsafe(process.run.inputReceived, Effect.void)
+        return
+      }
       if (!process) return emit({ type: "failed", id: message.id, request: message.type, message: "unknown process" })
       if (message.type === "kill" && process.ended)
         return emit({ type: "failed", id: message.id, request: "kill", message: "already exited" })
@@ -197,9 +227,10 @@ export const makeWorker = (machine: Machine.Interface) =>
       const current: Link = { open: true, queue: yield* Queue.unbounded<Message, Cause.Done>() }
       const hello: Machine.Hello = {
         type: "hello",
-        name: machine.environment.id,
+        protocol: 2,
         os: "linux",
         arch: "x64",
+        home: "/home/worker",
         instance,
         processes: [...table.values()].map((process) => ({
           id: process.run.id,
@@ -213,7 +244,7 @@ export const makeWorker = (machine: Machine.Interface) =>
       // Live before the machine sees the hello, so what it sends while handling the hello is answered.
       link = current
       current.fiber = yield* Effect.forkIn(
-        machine.connect({
+        host.connect({
           hello,
           send: (message) => {
             if (current.open) receive(message)

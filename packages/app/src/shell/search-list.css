@@ -340,9 +340,15 @@
   [data-component="text-input-v2"],
   [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
     border-radius: 0;
-    outline: 0;
     background: transparent;
     box-shadow: none;
+  }
+
+  @media (forced-colors: none) {
+    [data-component="text-input-v2"],
+    [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
+      outline: 0;
+    }
   }
 
   [data-slot="text-input-v2-value"] {

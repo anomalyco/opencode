@@ -1565,6 +1565,8 @@ export interface ExperimentalGenerateApi<E = never> {
 export type ExperimentalVoiceModelsOutput = {
   readonly models: ReadonlyArray<{
     readonly model: string
+    readonly name: string
+    readonly engine: string
     readonly provider: string
     readonly transports: ReadonlyArray<"webrtc" | "websocket">
     readonly available: boolean
@@ -2561,6 +2563,41 @@ export type ExperimentalJobCancelOperation<E = never> = (
   input: ExperimentalJobCancelInput,
 ) => Effect.Effect<ExperimentalJobCancelOutput, E>
 
+export type ExperimentalMachineListOutput = ReadonlyArray<{
+  readonly id: string
+  readonly online: boolean
+  readonly paired: boolean
+  readonly os?: string
+  readonly arch?: string
+  readonly connection?: {
+    readonly kind: "websocket" | "iroh"
+    readonly path?: "direct" | "relayed"
+    readonly rtt?: number
+  }
+}>
+export type ExperimentalMachineListOperation<E = never> = () => Effect.Effect<ExperimentalMachineListOutput, E>
+
+export type ExperimentalMachineAddInput = {
+  readonly name: string
+  readonly reach: ReadonlyArray<{ readonly type: "url"; readonly url: string }>
+  readonly replace?: boolean | undefined
+}
+export type ExperimentalMachineAddOutput = {
+  readonly name: string
+  readonly join: string
+  readonly expires: number
+  readonly reach: ReadonlyArray<{ readonly type: "url"; readonly url: string } | { readonly type: "iroh" }>
+}
+export type ExperimentalMachineAddOperation<E = never> = (
+  input: ExperimentalMachineAddInput,
+) => Effect.Effect<ExperimentalMachineAddOutput, E>
+
+export type ExperimentalMachineRemoveInput = { readonly name: string }
+export type ExperimentalMachineRemoveOutput = void
+export type ExperimentalMachineRemoveOperation<E = never> = (
+  input: ExperimentalMachineRemoveInput,
+) => Effect.Effect<ExperimentalMachineRemoveOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2591,6 +2628,11 @@ export interface ExperimentalApi<E = never> {
     readonly delete: ExperimentalArtifactsDeleteOperation<E>
   }
   readonly job: { readonly list: ExperimentalJobListOperation<E>; readonly cancel: ExperimentalJobCancelOperation<E> }
+  readonly machine: {
+    readonly list: ExperimentalMachineListOperation<E>
+    readonly add: ExperimentalMachineAddOperation<E>
+    readonly remove: ExperimentalMachineRemoveOperation<E>
+  }
 }
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

@@ -10,7 +10,7 @@ import path from "node:path"
 import { HttpApiSchema } from "effect/http-api"
 import { missingSession } from "./session-error"
 
-/** `automation.*` in the `server.experimental` group. Every route needs experimental.automations where it runs. */
+/** `automation.*` in the `server.experimental` group. Every route requires automations to be enabled where it runs. */
 export const makeAutomation = Effect.gen(function* () {
   const automations = yield* Automation.Service
   const sessions = yield* Session.Service

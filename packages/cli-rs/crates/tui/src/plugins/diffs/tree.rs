@@ -1,0 +1,373 @@
+//! Display and navigate the diff viewer's file tree.
+
+use std::collections::BTreeSet;
+
+use opencode_plugin::abi::interact::Interact;
+use opencode_plugin::abi::v2;
+use opencode_plugin::abi::{Click, Edges, Layout, Rgba, Span, Width, Wrap};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Directory,
+    File,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Node {
+    pub id: usize,
+    pub name: String,
+    pub parent: Option<usize>,
+    pub children: Vec<usize>,
+    pub depth: usize,
+    pub kind: Kind,
+    pub file: Option<usize>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Tree {
+    pub roots: Vec<usize>,
+    pub nodes: Vec<Node>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Row {
+    pub id: usize,
+    pub depth: usize,
+    pub kind: Kind,
+    pub name: String,
+    pub file: Option<usize>,
+}
+
+pub type Expanded = BTreeSet<usize>;
+
+/// `buildFileTree`: directories before files, then by name, then by insertion.
+pub fn build<'a>(files: impl IntoIterator<Item = &'a str>) -> Tree {
+    let mut tree = Tree::default();
+    let mut directories: Vec<(String, usize)> = Vec::new();
+    for (file, path) in files.into_iter().enumerate() {
+        let segments: Vec<&str> = path.split('/').filter(|segment| !segment.is_empty()).collect();
+        let Some((name, parents)) = segments.split_last() else { continue };
+        let mut parent = None;
+        let mut directory = String::new();
+        for (depth, segment) in parents.iter().enumerate() {
+            if !directory.is_empty() {
+                directory.push('/');
+            }
+            directory.push_str(segment);
+            let existing = directories.iter().find(|(path, _)| *path == directory).map(|(_, id)| *id);
+            let id = existing.unwrap_or_else(|| {
+                let id = add(&mut tree, segment, parent, depth, Kind::Directory, None);
+                directories.push((directory.clone(), id));
+                id
+            });
+            parent = Some(id);
+        }
+        add(&mut tree, name, parent, parents.len(), Kind::File, Some(file));
+    }
+    let order = |tree: &Tree, ids: &mut Vec<usize>| ids.sort_by(|left, right| compare(tree, *left, *right));
+    let mut roots = std::mem::take(&mut tree.roots);
+    order(&tree, &mut roots);
+    tree.roots = roots;
+    for index in 0..tree.nodes.len() {
+        let mut children = std::mem::take(&mut tree.nodes[index].children);
+        order(&tree, &mut children);
+        tree.nodes[index].children = children;
+    }
+    tree
+}
+
+fn add(tree: &mut Tree, name: &str, parent: Option<usize>, depth: usize, kind: Kind, file: Option<usize>) -> usize {
+    let id = tree.nodes.len();
+    tree.nodes.push(Node { id, name: name.to_owned(), parent, children: Vec::new(), depth, kind, file });
+    match parent {
+        Some(parent) => tree.nodes[parent].children.push(id),
+        None => tree.roots.push(id),
+    }
+    id
+}
+
+fn compare(tree: &Tree, left: usize, right: usize) -> std::cmp::Ordering {
+    let (a, b) = (&tree.nodes[left], &tree.nodes[right]);
+    (a.kind != Kind::Directory)
+        .cmp(&(b.kind != Kind::Directory))
+        .then_with(|| a.name.encode_utf16().cmp(b.name.encode_utf16()))
+        .then(left.cmp(&right))
+}
+
+/// `flattenFileTree`: every row, or with `expanded` only the rows under expanded directories.
+pub fn flatten(tree: &Tree, expanded: Option<&Expanded>) -> Vec<Row> {
+    fn visit(tree: &Tree, expanded: Option<&Expanded>, id: usize, depth: usize, rows: &mut Vec<Row>) {
+        let node = &tree.nodes[id];
+        if node.kind == Kind::File {
+            rows.push(Row { id, depth, kind: Kind::File, name: node.name.clone(), file: node.file });
+            return;
+        }
+        let mut chain = vec![node];
+        while let [only] = chain.last().map_or(&[][..], |last| last.children.as_slice())
+            && tree.nodes[*only].kind == Kind::Directory
+        {
+            chain.push(&tree.nodes[*only]);
+        }
+        let names: Vec<&str> = chain.iter().map(|node| node.name.as_str()).collect();
+        rows.push(Row { id, depth, kind: Kind::Directory, name: names.join("/"), file: node.file });
+        if expanded.is_none_or(|expanded| expanded.contains(&id))
+            && let Some(last) = chain.last()
+        {
+            for &child in &last.children {
+                visit(tree, expanded, child, depth + 1, rows);
+            }
+        }
+    }
+    let mut rows = Vec::new();
+    for &root in &tree.roots {
+        visit(tree, expanded, root, 0, &mut rows);
+    }
+    rows
+}
+
+/// The directories to expand so `file` shows (`fileTreeFileSelection`).
+pub fn parents_of(tree: &Tree, file: usize) -> Option<Expanded> {
+    let node = tree.nodes.iter().find(|node| node.kind == Kind::File && node.file == Some(file))?;
+    Some(std::iter::successors(node.parent, |&parent| tree.nodes[parent].parent).collect())
+}
+
+/// `orderedPatchFileIndexes`: the files in tree order.
+pub fn ordered_files(rows: &[Row]) -> Vec<usize> {
+    rows.iter().filter_map(|row| row.file).collect()
+}
+
+/// `movePatchFileIndex`: `offset` files from `current` in `files`, clamped; the first when `current` is not there.
+pub fn move_file(files: &[usize], current: Option<usize>, offset: i64) -> Option<usize> {
+    let first = *files.first()?;
+    let Some(index) = current.and_then(|current| files.iter().position(|&file| file == current)) else {
+        return Some(first);
+    };
+    let last = files.len() as i64 - 1;
+    Some(files[(index as i64 + offset).clamp(0, last) as usize])
+}
+
+pub fn all_expanded(tree: &Tree) -> Expanded {
+    tree.nodes.iter().filter(|node| node.kind == Kind::Directory).map(|node| node.id).collect()
+}
+
+pub fn toggle(tree: &Tree, expanded: &Expanded, selected: usize) -> Expanded {
+    let mut next = expanded.clone();
+    if tree.nodes.get(selected).is_some_and(|node| node.kind == Kind::Directory) && !next.remove(&selected) {
+        next.insert(selected);
+    }
+    next
+}
+
+/// Collapsed chains drop whole leading segments: "a/b/c/d" narrows to "…/c/d" (`truncateDirectoryChain`).
+pub fn truncate_directory_chain(name: &str, max: i64) -> String {
+    if width(name) <= max {
+        return name.to_owned();
+    }
+    let mut kept: Vec<&str> = Vec::new();
+    let mut used = width("…/");
+    for segment in name.rsplit('/') {
+        let next = width(segment) + i64::from(!kept.is_empty());
+        if used + next > max {
+            break;
+        }
+        kept.insert(0, segment);
+        used += next;
+    }
+    if kept.is_empty() {
+        return crate::dialogs::open::truncate_file_path(name, max);
+    }
+    format!("…/{}", kept.join("/"))
+}
+
+pub(crate) fn width(text: &str) -> i64 {
+    unicode_width::UnicodeWidthStr::width(text) as i64
+}
+
+pub struct Item<'a> {
+    pub file: &'a str,
+    pub status: Status,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Status {
+    Added,
+    Deleted,
+    Modified,
+    Unknown,
+}
+
+pub struct Pane<'a> {
+    pub width: u16,
+    pub files: &'a [Item<'a>],
+    pub selected: Option<usize>,
+    pub reviewed: &'a dyn Fn(usize) -> bool,
+    pub expanded: &'a Expanded,
+    pub source: &'a str,
+    pub detail: Option<&'a str>,
+    pub help: Option<String>,
+    pub faint: Rgba,
+    pub rail: Rgba,
+}
+
+pub fn row_id(row: &Row) -> String {
+    format!("t:{}", row.id)
+}
+
+/// What a row of the tree shows: a row that shows the same is kept ([`v2::View::memo`]), so a view at 1,000 files
+/// sends the host one keep a row, not the row.
+#[derive(Clone, PartialEq)]
+struct Line {
+    indent: String,
+    marker: &'static str,
+    name: String,
+    selected: bool,
+    foreground: &'static str,
+    status: &'static str,
+    status_color: &'static str,
+    faint: Rgba,
+    rail: Rgba,
+}
+
+pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
+    let surface = "background.raised.base";
+    let content_width = (i64::from(input.width) - 6).max(0);
+    let reviewed_count = (0..input.files.len()).filter(|&file| (input.reviewed)(file)).count();
+    let mut switch = vec![
+        v2::Node::text([Span::new(input.source).bold()])
+            .fg("text.action.secondary.base")
+            .wrap(Wrap::None)
+            .layout(Layout::default().shrink(false)),
+    ];
+    if let Some(detail) = input.detail {
+        switch.push(
+            v2::Node::text([Span::new(format!(" · {detail}"))])
+                .fg("text.muted")
+                .wrap(Wrap::None)
+                .truncate()
+                .layout(Layout::default().grow().min_width(0)),
+        );
+    }
+    let header = v2::Node::row(vec![
+        v2::Node::row(switch).layout(Layout::default().grow().min_width(0)).on_click(Click::command(super::SOURCE)),
+        v2::Node::text([Span::new(format!("{reviewed_count}/{}", input.files.len()))])
+            .fg("text.muted")
+            .wrap(Wrap::None)
+            .layout(Layout::default().shrink(false)),
+    ])
+    .gap(1)
+    .layout(Layout::default().height(Width::Cells(1)).shrink(false).margin(Edges { bottom: 1, ..Edges::default() }));
+
+    let rows: Vec<v2::ListItem> = flatten(tree, Some(input.expanded))
+        .into_iter()
+        .map(|row| {
+            let selected = row.file.is_some() && row.file == input.selected;
+            let reviewed = row.file.is_some_and(|file| (input.reviewed)(file));
+            let foreground = match () {
+                _ if row.kind == Kind::Directory => "text.muted",
+                _ if selected => "text.action.primary.selected",
+                _ if reviewed => "text.muted",
+                _ => "text.base",
+            };
+            let marker = match row.kind {
+                Kind::File => "≡ ",
+                Kind::Directory if input.expanded.contains(&row.id) => "▾ ",
+                Kind::Directory => "▸ ",
+            };
+            let depth = (row.depth as i64).min(((content_width - 3) / 2).max(0)).max(0);
+            let indent = "│ ".repeat(depth as usize);
+            let name_width = content_width - width(&indent) - width(marker);
+            let name = match row.kind {
+                Kind::Directory => truncate_directory_chain(&row.name, name_width),
+                Kind::File => crate::dialogs::open::truncate_file_path(&row.name, name_width),
+            };
+            let item = row.file.and_then(|file| input.files.get(file));
+            let (status, status_color) = match item.map(|item| item.status) {
+                None => ("", "text.muted"),
+                Some(_) if reviewed => ("✓", "text.muted"),
+                Some(Status::Modified) => ("M", "text.muted"),
+                Some(Status::Added) => ("A", "diff.text.added"),
+                Some(Status::Deleted) => ("D", "diff.text.removed"),
+                Some(Status::Unknown) => ("?", "text.muted"),
+            };
+            let line = Line {
+                indent,
+                marker,
+                name,
+                selected,
+                foreground,
+                status,
+                status_color,
+                faint: input.faint,
+                rail: input.rail,
+            };
+            let id = row_id(&row);
+            v2::ListItem::new(cx.memo(id.clone(), line.clone(), |_| row_node(id, &line, surface)), 1)
+        })
+        .collect();
+    // A windowed list, as the cards are: only the rows near the view are built, so 1,000 files stay within what the
+    // host builds for one tree at once.
+    let scroll = v2::Node::list(rows).with_id(super::TREE).layout(Layout::default().grow().min_height(Width::Cells(0)));
+
+    let mut body = vec![header, scroll];
+    if let Some(help) = &input.help {
+        body.push(
+            v2::Node::column(vec![
+                v2::Node::text([Span::new(help.clone()).fg("text.base"), Span::new(" help").fg("text.muted")])
+                    .wrap(Wrap::None)
+                    .on_click(Click::command(super::HELP)),
+            ])
+            .padding_sides(Edges { top: 1, bottom: 1, ..Edges::default() })
+            .layout(Layout::default().shrink(false)),
+        );
+    }
+    let body = v2::Node::column(body)
+        .bg(surface)
+        .padding_sides(Edges { bottom: 1, left: 2, right: 2, ..Edges::default() })
+        .layout(Layout::default().grow().min_width(0).min_height(Width::Cells(0)));
+    v2::Node::column(vec![
+        v2::Node::column(Vec::new()).bg(surface).layout(Layout::default().height(Width::Cells(1)).shrink(false)),
+        body,
+    ])
+    .layout(
+        Layout::default()
+            .width(Width::Cells(input.width))
+            .height(Width::Percent(100.0))
+            .min_width(0)
+            .min_height(Width::Cells(0))
+            .shrink(false),
+    )
+}
+
+fn row_node(id: String, line: &Line, surface: &'static str) -> v2::Node {
+    let name = Span { bold: line.selected, ..Span::new(line.name.clone()) };
+    v2::Node::row(vec![
+        v2::Node::text([Span::new(line.indent.clone()).fg(line.rail), Span::new(line.marker).fg(line.faint)])
+            .wrap(Wrap::None)
+            .layout(Layout::default().shrink(false)),
+        v2::Node::text([name])
+            .fg(line.foreground)
+            .wrap(Wrap::None)
+            .truncate()
+            .layout(Layout::default().grow().min_width(0).margin(Edges { right: 1, ..Edges::default() })),
+        v2::Node::text([Span::new(line.status)])
+            .fg(line.status_color)
+            .wrap(Wrap::None)
+            .layout(Layout::default().width(Width::Cells(1)).shrink(false)),
+    ])
+    .with_id(id)
+    .bg(surface)
+    .interact(Interact { pointer: true, hover: Some("background.raised.high".into()), ..Interact::default() })
+    .layout(Layout::default().width(Width::Percent(100.0)).height(Width::Cells(1)).shrink(false))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn directory_chains_drop_leading_segments() {
+        assert_eq!(truncate_directory_chain("a/b/c/d", 20), "a/b/c/d");
+        assert_eq!(truncate_directory_chain("alpha/beta/gamma/delta", 14), "…/gamma/delta");
+        assert_eq!(truncate_directory_chain("alpha/beta/gamma/delta", 8), "…/delta");
+    }
+}

@@ -111,7 +111,12 @@ export const CodeAction = Schema.Struct({
 }).annotate({ identifier: "Automation.Action.Code" })
 export interface CodeAction extends Schema.Schema.Type<typeof CodeAction> {}
 
-export const Action = Schema.Union([PromptAction, CodeAction]).pipe(
+const shellFields = { type: Schema.tag("shell"), command: Schema.NonEmptyString }
+
+export const ShellAction = Schema.Struct(shellFields).annotate({ identifier: "Automation.Action.Shell" })
+export interface ShellAction extends Schema.Schema.Type<typeof ShellAction> {}
+
+export const Action = Schema.Union([PromptAction, CodeAction, ShellAction]).pipe(
   Schema.toTaggedUnion("type"),
   Schema.annotate({ identifier: "Automation.Action" }),
 )
@@ -163,7 +168,7 @@ export const CodeActionInput = Schema.Struct({
   type: Schema.tag("code"),
   code: Schema.String.check(Schema.isMinLength(1)).annotate({
     description: [
-      "Code Mode JavaScript run on each trigger with no model (no fetch; 30s, 20 tool calls, 32 KB output cap).",
+      "Code Mode JavaScript run on each trigger with no model (32 KB output cap).",
       'Call tools statically as tools.<ns>.<tool>(...) or tools["ns-name"].tool(...); each is authorized once at creation to run unattended.',
       "Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs.",
       "Event triggers also receive input.event = { id, timestamp, data }; data follows the event type's payloadSchema.",
@@ -176,7 +181,15 @@ export const CodeActionInput = Schema.Struct({
 }).annotate({ identifier: "Automation.CodeActionInput" })
 export interface CodeActionInput extends Schema.Schema.Type<typeof CodeActionInput> {}
 
-export const ActionInput = Schema.Union([PromptActionInput, CodeActionInput]).pipe(
+export const ShellActionInput = Schema.Struct({
+  ...shellFields,
+  command: shellFields.command.annotate({
+    description: "The fixed shell command to run on each trigger without a model.",
+  }),
+}).annotate({ identifier: "Automation.ShellActionInput" })
+export interface ShellActionInput extends Schema.Schema.Type<typeof ShellActionInput> {}
+
+export const ActionInput = Schema.Union([PromptActionInput, CodeActionInput, ShellActionInput]).pipe(
   Schema.toTaggedUnion("type"),
   Schema.annotate({ identifier: "Automation.ActionInput" }),
 )
@@ -187,11 +200,11 @@ export const Request = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1)).annotate({ description: "A short label shown in lists." }),
   trigger: Trigger.annotate({
     description:
-      'When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz. Or { type: "event", server, event, args? } for a connected MCP server advertising push delivery (requires mcp_events).',
+      'When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz. Or { type: "event", server, event, args? } for a connected MCP server advertising push delivery.',
   }),
   action: ActionInput.annotate({
     description:
-      'What it does: { type: "prompt", prompt, to? } sends a prompt; { type: "code", code, args? } runs Code Mode with no model.',
+      'What it does: { type: "prompt", prompt, to? } sends a prompt; { type: "code", code, args? } runs Code Mode; { type: "shell", command } runs a fixed shell command.',
   }),
   expires: Schema.String.pipe(optional).annotate({
     description: 'When it stops for good: an instant, a wall-clock time in tz, or "in 8 hours".',

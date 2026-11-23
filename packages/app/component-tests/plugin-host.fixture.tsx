@@ -86,6 +86,7 @@ type Json = string | number | boolean | null | readonly Json[] | { readonly [key
 export { createComponent, createMemo, createRoot, createSignal, getOwner, onCleanup, runWithOwner, useDialog }
 
 const layout: BuiltinLayout = {
+  fitsSide: () => true,
   narrow: () => false,
   ready: () => true,
   open() {},

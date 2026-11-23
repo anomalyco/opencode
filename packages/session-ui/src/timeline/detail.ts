@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { shellResultFailed } from "../message/current-tool-state"
 
 export const timelineCategories = ["shell", "edit", "thinking", "subagents", "notices", "tools", "commentary"] as const
@@ -96,33 +96,6 @@ export function timelinePreset(value: TimelineDetail) {
       )
     }),
   )
-}
-
-export function timelineCategory(
-  content: SessionMessageAssistant["content"][number],
-): keyof TimelineDetail | undefined {
-  if (content.type === "text") return
-
-  if (content.type === "reasoning") return "thinking"
-
-  if (["shell", "execute", "bash"].includes(content.name)) return "shell"
-
-  if (["edit", "write", "patch", "apply_patch"].includes(content.name)) return "edit"
-
-  if (["subagent", "task"].includes(content.name)) return "subagents"
-
-  return "tools"
-}
-
-// Like the TUI, background work reports its outcome as its own row where it finished, never folded into a group.
-// A subagent's outcome follows the subagent setting, so it shows wherever its launch does.
-export function timelineNoticePlacement(message: SessionMessageInfo, detail: TimelineDetail): TimelinePlacement {
-  const source = message.type === "synthetic" ? message.metadata?.source : undefined
-  const placement = source === "subagent" ? detail.subagents.placement : detail.notices.placement
-
-  if (placement === "hidden") return timelineNoticeRequired(message) ? "separate" : "hidden"
-
-  return source === "subagent" || source === "shell" ? "separate" : placement
 }
 
 export function timelineNoticeRequired(message: SessionMessageInfo) {
