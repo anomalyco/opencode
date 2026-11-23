@@ -1,5 +1,6 @@
 // A first-person maze: walls as a few hundred instanced boxes, WASD to walk, a click captures the pointer for
-// mouse-look, and a HUD in a stack over the canvas. `data.frames`: stop after that many frames (fixtures).
+// mouse-look; on touch, drag to look and hold still to walk. A HUD in a stack over the canvas. `data.frames`: stop
+// after that many frames (fixtures).
 const SHADER = `
 struct Uniforms { viewProjection: mat4x4f, eye: vec4f }
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -108,7 +109,15 @@ function multiply(a, b) {
 
 async function main(data) {
   const walls = maze(7)
-  const player = { x: 1.5, z: 1.5, yaw: Math.PI / 2, pitch: 0, captured: false }
+  const open = (x, z) => !walls[Math.floor(z)]?.[Math.floor(x)]
+  // Start facing down the corridor out of the corner: east if it's open, else south.
+  const player = { x: 1.5, z: 1.5, yaw: open(2.5, 1.5) ? Math.PI / 2 : Math.PI, pitch: 0, captured: false }
+  // The touch (or uncaptured mouse button) held: where it started and was last; once 8 px from the start, it's a drag.
+  let touch = null
+  const look = (dx, dy, speed) => {
+    player.yaw += dx * speed
+    player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch - dy * speed))
+  }
   const hud = () =>
     widget.render(
       ui.stack([
@@ -118,15 +127,21 @@ async function main(data) {
           height: 360,
           place: "fill",
           alt: "A first-person maze",
-          // Under pointer capture, moves are relative: they turn the camera.
+          // Under pointer capture, moves are relative: they turn the camera. Without it (touch never captures), a
+          // drag turns it and a touch held still walks.
           onPointer: (p) => {
-            if (p.dx !== undefined) {
-              player.yaw += p.dx * 0.004
-              player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch - p.dy * 0.004))
-            } else if (p.kind === "down" && !player.captured) widget.capturePointer()
+            if (p.dx !== undefined) return look(p.dx, p.dy, 0.004)
+            if (p.kind === "down") {
+              touch = { startX: p.x, startY: p.y, x: p.x, y: p.y, dragged: false }
+              if (!player.captured) widget.capturePointer()
+            } else if (p.kind === "move" && touch) {
+              look(p.x - touch.x, p.y - touch.y, 0.008)
+              touch.dragged ||= Math.hypot(p.x - touch.startX, p.y - touch.startY) > 8
+              Object.assign(touch, { x: p.x, y: p.y })
+            } else if (p.kind === "up") touch = null
           },
         }),
-        ui.text(player.captured ? "WASD to walk, Esc to let go" : "Click to look around", {
+        ui.text(player.captured ? "WASD to walk, Esc to let go" : "Click or drag to look, hold to walk", {
           place: "top-left",
           inset: 8,
         }),
@@ -192,13 +207,13 @@ async function main(data) {
     entries: [{ binding: 0, resource: { buffer: uniforms } }],
   })
 
-  const open = (x, z) => !walls[Math.floor(z)]?.[Math.floor(x)]
   const depth = { texture: null, width: 0, height: 0 }
   for (let frame = 0; data?.frames === undefined || frame < data.frames; frame++) {
     const { dt, width, height, scale } = await widget.frame()
     // Walk, sliding along walls: each axis moves only into open cells, keeping 0.2 from them.
     const keys = widget.keys
-    const ahead = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0)
+    const held = touch && !touch.dragged ? 1 : 0
+    const ahead = Math.min(1, (keys.has("KeyW") ? 1 : 0) + held) - (keys.has("KeyS") ? 1 : 0)
     const side = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0)
     const speed = 2.5 * dt
     const dx = (Math.sin(player.yaw) * ahead + Math.cos(player.yaw) * side) * speed

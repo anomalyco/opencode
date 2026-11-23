@@ -29,6 +29,8 @@ this. Clients only; the server knows nothing about it.
   handler). On desktop and web they also include **hover moves**: `{ kind: "move", x, y, down: false, width, height }`
   while the pointer is over the node with no button held, at most once per frame. Touch devices have no hover. Both
   kinds go to the node's `onPointer`; capture changes go to `onCapture` / `widget.on("capture")`.
+- On touch, capture is never granted: touch hosts ignore the request (no `capture` event), and touches stay absolute
+  `down`/`move`/`up` events (drags), so a widget template that looks around under capture needs drag steering too.
 
 ## Esc always releases
 
