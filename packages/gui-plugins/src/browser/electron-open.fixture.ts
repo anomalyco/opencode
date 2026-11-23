@@ -1,5 +1,7 @@
 import { createServer, type ServerResponse } from "node:http"
 import electron from "electron"
+import { Schema } from "effect"
+import { RpcError } from "@opencode/protocol/errors"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds } from "@opencode/plugin/gui/main"
 import type { Browser } from "@opencode/plugin-browser/rpc"
@@ -48,6 +50,9 @@ type Frame =
 type Outcome = { type: "success" } | { type: "failure"; code: string; message: string }
 
 const frame = (event: Frame) => `data: ${JSON.stringify({ id: `evt_${Date.now()}`, ...event })}\n\n`
+
+// The body of the 400 a server answers a call with while no plugin of the Location has registered the RPC.
+const unavailable = JSON.stringify(Schema.encodeSync(RpcError)(new RpcError({ type: "rpc.unavailable", message: "RPC is unavailable: experimental.browser" })))
 
 // The session's server, as far as a pane's attachment asks: the session, the event stream, the plugin list and the
 // browser RPC. It answers `attach` with the `attached` handshake on the stream and then holds the call open, and it
@@ -113,7 +118,7 @@ function createApi(directory: string) {
           startup.refused += 1
           response.writeHead(400, { "content-type": "application/json" })
 
-          return void response.end(JSON.stringify({ _tag: "RpcError", type: "rpc.unavailable", message: "RPC is unavailable: experimental.browser" }))
+          return void response.end(unavailable)
         }
 
         attached.connectionID = input.connectionID
