@@ -39,6 +39,7 @@ import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Form } from "@opencode/schema/form"
 import { PublicSessionMessage } from "./message.js"
+import { Params } from "./params.js"
 
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
@@ -107,6 +108,15 @@ const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
   }),
 )
 
+const params = {
+  messageID: SessionMessage.ID.annotateKey({ description: "Message ID, as returned by session.message.list." }),
+  inboxID: SessionMessage.ID.annotateKey({ description: "Inbox item ID, as returned by session.inbox.list." }),
+  key: InstructionEntry.Key.annotateKey({
+    description: "Instruction entry key, as returned by experimental.session.instructions.entry.list.",
+  }),
+  formID: Form.ID.annotateKey({ description: "Form ID, as returned by session.form.list or session.form.create." }),
+}
+
 // Kept so existing imports of SessionsCursor from Protocol keep working.
 export const SessionsCursor = Session.ListCursor
 export type SessionsCursor = Session.ListCursor
@@ -116,7 +126,26 @@ export const SessionsQuery = Schema.Struct({
     description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
   }),
   ...Session.ListFilter.fields,
-  cursor: Session.ListCursor.pipe(Schema.optional),
+  search: Session.ListFilter.fields.search.annotateKey({
+    description: "Only sessions whose title contains this text, ignoring case. % and _ act as wildcards.",
+  }),
+  archived: Session.ListFilter.fields.archived.annotateKey({
+    description:
+      "Filter by archive state. Use true to return only archived sessions or false to exclude them. Omit to include both.",
+  }),
+  directory: Session.ListFilter.fields.directory.annotateKey({
+    description: "Only sessions whose directory is exactly this absolute path.",
+  }),
+  project: Session.ListFilter.fields.project.annotateKey({
+    description: "Only sessions in this project, as returned by project.list.",
+  }),
+  subpath: Session.ListFilter.fields.subpath.annotateKey({
+    description: "With project, only sessions at this path relative to the project directory.",
+  }),
+  cursor: Session.ListCursor.pipe(Schema.optional).annotateKey({
+    description:
+      "Opaque cursor from a previous page's cursor.next or cursor.previous. It carries that page's filters and order, so other filters are ignored.",
+  }),
 }).annotate({ identifier: "SessionsQuery" })
 
 export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI extends HttpApiMiddleware.AnyId, FormS>(
@@ -147,11 +176,23 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.get("session.stats", "/api/experimental/session/stats", {
         query: Schema.Struct({
-          from: Schema.NumberFromString.pipe(Schema.optional),
-          to: Schema.NumberFromString.pipe(Schema.optional),
-          project: Project.ID.pipe(Schema.optional),
-          timezone: Schema.String.pipe(Schema.optional),
-          tools: SessionStats.ToolMode.pipe(Schema.optional),
+          from: Schema.NumberFromString.pipe(Schema.optional).annotateKey({
+            description:
+              "Start of the range in Unix milliseconds, inclusive. Defaults to the earliest recorded message.",
+          }),
+          to: Schema.NumberFromString.pipe(Schema.optional).annotateKey({
+            description: "End of the range in Unix milliseconds, exclusive. Defaults to now.",
+          }),
+          project: Project.ID.pipe(Schema.optional).annotateKey({
+            description: "Only count sessions in this project, as returned by project.list.",
+          }),
+          timezone: Schema.String.pipe(Schema.optional).annotateKey({
+            description: "IANA time zone used to group activity by day. Defaults to UTC.",
+          }),
+          tools: SessionStats.ToolMode.pipe(Schema.optional).annotateKey({
+            description:
+              "How much tool usage to report: none, summary totals, or per-tool detail. Defaults to summary.",
+          }),
         }),
         success: Schema.Struct({ data: SessionStats.Info }),
         error: InvalidRequestError,
@@ -218,8 +259,12 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.get("session.export", "/api/experimental/session/:sessionID/export", {
-        params: { sessionID: Session.ID },
-        query: Schema.Struct({ sanitize: BooleanFromString.pipe(Schema.optional) }),
+        params: { sessionID: Params.sessionID },
+        query: Schema.Struct({
+          sanitize: BooleanFromString.pipe(Schema.optional).annotateKey({
+            description: "Set to true to redact titles, message text, file data, paths and metadata from the export.",
+          }),
+        }),
         success: Schema.Struct({ data: PublicSessionTransfer }),
         error: [SessionNotFoundError, UnknownError],
       }).annotateMerge(
@@ -244,7 +289,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.get("session.get", "/api/session/:sessionID", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         success: Schema.Struct({ data: PublicSessionInfo }),
         error: SessionNotFoundError,
       }).annotateMerge(
@@ -257,7 +302,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.delete("session.remove", "/api/session/:sessionID", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
       }).annotateMerge(
@@ -270,7 +315,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.fork", "/api/session/:sessionID/fork", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({ before: SessionMessage.ID.pipe(Schema.optional) }),
         success: Schema.Struct({ data: PublicSessionInfo }),
         error: [SessionNotFoundError, MessageNotFoundError, InvalidRequestError],
@@ -285,7 +330,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.switchAgent", "/api/session/:sessionID/agent", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({ agent: Agent.ID }),
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
@@ -299,7 +344,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.switchModel", "/api/session/:sessionID/model", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({ model: Model.Ref }),
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
@@ -313,7 +358,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.patch("session.update", "/api/session/:sessionID", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({
           title: Schema.String.pipe(Schema.optional),
           metadata: Session.Metadata.pipe(Schema.optional),
@@ -335,7 +380,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.move", "/api/session/:sessionID/move", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({ ...Location.PublicRef.fields, delivery: SessionInbox.Delivery.pipe(Schema.optional) }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, InvalidRequestError],
@@ -349,7 +394,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.prompt", "/api/session/:sessionID/prompt", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional).annotate({
             description:
@@ -382,7 +427,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.command", "/api/session/:sessionID/command", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({
           name: Schema.String,
           ...PromptInput.Prompt.fields,
@@ -406,7 +451,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.skill", "/api/experimental/session/:sessionID/skill", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({
           id: Skill.ID,
           resume: Schema.Boolean.pipe(Schema.optional),
@@ -425,7 +470,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.synthetic", "/api/session/:sessionID/synthetic", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional).annotate({
             description:
@@ -459,7 +504,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.shell", "/api/session/:sessionID/shell", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional),
           command: Schema.String,
@@ -479,7 +524,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.compact", "/api/session/:sessionID/compact", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional),
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
@@ -497,7 +542,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.wait", "/api/experimental/session/:sessionID/wait", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, ServiceUnavailableError],
       }).annotateMerge(
@@ -511,7 +556,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.revert.stage", "/api/session/:sessionID/revert/stage", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({ messageID: SessionMessage.ID, files: Schema.Boolean.pipe(Schema.optional) }),
         success: Schema.Struct({ data: Session.Revert }),
         error: [MessageNotFoundError, SessionNotFoundError, SessionBusyError, UnknownError],
@@ -527,7 +572,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.delete("session.revert.clear", "/api/session/:sessionID/revert", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, SessionBusyError, UnknownError],
       })
@@ -536,14 +581,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.revert.commit", "/api/session/:sessionID/revert/commit", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, SessionBusyError],
       }).annotateMerge(OpenApi.annotations({ identifier: "session.revert.commit", summary: "Commit staged revert" })),
     )
     .add(
       HttpApiEndpoint.get("session.context", "/api/session/:sessionID/context", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         success: Schema.Struct({ data: Schema.Array(PublicSessionMessage) }),
         error: [SessionNotFoundError, UnknownError],
       }).annotateMerge(
@@ -556,7 +601,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.get("session.diff", "/api/session/:sessionID/diff", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         query: Schema.Struct({
           from: Schema.optional(SessionMessage.ID).annotate({
             description: "User message whose turn to diff. Defaults to the turn of the newest user message.",
@@ -581,7 +626,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.get("session.inbox.list", "/api/session/:sessionID/inbox", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         success: Schema.Struct({ data: Schema.Array(PublicInboxInfo) }),
         error: SessionNotFoundError,
       }).annotateMerge(
@@ -595,7 +640,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.delete("session.inbox.cancel", "/api/session/:sessionID/inbox/:inboxID", {
-        params: { sessionID: Session.ID, inboxID: SessionMessage.ID },
+        params: { sessionID: Params.sessionID, inboxID: params.inboxID },
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
       }).annotateMerge(
@@ -608,7 +653,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.patch("session.inbox.update", "/api/session/:sessionID/inbox/:inboxID", {
-        params: { sessionID: Session.ID, inboxID: SessionMessage.ID },
+        params: { sessionID: Params.sessionID, inboxID: params.inboxID },
         payload: Schema.Struct({ delivery: SessionInbox.Delivery }),
         success: HttpApiSchema.NoContent,
         error: [ConflictError, SessionNotFoundError],
@@ -625,7 +670,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         "session.instructions.entry.list",
         "/api/experimental/session/:sessionID/instructions/entries",
         {
-          params: { sessionID: Session.ID },
+          params: { sessionID: Params.sessionID },
           success: Schema.Struct({ data: Schema.Array(InstructionEntry.Info) }),
           error: SessionNotFoundError,
         },
@@ -642,7 +687,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         "session.instructions.entry.put",
         "/api/experimental/session/:sessionID/instructions/entries/:key",
         {
-          params: { sessionID: Session.ID, key: InstructionEntry.Key },
+          params: { sessionID: Params.sessionID, key: params.key },
           payload: Schema.Struct({ value: Schema.Json }),
           success: HttpApiSchema.NoContent,
           error: [SessionNotFoundError, InstructionEntry.ValueTooLargeError],
@@ -661,7 +706,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         "session.instructions.entry.remove",
         "/api/experimental/session/:sessionID/instructions/entries/:key",
         {
-          params: { sessionID: Session.ID, key: InstructionEntry.Key },
+          params: { sessionID: Params.sessionID, key: params.key },
           success: HttpApiSchema.NoContent,
           error: SessionNotFoundError,
         },
@@ -675,7 +720,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.generate", "/api/session/:sessionID/generate", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({ prompt: Schema.String }),
         success: Schema.Struct({
           // Same `tokens` and `cost` an assistant message reports for a step.
@@ -695,10 +740,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.get("session.log", "/api/experimental/session/:sessionID/log", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         query: {
-          after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional),
-          follow: BooleanFromString.pipe(Schema.optional),
+          after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional).annotateKey({
+            description: "Only return events after this sequence number.",
+          }),
+          follow: BooleanFromString.pipe(Schema.optional).annotateKey({
+            description: "Set to true to keep the stream open and send live events after the stored ones.",
+          }),
         },
         success: HttpApiSchema.StreamSse({
           data: Schema.Union([SessionEvent.Durable, EventLog.Synced]).annotate({ identifier: "SessionLogItem" }),
@@ -715,8 +764,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.interrupt", "/api/session/:sessionID/interrupt", {
-        params: { sessionID: Session.ID },
-        query: { resume: BooleanFromString.pipe(Schema.optional) },
+        params: { sessionID: Params.sessionID },
+        query: {
+          resume: BooleanFromString.pipe(Schema.optional).annotateKey({
+            description:
+              "Set to true to resume pending steering input and next-in-line control items after interrupting.",
+          }),
+        },
         success: Schema.Struct({
           interrupted: Schema.Boolean.annotate({
             description: "Whether an active execution owned by this OpenCode process was interrupted.",
@@ -734,7 +788,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.background", "/api/session/:sessionID/background", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
       }).annotateMerge(
@@ -748,7 +802,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.get("session.message", "/api/session/:sessionID/message/:messageID", {
-        params: { sessionID: Session.ID, messageID: SessionMessage.ID },
+        params: { sessionID: Params.sessionID, messageID: params.messageID },
         success: Schema.Struct({ data: PublicSessionMessage }),
         error: [SessionNotFoundError, MessageNotFoundError],
       }).annotateMerge(
@@ -761,7 +815,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.get("session.form.list", "/api/session/:sessionID/form", {
-        params: { sessionID: Schema.String },
+        params: { sessionID: Params.formSessionID },
         success: Schema.Struct({ data: Schema.Array(Form.Info) }),
         error: SessionNotFoundError,
       })
@@ -776,7 +830,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.form.create", "/api/session/:sessionID/form", {
-        params: { sessionID: Schema.String },
+        params: { sessionID: Params.formSessionID },
         payload: FormCreatePayload,
         success: Schema.Struct({ data: Form.Info }),
         error: [SessionNotFoundError, ConflictError, InvalidRequestError],
@@ -792,7 +846,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.get("session.form.get", "/api/session/:sessionID/form/:formID", {
-        params: { sessionID: Schema.String, formID: Form.ID },
+        params: { sessionID: Params.formSessionID, formID: params.formID },
         success: Schema.Struct({ data: Form.Detail }),
         error: [SessionNotFoundError, FormNotFoundError],
       })
@@ -807,7 +861,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.form.reply", "/api/session/:sessionID/form/:formID/reply", {
-        params: { sessionID: Schema.String, formID: Form.ID },
+        params: { sessionID: Params.formSessionID, formID: params.formID },
         payload: Form.Reply,
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, FormAlreadySettledError, FormInvalidAnswerError, FormNotFoundError],
@@ -823,8 +877,12 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.delete("session.form.cancel", "/api/session/:sessionID/form/:formID", {
-        params: { sessionID: Schema.String, formID: Form.ID },
-        query: Schema.Struct({ message: Schema.optional(Schema.String) }),
+        params: { sessionID: Params.formSessionID, formID: params.formID },
+        query: Schema.Struct({
+          message: Schema.optional(Schema.String).annotateKey({
+            description: "Why the form was not answered, passed on to the asker.",
+          }),
+        }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, FormAlreadySettledError, FormNotFoundError],
       })
@@ -839,7 +897,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.put("session.environment", "/api/session/:sessionID/environment", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({ variables: Schema.Record(Schema.String, Schema.String) }),
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
@@ -853,7 +911,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.post("session.view", "/api/session/:sessionID/view", {
-        params: { sessionID: Session.ID },
+        params: { sessionID: Params.sessionID },
         payload: Schema.Struct({ idle: DateTimeUtcFromMillis }),
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,

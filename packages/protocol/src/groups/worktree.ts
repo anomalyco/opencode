@@ -21,7 +21,11 @@ export class WorktreeError extends Schema.TaggedError<WorktreeError>()(
 export const WorktreeGroup = HttpApiGroup.make("server.worktree")
   .add(
     HttpApiEndpoint.get("worktree.list", root, {
-      query: Schema.Struct({ projectID: Project.ID }),
+      query: Schema.Struct({
+        projectID: Project.ID.annotateKey({
+          description: "Project whose worktrees to list, as returned by project.list.",
+        }),
+      }),
       success: Worktree.List,
       error: ProjectNotFoundError,
     }).annotateMerge(

@@ -13,6 +13,8 @@ export const PTY_CONNECT_PATH = "/api/pty/:ptyID/connect"
 
 const PTY_CONNECT_URL = /^\/api\/pty\/[^/]+\/connect$/
 
+const params = { ptyID: Pty.ID.annotateKey({ description: "PTY ID, as returned by pty.create or pty.list." }) }
+
 export function hasPtyConnectTicketURL(url: URL) {
   return PTY_CONNECT_URL.test(url.pathname) && !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
 }
@@ -52,7 +54,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.get("pty.get", "/api/pty/:ptyID", {
-        params: { ptyID: Pty.ID },
+        params,
         query: LocationQuery,
         success: Location.response(Pty.Info),
         error: PtyNotFoundError,
@@ -68,7 +70,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.put("pty.update", "/api/pty/:ptyID", {
-        params: { ptyID: Pty.ID },
+        params,
         query: LocationQuery,
         payload: Pty.UpdateInput,
         success: Location.response(Pty.Info),
@@ -85,7 +87,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.delete("pty.remove", "/api/pty/:ptyID", {
-        params: { ptyID: Pty.ID },
+        params,
         query: LocationQuery,
         success: HttpApiSchema.NoContent,
         error: PtyNotFoundError,
@@ -101,9 +103,13 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     )
     .add(
       HttpApiEndpoint.post("pty.connectToken", "/api/pty/:ptyID/connect-token", {
-        params: { ptyID: Pty.ID },
+        params,
         query: LocationQuery,
-        headers: Schema.Struct({ [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String) }),
+        headers: Schema.Struct({
+          [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String).annotateKey({
+            description: `Must be ${PTY_CONNECT_TOKEN_HEADER_VALUE}; requests without it are refused.`,
+          }),
+        }),
         success: Location.response(PtyTicket.ConnectToken),
         error: [ForbiddenError, PtyNotFoundError],
       })
@@ -120,7 +126,7 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     .add(
       // Query fields are decoded in the raw handler before upgrade work.
       HttpApiEndpoint.get("pty.connect", PTY_CONNECT_PATH, {
-        params: { ptyID: Pty.ID },
+        params,
         success: Schema.Boolean,
         error: [ForbiddenError, PtyNotFoundError, LocationNotFoundError],
       }).annotateMerge(
@@ -133,11 +139,14 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
             "x-websocket": true,
             parameters: [
               ...(operation.parameters ?? []),
-              ...["location[directory]", "cursor", PTY_CONNECT_TICKET_QUERY].map((name) => ({
-                in: "query",
-                name,
-                schema: { type: "string" },
-              })),
+              ...Object.entries({
+                "location[directory]":
+                  "Absolute path of the location directory. Omit to use the server's default location.",
+                cursor:
+                  "Output offset to replay from. Use -1 to start at the current end; omit to replay all retained output.",
+                [PTY_CONNECT_TICKET_QUERY]:
+                  "Single-use ticket from pty.connect.token, which authorizes the connection without the usual credentials.",
+              }).map(([name, description]) => ({ in: "query", name, description, schema: { type: "string" } })),
             ],
           }),
         }),

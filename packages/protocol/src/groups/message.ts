@@ -1,9 +1,9 @@
-import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Location } from "@opencode/schema/location"
 import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../errors.js"
+import { Params } from "./params.js"
 
 // Keyed by message type so a new message type cannot be left out of the filter.
 const MessageTypes = {
@@ -100,7 +100,7 @@ export const SessionMediaMessageResponse = Schema.Struct({ data: PublicMediaSess
 export const MessageGroup = HttpApiGroup.make("server.message")
   .add(
     HttpApiEndpoint.get("session.messages", "/api/session/:sessionID/message", {
-      params: { sessionID: Session.ID },
+      params: { sessionID: Params.sessionID },
       query: SessionMessagesQuery,
       success: Schema.Struct({
         data: Schema.Array(PublicSessionMessage),

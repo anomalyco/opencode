@@ -86,7 +86,11 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
   )
   .add(
     HttpApiEndpoint.get("generate.video.get", "/api/experimental/generate/video/:id", {
-      params: { id: Generate.VideoID },
+      params: {
+        id: Generate.VideoID.annotateKey({
+          description: "Video generation ID, as returned by experimental.generate.video.create.",
+        }),
+      },
       success: Schema.Struct({ data: Generate.VideoJob }).annotate({ identifier: "GenerateVideoGetResponse" }),
       error: [VideoNotFoundError, LocationNotFoundError],
     }).annotateMerge(

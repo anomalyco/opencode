@@ -101,7 +101,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Pairing code from server.pair."
           }
         ],
         "security": [],
@@ -160,14 +161,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -281,14 +284,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -362,7 +367,8 @@
             "schema": {
               "$ref": "#/components/schemas/Agent.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Agent ID, as returned by agent.list."
           },
           {
             "name": "location",
@@ -378,14 +384,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -471,14 +479,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -560,14 +570,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "id",
@@ -661,14 +673,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -773,14 +787,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -866,10 +882,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "Maximum number of sessions to return. Defaults to the newest 50 sessions."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Maximum number of sessions to return. Defaults to the newest 50 sessions."
           },
           {
             "name": "order",
@@ -880,10 +896,10 @@
                   "type": "string",
                   "enum": ["asc", "desc"]
                 }
-              ],
-              "description": "Session order for the first page. Use desc for newest first or asc for oldest first."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Session order for the first page. Use desc for newest first or asc for oldest first."
           },
           {
             "name": "search",
@@ -891,7 +907,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Only sessions whose title contains this text, ignoring case. % and _ act as wildcards."
           },
           {
             "name": "parentID",
@@ -905,10 +922,10 @@
                   "type": "string",
                   "enum": ["null"]
                 }
-              ],
-              "description": "Filter by parent session. Use null to return only root sessions."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Filter by parent session. Use null to return only root sessions."
           },
           {
             "name": "archived",
@@ -917,7 +934,8 @@
               "type": "string",
               "enum": ["true", "false"]
             },
-            "required": false
+            "required": false,
+            "description": "Filter by archive state. Use true to return only archived sessions or false to exclude them. Omit to include both."
           },
           {
             "name": "directory",
@@ -925,7 +943,8 @@
             "schema": {
               "$ref": "#/components/schemas/AbsolutePath"
             },
-            "required": false
+            "required": false,
+            "description": "Only sessions whose directory is exactly this absolute path."
           },
           {
             "name": "project",
@@ -933,7 +952,8 @@
             "schema": {
               "$ref": "#/components/schemas/Project.ID"
             },
-            "required": false
+            "required": false,
+            "description": "Only sessions in this project, as returned by project.list."
           },
           {
             "name": "subpath",
@@ -941,7 +961,8 @@
             "schema": {
               "$ref": "#/components/schemas/RelativePath"
             },
-            "required": false
+            "required": false,
+            "description": "With project, only sessions at this path relative to the project directory."
           },
           {
             "name": "cursor",
@@ -949,7 +970,8 @@
             "schema": {
               "$ref": "#/components/schemas/SessionsCursor"
             },
-            "required": false
+            "required": false,
+            "description": "Opaque cursor from a previous page's cursor.next or cursor.previous. It carries that page's filters and order, so other filters are ignored."
           }
         ],
         "security": [],
@@ -1162,7 +1184,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Start of the range in Unix milliseconds, inclusive. Defaults to the earliest recorded message."
           },
           {
             "name": "to",
@@ -1170,7 +1193,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "End of the range in Unix milliseconds, exclusive. Defaults to now."
           },
           {
             "name": "project",
@@ -1178,7 +1202,8 @@
             "schema": {
               "$ref": "#/components/schemas/Project.ID"
             },
-            "required": false
+            "required": false,
+            "description": "Only count sessions in this project, as returned by project.list."
           },
           {
             "name": "timezone",
@@ -1186,7 +1211,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "IANA time zone used to group activity by day. Defaults to UTC."
           },
           {
             "name": "tools",
@@ -1195,7 +1221,8 @@
               "type": "string",
               "enum": ["none", "summary", "detail"]
             },
-            "required": false
+            "required": false,
+            "description": "How much tool usage to report: none, summary totals, or per-tool detail. Defaults to summary."
           }
         ],
         "security": [],
@@ -1352,7 +1379,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "sanitize",
@@ -1361,7 +1389,8 @@
               "type": "string",
               "enum": ["true", "false"]
             },
-            "required": false
+            "required": false,
+            "description": "Set to true to redact titles, message text, file data, paths and metadata from the export."
           }
         ],
         "security": [],
@@ -1494,7 +1523,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -1560,7 +1590,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -1612,7 +1643,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -1727,7 +1759,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -1825,7 +1858,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -1896,7 +1930,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -1967,7 +2002,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -2048,7 +2084,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -2204,7 +2241,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -2327,7 +2365,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -2418,7 +2457,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -2560,7 +2600,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -2648,7 +2689,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -2759,7 +2801,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -2823,7 +2866,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -2948,7 +2992,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -3028,7 +3073,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -3091,7 +3137,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -3172,7 +3219,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "from",
@@ -3182,10 +3230,10 @@
                 {
                   "$ref": "#/components/schemas/Session.Message.ID"
                 }
-              ],
-              "description": "User message whose turn to diff. Defaults to the turn of the newest user message."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "User message whose turn to diff. Defaults to the turn of the newest user message."
           },
           {
             "name": "to",
@@ -3195,10 +3243,10 @@
                 {
                   "$ref": "#/components/schemas/Session.Message.ID"
                 }
-              ],
-              "description": "Later user message whose turn ends the range. Defaults to the turn of `from` alone."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Later user message whose turn ends the range. Defaults to the turn of `from` alone."
           },
           {
             "name": "context",
@@ -3208,10 +3256,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "Unchanged lines around each hunk. Omit for full-file patches."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Unchanged lines around each hunk. Omit for full-file patches."
           }
         ],
         "security": [],
@@ -3302,7 +3350,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -3373,7 +3422,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "inboxID",
@@ -3381,7 +3431,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.Message.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Inbox item ID, as returned by session.inbox.list."
           }
         ],
         "security": [],
@@ -3433,7 +3484,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "inboxID",
@@ -3441,7 +3493,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.Message.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Inbox item ID, as returned by session.inbox.list."
           }
         ],
         "security": [],
@@ -3522,7 +3575,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -3593,7 +3647,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "key",
@@ -3601,7 +3656,8 @@
             "schema": {
               "$ref": "#/components/schemas/InstructionEntry.Key"
             },
-            "required": true
+            "required": true,
+            "description": "Instruction entry key, as returned by experimental.session.instructions.entry.list."
           }
         ],
         "security": [],
@@ -3678,7 +3734,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "key",
@@ -3686,7 +3743,8 @@
             "schema": {
               "$ref": "#/components/schemas/InstructionEntry.Key"
             },
-            "required": true
+            "required": true,
+            "description": "Instruction entry key, as returned by experimental.session.instructions.entry.list."
           }
         ],
         "security": [],
@@ -3740,7 +3798,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -3835,7 +3894,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "after",
@@ -3843,7 +3903,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Only return events after this sequence number."
           },
           {
             "name": "follow",
@@ -3852,7 +3913,8 @@
               "type": "string",
               "enum": ["true", "false"]
             },
-            "required": false
+            "required": false,
+            "description": "Set to true to keep the stream open and send live events after the stored ones."
           }
         ],
         "security": [],
@@ -3994,7 +4056,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "resume",
@@ -4003,7 +4066,8 @@
               "type": "string",
               "enum": ["true", "false"]
             },
-            "required": false
+            "required": false,
+            "description": "Set to true to resume pending steering input and next-in-line control items after interrupting."
           }
         ],
         "security": [],
@@ -4064,7 +4128,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -4118,7 +4183,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "messageID",
@@ -4126,7 +4192,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.Message.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Message ID, as returned by session.message.list."
           }
         ],
         "security": [],
@@ -4201,7 +4268,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -4277,7 +4345,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -4372,7 +4441,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "formID",
@@ -4380,7 +4450,8 @@
             "schema": {
               "$ref": "#/components/schemas/Form.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Form ID, as returned by session.form.list or session.form.create."
           }
         ],
         "security": [],
@@ -4456,7 +4527,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "formID",
@@ -4464,7 +4536,8 @@
             "schema": {
               "$ref": "#/components/schemas/Form.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Form ID, as returned by session.form.list or session.form.create."
           },
           {
             "name": "message",
@@ -4472,7 +4545,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Why the form was not answered, passed on to the asker."
           }
         ],
         "security": [],
@@ -4546,7 +4620,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "formID",
@@ -4554,7 +4629,8 @@
             "schema": {
               "$ref": "#/components/schemas/Form.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Form ID, as returned by session.form.list or session.form.create."
           }
         ],
         "security": [],
@@ -4645,7 +4721,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -4719,7 +4796,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -4790,7 +4868,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "limit",
@@ -4800,10 +4879,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "Maximum number of messages to return. When omitted, the endpoint returns its default page size."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Maximum number of messages to return. When omitted, the endpoint returns its default page size."
           },
           {
             "name": "order",
@@ -4814,19 +4893,19 @@
                   "type": "string",
                   "enum": ["asc", "desc"]
                 }
-              ],
-              "description": "Message order for the first page. Use desc for newest first or asc for oldest first."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Message order for the first page. Use desc for newest first or asc for oldest first."
           },
           {
             "name": "cursor",
             "in": "query",
             "schema": {
-              "type": "string",
-              "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order."
+              "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order."
           },
           {
             "name": "type",
@@ -4849,10 +4928,10 @@
                     "idle"
                   ]
                 }
-              ],
-              "description": "Filter by message type before pagination. When omitted, all message types are returned. Pass the same type when following cursors."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Filter by message type before pagination. When omitted, all message types are returned. Pass the same type when following cursors."
           }
         ],
         "security": [],
@@ -4938,14 +5017,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "types",
@@ -4961,10 +5042,10 @@
                     "$ref": "#/components/schemas/Model.Type"
                   }
                 }
-              ],
-              "description": "Only list models of these types. Defaults to chat, the only type offered for sessions."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Only list models of these types. Defaults to chat, the only type offered for sessions."
           }
         ],
         "security": [],
@@ -5056,14 +5137,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -5594,7 +5677,8 @@
             "schema": {
               "$ref": "#/components/schemas/Generate.VideoID"
             },
-            "required": true
+            "required": true,
+            "description": "Video generation ID, as returned by experimental.generate.video.create."
           }
         ],
         "security": [],
@@ -5926,14 +6010,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6017,7 +6103,8 @@
             "schema": {
               "$ref": "#/components/schemas/Provider.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Provider ID, as returned by provider.list."
           },
           {
             "name": "location",
@@ -6033,14 +6120,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6136,14 +6225,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6217,7 +6308,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Integration ID, as returned by integration.list."
           },
           {
             "name": "location",
@@ -6233,14 +6325,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6326,14 +6420,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6404,7 +6500,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Integration ID, as returned by integration.list."
           },
           {
             "name": "location",
@@ -6420,14 +6517,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6525,7 +6624,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Integration ID, as returned by integration.list."
           },
           {
             "name": "location",
@@ -6541,14 +6641,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6646,7 +6748,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Integration ID, as returned by integration.list."
           },
           {
             "name": "location",
@@ -6662,14 +6765,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6777,7 +6882,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Integration ID, as returned by integration.list."
           },
           {
             "name": "attemptID",
@@ -6785,7 +6891,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.AttemptID"
             },
-            "required": true
+            "required": true,
+            "description": "OAuth attempt ID, as returned by integration.oauth.connect."
           },
           {
             "name": "location",
@@ -6801,14 +6908,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6887,7 +6996,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Integration ID, as returned by integration.list."
           },
           {
             "name": "attemptID",
@@ -6895,7 +7005,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.AttemptID"
             },
-            "required": true
+            "required": true,
+            "description": "OAuth attempt ID, as returned by integration.oauth.connect."
           },
           {
             "name": "location",
@@ -6911,14 +7022,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6972,7 +7085,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Integration ID, as returned by integration.list."
           },
           {
             "name": "attemptID",
@@ -6980,7 +7094,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.AttemptID"
             },
-            "required": true
+            "required": true,
+            "description": "OAuth attempt ID, as returned by integration.oauth.connect."
           },
           {
             "name": "location",
@@ -6996,14 +7111,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7090,7 +7207,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Integration ID, as returned by integration.list."
           },
           {
             "name": "location",
@@ -7106,14 +7224,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7221,7 +7341,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Integration ID, as returned by integration.list."
           },
           {
             "name": "attemptID",
@@ -7229,7 +7350,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.AttemptID"
             },
-            "required": true
+            "required": true,
+            "description": "Command attempt ID, as returned by integration.command.connect."
           },
           {
             "name": "location",
@@ -7245,14 +7367,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7331,7 +7455,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Integration ID, as returned by integration.list."
           },
           {
             "name": "attemptID",
@@ -7339,7 +7464,8 @@
             "schema": {
               "$ref": "#/components/schemas/Integration.AttemptID"
             },
-            "required": true
+            "required": true,
+            "description": "Command attempt ID, as returned by integration.command.connect."
           },
           {
             "name": "location",
@@ -7355,14 +7481,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7424,14 +7552,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7505,7 +7635,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Name to add the MCP server under."
           },
           {
             "name": "location",
@@ -7521,14 +7652,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7604,7 +7737,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "MCP server name, as listed by mcp.list."
           },
           {
             "name": "location",
@@ -7620,14 +7754,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7688,7 +7824,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "MCP server name, as listed by mcp.list."
           },
           {
             "name": "location",
@@ -7704,14 +7841,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7772,7 +7911,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "MCP server name, as listed by mcp.list."
           },
           {
             "name": "location",
@@ -7788,14 +7928,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7864,14 +8006,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7942,7 +8086,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Must be 1; requests without it are refused."
           },
           {
             "name": "location",
@@ -7958,14 +8103,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "name",
@@ -7973,7 +8120,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Name of the MCP server the client hosts. Letters, digits, _ and - only."
           }
         ],
         "security": [],
@@ -8062,12 +8210,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "name",
@@ -8075,7 +8225,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Name of the MCP server the client hosts. Letters, digits, _ and - only."
           },
           {
             "name": "ticket",
@@ -8083,7 +8234,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Single-use ticket from experimental.mcp.client.token, which authorizes the connection without the usual credentials."
           }
         ],
         "security": [],
@@ -8274,7 +8426,8 @@
             "schema": {
               "$ref": "#/components/schemas/Credential.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Credential ID, as returned by credential.list or credential.create."
           }
         ],
         "security": [],
@@ -8333,7 +8486,8 @@
             "schema": {
               "$ref": "#/components/schemas/Credential.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Credential ID, as returned by credential.list or credential.create."
           }
         ],
         "security": [],
@@ -8377,7 +8531,8 @@
             "schema": {
               "$ref": "#/components/schemas/Credential.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Credential ID, as returned by credential.list or credential.create."
           }
         ],
         "security": [],
@@ -8422,7 +8577,8 @@
               "type": "string",
               "enum": ["true", "false"]
             },
-            "required": false
+            "required": false,
+            "description": "Set to true to include archived projects."
           }
         ],
         "security": [],
@@ -8476,7 +8632,8 @@
             "schema": {
               "$ref": "#/components/schemas/Project.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Project ID, as returned by project.list."
           }
         ],
         "security": [],
@@ -8570,14 +8727,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -8659,14 +8818,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -8740,7 +8901,8 @@
             "schema": {
               "$ref": "#/components/schemas/Project.ID"
             },
-            "required": false
+            "required": false,
+            "description": "Project whose saved permissions to list. Defaults to the project of the requested location."
           }
         ],
         "security": [],
@@ -8811,7 +8973,8 @@
             "schema": {
               "$ref": "#/components/schemas/PermissionSaved.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Saved permission ID, as returned by permission.saved.list."
           }
         ],
         "security": [],
@@ -8920,7 +9083,8 @@
             "schema": {
               "$ref": "#/components/schemas/PermissionSaved.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Saved permission ID, as returned by permission.saved.list."
           }
         ],
         "security": [],
@@ -8964,7 +9128,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -9102,7 +9267,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -9180,7 +9346,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "requestID",
@@ -9188,7 +9355,8 @@
             "schema": {
               "$ref": "#/components/schemas/Permission.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Permission request ID, as returned by session.permission.list."
           }
         ],
         "security": [],
@@ -9266,7 +9434,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "requestID",
@@ -9274,7 +9443,8 @@
             "schema": {
               "$ref": "#/components/schemas/Permission.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Permission request ID, as returned by session.permission.list."
           }
         ],
         "security": [],
@@ -9373,14 +9543,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -9457,14 +9629,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "path",
@@ -9474,10 +9648,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "An absolute path or a path relative to the requested location. Defaults to the location directory."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "An absolute path or a path relative to the requested location. Defaults to the location directory."
           }
         ],
         "security": [],
@@ -9566,14 +9740,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "query",
@@ -9680,23 +9856,25 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "path",
             "in": "query",
             "schema": {
-              "type": "string",
-              "description": "An absolute path or a path relative to the requested location. Missing parent directories are created."
+              "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "An absolute path or a path relative to the requested location. Missing parent directories are created."
           }
         ],
         "security": [],
@@ -9786,14 +9964,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -9888,14 +10068,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -9975,14 +10157,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10064,14 +10248,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10145,7 +10331,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "ID of the RPC a plugin registered."
           },
           {
             "name": "method",
@@ -10153,7 +10340,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Name of the method to call on that RPC."
           },
           {
             "name": "location",
@@ -10169,14 +10357,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10486,10 +10676,10 @@
                     ]
                   }
                 }
-              ],
-              "description": "Only send events of these types, plus the initial server.connected event. When omitted, all events are sent."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Only send events of these types, plus the initial server.connected event. When omitted, all events are sent."
           }
         ],
         "security": [],
@@ -10629,14 +10819,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10716,14 +10908,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10828,7 +11022,8 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "PTY ID, as returned by pty.create or pty.list."
           },
           {
             "name": "location",
@@ -10844,14 +11039,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10927,7 +11124,8 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "PTY ID, as returned by pty.create or pty.list."
           },
           {
             "name": "location",
@@ -10943,14 +11141,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -11059,7 +11259,8 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "PTY ID, as returned by pty.create or pty.list."
           },
           {
             "name": "location",
@@ -11075,14 +11276,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -11143,7 +11346,8 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "PTY ID, as returned by pty.create or pty.list."
           },
           {
             "name": "x-opencode-ticket",
@@ -11151,7 +11355,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Must be 1; requests without it are refused."
           },
           {
             "name": "location",
@@ -11167,14 +11372,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -11262,11 +11469,13 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "PTY ID, as returned by pty.create or pty.list."
           },
           {
             "in": "query",
             "name": "location[directory]",
+            "description": "Absolute path of the location directory. Omit to use the server's default location.",
             "schema": {
               "type": "string"
             }
@@ -11274,6 +11483,7 @@
           {
             "in": "query",
             "name": "cursor",
+            "description": "Output offset to replay from. Use -1 to start at the current end; omit to replay all retained output.",
             "schema": {
               "type": "string"
             }
@@ -11281,6 +11491,7 @@
           {
             "in": "query",
             "name": "ticket",
+            "description": "Single-use ticket from pty.connect.token, which authorizes the connection without the usual credentials.",
             "schema": {
               "type": "string"
             }
@@ -11362,7 +11573,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           },
           {
             "name": "lines",
@@ -11370,7 +11582,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Number of trailing rows to read, up to 65535. Defaults to the live terminal height; larger counts include retained history."
           }
         ],
         "security": [],
@@ -11445,7 +11658,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -11512,7 +11726,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Session ID, as returned by session.create or session.list."
           }
         ],
         "security": [],
@@ -11695,7 +11910,8 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
           }
         ],
         "security": [],
@@ -11769,7 +11985,8 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
           }
         ],
         "security": [],
@@ -11864,7 +12081,8 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
           }
         ],
         "security": [],
@@ -11926,7 +12144,8 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
           }
         ],
         "security": [],
@@ -12002,7 +12221,8 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
           },
           {
             "name": "x-opencode-ticket",
@@ -12010,7 +12230,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Must be 1; requests without it are refused."
           }
         ],
         "security": [],
@@ -12096,11 +12317,13 @@
             "schema": {
               "$ref": "#/components/schemas/Pty.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Terminal ID, as returned by experimental.persistentPty.create or experimental.persistentPty.list."
           },
           {
             "in": "query",
             "name": "cursor",
+            "description": "Output offset to replay from. Defaults to 0.",
             "schema": {
               "type": "string"
             }
@@ -12108,6 +12331,7 @@
           {
             "in": "query",
             "name": "role",
+            "description": "Attach as controller (the default) or observer.",
             "schema": {
               "type": "string"
             }
@@ -12115,6 +12339,7 @@
           {
             "in": "query",
             "name": "attachment_id",
+            "description": "ID for this attachment. Defaults to a random ID.",
             "schema": {
               "type": "string"
             }
@@ -12122,6 +12347,7 @@
           {
             "in": "query",
             "name": "takeover",
+            "description": "Set to true to take over control of the terminal.",
             "schema": {
               "type": "string"
             }
@@ -12129,6 +12355,7 @@
           {
             "in": "query",
             "name": "input_protocol",
+            "description": "Set to 1 to send framed input messages instead of raw terminal input.",
             "schema": {
               "type": "string"
             }
@@ -12136,6 +12363,7 @@
           {
             "in": "query",
             "name": "ticket",
+            "description": "Single-use ticket from experimental.persistentPty.connectToken, which authorizes the connection without the usual credentials.",
             "schema": {
               "type": "string"
             }
@@ -12220,7 +12448,8 @@
             "schema": {
               "$ref": "#/components/schemas/MediaHash"
             },
-            "required": true
+            "required": true,
+            "description": "Lowercase hex SHA-256 hash of the media content."
           }
         ],
         "security": [],
@@ -12282,7 +12511,8 @@
             "schema": {
               "$ref": "#/components/schemas/Blob.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Blob ID, such as one from a completed video generation's blobs."
           }
         ],
         "security": [],
@@ -12423,10 +12653,10 @@
                 {
                   "$ref": "#/components/schemas/Session.ID"
                 }
-              ],
-              "description": "Only automations created by this Session."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Only automations created by this Session."
           },
           {
             "name": "directory",
@@ -12436,10 +12666,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "Only automations in the project that owns this directory."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Only automations in the project that owns this directory."
           }
         ],
         "security": [],
@@ -12520,7 +12750,8 @@
             "schema": {
               "$ref": "#/components/schemas/Automation.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Automation ID, as returned by experimental.automation.create or experimental.automation.list."
           }
         ],
         "security": [],
@@ -12596,7 +12827,8 @@
             "schema": {
               "$ref": "#/components/schemas/Automation.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Automation ID, as returned by experimental.automation.create or experimental.automation.list."
           }
         ],
         "security": [],
@@ -12660,7 +12892,8 @@
             "schema": {
               "$ref": "#/components/schemas/Automation.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Automation ID, as returned by experimental.automation.create or experimental.automation.list."
           }
         ],
         "security": [],
@@ -12738,7 +12971,8 @@
             "schema": {
               "$ref": "#/components/schemas/Automation.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Automation ID, as returned by experimental.automation.create or experimental.automation.list."
           }
         ],
         "security": [],
@@ -12824,12 +13058,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -12931,12 +13167,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "sessionID",
@@ -12944,7 +13182,8 @@
             "schema": {
               "$ref": "#/components/schemas/Session.ID"
             },
-            "required": false
+            "required": false,
+            "description": "Only artifacts created by this session."
           },
           {
             "name": "provider",
@@ -12952,7 +13191,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Only artifacts from this provider, as returned by experimental.artifacts.providers."
           }
         ],
         "security": [],
@@ -13059,12 +13299,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -13175,7 +13417,8 @@
             "schema": {
               "$ref": "#/components/schemas/Artifact.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Artifact ID, as returned by experimental.artifacts.create or experimental.artifacts.list."
           },
           {
             "name": "location",
@@ -13191,12 +13434,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -13292,7 +13537,8 @@
             "schema": {
               "$ref": "#/components/schemas/Artifact.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Artifact ID, as returned by experimental.artifacts.create or experimental.artifacts.list."
           },
           {
             "name": "location",
@@ -13308,12 +13554,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -13422,7 +13670,8 @@
             "schema": {
               "$ref": "#/components/schemas/Artifact.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Artifact ID, as returned by experimental.artifacts.create or experimental.artifacts.list."
           },
           {
             "name": "location",
@@ -13438,12 +13687,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -13524,7 +13775,8 @@
             "schema": {
               "$ref": "#/components/schemas/Artifact.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Artifact ID, as returned by experimental.artifacts.create or experimental.artifacts.list."
           },
           {
             "name": "location",
@@ -13540,12 +13792,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -13639,10 +13893,10 @@
                 {
                   "$ref": "#/components/schemas/Session.ID"
                 }
-              ],
-              "description": "Filter to background jobs owned by this session."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Filter to background jobs owned by this session."
           },
           {
             "name": "kind",
@@ -13652,10 +13906,10 @@
                 {
                   "$ref": "#/components/schemas/Job.Kind"
                 }
-              ],
-              "description": "Filter by background job kind."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Filter by background job kind."
           },
           {
             "name": "status",
@@ -13665,10 +13919,10 @@
                 {
                   "$ref": "#/components/schemas/Job.Status"
                 }
-              ],
-              "description": "Filter by job status (running, completed, error, or cancelled)."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Filter by job status (running, completed, error, or cancelled)."
           },
           {
             "name": "descendants",
@@ -13679,10 +13933,10 @@
                   "type": "string",
                   "enum": ["true", "false"]
                 }
-              ],
-              "description": "When sessionID is set, also include background jobs owned by child and nested subagent sessions."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "When sessionID is set, also include background jobs owned by child and nested subagent sessions."
           }
         ],
         "security": [],
@@ -13753,7 +14007,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Background job ID, as returned by experimental.job.list."
           }
         ],
         "security": [],
@@ -13989,7 +14244,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Name of the machine to remove."
           }
         ],
         "security": [],
@@ -14061,14 +14317,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -14148,14 +14406,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -14254,7 +14514,8 @@
             "schema": {
               "$ref": "#/components/schemas/Shell.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Shell command ID, as returned by shell.create or shell.list."
           },
           {
             "name": "location",
@@ -14270,14 +14531,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -14353,7 +14616,8 @@
             "schema": {
               "$ref": "#/components/schemas/Shell.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Shell command ID, as returned by shell.create or shell.list."
           },
           {
             "name": "location",
@@ -14369,14 +14633,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -14430,7 +14696,8 @@
             "schema": {
               "$ref": "#/components/schemas/Shell.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Shell command ID, as returned by shell.create or shell.list."
           },
           {
             "name": "location",
@@ -14446,14 +14713,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "cursor",
@@ -14462,7 +14731,8 @@
               "type": "string",
               "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$"
             },
-            "required": false
+            "required": false,
+            "description": "Byte offset to read from, such as the cursor of the previous page. Defaults to 0."
           },
           {
             "name": "limit",
@@ -14471,7 +14741,8 @@
               "type": "string",
               "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$"
             },
-            "required": false
+            "required": false,
+            "description": "Maximum number of bytes to return. Defaults to 65536."
           }
         ],
         "security": [],
@@ -14577,14 +14848,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -14658,7 +14931,8 @@
             "schema": {
               "$ref": "#/components/schemas/Project.ID"
             },
-            "required": true
+            "required": true,
+            "description": "Project whose worktrees to list, as returned by project.list."
           }
         ],
         "security": [],
@@ -14923,14 +15197,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "provider",
@@ -14938,7 +15214,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "VCS provider to initialize. Defaults to git."
           }
         ],
         "security": [],
@@ -15030,14 +15307,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -15116,14 +15395,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -15219,14 +15500,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -15308,14 +15591,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "search",
@@ -15410,14 +15695,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "mode",
@@ -15535,10 +15822,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "Absolute server-local directory to write the snapshot into, created when missing. Defaults to the server's log directory."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Absolute server-local directory to write the snapshot into, created when missing. Defaults to the server's log directory."
           }
         ],
         "security": [],
@@ -15725,14 +16012,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -15897,14 +16186,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -15996,14 +16287,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -16112,14 +16405,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -16215,14 +16510,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],

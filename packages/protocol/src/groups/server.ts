@@ -65,7 +65,7 @@ export const ServerGroup = HttpApiGroup.make("server.server")
   )
   .add(
     HttpApiEndpoint.get("server.connect", PAIRING_CONNECT_PATH, {
-      params: { code: Schema.String },
+      params: { code: Schema.String.annotateKey({ description: "Pairing code from server.pair." }) },
       success: PairingSession,
       error: UnauthorizedError,
     }).annotateMerge(

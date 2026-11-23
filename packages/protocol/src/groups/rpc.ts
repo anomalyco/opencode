@@ -12,7 +12,10 @@ export const RpcOutput = Schema.Struct({ output: Schema.optionalKey(Schema.Unkno
 export const RpcGroup = HttpApiGroup.make("server.rpc")
   .add(
     HttpApiEndpoint.post("rpc.call", "/api/rpc/:rpcID/:method", {
-      params: { rpcID: Schema.String, method: Schema.String },
+      params: {
+        rpcID: Schema.String.annotateKey({ description: "ID of the RPC a plugin registered." }),
+        method: Schema.String.annotateKey({ description: "Name of the method to call on that RPC." }),
+      },
       query: LocationQuery,
       payload: RpcInput,
       success: RpcOutput,

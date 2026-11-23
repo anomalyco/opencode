@@ -15,7 +15,11 @@ const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
 export const ProjectGroup = HttpApiGroup.make("server.project")
   .add(
     HttpApiEndpoint.get("project.list", root, {
-      query: Schema.Struct({ archived: BooleanFromString.pipe(Schema.optional) }),
+      query: Schema.Struct({
+        archived: BooleanFromString.pipe(Schema.optional).annotateKey({
+          description: "Set to true to include archived projects.",
+        }),
+      }),
       success: Schema.Array(Project.Info),
     }).annotateMerge(
       OpenApi.annotations({
@@ -27,7 +31,7 @@ export const ProjectGroup = HttpApiGroup.make("server.project")
   )
   .add(
     HttpApiEndpoint.patch("project.update", `${root}/:projectID`, {
-      params: { projectID: Project.ID },
+      params: { projectID: Project.ID.annotateKey({ description: "Project ID, as returned by project.list." }) },
       payload: UpdatePayload,
       success: Project.Info,
       error: ProjectNotFoundError,

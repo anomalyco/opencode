@@ -22,7 +22,7 @@ export const AgentGroup = HttpApiGroup.make("server.agent")
   )
   .add(
     HttpApiEndpoint.get("agent.get", "/api/agent/:agentID", {
-      params: { agentID: Agent.ID },
+      params: { agentID: Agent.ID.annotateKey({ description: "Agent ID, as returned by agent.list." }) },
       query: LocationQuery,
       success: Location.response(Agent.Info),
       error: AgentNotFoundError,

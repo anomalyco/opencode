@@ -7,7 +7,11 @@ import { AutomationNotFoundError, ForbiddenError, InvalidRequestError, SessionNo
 const EXPERIMENTAL =
   "Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access."
 const errors = [AutomationNotFoundError, ForbiddenError] as const
-const params = { automationID: Automation.ID }
+const params = {
+  automationID: Automation.ID.annotateKey({
+    description: "Automation ID, as returned by experimental.automation.create or experimental.automation.list.",
+  }),
+}
 const annotations = (identifier: string, summary: string, description: string) =>
   OpenApi.annotations({
     identifier: `experimental.automation.${identifier}`,
