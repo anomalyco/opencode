@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/ai-sdk-provider",
+  "version": "2.4.0",
+  "description": "OpenCode inference provider for Vercel's AI SDK",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/ai-sdk-provider"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun run script/build.ts",
+    "pack": "bun run script/pack.ts",
+    "models": "bun run script/models.ts",
+    "test": "bun test --timeout 30000",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "4.0.106",
+    "@ai-sdk/google": "4.0.122",
+    "@ai-sdk/openai": "4.0.121",
+    "@ai-sdk/openai-compatible": "3.0.93",
+    "@ai-sdk/provider": "4.0.39",
+    "@ai-sdk/provider-utils": "5.0.82"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.76 || ^4.1.8"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:",
+    "ai": "7.0.177",
+    "typescript": "catalog:",
+    "zod": "catalog:"
+  }
+}
