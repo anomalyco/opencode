@@ -176,6 +176,9 @@ export function keyFromKeyboardEvent(event: KeyboardEvent) {
   return event.code.slice(3).toLowerCase()
 }
 
+// The key of a modifier's own keydown.
+const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "AltGraph", "Meta"])
+
 const MODIFIER_PARTS = new Set(["ctrl", "control", "shift", "alt", "option", "super", "hyper"])
 
 const KEY_NAMES = new Map([
@@ -251,6 +254,10 @@ function createAppKeymapHost(root: HTMLElement, blocked: () => boolean) {
         if (original && (original.isComposing || original.keyCode === 229)) return
 
         if (blocked()) return
+
+        // A modifier going down is no key of a chord. Passed on, it ends a chord in progress, so Ctrl+K Ctrl+C would
+        // only run with Ctrl held from the first key to the last.
+        if (original && MODIFIER_KEYS.has(original.key)) return
 
         // A modal alert dialog the app's dialog stack does not track, such as a page's prompt in the browser pane, is
         // modal for less than the window: its keys are its own.

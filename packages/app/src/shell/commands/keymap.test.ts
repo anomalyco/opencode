@@ -161,6 +161,20 @@ test("Escape cancels a pending chord without running a command, and Backspace ta
   expect(app.keymap.getPendingSequence()).toHaveLength(0)
 })
 
+test("a chord goes on when its modifier is let go and pressed again between its keys", () => {
+  const ran: string[] = []
+  const app = setup([command("comment.toggle", "mod+k mod+c", ran)])
+
+  press(document.body, { key: "Control", ctrlKey: true })
+  press(document.body, { key: "k", ctrlKey: true })
+  const modifier = press(document.body, { key: "Control", ctrlKey: true })
+  expect(app.keymap.getPendingSequence()).toHaveLength(1)
+  press(document.body, { key: "c", ctrlKey: true })
+
+  expect(modifier.defaultPrevented).toBe(false)
+  expect(ran).toEqual(["comment.toggle"])
+})
+
 test.each([
   { name: "composing", init: { key: "Escape", isComposing: true } },
   { name: "Safari's composition Enter", init: { key: "Escape", keyCode: 229 } },
