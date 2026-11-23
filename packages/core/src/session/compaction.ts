@@ -213,10 +213,10 @@ const SUMMARY_RULES = `Rules:
 - Preserve consequential workflow state, including whether changes are uncommitted, committed, pushed, under review, or merged.
 - Do not mention the summary process or that context was compacted.`
 
-/** `subagents`: the `compaction_subagents` flag, under which the checkpoint lists the session's subagents and background jobs itself. */
-export const buildPrompt = (update: boolean, legacy = false, subagents = false) => {
+/** `jobs`: the `compaction_jobs` flag, under which the checkpoint lists the session's subagents and background jobs itself. */
+export const buildPrompt = (update: boolean, legacy = false, jobs = false) => {
   const shared = [
-    `Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like ${subagents ? "this session's ID" : "the session ID"}. The next agent receives current versions of all of these separately.`,
+    `Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like ${jobs ? "this session's ID" : "the session ID"}. The next agent receives current versions of all of these separately.`,
     SUMMARY_TEMPLATE,
     SUMMARY_RULES,
     "Do not continue the task or call tools.",
@@ -242,7 +242,7 @@ export const buildPrompt = (update: boolean, legacy = false, subagents = false) 
       : []),
     "Newer history always takes precedence over the existing checkpoint. Preserve previous information unless newer history clearly contradicts, supersedes, resolves, or makes it stale. If something is no longer relevant to continuing the work, you may remove it.",
     "Incorporate newer requirements, decisions, progress, and context. Reconcile Work State and Next Move: move completed work out of Active, remove resolved blockers and answered questions, and preserve unresolved or pending work.",
-    `Return only the updated Markdown sections. Do not reproduce the ${subagents ? "`<conversation-checkpoint>`, `<summary>`, `<recent-context>`, `<subagents>`, or `<background-work>`" : "`<conversation-checkpoint>`, `<summary>`, or `<recent-context>`"} wrapper tags from the previous checkpoint.`,
+    `Return only the updated Markdown sections. Do not reproduce the ${jobs ? "`<conversation-checkpoint>`, `<summary>`, `<recent-context>`, `<subagents>`, or `<background-work>`" : "`<conversation-checkpoint>`, `<summary>`, or `<recent-context>`"} wrapper tags from the previous checkpoint.`,
     ...shared,
   ].join("\n\n")
 }
@@ -511,7 +511,7 @@ export const layer = Layer.effect(
       const prompt = buildPrompt(
         previous !== undefined,
         previous?.summary.includes(LEGACY_HEADING) ?? false,
-        yield* flags.enabled("compaction_subagents"),
+        yield* flags.enabled("compaction_jobs"),
       )
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
@@ -957,7 +957,7 @@ export const layer = Layer.effect(
       }
 
       // Read when the compaction lands, not when its summary was written: a background summary may predate them.
-      const lists = (yield* flags.enabled("compaction_subagents"))
+      const lists = (yield* flags.enabled("compaction_jobs"))
         ? {
             subagents: yield* SessionCompactionSubagents.collect(store, jobs, sessionID),
             background: yield* SessionCompactionBackground.collect(jobs, store, sessionID),

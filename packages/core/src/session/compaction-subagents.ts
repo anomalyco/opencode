@@ -5,25 +5,28 @@ import type { Job } from "../job.js"
 import type { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import type { SessionStore } from "./store.js"
+import { SubagentCompletion } from "./subagent-completion.js"
 
-/** Most recently updated idle direct children kept alongside all currently running ones. */
+/** Most recently updated idle direct children kept alongside the running ones. */
 export const MAX_IDLE = 10
+/** Children one checkpoint lists at most, running ones first. The list goes into the durable compaction event. */
+export const MAX = 20
 const MAX_TITLE_CHARS = 120
 
-export const Entry = Schema.Struct({
+const Entry = Schema.Struct({
   id: SessionSchema.ID,
   agent: Schema.optionalKey(Schema.String),
   title: Schema.optionalKey(Schema.String),
   status: Schema.Literals(["running", "idle"]),
 })
-export type Entry = typeof Entry.Type
+type Entry = typeof Entry.Type
 
 const Entries = Schema.Array(Entry)
 const decodeEntries = Schema.decodeUnknownOption(Entries)
 
 /**
- * Snapshots a session's direct non-archived subagents for compaction metadata: every currently
- * running child plus up to {@link MAX_IDLE} most recently updated idle children.
+ * Snapshots a session's direct non-archived subagents for compaction metadata: running children, then up to
+ * {@link MAX_IDLE} most recently updated idle ones, {@link MAX} in all.
  */
 export const collect = Effect.fnUntraced(function* (
   store: Pick<SessionStore.Interface, "list">,
@@ -52,16 +55,12 @@ export const collect = Effect.fnUntraced(function* (
   })
   const running = entries.filter((entry) => entry.status === "running")
   const idle = entries.filter((entry) => entry.status === "idle").slice(0, MAX_IDLE)
-  return [...running, ...idle]
+  return [...running, ...idle].slice(0, MAX)
 })
-
-/** Decodes valid subagent entries stored in compaction metadata. */
-export const read = (message: SessionMessage.CompactionCompleted): readonly Entry[] =>
-  Option.getOrElse(decodeEntries(message.metadata?.subagents), () => [])
 
 /** Renders the `<subagents>` checkpoint block, or an empty string when none exist. */
 export const format = (message: SessionMessage.CompactionCompleted) => {
-  const entries = read(message)
+  const entries = Option.getOrElse(decodeEntries(message.metadata?.subagents), () => [])
   if (entries.length === 0) return ""
   return [
     "<subagents>",
@@ -78,7 +77,7 @@ const isBusy = (session: SessionSchema.Info) =>
 
 const formatTitle = (value: string | undefined) => {
   if (!value) return undefined
-  const cleaned = value.replace(/\s+/g, " ").trim()
+  const cleaned = SubagentCompletion.clean(value)
   if (!cleaned) return undefined
   const chars = Array.from(cleaned)
   return chars.length <= MAX_TITLE_CHARS ? cleaned : `${chars.slice(0, MAX_TITLE_CHARS - 1).join("")}…`

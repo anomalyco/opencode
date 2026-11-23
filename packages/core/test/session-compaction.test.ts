@@ -131,7 +131,7 @@ const layer = AppNodeBuilder.build(
 )
 // Tests channels keep flags off; the subagent tests turn theirs on.
 const it = testEffect(layer)
-const flagged = testEffect(layer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "compaction_subagents"))))
+const flagged = testEffect(layer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "compaction_jobs"))))
 
 test("compaction prompt preserves detailed work state and relevant files", () => {
   const prompt = SessionCompaction.buildPrompt(false)
@@ -1683,7 +1683,7 @@ it.effect("a background summary waits for a response whose prompt is still cache
   }),
 )
 
-test("compaction prompt mentions subagents only under the compaction_subagents flag", () => {
+test("compaction prompt mentions subagents only under the compaction_jobs flag", () => {
   expect(SessionCompaction.buildPrompt(true, false, true)).toContain("<subagents>")
   expect(SessionCompaction.buildPrompt(true)).not.toContain("<subagents>")
 })
@@ -1723,7 +1723,7 @@ const runningShell = (sessionID: Session.ID, shellID: string) =>
     })
   })
 
-it.effect("compaction lists no subagents while the compaction_subagents flag is off", () =>
+it.effect("compaction lists no subagents while the compaction_jobs flag is off", () =>
   Effect.gen(function* () {
     const parent = yield* insertSession(Session.ID.make("ses_subagents_off"))
     yield* child(parent.id, "ses_subagents_off_child", 100)
@@ -1756,6 +1756,19 @@ flagged.effect("compaction lists running children first, then the newest idle di
         .toReversed()
         .map((id) => ({ id, status: "idle" })),
     ])
+  }),
+)
+
+flagged.effect("compaction lists at most MAX subagents, even when more are running", () =>
+  Effect.gen(function* () {
+    const parent = yield* insertSession(Session.ID.make("ses_subagents_cap"))
+    yield* Effect.forEach(Array.from({ length: SessionCompactionSubagents.MAX + 1 }), (_, index) =>
+      child(parent.id, `ses_sub_cap_${index}`, index, { time_busy: index }),
+    )
+    const messages = [textUser("Question")]
+    yield* storeMessages(parent.id, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+    expect(yield* subagentsOf(parent.id)).toHaveLength(SessionCompactionSubagents.MAX)
   }),
 )
 

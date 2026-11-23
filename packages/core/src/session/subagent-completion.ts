@@ -33,7 +33,8 @@ export function text(message: SessionMessage.Info | undefined) {
   )
 }
 
-const clean = (value: string) => value.replace(/\s+/g, " ").trim()
+/** `value` on one line, with runs of whitespace collapsed. */
+export const clean = (value: string) => value.replace(/\s+/g, " ").trim()
 
 const STILL_RUNNING = "\n\nBackground work still running:\n"
 

@@ -18567,7 +18567,7 @@
               "mcp_skills": {
                 "type": "boolean"
               },
-              "compaction_subagents": {
+              "compaction_jobs": {
                 "type": "boolean"
               },
               "sqlite_fts": {
