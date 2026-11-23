@@ -558,6 +558,12 @@ fn open_dialog_reads_worktrees_and_creates_one() {
     kit.app.press("right");
     kit.wait_for("App / Worktrees");
     kit.wait_for("app-feature    ");
+    // The list draws from the GET's answer and the refresh goes out after it, so wait for the fixture to see
+    // the request rather than for the screen.
+    let refreshed = kit.app.wait_until(WAIT, || {
+        kit.requests().iter().any(|(method, url, _)| method == "POST" && url == "/api/worktree/refresh")
+    });
+    assert!(refreshed, "the fixture never saw the worktree refresh: {:?}", kit.requests());
     // Only the worktree requests: the prompt's catalog reads after connect are not ordered against them.
     let requests: Vec<(String, String)> = kit
         .requests()
