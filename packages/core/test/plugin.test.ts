@@ -8,9 +8,12 @@ import { Command } from "@opencode/core/command"
 import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Rpc } from "@opencode/core/rpc"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Workspace } from "@opencode/core/workspace"
 import { Event } from "@opencode/schema/config"
 import { PluginModule } from "@opencode/core/plugin/module"
 import { Session } from "@opencode/core/session"
@@ -722,6 +725,54 @@ it.effect("host event subscriptions deliver requested rpc types and ignore unkno
     expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.type, event.data])).toEqual([
       ["rpc.test.ping", { value: 1 }],
     ])
+  }),
+)
+
+it.effect("host event subscriptions stay scoped to the host location while retaining global events", () =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const location = yield* Location.Service
+    const plugins = yield* Plugin.Service
+    const other = Location.Ref.make({
+      directory: AbsolutePath.make(path.join(location.directory, "other")),
+      workspaceID: Workspace.ID.make("wrk_other"),
+    })
+    const received: string[] = []
+    // Plugin.load runs plugin effects without Location.Service. Subscribing through the plugin host
+    // reproduces the leak; subscribing directly in the test fiber would still see its location.
+    yield* plugins.activate([
+      {
+        id: "location-scope-test",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.event
+            .subscribe({ types: [Event.Updated.type] })
+            .pipe(
+              Stream.tap((event) =>
+                Effect.sync(() => {
+                  if (!event.location) return received.push("global")
+                  if (
+                    event.location.directory === location.directory &&
+                    event.location.workspaceID === location.workspaceID
+                  )
+                    return received.push("owned")
+                  received.push("other")
+                }),
+              ),
+              Stream.take(2),
+              Stream.runDrain,
+              Effect.forkScoped({ startImmediately: true }),
+            ),
+      },
+    ])
+    yield* plugins.awaitActivation
+
+    yield* bus.publish(Event.Updated, {}, { location: other })
+    yield* bus.publish(Event.Updated, {}, { global: true })
+    yield* bus.publish(Event.Updated, {})
+    yield* Effect.yieldNow
+
+    expect(received).toEqual(["global", "owned"])
   }),
 )
 
