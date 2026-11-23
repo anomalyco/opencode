@@ -474,6 +474,11 @@ only until it has drawn a frame with `t >= duration` and then draws again only o
 animations: `{ fps: 60, duration: 0.6 }`); `t` keeps counting from when the canvas appeared, across view updates. Budget: 8 ms per draw step and 2,000 commands
 per frame; a canvas that exceeds it three frames in a row stops animating and keeps its last frame.
 
+**Dev fps readout.** In dev mode only (`widgets-live.md`, Capabilities), every animating canvas, 2D or GPU, shows a
+small badge in a corner with the frames per second actually presented to the screen, updated once a second. It is
+measured by counting presents and nothing else, and with dev mode off it costs nothing. It isn't part of the widget: it
+never reaches the program and never changes layout.
+
 Commands are compact arrays, built with the prelude's `ui.draw()` builder (`const g = ui.draw(); g.rect(...);
 return g.commands`). Coordinates are logical pixels, origin top-left. A `text` command's `y` is the alphabetic
 baseline; `size` defaults to 13 and `color` to `"text"`.

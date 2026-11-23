@@ -126,6 +126,7 @@ intermediate batch, allowed; batches aren't counted toward the post rate, but ne
 `draw`: `widgets-live.md`, Post rate). A batch with no ops isn't posted. The client replays each batch in order on its
 device and presents every canvas whose texture a render pass in the batch wrote to (as a color attachment's `view` or
 `resolveTarget`). It may skip presents beyond one per display frame, never other ops.
+In dev mode the canvas shows the presents per second (`widgets.md`, Canvas: Dev fps readout).
 
 **A canvas's contents in a frame.** A canvas is cleared to transparent once per frame, at the frame boundary (each
 `widget.frame()`), not once per batch. Batches posted before `sleep`/`fetch` within a frame see what earlier passes in
