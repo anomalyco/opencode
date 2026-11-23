@@ -613,7 +613,6 @@ export function RunFooterView(props: RunFooterViewProps) {
         id: "session.child.activity",
         title: "Toggle agent activity panel",
         group: "Session",
-        bind: "e",
         run: () => void setExpanded((v) => !v),
       },
     ],
