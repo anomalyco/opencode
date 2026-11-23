@@ -474,7 +474,7 @@ fn navigation_frees_the_view_it_replaces() {
     let (x, y) = h.find("Question 3");
     h.app.hover(x, y);
     h.app.click(x, y);
-    h.wait_for("Message Actions");
+    h.wait_for("Search actions");
     h.app.press("escape");
     h.tui.navigate(Route::Home);
     h.idle();

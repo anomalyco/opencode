@@ -23,7 +23,8 @@ pub fn show(tui: &Tui, session: SessionID, message: String) {
     tui.dialogs.replace(
         move |cx| {
             let mut props = SelectProps::new("Message Actions", options.clone());
-            props.render_filter = false;
+            props.search_in_title = true;
+            props.title_placeholder = Some("Search actions".to_owned());
             select::select(cx, props).0
         },
         None,
