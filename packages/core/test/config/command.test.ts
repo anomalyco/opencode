@@ -43,6 +43,7 @@ const shellLayer = Layer.succeed(
     resolve: () => Effect.succeed("sh"),
     transform: () => Effect.die("unused shell.transform"),
     reload: () => Effect.die("unused shell.reload"),
+    changes: Stream.empty,
   }),
 )
 

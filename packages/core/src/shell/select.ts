@@ -3,7 +3,7 @@ export * as ShellSelect from "./select.js"
 import path from "path"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, PubSub, Schema, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
@@ -43,15 +43,12 @@ export type Editor = {
 
 export type ResolveInput = {
   priority: "config" | "compat"
-  /**
-   * The configured shell as the caller read it from config, or null for none. A caller that rebuilds on config changes
-   * passes it so its result follows that config instead of depending on this service having reloaded first.
-   */
-  configured?: string | null
 }
 
 export interface Interface extends State.Transformable<Editor> {
   readonly resolve: (input: ResolveInput) => Effect.Effect<string>
+  /** Emits after the configured shell changes, so whatever names the shell can refresh. */
+  readonly changes: Stream.Stream<void>
   readonly list?: () => Effect.Effect<Item[]>
 }
 
@@ -210,9 +207,14 @@ const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       const global = yield* Global.Service
+      const changed = yield* PubSub.sliding<void>(1)
       const state = State.create<Data, Editor>({
         name: "shell-select",
         initial: () => ({}),
+        notify: State.changes(
+          (data) => data.shell ?? null,
+          () => PubSub.publish(changed, undefined).pipe(Effect.asVoid),
+        ),
         editor: (editor) => ({
           configure: (shell) => {
             editor.shell = shell
@@ -222,16 +224,9 @@ const layer = (options?: Options) =>
       return Service.of({
         transform: state.transform,
         reload: state.reload,
-        resolve: (input) =>
-          Effect.sync(() =>
-            resolve(
-              input,
-              input.configured === undefined ? state.get().shell : (input.configured ?? undefined),
-              options,
-              global.bin,
-            ),
-          ),
+        resolve: (input) => Effect.sync(() => resolve(input, state.get().shell, options, global.bin)),
         list: () => Effect.promise(() => list(options, global.bin)),
+        changes: Stream.fromPubSub(changed),
       })
     }),
   )

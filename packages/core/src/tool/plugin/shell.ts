@@ -5,7 +5,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Shell as ShellSchema } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
-import { Clock, Deferred, Effect, Fiber, Option, Schema, Struct } from "effect"
+import { Clock, Deferred, Effect, Fiber, Option, Schema, Stream, Struct } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
@@ -399,16 +399,16 @@ export const Plugin = {
       })
     })
 
+    // The descriptions name the selected shell, so they're rebuilt whenever it changes.
+    yield* shellSelect.changes.pipe(
+      Stream.runForEach(() => ctx.tool.reload()),
+      Effect.forkScoped({ startImmediately: true }),
+    )
     const runSync = Effect.runSyncWith(yield* Effect.context())
     yield* ctx.tool
       .transform((editor) => {
-        // Named in both the direct and the Code Mode description, so a model knows the shell either way. Read from this
-        // plugin's own config so a changed shell setting shows up in the same rebuild.
-        const shellName = ShellSelect.name(
-          runSync(
-            shellSelect.resolve({ priority: "compat", configured: Config.latest(loaded.entries, "shell") ?? null }),
-          ),
-        )
+        // Named in both the direct and the Code Mode description, so a model knows the shell either way.
+        const shellName = ShellSelect.name(runSync(compatibleShell))
         editor.add({
           name,
           // With full_codemode, shell is allowed in Code Mode and pinned so the catalog always lists it.
