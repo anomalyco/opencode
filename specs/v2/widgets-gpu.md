@@ -17,6 +17,8 @@ canvases are unaffected. Clients only: the server stores and validates nothing f
 `poster` (else its `alt`, else "GPU canvas not supported") and everything else in the widget keeps working: other nodes,
 nodes layered over it in a `stack`, handlers, timers. The program runs unchanged: `requestDevice()` still resolves and
 its calls are recorded and dropped (`widget.gpu.available` is `false`), so a widget template needs no fallback path.
+The unavailable state has an exact reason (e.g. no WebGPU, or the device creation error), shown under the placeholder
+in dev mode only (`widgets.md`, Failures).
 
 **What the program knows.** A host tells the prelude about its GPU in the live input: `__input()` returns
 `{ data, gpu: { available, format } }`, `available` whether it replays batches and `format` its preferred canvas
@@ -256,8 +258,9 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
 - **Stopped stays stopped.** A canvas an error stopped stays stopped, its placeholder showing its error, for the rest
   of the run: also when it leaves the view and comes back under the same key, and after a device loss. A program error
   is a bug in the program, and a new device doesn't fix it.
-- **Client errors** (not reported, logged in dev mode): no WebGPU, device creation failure, a driver crash or reset,
-  running out of GPU memory under the limits. The canvas shows its placeholder.
+- **Client errors** (not reported; logged, and shown with their reason under the placeholder in dev mode, `widgets.md`,
+  Failures): no WebGPU, device creation failure, a driver crash or reset, running out of GPU memory under the limits.
+  The canvas shows its placeholder.
 - **GPU hang.** A batch, or a `wgsl` shader frame, whose GPU work is still unfinished 250 ms after its submit stops
   every canvas it draws into (a pass's color attachment `view` or `resolveTarget`; drawing into none, every GPU canvas
   of the widget, as Which canvases stop says) for the rest of the run, as an error would: a client error with exactly
