@@ -1,7 +1,6 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Environment } from "@opencode/schema/environment"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
 import type { PlatformPath } from "node:path"
 import type { Driver } from "./driver.js"
@@ -12,16 +11,19 @@ import { Location } from "../location.js"
 import { AbsolutePath } from "../schema.js"
 import { Workspace } from "../workspace.js"
 
-// The wire and storage contract lives in Schema; these keep the domain facade's identity unchanged.
-export const ID = Environment.ID
+// An environment's name: what a path will later use to say where it lives.
+export const ID = Schema.String.pipe(Schema.brand("Environment.ID"))
 export type ID = typeof ID.Type
 
 /** The server's own machine. */
-export const localID = Environment.localID
+export const localID = ID.make("local")
 
 /** Where a file or a directory is: an absolute path in an environment. */
-export const Place = Environment.Place
-export type Place = Environment.Place
+export const Place = Schema.Struct({
+  absolute: AbsolutePath,
+  environment: Schema.Struct({ id: ID }),
+})
+export type Place = typeof Place.Type
 
 /** What an environment says about itself, set by whoever makes it. Absent means no, or the server's own. */
 export interface Facts {
@@ -59,8 +61,8 @@ export const local = (spawner: ChildProcessSpawner["Service"]) =>
   make(localID, makeLocalDriver(spawner), { hostsServer: true, searchable: true })
 
 /**
- * A session's own working directory, already bound to its environment, set by the runner around a step.
- * Read per operation: absent unless the session names one, so a bare path or command stays the Location's directory.
+ * A session's own working directory, bound to its environment, provided by the runner around a step.
+ * Absent unless the session sets one, so bare paths and commands stay on the Location's directory.
  */
 export const CurrentWorkingDirectory = Context.Reference<
   { readonly absolute: AbsolutePath; readonly environment: Interface } | undefined
@@ -72,6 +74,13 @@ export const workingDirectory = Effect.gen(function* () {
   const environment = yield* Service
   return { absolute: location.directory, environment }
 })
+
+/** Build once inside a Location layer; resolves CurrentWorkingDirectory per call, falling back to the Location's default. */
+export const workingDirectoryResolver = Effect.map(workingDirectory, (fallback) =>
+  Effect.gen(function* () {
+    return (yield* CurrentWorkingDirectory) ?? fallback
+  }),
+)
 
 const layer = Layer.effect(
   Service,

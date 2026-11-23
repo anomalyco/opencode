@@ -25,7 +25,6 @@ import type { EventLog } from "@opencode/schema/event-log"
 import type { Workspace } from "@opencode/schema/workspace"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Snapshot } from "@opencode/schema/snapshot"
-import type { Environment } from "@opencode/schema/environment"
 import type { Shell } from "@opencode/schema/shell"
 import type { Generate } from "@opencode/schema/generate"
 import type { Provider } from "@opencode/schema/provider"
@@ -160,7 +159,6 @@ export type SessionCreateInput = {
   readonly location?: Location.PublicRef | undefined
   readonly metadata?: Session.Metadata | undefined
   readonly permissions?: Permission.Ruleset | undefined
-  readonly experimental?: { readonly cwd?: string | undefined } | undefined
 }
 export type SessionCreateOutput = Session.Info
 export type SessionCreateOperation<E = never> = (input?: SessionCreateInput) => Effect.Effect<SessionCreateOutput, E>
@@ -573,12 +571,6 @@ export type ExperimentalSessionExportOperation<E = never> = (
   input: ExperimentalSessionExportInput,
 ) => Effect.Effect<ExperimentalSessionExportOutput, E>
 
-export type ExperimentalSessionCwdInput = { readonly sessionID: Session.ID; readonly cwd: string | null }
-export type ExperimentalSessionCwdOutput = Session.Info
-export type ExperimentalSessionCwdOperation<E = never> = (
-  input: ExperimentalSessionCwdInput,
-) => Effect.Effect<ExperimentalSessionCwdOutput, E>
-
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: Session.ID
   readonly id: Skill.ID
@@ -641,7 +633,6 @@ export type ExperimentalSessionLogOutput =
             readonly projectID: Project.ID
             readonly location: { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
             readonly subpath?: RelativePath | undefined
-            readonly cwd?: Environment.Place | undefined
             readonly parentID?: Session.ID | undefined
             readonly slug: string
             readonly title?: string | undefined
@@ -719,17 +710,6 @@ export type ExperimentalSessionLogOutput =
             | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
             | undefined
           readonly data: { readonly sessionID: Session.ID; readonly metadata: Session.Metadata }
-        }
-      | {
-          readonly id: Event.ID
-          readonly created: number
-          readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.cwd.updated"
-          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
-          readonly location?:
-            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
-            | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly cwd: Environment.Place | null }
         }
       | {
           readonly id: Event.ID
@@ -1464,7 +1444,6 @@ export interface ExperimentalSessionApi<E = never> {
   readonly stats: ExperimentalSessionStatsOperation<E>
   readonly import: ExperimentalSessionImportOperation<E>
   readonly export: ExperimentalSessionExportOperation<E>
-  readonly cwd: ExperimentalSessionCwdOperation<E>
   readonly skill: ExperimentalSessionSkillOperation<E>
   readonly wait: ExperimentalSessionWaitOperation<E>
   readonly instructions: {
@@ -2131,7 +2110,6 @@ export type EventSubscribeInput = {
         | "session.moved"
         | "session.renamed"
         | "session.metadata.updated"
-        | "session.cwd.updated"
         | "session.permissions"
         | "session.viewed"
         | "session.archived"

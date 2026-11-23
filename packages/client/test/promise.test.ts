@@ -76,7 +76,6 @@ test("exposes every standard HTTP API group", () => {
     "stats",
     "import",
     "export",
-    "cwd",
     "skill",
     "wait",
     "instructions",

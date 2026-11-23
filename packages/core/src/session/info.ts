@@ -11,7 +11,6 @@ import { Money } from "@opencode/schema/money"
 const decodeRevert = Schema.decodeUnknownSync(PersistedRevert)
 
 export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
-  const stored = SessionCwd.readStored(row.metadata)
   return SessionSchema.Info.make({
     id: row.id,
     projectID: row.project_id,
@@ -47,8 +46,7 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
       workspaceID: row.workspace_id ?? undefined,
     },
     subpath: row.path ? RelativePath.make(row.path) : undefined,
-    ...(stored.cwd ? { experimental: { cwd: stored.cwd } } : {}),
-    metadata: stored.metadata,
+    metadata: SessionCwd.readStored(row.metadata).metadata,
     permissions: row.permission ?? undefined,
     revert: row.revert ? decodeRevert(row.revert) : undefined,
     outcome: row.idle_outcome ?? undefined,

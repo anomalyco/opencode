@@ -679,8 +679,7 @@ const layer = () =>
       const fs = yield* FSUtil.Service
       const shell = yield* ShellSelect.Service
       const environment = yield* Environment.Service
-      // The Location's default; a step's Session cwd, when it has one, is read per command.
-      const locationWorkingDirectory = yield* Environment.workingDirectory
+      const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
       const hooks = yield* PluginHooks.Service
       const environments = yield* SessionEnvironment.Service
       const config = yield* Config.Service
@@ -965,8 +964,7 @@ const layer = () =>
         before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
       ) {
         const sessionID = input.metadata?.sessionID
-        // Read per command: a Session may name its own cwd, and it can change while the Location stays open.
-        const workingDirectory = (yield* Environment.CurrentWorkingDirectory) ?? locationWorkingDirectory
+        const workingDirectory = yield* currentWorkingDirectory
         const target = input.environment ?? workingDirectory.environment
         // A command anywhere else takes none of this server's variables, keeps its cwd as given and is spawned through
         // its environment.

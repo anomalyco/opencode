@@ -27,4 +27,5 @@ export {
   Place,
   Service,
   workingDirectory,
+  workingDirectoryResolver,
 } from "./environment.js"

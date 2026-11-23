@@ -66,8 +66,6 @@ export type TokenUsageInfo = {
 
 export type RelativePath = string
 
-export type EnvironmentID = string
-
 export type SessionMetadata = { [x: string]: JsonValue }
 
 export type SnapshotID = string
@@ -480,8 +478,6 @@ export type UsageLimitsBudgetModel = { providerID: ProviderID; modelID: string; 
 export type SessionGenerateResponse = { data: { text: string; tokens: TokenUsageInfo; cost: MoneyUSD } }
 
 export type FileSystemEntry = { path: RelativePath; type: "file" | "directory" }
-
-export type EnvironmentPlace = { absolute: AbsolutePath; environment: { id: EnvironmentID } }
 
 export type SessionRevert = {
   messageID: SessionMessageID
@@ -1288,16 +1284,6 @@ export type SessionMetadataUpdated = {
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
   data: { sessionID: SessionID; metadata: SessionMetadata }
-}
-
-export type SessionCwdUpdated = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.cwd.updated"
-  durable: { aggregateID: string; seq: EventSeq; version: 1 }
-  location?: LocationRef
-  data: { sessionID: SessionID; cwd: EnvironmentPlace | null }
 }
 
 export type SessionViewed = {
@@ -2447,7 +2433,6 @@ export type SessionInfo = {
   time: { created: number; updated: number; busy?: number; idle?: number; viewed?: number; archived?: number }
   title?: string
   subpath?: RelativePath
-  experimental?: { cwd?: EnvironmentPlace }
   metadata?: SessionMetadata
   permissions?: PermissionRuleset
   revert?: SessionRevert
@@ -2466,7 +2451,6 @@ export type SessionCreated = {
     projectID: ProjectID
     location: LocationRef
     subpath?: RelativePath
-    cwd?: EnvironmentPlace
     parentID?: SessionID
     slug: string
     title?: string
@@ -2951,7 +2935,6 @@ export type SessionEventDurable =
   | SessionMoved
   | SessionRenamed
   | SessionMetadataUpdated
-  | SessionCwdUpdated
   | SessionPermissions
   | SessionViewed
   | SessionArchived
@@ -3010,7 +2993,6 @@ export type V2Event =
   | SessionMoved
   | SessionRenamed
   | SessionMetadataUpdated
-  | SessionCwdUpdated
   | SessionPermissions
   | SessionViewed
   | SessionArchived
@@ -3149,10 +3131,6 @@ export const isPluginNotFoundError = (value: unknown): value is PluginNotFoundEr
 export type InvalidCursorError = { readonly _tag: "InvalidCursorError"; readonly message: string }
 export const isInvalidCursorError = (value: unknown): value is InvalidCursorError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "InvalidCursorError"
-
-export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
-export const isForbiddenError = (value: unknown): value is ForbiddenError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type SessionNotFoundError = {
   readonly _tag: "SessionNotFoundError"
@@ -3330,6 +3308,10 @@ export type McpServerNotFoundError = {
 }
 export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
+
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type ProjectNotFoundError = {
   readonly _tag: "ProjectNotFoundError"
@@ -3517,7 +3499,6 @@ export type SessionCreateInput = {
     | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
     | null
     | undefined
-  readonly experimental?: { readonly cwd?: string | null } | null | undefined
 }
 
 export type SessionCreateOutput = { data: SessionInfo }["data"]
@@ -4009,9 +3990,6 @@ export type ExperimentalSessionImportInput = {
     }
     readonly title?: string
     readonly subpath?: string
-    readonly experimental?: {
-      readonly cwd?: { readonly absolute: string; readonly environment: { readonly id: string } }
-    }
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly permissions?: ReadonlyArray<{
       readonly action: string
@@ -4042,10 +4020,6 @@ export type ExperimentalSessionImportOutput = { data: SessionInfo }["data"]
 export type ExperimentalSessionExportInput = { readonly sessionID: string; readonly sanitize?: boolean | undefined }
 
 export type ExperimentalSessionExportOutput = { data: SessionTransferData }["data"]
-
-export type ExperimentalSessionCwdInput = { readonly sessionID: string; readonly cwd: string | null }
-
-export type ExperimentalSessionCwdOutput = { data: SessionInfo }["data"]
 
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: string
@@ -4563,7 +4537,6 @@ export type EventSubscribeInput = {
         | "session.moved"
         | "session.renamed"
         | "session.metadata.updated"
-        | "session.cwd.updated"
         | "session.permissions"
         | "session.viewed"
         | "session.archived"

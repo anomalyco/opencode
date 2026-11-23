@@ -884,7 +884,7 @@ const layer = Layer.effectDiscard(
             title: event.data.title,
             agent: event.data.agent,
             model: event.data.model,
-            metadata: SessionCwd.writeStored(event.data.metadata, event.data.cwd),
+            metadata: SessionCwd.writeStored(event.data.metadata, undefined),
             permission: event.data.permissions,
             version: event.data.version,
             time_created: event.created,
@@ -987,29 +987,9 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.MetadataUpdated, (event) =>
       Effect.gen(function* () {
-        const row = yield* db
-          .select({ metadata: SessionTable.metadata })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, event.data.sessionID))
-          .get()
-          .pipe(Effect.orDie)
-        const existing = SessionCwd.readStored(row?.metadata)
+        const existing = yield* SessionCwd.read(db, event.data.sessionID)
         yield* setSession(db, event.data.sessionID, {
-          metadata: SessionCwd.writeStored(event.data.metadata, existing.cwd),
-          time_updated: event.created,
-        })
-      }),
-    )
-    yield* bus.project(SessionEvent.CwdUpdated, (event) =>
-      Effect.gen(function* () {
-        const row = yield* db
-          .select({ metadata: SessionTable.metadata })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, event.data.sessionID))
-          .get()
-          .pipe(Effect.orDie)
-        yield* setSession(db, event.data.sessionID, {
-          metadata: SessionCwd.writeStored(row?.metadata, event.data.cwd ?? undefined),
+          metadata: SessionCwd.writeStored(event.data.metadata, existing),
           time_updated: event.created,
         })
       }),

@@ -67,7 +67,8 @@ import type { EventLog } from "@opencode/schema/event-log"
 import type { FileDiff } from "@opencode/schema/file-diff"
 import { Job } from "./job.js"
 import type { Command } from "./command.js"
-import type { Environment } from "@opencode/schema/environment"
+import type { Environment } from "./environment/index.js"
+import { SessionCwd } from "./session/cwd.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 
@@ -211,6 +212,8 @@ export interface Interface {
     sessionID: SessionSchema.ID
     permissions: Permission.Ruleset
   }) => Effect.Effect<void, NotFoundError>
+  /** Experimental: the Session's working directory, if one was set. */
+  readonly cwd: (sessionID: SessionSchema.ID) => Effect.Effect<Environment.Place | undefined, NotFoundError>
   /** Experimental: set or clear the Session's working directory; undefined clears it. */
   readonly setCwd: (input: {
     sessionID: SessionSchema.ID
@@ -318,7 +321,6 @@ const layer = Layer.effect(
               parentID: input.parentID,
               location,
               subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
-              cwd: input.cwd ?? parent?.experimental?.cwd,
               title: input.title,
               agent: input.agent,
               // Children inherit metadata and permissions the way they inherit
@@ -346,6 +348,10 @@ const layer = Layer.effect(
             }),
           )
         if (projected.type === "existing") return projected.session
+        const inherited =
+          input.cwd === undefined && input.parentID ? yield* SessionCwd.read(db, input.parentID) : undefined
+        const cwd = input.cwd ?? inherited
+        if (cwd) yield* SessionCwd.write(db, sessionID, cwd)
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
@@ -528,7 +534,14 @@ const layer = Layer.effect(
       unarchive: (sessionID) => sessions.forSession(sessionID).unarchive(),
       setMetadata: (input) => sessions.forSession(input.sessionID).setMetadata(input),
       setPermissions: (input) => sessions.forSession(input.sessionID).setPermissions(input),
-      setCwd: (input) => sessions.forSession(input.sessionID).setCwd({ cwd: input.cwd }),
+      cwd: Effect.fn("Session.cwd")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* SessionCwd.read(db, sessionID)
+      }),
+      setCwd: Effect.fn("Session.setCwd")(function* (input) {
+        yield* result.get(input.sessionID)
+        yield* SessionCwd.write(db, input.sessionID, input.cwd)
+      }),
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),

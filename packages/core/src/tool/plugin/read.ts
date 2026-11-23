@@ -49,8 +49,7 @@ export const Plugin = {
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const environment = yield* Environment.Service
-    // The Location's default; a step's Session cwd, when it has one, is read per call.
-    const locationWorkingDirectory = yield* Environment.workingDirectory
+    const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
     const config = yield* Config.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
@@ -68,7 +67,7 @@ export const Plugin = {
           output: ReadToolFileSystem.Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
-              const workingDirectory = (yield* Environment.CurrentWorkingDirectory) ?? locationWorkingDirectory
+              const workingDirectory = yield* currentWorkingDirectory
               if (input.limit === 0) return yield* new ToolFailure({ message: "Limit must be a positive integer" })
               if (Skill.isUri(input.path)) {
                 const parsed = parseSkillUri(input.path)
@@ -225,7 +224,7 @@ export const Plugin = {
     // A path written from the wrong root, such as /Users/me/src/a.ts for a location at /Users/me/repo,
     // usually means <location>/src/a.ts, so check that one path and nothing else.
     const reroot = Effect.fn("ReadTool.reroot")(function* (miss: Missing) {
-      const root = ((yield* Environment.CurrentWorkingDirectory) ?? locationWorkingDirectory).absolute
+      const root = (yield* currentWorkingDirectory).absolute
       // A machine's path is not this server's path to reroot, even when the text happens to sit under the Location.
       if (miss.requested.environment.id !== environment.id) return []
       if (FSUtil.contains(root, miss.requested.absolute) || !FSUtil.contains(dirname(root), miss.requested.absolute))

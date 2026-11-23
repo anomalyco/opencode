@@ -11,7 +11,6 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
-import { Environment } from "../environment/index.js"
 import { DatabaseBatch } from "../database/batch.js"
 import { Instance } from "../instance/service.js"
 import { Location } from "../location.js"
@@ -116,7 +115,6 @@ const layer = Layer.effect(
               projectID: project.id,
               location: input.location,
               subpath,
-              // Drop exported cwd on import: it belongs to the source host and must not bypass locate or permission boundaries here.
               title: input.data.info.title,
               agent: input.data.info.agent,
               model: input.data.info.model,
@@ -231,23 +229,6 @@ function sanitize(data: Data): Data {
         ...data.info.location,
         directory: AbsolutePath.make(`/${redact("session-directory", data.info.id, data.info.location.directory)}`),
       },
-      ...(data.info.experimental?.cwd
-        ? {
-            experimental: {
-              ...data.info.experimental,
-              cwd: {
-                absolute: AbsolutePath.make(
-                  `/${redact("session-cwd", data.info.id, data.info.experimental.cwd.absolute)}`,
-                ),
-                environment: {
-                  id: Environment.ID.make(
-                    redact("session-environment", data.info.id, data.info.experimental.cwd.environment.id),
-                  ),
-                },
-              },
-            },
-          }
-        : {}),
       revert: data.info.revert
         ? {
             ...data.info.revert,

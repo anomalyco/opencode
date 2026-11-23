@@ -307,8 +307,7 @@ export const Plugin = {
     const agents = yield* Agent.Service
     const jobs = yield* Job.Service
     const access = yield* FileAccess.Service
-    // The Location's default; a step's Session cwd, when it has one, is read per call.
-    const locationWorkingDirectory = yield* Environment.workingDirectory
+    const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
@@ -323,8 +322,7 @@ export const Plugin = {
       context: Tool.Context,
       requested: { readonly cwd: string; readonly target: FileAccess.Target },
     ) {
-      // The Session's cwd, when it has one, is the base a hook's relative move resolves against.
-      const workingDirectory = (yield* Environment.CurrentWorkingDirectory) ?? locationWorkingDirectory
+      const workingDirectory = yield* currentWorkingDirectory
       // Resolved before the hooks ran; only a hook that moved the working directory needs it resolved again. It always
       // resolves from a base, so a moved path is a plain path on the machine the command was asked for.
       const target =
@@ -447,8 +445,7 @@ export const Plugin = {
                   ),
                 )
                 return yield* Effect.gen(function* () {
-                  // The Session's cwd is where a bare command runs; an explicit workdir overrides it as written.
-                  const workingDirectory = (yield* Environment.CurrentWorkingDirectory) ?? locationWorkingDirectory
+                  const workingDirectory = yield* currentWorkingDirectory
                   // The same default `Shell.create` gives the hooks, so `prepare` can tell whether one moved it.
                   const cwd = input.workdir ?? workingDirectory.absolute
                   const target = yield* restore(

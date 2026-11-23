@@ -128,8 +128,7 @@ const layer = Layer.effect(
     const environment = yield* Environment.Service
     const exists = (file: string) => Environment.exists(environment.files, file)
     const location = yield* Location.Service
-    // The Location's default; a step's Session cwd, when it has one, is read per operation.
-    const locationWorkingDirectory = yield* Environment.workingDirectory
+    const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
     const permission = yield* Permission.Service
     const flags = yield* Flag.Service
     const machines = yield* Machines.Service
@@ -179,10 +178,6 @@ const layer = Layer.effect(
         absolute: AbsolutePath.make(rules.resolve(from.absolute, rooted)),
         environment: { id },
       } satisfies Environment.Place
-    })
-
-    const currentWorkingDirectory = Effect.gen(function* () {
-      return (yield* Environment.CurrentWorkingDirectory) ?? locationWorkingDirectory
     })
 
     const locate = Effect.fn("FileAccess.locate")(function* (text: string, base?: Environment.Place) {

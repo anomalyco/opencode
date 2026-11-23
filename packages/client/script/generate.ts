@@ -14,7 +14,6 @@ import { Automation } from "@opencode/schema/automation"
 import { Command } from "@opencode/schema/command"
 import { Config } from "@opencode/schema/config"
 import { Credential } from "@opencode/schema/credential"
-import { Environment } from "@opencode/schema/environment"
 import { Event } from "@opencode/schema/event"
 import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
@@ -116,8 +115,6 @@ const effectTypeReferences = [
   typeReference("AgentAttachment", "@opencode/schema/prompt", AgentAttachment),
   typeReference("AbsolutePath", "@opencode/schema/schema", AbsolutePath),
   typeReference("RelativePath", "@opencode/schema/schema", RelativePath),
-  typeReference("Environment.ID", "@opencode/schema/environment", Environment.ID),
-  typeReference("Environment.Place", "@opencode/schema/environment", Environment.Place),
 ]
 
 await Effect.runPromise(

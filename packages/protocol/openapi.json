@@ -1038,29 +1038,12 @@
               }
             }
           },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -1149,30 +1132,6 @@
                     "anyOf": [
                       {
                         "$ref": "#/components/schemas/Permission.Ruleset"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "experimental": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "cwd": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "description": "Working directory for the session's bare paths and commands, independent of its location, such as /work/app or gpu:/work/app. Requires the machines flag. A child session without one inherits its parent's."
-                          }
-                        },
-                        "additionalProperties": false
                       },
                       {
                         "type": "null"
@@ -1985,116 +1944,6 @@
                   }
                 },
                 "required": ["model"],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/experimental/session/{sessionID}/cwd": {
-      "post": {
-        "tags": ["session"],
-        "operationId": "experimental.session.cwd",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Session.Info"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "description": "Experimental: may change without compatibility guarantees. Set or clear a session's working directory for its bare paths and commands.",
-        "summary": "Set session working directory",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "cwd": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "Working directory for the session's bare paths and commands, such as /work/app or gpu:/work/app. Null clears it."
-                  }
-                },
-                "required": ["cwd"],
                 "additionalProperties": false
               }
             }
@@ -10419,7 +10268,6 @@
                     "session.moved",
                     "session.renamed",
                     "session.metadata.updated",
-                    "session.cwd.updated",
                     "session.permissions",
                     "session.viewed",
                     "session.archived",
@@ -10532,7 +10380,6 @@
                           "session.moved",
                           "session.renamed",
                           "session.metadata.updated",
-                          "session.cwd.updated",
                           "session.permissions",
                           "session.viewed",
                           "session.archived",
@@ -18734,29 +18581,6 @@
           }
         ]
       },
-      "Environment.ID": {
-        "type": "string"
-      },
-      "Environment.Place": {
-        "type": "object",
-        "properties": {
-          "absolute": {
-            "$ref": "#/components/schemas/AbsolutePath"
-          },
-          "environment": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "$ref": "#/components/schemas/Environment.ID"
-              }
-            },
-            "required": ["id"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["absolute", "environment"],
-        "additionalProperties": false
-      },
       "Event.ID": {
         "type": "string",
         "pattern": "^evt_"
@@ -24038,9 +23862,6 @@
             "$ref": "#/components/schemas/session.metadata.updated"
           },
           {
-            "$ref": "#/components/schemas/session.cwd.updated"
-          },
-          {
             "$ref": "#/components/schemas/session.permissions"
           },
           {
@@ -24583,15 +24404,6 @@
           },
           "subpath": {
             "$ref": "#/components/schemas/RelativePath"
-          },
-          "experimental": {
-            "type": "object",
-            "properties": {
-              "cwd": {
-                "$ref": "#/components/schemas/Environment.Place"
-              }
-            },
-            "additionalProperties": false
           },
           "metadata": {
             "$ref": "#/components/schemas/Session.Metadata"
@@ -26561,9 +26373,6 @@
           },
           {
             "$ref": "#/components/schemas/session.metadata.updated"
-          },
-          {
-            "$ref": "#/components/schemas/session.cwd.updated"
           },
           {
             "$ref": "#/components/schemas/session.permissions"
@@ -28907,9 +28716,6 @@
               "subpath": {
                 "$ref": "#/components/schemas/RelativePath"
               },
-              "cwd": {
-                "$ref": "#/components/schemas/Environment.Place"
-              },
               "parentID": {
                 "$ref": "#/components/schemas/Session.ID"
               },
@@ -28936,65 +28742,6 @@
               }
             },
             "required": ["sessionID", "projectID", "location", "slug", "version"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "created", "type", "durable", "data"],
-        "additionalProperties": false
-      },
-      "session.cwd.updated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/Event.ID"
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.cwd.updated"]
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "$ref": "#/components/schemas/Event.Seq"
-              },
-              "version": {
-                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "$ref": "#/components/schemas/Session.ID"
-              },
-              "cwd": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/Environment.Place"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": ["sessionID", "cwd"],
             "additionalProperties": false
           }
         },

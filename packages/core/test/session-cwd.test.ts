@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
-import { Effect, Fiber, Layer, Schema } from "effect"
+import { Effect, Fiber, Layer } from "effect"
 import type { ChildProcess } from "effect/process"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Agent } from "@opencode/core/agent"
@@ -29,7 +29,6 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionCwd } from "@opencode/core/session/cwd"
 import { SessionExecution } from "@opencode/core/session/execution"
-import { SessionEvent } from "@opencode/core/session/event"
 import { fromRow } from "@opencode/core/session/info"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionInstructions } from "@opencode/core/session/instructions"
@@ -85,48 +84,28 @@ const gpuCwd = { absolute: AbsolutePath.make("/work/app"), environment: { id: gp
 const otherGpuCwd = { absolute: AbsolutePath.make("/work/other"), environment: { id: gpu } }
 
 describe("Session cwd", () => {
-  state.effect("creates a session with a cwd, and reads it back from its row", () =>
+  state.effect("creates a session with a cwd and leaves Session.Info metadata clean", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const created = yield* sessions.create({ location: local, cwd: gpuCwd })
 
-      expect(created.experimental).toEqual({ cwd: gpuCwd })
-      // A separate read is a reload: the value survives because the row holds it, not the create call.
-      expect((yield* sessions.get(created.id)).experimental).toEqual({ cwd: gpuCwd })
+      expect(yield* sessions.cwd(created.id)).toEqual(gpuCwd)
+      expect(created.metadata).toBeUndefined()
+      expect((yield* sessions.get(created.id)).metadata).toBeUndefined()
     }),
   )
 
-  state.effect("omits experimental entirely when a session has no cwd", () =>
+  state.effect("sets and clears a session's cwd", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const created = yield* sessions.create({ location: local })
-
-      expect(created).not.toHaveProperty("experimental")
-      expect(yield* sessions.get(created.id)).not.toHaveProperty("experimental")
-    }),
-  )
-
-  state.effect("sets and clears a session's cwd, publishing one event each time", () =>
-    Effect.gen(function* () {
-      const sessions = yield* Session.Service
-      const bus = yield* Bus.Service
-      const created = yield* sessions.create({ location: local })
-      const events: unknown[] = []
-      yield* bus.listen((event) =>
-        Effect.sync(() => {
-          if (Schema.is(SessionEvent.CwdUpdated)(event)) events.push(event.data.cwd)
-        }),
-      )
+      expect(yield* sessions.cwd(created.id)).toBeUndefined()
 
       yield* sessions.setCwd({ sessionID: created.id, cwd: gpuCwd })
-      expect((yield* sessions.get(created.id)).experimental).toEqual({ cwd: gpuCwd })
-      // Setting the same cwd again is a no-op, not another durable fact.
-      yield* sessions.setCwd({ sessionID: created.id, cwd: gpuCwd })
-      expect(events).toEqual([gpuCwd])
+      expect(yield* sessions.cwd(created.id)).toEqual(gpuCwd)
 
       yield* sessions.setCwd({ sessionID: created.id, cwd: undefined })
-      expect((yield* sessions.get(created.id)).experimental).toBeUndefined()
-      expect(events).toEqual([gpuCwd, null])
+      expect(yield* sessions.cwd(created.id)).toBeUndefined()
     }),
   )
 
@@ -137,11 +116,11 @@ describe("Session cwd", () => {
       const inheriting = yield* sessions.create({ parentID: parent.id })
       const overriding = yield* sessions.create({ parentID: parent.id, cwd: otherGpuCwd })
 
-      expect(inheriting.experimental).toEqual({ cwd: gpuCwd })
-      expect(overriding.experimental).toEqual({ cwd: otherGpuCwd })
+      expect(yield* sessions.cwd(inheriting.id)).toEqual(gpuCwd)
+      expect(yield* sessions.cwd(overriding.id)).toEqual(otherGpuCwd)
       // Inheritance is a fact at creation; the parent does not remain a later source of truth.
       yield* sessions.setCwd({ sessionID: parent.id, cwd: undefined })
-      expect((yield* sessions.get(inheriting.id)).experimental).toEqual({ cwd: gpuCwd })
+      expect(yield* sessions.cwd(inheriting.id)).toEqual(gpuCwd)
     }),
   )
 
@@ -149,7 +128,7 @@ describe("Session cwd", () => {
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const created = yield* sessions.create({ location: local, cwd: gpuCwd, metadata: { source: "test" } })
-      expect(created.experimental).toEqual({ cwd: gpuCwd })
+      expect(yield* sessions.cwd(created.id)).toEqual(gpuCwd)
       expect(created.metadata).toEqual({ source: "test" })
 
       yield* sessions.setMetadata({
@@ -157,12 +136,12 @@ describe("Session cwd", () => {
         metadata: { source: "updated", $opencode_experimental_cwd: otherGpuCwd },
       })
       const afterMeta = yield* sessions.get(created.id)
-      expect(afterMeta.experimental).toEqual({ cwd: gpuCwd })
+      expect(yield* sessions.cwd(created.id)).toEqual(gpuCwd)
       expect(afterMeta.metadata).toEqual({ source: "updated" })
 
       yield* sessions.setCwd({ sessionID: created.id, cwd: undefined })
       const cleared = yield* sessions.get(created.id)
-      expect(cleared.experimental).toBeUndefined()
+      expect(yield* sessions.cwd(created.id)).toBeUndefined()
       expect(cleared.metadata).toEqual({ source: "updated" })
     }),
   )
@@ -331,14 +310,7 @@ const withSessionRow = (
   })
 
 /** What the runner binds to a step: the cwd's place, or nothing when the Session has none or machines are off. */
-const currentCwd = Effect.fnUntraced(function* (session: Session.Info) {
-  return yield* SessionCwd.current({
-    session,
-    flag: yield* Flag.Service,
-    environment: yield* Environment.Service,
-    machines: yield* Machines.Service,
-  })
-})
+const currentCwd = (session: Session.Info) => SessionCwd.current(session.id)
 
 const on = testEffect(Layer.succeed(Flag.Overrides, "machines"))
 const off = testEffect(Layer.succeed(Flag.Overrides, "-machines"))
@@ -484,7 +456,7 @@ off.live("ignores a session cwd with the machines flag off, leaving bare paths l
 
       expect(yield* currentCwd(session)).toBeUndefined()
       // The row still records the cwd; only its use is off.
-      expect(session.experimental).toEqual({ cwd: gpuCwd })
+      expect(yield* SessionCwd.read((yield* Database.Service).db, session.id)).toEqual(gpuCwd)
       expect((yield* executeTool(registry, call("read", { path: "local-only.txt" }))).status).toBe("error")
       expect(yield* machine.files.read("/work/app/local-only.txt").pipe(Effect.map((file) => text(file.bytes)))).toBe(
         "remote\n",
