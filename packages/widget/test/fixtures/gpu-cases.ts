@@ -351,6 +351,30 @@ export const gpuCases: ReadonlyArray<GpuCase> = [
     canvases: [{ key: "scene", width: 5120, height: 2880 }],
     inputs: [{ frame: 1, input: { type: "canvas", key: "scene", width: 9000, height: 1000 } }],
   },
+  // Numbers are read as they are: a non-finite one fails the check that reads it where null would pass.
+  {
+    name: "error-nan-rows-per-image",
+    source: program(`
+  await widget.frame()
+  const texture = device.createTexture({ size: [4, 4], format: "rgba8unorm", usage: GPUTextureUsage.COPY_DST })
+  device.queue.writeTexture({ texture }, new Uint8Array(64), { bytesPerRow: 16, rowsPerImage: NaN }, [4, 4])
+  await widget.frame()`),
+    canvases: scene,
+  },
+  {
+    name: "error-infinite-depth-clear-value",
+    source: program(`
+  await widget.frame()
+  const depth = device
+    .createTexture({ size: [200, 200], format: "depth24plus", usage: GPUTextureUsage.RENDER_ATTACHMENT })
+    .createView()
+  const encoder = device.createCommandEncoder()
+  const depthStencilAttachment = { view: depth, depthClearValue: Infinity, depthLoadOp: "clear", depthStoreOp: "store" }
+  encoder.beginRenderPass({ ...clear("scene"), depthStencilAttachment }).end()
+  device.queue.submit([encoder.finish()])
+  await widget.frame()`),
+    canvases: scene,
+  },
   // A canvas's texture is only rendered into: copied from, copied into, written or bound, it is an error naming the
   // canvas.
   {

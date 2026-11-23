@@ -15,6 +15,14 @@ const frame = (i: number) => ({ t: i / 60, dt: 1 / 60, width: 300, height: 200, 
 /** The most frames a fixture runs. */
 const FRAMES = 10
 
+// A value with every number JSON can't hold (NaN, Infinity, -Infinity) as `{ $num: "NaN" }` and so on; the rest as is.
+const tagged = (value: unknown): unknown => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : { $num: String(value) }
+  if (Array.isArray(value)) return value.map(tagged)
+  if (value === null || typeof value !== "object" || value instanceof ArrayBuffer) return value
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, tagged(item)]))
+}
+
 export interface Recorded {
   /** `bytes`: base64, or null when the program posted something other than an `ArrayBuffer`; `ops` as posted. */
   readonly batches: ReadonlyArray<{ readonly frame: boolean; readonly ops: unknown; readonly bytes: string | null }>
@@ -46,7 +54,7 @@ export async function run(item: GpuCase): Promise<Recorded> {
       if (batch)
         batches.push({
           frame: message.type === "frame",
-          ops: batch.ops,
+          ops: tagged(batch.ops),
           bytes: batch.bytes instanceof ArrayBuffer ? Buffer.from(batch.bytes).toString("base64") : null,
         })
     },
