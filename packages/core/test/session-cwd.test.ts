@@ -144,6 +144,28 @@ describe("Session cwd", () => {
       expect((yield* sessions.get(inheriting.id)).experimental).toEqual({ cwd: gpuCwd })
     }),
   )
+
+  state.effect("keeps experimental cwd isolated from caller metadata updates", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const created = yield* sessions.create({ location: local, cwd: gpuCwd, metadata: { source: "test" } })
+      expect(created.experimental).toEqual({ cwd: gpuCwd })
+      expect(created.metadata).toEqual({ source: "test" })
+
+      yield* sessions.setMetadata({
+        sessionID: created.id,
+        metadata: { source: "updated", $opencode_experimental_cwd: otherGpuCwd },
+      })
+      const afterMeta = yield* sessions.get(created.id)
+      expect(afterMeta.experimental).toEqual({ cwd: gpuCwd })
+      expect(afterMeta.metadata).toEqual({ source: "updated" })
+
+      yield* sessions.setCwd({ sessionID: created.id, cwd: undefined })
+      const cleared = yield* sessions.get(created.id)
+      expect(cleared.experimental).toBeUndefined()
+      expect(cleared.metadata).toEqual({ source: "updated" })
+    }),
+  )
 })
 
 const sessionID = Session.ID.make("ses_session_cwd_test")
@@ -289,7 +311,7 @@ const withSessionRow = (
         id: sessionID,
         project_id: Project.ID.global,
         directory,
-        cwd,
+        metadata: SessionCwd.writeStored(undefined, cwd),
         slug: "test",
         version: "test",
         agent: toolIdentity.agent,

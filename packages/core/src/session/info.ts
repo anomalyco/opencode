@@ -2,6 +2,7 @@ import { DateTime, Schema } from "effect"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { AbsolutePath, RelativePath } from "../schema.js"
+import { SessionCwd } from "./cwd.js"
 import { SessionSchema } from "./schema.js"
 import type { SessionTable } from "./sql.js"
 import { PersistedRevert } from "@opencode/schema/session-revert"
@@ -10,6 +11,7 @@ import { Money } from "@opencode/schema/money"
 const decodeRevert = Schema.decodeUnknownSync(PersistedRevert)
 
 export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
+  const stored = SessionCwd.readStored(row.metadata)
   return SessionSchema.Info.make({
     id: row.id,
     projectID: row.project_id,
@@ -45,8 +47,8 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
       workspaceID: row.workspace_id ?? undefined,
     },
     subpath: row.path ? RelativePath.make(row.path) : undefined,
-    ...(row.cwd ? { experimental: { cwd: row.cwd } } : {}),
-    metadata: row.metadata ?? undefined,
+    ...(stored.cwd ? { experimental: { cwd: stored.cwd } } : {}),
+    metadata: stored.metadata,
     permissions: row.permission ?? undefined,
     revert: row.revert ? decodeRevert(row.revert) : undefined,
     outcome: row.idle_outcome ?? undefined,

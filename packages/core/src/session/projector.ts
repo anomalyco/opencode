@@ -10,6 +10,7 @@ import { DatabaseBatch } from "../database/batch.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Model } from "@opencode/schema/model"
+import { SessionCwd } from "./cwd.js"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
@@ -171,7 +172,6 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       slug: Slug.create(),
       directory: parent.directory,
       path: parent.path,
-      cwd: parent.cwd,
       title: forkTitle(parent.title ?? undefined),
       agent: parent.agent,
       model: parent.model,
@@ -881,11 +881,10 @@ const layer = Layer.effectDiscard(
             slug: event.data.slug,
             directory: event.data.location.directory,
             path: event.data.subpath,
-            cwd: event.data.cwd,
             title: event.data.title,
             agent: event.data.agent,
             model: event.data.model,
-            metadata: event.data.metadata,
+            metadata: SessionCwd.writeStored(event.data.metadata, event.data.cwd),
             permission: event.data.permissions,
             version: event.data.version,
             time_created: event.created,
@@ -987,10 +986,33 @@ const layer = Layer.effectDiscard(
       setSession(db, event.data.sessionID, { title: event.data.title, time_updated: event.created }),
     )
     yield* bus.project(SessionEvent.MetadataUpdated, (event) =>
-      setSession(db, event.data.sessionID, { metadata: event.data.metadata, time_updated: event.created }),
+      Effect.gen(function* () {
+        const row = yield* db
+          .select({ metadata: SessionTable.metadata })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        const existing = SessionCwd.readStored(row?.metadata)
+        yield* setSession(db, event.data.sessionID, {
+          metadata: SessionCwd.writeStored(event.data.metadata, existing.cwd),
+          time_updated: event.created,
+        })
+      }),
     )
     yield* bus.project(SessionEvent.CwdUpdated, (event) =>
-      setSession(db, event.data.sessionID, { cwd: event.data.cwd, time_updated: event.created }),
+      Effect.gen(function* () {
+        const row = yield* db
+          .select({ metadata: SessionTable.metadata })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        yield* setSession(db, event.data.sessionID, {
+          metadata: SessionCwd.writeStored(row?.metadata, event.data.cwd ?? undefined),
+          time_updated: event.created,
+        })
+      }),
     )
     yield* bus.project(SessionEvent.Permissions, (event) =>
       setSession(db, event.data.sessionID, { permission: event.data.permissions, time_updated: event.created }),
