@@ -5,6 +5,7 @@ import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { processStopped } from "../service-process.js"
 
 export * from "../service.js"
 export { headers }
@@ -88,7 +89,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       }
     } else timeouts = undefined
     if (service !== undefined) {
-      pool.serviceAnswered()
+      pool.serviceAnswered(service.info.pid, service.state === "ready")
       const decision = decide(service, options)
       if (decision._tag === "fail") return yield* Effect.fail(decision.error)
       if (decision._tag === "reuse") {
@@ -168,26 +169,26 @@ const registered = Effect.fnUntraced(function* (file?: string, timeout?: number)
 const poll = (timing: EnsureTiming) =>
   Schedule.max([Schedule.spaced(timing.stopPollInterval), Schedule.recurs(timing.stopPollAttempts)])
 
-const signal = (pid: number, name: NodeJS.Signals) =>
-  Effect.try({ try: () => process.kill(pid, name), catch: (cause) => cause }).pipe(Effect.ignore)
+const signal = (pid: number, name: NodeJS.Signals, timing: EnsureTiming) =>
+  Effect.try({
+    try: () => (timing.signal ? timing.signal(pid, name) : process.kill(pid, name)),
+    catch: (cause) => cause,
+  }).pipe(Effect.ignore)
 
 const stopped = Effect.fnUntraced(function* (pid: number) {
-  const running = yield* Effect.try({ try: () => process.kill(pid, 0), catch: () => false }).pipe(
-    Effect.orElseSucceed(() => false),
-  )
-  if (!running) return true
+  if (yield* Effect.promise(() => processStopped(pid))) return true
   return yield* Effect.fail(new Error(`Server process ${pid} is still running`))
 })
 
 const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = yield* read(options.file)
   if (current === undefined || !same(current, info)) return
-  yield* signal(info.pid, "SIGTERM")
+  yield* signal(info.pid, "SIGTERM", timing)
   const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
   // The registration can disappear or change hands before this process exits. Only the PID we
   // signalled can tell us whether it has stopped, so escalate based on that process.
   if (Option.isNone(done)) {
-    yield* signal(info.pid, "SIGKILL")
+    yield* signal(info.pid, "SIGKILL", timing)
     yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
   }
   const latest = yield* read(options.file)

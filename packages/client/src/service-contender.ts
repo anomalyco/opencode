@@ -3,6 +3,8 @@ import type { EnsureTiming } from "./service-timing.js"
 
 export type ServiceContender = {
   readonly child: ChildProcess
+  readonly ready: () => boolean
+  readonly markReady: () => void
   readonly error: () => Error | undefined
   readonly closed: () => boolean
   readonly stderr: () => string
@@ -10,6 +12,9 @@ export type ServiceContender = {
 }
 
 const stderrLimit = 8 * 1024
+// Keep live handles referenced until the child exits so the runtime's process watcher still
+// reaps detached contenders after `ensure()` returns, while `unref()` lets this client exit.
+const liveContenders = new Set<ChildProcess>()
 
 export function spawnServiceContender(
   command: string,
@@ -22,8 +27,14 @@ export function spawnServiceContender(
     stdio: ["ignore", "ignore", "pipe"],
     env: { ...process.env, ...env },
   })
+  liveContenders.add(child)
+  const forget = () => {
+    liveContenders.delete(child)
+  }
   let error: Error | undefined
   let closed = false
+  let ready = false
+  const startedAt = performance.now()
   let stderr = Buffer.alloc(0)
   const onStderr = (chunk: Buffer) => {
     const tail = chunk.subarray(-stderrLimit)
@@ -35,14 +46,30 @@ export function spawnServiceContender(
   child.stderr?.on("data", onStderr)
   if (child.stderr !== null && "unref" in child.stderr && typeof child.stderr.unref === "function") child.stderr.unref()
   child.once("error", (cause) => {
+    forget()
     error = new Error("Failed to start server", { cause })
   })
+  child.once("exit", (code, signal) => {
+    forget()
+    console.warn("OpenCode background service contender exited", {
+      pid: child.pid,
+      exitCode: code,
+      signal,
+      ready,
+      uptimeMs: Math.round(performance.now() - startedAt),
+    })
+  })
   child.once("close", () => {
+    forget()
     closed = true
   })
   child.unref()
   return {
     child,
+    ready: () => ready,
+    markReady: () => {
+      ready = true
+    },
     error: () => error,
     closed: () => closed,
     stderr: () => stderr.toString("utf8").trim(),
@@ -67,7 +94,12 @@ export function contenderPool(timing: EnsureTiming) {
     /** The first startup failure seen since the last eviction. */
     failure: () => failure,
     /** A registered service answered, so the next attempt waits the base delay again. */
-    serviceAnswered() {
+    serviceAnswered(pid: number, ready: boolean) {
+      if (ready) {
+        for (const contender of contenders) {
+          if (contender.child.pid === pid) contender.markReady()
+        }
+      }
       spawnDelay = timing.spawnDelay
     },
     /**

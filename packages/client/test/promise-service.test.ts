@@ -8,6 +8,7 @@ import {
   stoppedExitCode,
 } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
+import { withEnsureTiming } from "../src/service-timing"
 
 const ensure = accelerate(Service.ensure)
 const stop = accelerate(Service.stop)
@@ -300,7 +301,6 @@ test("stop escalates when the registration disappears before the process exits",
   await stop({ file: registration })
 
   expect(await fixture.signal()).toBe(stopSignal)
-  expect(() => process.kill(original.pid, 0)).toThrow()
   await expectNotListening(original.url)
   expect(await Bun.file(registration).exists()).toBe(false)
   await existing.exited
@@ -311,12 +311,48 @@ test.skipIf(process.platform === "win32")(
   async () => {
     await using fixture = await serviceFixture()
     const registration = fixture.registration
+    const existing = fixture.spawn("lingering", "60000")
+    await fixture.waitForFile()
+    const original = await Bun.file(registration).json()
+
+    try {
+      await expect(
+        Service.stop(
+          withEnsureTiming(
+            { file: registration },
+            {
+              stopPollInterval: 5,
+              stopPollAttempts: 20,
+              signal: (pid, name) => {
+                if (name !== "SIGKILL") process.kill(pid, name)
+              },
+            },
+          ),
+        ),
+      ).rejects.toThrow(`Server process ${original.pid} is still running`)
+      expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+    } finally {
+      existing.kill("SIGKILL")
+      await existing.exited
+    }
+  },
+  15_000,
+)
+
+test.skipIf(process.platform === "win32")(
+  "stop treats an unreaped zombie service process as stopped",
+  async () => {
+    await using fixture = await serviceFixture()
+    const registration = fixture.registration
     fixture.spawnUnreaped("lingering", "60000")
     await fixture.waitForFile()
     const original = await Bun.file(registration).json()
 
-    await expect(stop({ file: registration })).rejects.toThrow(`Server process ${original.pid} is still running`)
-    expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+    await stop({ file: registration })
+
+    expect(() => process.kill(original.pid, 0)).not.toThrow()
+    await expectNotListening(original.url)
+    expect(await Bun.file(registration).exists()).toBe(false)
   },
   15_000,
 )
@@ -343,7 +379,6 @@ test.skipIf(!catchesSigterm)(
 
       await stopping
 
-      expect(() => process.kill(original.pid, 0)).toThrow()
       await expectNotListening(original.url)
       expect(await Bun.file(registration).json()).toEqual(replacement)
       expect(await fetch(new URL("/api/info", replacement.url)).then((response) => response.json())).toMatchObject({
