@@ -1,5 +1,5 @@
 import { blob, sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { sql } from "drizzle-orm"
+import { desc, sql } from "drizzle-orm"
 import { directoryColumn, pathColumn } from "../database/path.js"
 import { ProjectTable } from "../project/sql.js"
 import type { SessionMessage } from "./message.js"
@@ -77,6 +77,9 @@ export const SessionTable = sqliteTable(
     index("session_v2_project_idx").on(table.project_id),
     index("session_v2_workspace_idx").on(table.workspace_id),
     index("session_v2_parent_idx").on(table.parent_id),
+    index("session_v2_root_project_path_updated_idx")
+      .on(table.project_id, table.path, desc(table.time_updated), desc(table.id))
+      .where(sql`${table.parent_id} is null and ${table.time_archived} is null`),
     index("session_v2_time_suspended_idx")
       .on(table.time_suspended)
       .where(sql`${table.time_suspended} is not null`),

@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "6fdb1fc8-74cd-4f15-8faa-e109d3030da9",
-  "prevIds": ["74cace2e-430e-4672-bf3b-eba14ae0c399"],
+  "id": "34e965e7-3f4b-417b-a299-12bff5987cad",
+  "prevIds": ["6fdb1fc8-74cd-4f15-8faa-e109d3030da9"],
   "ddl": [
     {
       "name": "account_state",
@@ -2741,6 +2741,32 @@
       "where": null,
       "origin": "manual",
       "name": "session_v2_parent_idx",
+      "entityType": "indexes",
+      "table": "session_v2"
+    },
+    {
+      "columns": [
+        {
+          "value": "project_id",
+          "isExpression": false
+        },
+        {
+          "value": "path",
+          "isExpression": false
+        },
+        {
+          "value": "\"time_updated\" desc",
+          "isExpression": true
+        },
+        {
+          "value": "\"id\" desc",
+          "isExpression": true
+        }
+      ],
+      "isUnique": false,
+      "where": "\"session_v2\".\"parent_id\" is null and \"session_v2\".\"time_archived\" is null",
+      "origin": "manual",
+      "name": "session_v2_root_project_path_updated_idx",
       "entityType": "indexes",
       "table": "session_v2"
     },
