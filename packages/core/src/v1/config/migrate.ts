@@ -30,6 +30,8 @@ export function normalizeAction(action: string) {
   if (action === "write" || action === "patch" || action === "apply_patch") return "edit"
   if (action === "task") return "subagent"
   if (action === "bash") return "shell"
+  if (action === "experimental_image_generate") return "image_generate"
+  if (action === "experimental_video_generate") return "video_generate"
   return action
 }
 

@@ -151,7 +151,7 @@ const until = (expected: boolean) =>
 
 const kinds = (assets: ReadonlyArray<Media.Asset> | undefined) => assets?.map((asset) => asset.mediaType)
 
-describe("experimental_video_generate", () => {
+describe("video_generate", () => {
   it.live("is on by default while a video model is available, and off with experimental.video_generate: false", () =>
     Effect.gen(function* () {
       yield* setup()
@@ -214,7 +214,7 @@ describe("experimental_video_generate", () => {
         },
       ])
       expect(fixture.assertions.map((item) => [item.action, item.resources])).toEqual([
-        ["experimental_video_generate", ["test/director"]],
+        ["video_generate", ["test/director"]],
         ["edit", ["kite.mp4"]],
         ["read", ["first.png"]],
         ["webfetch", ["https://example.test/last.png"]],

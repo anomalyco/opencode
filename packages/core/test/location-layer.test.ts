@@ -543,7 +543,7 @@ describe("LocationServiceMap", () => {
           expect(blockedState.providers.some((provider) => provider.id === blockedID)).toBe(true)
           expect(blockedState.providers.some((provider) => provider.id === allowedID)).toBe(false)
           // Code Mode and media generation depend on the bundled catalog (usable image and video models), not the location.
-          const media = ["experimental_image_generate", "experimental_video_generate"]
+          const media = ["image_generate", "video_generate"]
           const builtIn = (name: string) => name !== "execute" && !media.includes(name)
           const blockedTools = blockedState.tools.map((tool) => tool.name)
           expect(blockedTools.filter(builtIn).sort()).toEqual([
