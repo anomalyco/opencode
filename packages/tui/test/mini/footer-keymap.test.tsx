@@ -124,13 +124,13 @@ test("ctrl+g toggles the agent activity panel", async () => {
     // Press the configured toggle key.
     app.mockInput.pressKey("g", { ctrl: true })
     await app.renderOnce()
-    // Expanded: the status line is replaced by the activity panel, which
-    // renders the running subagent's label and active tool.
+    // Expanded: activity rows appear above the status line (which now shows "hide" instead of "agents").
+    // The running subagent's label and active tool are visible in the new rows.
     const expandedFrame = app.captureCharFrame()
     expect(expandedFrame).toContain("Explore")
     expect(expandedFrame).toContain("read")
     expect(expandedFrame).not.toContain("agents")
-    // Press again to collapse back to the status line.
+    // Press again to collapse the activity panel.
     app.mockInput.pressKey("g", { ctrl: true })
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("agents")

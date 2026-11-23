@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { descendantActivityModel, descendantActivityStatus, footerActivityStatus, activeToolSummaries } from "./session-data"
+import { descendantActivityModel, descendantActivityStatus, footerActivityStatus, activeToolSummaries } from "../../src/mini/session-data"
 
 describe("descendantActivityStatus", () => {
   it("shows running child", () => {
@@ -123,8 +123,8 @@ describe("footerActivityStatus", () => {
 
 describe("activeToolSummaries", () => {
   const makeTab = (
-    overrides: Partial<import("./types").FooterSubagentTab>,
-  ): import("./types").FooterSubagentTab => ({
+    overrides: Partial<import("../../src/mini/types").FooterSubagentTab>,
+  ): import("../../src/mini/types").FooterSubagentTab => ({
     sessionID: "ses_test",
     label: "developer",
     description: "",
@@ -141,7 +141,7 @@ describe("activeToolSummaries", () => {
   })
 
   it("excludes running tab without activeTool", () => {
-    const tabs: import("./types").FooterSubagentTab[] = [
+    const tabs: import("../../src/mini/types").FooterSubagentTab[] = [
       { sessionID: "s1", label: "agent-1", description: "", status: "running" },
     ]
     const result = activeToolSummaries(tabs, 1000)

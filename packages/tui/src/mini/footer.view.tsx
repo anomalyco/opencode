@@ -364,8 +364,13 @@ export function RunFooterView(props: RunFooterViewProps) {
   const [promptRows, setPromptRows] = createSignal(1)
   const [expanded, setExpanded] = createSignal(false)
   const [now, setNow] = createSignal(Date.now())
-  const ticker = setInterval(() => setNow(Date.now()), 1000)
-  onCleanup(() => clearInterval(ticker))
+  // Ticker runs only while the panel is open to avoid a 1 Hz tick during idle sessions.
+  createEffect(() => {
+    if (!expanded()) return
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(id))
+  })
   const toolSummaries = createMemo(() =>
     expanded() ? activeToolSummaries(tabs(), now()) : [],
   )
@@ -613,13 +618,18 @@ export function RunFooterView(props: RunFooterViewProps) {
         id: "session.child.activity",
         title: "Toggle agent activity panel",
         group: "Session",
-        run: () => void setExpanded((v) => !v),
+        run: () => {
+          // Don't expand when no agent is currently running a tool; between tool calls the panel would be blank.
+          if (!expanded() && activeToolSummaries(activeTabs(), Date.now()).length === 0) return
+          setExpanded((v) => !v)
+        },
       },
     ],
   }))
 
   createEffect(() => {
-    if (activeTabs().length === 0) setExpanded(false)
+    // Collapse when all agents finish, or when the expanded panel would be empty (agent between tool calls).
+    if (activeTabs().length === 0 || (expanded() && toolSummaries().length === 0)) setExpanded(false)
   })
 
   Keymap.createLayer(() => ({
@@ -991,48 +1001,8 @@ export function RunFooterView(props: RunFooterViewProps) {
             </Show>
 
             <Show when={!panel() && !menu()}>
-              <Show
-                when={expanded() && activeTabs().length > 0}
-                fallback={
-                  <box
-                    id="mini-statusline"
-                    width="100%"
-                    flexDirection="row"
-                    gap={1}
-                    flexShrink={0}
-                    backgroundColor="transparent"
-                  >
-                    <Show when={busy()}>
-                      <box id="mini-work-spinner" width={1} flexShrink={0}>
-                        <OneCellSpinner
-                          animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
-                          color={agentColor()}
-                          animations={props.tuiConfig.animations}
-                          glow={!props.mono}
-                          still={props.mono ? "*" : undefined}
-                          age={performance.now() - (started() ?? performance.now())}
-                        />
-                      </box>
-                    </Show>
-                    <Show when={statusSections().length > 0}>
-                      <text fg={statusColor()} wrapMode="word" width={statusWidth()} flexShrink={0} height={statusRows()}>
-                        <For each={statusSections()}>
-                          {(section, index) => (
-                            <>
-                              <Show when={index() > 0}>
-                                <span style={{ fg: theme().muted }}>{props.mono ? " - " : " · "}</span>
-                              </Show>
-                              <For each={section.parts}>
-                                {(part) => <span style={{ fg: statusColors()[part.tone] }}>{part.text}</span>}
-                              </For>
-                            </>
-                          )}
-                        </For>
-                      </text>
-                    </Show>
-                  </box>
-                }
-              >
+              {/* Activity rows appear above the status line so the status line (spinner, model, hints) is always visible. */}
+              <Show when={expanded() && toolSummaries().length > 0}>
                 <box
                   id="mini-agent-activity"
                   width="100%"
@@ -1070,6 +1040,43 @@ export function RunFooterView(props: RunFooterViewProps) {
                   </For>
                 </box>
               </Show>
+              <box
+                id="mini-statusline"
+                width="100%"
+                flexDirection="row"
+                gap={1}
+                flexShrink={0}
+                backgroundColor="transparent"
+              >
+                <Show when={busy()}>
+                  <box id="mini-work-spinner" width={1} flexShrink={0}>
+                    <OneCellSpinner
+                      animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
+                      color={agentColor()}
+                      animations={props.tuiConfig.animations}
+                      glow={!props.mono}
+                      still={props.mono ? "*" : undefined}
+                      age={performance.now() - (started() ?? performance.now())}
+                    />
+                  </box>
+                </Show>
+                <Show when={statusSections().length > 0}>
+                  <text fg={statusColor()} wrapMode="word" width={statusWidth()} flexShrink={0} height={statusRows()}>
+                    <For each={statusSections()}>
+                      {(section, index) => (
+                        <>
+                          <Show when={index() > 0}>
+                            <span style={{ fg: theme().muted }}>{props.mono ? " - " : " · "}</span>
+                          </Show>
+                          <For each={section.parts}>
+                            {(part) => <span style={{ fg: statusColors()[part.tone] }}>{part.text}</span>}
+                          </For>
+                        </>
+                      )}
+                    </For>
+                  </text>
+                </Show>
+              </box>
             </Show>
           </box>
         }
