@@ -121,10 +121,9 @@ describe("OpenAI freeform tools with an options line", () => {
       properties: { code: { type: "string" }, ...properties },
       required,
     })
-    // An optional parameter without a grammar, a second required one, no optional ones, or a missing field.
-    expect(
-      OpenAIFreeform.resolve(tool({ inputSchema: schema({ env: { type: "object" } }), freeform: format })),
-    ).toBeUndefined()
+    // An optional parameter without an exact-replay grammar, a second required one, no optional ones, or a missing field.
+    for (const type of ["object", "number"])
+      expect(OpenAIFreeform.resolve(tool({ inputSchema: schema({ env: { type } }), freeform: format }))).toBeUndefined()
     expect(
       OpenAIFreeform.resolve(
         tool({ inputSchema: schema({ background: { type: "boolean" } }, ["code", "background"]), freeform: format }),

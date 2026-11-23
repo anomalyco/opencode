@@ -78,11 +78,11 @@ const optionsGrammar = (
     ...(body === undefined ? ["body: /[\\s\\S]+/", `plain: /${notStartingWith(prefix)}/`] : [body]),
   ].join("\n")
 
+// Only forms `JSON.stringify` writes back unchanged, so replay is exact; `number` would allow `1.0` or `1e2`.
 const valueRule = (schema: JsonSchema): string | undefined => {
   if (Array.isArray(schema.enum)) return `(${schema.enum.map((item) => larkString(encodeJson(item))).join(" | ")})`
   if (schema.type === "boolean") return '("true" | "false")'
   if (schema.type === "string") return '/"(?:[^"\\\\\\x00-\\x1f]|\\\\["\\\\bfnrt])*"/'
-  if (schema.type === "number") return "/-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/"
   if (schema.type !== "integer") return undefined
   const minimum =
     typeof schema.minimum === "number"
@@ -90,7 +90,7 @@ const valueRule = (schema: JsonSchema): string | undefined => {
       : typeof schema.exclusiveMinimum === "number"
         ? schema.exclusiveMinimum + 1
         : undefined
-  if (minimum === undefined || minimum < 0) return "/-?(?:0|[1-9][0-9]*)/"
+  if (minimum === undefined || minimum < 0) return "/0|-?[1-9][0-9]*/"
   return minimum >= 1 ? "/[1-9][0-9]*/" : "/0|[1-9][0-9]*/"
 }
 
