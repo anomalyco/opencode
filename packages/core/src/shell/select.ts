@@ -3,10 +3,11 @@ export * as ShellSelect from "./select.js"
 import path from "path"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
-import { Context, Effect, Layer, PubSub, Schema, Stream } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
+import { Bus } from "../bus.js"
 import { State } from "../state.js"
 import { isAppExecutionAlias, which } from "../util/which.js"
 
@@ -47,12 +48,15 @@ export type ResolveInput = {
 
 export interface Interface extends State.Transformable<Editor> {
   readonly resolve: (input: ResolveInput) => Effect.Effect<string>
-  /** Emits after the configured shell changes, so whatever names the shell can refresh. */
-  readonly changes: Stream.Stream<void>
   readonly list?: () => Effect.Effect<Item[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ShellSelect") {}
+
+export const Event = {
+  /** The configured shell changed, so whatever names the shell can refresh. */
+  Updated: Bus.ephemeral({ type: "shell-select.updated", schema: {} }),
+}
 
 function stat(file: string) {
   return statSync(file, { throwIfNoEntry: false }) ?? undefined
@@ -207,13 +211,13 @@ const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       const global = yield* Global.Service
-      const changed = yield* PubSub.sliding<void>(1)
+      const bus = yield* Bus.Service
       const state = State.create<Data, Editor>({
         name: "shell-select",
         initial: () => ({}),
         notify: State.changes(
           (data) => data.shell ?? null,
-          () => PubSub.publish(changed, undefined).pipe(Effect.asVoid),
+          () => bus.publish(Event.Updated, {}).pipe(Effect.asVoid),
         ),
         editor: (editor) => ({
           configure: (shell) => {
@@ -226,13 +230,12 @@ const layer = (options?: Options) =>
         reload: state.reload,
         resolve: (input) => Effect.sync(() => resolve(input, state.get().shell, options, global.bin)),
         list: () => Effect.promise(() => list(options, global.bin)),
-        changes: Stream.fromPubSub(changed),
       })
     }),
   )
 
 export function configured(options?: Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [Global.node] })
+  return makeLocationNode({ service: Service, layer: layer(options), deps: [Global.node, Bus.node] })
 }
 
 export const node = configured()

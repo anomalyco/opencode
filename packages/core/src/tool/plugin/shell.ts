@@ -7,6 +7,7 @@ import type { Shell as ShellSchema } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
 import { Clock, Deferred, Effect, Fiber, Option, Schema, Stream, Struct } from "effect"
 import { Agent } from "../../agent.js"
+import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
@@ -400,7 +401,8 @@ export const Plugin = {
     })
 
     // The descriptions name the selected shell, so they're rebuilt whenever it changes.
-    yield* shellSelect.changes.pipe(
+    const bus = yield* Bus.Service
+    yield* bus.subscribe(ShellSelect.Event.Updated).pipe(
       Stream.runForEach(() => ctx.tool.reload()),
       Effect.forkScoped({ startImmediately: true }),
     )
