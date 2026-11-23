@@ -4051,6 +4051,20 @@
             },
             "required": false,
             "description": "Set to true to resume pending steering input and next-in-line control items after interrupting."
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["user", "superseded", "inactivity"]
+                }
+              ],
+              "description": "Why the execution is being interrupted. Defaults to \"user\" when omitted. Only \"user\" lets tools awaiting cancellation stop and settle their own call; any other reason interrupts them at once."
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -4097,32 +4111,7 @@
           }
         },
         "description": "Stop the session's agent if it is running in this server process; interrupted=false means nothing was running. With resume=true it continues with pending steer items, compaction and moves, while queued messages keep waiting.",
-        "summary": "Interrupt session execution",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "reason": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "enum": ["user", "superseded", "inactivity"]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "Why the execution is being interrupted. Defaults to \"user\" when omitted. Only \"user\" lets tools awaiting cancellation stop and settle their own call; any other reason interrupts them at once."
-                  }
-                },
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": false
-        }
+        "summary": "Interrupt session execution"
       }
     },
     "/api/session/{sessionID}/background": {

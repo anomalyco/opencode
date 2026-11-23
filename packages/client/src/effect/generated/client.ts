@@ -714,8 +714,7 @@ const EndpointSessionInterrupt = (raw: RawClient["server.session"]) => (input: S
   preserveEffect<SessionInterruptOutput>()(
     raw["session.interrupt"]({
       params: { sessionID: input["sessionID"] },
-      query: { resume: input["resume"] },
-      payload: { reason: input["reason"] },
+      query: { resume: input["resume"], reason: input["reason"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 

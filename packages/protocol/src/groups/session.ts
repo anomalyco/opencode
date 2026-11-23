@@ -757,20 +757,15 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             description:
               "Set to true to resume pending steering input and next-in-line control items after interrupting.",
           }),
-        },
-        // The body itself is optional: callers that sent no body before this endpoint
-        // gained a reason must still get 200. Effect's JSON codec cannot decode an absent
-        // body against a declared payload, so the server's interrupt-body middleware
-        // supplies "{}" for an empty body before decoding (see middleware/interrupt-body.ts).
-        // "shutdown" is deliberately absent: it is only ever published when the process
-        // owner interrupts the execution fiber on teardown, never supplied by a caller
-        // (see SessionExecution.terminal).
-        payload: Schema.Struct({
+          // "shutdown" is deliberately absent: it is only ever published when the process
+          // owner interrupts the execution fiber on teardown, never supplied by a caller
+          // (see SessionExecution.terminal). The reason lives in the query string next to
+          // resume: no body is decoded, so a body-less POST needs no middleware.
           reason: Schema.Literals(["user", "superseded", "inactivity"]).pipe(Schema.optional).annotate({
             description:
               'Why the execution is being interrupted. Defaults to "user" when omitted. Only "user" lets tools awaiting cancellation stop and settle their own call; any other reason interrupts them at once.',
           }),
-        }),
+        },
         success: Schema.Struct({
           interrupted: Schema.Boolean.annotate({
             description: "Whether an active execution owned by this OpenCode process was interrupted.",
@@ -783,13 +778,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           summary: "Interrupt session execution",
           description:
             "Stop the session's agent if it is running in this server process; interrupted=false means nothing was running. With resume=true it continues with pending steer items, compaction and moves, while queued messages keep waiting.",
-          // Effect's OpenAPI generator marks every declared payload required, but this
-          // payload is optional: a body-less POST is the pre-reason call shape.
-          transform: (operation) => ({
-            ...operation,
-            requestBody:
-              operation.requestBody === undefined ? undefined : { ...operation.requestBody, required: false },
-          }),
         }),
       ),
     )
