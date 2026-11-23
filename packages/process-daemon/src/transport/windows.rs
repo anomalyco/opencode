@@ -29,7 +29,7 @@ use windows_sys::Win32::System::Pipes::{
     WaitNamedPipeW,
 };
 use windows_sys::Win32::System::Threading::{
-    CreateEventW, INFINITE, SetEvent, WaitForMultipleObjects, WaitForSingleObject,
+    CreateEventW, INFINITE, ResetEvent, SetEvent, WaitForMultipleObjects, WaitForSingleObject,
 };
 
 pub(crate) mod security;
@@ -39,8 +39,6 @@ use security::PrivateSecurity;
 const BUFFER_BYTES: u32 = 64 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const COMPLETION_TIMEOUT: Duration = Duration::from_secs(2);
-/// Interim idle poll until `wait` blocks on the pending connect and a stop event.
-const POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 pub(crate) struct Listener {
     endpoint: Vec<u16>,
@@ -86,10 +84,25 @@ impl Listener {
         self.pending.operation.pipe.cancel();
     }
 
-    /// Windows keeps a 25 ms poll for now; the caller then polls `accept`.
-    pub fn wait(&self, _wake: &Wake, listen: bool, timeout: Duration) -> io::Result<Readiness> {
-        thread::sleep(timeout.min(POLL_INTERVAL));
-        // `timed_out` stays false: Windows cannot tell, and the missed-wake detector must stay off.
+    /// Sleeps until a client connects (the pending `ConnectNamedPipe`'s event), a wake, or
+    /// `timeout`; the caller then polls `accept`. It slept 25 ms instead, and the server makes
+    /// two connections per keystroke, so every echo in a terminal waited up to 50 ms for it.
+    pub fn wait(&self, wake: &Wake, listen: bool, timeout: Duration) -> io::Result<Readiness> {
+        let listening = listen && !self.stopped;
+        if listening && self.pending.connected {
+            return Ok(Readiness {
+                connection: true,
+                timed_out: false,
+            });
+        }
+        let mut handles = vec![wake.event.as_raw_handle()];
+        if listening {
+            handles.push(self.pending.operation.event.as_raw_handle());
+        }
+        let milliseconds = timeout.as_millis().min(u128::from(INFINITE - 1)) as u32;
+        // SAFETY: both events are owned by live objects for the whole call.
+        unsafe { WaitForMultipleObjects(handles.len() as u32, handles.as_ptr(), 0, milliseconds) };
+        // `timed_out` stays false: the missed-wake detector stays off, as before.
         Ok(Readiness {
             connection: listen,
             timed_out: false,
@@ -105,18 +118,31 @@ pub(crate) struct Readiness {
     pub timed_out: bool,
 }
 
-/// Windows keeps a 25 ms poll for now, so notify is a no-op.
-pub(crate) struct Wake;
+/// The accept loop's wake: a manual-reset event `Listener::wait` sleeps on beside the pending
+/// connection.
+pub(crate) struct Wake {
+    event: OwnedHandle,
+}
 
 impl Wake {
     pub fn new() -> io::Result<Self> {
-        Ok(Self)
+        Ok(Self { event: event()? })
     }
 
-    pub fn notify(&self) {}
+    pub fn notify(&self) {
+        // SAFETY: the event is owned by self; signalling it is idempotent.
+        unsafe { SetEvent(self.event.as_raw_handle()) };
+    }
 
+    /// Whether a wake was pending, clearing it.
     pub fn drain(&self) -> bool {
-        false
+        // SAFETY: the event is owned by self; a zero timeout only queries it.
+        let set = unsafe { WaitForSingleObject(self.event.as_raw_handle(), 0) } == WAIT_OBJECT_0;
+        if set {
+            // SAFETY: as above.
+            unsafe { ResetEvent(self.event.as_raw_handle()) };
+        }
+        set
     }
 }
 
@@ -616,6 +642,47 @@ mod tests {
         }
     }
 
+    #[test]
+    fn wake_drain_reports_and_clears_a_notify() {
+        let wake = Wake::new().unwrap();
+        assert!(!wake.drain());
+        for _ in 0..1_000 {
+            wake.notify();
+        }
+        assert!(wake.drain());
+        assert!(!wake.drain());
+    }
+
+    #[test]
+    fn listener_wait_ends_on_a_wake_or_a_connection_not_a_poll() {
+        let endpoint = endpoint();
+        let mut listener = Listener::bind(&endpoint).unwrap();
+        let wake = Wake::new().unwrap();
+
+        // Nothing to report: it sleeps the whole timeout (it used to return after 25 ms).
+        let started = Instant::now();
+        listener
+            .wait(&wake, true, Duration::from_millis(200))
+            .unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(150));
+
+        wake.notify();
+        let started = Instant::now();
+        listener.wait(&wake, true, Duration::from_secs(5)).unwrap();
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(wake.drain());
+
+        let started = Instant::now();
+        let connector = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(100));
+            Connection::connect(&endpoint).unwrap()
+        });
+        let ready = listener.wait(&wake, true, Duration::from_secs(5)).unwrap();
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(ready.connection);
+        let _client = connector.join().unwrap();
+        assert!(listener.accept().unwrap().is_some());
+    }
     #[test]
     fn multiple_byte_stream_connections_and_namespace_ownership() {
         let endpoint = endpoint();

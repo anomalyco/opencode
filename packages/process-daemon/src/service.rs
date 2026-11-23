@@ -1684,7 +1684,14 @@ fn receive_actor_message(
     else {
         return Ok(message);
     };
-    let deadline = Instant::now() + OUTPUT_BATCH_DELAY;
+    // A deadline sleeps at least one timer tick on Windows (15.6 ms), which every echo waited for
+    // this 1 ms batch, so there the batch takes only what is already queued.
+    let deadline = Instant::now()
+        + if cfg!(windows) {
+            Duration::ZERO
+        } else {
+            OUTPUT_BATCH_DELAY
+        };
     while bytes.len() < OUTPUT_BATCH_BYTES {
         match messages.recv_deadline(deadline) {
             Ok(ActorMessage::Output {
