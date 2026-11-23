@@ -53,6 +53,11 @@
     {
       "frame": true,
       "bytes": "",
+      "ops": []
+    },
+    {
+      "frame": true,
+      "bytes": "",
       "ops": [
         ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
         ["end"],

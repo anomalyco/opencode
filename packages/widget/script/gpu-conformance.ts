@@ -34,8 +34,14 @@ export async function run(item: GpuCase): Promise<Recorded> {
     // GPU programs, not budgets: no 50 ms slice.
     busyMs: 600_000,
     gpu: { format: GPU.format },
+    // Every batch, and every frame request (one without a batch has no ops and no bytes): a frame ends there.
     onMessage: (message) => {
-      const batch = message.type === "frame" ? message.gpu : message.type === "gpu" ? message : undefined
+      const batch =
+        message.type === "frame"
+          ? (message.gpu ?? { ops: [], bytes: new ArrayBuffer(0) })
+          : message.type === "gpu"
+            ? message
+            : undefined
       if (batch)
         batches.push({
           frame: message.type === "frame",
@@ -81,12 +87,11 @@ function format(file: Record<string, unknown>) {
   const { batches, ...rest } = file as { batches?: Recorded["batches"] }
   const head = JSON.stringify(rest, null, 2).slice(0, -2)
   if (!batches) return head + "\n}\n"
-  const body = batches.map(
-    (batch) =>
-      `    {\n      "frame": ${batch.frame},\n      "bytes": ${JSON.stringify(batch.bytes)},\n      "ops": [\n` +
-      (batch.ops as ReadonlyArray<unknown>).map((op) => `        ${JSON.stringify(op)}`).join(",\n") +
-      `\n      ]\n    }`,
-  )
+  const body = batches.map((batch) => {
+    const ops = batch.ops as ReadonlyArray<unknown>
+    const list = ops.length === 0 ? "[]" : `[\n${ops.map((op) => `        ${JSON.stringify(op)}`).join(",\n")}\n      ]`
+    return `    {\n      "frame": ${batch.frame},\n      "bytes": ${JSON.stringify(batch.bytes)},\n      "ops": ${list}\n    }`
+  })
   return `${head},\n  "batches": [\n${body.join(",\n")}\n  ]\n}\n`
 }
 
