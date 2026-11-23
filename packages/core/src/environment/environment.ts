@@ -7,6 +7,7 @@ import type { Driver } from "./driver.js"
 import type { Files } from "./files.js"
 import { makeFiles } from "./exec-defaults.js"
 import { makeLocalDriver } from "./local.js"
+import { EnvironmentUnavailable } from "./unavailable.js"
 import { Location } from "../location.js"
 import { AbsolutePath } from "../schema.js"
 import { Workspace } from "../workspace.js"
@@ -58,7 +59,12 @@ export const make = (id: ID, driver: Driver, facts?: Facts): Interface => ({
 
 /** The computer the server runs on. */
 export const local = (spawner: ChildProcessSpawner["Service"]) =>
-  make(localID, makeLocalDriver(spawner), { hostsServer: true, searchable: true })
+  make(
+    localID,
+    makeLocalDriver(spawner),
+    // Runtimes without local process execution (such as workerd) cannot host local commands or search.
+    spawner === EnvironmentUnavailable.spawner ? {} : { hostsServer: true, searchable: true },
+  )
 
 /**
  * A session's own working directory, bound to its environment, provided by the runner around a step.
