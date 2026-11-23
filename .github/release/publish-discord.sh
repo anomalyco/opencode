@@ -6,7 +6,8 @@
 tag="v$OPENCODE_VERSION"
 payload=$(jq -n --arg tag "$tag" --arg notes "${OPENCODE_RELEASE_NOTES:-}" \
   --arg url "https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag" '
-  ($notes | if length > 4000 then .[:4000] + "\n\n[Full release notes](\($url))" else . end) as $description |
+  ($notes | gsub("(?m)^#{4,6}[ \\t]+(?<heading>[^\\r\\n]+)"; "**\(.heading)**") |
+    if length > 4000 then .[:4000] + "\n\n[Full release notes](\($url))" else . end) as $description |
   {
     allowed_mentions: {parse: []},
     embeds: [{title: "OpenCode V2 \($tag)", url: $url, description: $description, color: 2829099}]

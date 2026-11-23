@@ -5,7 +5,7 @@ import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import { ForbiddenError, LocationNotFoundError, McpServerNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
-import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER } from "./pty.js"
+import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "./pty.js"
 
 export const MCP_CLIENT_PATH = "/api/experimental/client-mcp"
 
@@ -15,7 +15,9 @@ export function hasMcpClientTicketURL(url: URL) {
 
 const McpClientQuery = Schema.Struct({
   ...LocationQuery.fields,
-  name: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]+$/)),
+  name: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]+$/)).annotateKey({
+    description: "Name of the MCP server the client hosts.",
+  }),
 })
 
 export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, LocationService>(
@@ -119,7 +121,11 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     .add(
       HttpApiEndpoint.post("mcp.clientToken", `${MCP_CLIENT_PATH}/token`, {
         query: McpClientQuery,
-        headers: Schema.Struct({ [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String) }),
+        headers: Schema.Struct({
+          [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String).annotateKey({
+            description: `Must be ${PTY_CONNECT_TOKEN_HEADER_VALUE}; requests without it are refused.`,
+          }),
+        }),
         success: Location.response(PtyTicket.ConnectToken),
         error: ForbiddenError,
       })
@@ -137,7 +143,13 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
     .middleware(locationMiddleware)
     .add(
       HttpApiEndpoint.get("mcp.client", MCP_CLIENT_PATH, {
-        query: Schema.Struct({ ...McpClientQuery.fields, [PTY_CONNECT_TICKET_QUERY]: Schema.optional(Schema.String) }),
+        query: Schema.Struct({
+          ...McpClientQuery.fields,
+          [PTY_CONNECT_TICKET_QUERY]: Schema.optional(Schema.String).annotateKey({
+            description:
+              "Single-use ticket from experimental.mcp.client.token, which authorizes the connection without the usual credentials.",
+          }),
+        }),
         success: Schema.Boolean,
         error: [ForbiddenError, LocationNotFoundError],
       })

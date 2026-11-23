@@ -14,7 +14,12 @@ const Endpoint = Schema.String.check(
     if (!URL.canParse(value)) return "a loopback WebSocket endpoint with an explicit port"
     const endpoint = new URL(value)
     const port = Number(endpoint.port)
-    return endpoint.protocol === "ws:" && endpoint.hostname === "127.0.0.1" && Number.isInteger(port) && port >= 1
+    // An explicit 0 asks the endpoint for a port of its own; a URL with no port has none to ask about.
+    return endpoint.protocol === "ws:" &&
+      endpoint.hostname === "127.0.0.1" &&
+      endpoint.port !== "" &&
+      Number.isInteger(port) &&
+      port >= 0
       ? undefined
       : "a loopback WebSocket endpoint with an explicit port"
   }),

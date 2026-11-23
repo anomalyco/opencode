@@ -7,7 +7,7 @@ use opencode_store::MessageKey;
 use opencode_ui::locale::{duration, titlecase};
 
 use super::errors::StepError;
-use super::list::Context;
+use super::list::{Context, Switch};
 
 use crate::prelude::*;
 
@@ -80,7 +80,7 @@ struct UsageInner {
     summary: Text,
     table: View,
     steps: RefCell<Vec<Step>>,
-    expanded: Cell<bool>,
+    expanded: Switch,
     hover: Cell<bool>,
     verbose: Cell<bool>,
 }
@@ -121,12 +121,12 @@ impl TurnUsage {
             summary,
             table,
             steps: RefCell::default(),
-            expanded: Cell::new(false),
+            expanded: cx.toggles.switch(),
             hover: Cell::new(false),
             verbose: Cell::new(false),
         });
         header.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, _, _| {
-            inner.expanded.set(!inner.expanded.get());
+            inner.expanded.flip();
             inner.render();
         }));
         header.on_hover(bind!(inner, |inner, _, hovered| {
@@ -146,6 +146,9 @@ impl TurnUsage {
     }
 
     pub fn update(&self, cx: &Context<'_>, messages: &[MessageKey], previous: Option<&CacheUsage>) {
+        if let Some(first) = messages.first().and_then(|key| cx.message(*key)) {
+            self.0.expanded.key(format!("usage {}", first.id()));
+        }
         let mut previous = previous.cloned();
         let steps = messages
             .iter()
