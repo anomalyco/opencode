@@ -61,14 +61,12 @@ void electron.app.whenReady().then(async () => {
     manifest: createManifests(),
   })
 
-  // Electron keeps no badge on Linux outside Unity, and says so here.
-  const kept = electron.app.setBadgeCount(0)
   const plain = await open("persist:plain")
   await plain.executeJavaScript("navigator.setAppBadge(7)")
   // Main hears of a badge a moment after the page hears its call resolve.
   const deadline = Date.now() + 10_000
 
-  while (kept && electron.app.getBadgeCount() !== 7 && Date.now() < deadline)
+  while (electron.app.getBadgeCount() !== 7 && Date.now() < deadline)
     await new Promise((resolve) => setTimeout(resolve, 20))
 
   const unguarded = electron.app.getBadgeCount()
