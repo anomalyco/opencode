@@ -3,7 +3,6 @@ export * as Voice from "./voice.js"
 import { type AIError } from "@opencode/ai/effect"
 import {
   Realtime,
-  type RealtimeEngine,
   type RealtimeSession,
   type RealtimeTransport,
   type RealtimeTransportInput,
@@ -16,6 +15,7 @@ import { Credential } from "./credential.js"
 import { requestExecutor } from "./effect/app-node-platform.js"
 import { Integration } from "./integration.js"
 import { Model } from "./model.js"
+import { Provider } from "./provider.js"
 
 export interface ModelInfo {
   readonly model: string
@@ -31,6 +31,8 @@ export interface Models {
 
 export interface SessionInput {
   readonly model: string
+  /** The model's provider. Old clients send only the model ID. */
+  readonly provider?: string
   readonly session?: RealtimeSession
   readonly transport: RealtimeTransportInput
 }
@@ -58,67 +60,65 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
     const integrations = yield* Integration.Service
+    const providers = yield* Provider.Service
     const catalog = yield* Model.Service
 
-    // Integration lists the active credential first, then newer stored credentials, then non-empty env vars.
-    const findConnection = (provider: string, methods: readonly string[] = ["key"]) =>
-      integrations
-        .get(Integration.ID.make(provider))
-        .pipe(
-          Effect.map((info) => info?.connections.find((item) => item.type === "env" || methods.includes(item.method))),
-        )
-
-    // Each engine's listed voice models, newest first: from its own provider when connected, else GPT-Live from
-    // OpenCode's hosted endpoint with the server's OpenCode Console connection.
-    const offered = Effect.fnUntraced(function* () {
-      const listed = yield* catalog.available(["realtime"])
-      const result: { engine: RealtimeEngine; model: Model.Info }[] = []
-      for (const engine of Realtime.engines) {
-        const matching = listed.filter((model) => model.package === engine.id)
-        const own = matching.filter((model) => model.providerID === engine.provider)
-        for (const model of own.length > 0 ? own : matching) result.push({ engine, model })
-      }
-      return result
+    // The connected providers' realtime models with a voice protocol this server speaks, newest first.
+    const listed = Effect.fnUntraced(function* () {
+      const models = yield* catalog.available(["realtime"])
+      return models.filter((model) => engineOf(model) !== undefined)
     })
 
     const models = Effect.fn("Voice.models")(function* () {
-      const list = (yield* offered()).map((item) => ({
-        model: item.model.id,
-        provider: item.model.providerID,
-        transports: item.engine.transports,
-        available: true,
-      }))
-      const first = list[0]?.model
+      const all = yield* listed()
+      const list: ModelInfo[] = []
+      for (const model of all) {
+        if (list.some((item) => item.model === model.id)) continue
+        const picked = pick(all, model.id)
+        list.push({
+          model: picked.id,
+          provider: picked.providerID,
+          transports: picked.realtime?.transports ?? [],
+          available: true,
+        })
+      }
+      // GPT-Live is the default, as it was before voice models came from the catalog.
+      const live = all.find((model) => model.realtime?.protocol === "openai-live")
+      const first = live?.id ?? list[0]?.model
       return first ? { models: list, default: first } : { models: list }
     })
 
     const session = Effect.fn("Voice.session")(function* (input: SessionInput) {
-      const list = yield* offered()
-      const offer = list.find((item) => item.model.id === input.model)
-      if (!offer)
-        return yield* new InvalidRequestError({
-          message: `Unsupported voice model: ${input.model}. This server lists ${list.map((item) => item.model.id).join(", ") || "none"}.`,
-        })
+      const all = yield* listed()
+      const model = input.provider
+        ? all.find((item) => item.providerID === input.provider && item.id === input.model)
+        : pick(all, input.model)
+      const engine = model && engineOf(model)
+      if (!model || !engine) return yield* new UnavailableError({ service: input.provider, message: missingKeyMessage })
 
-      const engine = offer.engine
-      const provider = offer.model.providerID
-      // An OpenCode Console sign-in works as well as a key; a ChatGPT sign-in can't start voice sessions.
-      const connection = yield* findConnection(provider, provider === openCodeLive.provider ? ["key", "oauth"] : ["key"])
-      const credential = connection
+      // The same credential a chat model of this provider uses: its active connection, else a configured key.
+      const provider = yield* providers.get(model.providerID)
+      const connection = yield* integrations.connection.active(
+        provider?.integrationID ?? Integration.ID.make(model.providerID),
+      )
+      const resolved = connection
         ? yield* integrations.connection
             .resolve(connection)
-            .pipe(Effect.mapError((error) => new UnavailableError({ service: provider, message: error.message })))
+            .pipe(Effect.mapError((error) => new UnavailableError({ service: model.providerID, message: error.message })))
         : undefined
-      const access = credential && sessionAccess(provider, credential)
+      const configured = provider?.settings?.apiKey
+      const credential =
+        resolved ??
+        (typeof configured === "string" && configured !== ""
+          ? Credential.Key.make({ type: "key", key: configured })
+          : undefined)
+      const access = credential && sessionAccess(model.providerID, credential)
       if (access === undefined)
-        return yield* new UnavailableError({
-          service: engine.provider,
-          message: engine.id === "openai-live" ? missingLiveKeyMessage : missingKeyMessage[engine.provider],
-        })
+        return yield* new UnavailableError({ service: model.providerID, message: missingKeyMessage })
 
       return yield* Realtime.connect({
         engine,
-        model: input.model,
+        model: model.modelID,
         session: input.session,
         transport: input.transport,
         ...access,
@@ -128,7 +128,7 @@ export const layer = Layer.effect(
           (error: AIError): Error =>
             error.reason._tag === "InvalidRequest" || error.reason._tag === "UnsupportedOperation"
               ? new InvalidRequestError({ message: error.message })
-              : new UnavailableError({ message: error.message, service: provider }),
+              : new UnavailableError({ message: error.message, service: model.providerID }),
         ),
       )
     })
@@ -140,8 +140,17 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Integration.node, Model.node, requestExecutor],
+  deps: [Integration.node, Provider.node, Model.node, requestExecutor],
 })
+
+const engineOf = (model: Model.Info) => Realtime.engines.find((engine) => engine.id === model.realtime?.protocol)
+
+/** For a bare model ID, which old clients send: the model from its protocol's own provider, else OpenCode's. */
+const pick = (models: readonly Model.Info[], id: string) => {
+  const matching = models.filter((model) => model.id === id)
+  const own = matching.find((model) => engineOf(model)?.provider === model.providerID)
+  return own ?? matching[0]
+}
 
 /** OpenCode hosts GPT-Live on its OpenAI account, billed to the workspace whose credential starts a session. */
 const openCodeLive = { provider: "opencode", baseURL: "https://opencode.ai/inference/openai/v1" } as const
@@ -162,13 +171,5 @@ const sessionAccess = (provider: string, credential: Credential.Value) => {
   }
 }
 
-const missingLiveKeyMessage =
-  "GPT-Live needs an OpenAI API key (a stored key or OPENAI_API_KEY) or an OpenCode Console connection on the server. ChatGPT sign-in can't start voice sessions."
-
-const missingKeyMessage = {
-  openai:
-    "Voice needs an OpenAI API key on the server (a stored key or OPENAI_API_KEY). ChatGPT sign-in can't start voice sessions.",
-  xai: "Voice needs an xAI API key on the server (a stored key or XAI_API_KEY).",
-  google:
-    "Voice needs a Google API key on the server (a stored key, GEMINI_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GOOGLE_API_KEY).",
-} as const
+const missingKeyMessage =
+  "Voice needs an API key on the server for the model's provider (OpenAI, xAI or Google), or an OpenCode Console connection for GPT-Live. ChatGPT and SuperGrok sign-ins can't start voice sessions."

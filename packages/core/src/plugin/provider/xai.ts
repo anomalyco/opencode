@@ -5,6 +5,8 @@ import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { Provider } from "../../provider.js"
+import { storedCredential } from "./credential-settings.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "b1a00492-073a-47ea-816f-4c329264a828"
 const issuer = "https://auth.x.ai/oauth2"
@@ -95,6 +97,26 @@ export const XAIPlugin = define({
       editor.method.update(device(ctx.app))
       editor.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
     })
+    // A SuperGrok sign-in can't start voice sessions, so its realtime models are hidden like other models a
+    // sign-in can't use.
+    let subscription = false
+    const load = Effect.fn("XAIPlugin.load")(function* () {
+      const { credential } = yield* storedCredential(ctx, "xai")
+      const previous = subscription
+      subscription = credential?.type === "oauth"
+      return previous !== subscription
+    })
+    yield* load()
+    yield* ctx.model.transform((models) => {
+      if (!subscription) return
+      for (const model of models.list(providerID)) {
+        if (model.type !== "realtime") continue
+        models.update(model.providerID, model.id, (draft) => {
+          draft.enabled = false
+        })
+      }
+    })
+    yield* ProviderRefresh.onSwitch("xai", ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload()))
     yield* ctx.provider.transform((providers) => {
       if (!providers.get(providerID)) return
       providers.update(providerID, (provider) => {

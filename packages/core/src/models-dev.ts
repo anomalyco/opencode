@@ -223,10 +223,16 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
     const providerID = Provider.ID.make(item.id)
     // Vertex needs separate handling for location and Express Mode.
     const prefer = recommended && providerID !== Provider.ID.googleVertex
+    const voices: { model: SourceModel; realtime: Model.Realtime }[] = []
     const sources = Object.entries(item.models).flatMap(([key, value]) => {
       const decoded = decodeModel(value)
       if (Result.isFailure(decoded)) failed.push({ model: `${item.id}/${key}`, issue: decoded.failure })
       const model = Result.isSuccess(decoded) ? decoded.success : undefined
+      const realtime = model && voice(providerID, model)
+      if (model && realtime) {
+        voices.push({ model, realtime })
+        return []
+      }
       // The fetch already asks for these types, but custom files and v1 catalogs may hold any type.
       const target = model && TYPES.includes(model.type) && route(providerID, model, unknown, prefer)
       return model && target ? [{ model, route: target }] : []
@@ -234,11 +240,9 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
     if (sources.length === 0) return []
     // v2 lists APIs per model, so the provider defaults are what most of its models use. A model that
     // builds its own URL would inherit a provider baseURL, so then every model carries its own instead.
-    // Realtime models name a voice engine instead of a package and have no URL, so they don't count.
-    const defaults = sources.filter((source) => source.model.type !== "realtime")
-    const packageName = mostCommon(defaults.map((source) => source.route.package))
+    const packageName = mostCommon(sources.map((source) => source.route.package))
     if (!packageName) return []
-    const urls = defaults.map((source) => source.route.baseURL)
+    const urls = sources.map((source) => source.route.baseURL)
     const baseURL = urls.every((url) => url !== undefined) ? mostCommon(urls) : undefined
     const info = {
       id: providerID,
@@ -267,6 +271,13 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
         ),
       ]
     })
+    for (const item of voices) {
+      const model = modelInfo(providerID, { packageName, baseURL }, Model.ID.make(item.model.id), {
+        model: item.model,
+        route: { package: packageName },
+      })
+      models.push({ ...model, realtime: item.realtime })
+    }
     return [
       {
         info,
@@ -295,21 +306,25 @@ function entries<A>(record: Record<string, unknown> | undefined, decode: (input:
   )
 }
 
-function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>, recommended: boolean) {
-  // A realtime model is kept when it answers in speech, calls tools and speaks the API of a voice engine for its
-  // provider, whose ID becomes its package. OpenCode hosts GPT-Live too. Translation and streaming models are
-  // realtime as well, but don't answer in speech or call tools.
-  if (model.type === "realtime") {
-    const api = Object.keys(model.api)[0]
-    const speaks = model.modalities.output.some((output) => output.startsWith("audio"))
-    if (!speaks || !model.capabilities.tools.supported || model.status === "deprecated") return undefined
-    const engine = Realtime.engines.find(
-      (engine) =>
-        engine.api === api &&
-        (engine.provider === providerID || (engine.id === "openai-live" && providerID === Provider.ID.opencode)),
-    )
-    return engine ? { package: engine.id, baseURL: undefined } : undefined
+/**
+ * A realtime model is kept when it answers in speech, calls tools and speaks the API of a voice protocol for its
+ * provider. OpenCode hosts GPT-Live too. Translation and streaming models are realtime as well, but don't answer in
+ * speech or call tools.
+ */
+function voice(providerID: Provider.ID, model: SourceModel): Model.Realtime | undefined {
+  if (model.type !== "realtime") return undefined
+  const api = Object.keys(model.api)[0]
+  const speaks = model.modalities.output.some((output) => output.startsWith("audio"))
+  if (!speaks || !model.capabilities.tools.supported || model.status === "deprecated") return undefined
+  for (const engine of Realtime.engines) {
+    if (engine.api !== api) continue
+    if (engine.provider === providerID || (engine.id === "openai-live" && providerID === Provider.ID.opencode))
+      return { protocol: engine.id, transports: engine.transports }
   }
+  return undefined
+}
+
+function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>, recommended: boolean) {
   // A chat model uses its first API with a package. Other types (image, decision…) only run through the
   // opencode entrypoint for their type (`providers/<P>/images`) that this build can load, and are skipped
   // without one: a chat entrypoint loads a chat model, which can't generate images or decisions.

@@ -199,6 +199,9 @@ const withSubagent = (location: Location.Ref) =>
         editor.models.update(Provider.ID.make("test"), Model.ID.make("classifier"), (model) => {
           model.type = "decision"
         })
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("speaker"), (model) => {
+          model.type = "realtime"
+        })
       }),
     ).pipe(Effect.provide(locations.get(location)))
     yield* Agent.Service.use((agents) =>
@@ -797,6 +800,10 @@ describe("SubagentTool", () => {
             [
               "test/classifier",
               'Model "test/classifier" is a decision model; subagents need a chat model. Use the models tool to find one.',
+            ],
+            [
+              "test/speaker",
+              'Model "test/speaker" is a voice model; subagents need a chat model. Use the models tool to find one.',
             ],
           ] as const
           for (const [model, message] of failures) {

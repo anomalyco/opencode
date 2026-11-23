@@ -152,8 +152,19 @@ type Listed = Awaited<ReturnType<ModelList>>
 
 type ModelInfo = Listed["data"][number]
 
-// SAFETY: the transport reads only a listed model's id and package.
-const live = { id: "gpt-live-1", providerID: "openai", type: "realtime", package: "openai-live" } as ModelInfo
+// SAFETY: the transport reads only a listed model's id, provider and realtime protocol.
+const live = {
+  id: "gpt-live-1",
+  providerID: "openai",
+  type: "realtime",
+  realtime: { protocol: "openai-live", transports: ["webrtc"] },
+} as ModelInfo
+
+const realtime = {
+  ...live,
+  id: "gpt-realtime-9",
+  realtime: { protocol: "openai-realtime", transports: ["webrtc", "websocket"] },
+} satisfies ModelInfo
 
 function listed(data: ModelInfo[]) {
   // SAFETY: the transport never reads the location, and the directory brand only marks server paths.
@@ -193,16 +204,18 @@ const failure = (promise: Promise<unknown>) =>
   )
 
 test("a call starts the newest GPT-Live model the server lists", async () => {
-  const realtime = { ...live, id: "gpt-realtime-9", package: "openai-realtime" }
-  const result = open(() => listed([realtime, { ...live, id: "gpt-live-2" }, live]))
+  const result = open(() => listed([realtime, { ...live, id: "gpt-live-2", providerID: "opencode" }, live]))
   void result.transport.join({ id: "ses_1" }, "")
   await settle()
 
-  expect(result.session.mock.calls[0][0]).toMatchObject({ model: "gpt-live-2", session: { model: "gpt-live-2" } })
+  expect(result.session.mock.calls[0][0]).toMatchObject({
+    model: "gpt-live-2",
+    provider: "opencode",
+    session: { model: "gpt-live-2" },
+  })
 })
 
 test("a server without a GPT-Live model fails the join as unavailable", async () => {
-  const realtime = { ...live, id: "gpt-realtime-9", package: "openai-realtime" }
   const result = open(() => listed([realtime]))
 
   expect(await failure(result.transport.join({ id: "ses_1" }, ""))).toBe("unavailable")

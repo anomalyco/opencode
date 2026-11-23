@@ -1562,6 +1562,9 @@ export interface ExperimentalGenerateApi<E = never> {
   readonly decisions: ExperimentalGenerateDecisionsOperation<E>
 }
 
+export type ExperimentalVoiceModelsInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
 export type ExperimentalVoiceModelsOutput = {
   readonly models: ReadonlyArray<{
     readonly model: string
@@ -1571,10 +1574,14 @@ export type ExperimentalVoiceModelsOutput = {
   }>
   readonly default?: string | undefined
 }
-export type ExperimentalVoiceModelsOperation<E = never> = () => Effect.Effect<ExperimentalVoiceModelsOutput, E>
+export type ExperimentalVoiceModelsOperation<E = never> = (
+  input?: ExperimentalVoiceModelsInput,
+) => Effect.Effect<ExperimentalVoiceModelsOutput, E>
 
 export type ExperimentalVoiceSessionInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly model: string
+  readonly provider?: string | undefined
   readonly session?: { readonly [x: string]: unknown } | undefined
   readonly transport:
     | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number | undefined }
@@ -2999,6 +3006,9 @@ export type GenerateDecisionsOutput = ExperimentalGenerateDecisionsOutput
 
 /** @deprecated Use `ExperimentalGenerateDecisionsOperation`. Removed in the next minor. */
 export type GenerateDecisionsOperation<E = never> = ExperimentalGenerateDecisionsOperation<E>
+
+/** @deprecated Use `ExperimentalVoiceModelsInput`. Removed in the next minor. */
+export type VoiceModelsInput = ExperimentalVoiceModelsInput
 
 /** @deprecated Use `ExperimentalVoiceModelsOutput`. Removed in the next minor. */
 export type VoiceModelsOutput = ExperimentalVoiceModelsOutput

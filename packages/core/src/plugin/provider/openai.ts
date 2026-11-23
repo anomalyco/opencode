@@ -290,6 +290,11 @@ export const OpenAIPlugin = define({
         // subscription covers usage, so hide the rest and zero the cost.
         models.update(model.providerID, model.id, (draft) => {
           if (!chatgpt) return
+          // A ChatGPT sign-in can't start voice sessions.
+          if (draft.type === "realtime") {
+            draft.enabled = false
+            return
+          }
           if (plan.current) {
             if (plan.current.has(draft.id)) draft.cost = []
             else draft.enabled = false

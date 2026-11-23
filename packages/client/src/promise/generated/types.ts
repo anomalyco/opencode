@@ -188,6 +188,8 @@ export type ModelCacheFormat = "anthropic" | "alibaba"
 
 export type ModelMediaInput = "assets" | "state" | "root"
 
+export type ModelRealtime = { protocol: string; transports: Array<"webrtc" | "websocket"> }
+
 export type ToolFreeformFormat = "text" | "regex" | "lark"
 
 export type MoneyUSDPerMillionTokens = number
@@ -2401,6 +2403,7 @@ export type ModelInfo = {
   name: string
   compatibility?: ModelCompatibility
   package?: string
+  realtime?: ModelRealtime
   settings?: ModelSettings
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
@@ -4152,10 +4155,16 @@ export type ExperimentalGenerateDecisionsInput = {
 
 export type ExperimentalGenerateDecisionsOutput = GenerateDecisionsResponse["data"]
 
+export type ExperimentalVoiceModelsInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
 export type ExperimentalVoiceModelsOutput = VoiceModelsResponse["data"]
 
 export type ExperimentalVoiceSessionInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly model: string
+  readonly provider?: string | undefined
   readonly session?: { readonly [x: string]: unknown } | undefined
   readonly transport:
     | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number | undefined }
@@ -5089,6 +5098,9 @@ export type GenerateDecisionsInput = ExperimentalGenerateDecisionsInput
 
 /** @deprecated Use `ExperimentalGenerateDecisionsOutput`. Removed in the next minor. */
 export type GenerateDecisionsOutput = ExperimentalGenerateDecisionsOutput
+
+/** @deprecated Use `ExperimentalVoiceModelsInput`. Removed in the next minor. */
+export type VoiceModelsInput = ExperimentalVoiceModelsInput
 
 /** @deprecated Use `ExperimentalVoiceModelsOutput`. Removed in the next minor. */
 export type VoiceModelsOutput = ExperimentalVoiceModelsOutput

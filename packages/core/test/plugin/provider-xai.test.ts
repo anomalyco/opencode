@@ -36,8 +36,20 @@ describe("XAIPlugin", () => {
     }),
   )
 
-  it.effect("migrates browser OAuth credentials to the device method", () =>
+  it.effect("migrates browser OAuth credentials to the device method and hides voice models from the sign-in", () =>
     Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("xai")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.package = "@opencode/ai/providers/xai"
+          provider.activation = "enabled"
+        })
+        editor.models.update(providerID, Model.ID.make("grok-voice-3.0"), (model) => {
+          model.type = "realtime"
+        })
+      })
       const credentials = yield* Credential.Service
       const original = yield* credentials.create({
         integrationID: Integration.ID.make("xai"),
@@ -65,6 +77,7 @@ describe("XAIPlugin", () => {
           metadata: { account: "account" },
         }),
       })
+      expect(yield* models.available(["realtime"])).toEqual([])
     }),
   )
 

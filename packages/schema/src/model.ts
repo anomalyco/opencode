@@ -106,6 +106,13 @@ export const Cost = Schema.Struct({
   }),
 }).annotate({ identifier: "Model.Cost" })
 
+/** How a realtime model is reached: its voice protocol (`openai-live`, `gemini-live`…) and the transports it offers. */
+export interface Realtime extends Schema.Schema.Type<typeof Realtime> {}
+export const Realtime = Schema.Struct({
+  protocol: Schema.String,
+  transports: Schema.Array(Schema.Literals(["webrtc", "websocket"])),
+}).annotate({ identifier: "Model.Realtime" })
+
 export interface Variant extends Schema.Schema.Type<typeof Variant> {}
 export const Variant = Schema.Struct({
   id: VariantID,
@@ -124,6 +131,7 @@ export const Info = Schema.Struct({
   name: Schema.String,
   compatibility: Compatibility.pipe(optional),
   package: Provider.Package.pipe(optional),
+  realtime: Realtime.pipe(optional),
   ...Overlays,
   capabilities: Capabilities,
   variants: Schema.Array(Variant),

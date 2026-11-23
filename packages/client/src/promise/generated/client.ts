@@ -119,6 +119,7 @@ import type {
   ExperimentalGenerateVideoGetOutput,
   ExperimentalGenerateDecisionsInput,
   ExperimentalGenerateDecisionsOutput,
+  ExperimentalVoiceModelsInput,
   ExperimentalVoiceModelsOutput,
   ExperimentalVoiceSessionInput,
   ExperimentalVoiceSessionOutput,
@@ -1267,11 +1268,12 @@ export function make(options: ClientOptions) {
           ).then((value) => value.data),
       },
       voice: {
-        models: (requestOptions?: RequestOptions) =>
+        models: (input?: ExperimentalVoiceModelsInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalVoiceModelsOutput }>(
             {
               method: "GET",
               path: `/api/experimental/voice/models`,
+              query: { location: input?.["location"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 404, 503],
               empty: false,
@@ -1283,7 +1285,13 @@ export function make(options: ClientOptions) {
             {
               method: "POST",
               path: `/api/experimental/voice/session`,
-              body: { model: input["model"], session: input["session"], transport: input["transport"] },
+              query: { location: input["location"] },
+              body: {
+                model: input["model"],
+                provider: input["provider"],
+                session: input["session"],
+                transport: input["transport"],
+              },
               successStatus: 200,
               declaredStatuses: [400, 401, 404, 503],
               empty: false,

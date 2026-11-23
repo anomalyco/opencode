@@ -5745,7 +5745,31 @@
       "get": {
         "tags": ["voice"],
         "operationId": "experimental.voice.models",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
         "security": [],
         "responses": {
           "200": {
@@ -5799,7 +5823,7 @@
             }
           }
         },
-        "description": "List supported voice models, their transports, and whether the server has a usable API key for each provider.",
+        "description": "List the voice models the server can start, one per model ID, and their transports. Every model listed is available. New clients should list realtime models with model.list instead.",
         "summary": "List voice models"
       }
     },
@@ -5807,7 +5831,31 @@
       "post": {
         "tags": ["voice"],
         "operationId": "experimental.voice.session",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
         "security": [],
         "responses": {
           "200": {
@@ -5871,6 +5919,17 @@
                 "properties": {
                   "model": {
                     "type": "string"
+                  },
+                  "provider": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The model's provider. Without it, the model's own provider is preferred, then OpenCode."
                   },
                   "session": {
                     "anyOf": [
@@ -22079,6 +22138,9 @@
           "package": {
             "type": "string"
           },
+          "realtime": {
+            "$ref": "#/components/schemas/Model.Realtime"
+          },
           "settings": {
             "$ref": "#/components/schemas/Model.Settings"
           },
@@ -22168,6 +22230,23 @@
       "Model.MediaInput": {
         "type": "string",
         "enum": ["assets", "state", "root"]
+      },
+      "Model.Realtime": {
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "type": "string"
+          },
+          "transports": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["webrtc", "websocket"]
+            }
+          }
+        },
+        "required": ["protocol", "transports"],
+        "additionalProperties": false
       },
       "Model.ReasoningField": {
         "anyOf": [

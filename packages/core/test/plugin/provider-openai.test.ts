@@ -238,6 +238,9 @@ describe("OpenAIPlugin", () => {
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-image-2"), (model) => {
           model.type = "image"
         })
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-live-1"), (model) => {
+          model.type = "realtime"
+        })
       })
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
@@ -250,7 +253,9 @@ describe("OpenAIPlugin", () => {
           metadata: { accountID: "acct_123" },
         }),
       })
-      const lists = { current: { "openai-codex": ["gpt-5.5", "gpt-6-sol", "gpt-6-sol-fast", "gpt-image-2"] } }
+      const lists = {
+        current: { "openai-codex": ["gpt-5.5", "gpt-6-sol", "gpt-6-sol-fast", "gpt-image-2", "gpt-live-1"] },
+      }
       const plugin = yield* Plugin.Service
       const host = yield* PluginHost.make(plugin, "test")
       yield* OpenAIPlugin.effect(host).pipe(Effect.provideService(ModelsDev.Service, subscriptionCatalog(lists)))
@@ -265,6 +270,8 @@ describe("OpenAIPlugin", () => {
       const images = (yield* models.available(["image"])).filter((model) => model.providerID === Provider.ID.openai)
       expect(images.map((model) => model.id)).toEqual([Model.ID.make("gpt-image-2")])
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-sol"))).cost).toEqual([])
+      // A ChatGPT sign-in can't start voice sessions, even for a listed model.
+      expect(yield* models.available(["realtime"])).toEqual([])
 
       lists.current = { "openai-codex": ["gpt-7"] }
       yield* bus.publish(ModelsDev.Event.Refreshed, {})

@@ -32,13 +32,13 @@ const voice = makeLocationNode({
               model: "grok-voice-3.0",
               provider: "xai",
               transports: ["websocket"],
-              available: false,
+              available: true,
             },
             {
               model: "gemini-3.8-live",
               provider: "google",
               transports: ["websocket"],
-              available: false,
+              available: true,
             },
           ],
           default: "gpt-live-1",
@@ -50,7 +50,7 @@ const voice = makeLocationNode({
           return Effect.fail(new Voice.UnavailableError({ message: "OpenAI API key is required", service: "openai" }))
         return Effect.succeed(
           input.transport.type === "webrtc"
-            ? { type: "webrtc" as const, sdp: `answer:${input.model}:${input.transport.sdp}` }
+            ? { type: "webrtc" as const, sdp: `answer:${input.provider}/${input.model}:${input.transport.sdp}` }
             : {
                 type: "websocket" as const,
                 url: `wss://api.x.ai/v1/realtime?model=${input.model}`,
@@ -101,13 +101,13 @@ it.live("routes experimental voice models and session endpoints", () =>
             model: "grok-voice-3.0",
             provider: "xai",
             transports: ["websocket"],
-            available: false,
+            available: true,
           },
           {
             model: "gemini-3.8-live",
             provider: "google",
             transports: ["websocket"],
-            available: false,
+            available: true,
           },
         ],
         default: "gpt-live-1",
@@ -127,12 +127,13 @@ it.live("routes experimental voice models and session endpoints", () =>
 
     const rtcRes = yield* post({
       model: "gpt-live-1",
+      provider: "opencode",
       session: { voice: "marin" },
       transport: { type: "webrtc", sdp: "v=0", dcid: 4 },
     })
     expect(rtcRes.status).toBe(200)
     expect(yield* Effect.promise(() => rtcRes.json())).toEqual({
-      data: { transport: { type: "webrtc", sdp: "answer:gpt-live-1:v=0" } },
+      data: { transport: { type: "webrtc", sdp: "answer:opencode/gpt-live-1:v=0" } },
     })
 
     const wsRes = yield* post({ model: "grok-voice-3.0", transport: { type: "websocket" } })

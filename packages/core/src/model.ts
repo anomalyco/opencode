@@ -45,6 +45,9 @@ export const Cost = Model.Cost
 export const Type = Model.Type
 export type Type = Model.Type
 
+export const Realtime = Model.Realtime
+export type Realtime = Model.Realtime
+
 export const Ref = Model.Ref
 export type Ref = typeof Ref.Type
 

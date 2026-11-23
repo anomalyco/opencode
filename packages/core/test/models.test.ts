@@ -576,7 +576,7 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.effect("keeps realtime models that answer in speech and call tools, with their voice engine as package", () =>
+  it.effect("keeps realtime models that answer in speech and call tools, with the voice protocol that speaks to them", () =>
     Effect.gen(function* () {
       const realtime = (id: string, input: Record<string, unknown> = {}) =>
         sourceModel(id, {
@@ -602,9 +602,9 @@ describe("ModelsDev Service", () => {
           },
         }),
       )
-      expect(openai?.models.map((item) => [item.id, item.type, item.package ?? openai.info.package])).toEqual([
-        [Model.ID.make("chat"), "chat", "@opencode/ai/providers/openai-compatible"],
-        [Model.ID.make("voice"), "realtime", "openai-live"],
+      expect(openai?.models.map((item) => [item.id, item.type, item.realtime])).toEqual([
+        [Model.ID.make("chat"), "chat", undefined],
+        [Model.ID.make("voice"), "realtime", { protocol: "openai-live", transports: ["webrtc"] }],
       ])
     }),
   )
