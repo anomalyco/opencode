@@ -61,6 +61,7 @@ import { IdentityPlugin } from "@opencode/core/plugin/identity"
 import { QuestionTool } from "@opencode/core/tool/plugin/question"
 import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
@@ -538,6 +539,7 @@ const layer = Layer.unwrap(
         SkillInstructions.node,
         ReferenceInstructions.node,
         Config.node,
+        Flag.node,
         Snapshot.node,
         SessionCompaction.node,
         LayerNodePlatform.llmClient,

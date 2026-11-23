@@ -11,6 +11,7 @@ import { EventTable } from "@opencode/core/event/sql"
 import { Permission } from "@opencode/core/permission"
 import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -147,6 +148,7 @@ const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
       SkillInstructions.node,
       ReferenceInstructions.node,
       Config.node,
+      Flag.node,
       Snapshot.node,
       SessionRunnerLLM.node,
       Session.node,

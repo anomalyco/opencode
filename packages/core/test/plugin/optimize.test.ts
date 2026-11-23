@@ -11,7 +11,8 @@ import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/core/provider"
-import { Effect } from "effect"
+import { Flag } from "@opencode/core/flag"
+import { Effect, Layer } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
@@ -22,6 +23,7 @@ import PROMPT_TRINITY from "../../src/plugin/system-prompt/trinity.txt"
 import PROMPT_ANTHROPIC from "../../src/plugin/system-prompt/anthropic.txt"
 
 const it = testEffect(PluginTestLayer)
+const fullCodeModeIt = testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 const fallback = SessionSystemPrompt.make([])
 const appended = `${fallback}\n\n${SessionSystemPrompt.render(PROMPT_ANTHROPIC, [])}`
 const makeHost = Effect.gen(function* () {
@@ -191,6 +193,39 @@ describe("OptimizePlugin", () => {
             ),
           )
         },
+        { discard: true },
+      )
+    }),
+  )
+
+  fullCodeModeIt.effect("keeps the base prompt for Muse models with full Code Mode", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const hooks = yield* PluginHooks.Service
+      const pluginHost = yield* makeHost
+      yield* catalog.transform((editor) => {
+        for (const id of ["gpt-5", "kimi-k2", "claude-sonnet-4"])
+          editor.models.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
+          model.name = "Muse Spark"
+        })
+      })
+      yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
+      const cases = [
+        ["meta/muse-spark-1.1", fallback],
+        ["gpt-5", PROMPT_GPT],
+        ["kimi-k2", PROMPT_KIMI],
+        ["claude-sonnet-4", appended],
+      ] as const
+
+      yield* Effect.forEach(
+        cases,
+        ([id, expected]) =>
+          Effect.gen(function* () {
+            const event = context(id)
+            yield* hooks.trigger("session", "context", event)
+            expect(event.system[0]?.text).toBe(SessionSystemPrompt.render(expected, Object.keys(event.tools)))
+          }),
         { discard: true },
       )
     }),
