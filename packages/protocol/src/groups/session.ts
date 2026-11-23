@@ -356,7 +356,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "session.prompt",
             summary: "Send message",
-            description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+            description:
+              "Durably admit one session input and schedule agent-loop execution unless resume is false. A leading slash command is treated as prompt text. To execute a slash command, call session.command with its name without the slash and its arguments as text.",
           }),
         ),
     )
