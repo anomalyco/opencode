@@ -107,7 +107,7 @@ describe("tool paths", () => {
     expect(() => ToolDefinition.make({ name: "crm.lookup", description: "Look up", inputSchema: {} })).toThrow(dotted)
     expect(() => ToolNamespace.make({ name: "crm.v2", tools: [] })).toThrow(dotted)
     expect(() => namespace("crm.v2", {}, [])).toThrow(dotted)
-    expect(() => tool({ name: "x".repeat(129), description: "Too long", input: Schema.Struct({}) })).toThrow()
+    expect(() => tool({ name: "", description: "Empty", input: Schema.Struct({}) })).toThrow()
   })
 
   it.effect("a grouped tool round-trips on a flattening protocol", () =>

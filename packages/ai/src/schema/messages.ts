@@ -426,16 +426,17 @@ export class ToolDefinition extends Schema.Class<ToolDefinition>("LLM.ToolDefini
   }
 }
 
-const TOOL_NAME = /^[a-zA-Z0-9_-]{1,128}$/
+const TOOL_NAME = /^[a-zA-Z0-9_-]+$/
 
 /**
- * A tool or namespace name is one segment that every provider accepts. Group tools with a namespace rather than a
+ * A tool or namespace name is one segment of characters every provider accepts; length limits differ by provider and
+ * are left to them. Group tools with a namespace rather than a
  * dotted name; the dot is reserved for paths such as `crm.lookup`.
  */
 export const toolName = (name: string) => {
   if (TOOL_NAME.test(name)) return name
   throw new Error(
-    `Invalid tool name "${name}": use 1 to 128 letters, digits, "_" or "-"${name.includes(".") ? ", and group tools with a namespace instead of a dotted name" : ""}`,
+    `Invalid tool name "${name}": use letters, digits, "_" or "-"${name.includes(".") ? ", and group tools with a namespace instead of a dotted name" : ""}`,
   )
 }
 

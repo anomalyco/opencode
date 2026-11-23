@@ -159,8 +159,6 @@ const nameTable = (leaves: Leaves, native: boolean) => {
     const path = leaf.path.join(".")
     const wire = wireName(leaf.path, native)
     const key = ToolCallPart.path(wire)
-    if (wire.name.length > 128)
-      return Result.fail(invalid(`Tool "${path}" would be sent as "${wire.name}", longer than 128 characters`))
     const owner = byWire.get(key)
     if (owner !== undefined && owner !== path)
       return Result.fail(invalid(`Tools "${owner}" and "${path}" would both be sent as "${key}"; rename one of them`))
