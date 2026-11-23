@@ -6,6 +6,7 @@ import { Clock, Context, Deferred, Duration, Effect, Layer, Scope } from "effect
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "@opencode/schema/filesystem"
+import { Environment } from "../environment/index.js"
 import { Location } from "../location.js"
 import { Ripgrep } from "../ripgrep.js"
 import { RelativePath } from "../schema.js"
@@ -53,6 +54,7 @@ const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
+    const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const scope = yield* Scope.Scope
     const clock = yield* Clock.Clock
@@ -66,8 +68,10 @@ const ripgrepLayer = Layer.effect(
       const previous = index
       if (!initialized) index = next
       yield* ripgrep.find({
+        environment,
         cwd: location.directory,
         pattern: "*",
+        hidden: true,
         limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
         onEntry: (entry) =>
@@ -224,9 +228,10 @@ const layer = (options?: Options) =>
   Layer.unwrap(
     Effect.gen(function* () {
       const location = yield* Location.Service
-      // Workspace-backed Locations resolve in a remote sandbox; fff would index the local server directory
-      // in-process and serve wrong results. Ripgrep routes through the Location environment spawner.
-      if (location.workspaceID) return ripgrepLayer
+      const environment = yield* Environment.Service
+      // fff indexes a directory on the server's own disk in-process, so only the server's own environment can use it.
+      // Ripgrep routes through the Location environment spawner.
+      if (!environment.hostsServer) return ripgrepLayer
       if (options?.fff === false || (options?.fff === undefined && process.platform === "win32") || !Fff.available())
         return ripgrepLayer
       // Non-VCS locations can contain many repositories, so avoid eagerly content-indexing the entire aggregate tree.
@@ -235,7 +240,11 @@ const layer = (options?: Options) =>
   )
 
 export function configured(options?: Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [Location.node, Ripgrep.node] })
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [Location.node, Environment.node, Ripgrep.node],
+  })
 }
 
 export const node = configured()

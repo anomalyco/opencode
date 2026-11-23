@@ -50,6 +50,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "মন্তব্য করছেন",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "মন্তব্য যোগ করুন",
+  "ui.lineComment.add": "মন্তব্য যোগ করুন",
+  "ui.lineComment.actions": "নির্বাচনের কার্যক্রম",
   "ui.lineComment.contextPlaceholder": "এই পরিবর্তনের জন্য প্রসঙ্গ যোগ করুন",
   "ui.lineComment.submit": "মন্তব্য করুন",
   "ui.lineComment.cancel": "বাতিল করুন",

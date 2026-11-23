@@ -196,7 +196,7 @@ fn registration(child: &mut Child, directory: &Path) -> Registration {
         if let Ok(registration) = opencode_pty::daemon::read_registration(directory)
             && registration.pid == child.id()
         {
-            assert_eq!(registration.protocol, 8);
+            assert_eq!(registration.protocol, 9);
             assert_eq!(
                 registration.socket,
                 PathBuf::from(format!(
@@ -658,7 +658,7 @@ fn observer_disconnect_and_control_input_preserve_independent_terminals() {
         matches!(daemon.request(Request::List { mode: ProcessMode::Pty }), Response::Processes { processes: terminals } if terminals.len() == 2)
     );
     assert!(
-        matches!(daemon.request(Request::Ping), Response::Pong { instance_id, pid, protocol: 8, .. }
+        matches!(daemon.request(Request::Ping), Response::Pong { instance_id, pid, protocol: 9, .. }
         if instance_id == daemon.registration.instance_id && pid == daemon.registration.pid)
     );
     assert!(matches!(daemon.own(None).1, Response::Error { .. }));

@@ -136,6 +136,38 @@ test("isolates concurrent side questions and makes interrupted and blank answers
   expect(prompts).toEqual([])
 })
 
+test("marks a side question answered behind another tab until it is shown", async ({ page }) => {
+  const held = Promise.withResolvers<void>()
+
+  const { editor } = await openSession(page, {
+    name: "BtwUnread",
+    generate: async (input) => {
+      if (!input.prompt.includes("slow question")) return { text: "Fast answer" }
+      await held.promise
+
+      return { text: "Slow answer" }
+    },
+  })
+
+  const panel = page.locator('[data-slot="session-btw-panel"]')
+  const slow = page.getByRole("tab", { name: "slow question", exact: true })
+  const fast = page.getByRole("tab", { name: "fast question", exact: true })
+  const unread = page.getByRole("tab", { name: "slow question New answer", exact: true })
+  await editor.fill("/btw slow question")
+  await editor.press("Enter")
+  await expect(panel.getByRole("status")).toContainText("Working")
+  await editor.fill("/btw fast question")
+  await editor.press("Enter")
+  await expect(panel.getByText("Fast answer", { exact: true })).toBeVisible()
+  await expect(fast).toHaveAttribute("data-selected", "")
+  await expect(slow).toBeVisible()
+  held.resolve()
+  await unread.click()
+  await expect(panel.getByText("Slow answer", { exact: true })).toBeVisible()
+  await expect(slow).toHaveAttribute("data-selected", "")
+  await expect(unread).toHaveCount(0)
+})
+
 test("keeps many long-titled side tabs usable at a narrow desktop width", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 900, height: 700 })
 

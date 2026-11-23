@@ -65,7 +65,13 @@ import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
 import type { Info as ToolInfo } from "@opencode/schema/tool"
-import { InstructionStateTable, SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import {
+  InstructionStateTable,
+  SessionInboxTable,
+  SessionMessageTable,
+  SessionPartTable,
+  SessionTable,
+} from "@opencode/core/session/sql"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionStore } from "@opencode/core/session/store"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -348,6 +354,14 @@ const layer = Layer.unwrap(
     )
     const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: echo, deps: [Tool.node] })
     const models = Layer.mock(SessionRunnerModel.Service)({
+      select: (session) =>
+        Effect.sync(() => {
+          const selected = session.model?.id === "replacement" ? replacementModel : state.currentModel
+          return {
+            info: Model.Info.default(Provider.ID.make(selected.provider), Model.ID.make(selected.id)),
+            variant: session.model?.variant,
+          }
+        }),
       resolve: (session) =>
         state.modelResolveHook.pipe(
           Effect.map(() => {
@@ -391,6 +405,7 @@ const layer = Layer.unwrap(
     const instructionContext = Layer.mock(InstructionDiscovery.Service, {
       project: true,
       global: true,
+      claude: true,
       load: () => Effect.succeed(Instructions.empty),
     })
     const skillInstructions = Layer.mock(SkillInstructions.Service, {
@@ -2923,6 +2938,10 @@ describe("SessionRunnerLLM", () => {
       scenario(`preserves the session request prefix during ${reason} compaction (${route.id})`, function* (s) {
         const agents = yield* Agent.Service
         const hooks = yield* PluginHooks.Service
+        const compaction = yield* SessionCompaction.Service
+        // The idle step past the threshold would start a background summary, which keeps the next prompt verbatim
+        // instead of summarizing it; this covers the summary written when compaction is due.
+        yield* compaction.transform((editor) => editor.configure({ background: false }))
         const agentID = Agent.ID.make("reviewer")
         const variant = Model.VariantID.make("test-variant")
         s.currentModel = LanguageModel.make({
@@ -3272,11 +3291,12 @@ describe("SessionRunnerLLM", () => {
   }
 
   scenario("stops after four smaller compaction inputs overflow", function* (s) {
-    // Large enough that the conversation, not the system prompt, is most of the request.
+    // Large enough that the conversation, not the system prompt, is most of the request. Twice what `keep` retains,
+    // so the history before the tail has exchanges left to drop.
     const filler = "context ".repeat(1_000)
-    yield* s.llm.push(...Array.from({ length: 8 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
+    yield* s.llm.push(...Array.from({ length: 16 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
     yield* Effect.forEach(
-      Array.from({ length: 8 }, (_, index) => index),
+      Array.from({ length: 16 }, (_, index) => index),
       (index) => s.runPrompt(`Request ${index}: ${filler}`),
     )
     s.currentModel = unknownContextModel
@@ -3290,7 +3310,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(5)
-    expect(userTexts(s.requests[2])[0].length).toBeLessThan(userTexts(s.requests[1])[0].length)
+    // The history before the tail goes out unchanged once, then only as ever shorter text.
+    expect(userTexts(s.requests[1])[0]).toBe(`Request 0: ${filler}`)
+    expect(userTexts(s.requests[2])[0]).not.toBe(`Request 0: ${filler}`)
     expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
     expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
@@ -5099,15 +5121,20 @@ describe("SessionRunnerLLM", () => {
       executed: false,
     })
     yield* s.db
-      .update(SessionMessageTable)
+      .update(SessionPartTable)
       .set({
         data: sql`json_set(
-          ${SessionMessageTable.data},
-          '$.content[0].state.metadata',
+          ${SessionPartTable.data},
+          '$.state.metadata',
           json('{"sessionID":"ses_existing_child","status":"running","internal":"private"}')
         )`,
       })
-      .where(eq(SessionMessageTable.id, assistantMessageID))
+      .where(
+        and(
+          eq(SessionPartTable.message_id, assistantMessageID),
+          eq(SessionPartTable.call_id, "call-interrupted-subagent"),
+        ),
+      )
       .run()
       .pipe(Effect.orDie)
     s.requests.length = 0
@@ -5184,11 +5211,9 @@ describe("SessionRunnerLLM", () => {
     })
     yield* callTool(crashed, "call-running", "subagent")
     yield* s.db
-      .update(SessionMessageTable)
-      .set({
-        data: sql`json_set(${SessionMessageTable.data}, '$.content[1].state.metadata', json('{"sessionID":"ses_child"}'))`,
-      })
-      .where(eq(SessionMessageTable.id, crashed))
+      .update(SessionPartTable)
+      .set({ data: sql`json_set(${SessionPartTable.data}, '$.state.metadata', json('{"sessionID":"ses_child"}'))` })
+      .where(and(eq(SessionPartTable.message_id, crashed), eq(SessionPartTable.call_id, "call-running")))
       .run()
       .pipe(Effect.orDie)
     // An unfinished assistant behind the checkpoint is outside the history the runner settles.
@@ -5468,6 +5493,37 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push([])
     yield* s.resume
     expect(s.requests).toHaveLength(2)
+  })
+
+  scenario("runs a top-level call to a Code Mode tool and records it as the model sent it", function* (s) {
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      {
+        echo: {
+          name: "echo",
+          description: "Echo text",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.Struct({ text: Schema.String }),
+          execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
+        },
+      },
+      { namespace: "acme" },
+    )
+    yield* s.admit("Call echo directly")
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "acme.echo", { text: "hi" }), TestLLM.stop())
+    yield* s.resume
+
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Call echo directly"),
+      Expected.assistant({}, [
+        Expected.completedTool(
+          { id: "call-echo", name: "acme.echo" },
+          { input: { text: "hi" }, content: [Expected.text("hi")] },
+        ),
+      ]),
+      { type: "assistant", finish: "stop" },
+    ])
   })
 
   scenario("durably settles local tool failures before continuing", function* (s) {

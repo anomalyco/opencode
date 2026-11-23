@@ -88,19 +88,23 @@ export async function openDraft(
   return { ...workspace, draftID, editor }
 }
 
-// Opens a draft on the local project with "New worktree" selected. Worktree creation stays pending until the test
-// resolves `worktree`; POST order (`worktree`, `session`, `prompt`), worktree requests, session creates and prompts are
-// recorded. The draft tab comes first, then a tab per session.
 // The new-session trigger that shows the draft's project and opens the location dialog on its projects.
 export function newSessionLocation(page: Page) {
   return page.locator('[data-component="new-session"] [data-action="prompt-project"]')
 }
 
-// The new-session branch chip for the selected branch. It opens the project's worktree step.
-export function newSessionBranch(page: Page) {
-  return page.locator('[data-component="new-session"] [data-action="prompt-branch"]')
+// The selected checkout's branch opens the project's worktree step.
+export function newSessionWorktree(page: Page) {
+  return page.locator('[data-component="new-session"] [data-action="prompt-worktree"]')
 }
 
+export function newSessionBaseBranch(page: Page) {
+  return page.locator('[data-component="new-session"] button[aria-description="Choose base branch"]')
+}
+
+// Opens a draft on the local project with "New worktree" selected. Worktree creation stays pending until the test
+// resolves `worktree`; POST order (`worktree`, `session`, `prompt`), worktree requests, session creates and prompts are
+// recorded. The draft tab comes first, then a tab per session.
 export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { draftID?: string }) {
   const worktree = Promise.withResolvers<{ status: number; json: unknown }>()
   const calls: string[] = []
@@ -148,9 +152,10 @@ export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { dr
   await page.goto(draftHref(draftID))
   const editor = page.locator('[data-component="composer-editor"]')
   await expect(editor).toBeVisible({ timeout: APP_READY_TIMEOUT })
-  await newSessionBranch(page).click()
+  await newSessionWorktree(page).click()
   await expect(page.getByRole("combobox", { name: "Search worktrees", exact: true })).toBeFocused()
   await page.getByRole("option", { name: /^New worktree/ }).click()
+  await expect(newSessionBaseBranch(page)).toBeVisible()
   await expect(editor).toBeEditable()
 
   return { ...workspace, draftID, editor, worktree, calls, worktreeRequests, creates, prompts }

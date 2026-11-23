@@ -1,5 +1,5 @@
 import { statModel } from "@opencode/data-core/domain/model-normalization"
-import { formatTokens, fromFirstUsage, isoDay } from "../lib/format"
+import { formatTokens, fromFirstUsage } from "../lib/format"
 import { baseUrl } from "../lib/language"
 import { publicModelName } from "../lib/model-name"
 import { hasProviderIcon, providerIconId } from "../lib/provider-icon"
@@ -7,9 +7,9 @@ import { formatCatalogLabName, isKnownCatalogLab } from "../routes/model-catalog
 import type { OgCard } from "./card"
 
 // Bump to change every card's URL, so unfurlers fetch the new image after a design change.
-const cardVersion = "1"
+const cardVersion = "2"
 
-type Usage = { date: string; tokens: number }
+type Usage = { start: string; tokens: number }
 
 // The parts of ModelPageData and LabPageData (src/lib/page-data.ts) a card shows.
 type ModelCardData = {
@@ -102,7 +102,7 @@ function icon(lab: string) {
 function days(stats: { usage: Usage[]; updatedAt: string | null } | null) {
   if (!stats) return []
   return fromFirstUsage(stats.usage).map((point) => ({
-    date: isoDay(point.date, stats.updatedAt),
+    date: point.start,
     tokens: point.tokens,
   }))
 }

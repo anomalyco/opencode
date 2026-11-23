@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "අදහස් දක්වමින්",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "අදහස් එක් කරන්න",
+  "ui.lineComment.add": "අදහස් එක් කරන්න",
+  "ui.lineComment.actions": "තේරීම් ක්‍රියා",
   "ui.lineComment.contextPlaceholder": "මෙම වෙනස සඳහා සන්දර්භය එක් කරන්න",
   "ui.lineComment.submit": "අදහස් දක්වන්න",
   "ui.lineComment.cancel": "අවලංගු කරන්න",

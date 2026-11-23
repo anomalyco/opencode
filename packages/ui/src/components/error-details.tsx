@@ -4,7 +4,7 @@ import type { JSX } from "solid-js"
 export function ErrorDetails(props: { error: string; children: JSX.Element }) {
   return (
     <div data-component="error-details">
-      <pre data-slot="error-details-text" tabIndex={0}>
+      <pre data-slot="error-details-text" tabIndex={-1}>
         {props.error}
       </pre>
       <div data-slot="error-details-actions">{props.children}</div>

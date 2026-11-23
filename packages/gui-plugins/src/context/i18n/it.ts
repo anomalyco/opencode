@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Utilizzo",
   "usage.cost": "Costo",
   "usage.view": "Visualizza l'utilizzo del contesto",
-  "systemPrompt.title": "Prompt di sistema",
   "rawMessages.title": "Messaggi non elaborati",
   "export.session": "Esporta sessione",
   "stats.session": "Sessione",

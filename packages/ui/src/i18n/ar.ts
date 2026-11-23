@@ -49,6 +49,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "جارٍ التعليق على ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "أضف تعليقًا",
+  "ui.lineComment.add": "أضف تعليقًا",
+  "ui.lineComment.actions": "إجراءات التحديد",
   "ui.lineComment.contextPlaceholder": "أضف سياقًا لهذا التغيير",
   "ui.lineComment.submit": "تعليق",
   "ui.lineComment.cancel": "إلغاء",

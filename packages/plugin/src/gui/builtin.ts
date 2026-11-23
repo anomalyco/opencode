@@ -3,11 +3,25 @@
 
 import type { Schema } from "effect"
 import type { Context } from "./context.js"
-import { Registry, type Catalog, type Messages, type Persisted, type StoreDeclaration, type StoreFrom } from "./core.js"
-import type { Desktop, Layout, Locale, StorageScope, StoreOptions } from "./host-apis.js"
+import { Registry, type Catalog, type Cleanup, type Contract, type Messages, type Persisted, type StoreDeclaration, type StoreFrom } from "./core.js"
+import type { Desktop, Layout, Locale, OpenOptions, SessionRef, StorageScope, StoreOptions } from "./host-apis.js"
 import type { MainContext } from "./main.js"
 import type { Command, IconName, Panel, PanelTab, SlotMap } from "./registries.js"
 import { type JSX } from "solid-js"
+
+/** Receives a person's activation of an application link on the desktop session screen. Unlike Links.open, this
+ * registry is not a programmatic way to open a URL.
+ * @example
+ * ```ts
+ * ctx.add(BuiltinAppLink, { review: (href) => review(href) })
+ * ```
+ */
+export const BuiltinAppLink = Registry.define<{
+  /** Reviews the target; never launches the address directly.
+   * @param href - The written target, not the link's label.
+   */
+  review(href: string): void
+}>("app-link")
 
 /**
  * Runs fn when the main thread is idle (a short timeout where requestIdleCallback is missing, e.g. Safari). Load lazy
@@ -33,6 +47,38 @@ export function onIdle(fn: () => void) {
 
   return () => clearTimeout(id)
 }
+
+/** Work a built-in finishes before the host sends a prompt or a command to a session. */
+export interface BuiltinPromptGate {
+  /**
+   * Called each time the host is about to send a prompt or a command to a session, once the server has created the
+   * session and before the request goes out. Return at once when there is nothing to prepare, and wait only for work
+   * that is in flight and can still succeed: the composer takes no other send meanwhile. The host waits for every
+   * gate at the same time, for at most one second, then sends whatever they did; a gate that throws or rejects is
+   * ignored. The prompt already shows in the conversation while the host waits, and Stop cancels it. Only a plugin
+   * that ships with the app is asked: the host ignores a gate any other plugin adds.
+   *
+   * @param input - The session the prompt goes to, mounted or not, and a signal that aborts when the host stops
+   *   waiting.
+   */
+  ready(input: {
+    /** The session the prompt goes to. It may not be routed or mounted yet, as when a draft sends its first prompt. */
+    readonly session: SessionRef
+    /** Aborts when the host stops waiting: every gate settled, or the second passed. */
+    readonly signal: AbortSignal
+  }): Promise<void> | void
+}
+
+/**
+ * Gates the host waits for before it sends a prompt or a command to a session. Use it for what the session's first
+ * step must already find, such as a desktop attachment that adds tools; never for work that can finish later.
+ *
+ * @example
+ * ```ts
+ * ctx.add(BuiltinPromptGate, { ready: ({ session, signal }) => attach(session, signal) })
+ * ```
+ */
+export const BuiltinPromptGate = Registry.define<BuiltinPromptGate>("prompt-gate")
 
 /** A `Command` with the fields only built-ins set. */
 export interface BuiltinCommand extends Command {
@@ -266,10 +312,42 @@ export interface BuiltinDesktop extends Desktop {
    * @param enabled - Turns it on or off.
    */
   forceFocus(enabled: boolean): Promise<void>
+  /**
+   * Hands a file row's drag to the system, so the file drops into other apps (a file manager, a browser, a chat app)
+   * as the file itself. Call it from `dragstart` after setting the drag's data: a drop back into the app reads as
+   * that data, as the row's own drag would. The host cancels the event's drag when it hands it over; when the file is
+   * gone by then, nothing is dragged. When the system drag ends, the event's target gets the `dragend` its cancelled drag
+   * never fired. Windows desktop only: returns false elsewhere, and the event's own drag goes on.
+   *
+   * @param event - The row's `dragstart`.
+   * @param path - The file's absolute path on this computer.
+   * @returns Whether the system drag started in place of the event's.
+   */
+  dragOut(event: DragEvent, path: string): boolean
+}
+
+/** `OpenOptions` with the placement only built-ins use. */
+export interface BuiltinOpenOptions extends OpenOptions {
+  /**
+   * With `tab: "append"` or `"select"`, the stored tab the new tab lands directly after, as `${plugin}:${tab id}`,
+   * for a tab that belongs beside the one it came from. Defaults to the end of the strip, which is also where the tab
+   * lands when the strip does not store that key. A tab the strip stores already does not move.
+   */
+  readonly after?: string
 }
 
 /** `Layout` with the abilities only built-ins use. */
 export interface BuiltinLayout extends Layout {
+  /**
+   * `Layout.open`, which can also place the tab after another one.
+   *
+   * @param key - `${plugin}:${tab id}`.
+   * @param session - The session whose strip changes.
+   * @param options - How the tab lands; see `BuiltinOpenOptions`.
+   */
+  open(key: string, session: SessionRef, options?: BuiltinOpenOptions): void
+  /** Whether the current session row can fit a readable conversation beside the minimum side pane. */
+  fitsSide(): boolean
   /**
    * Runs an app command as the command palette does, e.g. `mcp.toggle` (the `/mcp` dialog). Does nothing when the
    * command is unavailable or disabled. App command ids are the app's own, not a plugin contract.
@@ -291,6 +369,13 @@ export interface BuiltinLocale extends Locale {
 
 /** The window context as the app's host builds it for every plugin, with the members only built-ins use. */
 export interface BuiltinContext extends Context {
+  /**
+   * Provides a separate implementation to each consuming plugin instance. The host supplies its identity and lifetime.
+   * @param token - A contract owned by this provider.
+   * @param bind - Creates the implementation the named consumer alone receives, until its signal aborts.
+   * @returns Withdraws the contract early.
+   */
+  provideFor<T>(token: Contract<T>, bind: (consumer: string, signal: AbortSignal) => T): Cleanup
   /** Desktop-only abilities, `forceFocus` included; undefined on the web. */
   readonly desktop: BuiltinDesktop | undefined
   /** The interface language and its writing direction, which `setDirection` overrides. */

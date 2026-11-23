@@ -1,7 +1,7 @@
 import { Clock, Effect, Redacted, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { RequestExecutor } from "../route/executor.js"
-import { AIError, InvalidProviderOutputError, InvalidRequestError } from "../schema/index.js"
+import { AIError, InvalidProviderOutputError, InvalidRequestError, type RequestTimeout } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 
 const OPENAI_BASE_URL = "https://api.openai.com/v1"
@@ -21,42 +21,30 @@ export type RealtimeTransport =
 export type RealtimeSession = Readonly<Record<string, unknown>>
 
 export interface RealtimeConnectInput {
+  readonly engine: RealtimeEngine
   readonly model: string
   readonly apiKey: Redacted.Redacted
   /** Where a GPT-Live session starts, OpenAI by default: another host of its API, such as OpenCode's. */
   readonly baseURL?: string
   /** Headers that host needs besides the API key, such as OpenCode's workspace. */
   readonly headers?: Readonly<Record<string, string>>
+  readonly timeout?: RequestTimeout
   readonly session?: RealtimeSession
   readonly transport: RealtimeTransportInput
 }
 
+// The voice APIs this package speaks, by provider and models.dev API. Which models they start comes from models.dev.
 export const engines = [
-  { family: "gpt-live", model: "gpt-live-1", id: "openai-live", provider: "openai", transports: ["webrtc"] },
-  {
-    family: "gpt-realtime",
-    model: "gpt-realtime-2.1",
-    id: "openai-realtime",
-    provider: "openai",
-    transports: ["webrtc", "websocket"],
-  },
-  { family: "grok-voice", model: "grok-voice-3.0", id: "xai-realtime", provider: "xai", transports: ["websocket"] },
-  {
-    family: "gemini-3.8-live",
-    model: "gemini-3.8-live",
-    id: "gemini-live",
-    provider: "google",
-    transports: ["websocket"],
-  },
+  { id: "openai-live", provider: "openai", api: "live", transports: ["webrtc"] },
+  { id: "openai-realtime", provider: "openai", api: "realtime", transports: ["webrtc", "websocket"] },
+  { id: "xai-realtime", provider: "xai", api: "realtime", transports: ["websocket"] },
+  { id: "gemini-live", provider: "google", api: "bidi-generate-content", transports: ["websocket"] },
 ] as const
 
-// Matches the bare family name (`gpt-realtime`) and its versions (`gpt-realtime-2.1`, `gpt-realtime-mini`).
-export const engine = (model: string) =>
-  engines.find((item) => model === item.family || model.startsWith(`${item.family}-`))
+export type RealtimeEngine = (typeof engines)[number]
 
 export const connect = Effect.fn("Realtime.connect")(function* (input: RealtimeConnectInput) {
-  const resolved = engine(input.model)
-  if (!resolved) return yield* invalidRequest(`Unsupported voice model: ${input.model}`)
+  const resolved = input.engine
   if (!resolved.transports.some((type) => type === input.transport.type))
     return yield* invalidRequest(`${input.model} only supports ${resolved.transports.join(", ")} transport`)
   const session = { ...input.session, model: input.model }
@@ -69,16 +57,23 @@ export const connect = Effect.fn("Realtime.connect")(function* (input: RealtimeC
         input.apiKey,
         { session, transport: input.transport },
         LiveSessionResponse,
-        { headers: input.headers },
+        { headers: input.headers, timeout: input.timeout },
       )
       return { type: "webrtc" as const, sdp: data.transport.sdp }
     }
     case "openai-realtime": {
       if (input.transport.type === "websocket")
-        return yield* clientSecret(resolved.id, OPENAI_BASE_URL, input.model, input.apiKey, {
-          expires_after: { anchor: "created_at", seconds: 60 },
-          session,
-        })
+        return yield* clientSecret(
+          resolved.id,
+          OPENAI_BASE_URL,
+          input.model,
+          input.apiKey,
+          {
+            expires_after: { anchor: "created_at", seconds: 60 },
+            session,
+          },
+          input.timeout,
+        )
       const form = new FormData()
       form.append("sdp", input.transport.sdp)
       form.append("session", encodeJson(session))
@@ -89,13 +84,21 @@ export const connect = Effect.fn("Realtime.connect")(function* (input: RealtimeC
         input.apiKey,
         form,
         Schema.String,
+        { timeout: input.timeout },
       )
       return { type: "webrtc" as const, sdp }
     }
     case "xai-realtime":
-      return yield* clientSecret(resolved.id, XAI_BASE_URL, input.model, input.apiKey, {
-        expires_after: { seconds: 60 },
-      })
+      return yield* clientSecret(
+        resolved.id,
+        XAI_BASE_URL,
+        input.model,
+        input.apiKey,
+        {
+          expires_after: { seconds: 60 },
+        },
+        input.timeout,
+      )
     case "gemini-live": {
       const now = yield* Clock.currentTimeMillis
       const expiresAt = now + 60_000
@@ -110,7 +113,7 @@ export const connect = Effect.fn("Realtime.connect")(function* (input: RealtimeC
           bidiGenerateContentSetup: { ...input.session, model: `models/${input.model}` },
         },
         AuthTokenResponse,
-        { authHeader: "x-goog-api-key" },
+        { authHeader: "x-goog-api-key", timeout: input.timeout },
       )
       return {
         type: "websocket" as const,
@@ -124,7 +127,6 @@ export const connect = Effect.fn("Realtime.connect")(function* (input: RealtimeC
 
 export const Realtime = {
   engines,
-  engine,
   connect,
 } as const
 
@@ -158,11 +160,18 @@ const post = <A>(
   apiKey: Redacted.Redacted,
   body: Record<string, unknown> | FormData,
   response: Schema.Codec<A, string>,
-  options: { readonly authHeader?: string; readonly headers?: Readonly<Record<string, string>> } = {},
+  options: {
+    readonly authHeader?: string
+    readonly headers?: Readonly<Record<string, string>>
+    readonly timeout?: RequestTimeout
+  } = {},
 ) =>
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
-    const res = yield* executor.execute(
+    const res = yield* RequestExecutor.withTimeout(
+      executor.execute,
+      options.timeout,
+    )(
       HttpClientRequest.post(url).pipe(
         HttpClientRequest.setHeaders(options.headers ?? {}),
         options.authHeader
@@ -176,7 +185,7 @@ const post = <A>(
     const http = RequestExecutor.responseHttp(res)
     const fail = (message: string, cause?: unknown, raw?: string) =>
       new AIError({ reason: new InvalidProviderOutputError({ route, message, body: raw, http, cause }) })
-    const text = yield* res.text.pipe(Effect.mapError((cause) => fail(`Failed to read ${route} response`, cause)))
+    const text = yield* RequestExecutor.responseText(res)
     return yield* Schema.decodeEffect(response)(text).pipe(
       Effect.mapError((cause) => fail(`${route} returned an invalid response`, cause, text)),
     )
@@ -188,8 +197,9 @@ const clientSecret = (
   model: string,
   apiKey: Redacted.Redacted,
   body: Record<string, unknown>,
+  timeout?: RequestTimeout,
 ) =>
-  post(route, `${baseURL}/realtime/client_secrets`, apiKey, body, ClientSecretResponse).pipe(
+  post(route, `${baseURL}/realtime/client_secrets`, apiKey, body, ClientSecretResponse, { timeout }).pipe(
     Effect.map(
       (data): RealtimeTransport => ({
         type: "websocket",

@@ -51,7 +51,7 @@ export class SpeechModel<Options extends SpeechOptions = SpeechOptions> extends 
     return new SpeechModel<Options>({
       id: input.id,
       provider: route.protocol.provider,
-      http: input.http,
+      transport: input.transport,
       providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as SpeechRoute,
     })

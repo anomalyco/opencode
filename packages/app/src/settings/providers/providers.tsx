@@ -37,7 +37,6 @@ type ProviderSource = "env" | "api" | "account" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
 
 const PROVIDER_NOTES = [
-  { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
   { match: (id: string) => id === "opencode-go", key: "dialog.provider.opencodeGo.tagline" },
   { match: (id: string) => id === "anthropic", key: "dialog.provider.anthropic.note" },
   { match: (id: string) => id === "claude-agent", key: "dialog.provider.claudeAgent.note" },
@@ -232,10 +231,13 @@ export const SettingsProviders: Component<{
     // key, including one imported from a v1 auth.json, makes Zen "connected" without any account, so
     // the Popular list keeps the sign-in row until the active credential is an OAuth grant. Until the
     // integration list arrives the row is still the models.dev Zen provider, so dedupe it as before.
+    // OpenCode Go connects through OpenCode, so it's only listed for people who already saved a Go key.
     const account = integrations.list().find((entry) => entry.id === CONSOLE_INTEGRATION)
+    const go = integrations.list().find((entry) => entry.id === "opencode-go")
 
     const items = providers
       .popular()
+      .filter((p) => p.id !== "opencode-go" || !!go?.connections.some((connection) => connection.type === "credential"))
       .filter((p) => {
         if (p.id !== CONSOLE_INTEGRATION || !account) return !connectedIDs.has(p.id)
 
@@ -406,7 +408,7 @@ export const SettingsProviders: Component<{
             aria-label={language.t("settings.providers.account.manage", { provider: name() })}
           >
             <span>{active()?.label}</span>
-            <Icon name="chevron-down" size="small" />
+            <Icon name="chevron-down" />
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="settings-provider-account-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
@@ -432,7 +434,7 @@ export const SettingsProviders: Component<{
               </Menu.Group>
               <Menu.Separator />
               <Menu.Item disabled={accountView().busy} onSelect={() => connect(menuProps.provider.id)}>
-                <Icon name="plus" size="small" class="shrink-0" />
+                <Icon name="plus" class="shrink-0" />
                 {language.t("settings.providers.account.add")}
               </Menu.Item>
             </Menu.Content>
@@ -574,7 +576,6 @@ export const SettingsProviders: Component<{
                                     </span>
                                     <Icon
                                       name="chevron-right"
-                                      size="small"
                                       classList={{
                                         "settings-provider-console-chevron": true,
                                         open: consoleExpanded(),
@@ -612,7 +613,6 @@ export const SettingsProviders: Component<{
                                     <span>{provider.name.slice(group().prefix.length)}</span>
                                     <Icon
                                       name="chevron-right"
-                                      size="small"
                                       class="settings-provider-console-item-chevron"
                                     />
                                   </button>

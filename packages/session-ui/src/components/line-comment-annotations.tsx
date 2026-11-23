@@ -52,8 +52,8 @@ export type SavedLineComment = {
 type LineCommentDriverProps<T extends SavedLineComment> = {
   machine?: LineCommentMachine
   onSyncSelected?: (range: SelectedLineRange | null) => void
-  onSubmit: (input: { comment: string; selection: SelectedLineRange }) => void
-  onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange }) => void
+  onSubmit: (input: { comment: string; selection: SelectedLineRange; send: boolean }) => void
+  onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange; send: boolean }) => void
   onDelete?: (comment: T) => void
 }
 
@@ -239,10 +239,11 @@ export function createLineCommentDriver<T extends SavedLineComment>(props: LineC
       if (effect.type === "sync-selected")
         props.onSyncSelected?.(effect.range ? cloneSelectedLineRange(effect.range) : null)
 
-      if (effect.type === "submit-draft") props.onSubmit({ comment: effect.comment, selection: effect.selection })
+      if (effect.type === "submit-draft")
+        props.onSubmit({ comment: effect.comment, selection: effect.selection, send: effect.send })
 
       if (effect.type === "submit-edit")
-        props.onUpdate?.({ id: effect.id, comment: effect.comment, selection: effect.selection })
+        props.onUpdate?.({ id: effect.id, comment: effect.comment, selection: effect.selection, send: effect.send })
 
       if (effect.type === "delete-comment" && comment) props.onDelete?.(comment)
     }
@@ -285,6 +286,7 @@ type LineCommentController<T extends SavedLineComment, A> = {
   renderGutterUtility: ReturnType<typeof createLineCommentGutterRenderer>
   onLineSelected: (range: SelectedLineRange | null) => void
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
+  commentSelection: Accessor<((range: SelectedLineRange) => void) | undefined>
 }
 
 export function createLineCommentController<T extends SavedLineComment>(
@@ -387,6 +389,11 @@ export function createLineCommentController<T extends SavedLineComment>(
     }),
     onLineSelected: (range: SelectedLineRange | null) => driver.send({ type: "line.selected", range }),
     onLineSelectionEnd: (range: SelectedLineRange | null) => driver.send({ type: "line.selection-ended", range }),
+    /** Opens a draft on text selected in the code. Unset while a saved comment is edited, which keeps its range. */
+    commentSelection: () =>
+      driver.mode().status === "editing"
+        ? undefined
+        : (range: SelectedLineRange) => driver.send({ type: "draft.opened", range }),
   }
 }
 
@@ -546,6 +553,7 @@ export function createLineCommentGutterRenderer(props: {
     const comment = createHoverComment({
       label: props.label,
       getHoveredLine,
+      isSelected: (hovered) => lineInSelectedRange(props.getSelectedRange(), hovered.lineNumber, hovered.side),
       onSelect: (hovered) => {
         const current = props.getSelectedRange()
 

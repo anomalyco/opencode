@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, onCleanup, untrack } from "soli
 import { useLayout } from "@/shell/state/layout"
 import { useGlobal } from "@/runtime/server/runtime"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
-import { useProjectsSidebar } from "@/shell/projects-sidebar"
+import { useProjectNavigation } from "@/shell/project-navigation"
 import { tabProjectDirectory } from "@/shell/tabs/project-sessions"
 import { rootSession } from "@/shell/routes/session"
 import {
@@ -22,7 +22,7 @@ export function createRouteTabSync() {
   const layout = useLayout()
   const global = useGlobal()
   const tabs = useTabs()
-  const projectsSidebar = useProjectsSidebar()
+  const projectNavigation = useProjectNavigation()
   const [routeState, setRouteState] = createSignal(INITIAL_ROUTE_TAB_STATE)
   const lookups = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
@@ -60,7 +60,7 @@ export function createRouteTabSync() {
 
   // Home's project selection is shared across windows; this window's last project can differ.
   createEffect(() => {
-    if (!projectsSidebar() || !tabs.recentReady() || !tabs.infoReady()) return
+    if (!projectNavigation() || !tabs.recentReady() || !tabs.infoReady()) return
     const tab = currentTab()
 
     if (!tab) return

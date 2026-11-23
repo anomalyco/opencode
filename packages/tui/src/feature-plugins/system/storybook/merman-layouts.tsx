@@ -169,12 +169,11 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
                 width="100%"
                 syntaxStyle={themes.currentSyntax()}
                 content={markdown()}
-                internalBlockMode="top-level"
                 tableOptions={{ style: "grid", cellPaddingX: 1 }}
                 conceal={true}
                 fg={theme.markdown.text}
                 bg={theme.background.base}
-                renderNode={plugins.markdown()}
+                renderBlock={plugins.markdown()}
               />
             </box>
           </scrollbox>

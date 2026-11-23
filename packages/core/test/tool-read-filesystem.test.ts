@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { pathToFileURL } from "url"
 import { Environment } from "@opencode/core/environment/index"
 import { AbsolutePath } from "@opencode/core/schema"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
@@ -21,104 +22,204 @@ const fixture = Effect.gen(function* () {
 })
 const absolute = (value: string) => AbsolutePath.make(value)
 
+const synthetic = (size: number, slice: (offset: number, length: number) => Uint8Array, maximum = Infinity) => {
+  const calls: { readonly offset: number; readonly length: number }[] = []
+  const files: Environment.Files = {
+    ...Environment.makeFiles(Environment.makeMemoryDriver()),
+    read: (_, range) =>
+      Effect.sync(() => {
+        if (!range) throw new Error("Expected a range read")
+        calls.push(range)
+        return {
+          info: { type: "file" as const, size, mtimeMs: 0 },
+          bytes: slice(range.offset, Math.min(range.length, maximum, size - range.offset)),
+        }
+      }),
+  }
+  return {
+    calls,
+    read: (page: ReadToolFileSystem.PageInput) =>
+      ReadToolFileSystem.read(files, absolute(path.resolve("synthetic.txt")), "synthetic.txt", page),
+  }
+}
+
+describe("ReadToolFileSystem scan ranges", () => {
+  for (const sample of [
+    { page: { offset: 163_741, limit: 10 }, offset: 163_741, lines: 10, next: 163_751, calls: 7 },
+    { page: { offset: -100 }, offset: 163_741, lines: 100, calls: 7 },
+    { page: { offset: 163_841 }, offset: 163_741, lines: 100, calls: 7 },
+    { page: { offset: 1, limit: 10 }, offset: 1, lines: 10, next: 11, calls: 1 },
+  ]) {
+    it.effect(`counts reads on a 20 MiB file at offset ${sample.page.offset}`, () =>
+      Effect.gen(function* () {
+        const line = "x".repeat(127) + "\n"
+        const file = synthetic(20 * 1024 * 1024, (offset, length) =>
+          Buffer.alloc(length + (offset % 128), line).subarray(offset % 128),
+        )
+        expect(yield* file.read(sample.page)).toEqual({
+          type: "text",
+          content: Array.from({ length: sample.lines }, () => line.slice(0, -1)).join("\n"),
+          offset: sample.offset,
+          lineCount: sample.lines,
+          ...(sample.next === undefined ? {} : { next: sample.next }),
+        })
+        expect(file.calls).toHaveLength(sample.calls)
+        expect(file.calls[0]).toEqual({ offset: 0, length: 256 * 1024 })
+        expect(file.calls.every((call) => call.length <= 4 * 1024 * 1024)).toBe(true)
+      }),
+    )
+  }
+
+  it.effect("bounds reads to 256 KiB after reaching the requested page", () =>
+    Effect.gen(function* () {
+      const boundary = 1.25 * 1024 * 1024
+      const file = synthetic(boundary + 2 * 256 * 1024 + 5, (offset, length) => {
+        const bytes = Buffer.alloc(length, "x")
+        if (offset < boundary && offset + length >= boundary) bytes.write("\none\n", boundary - offset - 5)
+        return bytes
+      })
+      expect(yield* file.read({ offset: 2, limit: 2 })).toEqual({
+        type: "text",
+        content: `one\n${"x".repeat(2_000)}... (line truncated to 2000 chars)`,
+        offset: 2,
+        lineCount: 2,
+      })
+      // Once the scan reaches line 2 (after the 256 KiB + 1 MiB seek), later reads stay capped at 256 KiB.
+      expect(file.calls[0]?.length).toBe(256 * 1024)
+      expect(file.calls[1]?.length).toBe(1024 * 1024)
+      expect(file.calls.slice(2).every((call) => call.length <= 256 * 1024)).toBe(true)
+    }),
+  )
+
+  it.effect("keeps scan requests at least 256 KiB after a short read", () =>
+    Effect.gen(function* () {
+      const content = Buffer.from("x\n".repeat(4_000) + "target\n")
+      const file = synthetic(content.length, (offset, length) => content.subarray(offset, offset + length), 1_024)
+      expect(yield* file.read({ offset: 4_001, limit: 1 })).toEqual({
+        type: "text",
+        content: "target",
+        offset: 4_001,
+        lineCount: 1,
+      })
+      // Every non-EOF scan read requests the remaining file (never shrinking to 4 KiB after a 1 KiB short read).
+      expect(
+        file.calls.every((call) => call.offset + call.length === content.length || call.length >= 256 * 1024),
+      ).toBe(true)
+    }),
+  )
+})
+
 describe("ReadTool text serialization", () => {
-  const cases = [
+  const cases: {
+    name: string
+    content: string
+    page: ReadToolFileSystem.PageInput
+    output: ReadToolFileSystem.TextContent
+    model: string
+  }[] = [
     {
       name: "reads a partial GIF signature as text",
       content: "GIF8 is text",
       page: {},
-      output: { type: "file", content: "GIF8 is text", encoding: "utf8" },
+      output: { type: "text", content: "GIF8 is text", offset: 1, lineCount: 1 },
       model: "Read file lines.txt, lines 1-1\n1: GIF8 is text",
     },
     {
       name: "preserves a selected trailing blank line before continuation",
       content: "alpha\n\nomega\n",
       page: { offset: 1, limit: 2 },
-      output: { type: "text-page", content: "alpha\n", offset: 1, truncated: true, next: 3 },
+      output: { type: "text", content: "alpha\n", offset: 1, lineCount: 2, next: 3 },
       model: "Read file lines.txt, lines 1-2\n1: alpha\n2: \n[Output truncated. Continue reading with offset: 3]",
     },
     {
       name: "preserves multiple selected trailing blank lines at a noninitial offset",
       content: "before\nalpha\n\n\nomega\n",
       page: { offset: 2, limit: 3 },
-      output: { type: "text-page", content: "alpha\n\n", offset: 2, truncated: true, next: 5 },
+      output: { type: "text", content: "alpha\n\n", offset: 2, lineCount: 3, next: 5 },
       model: "Read file lines.txt, lines 2-4\n2: alpha\n3: \n4: \n[Output truncated. Continue reading with offset: 5]",
     },
     {
       name: "preserves a selected trailing blank line at EOF",
       content: "alpha\n\n",
       page: { limit: 2 },
-      output: { type: "text-page", content: "alpha\n", offset: 1, truncated: false },
+      output: { type: "text", content: "alpha\n", offset: 1, lineCount: 2 },
       model: "Read file lines.txt, lines 1-2\n1: alpha\n2: ",
     },
     {
       name: "preserves internal blank lines in a page",
       content: "alpha\n\nomega\n",
       page: { limit: 3 },
-      output: { type: "text-page", content: "alpha\n\nomega", offset: 1, truncated: false },
+      output: { type: "text", content: "alpha\n\nomega", offset: 1, lineCount: 3 },
       model: "Read file lines.txt, lines 1-3\n1: alpha\n2: \n3: omega",
     },
     {
       name: "preserves continuation for a nonblank page",
       content: "alpha\n\nomega\n",
       page: { limit: 1 },
-      output: { type: "text-page", content: "alpha", offset: 1, truncated: true, next: 2 },
+      output: { type: "text", content: "alpha", offset: 1, lineCount: 1, next: 2 },
       model: "Read file lines.txt, lines 1-1\n1: alpha\n[Output truncated. Continue reading with offset: 2]",
     },
     {
       name: "strips only the terminal file newline in a whole-file read",
       content: "alpha\n\n",
       page: {},
-      output: { type: "file", content: "alpha\n\n", encoding: "utf8" },
+      output: { type: "text", content: "alpha\n\n", offset: 1, lineCount: 2 },
       model: "Read file lines.txt, lines 1-2\n1: alpha\n2: ",
     },
     {
       name: "does not add a line for a whole-file terminal newline",
       content: "alpha\n",
       page: {},
-      output: { type: "file", content: "alpha\n", encoding: "utf8" },
+      output: { type: "text", content: "alpha\n", offset: 1, lineCount: 1 },
       model: "Read file lines.txt, lines 1-1\n1: alpha",
     },
     {
       name: "preserves a whole-file read without a terminal newline",
       content: "alpha",
       page: {},
-      output: { type: "file", content: "alpha", encoding: "utf8" },
+      output: { type: "text", content: "alpha", offset: 1, lineCount: 1 },
       model: "Read file lines.txt, lines 1-1\n1: alpha",
     },
     {
       name: "preserves empty whole-file output",
       content: "",
       page: {},
-      output: { type: "file", content: "", encoding: "utf8" },
+      output: { type: "text", content: "", offset: 1, lineCount: 0 },
       model: "Read file lines.txt, 0 lines",
     },
     {
       name: "preserves empty-file page output",
       content: "",
       page: { limit: 2 },
-      output: { type: "text-page", content: "", lineCount: 0, offset: 1, truncated: false },
+      output: { type: "text", content: "", offset: 1, lineCount: 0 },
       model: "Read file lines.txt, 0 lines",
     },
     {
       name: "numbers the only blank line in a newline-only file",
       content: "\n",
       page: { limit: 1 },
-      output: { type: "text-page", content: "", lineCount: 1, offset: 1, truncated: false },
+      output: { type: "text", content: "", offset: 1, lineCount: 1 },
+      model: "Read file lines.txt, lines 1-1\n1: ",
+    },
+    {
+      name: "keeps the newline of a whole newline-only file",
+      content: "\n",
+      page: {},
+      output: { type: "text", content: "\n", offset: 1, lineCount: 1 },
       model: "Read file lines.txt, lines 1-1\n1: ",
     },
     {
       name: "numbers a single blank line before continuation",
       content: "alpha\n\nomega\n",
       page: { offset: 2, limit: 1 },
-      output: { type: "text-page", content: "", lineCount: 1, offset: 2, truncated: true, next: 3 },
+      output: { type: "text", content: "", offset: 2, lineCount: 1, next: 3 },
       model: "Read file lines.txt, lines 2-2\n2: \n[Output truncated. Continue reading with offset: 3]",
     },
     {
       name: "counts the last blank line when an offset is past EOF",
       content: "alpha\n\n",
       page: { offset: 9, limit: 1 },
-      output: { type: "text-page", content: "", lineCount: 1, offset: 2, truncated: false },
+      output: { type: "text", content: "", offset: 2, lineCount: 1 },
       model: "Read file lines.txt, lines 2-2 (offset 9 is past the end; the file has 2 lines)\n2: ",
     },
   ]
@@ -132,7 +233,7 @@ describe("ReadTool text serialization", () => {
 
         const result = yield* ReadToolFileSystem.read(current.environment, file, "lines.txt", input.page)
 
-        expect(result).toMatchObject(input.output)
+        expect(result).toEqual(input.output)
         expect(ReadTool.toModelContent("lines.txt", input.page.offset, result)).toBe(input.model)
       }),
     )
@@ -144,23 +245,23 @@ describe("ReadToolFileSystem", () => {
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
       const file = absolute(path.join(directory, "dense.txt"))
-      const read = (page?: ReadToolFileSystem.PageInput) => ReadToolFileSystem.read(environment, file, "dense.txt", page)
+      const read = (page?: ReadToolFileSystem.PageInput) =>
+        ReadToolFileSystem.read(environment, file, "dense.txt", page)
       const prefix = "x\r\n".repeat(1_999)
       for (const ending of ["last", "last\n", "last\r\n", "\n"]) {
         const content = prefix + ending
         yield* files.writeFileString(file, content)
-        expect(yield* read()).toMatchObject({ type: "file", content })
+        expect(yield* read()).toEqual({ type: "text", content, offset: 1, lineCount: 2_000 })
       }
 
       yield* files.writeFileString(file, prefix + "\r\nlast")
       const page = yield* read()
-      expect(page.type).toBe("text-page")
-      if (page.type !== "text-page") return
-      expect(page).toMatchObject({ content: "x\n".repeat(1_999), offset: 1, next: 2_001, truncated: true })
+      expect(page).toEqual({ type: "text", content: "x\n".repeat(1_999), offset: 1, lineCount: 2_000, next: 2_001 })
+      if (page.type !== "text") return
       expect(ReadTool.toModelContent("dense.txt", undefined, page)).toEndWith(
         "2000: \n[Output truncated. Continue reading with offset: 2001]",
       )
-      expect(yield* read({ offset: page.next })).toMatchObject({ content: "last", offset: 2_001, truncated: false })
+      expect(yield* read({ offset: page.next })).toEqual({ type: "text", content: "last", offset: 2_001, lineCount: 1 })
     }),
   )
 
@@ -171,14 +272,14 @@ describe("ReadToolFileSystem", () => {
       const read = () => ReadToolFileSystem.read(environment, file, "bytes.txt")
       const exact = ("é".repeat(799) + "x\n").repeat(32)
       yield* files.writeFileString(file, exact)
-      expect(yield* read()).toMatchObject({ type: "file", content: exact })
+      expect(yield* read()).toEqual({ type: "text", content: exact, offset: 1, lineCount: 32 })
 
       // Each truncation marker takes more bytes than the one character it replaces.
       yield* files.writeFileString(file, ("x".repeat(2_001) + "\n").repeat(25) + "é".repeat(500))
       const page = yield* read()
-      expect(page.type).toBe("text-page")
-      if (page.type !== "text-page") return
-      expect(page).toMatchObject({ offset: 1, next: 26, truncated: true })
+      expect(page.type).toBe("text")
+      if (page.type !== "text") return
+      expect(page).toMatchObject({ offset: 1, lineCount: 25, next: 26 })
       expect(page.content.split("\n")).toHaveLength(25)
       expect(Buffer.byteLength(page.content)).toBeLessThanOrEqual(50 * 1024)
     }),
@@ -198,12 +299,15 @@ describe("ReadToolFileSystem", () => {
         ])
         const file = absolute(path.join(directory, name))
         yield* files.writeFile(file, bytes)
-        expect(yield* ReadToolFileSystem.read(environment, file, name)).toMatchObject({
-          type: "file",
+        const result = yield* ReadToolFileSystem.read(environment, file, name)
+        expect(result).toEqual({
+          type: "media",
+          uri: pathToFileURL(file).href,
           mime: "image/gif",
-          encoding: "base64",
-          content: bytes.toString("base64"),
+          name,
+          bytes: expect.any(Uint8Array),
         })
+        expect(result.type === "media" && Buffer.from(result.bytes).equals(bytes)).toBe(true)
       }
     }),
   )
@@ -227,13 +331,7 @@ describe("ReadToolFileSystem", () => {
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(directory), "folder")
 
-      expect(result).toMatchObject({
-        type: "list-page",
-        entries: [
-          { path: `folder${path.sep}`, type: "directory" },
-          { path: "file.txt", type: "file" },
-        ],
-      })
+      expect(result).toEqual({ type: "directory", entries: [`folder${path.sep}`, "file.txt"] })
     }),
   )
 
@@ -250,7 +348,7 @@ describe("ReadToolFileSystem", () => {
 
       expect(binaryError).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
       expect(binaryError.message).toBe("Cannot read binary file: archive.dat")
-      expect(malformedResult).toMatchObject({ type: "file", content: "hi\uFFFD", encoding: "utf8" })
+      expect(malformedResult).toEqual({ type: "text", content: "hi\uFFFD", offset: 1, lineCount: 1 })
     }),
   )
 
@@ -262,7 +360,7 @@ describe("ReadToolFileSystem", () => {
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "notes.docx")
 
-      expect(result).toMatchObject({ type: "file", content: "plain text", encoding: "utf8" })
+      expect(result).toEqual({ type: "text", content: "plain text", offset: 1, lineCount: 1 })
     }),
   )
 
@@ -278,14 +376,7 @@ describe("ReadToolFileSystem", () => {
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(directory), "folder")
 
-      expect(result.type).toBe("list-page")
-      if (result.type !== "list-page") return
-      expect(result.entries.map((entry) => ({ ...entry, path: String(entry.path) }))).toEqual([
-        { path: `folder${path.sep}`, type: "directory" },
-        { path: "broken", type: "symlink" },
-        { path: "escape", type: "symlink" },
-        { path: "file.txt", type: "file" },
-      ])
+      expect(result).toEqual({ type: "directory", entries: [`folder${path.sep}`, "broken", "escape", "file.txt"] })
     }),
   )
 
@@ -301,10 +392,7 @@ describe("ReadToolFileSystem", () => {
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(link), "link")
 
-      expect(result).toMatchObject({
-        type: "list-page",
-        entries: [{ path: "file.txt", type: "file" }],
-      })
+      expect(result).toEqual({ type: "directory", entries: ["file.txt"] })
     }),
   )
 
@@ -347,8 +435,7 @@ describe("ReadToolFileSystem", () => {
           Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
         )
       const lines = Array.from({ length: 3_000 }, (_, index) => `${index + 1}`.padEnd(100, "x"))
-      const expected = (from: number) =>
-        lines.slice(from - 1).map((line, index) => `${from + index}: ${line}`)
+      const expected = (from: number) => lines.slice(from - 1).map((line, index) => `${from + index}: ${line}`)
 
       expect(yield* read("lf.txt", lines.join("\n") + "\n", { offset: 5_000 })).toEqual([
         "Read file lf.txt, lines 2901-3000 (offset 5000 is past the end; the file has 3000 lines)",
@@ -385,7 +472,9 @@ describe("ReadToolFileSystem", () => {
       const capped = yield* read("wide.txt", wide.join("\n") + "\n", { offset: 201 })
       expect(capped[0]).toBe("Read file wide.txt, lines 176-200 (offset 201 is past the end; the file has 200 lines)")
       expect(capped.slice(1)).toEqual(
-        wide.slice(175).map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
+        wide
+          .slice(175)
+          .map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
       )
 
       // Matches whole-file reads: a null byte anywhere in the file rejects a past-end read.
@@ -559,7 +648,7 @@ describe("ReadToolFileSystem", () => {
         limit: 1,
       })
 
-      expect(result).toMatchObject({ type: "text-page", content: "two", offset: 2, truncated: true, next: 3 })
+      expect(result).toEqual({ type: "text", content: "two", offset: 2, lineCount: 1, next: 3 })
     }),
   )
 
@@ -571,10 +660,11 @@ describe("ReadToolFileSystem", () => {
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "long.txt", { limit: 1 })
 
-      expect(result).toMatchObject({
-        type: "text-page",
+      expect(result).toEqual({
+        type: "text",
         content: `${"a".repeat(1_999)}... (line truncated to 2000 chars)`,
-        truncated: false,
+        offset: 1,
+        lineCount: 1,
       })
     }),
   )
@@ -596,10 +686,10 @@ describe("ReadToolFileSystem", () => {
       const lines = yield* ReadToolFileSystem.read(environment, absolute(linesFile), "many-lines.txt", { limit: 2_000 })
       const bytes = yield* ReadToolFileSystem.read(tracked, absolute(bytesFile), "many-bytes.txt", {})
 
-      expect(lines).toMatchObject({ type: "text-page", truncated: true, next: 2_001 })
-      expect(lines.type === "text-page" ? lines.content.split("\n") : []).toHaveLength(2_000)
-      expect(bytes).toMatchObject({ type: "text-page", truncated: true, next: 26 })
-      expect(bytes.type === "text-page" ? Buffer.byteLength(bytes.content) : Infinity).toBeLessThanOrEqual(
+      expect(lines).toMatchObject({ type: "text", lineCount: 2_000, next: 2_001 })
+      expect(lines.type === "text" ? lines.content.split("\n") : []).toHaveLength(2_000)
+      expect(bytes).toMatchObject({ type: "text", lineCount: 25, next: 26 })
+      expect(bytes.type === "text" ? Buffer.byteLength(bytes.content) : Infinity).toBeLessThanOrEqual(
         ReadToolFileSystem.MAX_READ_BYTES,
       )
       expect(ranges).toEqual([{ offset: 0, length: 256 * 1024 }])
@@ -618,12 +708,7 @@ describe("ReadToolFileSystem", () => {
         limit: 1,
       })
 
-      expect(result).toMatchObject({
-        type: "list-page",
-        entries: [{ path: `z${path.sep}`, type: "directory" }],
-        truncated: true,
-        next: 3,
-      })
+      expect(result).toEqual({ type: "directory", entries: [`z${path.sep}`], next: 3 })
     }),
   )
 
@@ -635,7 +720,7 @@ describe("ReadToolFileSystem", () => {
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "nul.txt", { limit: 1 })
 
-      expect(result).toMatchObject({ type: "text-page", content: "one", truncated: true, next: 2 })
+      expect(result).toEqual({ type: "text", content: "one", offset: 1, lineCount: 1, next: 2 })
     }),
   )
 
@@ -647,7 +732,7 @@ describe("ReadToolFileSystem", () => {
       const read = (offset: number) => ReadToolFileSystem.read(environment, file, "nul.txt", { offset, limit: 1 })
 
       for (const offset of [2, -3]) {
-        expect(yield* read(offset)).toMatchObject({ content: "selected", offset: 2, truncated: true, next: 3 })
+        expect(yield* read(offset)).toEqual({ type: "text", content: "selected", offset: 2, lineCount: 1, next: 3 })
       }
       expect(yield* read(5).pipe(Effect.flip)).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
     }),
@@ -661,8 +746,8 @@ describe("ReadToolFileSystem", () => {
       yield* files.writeFileString(file, `${"x".repeat(256 * 1024 - 2)}\n\uFEFFselected`)
       const read = (offset: number) => ReadToolFileSystem.read(environment, file, "marked.txt", { offset, limit: 1 })
 
-      expect(yield* read(3)).toMatchObject({ content: "\uFEFFselected", offset: 2, truncated: false })
-      expect(yield* read(-1)).toMatchObject({ content: "selected", offset: 2, truncated: false })
+      expect(yield* read(3)).toEqual({ type: "text", content: "\uFEFFselected", offset: 2, lineCount: 1 })
+      expect(yield* read(-1)).toEqual({ type: "text", content: "selected", offset: 2, lineCount: 1 })
     }),
   )
 
@@ -692,7 +777,7 @@ describe("ReadToolFileSystem", () => {
         limit: 1,
       })
 
-      expect(result).toMatchObject({ type: "text-page", content: "second", offset: 2, truncated: false })
+      expect(result).toEqual({ type: "text", content: "second", offset: 2, lineCount: 1 })
     }),
   )
 
@@ -707,7 +792,7 @@ describe("ReadToolFileSystem", () => {
         limit: 1,
       })
 
-      expect(result).toMatchObject({ type: "text-page", content: "second", offset: 2, truncated: false })
+      expect(result).toEqual({ type: "text", content: "second", offset: 2, lineCount: 1 })
     }),
   )
 
@@ -735,12 +820,14 @@ describe("ReadToolFileSystem", () => {
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "document.pdf")
 
-      expect(result).toMatchObject({
-        type: "file",
-        content: Buffer.from("%PDF-1.7\ncontent").toString("base64"),
-        encoding: "base64",
+      expect(result).toEqual({
+        type: "media",
+        uri: pathToFileURL(file).href,
         mime: "application/pdf",
+        name: "document.pdf",
+        bytes: expect.any(Uint8Array),
       })
+      expect(result.type === "media" && Buffer.from(result.bytes).toString()).toBe("%PDF-1.7\ncontent")
     }),
   )
 })

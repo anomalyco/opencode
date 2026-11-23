@@ -1,5 +1,3 @@
-import { basePath } from "./language"
-
 // How src/middleware.ts reads a /data path: which page it names and whether it asks for an alternate format
 // (Markdown, JSON, llms.txt) or the page's Open Graph image.
 
@@ -32,23 +30,6 @@ export function parsePath(path: string) {
   if (!target) return undefined
   if (target.kind === "llms") return { target, extension: "", format: "text" as const }
   return { target, extension: extension ?? "", format: extension && extensionFormats[extension] }
-}
-
-// Machine and asset paths that never redirect to the visitor's language.
-export function isDataBypassPath(pathname: string) {
-  return (
-    pathname.startsWith(`${basePath}/_build/`) ||
-    pathname.startsWith(`${basePath}/api/`) ||
-    pathname.startsWith(`${basePath}/stats/`) ||
-    pathname.startsWith(`${basePath}/_server`) ||
-    pathname === `${basePath}/banner.jpg` ||
-    pathname === `${basePath}/banner.png` ||
-    pathname === `${basePath}/sitemap.xml` ||
-    pathname.endsWith("/llms.txt") ||
-    pathname.endsWith(`/${ogSegment}`) ||
-    pathname.endsWith(".md") ||
-    pathname.endsWith(".json")
-  )
 }
 
 function parseTarget(parts: string[], formatted: boolean): Target | undefined {
