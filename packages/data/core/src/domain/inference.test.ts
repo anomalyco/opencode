@@ -106,6 +106,14 @@ describe("inference stat normalization", () => {
     expect(toRetentionAggregate({ ...row, cohort_date: "2026-08-10", eligible_users: "12" })).toMatchObject([
       { model: "omen-alpha", provider: "unknown", eligibleUsers: 12 },
     ])
+    ;["hungerg", "hungerg-free", "opencode/hungerg-free", "opencode-go/hungerg-free", "OPENCODE-GO/HungerG-free:global"].forEach((model) => {
+      expect(statModel(model, "")).toBe("hungerg")
+      expect(statProvider(model, "hidden-route-model", "hidden-provider")).toBe("unknown")
+
+      const row = { ...aggregate(model, "hidden-provider"), provider_model: "hidden-route-model" }
+      expect(toModelAggregate(row)).toMatchObject([{ model: "hungerg", provider: "unknown", requests: 1 }])
+      expect(toProviderAggregate(row)).toMatchObject([{ provider: "unknown", requests: 1 }])
+    })
     ;["opencode-go/union-alpha", "opencode/union-alpha"].forEach((model) => {
       expect(statModel(model, "")).toBe("union-alpha")
       expect(statProvider(model, "gpt-test-model", "test-provider")).toBe("unknown")

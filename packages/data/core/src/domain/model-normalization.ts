@@ -31,6 +31,8 @@ export const MODEL_NAME_ALIASES: Record<string, string> = {
   "deepseek-v4-flash-0731": "deepseek-v4-flash",
   "deepseek-v4-flash-dsv4-flash-final-rnaovd": "deepseek-v4-flash",
   "ll-alpha": "flint-40b",
+  "opencode-go/hungerg": "hungerg",
+  "opencode/hungerg": "hungerg",
   "opencode-go/union-alpha": "union-alpha",
   "opencode/union-alpha": "union-alpha",
   "ox-alpha": "glm-5.3-flash",
