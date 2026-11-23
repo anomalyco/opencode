@@ -6,12 +6,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
+use futures_util::{FutureExt, StreamExt};
 use opencode_api::client::Client;
 use opencode_api::generated::V2Event;
 use opencode_api::transport::{Request, Response, Transport};
-use opencode_store::{Data, Options};
+use opencode_store::{Changes, Data, Dirty, Options};
 use serde_json::Value;
 use tokio::sync::watch;
 
@@ -48,6 +48,8 @@ impl Req {
 pub enum Reply {
     Json(u16, Value),
     Text(u16, String),
+    /// An event stream that sends this text, then stays open.
+    Sse(String),
     /// The request fails before a response, as a failed `fetch` does.
     Fail(String),
 }
@@ -76,6 +78,12 @@ impl Transport for Fake {
             let (status, content_type, body) = match reply.await {
                 Reply::Json(status, value) => (status, "application/json", serde_json::to_vec(&value).unwrap()),
                 Reply::Text(status, text) => (status, "text/plain", text.into_bytes()),
+                Reply::Sse(text) => {
+                    let body =
+                        futures_util::stream::iter([Ok(Bytes::from(text))]).chain(futures_util::stream::pending());
+                    let headers = vec![("content-type".to_owned(), "text/event-stream".to_owned())];
+                    return Ok(Response { status: 200, headers, body: Box::pin(body) });
+                }
                 Reply::Fail(message) => return Err(message),
             };
             Ok(Response {
@@ -104,7 +112,19 @@ pub fn data(handler: Handler, options: Options) -> Data {
         "" => "/project".to_owned(),
         directory => directory.to_owned(),
     };
-    Data::new(client, Options { directory, ..options })
+    Data::local(client, Options { directory, ..options })
+}
+
+/// The one consumer of a test store's changes.
+#[derive(Default)]
+pub struct Taken(pub Dirty);
+
+impl Taken {
+    /// What changed since the last take, with the revision of the last flush.
+    pub fn take<'a>(&'a mut self, data: &'a Data) -> (u64, Changes<'a>) {
+        let revision = data.take_changes(&mut self.0);
+        (revision, Changes::new(&self.0, data))
+    }
 }
 
 pub fn event(value: Value) -> V2Event {
@@ -113,7 +133,7 @@ pub fn event(value: Value) -> V2Event {
 
 /// Applies one event as its own batch.
 pub fn emit(data: &Data, value: Value) {
-    data.apply(&[event(value)]);
+    data.apply(vec![event(value)]);
 }
 
 /// Yields to spawned tasks until `check` holds (2 s at most).

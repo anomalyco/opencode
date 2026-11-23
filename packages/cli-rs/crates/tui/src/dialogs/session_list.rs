@@ -1,5 +1,6 @@
 //! Search and manage sessions in the current location or across projects.
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -39,8 +40,8 @@ pub fn show(tui: &Tui) {
         }),
         timer: Cell::new(None),
     });
-    let current = match tui.route() {
-        Route::Session { id } => Some(id),
+    let current = match &*tui.route() {
+        Route::Session { id } => Some(id.clone()),
         _ => None,
     };
     let built = list.clone();
@@ -202,14 +203,8 @@ impl List {
         }
     }
 
-    fn location(&self, tui: &Tui) -> Option<LocationPublicInfo> {
-        let location = picker_location(tui);
-        tui.data.read(|store| store.location(Some(&location)).and_then(|data| data.info.clone()))
-    }
-
     fn fetch(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
-        let location = self.location(&tui);
         let (query, all_projects, request) = {
             let mut state = self.state.borrow_mut();
             state.request += 1;
@@ -218,7 +213,11 @@ impl List {
         };
         self.refresh();
         let client = tui.data.client().clone();
-        let input = location.map(|location| list_input(&location, &query, all_projects));
+        let picker = picker_location(&tui);
+        let input = tui.data.read(|store| {
+            let location = store.location(Some(&picker))?.info.as_ref()?;
+            Some(list_input(location, &query, all_projects))
+        });
         tui.app.spawn(
             async move { read(&client, &input?).await },
             bind!(self, |list, _, sessions| {
@@ -371,8 +370,12 @@ impl List {
 
     fn project_name(&self) -> String {
         let Some(tui) = self.tui.upgrade() else { return String::new() };
-        let Some(current) = self.location(&tui) else { return String::new() };
-        tui.data.read(|store| project_name(store.project(&current.project.id))).unwrap_or_default()
+        let picker = picker_location(&tui);
+        let name = tui.data.read(|store| {
+            let current = store.location(Some(&picker))?.info.as_ref()?;
+            project_name(store.project(&current.project.id))
+        });
+        name.unwrap_or_default()
     }
 
     /// `sessions()`: the read's results, or the loaded sessions while a read is pending or failed.
@@ -437,13 +440,11 @@ impl List {
         };
         let delete_key = tui.keymap.shortcut("session.delete").unwrap_or_default();
         let to_delete = self.state.borrow().to_delete.clone();
-        let location = self.location(&tui);
+        let picker = picker_location(&tui);
         tui.data.read(|store| {
-            let sessions: Vec<SessionInfo> = self
-                .sessions(store, location.as_ref())
-                .into_iter()
-                .filter(|session| session.parent_id.is_none())
-                .collect();
+            let location = store.location(Some(&picker)).and_then(|data| data.info.as_ref());
+            let sessions: Vec<SessionInfo> =
+                self.sessions(store, location).into_iter().filter(|session| session.parent_id.is_none()).collect();
             let by_id: HashMap<&SessionID, &SessionInfo> =
                 sessions.iter().map(|session| (&session.id, session)).collect();
             let pinned: Vec<&SessionID> = pinned_ids.iter().filter(|id| by_id.contains_key(id)).collect();
@@ -542,7 +543,7 @@ async fn read(client: &Client, input: &SessionListInput) -> Option<Vec<SessionIn
 }
 
 fn picker_location(tui: &Tui) -> Location {
-    let session = match tui.route() {
+    let session = match &*tui.route() {
         Route::Session { id } => {
             tui.data.read(|state| state.session(&id).map(|session| Location::new(session.location.directory.0.clone())))
         }
@@ -564,11 +565,11 @@ fn footer(session: &SessionInfo, project: Option<&Project>) -> Option<String> {
     let root = match &session.subpath {
         Some(subpath) => {
             let ups = subpath.as_str().split('/').count();
-            resolve_up(Flavor::NATIVE, directory, ups)
+            Cow::Owned(resolve_up(Flavor::NATIVE, directory, ups))
         }
-        None => directory.to_owned(),
+        None => Cow::Borrowed(directory),
     };
-    let from = project.map_or(root.as_str(), |project| project.canonical.as_str());
+    let from = project.map_or(&*root, |project| project.canonical.as_str());
     let relative = relative(from, &root);
     (relative.starts_with("..") || Flavor::NATIVE.is_absolute(&relative))
         .then(|| select::truncate(basename(&relative), 25))
@@ -639,8 +640,8 @@ pub fn basename(path: &str) -> &str {
 }
 
 fn resolve_up(flavor: Flavor, directory: &str, ups: usize) -> String {
-    let root = flavor.sep().to_string();
-    let paths: Vec<&str> = [root.as_str(), directory].into_iter().chain(std::iter::repeat_n("..", ups)).collect();
+    let root = if flavor == Flavor::Windows { "\\" } else { "/" };
+    let paths: Vec<&str> = [root, directory].into_iter().chain(std::iter::repeat_n("..", ups)).collect();
     flavor.resolve(&paths)
 }
 

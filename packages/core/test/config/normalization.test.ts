@@ -321,6 +321,16 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("maps the media tools' old experimental names in native rules", () => {
+    const rule = { action: "experimental_image_generate", resource: "*", effect: "deny" }
+    const result = normalized({
+      permissions: [rule],
+      agents: { build: { permissions: [{ ...rule, action: "experimental_video_generate" }] } },
+    }).encoded
+    expect(result.permissions).toEqual([{ ...rule, action: "generate_image" }])
+    expect(result.agents).toMatchObject({ build: { permissions: [{ ...rule, action: "generate_video" }] } })
+  })
+
   test.each(["agent", "mode"])("preserves legacy %s permission source order", (key) => {
     const build = {
       tools: { write: false, read: true },

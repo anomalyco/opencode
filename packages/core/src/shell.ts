@@ -110,14 +110,14 @@ type Spawned = {
 // A command its host runs. The host writes and counts its output file. It belongs to the server, not
 // to the Location that started it, so a Location closing or reloading never stops or forgets it.
 type Run = {
-  kind: "daemon"
+  kind: "host"
   info: Info
   process: CommandProcess
   toolCall?: ToolCall
   // When a restart should stop it. Unset while a call waits on it: that call's timeout dies with this server.
   timeoutDeadline?: number
   stopReason?: StopReason
-  // From the exit: newlines in the file, and why the daemon stopped writing it early.
+  // From the exit: newlines in the file, and why the host stopped writing it early.
   outputLines?: number
   outputError?: string
   // Why it was killed without a signal of its own.
@@ -368,7 +368,7 @@ const commandRuns = <E>(host: CommandHost<E>) =>
         stopReason: run.stopReason,
       })
 
-      // Records the command's latest timeout and stop reason in the daemon, so a restart sees them.
+      // Records the command's latest timeout and stop reason in the host, so a restart sees them.
       const store = (run: Run) =>
         run.process
           .store(persisted(run))
@@ -480,7 +480,7 @@ const commandRuns = <E>(host: CommandHost<E>) =>
                 completed: exit.exitedAt,
               }
             }),
-            // The daemon went away (and its processes with it), or forgot the process: it was killed.
+            // The host went away (and its processes with it), or forgot the process: it was killed.
             Effect.catch((error) =>
               Effect.logWarning("lost a shell command's process", { id: run.info.id, error: error.message }).pipe(
                 Effect.andThen(
@@ -520,14 +520,14 @@ const commandRuns = <E>(host: CommandHost<E>) =>
           outputPath: input.info.file,
           metadata: persisted(pending),
         })
-        const run: Run = { kind: "daemon", ...pending, process: created }
+        const run: Run = { kind: "host", ...pending, process: created }
         run.info = produce(input.info, (draft) => {
           if (created.info.pid !== undefined) draft.pid = created.info.pid
-          // The daemon's clock, so the command reports the same start wherever it is read.
+          // The host's clock, so the command reports the same start wherever it is read.
           draft.time.started = created.info.startedAt
         })
         runs.set(run.info.id, run)
-        // Timed from now: starting the daemon may have taken a while.
+        // Timed from now: starting the host may have taken a while.
         yield* attach(run, input.timeout > 0 ? input.timeout : undefined)
         yield* bus.publish(Shell.Event.Created, { info: run.info }, { location: ref })
         return run.info
@@ -561,7 +561,7 @@ const commandRuns = <E>(host: CommandHost<E>) =>
           const exited = process.lifecycle.status === "exited" ? process.lifecycle : undefined
           const status = running ? "running" : (stored.stopReason ?? (exited ? "exited" : "killed"))
           const run: Run = {
-            kind: "daemon",
+            kind: "host",
             info: {
               id: stored.id,
               status,
@@ -690,8 +690,7 @@ const layer = () =>
       const commands = new Map<Shell.ID, Spawned>()
       const exitOrder: Shell.ID[] = []
       // Take local commands back before returning the service so session restart recovery sees them.
-      const runs =
-        location.workspaceID === undefined && PersistentPty.available ? yield* daemon.at(location) : undefined
+      const runs = environment.hostsServer && PersistentPty.available ? yield* daemon.at(location) : undefined
 
       const outputDir = path.join(global.data, DIRECTORY, location.project.id)
       const { unlink, stat } = yield* Effect.promise(() => import("fs/promises"))
@@ -734,7 +733,7 @@ const layer = () =>
       const remove = Effect.fn("Shell.remove")(function* (id: Shell.ID) {
         const command = yield* require(id)
         yield* annotate(command.info)
-        if (command.kind === "daemon") return yield* runs?.remove(id) ?? Effect.void
+        if (command.kind === "host") return yield* runs?.remove(id) ?? Effect.void
         yield* removeCommand(id)
       })
 
@@ -761,7 +760,7 @@ const layer = () =>
       const timeout = Effect.fn("Shell.timeout")(function* (id: Shell.ID, duration: number) {
         const command = yield* require(id)
         yield* annotate(command.info)
-        if (command.kind === "daemon") yield* runs?.timeout(command, duration) ?? Effect.void
+        if (command.kind === "host") yield* runs?.timeout(command, duration) ?? Effect.void
         if (command.kind === "spawned" && command.info.status === "running" && command.timeout)
           yield* command.timeout(duration)
         return command.info
@@ -770,7 +769,7 @@ const layer = () =>
       const stop = Effect.fn("Shell.stop")(function* (id: Shell.ID, reason: StopReason) {
         const command = yield* require(id)
         yield* annotate(command.info)
-        if (command.kind === "daemon") yield* runs?.stop(command, reason) ?? Effect.void
+        if (command.kind === "host") yield* runs?.stop(command, reason) ?? Effect.void
         if (command.kind === "spawned" && command.info.status === "running" && command.stop) yield* command.stop(reason)
         return command.info
       })
@@ -919,9 +918,9 @@ const layer = () =>
               : (command.outputLines ?? (yield* countNewlines(info.file, size)))
           const total = newlines === undefined ? undefined : newlines + (endsWithNewline ? 0 : 1)
           const suffix = `full output saved to ${info.file}]`
-          // After a write error the daemon kept running the command, but its file stopped early.
+          // After a write error the host kept running the command, but its file stopped early.
           const stoppedEarly =
-            command.kind === "daemon" && command.outputError
+            command.kind === "host" && command.outputError
               ? `\n\n[output file ${info.file} stopped early: ${command.outputError}]`
               : ""
           const killed = command.killed ? { killed: command.killed } : {}
@@ -1142,10 +1141,9 @@ const layer = () =>
                     Effect.catch((error) => {
                       const cause = error.cause
                       const signal = cause instanceof CrossSpawnSpawner.KilledBySignal ? cause.signal : undefined
-                      // A signal reads as one. A command on another machine that cannot read its exit reports the
-                      // driver's own sentence instead of nothing; a local one is unchanged.
-                      if (signal === undefined && target.id !== environment.id)
-                        command.killed = cause instanceof Error ? cause.message : String(cause)
+                      // A signal reads as one. A command that cannot read its exit reports the driver's own sentence
+                      // instead of nothing.
+                      if (signal === undefined) command.killed = cause instanceof Error ? cause.message : String(cause)
                       return Effect.succeed({ exit: undefined, signal })
                     }),
                   )

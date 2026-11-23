@@ -31,10 +31,11 @@ pub fn install(tui: &Tui) {
 }
 
 pub fn route_changed(tui: &Tui) {
-    let session = match tui.route() {
-        Route::Session { id } => {
-            tui.data.read(|state| state.session(&id).map(|session| session.title.clone())).map(|title| (id, title))
-        }
+    let session = match &*tui.route() {
+        Route::Session { id } => tui
+            .data
+            .read(|state| state.session(&id).map(|session| session.title.clone()))
+            .map(|title| (id.clone(), title)),
         _ => None,
     };
     if let Some(session) = &session {
@@ -43,7 +44,7 @@ pub fn route_changed(tui: &Tui) {
     if !enabled(tui) {
         return;
     }
-    let title = match tui.route() {
+    let title = match &*tui.route() {
         Route::Home => "OpenCode".to_owned(),
         Route::Session { .. } => session_title(session.as_ref().and_then(|(_, title)| title.as_deref())),
         Route::Plugin { name, .. } => format!("OC | {name}"),
@@ -52,8 +53,8 @@ pub fn route_changed(tui: &Tui) {
 }
 
 pub fn sync(tui: &Tui, changes: &Changes) {
-    if let Route::Session { id } = tui.route()
-        && changes.session(&id)
+    if let Route::Session { id } = &*tui.route()
+        && changes.has(id, Touched::INFO)
     {
         route_changed(tui);
     }

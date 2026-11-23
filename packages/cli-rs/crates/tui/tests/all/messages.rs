@@ -80,7 +80,7 @@ fn open(height: u16, session: Value, messages: Vec<Value>, inbox: Vec<Value>, in
 
 impl Screen {
     fn apply(&self, kind: &str, seq: u64, data: Value) {
-        self.tui.data.apply(&[support::event(ID, kind, seq, data)]);
+        self.tui.data.apply(vec![support::event(ID, kind, seq, data)]);
     }
 
     fn row(&self, text: &str) -> u16 {
@@ -194,7 +194,7 @@ fn shell_skill_notice_and_switch_messages_render_as_one_line_each() {
 
     h.app.click(8, h.row("Explore finished"));
     assert!(h.app.wait_until(WAIT, || matches!(
-        h.tui.route(),
+        &*h.tui.route(),
         Route::Session { id } if id.0 == "ses_child"
     )));
 }

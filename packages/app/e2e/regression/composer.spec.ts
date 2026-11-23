@@ -5,7 +5,7 @@ import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-serv
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
-test("the composer preserves its ring on dialog return and leaves autofocus and clicks quiet", async ({ page }) => {
+test("the composer shows its caret, never a focus ring, however focus arrives", async ({ page }) => {
   const view = await openSession(page, { name: "ComposerKeyboardFocus" })
 
   const frame = page.locator('[data-component="composer"]').filter({ has: view.editor })
@@ -17,7 +17,8 @@ test("the composer preserves its ring on dialog return and leaves autofocus and 
   await expect(view.editor).not.toBeFocused()
   await page.keyboard.press("Tab")
   await expect(view.editor).toBeFocused()
-  await expect(frame).toHaveCSS("outline-style", "solid")
+  await expect(frame).toHaveCSS("outline-style", "none")
+  await expect(view.editor).toHaveCSS("outline-style", "none")
 
   const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
 
@@ -27,7 +28,7 @@ test("the composer preserves its ring on dialog return and leaves autofocus and 
   await expect(dialog.getByRole("combobox")).toBeFocused()
   await page.keyboard.press("Escape")
   await expect(view.editor).toBeFocused()
-  await expect(frame).toHaveCSS("outline-style", "solid")
+  await expect(frame).toHaveCSS("outline-style", "none")
 
   await view.editor.click()
   await expect(view.editor).toBeFocused()

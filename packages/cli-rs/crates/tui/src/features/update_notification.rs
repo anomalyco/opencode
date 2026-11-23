@@ -1,6 +1,6 @@
 //! Register update actions only when an updater is available. Keep dismissed notices in shared storage.
 
-use opencode_api::generated::V2Event;
+use opencode_api::generated::{EventKind, V2Event};
 use opencode_ui::motion::FadeInText;
 
 use crate::prelude::*;
@@ -43,16 +43,20 @@ pub trait Source {
 struct Notice {
     kind: Kind,
     version: String,
-    server: Option<bool>,
+    by: By,
+}
+
+/// Who announced an update: this client, or its server on this machine or on another.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum By {
+    Client,
+    Server,
+    RemoteServer,
 }
 
 impl Notice {
-    fn remote(&self) -> bool {
-        self.server == Some(true)
-    }
-
     fn key(&self) -> String {
-        let source = if self.server.is_some() { "server" } else { "client" };
+        let source = if self.by == By::Client { "client" } else { "server" };
         format!("{source}:{}", self.version)
     }
 }
@@ -84,14 +88,15 @@ pub fn set_source(tui: &Rc<Tui>, source: Rc<dyn Source>) {
         .slash("update");
     tui.keymap
         .install("update", [KeymapLayer::global(vec![command]), KeymapLayer::default().bindings(["opencode.update"])]);
-    crate::features::events::subscribe(tui, ["installation.update-available", "installation.updated"], |tui, event| {
+    let kinds = [EventKind::InstallationUpdateAvailable, EventKind::InstallationUpdated];
+    crate::features::events::subscribe(tui, kinds, |tui, event| {
         let (kind, version) = match event {
             V2Event::InstallationUpdateAvailable(event) => (Kind::Available, event.data.version.clone()),
             V2Event::InstallationUpdated(event) => (Kind::Installed, event.data.version.clone()),
             _ => return,
         };
-        let remote = tui.updates.source().is_some_and(|source| source.remote());
-        notify(tui, Notice { kind, version, server: Some(remote) });
+        let by = if tui.updates.source().is_some_and(|source| source.remote()) { By::RemoteServer } else { By::Server };
+        notify(tui, Notice { kind, version, by });
     })
     .forget();
 }
@@ -114,7 +119,7 @@ impl Updates {
 }
 
 pub fn client_notice(tui: &Tui, notice: ClientNotice) {
-    notify(tui, Notice { kind: notice.kind, version: notice.version, server: None });
+    notify(tui, Notice { kind: notice.kind, version: notice.version, by: By::Client });
 }
 
 fn notify(tui: &Tui, notice: Notice) {
@@ -122,16 +127,16 @@ fn notify(tui: &Tui, notice: Notice) {
         return;
     }
     // Every way out of the TUI after a local install tells the user to start the new version.
-    if notice.kind == Kind::Installed && !notice.remote() {
+    if notice.kind == Kind::Installed && notice.by != By::RemoteServer {
         tui.epilogue.updated_version(notice.version.clone());
     }
     let dismissed = dismissed(tui);
-    if dismissed.contains(&notice.key()) || (notice.server.is_none() && dismissed.contains(&notice.version)) {
+    if dismissed.contains(&notice.key()) || (notice.by == By::Client && dismissed.contains(&notice.version)) {
         return;
     }
     {
         let mut current = tui.updates.notification.borrow_mut();
-        let keep = notice.server.is_some() && current.as_ref().is_some_and(|current| current.server.is_none());
+        let keep = notice.by != By::Client && current.as_ref().is_some_and(|current| current.by == By::Client);
         if !keep {
             *current = Some(notice);
         }
@@ -260,7 +265,7 @@ pub fn open(tui: &Tui, origin: Origin) {
     if tui.updates.source().is_none() {
         return;
     }
-    let known = tui.updates.notification.borrow().clone().filter(|notice| !notice.remote());
+    let known = tui.updates.notification.borrow().clone().filter(|notice| notice.by != By::RemoteServer);
     if origin == Origin::Notification && known.is_none() {
         return;
     }
@@ -308,7 +313,7 @@ fn render(tui: &Tui) {
     tui.updates.row.take();
     tui.updates.parts.borrow_mut().clear();
     let Some(notice) = tui.updates.notification.borrow().clone() else { return };
-    let remote = notice.remote();
+    let remote = notice.by == By::RemoteServer;
     if remote && notice.kind != Kind::Available {
         return;
     }

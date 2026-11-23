@@ -9,7 +9,7 @@ Use one default ring when someone navigates focus to a control, not when they cl
 
 ## The ring
 
-- Use `:focus-visible` for the ring. Don’t use `:focus` to decide whether to show it. The only exception is a custom field that combines `:focus` with its own ring state, as the composer and Home search do (see Text fields). `base.css` supplies `outline: 2px solid var(--v2-border-border-focus); outline-offset: 2px` and a 4px radius for links.
+- Use `:focus-visible` for the ring. Don’t use `:focus` to decide whether to show it. `base.css` supplies `outline: 2px solid var(--v2-border-border-focus); outline-offset: 2px` and a 4px radius for links.
 - Offset: `2px` outward by default. `-2px` inset for full-width rows and for controls flush against an edge that clips or scrolls (segmented items, split buttons, titlebar buttons, clear buttons). No other offsets.
 - Follow the control’s radius; give a square text action or link 4px where appropriate. Use a wrapper with `:has(> trigger:focus-visible)` when the wrapper owns the visible shape or the trigger’s ring would clip, as with tabs and Settings project cards.
 - Outline only. Don't draw focus with `box-shadow`: Windows High Contrast removes shadows, so the ring disappears, and shadow rings looked different from every other ring.
@@ -18,15 +18,13 @@ Use one default ring when someone navigates focus to a control, not when they cl
 - Inline rename inputs rely on the caret and editing state. The timeline's Jump to latest stays in the Tab order with the shared ring, since it's the only quick way back down from the keyboard; its container is `inert` while it's hidden. Loading alone doesn’t add a ring. If a busy button keeps keyboard focus, keep the ring and show the busy state separately with `aria-busy`, a disabled state, or loading text; the ring alone doesn’t say whether the button can be activated.
 - These ring rules do not replace normal field borders or validation feedback. Those can respond to click focus and have their own inset treatment.
 
-## Text fields
+## Text fields and scroll areas
 
-Editable fields can match `:focus-visible` after a click, so fields with a custom frame ring (the composer and Home search) decide when focus arrives. Use `packages/ui/src/context/field-focus.tsx`, not a global input tracker.
+Chromium matches `:focus-visible` on every focused text field, and on anything that has focus once a key is pressed. A ring on a large surface then shows after a click, when the app moves focus there, and on returning to the window.
 
-- Ring by default. Suppress the ring for direct pointer focus and for the composer’s explicit initial autofocus when a session or draft opens, including when it was opened with the keyboard.
-- Tab, shortcuts like Find, and assistive technology moving DOM focus show the ring. Moving a screen reader’s reading cursor alone does not move DOM focus.
-- When a dialog returns focus to a custom field, `packages/ui/src/context/dialog.tsx` restores the field's own ring state; ordinary controls use the browser's `:focus-visible` state. The overlay rules below apply.
-- A `pointerdown` inside a field that already shows the ring clears it immediately; no new focus event fires. Typing never changes the decision, and blur clears it.
-- A click shows the field's normal focused border or background and the caret, with no ring.
+- A text field never draws the ring, the composer and Home search included. Focus shows as the caret and the field's focused border or background. Don't add ring state or pointer tracking to a field.
+- A scroll area (the timeline, Home's list) takes focus so the keyboard can scroll it, and draws no ring. Show focus on the items inside it instead.
+- Moving a screen reader’s reading cursor alone does not move DOM focus.
 
 ## Rows
 
@@ -63,7 +61,7 @@ Editable fields can match `:focus-visible` after a click, so fields with a custo
 - Follow logical reading and interaction order, including in RTL. Fix DOM order rather than using positive `tabindex`. Use native buttons for actions and links for navigation; use established widget primitives or keyboard patterns for tabs, trees, sliders, and resize handles.
 - Move focus in response to a user action or to recover focus when its target disappears. Background updates, streamed output, toasts, and incoming prompts must not steal focus.
 - If a focused item is closed or deleted, move focus to the next place the user can continue the same task: the next or previous item in the same list, or a stable fallback such as the list heading or the control that opened it. Use the visually nearest control only when it serves that task. Don’t leave focus on `<body>`.
-- Chromium drops focus to `<body>` without an event when the focused element is removed, disabled, or stops being editable. `packages/ui/src/context/focus-rescue.tsx` (installed in `AppBaseProviders`) recovers it inside a `data-focus-scope`: the next item, or the previous after the last, widening to the enclosing scope when the inner one is empty, and back to what had focus before when nothing is left. Mark a new list, strip, chip row or panel with `data-focus-scope` rather than adding per-feature focus code. Rescue never moves focus into a `role="tablist"`, because Kobalte tabs select themselves on focus, so don't mark a tab list as a scope. Items in an overlay leave the return to the overlay; rescue steps in only when the overlay's opener is gone too. Move focus explicitly when the task has a better target than the neighbour, such as the composer after the last chip.
+- Chromium drops focus to `<body>` without an event when the focused element is removed, disabled, or stops being editable. `packages/ui/src/context/focus-rescue.tsx` (installed in `AppBaseProviders`) recovers it inside a `data-focus-scope`: the next item, or the previous after the last, widening to the enclosing scope when the inner one is empty, and back to what had focus before when nothing is left. The control it moves focus to shows its ring only when Tab or an arrow key last moved focus; typing, shortcuts and a key pressed on a clicked control don't count. Mark a new list, strip, chip row or panel with `data-focus-scope` rather than adding per-feature focus code. Rescue never moves focus into a `role="tablist"`, because Kobalte tabs select themselves on focus, so don't mark a tab list as a scope. Items in an overlay leave the return to the overlay; rescue steps in only when the overlay's opener is gone too. Move focus explicitly when the task has a better target than the neighbour, such as the composer after the last chip.
 
 ## Verify
 

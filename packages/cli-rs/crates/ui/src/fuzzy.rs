@@ -3,7 +3,7 @@
 mod accents;
 
 use opencode_api_types::js::is_whitespace;
-use std::borrow::Cow;
+use std::borrow::Borrow;
 use std::collections::HashMap;
 
 const NEG: f64 = f64::NEG_INFINITY;
@@ -30,16 +30,33 @@ pub struct Cache {
     pass: u64,
 }
 
-impl Cache {
-    fn fill(&mut self, keys: &[Option<&str>]) {
-        for &key in keys.iter().flatten() {
-            match self.prepared.get_mut(key) {
-                Some(entry) => entry.1 = self.pass,
-                None => {
-                    self.prepared.insert(key.to_owned(), (prepare(key), self.pass));
-                }
-            }
-        }
+/// The search strings of a list's targets, prepared once, for a list searched on every keystroke whose targets stay
+/// the same between keystrokes. Search it with [`go_prepared`].
+pub struct Targets<const N: usize> {
+    /// Each distinct string once: targets often share one, such as a category.
+    strings: Vec<Prepared>,
+    /// Each target's keys, in target order, as indexes into `strings`.
+    keys: Vec<[Option<u32>; N]>,
+}
+
+impl<const N: usize> Targets<N> {
+    pub fn new<T>(targets: &[T], keys: impl Fn(&T) -> [Option<&str>; N]) -> Self {
+        let mut seen: HashMap<&str, u32> = HashMap::new();
+        let mut strings = Vec::new();
+        let keys = targets
+            .iter()
+            .map(|target| {
+                searchable(keys(target)).map(|key| {
+                    key.map(|key| {
+                        *seen.entry(key).or_insert_with(|| {
+                            strings.push(prepare(key));
+                            u32::try_from(strings.len() - 1).expect("fewer than 2^32 search strings")
+                        })
+                    })
+                })
+            })
+            .collect();
+        Self { strings, keys }
     }
 }
 
@@ -52,7 +69,8 @@ pub fn go<T, const N: usize>(
     score: impl Fn(&[f64; N]) -> f64,
     threshold: f64,
 ) -> Vec<usize> {
-    scan(search, targets, keys, |keys, _, _| score(keys), threshold, usize::MAX, None)
+    let prepared = targets.iter().map(|target| searchable(keys(target)).map(|key| key.map(prepare)));
+    scan(search, prepared, |keys, _, _| score(keys), threshold, usize::MAX)
 }
 
 /// [`go`] with the targets' strings prepared once in `cache`.
@@ -64,7 +82,24 @@ pub fn go_cached<T, const N: usize>(
     score: impl Fn(&[f64; N]) -> f64,
     threshold: f64,
 ) -> Vec<usize> {
-    scan(search, targets, keys, |keys, _, _| score(keys), threshold, usize::MAX, Some(cache))
+    if search.is_empty() {
+        return Vec::new();
+    }
+    for key in targets.iter().flat_map(|target| searchable(keys(target))).flatten() {
+        match cache.prepared.get_mut(key) {
+            Some(entry) => entry.1 = cache.pass,
+            None => {
+                cache.prepared.insert(key.to_owned(), (prepare(key), cache.pass));
+            }
+        }
+    }
+    let prepared = &cache.prepared;
+    let lookup = targets.iter().map(|target| searchable(keys(target)).map(|key| key.map(|key| &prepared[key].0)));
+    let out = scan(search, lookup, |keys, _, _| score(keys), threshold, usize::MAX);
+    let pass = cache.pass;
+    cache.prepared.retain(|_, entry| entry.1 == pass);
+    cache.pass += 1;
+    out
 }
 
 /// [`go`] whose `score` also gets fuzzysort's own normalized score for the target, the `objResults.score` a
@@ -78,17 +113,50 @@ pub fn go_scored<T, const N: usize>(
     threshold: f64,
     limit: usize,
 ) -> Vec<usize> {
-    scan(search, targets, keys, score, threshold, limit, None)
+    let prepared = targets.iter().map(|target| searchable(keys(target)).map(|key| key.map(prepare)));
+    scan(search, prepared, score, threshold, limit)
 }
 
-fn scan<T, const N: usize>(
+/// [`go_scored`] over targets prepared once.
+pub fn go_prepared<const N: usize>(
     search: &str,
-    targets: &[T],
-    keys: impl Fn(&T) -> [Option<&str>; N],
+    targets: &Targets<N>,
     score: impl Fn(&[f64; N], f64, usize) -> f64,
     threshold: f64,
     limit: usize,
-    mut cache: Option<&mut Cache>,
+) -> Vec<usize> {
+    let strings = &targets.strings;
+    let prepared = targets.keys.iter().map(|keys| keys.map(|key| key.map(|key| &strings[key as usize])));
+    scan(search, prepared, score, threshold, limit)
+}
+
+/// The keys a search reads: empty strings match nothing.
+fn searchable<const N: usize>(keys: [Option<&str>; N]) -> [Option<&str>; N] {
+    keys.map(|key| key.filter(|key| !key.is_empty()))
+}
+
+/// Buffers one search reuses for every target.
+#[derive(Default)]
+struct Scratch {
+    matched: Match,
+    /// The target's beginnings as a word search moves them.
+    moved: Vec<usize>,
+}
+
+/// The working positions of [`single`], and in `best` the match it scored.
+#[derive(Default)]
+struct Match {
+    simple: Vec<usize>,
+    strict: Vec<usize>,
+    best: Vec<usize>,
+}
+
+fn scan<P: Borrow<Prepared>, const N: usize>(
+    search: &str,
+    targets: impl Iterator<Item = [Option<P>; N]>,
+    score: impl Fn(&[f64; N], f64, usize) -> f64,
+    threshold: f64,
+    limit: usize,
 ) -> Vec<usize> {
     if search.is_empty() {
         return Vec::new();
@@ -97,29 +165,22 @@ fn scan<T, const N: usize>(
     let threshold = denormalize(threshold);
     let mut heap = Heap::default();
     let mut partial = vec![NEG; search.spaces.len()];
-    'outer: for (index, target) in targets.iter().enumerate() {
-        let keys = keys(target).map(|key| key.filter(|key| !key.is_empty()));
-        let owned;
-        let prepared: [Option<&Prepared>; N] = match cache.as_deref_mut() {
-            Some(cache) => {
-                cache.fill(&keys);
-                let cache = &*cache;
-                keys.map(|key| key.map(|key| &cache.prepared[key].0))
-            }
-            None => {
-                owned = keys.map(|key| key.map(prepare));
-                owned.each_ref().map(Option::as_ref)
-            }
-        };
+    let mut best = vec![NEG; search.spaces.len()];
+    let mut scratch = Scratch::default();
+    'outer: for (index, prepared) in targets.enumerate() {
+        let prepared = prepared.each_ref().map(|key| key.as_ref().map(Borrow::borrow));
         let bitflags = prepared.iter().flatten().fold(0, |flags, key| flags | key.bitflags);
         if search.bitflags & bitflags != search.bitflags {
             continue;
         }
-        let mut best = vec![NEG; search.spaces.len()];
+        best.fill(NEG);
         let mut results = [NEG; N];
         for (key, target) in prepared.iter().enumerate() {
             let Some(target) = *target else { continue };
-            let Some(result) = algorithm(&search, target, false, search.contains_space, &mut partial) else { continue };
+            let Some(result) = algorithm(&search, target, false, search.contains_space, &mut partial, &mut scratch)
+            else {
+                continue;
+            };
             results[key] = result;
             if search.contains_space {
                 for i in 0..search.spaces.len() {
@@ -173,11 +234,6 @@ fn scan<T, const N: usize>(
     let mut out = vec![0; heap.items.len()];
     for slot in (0..out.len()).rev() {
         out[slot] = heap.poll().expect("one item per slot").1;
-    }
-    if let Some(cache) = cache {
-        let pass = cache.pass;
-        cache.prepared.retain(|_, entry| entry.1 == pass);
-        cache.pass += 1;
     }
     out
 }
@@ -295,14 +351,16 @@ fn find(haystack: &[u16], needle: &[u16], from: usize) -> Option<usize> {
     (from..haystack.len().saturating_sub(needle.len() - 1)).find(|&i| haystack[i..].starts_with(needle))
 }
 
-// `algorithm`: the score of one search against one target, or `None`. Leaves the match indexes in `indexes`.
-fn single(search: &[u16], codes: &[u16], next: &[usize], indexes: &mut Vec<usize>) -> Option<f64> {
+// `algorithm`: the score of one search against one target, or `None`. Leaves the match indexes in `matched.best`.
+fn single(search: &[u16], codes: &[u16], next: &[usize], matched: &mut Match) -> Option<f64> {
     let search_len = search.len();
     let target_len = codes.len();
     if search_len == 0 || target_len == 0 {
         return None;
     }
-    let mut simple = Vec::with_capacity(search_len);
+    let Match { simple, strict, best } = matched;
+    simple.clear();
+    strict.clear();
     let (mut search_i, mut target_i) = (0, 0);
     loop {
         if search[search_i] == codes[target_i] {
@@ -317,7 +375,6 @@ fn single(search: &[u16], codes: &[u16], next: &[usize], indexes: &mut Vec<usize
             return None;
         }
     }
-    let mut strict: Vec<usize> = Vec::with_capacity(search_len);
     let mut success = false;
     search_i = 0;
     target_i = if simple[0] == 0 { 0 } else { next[simple[0] - 1] };
@@ -400,16 +457,19 @@ fn single(search: &[u16], codes: &[u16], next: &[usize], indexes: &mut Vec<usize
         }
         score - longer
     };
-    let substring_matches = |start: usize| (start..start + search_len).collect::<Vec<_>>();
-    let best = match (success, substring) {
-        (false, Some(start)) => substring_matches(start),
-        (false, None) => simple,
-        (true, Some(start)) if substring_beginning => substring_matches(start),
-        (true, _) => strict,
-    };
-    let score = score_of(&best);
-    *indexes = best;
-    Some(score)
+    match (success, substring) {
+        (false, Some(start)) => {
+            best.clear();
+            best.extend(start..start + search_len);
+        }
+        (false, None) => std::mem::swap(best, simple),
+        (true, Some(start)) if substring_beginning => {
+            best.clear();
+            best.extend(start..start + search_len);
+        }
+        (true, _) => std::mem::swap(best, strict),
+    }
+    Some(score_of(best.as_slice()))
 }
 
 fn algorithm(
@@ -418,25 +478,33 @@ fn algorithm(
     allow_spaces: bool,
     partial_match: bool,
     partial: &mut [f64],
+    scratch: &mut Scratch,
 ) -> Option<f64> {
     if !allow_spaces && search.contains_space {
-        return spaces(search, target, partial_match, partial);
+        return spaces(search, target, partial_match, partial, scratch);
     }
-    single(&search.lower, &target.lower, &target.next, &mut Vec::new())
+    single(&search.lower, &target.lower, &target.next, &mut scratch.matched)
 }
 
 // `algorithmSpaces`; only the score is kept. fuzzysort moves the target's beginnings past each matched word and
 // puts them back afterwards; here the moves go to a copy, made on the first one.
-fn spaces(search: &Search, target: &Prepared, partial_match: bool, partial: &mut [f64]) -> Option<f64> {
+fn spaces(
+    search: &Search,
+    target: &Prepared,
+    partial_match: bool,
+    partial: &mut [f64],
+    scratch: &mut Scratch,
+) -> Option<f64> {
+    let Scratch { matched, moved } = scratch;
     let mut score = 0.0;
     let mut first_seen = 0usize;
     let count = search.spaces.len();
-    let mut next = Cow::Borrowed(target.next.as_slice());
+    let mut copied = false;
     let mut any = false;
-    let mut indexes = Vec::new();
     for (i, word) in search.spaces.iter().enumerate() {
         partial[i] = NEG;
-        let result = single(&word.lower, &target.lower, &next, &mut indexes);
+        let next = if copied { moved.as_slice() } else { target.next.as_slice() };
+        let result = single(&word.lower, &target.lower, next, matched);
         let Some(result) = result else {
             if partial_match {
                 continue;
@@ -444,14 +512,20 @@ fn spaces(search: &Search, target: &Prepared, partial_match: bool, partial: &mut
             return None;
         };
         any = true;
+        let indexes = &matched.best;
         if i != count - 1 && indexes.windows(2).all(|pair| pair[1] - pair[0] == 1) {
             let beginning = indexes[indexes.len() - 1] + 1;
-            let replace = next[beginning - 1];
+            if !copied {
+                moved.clear();
+                moved.extend_from_slice(&target.next);
+                copied = true;
+            }
+            let replace = moved[beginning - 1];
             for at in (0..beginning).rev() {
-                if next[at] != replace {
+                if moved[at] != replace {
                     break;
                 }
-                next.to_mut()[at] = beginning;
+                moved[at] = beginning;
             }
         }
         score += result / count as f64;
@@ -464,9 +538,7 @@ fn spaces(search: &Search, target: &Prepared, partial_match: bool, partial: &mut
     if partial_match && !any {
         return None;
     }
-    if let Some(whole) =
-        single(&search.lower, &target.lower, &target.next, &mut Vec::new()).filter(|whole| *whole > score)
-    {
+    if let Some(whole) = single(&search.lower, &target.lower, &target.next, matched).filter(|whole| *whole > score) {
         if partial_match {
             partial.iter_mut().for_each(|slot| *slot = whole / count as f64);
         }
@@ -586,12 +658,14 @@ mod tests {
         }
         let score = |scores: &[f64; 3]| scores[0] * 2.0 + scores[1] + scores[2];
         let mut cache = Cache::default();
+        let prepared = Targets::new(&targets, keys);
         // Each search twice, so the second reads strings the first prepared, and a word search does not leave its
         // moved beginnings behind.
         for search in ["s", "ses", "session", "sess tim", "tim sess", "se se", "cafe", "x", "s", "sess tim"] {
             let plain = go(search, &targets, keys, score, 0.0);
             assert_eq!(go_cached(&mut cache, search, &targets, keys, score, 0.0), plain, "{search:?}");
             assert_eq!(go_cached(&mut cache, search, &targets, keys, score, 0.0), plain, "{search:?} again");
+            assert_eq!(go_prepared(search, &prepared, |scores, _, _| score(scores), 0.0, usize::MAX), plain);
         }
         // Strings the last search did not see are dropped.
         go_cached(&mut cache, "s", &targets[..1], keys, score, 0.0);

@@ -268,11 +268,15 @@ fn one_call_of_many_effects_and_a_chain_of_closes_are_bounded() {
 }
 
 fn updates(setup: &mut abi::Setup) -> Result<(), String> {
-    let seen = Rc::new(Cell::new(0));
-    let counted = seen.clone();
-    setup.on_event(&["rpc.example.updated"], move |_, _| counted.set(counted.get() + 1));
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let heard = seen.clone();
+    // A type this client does not know reaches the handler that names it, and only that one.
+    setup.on_event(&["rpc.example.updated", "future.example.updated"], move |_, event| {
+        heard.borrow_mut().push(event.tag().to_owned());
+    });
+    setup.on_event(&["future.example.other"], |_, _| {});
     setup.slot(abi::Placement::append("home.footer"), move |_, _, _| {
-        abi::Render::Show(abi::Node::text([abi::Span::new(format!("updates {}", seen.get()))]))
+        abi::Render::Show(abi::Node::text([abi::Span::new(format!("updates: {}", seen.borrow().join(" ")))]))
     });
     Ok(())
 }
@@ -287,12 +291,13 @@ fn an_event_handler_renders_its_plugins_claims_again() {
     )]);
     let deps = Deps { events: true, ..support::deps(Arc::new(memory.clone())) };
     let h = home_with(updates, deps);
-    h.wait_for("updates 0");
-    memory.emit(&json!({
-        "id": "evt_rpc", "created": 1, "type": "rpc.example.updated",
-        "location": { "directory": support::DIRECTORY }, "data": {},
-    }));
-    h.wait_for("updates 1");
+    h.wait_for("updates:");
+    for tag in ["future.example.other", "future.example.updated", "rpc.example.updated"] {
+        let location = json!({ "directory": support::DIRECTORY });
+        memory
+            .emit(&json!({ "id": format!("evt_{tag}"), "created": 1, "type": tag, "location": location, "data": {} }));
+    }
+    h.wait_for("updates: future.example.updated rpc.example.updated");
 }
 
 thread_local! {

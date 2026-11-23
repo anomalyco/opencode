@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use opencode_api::generated::SessionID;
+use opencode_api::generated::{SessionID, V2Event};
 use opencode_api::memory::{Logged, Memory, Route as MemoryRoute};
 use opencode_tui::{Args, Deps, Route};
 use opentui::testing::TestApp;
@@ -137,8 +137,9 @@ fn the_environment_is_uploaded_when_the_status_follows_server_connected() {
     );
     let upload = || find(&memory.requests(), "PUT", "/api/session/ses_b/environment").is_some();
     assert!(app.wait_until(support::WAIT, || find(&memory.requests(), "GET", "/api/session/ses_b").is_some()));
-    let connected = serde_json::from_value(json!({ "id": "evt_c", "type": "server.connected", "data": {} })).unwrap();
-    tui.data.apply(&[connected]);
+    let connected =
+        serde_json::from_value::<V2Event>(json!({ "id": "evt_c", "type": "server.connected", "data": {} })).unwrap();
+    tui.data.apply(vec![connected]);
     assert!(!app.wait_until(Duration::from_millis(300), upload), "{:?}", writes(&memory));
     let state =
         opencode_api::events::State { status: opencode_api::events::Status::Connected, attempt: 0, error: None };

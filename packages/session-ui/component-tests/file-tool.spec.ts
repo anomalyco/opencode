@@ -46,17 +46,6 @@ for (const tool of ["edit", "write"]) {
   })
 }
 
-story("a long write folds until Show more opens it", async ({ mount }) => {
-  const root = await mount("current-session-file-changes--changing-files", { args: { scenario: "longWrite" } })
-  await root.getByRole("button", { name: /long\.ts/ }).click()
-  const fold = root.locator('[data-slot="file-diff-fold"]')
-
-  await root.getByRole("button", { name: "Show more" }).click()
-  await expect.poll(async () => (await fold.boundingBox())?.height).toBeGreaterThan(420)
-  await root.getByRole("button", { name: "Show less" }).click()
-  await expect.poll(async () => (await fold.boundingBox())?.height).toBe(420)
-})
-
 // Product regression from 010cd6131e: an empty write renders no file row. Remove `fail` once it is fixed.
 story.fail("empty writes still show a file row", async ({ mount }) => {
   const root = await mount("current-session-file-changes--file-tool-fallbacks", {

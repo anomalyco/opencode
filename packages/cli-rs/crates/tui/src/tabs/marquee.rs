@@ -196,7 +196,7 @@ pub fn text_parts(value: &str, width: usize, offset: usize) -> Vec<(char, bool)>
         return Vec::new();
     }
     if value.width() <= width || offset == 0 {
-        return take_width(value, width).into_iter().map(|character| (character, false)).collect();
+        return take_width(value, width).map(|character| (character, false)).collect();
     }
     let lap: Vec<(char, bool)> = value.chars().map(|c| (c, false)).chain(GAP.chars().map(|c| (c, c == '·'))).collect();
     let cursor = offset % cycle_width(value);

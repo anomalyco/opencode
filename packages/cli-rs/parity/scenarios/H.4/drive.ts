@@ -57,7 +57,7 @@ const steps: Step[] = [
   { method: "ui.mouse", params: { action: "move", x: 100, y: 5 } },
   { method: "ui.resize", params: { cols: 90, rows: 28 }, result: Frontend.State },
   { method: "ui.capture", result: Frontend.CapturedFrame, capture: "edited-resized" },
-  // TS lists its renderables; the Rust TUI has no renderable numbers and answers with an error (`T14a-drive-capabilities`).
+  // TS lists its renderables; the Rust TUI has no renderable numbers and lists none (`T14a-drive-capabilities`).
   { method: "ui.state", result: Frontend.State },
 ]
 

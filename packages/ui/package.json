@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.3.0",
+  "version": "2.3.2",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -115,6 +115,7 @@
     "test": "bun test src --only-failures",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts",
+    "generate:spinner": "bun run script/generate-spinner.ts",
     "generate:v2-oc2": "bun run script/build-oc2-v2-overrides.ts"
   },
   "devDependencies": {

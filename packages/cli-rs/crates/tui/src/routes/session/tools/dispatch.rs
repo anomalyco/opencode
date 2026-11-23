@@ -5,7 +5,7 @@ use opencode_api::generated::{
 };
 use opencode_plugin::claim;
 use opencode_ui::motion::Spinner;
-use opencode_ui::tool_info::{canonical_tool_name, tool_display_content, tool_display_metadata};
+use opencode_ui::tool_info::{ToolInput, ToolKind, tool_display_content, tool_display_metadata};
 use serde_json::Map;
 use unicode_width::UnicodeWidthStr;
 
@@ -13,7 +13,7 @@ use super::{edit, execute, generic, inline, patch, question, read, shell, subage
 use crate::dialogs::open::truncate_file_path;
 use crate::prelude::*;
 use crate::routes::session::messages::images::{Images, tool_images};
-use crate::routes::session::messages::list::Context;
+use crate::routes::session::messages::list::{Context, RowEvent};
 use crate::routes::session::permission;
 use opentui::input::strip_ansi_sequences;
 
@@ -24,7 +24,7 @@ pub const ICON_WIDTH: u16 = 2;
 pub struct Tool {
     root: View,
     body: View,
-    view: RefCell<Option<(&'static str, Box<dyn ToolView>)>>,
+    view: RefCell<Option<(ToolKind, Box<dyn ToolView>)>>,
     /// Claim mount and whether its tree replaces the normal tool view.
     claim: Rc<RefCell<Option<(claim::Mount, bool)>>>,
     /// `ToolImages`: the call's image results under its row.
@@ -77,13 +77,13 @@ impl Tool {
         let root = View::new(cx.app).column().shrink(0.0).child(&body).child(images.root());
         let claim: Rc<RefCell<Option<(claim::Mount, bool)>>> = Rc::default();
         // A claimed call changes height when its claim draws more or less, or falls back: the reader stays put.
-        let (claimed, reflowed, laid) = (Rc::downgrade(&claim), cx.reflowed.clone(), Cell::new(None));
+        let (claimed, events, laid) = (Rc::downgrade(&claim), cx.events.clone(), Cell::new(None));
         root.on_resize(move |_, rect| {
             if let (Some(before), Some(claim)) = (laid.replace(Some(rect.height)), claimed.upgrade())
                 && rect.height != before
                 && claim.borrow().is_some()
             {
-                reflowed(rect.screen_y, rect.height - before);
+                events.send(RowEvent::Reflowed { top: rect.screen_y, grown: rect.height - before });
             }
         });
         Self { root, body, view: RefCell::default(), claim, images }
@@ -110,25 +110,30 @@ impl Tool {
             self.images.update(cx, tool_images(part));
             return;
         }
-        let display = display(&part.name);
+        // `toolDisplay`: every tool without a view of its own shares the generic one.
+        let display = match ToolKind::of(&part.name) {
+            ToolKind::Invalid | ToolKind::Batch | ToolKind::List | ToolKind::Lsp => ToolKind::Other,
+            ToolKind::Context | ToolKind::ExternalDirectory | ToolKind::DoomLoop => ToolKind::Other,
+            kind => kind,
+        };
         let mut view = self.view.borrow_mut();
         if view.as_ref().is_none_or(|(current, _)| *current != display) {
             self.body.clear();
             let body: Box<dyn ToolView> = match display {
-                "shell" => Box::new(shell::Shell::new(cx)),
-                "glob" => inline::row(cx, inline::glob),
-                "read" => Box::new(read::Read::new(cx)),
-                "grep" => inline::row(cx, inline::grep),
-                "write" => Box::new(write::Write::new(cx)),
-                "edit" => Box::new(edit::Edit::new(cx)),
-                "webfetch" => inline::row(cx, inline::webfetch),
-                "websearch" => inline::row(cx, inline::websearch),
-                "subagent" => Box::new(subagent::Subagent::new(cx)),
-                "execute" => Box::new(execute::Execute::new(cx)),
-                "patch" => Box::new(patch::Patch::new(cx)),
-                "todowrite" => Box::new(todo::Todo::new(cx)),
-                "question" => Box::new(question::Question::new(cx)),
-                "skill" => inline::row(cx, inline::skill),
+                ToolKind::Shell => Box::new(shell::Shell::new(cx)),
+                ToolKind::Glob => inline::row(cx, inline::glob),
+                ToolKind::Read => Box::new(read::Read::new(cx)),
+                ToolKind::Grep => inline::row(cx, inline::grep),
+                ToolKind::Write => Box::new(write::Write::new(cx)),
+                ToolKind::Edit => Box::new(edit::Edit::new(cx)),
+                ToolKind::WebFetch => inline::row(cx, inline::webfetch),
+                ToolKind::WebSearch => inline::row(cx, inline::websearch),
+                ToolKind::Subagent => Box::new(subagent::Subagent::new(cx)),
+                ToolKind::Execute => Box::new(execute::Execute::new(cx)),
+                ToolKind::Patch => Box::new(patch::Patch::new(cx)),
+                ToolKind::Todo => Box::new(todo::Todo::new(cx)),
+                ToolKind::Question => Box::new(question::Question::new(cx)),
+                ToolKind::Skill => inline::row(cx, inline::skill),
                 _ => Box::new(generic::Generic::new(cx)),
             };
             self.body.add(body.root());
@@ -144,8 +149,10 @@ impl Tool {
         if claim.is_none() {
             let Some(found) = cx.claims.find(&part.name) else { return false };
             let mount = found.mount(cx.app, &part.id, cx.content);
-            let (switched, message) = (cx.switched.clone(), message.id.0.clone());
-            mount.on_switch(move || switched(&message));
+            if let Some(key) = cx.lookup.key(message.id.as_str()) {
+                let events = cx.events.clone();
+                mount.on_switch(move || events.send(RowEvent::Switched(key)));
+            }
             *claim = Some((mount, false));
         }
         let Some((mount, shown)) = claim.as_mut() else { return false };
@@ -179,32 +186,11 @@ impl Tool {
     }
 }
 
-/// `toolDisplay`: the view for a tool name.
-fn display(name: &str) -> &'static str {
-    match canonical_tool_name(name) {
-        "shell" => "shell",
-        "glob" => "glob",
-        "read" => "read",
-        "grep" => "grep",
-        "webfetch" => "webfetch",
-        "websearch" => "websearch",
-        "write" => "write",
-        "edit" => "edit",
-        "subagent" => "subagent",
-        "execute" => "execute",
-        "patch" => "patch",
-        "todowrite" => "todowrite",
-        "question" => "question",
-        "skill" => "skill",
-        _ => "generic",
-    }
-}
-
 /// `ToolProps`: what every view reads from the call.
 pub struct Props<'a> {
     pub part: &'a SessionMessageAssistantTool,
     /// The input, or empty while it streams as text.
-    pub input: Map<String, Value>,
+    pub input: ToolInput<'a>,
     pub metadata: Map<String, Value>,
     /// The text of the content items, `None` while the input streams.
     pub output: Option<String>,
@@ -214,8 +200,6 @@ pub struct Props<'a> {
 
 impl<'a> Props<'a> {
     fn new(cx: &Context<'_>, part: &'a SessionMessageAssistantTool) -> Self {
-        let state = serde_json::to_value(&part.state).unwrap_or_default();
-        let input = state.get("input").and_then(Value::as_object).cloned().unwrap_or_default();
         let streaming = matches!(part.state, SessionMessageAssistantToolState::Streaming(_));
         let output = (!streaming).then(|| {
             tool_display_content(&part.state)
@@ -230,7 +214,7 @@ impl<'a> Props<'a> {
         });
         Self {
             part,
-            input,
+            input: ToolInput::of(&part.state),
             metadata: tool_display_metadata(&part.state),
             output,
             permission: permission::tool_pending(cx.tui, cx.state, cx.session, &part.id),
@@ -253,11 +237,6 @@ impl<'a> Props<'a> {
             SessionMessageAssistantToolState::Error(state) => Some(state.error.message.as_str()),
             _ => None,
         }
-    }
-
-    /// `stringValue(props.input[key])`.
-    pub fn input_str(&self, key: &str) -> Option<&str> {
-        self.input.get(key).and_then(Value::as_str)
     }
 }
 
@@ -294,16 +273,6 @@ pub fn fingerprint(shown: &impl std::hash::Hash) -> u64 {
 /// A number as JavaScript prints it.
 pub fn number(value: f64) -> String {
     opencode_api::query::js_string(&Value::from(value))
-}
-
-/// JavaScript truthiness.
-pub fn truthy(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) | Some(Value::Bool(false)) => false,
-        Some(Value::Number(number)) => number.as_f64().is_some_and(|number| number != 0.0),
-        Some(Value::String(text)) => !text.is_empty(),
-        Some(_) => true,
-    }
 }
 
 /// `finiteNumber(value)`, when it is not 0 (`finiteNumber(x) || …`).

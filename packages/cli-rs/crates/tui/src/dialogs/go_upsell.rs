@@ -498,12 +498,7 @@ impl Connect {
         *self.label.borrow_mut() = Some(label);
 
         if self.valid() {
-            self.sync(
-                false,
-                bind!(self, |state, outcome| if outcome.is_none() && !state.closed.get() {
-                    state.start_oauth(&form);
-                }),
-            );
+            self.sync(false, bind!(self, |state| state.start_oauth(&form)));
             return;
         }
         self.start_oauth(&form);
@@ -561,21 +556,16 @@ impl Connect {
                 }
                 state.settled.set(true);
                 match result {
-                    Ok(_) => state.sync(
-                        true,
-                        bind!(state, |state, outcome| if outcome.is_none() && !state.closed.get() {
-                            state.local.dialogs.clear();
-                        }),
-                    ),
+                    Ok(_) => state.sync(true, bind!(state, |state| state.local.dialogs.clear())),
                     Err(error) => state.fail(error),
                 }
             }),
         );
     }
 
-    // Reloads the integrations, models, and providers into the store, one after another. `done` gets `Some(true)`
-    // after finishing, `Some(false)` when closed or failed, and `None` when the connection is not valid yet.
-    fn sync(self: &Rc<Self>, announce: bool, done: impl FnOnce(Option<bool>) + 'static) {
+    // Reloads the integrations, models, and providers into the store, one after another, and finishes. `invalid` runs
+    // instead when the dialog is open and the connection is not valid yet.
+    fn sync(self: &Rc<Self>, announce: bool, invalid: impl FnOnce() + 'static) {
         let local = &self.local;
         let (integrations, models, providers) =
             (local.reload(Catalog::Integration), local.reload(Catalog::Model), local.reload(Catalog::Provider));
@@ -587,14 +577,13 @@ impl Connect {
             },
             bind!(self, |state, _, result| {
                 if state.closed.get() || state.local.dialogs.is_empty() {
-                    return done(Some(false));
+                    return;
                 }
                 if let Err(error) = result {
-                    state.fail(error.to_string());
-                    return done(Some(false));
+                    return state.fail(error.to_string());
                 }
                 if !state.valid() {
-                    return done(None);
+                    return invalid();
                 }
                 if announce {
                     let name =
@@ -602,7 +591,6 @@ impl Connect {
                     state.local.toasts.show(ToastOptions::new(Variant::Success, format!("Connected {name}")));
                 }
                 state.finish();
-                done(Some(true));
             }),
         );
     }

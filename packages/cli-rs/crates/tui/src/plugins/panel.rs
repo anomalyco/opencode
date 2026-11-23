@@ -512,7 +512,7 @@ impl Picker {
                 Some(Err(error)) => tui.toasts.error(error),
                 Some(Ok(())) => {}
             }
-            tui.navigate(tui.route());
+            tui.navigate(Route::clone(&tui.route()));
             // Read hints from the current registry; the plugin supplies its own rows.
             if let Some(handle) = picker.handle.borrow().clone() {
                 handle.refresh_footer();

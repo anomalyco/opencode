@@ -2,6 +2,7 @@
 
 use opencode_api::generated::ShellID;
 use opencode_ui::motion::Spinner;
+use opencode_ui::tool_info::ShellInput;
 use opentui::input::strip_ansi_sequences;
 
 use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, format_path, paint_badge, status_badge};
@@ -116,8 +117,8 @@ impl Shell {
                 None => props.output.clone(),
             },
             shell,
-            command: props.input_str("command").map(str::to_owned),
-            workdir: format_path(cx, props.input_str("workdir")),
+            command: ShellInput(props.input).command().str().map(str::to_owned),
+            workdir: format_path(cx, ShellInput(props.input).workdir().str()),
             status,
             background: status == Status::Completed
                 && props.metadata.get("status").and_then(serde_json::Value::as_str) == Some("running"),

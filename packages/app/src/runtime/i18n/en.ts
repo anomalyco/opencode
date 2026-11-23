@@ -840,6 +840,8 @@ export const dict = {
   "sidebar.inbox.section.working": "Working",
   "sidebar.inbox.section.recent": "Recent",
   "sidebar.inbox.section.archived": "Archived",
+  "sidebar.inbox.section.drafts": "Drafts",
+  "sidebar.inbox.discardDraft": "Discard draft",
   "sidebar.inbox.archived.title": "Archived sessions",
   "sidebar.inbox.unarchive": "Unarchive",
   "sidebar.inbox.status.approval": "Approval",
@@ -1313,6 +1315,7 @@ export const dict = {
   "settings.shortcuts.unassigned": "Unassigned",
   "settings.shortcuts.pressKeys": "Press keys",
   "settings.shortcuts.unbind": "Unbind",
+  "settings.shortcuts.addKey": "Add a key",
   "settings.shortcuts.search.placeholder": "Search shortcuts",
 
   "settings.shortcuts.group.general": "General",

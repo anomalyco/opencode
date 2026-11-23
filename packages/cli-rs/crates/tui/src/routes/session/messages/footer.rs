@@ -3,6 +3,7 @@
 use opencode_api::generated::{
     ModelRef, SessionMessageAssistant, SessionMessageAssistantContentItem, SessionMessageAssistantFinish,
 };
+use opencode_store::MessageKey;
 use opencode_ui::locale::{duration, titlecase};
 
 use super::errors::StepError;
@@ -42,8 +43,8 @@ impl Footer {
         let muted = Style::new().fg(theme.text.muted);
         let interrupted = message.error.as_ref().is_some_and(|error| error.message == "Step interrupted");
         self.error.update(cx, message);
-        let index = cx.index.get(message.id.as_str()).copied();
-        let duration = turn_duration(cx.messages, message, index, cx.legacy);
+        let index = cx.lookup.key(message.id.as_str()).and_then(|key| cx.lookup.position(key));
+        let duration = turn_duration(cx.lookup.visible, message, index, cx.legacy);
         let width = cx.width;
         let agent = if message.error.is_some() { theme.text.muted } else { cx.agent_color(message.agent.as_str()) };
         let mut spans = vec![Span::styled(titlecase(message.agent.as_str()), Style::new().fg(agent))];
@@ -54,7 +55,7 @@ impl Footer {
             spans.push(Span::styled(format!(" · {}", self::duration(duration)), muted));
         }
         if cx.tps
-            && let Some(value) = tokens_per_second(cx.messages, index, cx.legacy)
+            && let Some(value) = tokens_per_second(cx.lookup.visible, index, cx.legacy)
         {
             spans.push(Span::styled(format!(" · {value:.1} tok/s"), muted));
         }
@@ -144,11 +145,11 @@ impl TurnUsage {
         self.0.render();
     }
 
-    pub fn update(&self, cx: &Context<'_>, messages: &[String], previous: Option<&CacheUsage>) {
+    pub fn update(&self, cx: &Context<'_>, messages: &[MessageKey], previous: Option<&CacheUsage>) {
         let mut previous = previous.cloned();
         let steps = messages
             .iter()
-            .filter_map(|id| cx.assistant(id))
+            .filter_map(|key| cx.assistant(*key))
             .filter_map(|message| {
                 let tokens = message.tokens.as_ref()?;
                 let total = total(message);

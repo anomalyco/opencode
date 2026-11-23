@@ -126,8 +126,8 @@ impl Open {
             OpenView::Projects => None,
         };
         let open = self.clone();
-        let current = tui.data.read(|state| match tui.route() {
-            Route::Session { id } => Some(Target::Session(state.root(&id))),
+        let current = tui.data.read(|state| match &*tui.route() {
+            Route::Session { id } => Some(Target::Session(state.root(&id).into())),
             _ => None,
         });
         tui.dialogs.replace(
@@ -300,7 +300,7 @@ impl Open {
             let roots: HashSet<SessionID> = waiting
                 .chain(forms)
                 .chain(recent)
-                .map(|id| store.root(&id))
+                .map(|id| SessionID::from(store.root(&id)))
                 .filter(|root| !known.contains(root) && store.session(root).is_none())
                 .collect();
             (active, roots)

@@ -80,7 +80,7 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
         .data
         .read(|state| {
             let sessions = state.sessions();
-            let jobs = state.jobs(&state.root(&inner.session));
+            let jobs = state.jobs(&SessionID::from(state.root(&inner.session)));
             family(&sessions, &inner.session)
                 .into_iter()
                 .map(|(session, prefix)| Entry {
@@ -155,16 +155,17 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
                 state.entries.get(state.selected).cloned()
             };
             let Some(entry) = entry else { return };
-            let data = tui.data.clone();
+            let client = tui.data.client().clone();
+            let cancels: Vec<_> = entry.jobs.iter().map(|job| tui.data.job_cancel(job)).collect();
             tui.app.runtime().spawn(async move {
                 if entry.running {
                     let input = SessionInterruptInput { session_id: entry.session, resume: None };
-                    if let Err(error) = data.client().session_interrupt(&input).await {
+                    if let Err(error) = client.session_interrupt(&input).await {
                         log::warn!("failed to interrupt the subagent: {error}");
                     }
                 }
-                for job in entry.jobs {
-                    if let Err(error) = data.job_cancel(&job).await {
+                for cancel in cancels {
+                    if let Err(error) = cancel.await {
                         log::warn!("failed to cancel the subagent's job: {error}");
                     }
                 }

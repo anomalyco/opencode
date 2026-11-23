@@ -1,10 +1,10 @@
 //! Display the edit diff when a patch is available.
 
-use opencode_local::cli_config::{DiffView as ConfigDiffView, DiffWrap};
 use opentui::widget::DiffView;
 
 use super::diagnostics;
 use super::dispatch::{Block, BlockTool, Header, Props, Status, content_width, fingerprint, format_path};
+use super::patch::{diff_layout, parse_files};
 use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 
@@ -39,9 +39,10 @@ impl Edit {
     }
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
-        let input_path = props.input_str("path");
-        let file = first_file(props.metadata.get("files"));
-        let path = file.as_ref().map(|file| file.path.as_str()).or(input_path);
+        let input_path = props.input.path().str();
+        // `parseApplyPatchFiles(...)[0]`: the first complete file.
+        let file = parse_files(props.metadata.get("files")).into_iter().next();
+        let path = file.as_ref().map(|file| file.relative_path.as_str()).or(input_path);
         let header = if file.is_some() || input_path.is_some_and(|path| !path.is_empty()) {
             Header::Path { label: "← Edit".to_owned(), value: format_path(cx, path) }
         } else {
@@ -61,21 +62,10 @@ impl Edit {
             self.shown.take();
             return;
         };
-        let diffs = cx.tui.config().info.diffs.clone();
-        let diffs = diffs.as_ref();
-        let view = match diffs.and_then(|diffs| diffs.view) {
-            Some(ConfigDiffView::Unified) => DiffView::Unified,
-            Some(ConfigDiffView::Split) => DiffView::Split,
-            _ if content_width(cx) > 120 => DiffView::Split,
-            _ => DiffView::Unified,
-        };
-        let wrap = match diffs.and_then(|diffs| diffs.wrap) {
-            Some(DiffWrap::None) => WrapMode::None,
-            _ => WrapMode::Word,
-        };
+        let (view, wrap) = diff_layout(cx, content_width(cx));
         let shown = Shown {
             patch: fingerprint(&file.patch),
-            path: file.path,
+            path: file.relative_path,
             view,
             wrap,
             diagnostics: props.metadata.get("diagnostics").cloned(),
@@ -104,57 +94,5 @@ impl Edit {
         }
         self.block.show_children(true);
         *self.shown.borrow_mut() = Some(shown);
-    }
-}
-
-/// The first file of `parseApplyPatchFiles`: its relative path and patch.
-struct File {
-    path: String,
-    patch: String,
-}
-
-fn first_file(files: Option<&Value>) -> Option<File> {
-    files?.as_array()?.iter().find_map(|item| {
-        let file = item.as_object()?;
-        let text = |key: &str| file.get(key).and_then(Value::as_str);
-        let number = |key: &str| file.get(key).and_then(opencode_ui::tool_info::finite_number);
-        let kind = text("type").or(match text("status") {
-            Some("added") => Some("add"),
-            Some("deleted") => Some("delete"),
-            Some("modified") => Some("update"),
-            _ => None,
-        });
-        let relative = text("file").or(text("relativePath"));
-        let absolute = text("filePath").or(relative);
-        let complete = kind.is_some_and(|kind| !kind.is_empty())
-            && absolute.is_some_and(|path| !path.is_empty())
-            && number("additions").is_some()
-            && number("deletions").is_some();
-        let relative = relative.filter(|path| !path.is_empty() && complete)?;
-        Some(File { path: relative.to_owned(), patch: text("patch")?.to_owned() })
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::first_file;
-
-    #[test]
-    fn the_first_complete_file_has_the_patch() {
-        let files = json!([
-            { "file": "a.rs", "type": "update", "patch": "@@", "additions": 1 },
-            { "relativePath": "b.rs", "status": "modified", "patch": "@@ -1 +1 @@", "additions": 1, "deletions": 1 },
-        ]);
-        let file = first_file(Some(&files)).unwrap();
-        assert_eq!((file.path.as_str(), file.patch.as_str()), ("b.rs", "@@ -1 +1 @@"));
-        assert!(
-            first_file(Some(
-                &json!([{ "file": "c.rs", "status": "renamed", "patch": "", "additions": 0, "deletions": 0 }])
-            ))
-            .is_none()
-        );
-        assert!(first_file(Some(&json!({}))).is_none());
     }
 }

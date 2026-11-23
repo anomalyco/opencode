@@ -310,7 +310,7 @@ fn a_composer_edit_is_not_overtaken_by_the_next_signal() {
     opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
     let select = event("tui.session.select", serde_json::json!({ "sessionID": "ses_a" }));
     opencode_tui::features::events::testing::signal(&setup.tui, select);
-    setup.wait("the session", || matches!(setup.tui.route(), Route::Session { .. }));
+    setup.wait("the session", || matches!(&*setup.tui.route(), Route::Session { .. }));
     setup.app.advance(std::time::Duration::from_millis(100));
     assert_eq!(setup.textarea().text(), "");
     assert!(setup.requests("POST", "/prompt").is_empty());

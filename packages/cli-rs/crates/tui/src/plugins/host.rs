@@ -5,9 +5,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use opencode_api::generated::{
-    IntegrationInfo, LocationQueryInput, McpServer, ModelInfo, ModelRef, PluginInfo, PluginListInput, PluginSource,
-    PluginState, ProviderID, ProviderInfo, SessionInboxDelivery, UsageLimitsInfo, V2Event, VcsInfo,
+    EventKind, IntegrationInfo, LocationQueryInput, McpServer, ModelInfo, ModelRef, PluginInfo, PluginListInput,
+    PluginSource, PluginState, ProviderID, ProviderInfo, SessionInboxDelivery, UsageLimitsInfo, V2Event, VcsInfo,
 };
+use opencode_api::kinds::EventKinds;
 use opencode_local::cli_config::AttentionSoundName;
 use opencode_local::serial::Serial;
 use opencode_local::storage::Storage;
@@ -137,18 +138,18 @@ impl Host for Tui {
         let mut options = ToastOptions::new(variant, toast.message.clone());
         options.title = toast.title.clone();
         // Only offer to open a session outside the visible family. Queue plugin toasts behind host failure notices.
-        let Some(session) = toast.session.as_ref().map(|id| SessionID(id.clone())) else {
+        let Some(session) = toast.session.as_deref() else {
             return self.toasts.show_behind_kept(options);
         };
-        let here = match self.route() {
-            Route::Session { id: open } => self.data.read(|state| state.root(&open) == state.root(&session)),
+        let here = match &*self.route() {
+            Route::Session { id: open } => self.data.read(|state| state.root(&open) == state.root(session)),
             _ => false,
         };
         if !here {
             if options.title.is_none() {
-                options.title = self.data.read(|state| state.session(&session).and_then(|info| info.title.clone()));
+                options.title = self.data.read(|state| state.session(session).and_then(|info| info.title.clone()));
             }
-            let route = Route::Session { id: session };
+            let route = Route::Session { id: SessionID::from(session) };
             options = options.action("Open", bind!(self, |tui| tui.navigate(route.clone())));
         }
         self.toasts.show_behind_kept(options);
@@ -248,8 +249,8 @@ impl Host for Tui {
         notify::notify(self, &request);
     }
 
-    fn on_event(&self, types: &[String], run: Rc<dyn Fn(&V2Event)>) -> Option<Disposer> {
-        Some(crate::features::events::subscribe(self, types.iter().cloned(), move |_, event| run(event)))
+    fn on_event(&self, kinds: EventKinds, run: Rc<dyn Fn(&V2Event)>) -> Option<Disposer> {
+        Some(crate::features::events::subscribe(self, kinds, move |_, event| run(event)))
     }
 
     fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount> {
@@ -265,7 +266,7 @@ impl Host for Tui {
     }
 
     fn remount(&self) {
-        self.navigate(self.route());
+        self.navigate(Route::clone(&self.route()));
         tell_plugins(self);
     }
 
@@ -351,7 +352,7 @@ impl Host for Tui {
         if !crate::tabs::Tabs::enabled(self) {
             return false;
         }
-        let root = |session: &str| self.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
+        let root = |session: &str| self.data.read(|state| state.root(session).to_owned());
         // Apply tab edits in call order.
         let (mut open, mut current) = (self.tabs.open_ids(self), self.tabs.current(self));
         for edit in staged {
@@ -452,8 +453,8 @@ impl Host for Tui {
 
     fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
         // One store snapshot for every read within `f`, a whole plugin call, which reads again and again: the reads
-        // nest in this one, and a batch another thread applies meanwhile waits until the call returns. Every read is
-        // pure, so nothing writes the store inside it.
+        // nest in this one, and a batch that arrives meanwhile applies once the call returns. Every read is pure, so
+        // nothing writes the store inside it.
         self.data.read(|_| f(&Reader { tui: self, theme: OnceCell::new() }));
     }
 
@@ -514,7 +515,8 @@ impl Host for Tui {
             return;
         }
         // Beside the session it names, or the one on screen, while that session shows.
-        let Route::Session { id: shown } = self.route() else {
+        let route = self.route();
+        let Route::Session { id: shown } = &*route else {
             log::warn!("plugin {id}: its panel {} opens beside a session, and none shows", open.surface);
             return;
         };
@@ -522,7 +524,8 @@ impl Host for Tui {
             log::warn!("plugin {id}: its panel {} names a session that is not on screen", open.surface);
             return;
         }
-        let target = crate::panel::Target { plugin: id.to_owned(), name: open.surface.clone(), session: shown.0 };
+        let target =
+            crate::panel::Target { plugin: id.to_owned(), name: open.surface.clone(), session: shown.0.clone() };
         let presentation =
             if open.fullscreen { crate::panel::Presentation::Fullscreen } else { crate::panel::Presentation::Panel };
         self.panels.open(self, target, presentation);
@@ -592,21 +595,24 @@ pub fn changed(tui: &Tui, changes: &Changes, sync: impl FnOnce(Option<&abi::Chan
     }
     // Refilled with each change batch, so a batch like the one before costs no allocation.
     let mut changed = tui.reads.batch.take();
-    changed.all = changes.all;
-    let sessions = changes.session.iter().chain(&changes.status).chain(changes.selected.keys()).chain(&changes.jobs);
-    refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
-    refill(&mut changed.lists, &changes.messages, |into, id| assign(into, &id.0));
-    let messages = changes.message.iter().flat_map(|(session, ids)| ids.iter().map(move |id| (session, id)));
-    refill(&mut changed.messages, messages, |(into_session, into_id), (session, id)| {
-        assign(into_session, &session.0);
-        assign(into_id, &id.0);
-    });
-    refill(&mut changed.locations, &changes.locations, |into, location| {
-        assign(&mut into.directory, &location.directory);
-        match &location.workspace_id {
-            Some(workspace) => assign(into.workspace.get_or_insert_default(), workspace),
-            None => into.workspace = None,
-        }
+    changed.all = changes.all();
+    tui.data.read(|state| {
+        let sessions = [Touched::INFO, Touched::STATUS, Touched::SELECTED, Touched::JOBS]
+            .into_iter()
+            .flat_map(|bits| changes.sessions_with(state, bits));
+        refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
+        refill(&mut changed.lists, changes.sessions_with(state, Touched::SHAPE), |into, id| assign(into, &id.0));
+        refill(&mut changed.messages, changes.changed_messages(state), |(into_session, into_id), (session, id)| {
+            assign(into_session, &session.0);
+            assign(into_id, id);
+        });
+        refill(&mut changed.locations, changes.locations(state), |into, location| {
+            assign(&mut into.directory, &location.directory);
+            match &location.workspace_id {
+                Some(workspace) => assign(into.workspace.get_or_insert_default(), workspace),
+                None => into.workspace = None,
+            }
+        });
     });
     (changed.local, changed.size, changed.woken) = (false, false, false);
     sync(Some(&changed));
@@ -880,7 +886,7 @@ impl abi::Read for Reader<'_> {
         self.session(id, |state, id| state.pending(id).to_vec())
     }
 
-    fn models(&self, location: Option<&abi::LocationRef>) -> Option<Vec<ModelInfo>> {
+    fn models(&self, location: Option<&abi::LocationRef>) -> Option<Arc<[ModelInfo]>> {
         self.catalog(location, Catalog::Model, |data| data.model.clone())
     }
 
@@ -897,7 +903,7 @@ impl abi::Read for Reader<'_> {
         self.tui.local.usage().flatten()
     }
 
-    fn providers(&self) -> Option<Vec<ProviderInfo>> {
+    fn providers(&self) -> Option<Arc<[ProviderInfo]>> {
         self.catalog(None, Catalog::Provider, |data| data.provider.clone())
     }
 
@@ -914,11 +920,11 @@ impl abi::Read for Reader<'_> {
         }
     }
 
-    fn mcp_servers(&self, location: Option<&abi::LocationRef>) -> Option<Vec<McpServer>> {
+    fn mcp_servers(&self, location: Option<&abi::LocationRef>) -> Option<Arc<[McpServer]>> {
         self.catalog(location, Catalog::McpServer, |data| data.mcp_server.clone())
     }
 
-    fn integrations(&self, location: Option<&abi::LocationRef>) -> Option<Vec<IntegrationInfo>> {
+    fn integrations(&self, location: Option<&abi::LocationRef>) -> Option<Arc<[IntegrationInfo]>> {
         self.catalog(location, Catalog::Integration, |data| data.integration.clone())
     }
 
@@ -927,10 +933,10 @@ impl abi::Read for Reader<'_> {
     }
 
     fn route(&self) -> abi::Route {
-        match self.tui.route() {
+        match &*self.tui.route() {
             Route::Home => abi::Route::Home,
-            Route::Session { id } => abi::Route::Session { id: id.0 },
-            Route::Plugin { id, name } => abi::Route::Plugin { id, name },
+            Route::Session { id } => abi::Route::Session { id: id.0.clone() },
+            Route::Plugin { id, name } => abi::Route::Plugin { id: id.clone(), name: name.clone() },
         }
     }
 
@@ -962,7 +968,7 @@ impl abi::Read for Reader<'_> {
         let tabs = &self.tui.tabs;
         let current = tabs.current(self.tui);
         tabs.tabs(self.tui)
-            .into_iter()
+            .iter()
             .map(|tab| {
                 let status = tabs.status(self.tui, &tab.session_id);
                 abi::Tab {
@@ -973,8 +979,8 @@ impl abi::Read for Reader<'_> {
                         crate::tabs::model::Unread::Activity => abi::Unread::Activity,
                         crate::tabs::model::Unread::Error => abi::Unread::Error,
                     }),
-                    session_id: tab.session_id,
-                    title: tab.title,
+                    session_id: tab.session_id.clone(),
+                    title: tab.title.clone(),
                 }
             })
             .collect()
@@ -1228,7 +1234,7 @@ pub fn install(tui: &Rc<Tui>) {
     // Notify plugin keymap readers when pending keys, layers, or focus change.
     let keymap = tui.keymap.keymap().on_state(bind!(tui, |tui| local_changed(&tui)));
     tui.layers.borrow_mut().push(keymap);
-    crate::features::events::subscribe(tui, ["plugin.updated", "server.connected"], |tui, event| {
+    crate::features::events::subscribe(tui, [EventKind::PluginUpdated, EventKind::ServerConnected], |tui, event| {
         if matches!(event, V2Event::PluginUpdated(_) | V2Event::ServerConnected(_)) {
             sync_server_plugins(tui);
         }
@@ -1239,8 +1245,7 @@ pub fn install(tui: &Rc<Tui>) {
 
 /// Reads the server plugins again once the default location changed.
 pub fn sync(tui: &Tui) {
-    let default = tui.data.read(|state| state.default_location().clone());
-    if tui.reads.server.borrow().0.as_ref() != Some(&default) {
+    if tui.data.read(|state| tui.reads.server.borrow().0.as_ref() != Some(state.default_location())) {
         sync_server_plugins(tui);
     }
 }
@@ -1430,9 +1435,7 @@ fn server_name(plugin: &PluginInfo) -> String {
     match &plugin.source {
         PluginSource::Package(package) => package.target.clone(),
         PluginSource::Local(local) => local.path.clone(),
-        PluginSource::Builtin(source) => source.r#type.clone(),
-        PluginSource::Sdk(source) => source.r#type.clone(),
-        PluginSource::Unknown(value) => value.get("type").and_then(Value::as_str).unwrap_or_default().to_owned(),
+        source => source.tag().to_owned(),
     }
 }
 
@@ -1688,7 +1691,7 @@ fn identity(dir: &std::path::Path) -> Option<u64> {
 pub fn add(tui: &Rc<Tui>, plugin: Definition) {
     tui.plugins.add(plugin);
     tui.plugins.activate(&host(tui));
-    tui.navigate(tui.route());
+    tui.navigate(Route::clone(&tui.route()));
     tell_plugins(tui);
 }
 

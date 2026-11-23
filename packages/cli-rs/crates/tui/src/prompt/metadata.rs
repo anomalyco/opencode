@@ -1,10 +1,12 @@
 //! Agent, model, variant, and usage labels below the prompt.
 
+use std::sync::Arc;
+
 use opencode_api::generated::{
-    AgentInfo, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
+    AgentInfo, CommandInfo, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
 };
 use opencode_store::location::{Catalog as Read, Location};
-use opencode_store::{Data, State, Task};
+use opencode_store::{Data, Parts, State, Task};
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
@@ -15,11 +17,11 @@ const READS: [Read; 6] = [Read::Agent, Read::Model, Read::Provider, Read::Config
 
 #[derive(Debug, Default)]
 pub struct Catalog {
-    pub agents: Vec<AgentInfo>,
-    pub models: Vec<ModelInfo>,
-    pub providers: Vec<ProviderInfo>,
-    /// Server command names, for `/name args` submits.
-    pub commands: Vec<String>,
+    pub agents: Arc<[AgentInfo]>,
+    pub models: Arc<[ModelInfo]>,
+    pub providers: Arc<[ProviderInfo]>,
+    /// Server commands, for `/name args` submits.
+    pub commands: Arc<[CommandInfo]>,
     pub branch: Option<String>,
 }
 
@@ -51,6 +53,21 @@ pub fn sync(data: &Data, location: &Location) -> Vec<Task<()>> {
 }
 
 impl Catalog {
+    /// What [`Catalog::read`] reads of a location.
+    pub const READS: Parts = Parts::catalogs(&[Read::Agent, Read::Model, Read::Provider, Read::Command, Read::Vcs]);
+
+    /// The same lists and branch as `other`. A list not read yet is a new empty one each time.
+    pub fn same(&self, other: &Self) -> bool {
+        fn same<T>(one: &Arc<[T]>, other: &Arc<[T]>) -> bool {
+            Arc::ptr_eq(one, other) || one.is_empty() && other.is_empty()
+        }
+        same(&self.agents, &other.agents)
+            && same(&self.models, &other.models)
+            && same(&self.providers, &other.providers)
+            && same(&self.commands, &other.commands)
+            && self.branch == other.branch
+    }
+
     /// The catalog of `location` once its agents and models are read (`promptDisplay` waits for
     /// both); the rest only label the selection.
     pub fn read(state: &State, location: &Location) -> Option<Self> {
@@ -59,7 +76,7 @@ impl Catalog {
             agents: data.agent.clone()?,
             models: data.model.clone()?,
             providers: data.provider.clone().unwrap_or_default(),
-            commands: data.command.iter().flatten().map(|command| command.name.clone()).collect(),
+            commands: data.command.clone().unwrap_or_default(),
             branch: data.vcs.as_ref().and_then(|vcs| vcs.branch.current.clone()),
         })
     }

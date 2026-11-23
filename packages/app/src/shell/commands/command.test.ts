@@ -6,6 +6,7 @@ import {
   commandPaletteOptions,
   CommandCatalog,
   formatKeybind,
+  formatKeybindParts,
   matchKeybind,
   parseKeybind,
   type CommandOption,
@@ -108,5 +109,10 @@ describe("command keybinds", () => {
     expect(formatKeybind("none")).toBe("")
     expect(formatKeybind("mod+k,mod+p")).toContain("K")
     expect(formatKeybind("mod+k,mod+p")).not.toContain("P")
+  })
+
+  test("formatKeybind shows a chord stroke by stroke", () => {
+    expect(formatKeybind("g i")).toBe("G I")
+    expect(formatKeybindParts("g s")).toEqual(["G", "S"])
   })
 })

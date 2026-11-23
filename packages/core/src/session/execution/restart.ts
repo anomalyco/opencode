@@ -172,7 +172,7 @@ export const layer = (options?: Options) =>
           description: "Image generation",
           text: ImageNotice.text({ id: background.id, state, body }),
           metadata: {
-            source: "experimental_image_generate",
+            source: "generate_image",
             jobID: background.id,
             state,
             path: recovery.path,

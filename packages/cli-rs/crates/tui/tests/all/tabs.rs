@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use opencode_api::generated::SessionID;
+use opencode_api::generated::{EventKind, SessionID, V2Event};
 use opencode_api::memory::{Memory, Route as MemoryRoute};
 use opencode_plugin::abi::{self, v2};
 use opencode_tui::panel::{Presentation, Target};
@@ -61,7 +61,7 @@ impl Tabs {
     /// Waits until the tabs are `ids` and the route is the session `route`, or home.
     fn wait_tabs(&self, ids: &[&str], route: Option<&str>) {
         let route = route.map_or(Route::Home, support::session_route);
-        let found = self.app.wait_until(WAIT, || self.ids() == ids && self.tui.route() == route);
+        let found = self.app.wait_until(WAIT, || self.ids() == ids && *self.tui.route() == route);
         assert!(found, "tabs {:?}, route {:?}", self.ids(), self.tui.route());
     }
 
@@ -79,7 +79,7 @@ impl Tabs {
     }
 
     fn ids(&self) -> Vec<String> {
-        self.tui.tabs.tabs(&self.tui).into_iter().map(|tab| tab.session_id).collect()
+        self.tui.tabs.tabs(&self.tui).iter().map(|tab| tab.session_id.clone()).collect()
     }
 }
 
@@ -100,6 +100,15 @@ fn tabs_open_close_and_persist_in_the_cwd_scope() {
     assert!(screen.lines().next().unwrap().contains("Fix the parser"), "{screen}");
     let file = h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
     assert_eq!(file["cwd"][cwd()]["unread"], json!({}));
+    // A background tab's rename reaches the strip.
+    h.memory.emit(&json!({
+        "id": "evt_1", "created": 3, "type": "session.renamed",
+        "durable": { "aggregateID": "ses_a", "seq": 1, "version": 1 },
+        "location": { "directory": "/project" },
+        "data": { "sessionID": "ses_a", "title": "Parse it all" },
+    }));
+    let screen = h.wait_for("Parse it all");
+    assert!(screen.lines().next().unwrap().contains("Parse it all"), "{screen}");
 
     h.app.press("ctrl+x");
     h.app.press("w");
@@ -119,7 +128,7 @@ fn deleting_the_open_tab_selects_another_without_a_toast() {
         "location": { "directory": "/project" },
         "data": { "sessionID": "ses_b" },
     }));
-    let moved = h.app.wait_until(WAIT, || h.tui.route() == support::session_route("ses_a"));
+    let moved = h.app.wait_until(WAIT, || *h.tui.route() == support::session_route("ses_a"));
     assert!(moved, "{:?}", h.tui.route());
     assert_eq!(h.ids(), ["ses_a"]);
     assert!(!h.app.text().contains("was deleted"), "{}", h.app.text());
@@ -226,7 +235,7 @@ fn closing_a_session_whose_tab_another_tui_closed_selects_its_former_neighbour()
     };
     let h = support::mount(100, 30, deps);
     h.wait_for("Write the docs");
-    let ids = || h.tui.tabs.tabs(&h.tui).into_iter().map(|tab| tab.session_id).collect::<Vec<_>>();
+    let ids = || h.tui.tabs.tabs(&h.tui).iter().map(|tab| tab.session_id.clone()).collect::<Vec<_>>();
 
     h.tui
         .storage()
@@ -234,10 +243,10 @@ fn closing_a_session_whose_tab_another_tui_closed_selects_its_former_neighbour()
         .update("tabs", &json!({}), |value| *value = serde_json::from_str(&file(&["ses_a", "ses_c"])).unwrap())
         .unwrap();
     assert!(h.app.wait_until(WAIT, || ids() == ["ses_a", "ses_c"]), "{:?}", ids());
-    assert_eq!(h.tui.route(), support::session_route("ses_b"));
+    assert_eq!(*h.tui.route(), support::session_route("ses_b"));
 
     opencode_tui::tabs::close(&h.tui, None);
-    let moved = h.app.wait_until(WAIT, || h.tui.route() == support::session_route("ses_c"));
+    let moved = h.app.wait_until(WAIT, || *h.tui.route() == support::session_route("ses_c"));
     assert!(moved, "{:?}", h.tui.route());
     assert_eq!(ids(), ["ses_a", "ses_c"]);
 }
@@ -280,7 +289,7 @@ fn a_reload_keeps_the_writes_held_behind_the_lock() {
     let lock = opencode_local::lock::acquire(&locks, &file.to_string_lossy(), &Default::default()).unwrap();
     let title = |id: &str| {
         let tabs = h.tui.tabs.tabs(&h.tui);
-        tabs.into_iter().find(|tab| tab.session_id == id).and_then(|tab| tab.title)
+        tabs.iter().find(|tab| tab.session_id == id).and_then(|tab| tab.title.clone())
     };
     h.tui.navigate(support::session_route("ses_b"));
     let titled = h.app.wait_until(WAIT, || title("ses_b").as_deref() == Some("Write the docs"));
@@ -299,15 +308,14 @@ fn a_reload_keeps_the_writes_held_behind_the_lock() {
     h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
 }
 
-// A burst that overflows the store's signal channel while the UI is busy skips the `session.deleted` in it; the
-// skip resyncs as a reconnect does, and the store saw the deletion, so the tab still closes.
+// A `session.deleted` in a burst of signals the store passes on while the UI is busy still closes its tab.
 #[test]
-fn a_deletion_lost_in_a_signal_overflow_still_closes_its_tab() {
+fn a_deletion_in_a_burst_of_signals_still_closes_its_tab() {
     let h = mount(100, json!({ "animations": false }));
     h.open("ses_b");
     h.tui.navigate(support::session_route("ses_a"));
     h.wait_for("Write the docs");
-    let _listening = opencode_tui::features::events::subscribe(&h.tui, ["filesystem.changed"], |_, _| {});
+    let _listening = opencode_tui::features::events::subscribe(&h.tui, [EventKind::FilesystemChanged], |_, _| {});
     let deleted = json!({
         "id": "evt_deleted", "created": 3, "type": "session.deleted",
         "durable": { "aggregateID": "ses_b", "seq": 1, "version": 1 },
@@ -321,11 +329,11 @@ fn a_deletion_lost_in_a_signal_overflow_still_closes_its_tab() {
         })
     });
     let events: Vec<_> =
-        std::iter::once(deleted).chain(burst).map(|event| serde_json::from_value(event).unwrap()).collect();
+        std::iter::once(deleted).chain(burst).map(|event| serde_json::from_value::<V2Event>(event).unwrap()).collect();
     // The UI thread is busy: nothing drains its queue until it is full.
     let proxy = h.app.proxy();
     while proxy.post(|_| {}) != Err(opentui::app::ProxyError::Full) {}
-    h.tui.data.apply(&events);
+    h.tui.data.apply(events);
     h.wait_tabs(&["ses_a"], Some("ses_a"));
 }
 
@@ -342,7 +350,7 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
         "durable": { "aggregateID": "ses_a", "seq": 1, "version": 1 },
         "data": { "sessionID": "ses_a" },
     });
-    h.tui.data.apply(&[serde_json::from_value(event).unwrap()]);
+    h.tui.data.apply(vec![serde_json::from_value::<V2Event>(event).unwrap()]);
     h.app.render();
     h.app.advance(std::time::Duration::from_millis(200));
     assert!(h.app.needs_frame(), "a busy tab pulses");
@@ -369,7 +377,7 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
             "durable": { "aggregateID": "ses_a", "seq": seq, "version": 1 },
             "data": { "sessionID": "ses_a" },
         });
-        serde_json::from_value(event).unwrap()
+        serde_json::from_value::<V2Event>(event).unwrap()
     };
     let vertical = json!({ "tabs": { "layout": "vertical" } });
     for (name, config, compact, busy) in [
@@ -393,7 +401,7 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
         // The app's other timers, which wake `App::run`'s loop without a frame.
         let rest = h.app.idle(std::time::Duration::from_secs(8));
         h.app.advance(std::time::Duration::from_millis(30));
-        h.tui.data.apply(&[execution("started", 1)]);
+        h.tui.data.apply(vec![execution("started", 1)]);
         if compact && busy > 0 {
             // The change lands before the spinner first paints, so only that paint can ask for the next step.
             assert!(h.app.wait_until(WAIT, || h.tui.tabs.status(&h.tui, "ses_a").busy), "{name}: not busy");
@@ -440,7 +448,7 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
             }
         }
         h.app.resize(60, 30);
-        h.tui.data.apply(&[execution("succeeded", 2)]);
+        h.tui.data.apply(vec![execution("succeeded", 2)]);
         frames(&h);
         assert!(frames(&h).len() <= 1, "{name}: idle again");
         let again = h.app.idle(std::time::Duration::from_secs(8));
