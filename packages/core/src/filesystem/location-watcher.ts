@@ -88,7 +88,7 @@ const layer = Layer.effect(
     )
     yield* policy.observe(reconcile)
     yield* Effect.gen(function* () {
-      yield* Plugin.awaitActivation
+      yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
       yield* reconcile()
     }).pipe(
       Effect.catchCauseIf(

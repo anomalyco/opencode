@@ -11,7 +11,7 @@ import { SessionCwd } from "./cwd.js"
 export const start = Effect.fn("SessionShell.start")(function* (input: { session: Session.Info; command: string }) {
   const instances = yield* Instance.Service
   const context = yield* Effect.gen(function* () {
-    yield* Plugin.awaitActivation
+    yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
     return {
       cwd: yield* SessionCwd.current(input.session.id),
       shell: yield* Shell.Service,

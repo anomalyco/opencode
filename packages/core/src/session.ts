@@ -400,7 +400,7 @@ const layer = Layer.effect(
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
         const forked = yield* result.get(sessionID).pipe(Effect.orDie)
         yield* Effect.gen(function* () {
-          yield* Plugin.awaitActivation
+          yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
           const hooks = yield* PluginHooks.Service
           yield* hooks.trigger("session", "fork", { sessionID })
         }).pipe(

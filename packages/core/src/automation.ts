@@ -272,7 +272,11 @@ const layer = Layer.effect(
      */
     const subagent = (owner: SessionSchema.Info, id: Agent.ID, invocation?: Invocation) =>
       Effect.gen(function* () {
-        yield* AutomationCode.awaitPlugins.pipe(Effect.mapError((reason) => new InvalidError({ reason })))
+        yield* AutomationCode.awaitPlugins.pipe(
+          Effect.timeoutOption("1 second"),
+          Effect.asVoid,
+          Effect.mapError((reason) => new InvalidError({ reason })),
+        )
         const location = yield* Location.Service
         if (location.project.id !== owner.projectID)
           return yield* new InvalidError({ reason: "The creating session's location is no longer in its project" })
@@ -837,7 +841,7 @@ const layer = Layer.effect(
         })
       const action = "opencode_watch_mcp_event"
       yield* Effect.gen(function* () {
-        yield* Plugin.awaitActivation
+        yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
         const agents = yield* Agent.Service
         const agent = yield* agents.select(owner.agent)
         if (!agent.info || agent.id !== row.event_position?.agent)

@@ -4,6 +4,7 @@ import { createRequire } from "node:module"
 import { defineConfig, type Plugin, type UserConfig } from "vite"
 import solid from "vite-plugin-solid"
 import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset } from "./src/node/target"
+import { seaFsPreludeImports } from "./src/node/sea-fs"
 import { verifySimulationGraph } from "./script/verify-artifact"
 
 const dir = import.meta.dirname
@@ -160,11 +161,7 @@ export const Error = sdk.Tool.Error
 `
   return `#!/usr/bin/env -S node ${nodeExecArgv.join(" ")}
 import __cjs_mod__ from "node:module"
-import { chmodSync as __ocChmod, existsSync as __ocExists, lstatSync as __ocLstat, mkdirSync as __ocMkdir, renameSync as __ocRename, rmSync as __ocRm, writeFileSync as __ocWrite } from "node:fs"
-import { tmpdir as __ocTmpdir } from "node:os"
-import __ocPath from "node:path"
-import { getAssetKeys as __ocAssetKeys, getRawAsset as __ocRawAsset, isSea as __ocIsSea } from "node:sea"
-import { fileURLToPath as __ocFileURLToPath } from "node:url"
+${seaFsPreludeImports}
 const __filename = import.meta.filename
 const __dirname = import.meta.dirname
 const require = __cjs_mod__.createRequire(import.meta.url)

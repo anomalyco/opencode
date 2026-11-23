@@ -11,6 +11,9 @@
     "text": {
       "base": "$hue.neutral.100",
       "muted": "$hue.neutral.300",
+      "badge": {
+        "base": "$background.raised.base"
+      },
       "action": {
         "primary": {
           "base": "$text.base",
@@ -53,6 +56,9 @@
     },
     "background": {
       "base": "$hue.neutral.900",
+      "badge": {
+        "base": "$hue.accent.400"
+      },
       "raised": {
         "base": "$hue.neutral.700",
         "high": "$hue.neutral.600",

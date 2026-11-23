@@ -87,6 +87,8 @@ export function createSessionRows(
   // Rows have no `id`, Solid's default reconcile key. Matching by position instead would move every
   // row into another store object whenever older history is prepended, remounting the whole transcript.
   // Rows inserted live carry no key, so key the current rows too before matching.
+  // Live deltas go through appendMessage/updatePart below; rebuild is reserved for
+  // structural resets (revert boundary, verbosity, turnTokens, initial/sync restore).
   function rebuild() {
     setRows(
       produce((draft) => {
@@ -146,8 +148,11 @@ export function createSessionRows(
 
   // Re-reduce when the revert boundary changes (stage/clear/commit). These reactions defer
   // their first run: the mount effect above has already reduced the same state.
+  // Rebuild stays reserved for revert/verbosity/turnTokens/sync; live inserts use
+  // appendMessage/updatePart below so streaming never re-reconciles the transcript.
   createEffect(on(revertBoundary, rebuild, { defer: true }))
 
+  // Queued/compaction inbox rows arrive live: append incrementally instead of rebuilding.
   createEffect(
     on(
       () =>
@@ -156,11 +161,21 @@ export function createSessionRows(
           if (item.type === "user" && item.delivery === "queue") return [`${item.id}:queue`]
           return []
         }),
-      rebuild,
+      (items) => {
+        if (items.length === 0) {
+          const stale = rows.some((row) => row.type === "compaction-queued")
+          if (stale) rebuild()
+          return
+        }
+        for (const item of items) appendMessage(item.split(":")[0])
+      },
       { defer: true },
     ),
   )
 
+  // User/synthetic/compaction/idle messages arrive live: append incrementally.
+  // A structural mismatch (e.g. history rewrite) still falls back to rebuild.
+  const knownMessageIDs = new Set<string>()
   createEffect(
     on(
       () =>
@@ -182,12 +197,39 @@ export function createSessionRows(
                 ]
               : [],
         ),
-      rebuild,
+      (entries) => {
+        const ids = new Set(entries.map((entry) => entry.id))
+        const fresh = entries.filter((entry) => !knownMessageIDs.has(entry.id))
+        for (const entry of entries) knownMessageIDs.add(entry.id)
+        if (fresh.length === 0) {
+          const removed = [...knownMessageIDs].some((id) => !ids.has(id))
+          if (removed) {
+            for (const id of [...knownMessageIDs]) if (!ids.has(id)) knownMessageIDs.delete(id)
+            rebuild()
+          }
+          return
+        }
+        for (const entry of fresh) appendMessage(entry.id)
+      },
       { defer: true },
     ),
   )
 
   createEffect(on([turnTokens, verbosity], rebuild, { defer: true }))
+
+  // Incremental live completion for an already-mounted reasoning part.
+  const updatePart = (ref: PartRef) =>
+    setRows(
+      produce((draft) => {
+        const row = draft.find(
+          (row) =>
+            row.type === "group" &&
+            row.kind === "reasoning" &&
+            groupRefs(row).some((item) => item.messageID === ref.messageID && item.partID === ref.partID),
+        )
+        if (row?.type === "group" && row.kind === "reasoning") row.completed = true
+      }),
+    )
 
   const appendMessage = (messageID: string) =>
     setRows(
@@ -210,13 +252,7 @@ export function createSessionRows(
           return
         }
         if (part.type !== "reasoning" || part.time?.completed === undefined) return
-        const row = draft.find(
-          (row) =>
-            row.type === "group" &&
-            row.kind === "reasoning" &&
-            groupRefs(row).some((item) => item.messageID === ref.messageID && item.partID === ref.partID),
-        )
-        if (row?.type === "group" && row.kind === "reasoning") row.completed = true
+        updatePart(ref)
       }),
     )
 

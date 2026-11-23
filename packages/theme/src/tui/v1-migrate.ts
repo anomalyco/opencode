@@ -118,6 +118,7 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
     text: {
       base: text,
       muted: textMuted,
+      badge: { base: "$background.raised.base" },
       action: {
         primary: {
           base: "$text.base",
@@ -145,6 +146,7 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
     },
     background: {
       base: background,
+      badge: { base: "$hue.accent.400" },
       raised: {
         base: backgroundPanel,
         high: backgroundMenu,

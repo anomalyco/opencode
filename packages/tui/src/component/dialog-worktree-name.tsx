@@ -1,4 +1,4 @@
-import { Slug } from "@opencode/core/util/slug"
+import { Slug } from "@opencode/util/slug"
 import { useNewDesigns } from "../config"
 import { type DialogContext } from "../ui/dialog"
 import { DialogPrompt } from "../ui/dialog-prompt"

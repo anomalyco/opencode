@@ -30,6 +30,7 @@ import {
   createMemo,
   ErrorBoundary,
   createSignal,
+  lazy,
   onMount,
   onCleanup,
   batch,
@@ -48,7 +49,6 @@ import {
   type TuiApp,
 } from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
-import { DialogIntegration } from "./component/dialog-integration"
 import { ErrorComponent } from "./component/error-component"
 import { PluginRouteMissing } from "./component/plugin-route-missing"
 import { EditorContextProvider } from "./context/editor"
@@ -63,21 +63,9 @@ import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs"
 import { LocationProvider, useLocation } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
-import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
-import { DialogMcp } from "./component/dialog-mcp"
-import { DialogUsage } from "./component/usage"
-import { DialogStatus } from "./component/dialog-status"
-import { DialogConfig } from "./component/dialog-config"
-import { DialogDebug } from "./component/dialog-debug"
-import { DialogPair } from "./component/dialog-pair"
-import { DialogHighlights } from "./component/dialog-highlights"
-import { claim } from "./util/highlights"
-import { DialogThemeList } from "./component/dialog-theme-list"
-import { DialogHelp } from "./ui/dialog-help"
-import { DialogAgent } from "./component/dialog-agent"
-import { DialogSessionList } from "./component/dialog-session-list"
-import { DialogOpen, DialogOpenKey, moveOpenSession } from "./component/dialog-open"
+// Heavy dialogs load on demand via await import() in their run handlers below.
+import { DialogOpenKey, moveOpenSession } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
 import { createPaneResize } from "./ui/pane-resize"
@@ -85,13 +73,15 @@ import { PaneResizeHandle } from "./ui/pane-resize-handle"
 import { clickedLink } from "./ui/link"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
-import { Home } from "./routes/home"
+const Home = lazy(() => import("./routes/home").then((mod) => ({ default: mod.Home })))
+const SessionFrameLazy = lazy(() => import("./component/session-frame").then((mod) => ({ default: mod.SessionFrame })))
+const loadHighlightsClaim = () => import("./util/highlights").then((mod) => mod.claim)
 import { PromptHistoryProvider } from "./prompt/history"
 import { FrecencyProvider } from "./prompt/frecency"
 import { PromptStashProvider } from "./prompt/stash"
 import { Toast, ToastProvider, useToast } from "./ui/toast"
 import { isFallbackTitle } from "@opencode/util/session-title-fallback"
-import * as Model from "./util/model"
+import { parse as parseModelRef } from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import { openUrl } from "@opencode/util/open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
@@ -101,7 +91,6 @@ import { UpdateNotificationProvider, useUpdateNotification, type UpdateSource } 
 import { PluginProvider, usePlugin, type PackageSource } from "./plugin/context"
 import { localPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
-import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
 import { DialogVariant } from "./component/dialog-variant"
@@ -113,7 +102,6 @@ import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
 import { ClientMcp } from "./context/client-mcp"
 import { PanelProvider, usePanel } from "./context/panel"
-import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
 
 const appGlobalBindingCommands = ["session.list", "session.new", "open.menu", "terminal.suspend"] as const
@@ -686,7 +674,7 @@ function App() {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
       if (args.model) {
-        const { providerID, modelID } = Model.parse(args.model)
+        const { providerID, modelID } = parseModelRef(args.model)
         if (!providerID || !modelID)
           return toast.show({
             variant: "warning",
@@ -756,14 +744,16 @@ function App() {
     if (route.data.type !== "home" || dialog.stack.length > 0 || promptRef.current?.current.text) return
     if (args.prompt || args.continue || args.sessionID || args.newSessionID) return
     if (process.env.OPENCODE_DRIVE || process.env.OPENCODE_STORY || process.env.OPENCODE_ROUTE) return
-    void claim(storage, {
-      version: app.version,
-      count: items.length,
-      history: existsSync(path.join(paths.state, "prompt-history.jsonl")),
-    })
+    void loadHighlightsClaim().then((claim) =>
+      claim(storage, {
+        version: app.version,
+        count: items.length,
+        history: existsSync(path.join(paths.state, "prompt-history.jsonl")),
+      }),
+    )
       .then((show) => {
         if (show && dialog.stack.length === 0)
-          dialog.replace(() => <DialogHighlights version={app.version} items={items} />)
+          void import("./component/dialog-highlights").then(({ DialogHighlights }) => dialog.replace(() => <DialogHighlights version={app.version} items={items} />))
       })
       .catch(toast.error)
   })
@@ -777,7 +767,7 @@ function App() {
         category: "System",
         palette: undefined,
         run: () => {
-          dialog.replace(() => <CommandPaletteDialog />)
+          void import("./component/command-palette").then(({ CommandPaletteDialog }) => dialog.replace(() => <CommandPaletteDialog />))
         },
       },
       {
@@ -787,7 +777,7 @@ function App() {
         suggested: data.session.list().length > 0,
         slash: { name: "sessions", aliases: ["resume", "continue"] },
         run: () => {
-          dialog.replace(() => <DialogSessionList />)
+          void import("./component/dialog-session-list").then(({ DialogSessionList }) => dialog.replace(() => <DialogSessionList />))
         },
       },
       {
@@ -851,10 +841,12 @@ function App() {
         slash: { name: "open", aliases: ["projects", "project"] },
         run: () => {
           if (dialog.key === DialogOpenKey) return
-          dialog.replace(() => <DialogOpen sessions={openSessions()} onLoad={setOpenSessions} />, undefined, {
-            key: DialogOpenKey,
-            size: "large",
-          })
+          void import("./component/dialog-open").then(({ DialogOpen }) =>
+            dialog.replace(() => <DialogOpen sessions={openSessions()} onLoad={setOpenSessions} />, undefined, {
+              key: DialogOpenKey,
+              size: "large",
+            }),
+          )
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
@@ -926,7 +918,7 @@ function App() {
         category: "Agent",
         slash: { name: "models" },
         run: () => {
-          dialog.replace(() => <DialogModel />)
+          void import("./component/dialog-model").then(({ DialogModel }) => dialog.replace(() => <DialogModel />))
         },
       },
       {
@@ -971,7 +963,7 @@ function App() {
         category: "Agent",
         slash: { name: "agents" },
         run: () => {
-          dialog.replace(() => <DialogAgent />)
+          void import("./component/dialog-agent").then(({ DialogAgent }) => dialog.replace(() => <DialogAgent />))
         },
       },
       {
@@ -980,7 +972,7 @@ function App() {
         category: "Agent",
         slash: { name: "usage" },
         run: () => {
-          dialog.replace(() => <DialogUsage />)
+          void import("./component/usage").then(({ DialogUsage }) => dialog.replace(() => <DialogUsage />))
         },
       },
       {
@@ -989,7 +981,7 @@ function App() {
         category: "Agent",
         slash: { name: "mcps" },
         run: () => {
-          dialog.replace(() => <DialogMcp />)
+          void import("./component/dialog-mcp").then(({ DialogMcp }) => dialog.replace(() => <DialogMcp />))
         },
       },
       {
@@ -1023,7 +1015,7 @@ function App() {
               variant: "info",
             })
           }
-          dialog.replace(() => <DialogVariant />)
+          void import("./component/dialog-variant").then(({ DialogVariant }) => dialog.replace(() => <DialogVariant />))
         },
       },
       // Only for a model that has other speeds, so nothing about speeds shows for the rest.
@@ -1063,11 +1055,17 @@ function App() {
         suggested: !connected(),
         slash: { name: "connect", aliases: ["login", "auth"] },
         run: () => {
-          dialog.replace(() => (
-            <DialogIntegration
-              onConnected={(providerID) => dialog.replace(() => <DialogModel providerID={providerID} />)}
-            />
-          ))
+          void import("./component/dialog-integration").then(({ DialogIntegration }) =>
+            dialog.replace(() => (
+              <DialogIntegration
+                onConnected={(providerID) =>
+                  void import("./component/dialog-model").then(({ DialogModel }) =>
+                    dialog.replace(() => <DialogModel providerID={providerID} />),
+                  )
+                }
+              />
+            )),
+          )
         },
         category: "Integration",
       },
@@ -1077,7 +1075,7 @@ function App() {
               name: "opencode.highlights",
               title: "Show release highlights",
               slash: { name: "highlights" },
-              run: () => dialog.replace(() => <DialogHighlights version={app.version} items={app.highlights ?? []} />),
+              run: () => void import("./component/dialog-highlights").then(({ DialogHighlights }) => dialog.replace(() => <DialogHighlights version={app.version} items={app.highlights ?? []} />)),
               category: "System",
             },
           ]
@@ -1088,7 +1086,7 @@ function App() {
         suggested: true,
         slash: { name: "settings" },
         run: () => {
-          dialog.replace(() => <DialogConfig />)
+          void import("./component/dialog-config").then(({ DialogConfig }) => dialog.replace(() => <DialogConfig />))
         },
         category: "System",
       },
@@ -1097,7 +1095,7 @@ function App() {
         title: "View status",
         slash: { name: "status" },
         run: () => {
-          dialog.replace(() => <DialogStatus />)
+          void import("./component/dialog-status").then(({ DialogStatus }) => dialog.replace(() => <DialogStatus />))
         },
         category: "System",
       },
@@ -1117,7 +1115,7 @@ function App() {
         title: "Pair device",
         slash: { name: "pair", aliases: ["web"] },
         run: () => {
-          dialog.replace(() => <DialogPair />)
+          void import("./component/dialog-pair").then(({ DialogPair }) => dialog.replace(() => <DialogPair />))
         },
         category: "System",
       },
@@ -1163,7 +1161,7 @@ function App() {
         title: "View debug info",
         slash: { name: "debug" },
         run: () => {
-          dialog.replace(() => <DialogDebug />)
+          void import("./component/dialog-debug").then(({ DialogDebug }) => dialog.replace(() => <DialogDebug />))
         },
         category: "System",
       },
@@ -1172,7 +1170,7 @@ function App() {
         title: "Switch theme",
         slash: { name: "themes" },
         run: () => {
-          dialog.replace(() => <DialogThemeList />)
+          void import("./component/dialog-theme-list").then(({ DialogThemeList }) => dialog.replace(() => <DialogThemeList />))
         },
         category: "System",
       },
@@ -1203,7 +1201,7 @@ function App() {
         title: "Help",
         slash: { name: "help" },
         run: () => {
-          dialog.replace(() => <DialogHelp />)
+          void import("./ui/dialog-help").then(({ DialogHelp }) => dialog.replace(() => <DialogHelp />))
         },
         category: "System",
       },
@@ -1488,7 +1486,7 @@ function App() {
                 <Match when={route.data.type === "session"}>
                   <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
                     {(sessionID) => (
-                      <SessionFrame
+                      <SessionFrameLazy
                         sessionID={sessionID}
                         verticalTabsWidth={verticalTabsVisible() ? tabsResize.size() : 0}
                       />

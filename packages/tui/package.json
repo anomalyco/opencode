@@ -50,7 +50,6 @@
   },
   "dependencies": {
     "@opencode/client": "workspace:*",
-    "@opencode/core": "workspace:*",
     "@opencode/latex": "workspace:*",
     "@opencode/merman": "workspace:*",
     "@opencode/plugin": "workspace:*",
@@ -72,6 +71,7 @@
     "strip-ansi": "7.1.2"
   },
   "devDependencies": {
+    "@opencode/core": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:"

@@ -49,6 +49,8 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
     metadata: SessionCwdStore.readStored(row.metadata).metadata,
     permissions: row.permission ?? undefined,
     revert: row.revert ? decodeRevert(row.revert) : undefined,
+    resumeAttempts: row.resume_attempts ?? undefined,
+    suspended: row.time_suspended === null || row.time_suspended === undefined ? undefined : DateTime.makeUnsafe(row.time_suspended),
     outcome: row.idle_outcome ?? undefined,
     time: {
       created: DateTime.makeUnsafe(row.time_created),

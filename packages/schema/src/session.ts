@@ -6,7 +6,7 @@ import { Agent } from "./agent.js"
 import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
-import { AbsolutePath, DateTimeUtcFromMillis, optional, RelativePath, statics } from "./schema.js"
+import { AbsolutePath, DateTimeUtcFromMillis, NonNegativeInt, optional, RelativePath, statics } from "./schema.js"
 import { SessionEvent } from "./session-event.js"
 import { SessionID } from "./session-id.js"
 import { SessionMetadata } from "./session-metadata.js"
@@ -60,6 +60,10 @@ export const Info = Schema.Struct({
   /** Evaluated after the agent's rules; the last matching rule wins. */
   permissions: Permission.Ruleset.pipe(optional),
   revert: Revert.pipe(optional),
+  /** Durable resume accounting for driver deduplication: attempts counted by the restart sweep. */
+  resumeAttempts: NonNegativeInt.pipe(optional),
+  /** Durable execution-claim timestamp; present while a turn holds the claim. */
+  suspended: DateTimeUtcFromMillis.pipe(optional),
 }).annotate({ identifier: "Session.Info" })
 
 export const ListAnchor = Schema.Struct({

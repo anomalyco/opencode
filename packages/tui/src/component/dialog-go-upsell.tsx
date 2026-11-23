@@ -1,7 +1,7 @@
 import { RGBA, TextAttributes, type Renderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { FormAnswer, IntegrationOauthConnectOutput, IntegrationOAuthMethod } from "@opencode/client"
-import * as Open from "@opencode/util/open"
+import { openUrl } from "@opencode/util/open"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useConfig, useNewDesigns } from "../config"
 import { useClient } from "../context/client"
@@ -69,7 +69,7 @@ export function DialogGoUpsell(props: {
 
   const run = (action: Action) => {
     if (action === "subscribe") {
-      Open.openUrl(GO_URL).catch(() => {})
+      openUrl(GO_URL).catch(() => {})
       dialog.replace(() => <DialogGoUpsellConnect canContinue={props.canContinue} onSubscribed={props.onSubscribe} />)
       return
     }
@@ -371,7 +371,7 @@ function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribe
   const open = () => {
     const current = attempt()
     if (!current) return
-    Open.openUrl(current.url).catch(() =>
+    openUrl(current.url).catch(() =>
       toast.show({
         message: "Could not open the browser. Copy the URL and continue manually.",
         variant: "error",

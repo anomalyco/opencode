@@ -394,7 +394,7 @@ function openEditorSocket(connection: EditorConnection, WebSocketImpl: typeof We
     headers: {
       "x-claude-code-ide-authorization": connection.authToken,
     },
-  } as any)
+  } as unknown as string)
 }
 
 function parseMessage(value: unknown) {

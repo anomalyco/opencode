@@ -9,7 +9,13 @@ import { SkillNotFoundError } from "./error.js"
 
 export const get = Effect.fn("SessionSkill.get")(function* (input: { session: Session.Info; skill: Skill.ID }) {
   const instances = yield* Instance.Service
-  const skills = yield* Plugin.awaitActivation.pipe(Effect.andThen(Skill.Service), instances.provide(input.session))
+  // Bounded activation: degrade to currently-loaded plugins, missing skill is not-found.
+  const skills = yield* Plugin.awaitActivation.pipe(
+    Effect.timeoutOption("1 second"),
+    Effect.asVoid,
+    Effect.andThen(Skill.Service),
+    instances.provide(input.session),
+  )
   const skill = yield* skills.get(input.skill)
   if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
   return skill

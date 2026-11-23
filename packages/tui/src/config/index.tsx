@@ -9,10 +9,12 @@ import { safeWatch } from "../util/watch"
 import path from "path"
 import { TuiKeybind } from "./keybind"
 
+type MutableDraft<T> = T extends object ? { -readonly [K in keyof T]: MutableDraft<T[K]> } : T
+
 export interface Interface {
   readonly path?: string
   readonly get: () => Promise<Info>
-  readonly update: (update: (draft: any) => void) => Promise<Info>
+  readonly update: (update: (draft: MutableDraft<Info>) => void) => Promise<Info>
 }
 
 export const AttentionSoundName = Schema.Literals([
@@ -370,7 +372,7 @@ export function ConfigProvider(props: {
         pending = pending
           .then(() => host.get())
           .then(apply)
-          .catch(() => {})
+          .catch((error: unknown) => console.warn("Failed to reload TUI config", error))
       })
     : undefined
   onCleanup(() => watcher?.close())

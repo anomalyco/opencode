@@ -82,7 +82,15 @@ const TextFeedbackDefinition = Schema.Struct({
   muted: Schema.optional(ColorValue),
 })
 
+const TextBadgeDefinition = Schema.Struct({
+  base: Schema.optional(ColorValue),
+})
+
 const BackgroundFeedbackDefinition = Schema.Struct({
+  base: Schema.optional(ColorValue),
+})
+
+const BackgroundBadgeDefinition = Schema.Struct({
   base: Schema.optional(ColorValue),
 })
 
@@ -90,6 +98,7 @@ const TextDefinition = Schema.Struct({
   base: Schema.optional(ColorValue),
   muted: Schema.optional(ColorValue),
   faint: Schema.optional(ColorValue),
+  badge: Schema.optional(TextBadgeDefinition),
   action: Schema.optional(ActionColorDefinition),
   formfield: Schema.optional(StatefulColorDefinition),
   feedback: Schema.optional(
@@ -105,6 +114,7 @@ export type TextDefinition = Schema.Schema.Type<typeof TextDefinition>
 
 const BackgroundDefinition = Schema.Struct({
   base: Schema.optional(ColorValue),
+  badge: Schema.optional(BackgroundBadgeDefinition),
   raised: Schema.optional(
     Schema.Struct({
       base: Schema.optional(ColorValue),
@@ -225,11 +235,15 @@ const CompleteActionColorDefinition = Schema.Struct({
 const CompleteTextFeedbackDefinition = Schema.Struct({ base: ColorValue, muted: Schema.optional(ColorValue) })
 const CompleteBackgroundFeedbackDefinition = Schema.Struct({ base: ColorValue })
 
+const CompleteTextBadgeDefinition = Schema.Struct({ base: ColorValue })
+const CompleteBackgroundBadgeDefinition = Schema.Struct({ base: ColorValue })
+
 const CompleteThemeTokensDefinition = Schema.Struct({
   text: Schema.Struct({
     base: ColorValue,
     muted: ColorValue,
     faint: Schema.optional(ColorValue),
+    badge: CompleteTextBadgeDefinition,
     action: CompleteActionColorDefinition,
     formfield: CompleteStatefulColorDefinition,
     feedback: Schema.Struct({
@@ -241,6 +255,7 @@ const CompleteThemeTokensDefinition = Schema.Struct({
   }),
   background: Schema.Struct({
     base: ColorValue,
+    badge: CompleteBackgroundBadgeDefinition,
     raised: Schema.Struct({ base: ColorValue, high: ColorValue, max: ColorValue }),
     action: CompleteActionColorDefinition,
     formfield: CompleteStatefulColorDefinition,

@@ -1,12 +1,12 @@
 export function createHistoryPrepend(input: {
   sessionID: () => string
   more: (sessionID: string) => boolean
-  loadMore: (sessionID: string) => Promise<void>
+  loadMore: (sessionID: string, options?: { signal?: AbortSignal; beforePublish?: () => void }) => Promise<void>
   afterLayout: (continuation: () => void) => void
   active: (sessionID: string) => boolean
   scrollBy: (amount: number) => void
 }) {
-  let pending: { scrollBy: number; continuation?: () => void; after?: () => void } | undefined
+  let pending: { scrollBy: number; continuation?: () => void; after?: () => void; controller?: AbortController } | undefined
 
   return Object.assign(
     (scrollBy = 0, continuation?: () => void) => {
@@ -20,14 +20,19 @@ export function createHistoryPrepend(input: {
         return false
       }
       if (!input.more(sessionID)) return false
-      const current = { scrollBy, continuation }
+      const controller = new AbortController()
+      const current = { scrollBy, continuation, controller }
       pending = current
-      void input.loadMore(sessionID).then(
+      void input.loadMore(sessionID, { signal: controller.signal }).then(
         () =>
           input.afterLayout(() => {
             if (pending !== current) return
             const after = pending.after
             pending = undefined
+            if (controller.signal.aborted) {
+              if (input.active(sessionID)) after?.()
+              return
+            }
             if (!input.active(sessionID)) return
             input.scrollBy(current.scrollBy)
             current.continuation?.()
@@ -45,6 +50,7 @@ export function createHistoryPrepend(input: {
     {
       cancel() {
         if (!pending) return
+        pending.controller?.abort()
         pending.continuation = undefined
         pending.after = undefined
       },

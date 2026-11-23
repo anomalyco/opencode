@@ -19,14 +19,14 @@ export function StoryFooter(props: {
   return (
     <box flexShrink={0} flexDirection="column" backgroundColor={theme.background.raised.base}>
       <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row">
-        <text fg={theme.text.base}>{props.title}</text>
+        <text fg={theme.text.base} wrapMode="word">{props.title}</text>
         <Show when={props.details?.length}>
-          <text fg={theme.text.muted}> · {props.details?.join(" · ")}</text>
+          <text fg={theme.text.muted} wrapMode="word"> · {props.details?.join(" · ")}</text>
         </Show>
       </box>
       <Show when={props.status || props.message}>
         <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row">
-          <text fg={theme.text.base} wrapMode="none">
+          <text fg={theme.text.base} wrapMode="word">
             {props.status ?? ""}
             <span style={{ fg: theme.text.muted }}>
               {props.status && props.message ? " · " : ""}

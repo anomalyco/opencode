@@ -1,4 +1,4 @@
-import * as fuzzysort from "fuzzysort"
+import { go as fuzzysortGo } from "fuzzysort"
 import { createMemo, createSignal } from "solid-js"
 import { useData } from "../context/data"
 import { useLocal } from "../context/local"
@@ -41,7 +41,7 @@ export function DialogFreeModels(props: {
     const needle = query().trim()
     if (needle)
       return prioritizeFavorites(
-        fuzzysort.go(needle, all, { key: "title" }).map((item) => item.obj),
+        fuzzysortGo(needle, all, { key: "title" }).map((item) => item.obj),
         favoritePriority,
       )
     // Favorites first, then most recently used, then the server's order.

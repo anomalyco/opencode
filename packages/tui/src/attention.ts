@@ -10,7 +10,7 @@ import type {
 import { Config } from "./config"
 import { Schema } from "effect"
 import stripAnsi from "strip-ansi"
-import * as TuiAudio from "./audio"
+import { loadSoundFile, play as playAudio } from "./audio"
 import {
   defaultSoundPath,
   questionSoundPath,
@@ -85,11 +85,11 @@ function focusSkip(when: AttentionWhen, focus: FocusState) {
 export function createTuiAttention(input: {
   renderer: AttentionRenderer
   config: Pick<Config.Resolved, "attention">
-  audio?: Pick<typeof TuiAudio, "loadSoundFile" | "play">
+  audio?: { loadSoundFile: typeof loadSoundFile; play: typeof playAudio }
 }): AttentionHost {
   let focus: FocusState = "unknown"
   let disposed = false
-  const audio = input.audio ?? TuiAudio
+  const audio = input.audio ?? { loadSoundFile, play: playAudio }
 
   const onFocus = () => {
     focus = "focused"

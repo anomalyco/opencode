@@ -635,14 +635,16 @@ export const generateWith = (stream: Interface["stream"]) =>
 export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError, Service> {
   return Stream.unwrap(
     Effect.gen(function* () {
-      return (yield* Service).stream(request, options)
+      const client = yield* Service
+      return client.stream(request, options)
     }),
   )
 }
 
 export function generate(request: LLMRequest, options?: StreamOptions): Effect.Effect<LLMResponse, AIError, Service> {
   return Effect.gen(function* () {
-    return yield* (yield* Service).generate(request, options)
+    const client = yield* Service
+    return yield* client.generate(request, options)
   })
 }
 

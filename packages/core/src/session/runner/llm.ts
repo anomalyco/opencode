@@ -79,7 +79,7 @@ const layer = Layer.effect(
         const control = pending.type === "compaction" || pending.type === "move"
         if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
       }
-      yield* plugins.awaitActivation
+      yield* plugins.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
       yield* settleStaleCompactions(sessionID)
       yield* settleStaleToolCalls(sessionID)
 
@@ -134,7 +134,7 @@ const layer = Layer.effect(
               if (pending?.type === "compaction") {
                 const compacted = yield* restore(
                   Effect.gen(function* () {
-                    yield* plugins.awaitActivation
+                    yield* plugins.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
                     const selected = yield* context.select(sessionID)
                     const model = yield* context.resolveModel(selected.session, {
                       kind: "compaction",
@@ -231,7 +231,7 @@ const layer = Layer.effect(
 
     const prepareContext = Effect.fn("SessionRunner.prepareContext")(function* (sessionID: SessionSchema.ID) {
       // Plugins can reload mid-turn; each step and retry must read the settled agents, models and skills.
-      yield* plugins.awaitActivation
+      yield* plugins.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
       const selected = yield* context.select(sessionID)
       // A blocked initial instruction baseline must leave admitted input pending.
       yield* InstructionState.prepare(db, bus, selected.instructions, sessionID)
@@ -310,7 +310,13 @@ const layer = Layer.effect(
             prepared: {
               ...prepared,
               // A tool call can arrive during a reload; its permission check reads the session's agent.
-              executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
+              // Bounded activation: degrade to loaded plugins, never block the tool call on activation.
+              executeTool: (call) =>
+                plugins.awaitActivation.pipe(
+                  Effect.timeoutOption("1 second"),
+                  Effect.asVoid,
+                  Effect.andThen(prepared.executeTool(call)),
+                ),
             },
             retryAttempt,
             retry: (cause, error, proposed) =>

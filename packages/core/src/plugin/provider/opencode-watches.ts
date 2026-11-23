@@ -519,7 +519,8 @@ function stream(hub: Hub) {
               const message = decodeServerMessage(typeof frame === "string" ? frame : decoder.decode(frame))
               if (Option.isNone(message))
                 return yield* Effect.logWarning("ignored an event stream message this version can't read")
-              const ids = yield* (yield* leader(hub)).deliver(message.value.events)
+              const current = yield* leader(hub)
+              const ids = yield* current.deliver(message.value.events)
               yield* Effect.forEach(chunks(ids), (chunk) => writer.write(JSON.stringify({ type: "ack", ids: chunk })), {
                 discard: true,
               })

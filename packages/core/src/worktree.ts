@@ -123,7 +123,7 @@ const layer = Layer.effect(
       if (current?.directory === directory) return current.get()
       const { Plugin } = yield* Effect.promise(() => import("./plugin.js"))
       const context = yield* locations.contextEffect(Location.Ref.make({ directory }))
-      yield* Context.get(context, Plugin.Service).awaitActivation
+      yield* Context.get(context, Plugin.Service).awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
       return Context.get(context, WorktreeStrategies.Service).get()
     })
 

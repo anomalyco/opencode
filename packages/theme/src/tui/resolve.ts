@@ -141,6 +141,8 @@ function resolveView(
   categorical: ResolvedThemeTokens["categorical"],
   hueSteps: Pick<ResolvedThemeTokens, "source" | "increase" | "decrease">,
 ): ResolvedThemeTokens {
+  // Badge tokens resolve through the generic resolver with expand fallbacks above;
+  // a custom theme that omits them still inherits $hue.accent.400 / $background.raised.base.
   const source: Record<string, unknown> = { hue, ...definition }
   const resolved = createResolver(source)(source, "theme") as ResolvedThemeTokens
   return {

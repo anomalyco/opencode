@@ -108,7 +108,7 @@ const { use: useHistoryEntries, provider: PromptHistoryProvider } = createSimple
 
       // Rewrite valid retained entries to self-heal corruption and enforce the limit.
       if (lines.length > 0)
-        writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+        writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch((error: unknown) => console.warn("Failed to persist TUI prompt state", error))
     })
 
     const [store, setStore] = createStore({ history: [] as PromptInfo[] })
@@ -132,10 +132,10 @@ const { use: useHistoryEntries, provider: PromptHistoryProvider } = createSimple
         )
 
         if (trimmed) {
-          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch((error: unknown) => console.warn("Failed to persist TUI prompt state", error))
           return
         }
-        appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        appendText(historyPath, JSON.stringify(entry) + "\n").catch((error: unknown) => console.warn("Failed to persist TUI prompt state", error))
       },
     }
   },

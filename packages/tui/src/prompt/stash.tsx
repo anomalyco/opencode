@@ -42,7 +42,7 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
       const lines = parsePromptStash(await readText(stashPath).catch(() => ""))
       setStore("entries", lines)
       if (lines.length > 0)
-        writeText(stashPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+        writeText(stashPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch((error: unknown) => console.warn("Failed to persist TUI prompt state", error))
     })
 
     const [store, setStore] = createStore({ entries: [] as StashEntry[] })
@@ -65,10 +65,10 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
         )
 
         if (trimmed) {
-          writeText(stashPath, store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+          writeText(stashPath, store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n").catch((error: unknown) => console.warn("Failed to persist TUI prompt state", error))
           return
         }
-        appendText(stashPath, JSON.stringify(stash) + "\n").catch(() => {})
+        appendText(stashPath, JSON.stringify(stash) + "\n").catch((error: unknown) => console.warn("Failed to persist TUI prompt state", error))
       },
       pop() {
         if (store.entries.length === 0) return undefined
@@ -77,7 +77,7 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
         writeText(
           stashPath,
           store.entries.length > 0 ? store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n" : "",
-        ).catch(() => {})
+        ).catch((error: unknown) => console.warn("Failed to persist TUI prompt state", error))
         return entry
       },
       remove(index: number) {
@@ -86,7 +86,7 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
         writeText(
           stashPath,
           store.entries.length > 0 ? store.entries.map((line) => JSON.stringify(line)).join("\n") + "\n" : "",
-        ).catch(() => {})
+        ).catch((error: unknown) => console.warn("Failed to persist TUI prompt state", error))
       },
     }
   },

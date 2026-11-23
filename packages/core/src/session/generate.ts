@@ -41,7 +41,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
   const bus = yield* Bus.Service
 
   return yield* Effect.gen(function* () {
-    yield* Plugin.awaitActivation
+    yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
     const context = yield* SessionContext.Service
     const selection = yield* context.select(input.session.id)
     const model = yield* context.resolveModel(selection.session, { kind: "generate", agent: selection.agent.id })

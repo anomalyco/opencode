@@ -5,6 +5,7 @@ import { useData } from "../../../context/data"
 import { useClient } from "../../../context/client"
 import { useTheme } from "../../../context/theme"
 import { Keymap } from "../../../context/keymap"
+import { useSharedTicker } from "../../../util/shared-ticker"
 import { Locale } from "../../../util/locale"
 import { scriptLabel } from "../../../util/session"
 import { useComposerTab } from "./context"
@@ -34,6 +35,7 @@ export function ScriptsTab(props: { sessionID: string }) {
   })
 
   const [store, setStore] = createStore({ selected: 0 })
+  const tick = useSharedTicker(() => composer.active("scripts"))
   const [now, setNow] = createSignal(Date.now())
   let scroll: ScrollBoxRenderable | undefined
 
@@ -42,11 +44,11 @@ export function ScriptsTab(props: { sessionID: string }) {
     if (store.selected >= count) setStore("selected", Math.max(0, count - 1))
   })
 
+  // Elapsed labels follow the shared 1s ticker; backed off globally when hidden.
   createEffect(() => {
     if (!composer.active("scripts")) return
+    tick()
     setNow(Date.now())
-    const timer = setInterval(() => setNow(Date.now()), 1_000)
-    onCleanup(() => clearInterval(timer))
   })
 
   createEffect(() => {

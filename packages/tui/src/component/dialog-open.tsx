@@ -230,7 +230,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           theme,
           state,
           running,
-          tabs.has(session.id) ? () => <text fg={theme.hue.accent[200]}>▪</text> : undefined,
+          tabs.has(session.id) ? () => <text fg={theme.text.badge}>▪</text> : undefined,
         ),
       }
     })

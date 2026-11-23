@@ -5,7 +5,7 @@ import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { DialogIntegration } from "./dialog-integration"
 import { DialogVariant } from "./dialog-variant"
-import * as fuzzysort from "fuzzysort"
+import { go as fuzzysortGo } from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useData } from "../context/data"
 import { modelPreferenceKey } from "../model-preference"
@@ -166,7 +166,7 @@ function DialogConnectedModels(props: {
     if (needle) {
       const results = prioritizeFavorites(
         sortModelOptions(
-          fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
+          fuzzysortGo(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
           false,
         ),
         favoritePriority,

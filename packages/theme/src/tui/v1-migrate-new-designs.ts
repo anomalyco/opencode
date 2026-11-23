@@ -75,6 +75,7 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
       base: "$hue.neutral.100",
       muted: "$hue.neutral.200",
       faint: "$hue.neutral.300",
+      badge: { base: "$background.raised.base" },
       action: {
         primary: {
           base: "$text.base",
@@ -102,6 +103,7 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
     },
     background: {
       base: "$hue.neutral.900",
+      badge: { base: "$hue.accent.400" },
       raised: {
         base: "$hue.neutral.700",
         high: "$hue.neutral.600",

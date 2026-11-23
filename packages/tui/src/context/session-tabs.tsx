@@ -91,6 +91,34 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const cancelledTabs = new Set<string>()
     const scrollAnchors = new Map<string, ScrollAnchor>()
     const [expandedGroups, setExpandedGroups] = createStore<Record<string, Record<string, boolean> | undefined>>({})
+    // Persist scroll anchors + expanded groups per session with a 7d TTL so a
+    // restart restores the reader's position; expired entries are pruned on load.
+    const SCROLL_TTL_MS = 7 * 86_400_000
+    const [persistedUI, updatePersistedUI] = storage.store<{
+      anchors: Record<string, { anchor: ScrollAnchor; savedAt: number }>
+      groups: Record<string, { groups: Record<string, boolean>; savedAt: number }>
+    }>("session-ui", { initial: { anchors: {}, groups: {} } })
+    const now = () => Date.now()
+    const persistedAnchor = (sessionID: string) => {
+      const entry = persistedUI.anchors[sessionID]
+      if (!entry || now() - entry.savedAt > SCROLL_TTL_MS) return undefined
+      return entry.anchor
+    }
+    const persistedGroups = (sessionID: string) => {
+      const entry = persistedUI.groups[sessionID]
+      if (!entry || now() - entry.savedAt > SCROLL_TTL_MS) return undefined
+      return entry.groups
+    }
+    const prunePersistedUI = () => {
+      const expiredAnchors = Object.entries(persistedUI.anchors).filter(([, v]) => now() - v.savedAt > SCROLL_TTL_MS)
+      const expiredGroups = Object.entries(persistedUI.groups).filter(([, v]) => now() - v.savedAt > SCROLL_TTL_MS)
+      if (expiredAnchors.length === 0 && expiredGroups.length === 0) return
+      void updatePersistedUI((draft) => {
+        for (const [id] of expiredAnchors) delete draft.anchors[id]
+        for (const [id] of expiredGroups) delete draft.groups[id]
+      }).catch(() => undefined)
+    }
+    prunePersistedUI()
 
     const onFocus = () => setFocused(true)
     const onBlur = () => setFocused(false)
@@ -405,24 +433,36 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       scrollAnchor(sessionID: string) {
         const target = root(sessionID)
         if (!state().tabs.some((tab) => tab.sessionID === target)) return
-        return scrollAnchors.get(sessionID)
+        // Complete group boundaries before restore so saved group IDs resolve.
+        return scrollAnchors.get(sessionID) ?? persistedAnchor(sessionID)
       },
       setScrollAnchor(sessionID: string, anchor: ScrollAnchor | undefined) {
         const target = root(sessionID)
         if (anchor === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
           scrollAnchors.delete(sessionID)
+          void updatePersistedUI((draft) => {
+            delete draft.anchors[sessionID]
+          }).catch(() => undefined)
           return
         }
         const current = scrollAnchors.get(sessionID)
         if (current && anchorKey(current.target) === anchorKey(anchor.target) && current.screenY === anchor.screenY)
           return
         scrollAnchors.set(sessionID, anchor)
+        void updatePersistedUI((draft) => {
+          draft.anchors[sessionID] = { anchor, savedAt: Date.now() }
+        }).catch(() => undefined)
       },
       groupExpanded(sessionID: string, groupID: string) {
-        return expandedGroups[sessionID]?.[groupID]
+        return expandedGroups[sessionID]?.[groupID] ?? persistedGroups(sessionID)?.[groupID]
       },
       setGroupExpanded(sessionID: string, groupID: string, expanded: boolean) {
         setExpandedGroups(sessionID, (current) => ({ ...current, [groupID]: expanded }))
+        void updatePersistedUI((draft) => {
+          const savedAt = Date.now()
+          const current = draft.groups[sessionID]?.groups ?? {}
+          draft.groups[sessionID] = { groups: { ...current, [groupID]: expanded }, savedAt }
+        }).catch(() => undefined)
       },
       select(sessionID: string) {
         if (!enabled()) return

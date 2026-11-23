@@ -212,7 +212,7 @@ const themeContext = createSimpleContext({
       applyPalette()
       void cache?.[1]((draft) => {
         draft.colors = colors
-      }).catch(() => {})
+      }).catch((error: unknown) => console.warn("Failed to persist TUI theme", error))
     }
     renderer.on(CliRenderEvents.PALETTE, handlePalette)
     function refreshPalette() {
@@ -329,7 +329,9 @@ const themeContext = createSimpleContext({
     const mode = () => selected().mode
     const tokens = () => selected().theme
     tokens()
-    themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
+    // Theme performance stays dev-only: never record timings in production.
+    if (process.env.NODE_ENV !== "production")
+      themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
     const current = createComponentTheme(tokens)
 
     createEffect(() => renderer.setBackgroundColor(tokens().background.base))

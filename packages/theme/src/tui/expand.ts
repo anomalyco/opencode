@@ -50,6 +50,8 @@ function expandText(definition: TextDefinition | undefined): TextDefinition | un
     ...definition,
     muted: definition.muted ?? (definition.base ? "$text.base" : undefined),
     faint: definition.faint ?? (definition.muted || definition.base ? "$text.muted" : undefined),
+    // Badge label text falls back to the raised surface so it stays legible on the badge fill.
+    badge: definition.badge ?? (definition.base ? { base: "$background.raised.base" } : undefined),
     action: expandActions(definition.action, "text.action"),
     formfield: expandFormfield(definition.formfield, "text.formfield"),
     feedback: definition.feedback
@@ -72,6 +74,8 @@ function expandBackground(definition: BackgroundDefinition | undefined): Backgro
   if (!definition) return
   return {
     ...definition,
+    // Badge fill falls back to the accent hue before any component reads it.
+    badge: definition.badge ?? (definition.base ? { base: "$hue.accent.400" } : undefined),
     action: expandActions(definition.action, "background.action"),
     formfield: expandFormfield(definition.formfield, "background.formfield"),
   }

@@ -21,7 +21,8 @@ export const authorize = Effect.fnUntraced(function* (
   action: Automation.ShellAction,
   invocation?: Invocation,
 ) {
-  if (invocation || (yield* AutomationCode.FromPlugin)) yield* AutomationCode.awaitPlugins
+  if (invocation || (yield* AutomationCode.FromPlugin))
+    yield* AutomationCode.awaitPlugins.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
   const agents = yield* Agent.Service
   const agent = yield* agents.select(owner.agent)
   if (invocation && !matchesAuthor(owner, agent.info, invocation))
@@ -64,7 +65,7 @@ export const start = Effect.fnUntraced(function* (
   action: Automation.ShellAction,
   directory: string,
 ) {
-  yield* Plugin.awaitActivation
+  yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
   const shell = yield* Shell.Service
   const select = yield* ShellSelect.Service
   const program = yield* select.resolve({ priority: "compat" })

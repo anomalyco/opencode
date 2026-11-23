@@ -136,6 +136,7 @@ import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
+import { useSharedTicker } from "../../util/shared-ticker"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -146,7 +147,9 @@ const NAVIGATION_SLACK_ID = "session-navigation-slack"
 const BACKGROUND_TOOL_HINT_DELAY = 3_000
 
 // Budgets count rendered entries (see mount-budget.ts); a collapsed group costs one.
-// The tail comfortably overfills a tall viewport; older rows mount as the reader approaches them.
+// Tail-first choice: mount only the newest 40 rows on open so inactive tabs stay cheap
+// to tear down, then backfill 60 rows per step as the reader approaches the top.
+// Under 500 rows the full transcript stays mounted without a virtualizer.
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
 
@@ -180,14 +183,27 @@ export function Session(props: {
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
-  const messageIndexes = createMemo(() => new Map(messages().map((message, index) => [message.id, index])))
-  const legacy = createMemo(() => SessionTurn.legacy(messages()))
-  const messagesBeforeRevert = () => {
+  // Single source for the visible transcript: everything before the revert boundary.
+  // The lazy index Map below is the only derived lookup and is rebuilt when seq changes.
+  const visibleMessages = createMemo(() => {
     const messageID = session()?.revert?.messageID
-    if (!messageID) return messages()
-    const index = messages().findIndex((message) => message.id === messageID)
-    return index === -1 ? messages() : messages().slice(0, index)
+    const list = messages()
+    if (!messageID) return list
+    const index = list.findIndex((message) => message.id === messageID)
+    return index === -1 ? list : list.slice(0, index)
+  })
+  const indexCache: { seq: string; map: Map<string, number> } = { seq: "", map: new Map() }
+  const messageIndexes = () => {
+    const list = visibleMessages()
+    const seq = `${list.length}:${list[0]?.id ?? ""}:${list[list.length - 1]?.id ?? ""}`
+    if (indexCache.seq !== seq) {
+      indexCache.seq = seq
+      indexCache.map = new Map(list.map((message, index) => [message.id, index]))
+    }
+    return indexCache.map
   }
+  const legacy = createMemo(() => SessionTurn.legacy(messages()))
+  const messagesBeforeRevert = () => visibleMessages()
   const messagesFromRevert = () => {
     const messageID = session()?.revert?.messageID
     if (!messageID) return []
@@ -444,17 +460,18 @@ export function Session(props: {
   const prependHistory = createHistoryPrepend({
     sessionID: () => route.sessionID,
     more: (id) => data.session.message.more(id),
-    loadMore: async (id) => {
+    loadMore: async (id, options) => {
       const beforePublish = () => {
         if (route.sessionID === id) pinAbove()
       }
-      await data.session.message.loadMore(id, { beforePublish })
+      await data.session.message.loadMore(id, { ...options, beforePublish })
+      if (options?.signal?.aborted) return
       await completeGroupBoundary({
         rows,
         messages: () => data.session.message.list(id).length,
         more: () => data.session.message.more(id),
-        loadMore: () => data.session.message.loadMore(id, { beforePublish }),
-        active: () => route.sessionID === id,
+        loadMore: () => data.session.message.loadMore(id, { ...options, beforePublish }),
+        active: () => route.sessionID === id && !options?.signal?.aborted,
       })
     },
     afterLayout,
@@ -2385,9 +2402,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
         : [],
     ),
   )
-  const themes = useThemes()
   const theme = useTheme()
-  const mode = themes.mode
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
   const delivery = createMemo(() => ctx.pendingDelivery(props.message.id))
@@ -2451,8 +2466,8 @@ function UserMessage(props: { message: SessionMessageUser }) {
                   <text fg={theme.text.base}>
                     <span
                       style={{
-                        bg: theme.hue.accent[mode() === "light" ? 300 : 200],
-                        fg: theme.background.raised.base,
+                        bg: theme.background.badge,
+                        fg: theme.text.badge,
                         bold: true,
                       }}
                     >
@@ -2475,8 +2490,8 @@ function UserMessage(props: { message: SessionMessageUser }) {
                     <text fg={theme.text.base}>
                       <span
                         style={{
-                          bg: theme.hue.accent[mode() === "light" ? 300 : 200],
-                          fg: theme.background.raised.base,
+                          bg: theme.background.badge,
+                          fg: theme.text.badge,
                           bold: true,
                         }}
                       >
@@ -2561,15 +2576,12 @@ function FreeLimitNotice(props: { message: Pick<SessionMessageAssistant, "error"
 function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
   const theme = useTheme()
   const [seconds, setSeconds] = createSignal(0)
+  const tick = useSharedTicker()
   createEffect(() => {
+    tick()
     const at = props.retry?.at
     if (at === undefined) return
-    const update = () => setSeconds(Math.max(0, Math.ceil((at - Date.now()) / 1_000)))
-    if (update() === 0) return
-    const timer = setInterval(() => {
-      if (update() === 0) clearInterval(timer)
-    }, 1_000)
-    onCleanup(() => clearInterval(timer))
+    setSeconds(Math.max(0, Math.ceil((at - Date.now()) / 1_000)))
   })
   return (
     <Show when={props.retry}>
@@ -3059,6 +3071,7 @@ function ShellDisplay(props: {
   let drainRequested = false
   let cursor = 0
   let wasRunning = false
+  const tick = useSharedTicker(() => backgroundRunning())
   const loadBackgroundOutput = async (drain = false) => {
     if (props.status === "completed" && props.output !== undefined) return
     const id = props.shellID
@@ -3102,6 +3115,8 @@ function ShellDisplay(props: {
   }
   createEffect(() => {
     const running = backgroundRunning()
+    // Shared ticker drives polling; backed off globally when hidden.
+    tick()
     if (!running) {
       if (wasRunning) void loadBackgroundOutput(true)
       wasRunning = false
@@ -3110,8 +3125,6 @@ function ShellDisplay(props: {
     wasRunning = true
     if (props.background && !expanded()) return
     void loadBackgroundOutput()
-    const interval = setInterval(() => void loadBackgroundOutput(), 1_000)
-    onCleanup(() => clearInterval(interval))
   })
   const output = createMemo(() => {
     if (props.status === "streaming") return ""

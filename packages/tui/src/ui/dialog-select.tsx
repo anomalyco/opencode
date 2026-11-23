@@ -5,7 +5,7 @@ import { entries, filter, flatMap, groupBy, pipe } from "remeda"
 import { batch, createEffect, createMemo, For, Show, type JSX, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import * as fuzzysort from "fuzzysort"
+import { go as fuzzysortGo } from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import {
   DIALOG_INSET,
@@ -222,13 +222,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
     // prioritize title matches (weight: 2) over category and supplemental search text matches (weight: 1).
     // users typically search by the item name, and not its category.
-    const result = fuzzysort
-      .go(needle, options, {
-        keys: ["title", "category", "searchText"],
-        scoreFn: (r) => r[0].score * 2 + r[1].score + r[2].score,
-        threshold: props.filterThreshold,
-      })
-      .map((x) => x.obj)
+    const result = fuzzysortGo(needle, options, {
+      keys: ["title", "category", "searchText"],
+      scoreFn: (r) => r[0].score * 2 + r[1].score + r[2].score,
+      threshold: props.filterThreshold,
+    }).map((x) => x.obj)
 
     return result
   })
