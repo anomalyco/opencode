@@ -363,10 +363,13 @@ export function RunFooterView(props: RunFooterViewProps) {
   }
   const [promptRows, setPromptRows] = createSignal(1)
   const [expanded, setExpanded] = createSignal(false)
+  const [now, setNow] = createSignal(Date.now())
+  const ticker = setInterval(() => setNow(Date.now()), 1000)
+  onCleanup(() => clearInterval(ticker))
   const toolSummaries = createMemo(() =>
-    expanded() ? activeToolSummaries(tabs(), Date.now()) : [],
+    expanded() ? activeToolSummaries(tabs(), now()) : [],
   )
-  const activityShortcut = () => shortcut("session.child.activity")
+  const activityShortcut = createMemo(() => shortcut("session.child.activity"))
   const composer = createPromptState({
     directory: props.directory,
     findFiles: props.findFiles,
@@ -474,10 +477,10 @@ export function RunFooterView(props: RunFooterViewProps) {
         expanded: `${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}`,
       })
     }
-    if (activeTabs().length > 0) {
+    if (activeTabs().length > 0 && activityShortcut()) {
       items.push({
         id: "activity" as const,
-        key: "e",
+        key: activityShortcut(),
         label: expanded() ? "hide" : "agents",
       })
     }
@@ -500,8 +503,8 @@ export function RunFooterView(props: RunFooterViewProps) {
       },
       escape: shell() && !takeover() ? { key: "esc", label: "normal" } : undefined,
       work: contextHintCandidates().filter(
-        (item): item is typeof item & { id: "queued" | "subagents" } =>
-          item.id === "queued" || item.id === "subagents",
+        (item): item is typeof item & { id: "queued" | "subagents" | "activity" } =>
+          item.id === "queued" || item.id === "subagents" || item.id === "activity",
       ),
       model: info ? { name: info.model, variant: info.variant } : undefined,
       agent: agentStatus(),
@@ -611,7 +614,7 @@ export function RunFooterView(props: RunFooterViewProps) {
         title: "Toggle agent activity panel",
         group: "Session",
         bind: "e",
-        run: () => { setExpanded((v) => !v) },
+        run: () => void setExpanded((v) => !v),
       },
     ],
   }))
@@ -1028,11 +1031,6 @@ export function RunFooterView(props: RunFooterViewProps) {
                         </For>
                       </text>
                     </Show>
-                    <Show when={activeTabs().length > 0 && footerDetails() && prompt() && !shell() && activityShortcut()}>
-                      <text fg={theme().muted} flexShrink={0}>
-                        {`${activityShortcut()} ${expanded() ? "hide" : "agents"}`}
-                      </text>
-                    </Show>
                   </box>
                 }
               >
@@ -1065,7 +1063,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             animations={props.tuiConfig.animations}
                             glow={!props.mono}
                             still={props.mono ? "*" : undefined}
-                            age={performance.now() - (started() ?? performance.now())}
+                            age={row.elapsedMs}
                           />
                         </box>
                       </box>
