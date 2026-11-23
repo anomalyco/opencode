@@ -46,6 +46,19 @@ test("space activates a focused timeline button instead of scrolling", async ({ 
   expect(await scroller.evaluate((element) => element.scrollTop)).toBe(before)
 })
 
+test("Tab moves between timeline controls without stopping on the timeline itself", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_tab_stop_text", "Long response. ".repeat(600))])],
+    seedHistory: true,
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const first = scroller.getByRole("button", { name: "More actions", exact: true })
+  await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expect(scroller).toHaveAttribute("tabindex", "-1")
+  await first.press("Shift+Tab")
+  await expect(scroller).not.toBeFocused()
+})
+
 test("jump to latest is reachable only while it is shown", async ({ page }) => {
   await setupTimeline(page, {
     messages: [userMessage(), assistantMessage([textPart("prt_jump_latest_text", "Latest response.")])],
@@ -68,6 +81,14 @@ test("jump to latest is reachable only while it is shown", async ({ page }) => {
   await expect(latest).toBeInViewport()
   // The click focused the button; hiding it must not leave focus on an invisible control.
   await expect(jump).not.toBeFocused()
+
+  // From the keyboard, focus continues in the prompt instead of falling to the page.
+  await page.mouse.wheel(0, -3000)
+  await expect(latest).not.toBeInViewport()
+  await jump.focus()
+  await page.keyboard.press("Enter")
+  await expect(latest).toBeInViewport()
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeFocused()
 })
 
 function lines(count: number) {

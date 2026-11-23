@@ -1,4 +1,5 @@
 import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
+import type { Data } from "@opencode/client/solid"
 
 function sessionTreeRequest<T>(
   session: SessionInfo[],
@@ -47,6 +48,17 @@ export function sessionTreeIDs(session: SessionInfo[], sessionID?: string) {
   }
 
   return ids
+}
+
+// Only a running Session can hold a pending permission or form, and events keep loaded requests current, so idle
+// subagents are never read. One that still has cached requests is read too, so a reconnect clears requests answered
+// while the client was offline.
+export function sessionMayHoldRequests(data: Data, sessionID: string) {
+  return (
+    data.session.status(sessionID) === "running" ||
+    !!data.session.permission.list(sessionID)?.length ||
+    !!data.session.form.list(sessionID)?.length
+  )
 }
 
 export function sessionPermissionRequest(

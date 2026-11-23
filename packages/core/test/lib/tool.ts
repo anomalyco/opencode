@@ -88,8 +88,9 @@ export interface ToolExecution {
 export const executeTool = (
   registry: Tool.Interface,
   input: Parameters<Tool.Snapshot["execute"]>[0],
+  options?: Tool.SnapshotOptions,
 ): Effect.Effect<ToolExecution> =>
-  registry.snapshot().pipe(
+  registry.snapshot(undefined, options).pipe(
     Effect.flatMap((tools) => tools.execute(input)),
     Effect.map((result) => ({ status: "completed" as const, ...result }) satisfies ToolExecution),
     Effect.catchTag("Tool.Error", (error) =>

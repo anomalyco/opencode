@@ -19,17 +19,18 @@ import { useProjectStart } from "@/home/projects/start"
 import { WindowsAppMenu } from "./windows-menu"
 import { createTitlebarHistory } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
+import { createPinnedLeading, PinMenuItems, PinnedArea, PinsProvider, usePins } from "@/shell/titlebar/pinned-area"
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { SidebarCustomized, type SidebarStripGrouping } from "@/shell/titlebar/sidebar-customized"
-import { SidebarOrganized } from "@/shell/titlebar/sidebar-organized"
 import { RecentSessions } from "@/shell/titlebar/recent-sessions"
+import { createNavigationSwitch } from "@/shell/tabs/navigation-switch"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
-import { tabKey, useTabs } from "@/shell/tabs/tabs"
+import { tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
 import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
 import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigger } from "@/shell/mobile-drawer"
@@ -200,9 +201,21 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
     },
   ])
 
+  // The desktop router keeps its history in memory, so the mouse's Back and Forward buttons do nothing on their own.
+  // The web app's browser already traverses its real history for them.
+  if (platform.platform === "desktop")
+    makeEventListener(window, "mouseup", (event) => {
+      if (event.button !== 3 && event.button !== 4) return
+      event.preventDefault()
+
+      if (event.button === 3) return history.back()
+      history.forward()
+    })
+
   return (
     <header
       data-slot="titlebar-v2"
+      data-focus-scope
       hidden={hideVerticalTitlebar()}
       classList={{
         "shrink-0 relative flex flex-row h-9 bg-v2-background-bg-deep overflow-visible": true,
@@ -254,8 +267,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             createEffect(() => {
               if (
                 settings.appearance.tabLayout() === "vertical" &&
-                (settings.general.sidebarOrganize() === "projects" ||
-                  settings.general.sidebarOrganize() === "customize") &&
+                settings.general.sidebarOrganize() === "customize" &&
                 !mobile()
               )
                 return
@@ -268,6 +280,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             const preparing = routeSync.preparing
             const session = routeSync.session
             const currentTab = routeSync.currentTab
+            createNavigationSwitch(currentTab)
 
             makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
               const detail = readSessionTabsRemovedDetail(event)
@@ -388,6 +401,11 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               />
             )
 
+            const homeLabel = () =>
+              language.t(settings.appearance.navigationPrototype() ? "sidebar.sessions" : "home.title")
+
+            const homeIcon = () => (settings.appearance.navigationPrototype() ? "sessions-stack" : "grid-plus")
+
             const homeButton = (vertical = false) => (
               <Show
                 when={vertical}
@@ -396,7 +414,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     placement="bottom"
                     value={
                       <>
-                        {language.t("home.title")}
+                        {homeLabel()}
                         <Keybind keys={command.keybindParts("home.toggle")} variant="neutral" />
                       </>
                     }
@@ -407,10 +425,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                       variant="ghost-muted"
                       size="large"
                       class="!w-9 shrink-0"
-                      icon={<Icon name="grid-plus" />}
+                      icon={<Icon name={homeIcon()} />}
                       state={layout.route().type === "home" ? "pressed" : undefined}
                       onClick={toggleHome}
-                      aria-label={language.t("home.title")}
+                      aria-label={homeLabel()}
                       aria-pressed={layout.route().type === "home"}
                     />
                   </Tooltip>
@@ -418,8 +436,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               >
                 <SidebarAction
                   action="vertical-tabs-home"
-                  icon="grid-plus"
-                  label={language.t("home.title")}
+                  icon={homeIcon()}
+                  label={homeLabel()}
                   keybind={command.keybindParts("home.toggle")}
                   pressed={layout.route().type === "home"}
                   onClick={toggleHome}
@@ -483,7 +501,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             }
 
             const firstSidebarAction = () => (
-              <Show when={projectNavigation()} fallback={homeButton(true)}>
+              <Show when={projectNavigation() || settings.appearance.navigationPrototype()} fallback={homeButton(true)}>
                 {newSessionButton()}
               </Show>
             )
@@ -508,6 +526,13 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 category: language.t("command.category.session"),
                 keybind: "mod+shift+f",
                 onSelect: async () => {
+                  // The navigation prototype searches on Home, whose search field takes focus when it opens.
+                  if (settings.appearance.navigationPrototype()) {
+                    if (layout.route().type !== "home") return void toggleHome()
+
+                    return void command.trigger("session.search")
+                  }
+
                   const { DialogSessionSearch } = await import("@/shell/commands/session-search")
                   void dialog.show(() => <DialogSessionSearch />)
                 },
@@ -644,8 +669,62 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             return (
               <TabGroupsProvider currentTab={currentTab}>
+                <PinsProvider currentTab={currentTab}>
                 {(() => {
                   const tabGroups = useTabGroups()
+                  const pins = usePins()
+                  const prototype = () => settings.appearance.navigationPrototype()
+                  const pinnedTop = createPinnedLeading("horizontal")
+                  const pinnedSide = createPinnedLeading("vertical")
+
+                  const pinMenu = (tab: Tab) => {
+                    const ref = pins.refOf(tab)
+
+                    return ref ? <PinMenuItems pin={ref} /> : undefined
+                  }
+
+                  const listPins = {
+                    content: () => (
+                      <Show when={pins.state.items.length > 0}>
+                        <PinnedArea orientation="vertical" />
+                      </Show>
+                    ),
+                    keys: pins.keys,
+                    current: pins.currentKey,
+                    unread: pins.unread,
+                    navigate: pins.openKey,
+                    holds: (server: string, sessionId: string) =>
+                      pins.pinned({ server: ServerConnection.Key.make(server), sessionId }),
+                    toggle: (server: string, sessionId: string) => {
+                      const ref = { server: ServerConnection.Key.make(server), sessionId }
+
+                      if (pins.pinned(ref)) return pins.unpin(ref)
+                      pins.pin(ref)
+                    },
+                  }
+
+                  const pinnedVerticalStrip = () => (
+                    <TitlebarTabStrip
+                      orientation="vertical"
+                      leading={pinnedSide()}
+                      hidden={pins.holds}
+                      tabContextMenu={pinMenu}
+                      tabs={tabsStore}
+                      currentTab={currentTab()}
+                      onNavigate={(tab, el) => {
+                        tabs.select(tab)
+                        el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                      }}
+                      onClose={(tab) => {
+                        const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+
+                        if (index !== -1) tabsStoreActions.closeTab(index)
+                      }}
+                      onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
+                      onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                    />
+                  )
+
                   const verticalSections = createVerticalTabGroupSections()
 
                   const defaultVerticalTabStrip = () => (
@@ -665,11 +744,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           tabs.select(tab)
                           el?.scrollIntoView({ behavior: "instant", block: "nearest" })
                         }}
-                        onClose={(tab) => {
-                          const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-
-                          if (index !== -1) tabsStoreActions.closeTab(index)
-                        }}
+                        onClose={tabGroups.closeTab}
                         onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
                         onReorder={(keys) => tabsStoreActions.reorder(keys)}
                       />
@@ -700,7 +775,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                         {/* Pulls the first tab's avatar 10px from Search, past the row gap plus the tab's own inset. */}
                         <div class="-me-0.5 flex shrink-0 items-center gap-0.5">
                           {homeButton()}
-                          {searchButton()}
+                          <Show when={!settings.appearance.navigationPrototype()}>{searchButton()}</Show>
                         </div>
                       </Show>
 
@@ -714,7 +789,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           >
                             <MobileDrawerTrigger
                               data-slot="mobile-tabs-trigger"
-                              class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:outline-none [app-region:no-drag]"
+                              class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:-outline-offset-2 [app-region:no-drag]"
                               aria-label={language.t("titlebar.tabs")}
                             >
                               <Show when={currentTab()} fallback={<Icon name="grid-plus" class="shrink-0" />}>
@@ -779,7 +854,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 <button
                                   type="button"
                                   data-action="mobile-tabs-new-session"
-                                  class="flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                  class="flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base hover:bg-v2-background-bg-layer-02 focus-visible:-outline-offset-2"
                                   onClick={() => {
                                     openNewTab()
                                     closeMobileTabs()
@@ -794,7 +869,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                     data-action="mobile-tabs-home"
                                     data-state={layout.route().type === "home" ? "pressed" : undefined}
                                     aria-current={layout.route().type === "home" ? "page" : undefined}
-                                    class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none"
+                                    class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:-outline-offset-2"
                                     onClick={() => {
                                       if (layout.route().type !== "home") toggleHome()
                                       closeMobileTabs()
@@ -807,7 +882,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                     <button
                                       type="button"
                                       data-action="mobile-tabs-settings"
-                                      class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                      class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:-outline-offset-2"
                                       onClick={() => dispatchMobileTabs({ type: "settings.requested" })}
                                     >
                                       <Icon name="settings-gear" />
@@ -816,7 +891,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                     <button
                                       type="button"
                                       data-action="mobile-tabs-help"
-                                      class="flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                      class="flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:-outline-offset-2"
                                       onClick={() => {
                                         closeMobileTabs()
                                         platform.openExternal("https://opencode.ai/desktop-feedback")
@@ -836,7 +911,13 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           when={props.verticalTabs}
                           fallback={
                             <>
+                              <Show when={prototype() && pins.state.items.length > 0}>
+                                <PinnedArea orientation="horizontal" />
+                              </Show>
                               <TitlebarTabStrip
+                                leading={prototype() ? pinnedTop() : undefined}
+                                hidden={prototype() ? pins.holds : undefined}
+                                tabContextMenu={prototype() ? pinMenu : undefined}
                                 tabs={tabsStore}
                                 currentTab={currentTab()}
                                 onNavigate={(tab, el) => {
@@ -904,8 +985,18 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                   </Show>
                                   <div class="flex w-full shrink-0 flex-col gap-[3px]">
                                     <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
-                                    {searchButton(true)}
-                                    <Show when={projectNavigation()} fallback={newSessionButton()}>
+                                    <Show
+                                      when={settings.appearance.navigationPrototype()}
+                                      fallback={
+                                        <>
+                                          {searchButton(true)}
+                                          <Show when={projectNavigation()} fallback={newSessionButton()}>
+                                            {settingsButton()}
+                                          </Show>
+                                        </>
+                                      }
+                                    >
+                                      {homeButton(true)}
                                       {settingsButton()}
                                     </Show>
                                   </div>
@@ -917,11 +1008,19 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                   </Show>
                                   <div class="flex min-h-0 flex-1 flex-col gap-1">
                                     <Switch fallback={defaultVerticalTabStrip()}>
+                                      <Match when={prototype() && settings.appearance.navigation() === "list"}>
+                                        <RecentSessions
+                                          organize={{
+                                            viewAll: () => {
+                                              if (layout.route().type !== "home") toggleHome()
+                                            },
+                                          }}
+                                          pinned={listPins}
+                                        />
+                                      </Match>
+                                      <Match when={prototype()}>{pinnedVerticalStrip()}</Match>
                                       <Match when={settings.appearance.tabLayout() === "inbox"}>
                                         <SidebarInbox />
-                                      </Match>
-                                      <Match when={settings.general.sidebarOrganize() === "projects"}>
-                                        <SidebarOrganized currentTab={currentTab()}>{verticalTabStrip}</SidebarOrganized>
                                       </Match>
                                       <Match when={settings.general.sidebarOrganize() === "customize"}>
                                         <SidebarCustomized currentTab={currentTab()} onNewSession={openNewTab}>
@@ -955,6 +1054,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     </div>
                   )
                 })()}
+                </PinsProvider>
               </TabGroupsProvider>
             )
           }}

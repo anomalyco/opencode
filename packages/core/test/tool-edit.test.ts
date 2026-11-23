@@ -78,7 +78,7 @@ const makeEditFixture = () => {
   })
 
   const formatter = Layer.mock(Formatter.Service, {
-    file: (target) => fixture.formatFile(target),
+    file: (target) => fixture.formatFile(target.absolute),
   })
 
   return Object.assign(fixture, { permission, formatter })
@@ -126,7 +126,7 @@ const call = (input: typeof EditTool.Input.Type, id = "call-edit") => ({
   call: { type: "tool-call" as const, id, name: "edit", input },
 })
 
-const it = testEffect(Layer.empty)
+const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
 
 describe("EditTool", () => {
   it.live("registers and replaces relative exact text through FileMutation once", () =>
@@ -644,6 +644,32 @@ describe("EditTool", () => {
         ),
         Effect.andThen(() => Effect.promise(() => fs.readFile(target, "utf8"))),
         Effect.tap((content) => Effect.sync(() => expect(content).toBe("\uFEFFafter\r\nrest\r\n"))),
+      )
+    }),
+  )
+
+  it.live("refuses to rewrite a file that is not valid UTF-8", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "Invoice.java")
+      // "// José" in Latin-1, far from the edited line.
+      const bytes = Buffer.concat([Buffer.from("// Jos\xe9\n", "latin1"), Buffer.from("int MAX = 10;\n")])
+      return Effect.promise(() => fs.writeFile(target, bytes)).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(registry, call({ path: "Invoice.java", oldString: "MAX = 10", newString: "MAX = 25" })),
+          ),
+        ),
+        Effect.tap((settled) =>
+          Effect.promise(async () => {
+            expect(settled).toMatchObject({
+              status: "error",
+              error: { message: expect.stringContaining("Unable to edit Invoice.java: file is not valid UTF-8.") },
+            })
+            expect(edit.writes).toEqual([])
+            expect(await fs.readFile(target)).toEqual(bytes)
+          }),
+        ),
       )
     }),
   )

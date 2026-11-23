@@ -93,8 +93,7 @@
       linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
     transition:
       background 170ms ease-out,
-      opacity 170ms ease-out,
-      outline-color 170ms ease-out;
+      opacity 170ms ease-out;
   }
 
   &:where(:not([data-readonly]))
@@ -102,7 +101,7 @@
     ~ [data-slot="radio-v2-item-control-stack"]
     [data-slot="radio-v2-item-control"] {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
 
   &:where(:hover):where(:not([data-disabled], [data-readonly])):where(:not([data-checked]))
@@ -198,5 +197,15 @@
 
   &:where([data-disabled]) [data-slot="radio-v2-item-description"] {
     color: var(--v2-text-text-faint);
+  }
+}
+
+@media (forced-colors: active) {
+  [data-component="radio-v2"] [data-slot="radio-v2-item-control"] {
+    border: 1px solid ButtonText;
+  }
+
+  [data-component="radio-v2"] [data-slot="radio-v2-item-indicator"] {
+    background: ButtonText;
   }
 }

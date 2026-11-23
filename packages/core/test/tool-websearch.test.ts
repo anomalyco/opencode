@@ -19,10 +19,7 @@ import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 import { webSearchHost } from "./plugin/host"
 import { TestWebSearch } from "./lib/websearch"
-import type { SessionContext } from "@opencode/plugin/effect/session"
 
-// The plugin's `context` hook, which edits the tools offered to the model.
-const contextHooks: ((event: SessionContext) => Effect.Effect<void>)[] = []
 const webSearchToolNode = makeLocationNode({
   name: "test/websearch-tool-plugin",
   layer: Layer.effectDiscard(
@@ -30,13 +27,6 @@ const webSearchToolNode = makeLocationNode({
       const websearch = yield* WebSearch.Service
       yield* registerToolPlugin(WebSearchTool.Plugin, {
         websearch: webSearchHost(websearch),
-        session: {
-          hook: (name, callback) =>
-            Effect.sync(() => {
-              if (name === "context") contextHooks.push(callback as (event: SessionContext) => Effect.Effect<void>)
-              return { dispose: Effect.void }
-            }),
-        },
       })
     }),
   ),
@@ -62,7 +52,8 @@ class Fixture {
   ]
 }
 
-const it = testEffect(TestWebSearch.layer)
+const it = testEffect(Layer.mergeAll(TestWebSearch.layer, Layer.succeed(Flag.Overrides, undefined)))
+const codeModeIt = testEffect(Layer.mergeAll(TestWebSearch.layer, Layer.succeed(Flag.Overrides, "full_codemode")))
 const setup = Effect.gen(function* () {
   const fixture = new Fixture()
   const websearch = yield* TestWebSearch.Service
@@ -148,6 +139,15 @@ describe("WebSearchTool registration", () => {
       ])
       expect(fixture.events).toEqual(["permission", "query"])
       expect(fixture.websearch.sessionIDs).toEqual([sessionID])
+    }),
+  )
+
+  codeModeIt.effect("pins websearch in the Code Mode catalog with full_codemode", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const snapshot = yield* fixture.registry.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.codeModeCatalog?.tools).toMatchObject([{ type: "tool", name: "websearch", pinned: true }])
     }),
   )
 
@@ -355,23 +355,6 @@ describe("WebSearchTool registration", () => {
       expect(results.every((item) => item.status === "completed")).toBe(true)
       expect(fixture.formRequests).toHaveLength(1)
       expect(yield* fixture.kv.get(WebSearch.ProviderKey)).toBe("random")
-    }),
-  )
-
-  it.effect("offers the tool to the model only while a provider remains", () =>
-    Effect.gen(function* () {
-      contextHooks.length = 0
-      const fixture = yield* setup
-      const offered = Effect.fnUntraced(function* () {
-        const event = { tools: { [WebSearchTool.name]: { description: "", input: {} } } }
-        yield* Effect.forEach(contextHooks, (hook) => hook(event as unknown as SessionContext))
-        return WebSearchTool.name in event.tools
-      })
-      expect(yield* offered()).toBe(true)
-
-      // As when policy denies every provider.
-      yield* fixture.websearch.transform((editor) => editor.list().forEach((provider) => editor.remove(provider.id)))
-      expect(yield* offered()).toBe(false)
     }),
   )
 

@@ -721,6 +721,56 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("continues a custom tool call from completed response output", () =>
+    Effect.gen(function* () {
+      const firstRequest = {
+        type: "response.create",
+        model: "gpt-6-astra",
+        store: false,
+        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Run it." }] }],
+      }
+      const first = continuationDriver(firstRequest)
+      const firstCreate = yield* first.create(undefined)
+      const saved = checkpoint(
+        yield* first.observe(
+          firstCreate,
+          ProviderShared.encodeJson({
+            type: "response.completed",
+            response: {
+              id: "resp_1",
+              output: [
+                {
+                  type: "custom_tool_call",
+                  id: "ctc_1",
+                  status: "completed",
+                  call_id: "call_1",
+                  name: "run",
+                  input: "ls",
+                },
+              ],
+            },
+          }),
+        ),
+      )
+      const second = continuationDriver({
+        ...firstRequest,
+        input: [
+          ...firstRequest.input,
+          { type: "custom_tool_call", call_id: "call_1", name: "run", input: "ls" },
+          { type: "custom_tool_call_output", call_id: "call_1", output: "a.txt" },
+        ],
+      })
+
+      const create = yield* second.create(saved)
+
+      expect(create.mode).toBe("incremental")
+      expect(ProviderShared.decodeJson(create.message)).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [{ type: "custom_tool_call_output", call_id: "call_1", output: "a.txt" }],
+      })
+    }),
+  )
+
   it.effect("continues a promoted steer after assistant output with response-only text metadata", () =>
     Effect.forEach([undefined, []], (output) =>
       Effect.gen(function* () {

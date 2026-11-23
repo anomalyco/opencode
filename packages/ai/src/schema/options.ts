@@ -100,7 +100,7 @@ export type RequestTimeout = HttpTimeout | TimeoutConfig
 export interface TransportOptions {
   /** Merged over the provider's headers; these win. */
   readonly headers?: Record<string, string>
-  /** Applied to text requests; media requests do not apply it yet. */
+  /** Applied to every HTTP request. */
   readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
 }

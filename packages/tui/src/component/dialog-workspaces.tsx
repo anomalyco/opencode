@@ -325,6 +325,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
   return (
     <box minHeight={showError() ? 5 : fullHeight()}>
       <DialogSelect
+        grow
         title="Worktrees"
         titleView={
           <box flexDirection="row" gap={1}>

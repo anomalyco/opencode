@@ -1,12 +1,11 @@
 import { app } from "electron"
-
-type Channel = "dev" | "beta" | "prod"
+import { resolveIdentity, type Channel } from "./identity"
 
 const raw = import.meta.env.OPENCODE_CHANNEL
 
 // Application identity uses prod; service discovery keeps the CLI's channel.
 export const CHANNEL: Channel =
-  raw === "latest" ? "prod" : raw === "dev" || raw === "beta" || raw === "prod" ? raw : "dev"
+  raw === "latest" ? "prod" : raw === "local" || raw === "dev" || raw === "beta" || raw === "prod" ? raw : "dev"
 
 export function serviceChannel() {
   if (process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local") return "local"
@@ -15,19 +14,10 @@ export function serviceChannel() {
 
 export const VERSION = app.isPackaged ? app.getVersion() : (process.env.OPENCODE_VERSION ?? app.getVersion())
 
-const appNames: Record<string, string> = {
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
-}
+const identity = resolveIdentity(CHANNEL, app.isPackaged)
 
-const appIDs: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
-}
+export const APP_NAME = identity.appName
 
-// Local renderer/server mode keeps the dev application identity.
-export const APP_NAME = app.isPackaged ? appNames[CHANNEL] : "OpenCode Dev"
+export const APP_ID = identity.appID
 
-export const APP_ID = app.isPackaged ? appIDs[CHANNEL] : "ai.opencode.desktop.dev"
+export const APP_USER_MODEL_ID = identity.appUserModelID

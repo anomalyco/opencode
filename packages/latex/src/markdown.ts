@@ -29,20 +29,16 @@ export function createLatexCodeBlockRenderer(
   options: () => LatexOptions,
 ): MarkdownCodeBlockRenderer {
   const lastGood = new Map<string, LatexFrame>()
-  return (token, render) => {
+  return (block, render) => {
     const fallback = render.defaultRender()
     const key = fallback?.id
     const previous = key ? lastGood.get(key) : undefined
-    const retained = previous && token.text.startsWith(previous.source) ? previous : undefined
-    const fence = /^ {0,3}(`{3,}|~{3,})/.exec(token.raw)?.[1]
-    const streaming =
-      fallback instanceof CodeRenderable &&
-      fallback.streaming &&
-      fence &&
-      !new RegExp(`\\n {0,3}${fence[0]}{${fence.length},}\\s*$`).test(token.raw)
-    const layout = layoutLatex(token.text)
+    const retained = previous && block.text.startsWith(previous.source) ? previous : undefined
+    // A fence still streaming in keeps the last formula that parsed.
+    const streaming = fallback instanceof CodeRenderable && fallback.streaming && !block.closed
+    const layout = layoutLatex(block.text)
     const frame: LatexFrame | undefined = layout
-      ? { source: token.text, layout }
+      ? { source: block.text, layout }
       : streaming && retained
         ? { ...retained }
         : undefined

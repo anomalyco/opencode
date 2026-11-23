@@ -9,12 +9,13 @@ import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX 
 import { getRequestEvent } from "solid-js/web"
 import { breadcrumbList, FormatLinks, JsonLd, LastModified } from "../../component/agent-meta"
 import { ChartDataTable } from "../../component/chart-data-table"
+import { DEFAULT_PERIOD, PeriodToggle } from "../../component/period-toggle"
 import { LocaleLinks } from "../../component/locale-links"
 import { NotFoundMeta } from "../../component/not-found-meta"
 import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
 import { dismissChartTooltipOnExit } from "../../lib/chart-tooltip"
-import { fromFirstUsage } from "../../lib/format"
+import { formatPeriodDate, fromFirstUsage } from "../../lib/format"
 import { providerIconId } from "../../lib/provider-icon"
 import { localizedUrl } from "../../lib/language"
 import { formerModelName, publicModelName } from "../../lib/model-name"
@@ -655,6 +656,7 @@ function ModelTrendSection(props: {
   const activeLineMaskId = createUniqueId()
   const areaGradientId = createUniqueId()
   const [activeIndex, setActiveIndex] = createSignal<number>()
+  const [period, setPeriod] = createSignal(DEFAULT_PERIOD)
   let chartRef: HTMLDivElement | undefined
   dismissChartTooltipOnExit({
     chart: () => chartRef,
@@ -664,7 +666,7 @@ function ModelTrendSection(props: {
   const highlightBars = createMemo(() => props.highlightBars ?? true)
   const lineScale = 326 / 450
   const areaBottom = 100 / lineScale
-  const usage = createMemo(() => props.data?.usage ?? [])
+  const usage = createMemo(() => (period() === "weekly" ? props.data?.weeklyUsage : props.data?.usage) ?? [])
   const valueMax = createMemo(() => Math.max(0, ...usage().map((item) => props.value(item))) || 1)
   const linePoints = createMemo(() =>
     usage().map((point, index) => ({
@@ -673,8 +675,18 @@ function ModelTrendSection(props: {
       y: modelUsageLineY(props.value(point), valueMax()),
     })),
   )
-  const linePath = createMemo(() => modelUsageLinePath(linePoints()))
-  const areaPath = createMemo(() => modelUsageAreaPath(linePoints(), areaBottom))
+  // The line runs from the first bucket with usage to the last complete one; the one still filling in would plunge.
+  const linePart = createMemo(() =>
+    linePoints().slice(
+      Math.max(
+        0,
+        usage().findIndex((point) => props.value(point) > 0),
+      ),
+      -1,
+    ),
+  )
+  const linePath = createMemo(() => modelUsageLinePath(linePart()))
+  const areaPath = createMemo(() => modelUsageAreaPath(linePart(), areaBottom))
   const activeLineBreak = createMemo(() => {
     const index = activeIndex()
     if (index === undefined || linePoints().length < 2) return undefined
@@ -697,11 +709,16 @@ function ModelTrendSection(props: {
       tooltipY: (linePoints()[index]?.y ?? 100) * lineScale,
     }
   })
-  const monthTicks = createMemo(() => modelUsageMonthTicks(usage(), props.data?.updatedAt ?? null))
+  const monthTicks = createMemo(() => modelUsageMonthTicks(usage()))
 
   return (
     <section id={props.id} data-section="model-panel">
-      <SectionTitle href={`#${props.id}`} title={props.title} description={props.description} />
+      <SectionHeading
+        href={`#${props.id}`}
+        title={props.title}
+        description={props.description}
+        action={<PeriodToggle value={period()} onChange={setPeriod} label={props.title} />}
+      />
       <Show
         when={usage().some((item) => props.value(item) > 0)}
         fallback={<ModelEmptyState title={props.emptyTitle} description={props.emptyDescription} />}
@@ -710,6 +727,7 @@ function ModelTrendSection(props: {
           ref={chartRef}
           data-component="model-usage-chart"
           data-variant="model-trend"
+          data-period={period()}
           data-highlight-bars={highlightBars() ? "true" : undefined}
           role="img"
           aria-label={props.ariaLabel}
@@ -792,7 +810,7 @@ function ModelTrendSection(props: {
                 </>
               )}
             </Show>
-            <Show when={linePoints().at(-1)}>
+            <Show when={linePart().at(-1)}>
               {(point) => (
                 <span
                   data-slot="model-trend-end-marker"
@@ -862,10 +880,7 @@ function ModelTrendSection(props: {
                     } as JSX.CSSProperties
                   }
                 >
-                  <strong>{formatModelUsageTooltipDate(active.point.date, props.data?.updatedAt ?? null)}</strong>
-                  <span>
-                    {props.formatValue(props.value(active.point))} {props.valueUnit}
-                  </span>
+                  <strong>{formatPeriodDate(active.point.start, active.point.end)}</strong>
                   <div data-slot="tooltip-divider" />
                   <p>
                     <span data-slot="tooltip-label">
@@ -1175,7 +1190,7 @@ function formatGeoShare(value: number) {
   return `${value.toFixed(value > 0 && value < 1 ? 1 : 0)}%`
 }
 
-function momentumChart(data: ModelUsagePoint[], updatedAt: string | null) {
+function momentumChart(data: { date: string; tokens: number }[], updatedAt: string | null) {
   const fallbackDate = updatedAt ? formatMomentumDateLabel(updatedAt) : "JAN 1"
   const points =
     data.length > 1 ? data : [data[0] ?? emptyUsagePoint(fallbackDate), data[0] ?? emptyUsagePoint(fallbackDate)]
@@ -1205,8 +1220,8 @@ function momentumChart(data: ModelUsagePoint[], updatedAt: string | null) {
   }
 }
 
-function emptyUsagePoint(date: string): ModelUsagePoint {
-  return { date, tokens: 0, users: 0, sessions: 0, cost: 0 }
+function emptyUsagePoint(date: string) {
+  return { date, tokens: 0 }
 }
 
 function smoothLinePath(points: { x: number; y: number }[]) {
@@ -1340,10 +1355,10 @@ function clampUsagePercent(value: number) {
   return Math.max(0, Math.min(100, value))
 }
 
-function modelUsageMonthTicks(points: ModelUsagePoint[], updatedAt: string | null) {
+function modelUsageMonthTicks(points: ModelUsagePoint[]) {
   const seen = new Set<string>()
   return points.flatMap((point, index) => {
-    const parsed = parseMomentumDate(point.date, updatedAt)
+    const parsed = parseMomentumDate(point.start, null)
     const label = shortMonths[parsed.getUTCMonth()]
     if (!label || seen.has(label)) return []
     seen.add(label)
@@ -1355,17 +1370,6 @@ function modelUsageMonthTicks(points: ModelUsagePoint[], updatedAt: string | nul
       },
     ]
   })
-}
-
-function formatModelUsageTooltipDate(value: string, updatedAt: string | null) {
-  const date = parseMomentumDate(value, updatedAt)
-  if (date.getUTCFullYear() === 1970) return value
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(date)
 }
 
 function formatRankLabel(rank: number | null) {

@@ -2,16 +2,15 @@ import type { ProviderPackage } from "../provider-package.js"
 import { SeedanceVideo } from "../protocols/seedance-video.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
-import { type HttpOptions, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { ProviderID, type ModelID, type ProviderOptions, type TransportOptions } from "../schema/index.js"
 import { toConfig } from "./settings.js"
 
 export const id = ProviderID.make("byteplus")
 
-export type Config = ProviderAuthOption<"optional"> & {
-  readonly baseURL?: string
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions
-}
+export type Config = TransportOptions &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+  }
 
 export type Settings = ProviderPackage.Settings & {
   readonly apiKey?: string | false

@@ -1,0 +1,6 @@
+# The life machine's plugin for opencode-native (`init.luau`), beside its TypeScript side (`tui.tsx`).
+id = "parity.life"
+name = "Life"
+version = "0.1.0"
+contract = "2.0"
+description = "The plugin of the life, project, manager and views machines of parity/machines/plugins.json"

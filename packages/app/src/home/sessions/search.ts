@@ -6,7 +6,12 @@ import { sessionLabel } from "@/session/title"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import type { HomeController } from "../model"
-import { homeSessionSearchKey, type HomeSessionRecord, type HomeSessionsController } from "./controller"
+import {
+  groupSessions,
+  homeSessionSearchKey,
+  type HomeSessionRecord,
+  type HomeSessionsController,
+} from "./controller"
 import {
   INITIAL_HOME_SESSION_SEARCH_STATE,
   selectSearchExact,
@@ -24,7 +29,12 @@ type HomeSessionSearchSource = Pick<HomeSessionsController, "data" | "session">
 
 type PendingLookup = { controller: AbortController; timer: ReturnType<typeof setTimeout> }
 
-export function createHomeSessionSearchController(home: HomeController, sessions: HomeSessionSearchSource) {
+/** `inline` filters Home's list in place instead of opening a results panel. */
+export function createHomeSessionSearchController(
+  home: HomeController,
+  sessions: HomeSessionSearchSource,
+  inline: () => boolean = () => false,
+) {
   const command = useCommand()
   const language = useLanguage()
   const servers = useServers()
@@ -94,7 +104,9 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     return records[0] ? homeSessionSearchKey(records[0]) : ""
   })
 
-  const open = createMemo(() => selectSearchOpen(searchState()))
+  const open = createMemo(() => !inline() && selectSearchOpen(searchState()))
+
+  const groups = createMemo(() => (inline() && query() ? groupSessions(results(), language) : sessions.data.groups()))
 
   const placeholder = createMemo(() => {
     const project = home.project.selected()
@@ -174,6 +186,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     result: {
       loading: () => sessions.data.loading() || selectSearchLookingUp(searchState()),
       list: results,
+      groups,
       active,
       noResultsLabel: () => language.t("home.sessions.search.noResults", { query: query() }),
       highlight: (record: HomeSessionRecord) =>

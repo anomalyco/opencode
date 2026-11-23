@@ -66,6 +66,16 @@ function toItem(input: {
       description: recovery.description,
     }
   }
+  if (recovery.kind === "video")
+    return {
+      kind: "video",
+      id: input.id,
+      sessionID: recovery.sessionID,
+      status: input.status,
+      ...(title !== undefined ? { title } : {}),
+      time,
+      path: recovery.path,
+    }
   return {
     kind: "image",
     id: input.id,
@@ -76,6 +86,18 @@ function toItem(input: {
     path: recovery.path,
     model: recovery.model,
   }
+}
+
+/** The listed shape of one live job. */
+export function item(info: Info, recovery: Recovery): Job.Info {
+  return toItem({
+    id: info.id,
+    status: info.status,
+    title: info.title,
+    started: info.started_at,
+    completed: info.completed_at,
+    recovery,
+  })
 }
 
 export function read<Entry extends Live>(

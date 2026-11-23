@@ -21,7 +21,7 @@ export type BackgroundActivity = Settings["general"]["backgroundActivity"]
 
 export type TimelineWidth = Settings["general"]["timelineWidth"]
 
-export type SidebarOrganize = Settings["general"]["sidebarOrganize"]
+export type SidebarOrganize = Exclude<Settings["general"]["sidebarOrganize"], "projects">
 
 export type TabLayout = Settings["appearance"]["tabLayout"]
 
@@ -137,7 +137,10 @@ const generalSchema = Persistence.struct({
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
   tabGroups: Persistence.optional(Schema.Boolean),
-  sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent"]),
+  // One side panel open state for every session tab, instead of one per tab.
+  sharedSidePanel: Persistence.optional(Schema.Boolean),
+  // "projects" is retired; `resolveSidebarOrganize` moves it to its replacement.
+  sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent", "consolidated"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -151,6 +154,8 @@ const appearanceSchema = Persistence.struct({
   terminal: Schema.String,
   // "inbox" is experimental: the vertical layout with a server-wide session inbox in place of tabs.
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
+  // Prototype (local/dev desktop builds): tabs at `tabLayout`'s position, or one list of every session.
+  navigation: Persistence.optional(Schema.Literals(["tabs", "list"])),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
 })
@@ -342,18 +347,31 @@ export function recentSessionsAvailable(platform: "web" | "desktop", channel: Im
   return platform === "desktop" && (channel === "local" || channel === "dev")
 }
 
+/** Projects moved to Consolidated where this build offers it (local/dev desktop), and to Customize elsewhere. */
+export function resolveSidebarOrganize(
+  value: Settings["general"]["sidebarOrganize"] | undefined,
+  options: readonly SidebarOrganize[],
+): SidebarOrganize {
+  if (value === "projects") return options.includes("consolidated") ? "consolidated" : "customize"
+
+  return value && options.includes(value) ? value : "list"
+}
+
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   gate: false,
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
 
-    const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(
-      usePlatform().platform,
-      import.meta.env.VITE_OPENCODE_CHANNEL,
+    const prototypes = recentSessionsAvailable(usePlatform().platform, import.meta.env.VITE_OPENCODE_CHANNEL)
+
+    const sidebarOrganizeOptions: SidebarOrganize[] = prototypes
+      ? ["list", "customize", "recent", "consolidated"]
+      : ["list", "customize"]
+
+    const sidebarOrganize = createMemo(() =>
+      resolveSidebarOrganize(store.general?.sidebarOrganize, sidebarOrganizeOptions),
     )
-      ? ["list", "projects", "customize", "recent"]
-      : ["list", "projects", "customize"]
 
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
@@ -446,16 +464,16 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTabGroups(value: boolean) {
           setStore("general", "tabGroups", value)
         },
+        sharedSidePanel: withFallback(() => store.general?.sharedSidePanel, false),
+        setSharedSidePanel(value: boolean) {
+          setStore("general", "sharedSidePanel", value)
+        },
         newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
         setNewQuestionUI(value: boolean) {
           setStore("general", "newQuestionUI", value)
         },
         sidebarOrganizeOptions,
-        sidebarOrganize: createMemo(() => {
-          const value = store.general?.sidebarOrganize
-
-          return sidebarOrganizeOptions.includes(value) ? value : defaultSettings.general.sidebarOrganize
-        }),
+        sidebarOrganize,
         setSidebarOrganize(value: SidebarOrganize) {
           setStore("general", "sidebarOrganize", value)
         },
@@ -491,9 +509,29 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTerminalFont(value: string) {
           setStore("appearance", "terminal", value.trim() ? value : "")
         },
-        tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
+        // The List layout always uses the sidebar, and the prototype has no Inbox, so both read as side tabs.
+        tabLayout: createMemo((): TabLayout => {
+          const stored = store.appearance?.tabLayout ?? defaultSettings.appearance.tabLayout
+          const prototype = sidebarOrganize() === "consolidated"
+
+          if (prototype && (store.appearance?.navigation === "list" || stored === "inbox")) return "vertical"
+
+          return stored
+        }),
+        /** Where tabs go when the prototype's Tabs layout is chosen, whatever the List layout forces meanwhile. */
+        tabPosition: createMemo(() => (store.appearance?.tabLayout === "horizontal" ? "horizontal" : "vertical")),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
+        },
+        /** The navigation prototype (Experimental → Consolidated): pinned sessions and groups, and Tabs or List. */
+        navigationPrototype: createMemo(() => sidebarOrganize() === "consolidated"),
+        navigation: createMemo(() =>
+          sidebarOrganize() === "consolidated" && store.appearance?.navigation === "list"
+            ? "list"
+            : "tabs",
+        ),
+        setNavigation(value: "tabs" | "list") {
+          setStore("appearance", "navigation", value)
         },
         sidebarOpen: withFallback(() => store.appearance?.sidebarOpen, true),
         setSidebarOpen(value: boolean) {
@@ -505,6 +543,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       keybinds: {
+        all: () => store.keybinds ?? {},
         get: (action: string) => store.keybinds?.[action],
         set(action: string, keybind: string) {
           setStore("keybinds", action, keybind)

@@ -390,6 +390,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M10.5 2.5V6.5L11.3571 8.5M10.5 2.5H5.5M10.5 2.5H12.5M5.5 2.5V6.5L4.21429 9.5M5.5 2.5H3.5M4.21429 9.5L2.5 13.5H13.5L11.3571 8.5M4.21429 9.5L11.3571 8.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
   },
+  "sessions-stack": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M3.5 3.5H12.5M1.5 5.5V12.5H14.5V5.5H12.5H3.5H1.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
+  },
   "grid-plus": {
     viewBox: "0 0 16 16",
     body: `<path d="M13.9948 11.668H9.32812M11.6641 9.33203V13.9987M6.66667 9.33203V13.9987H2V9.33203H6.66667ZM6.66667 2V6.66667H2V2H6.66667ZM13.9948 2V6.66667H9.32812V2H13.9948Z" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/>`,
@@ -469,6 +473,12 @@ const icons = {
   "outline-rotate-clockwise": {
     viewBox: "0 0 16 16",
     body: `<path d="M14.1992 8C14.1992 9.18669 13.8473 10.3467 13.188 11.3334C12.5288 12.3201 11.5917 13.0892 10.4953 13.5433C9.39897 13.9974 8.19257 14.1162 7.02868 13.8847C5.86479 13.6532 4.7957 13.0818 3.95658 12.2426C3.11747 11.4035 2.54602 10.3344 2.31451 9.17054C2.083 8.00666 2.20182 6.80026 2.65594 5.7039C3.11007 4.60754 3.87911 3.67047 4.8658 3.01118C5.85249 2.35189 7.01253 2 8.19922 2C9.87922 2 11.4859 2.66667 12.6926 3.82667L14.1992 5.33333M10.866 5.33333L14.1992 5.33333L14.1993 2" stroke="currentColor" stroke-linecap="square" stroke-linejoin="round"/>`,
+  },
+  // A browser extension, as every browser draws it: a piece with a tab on top and on the right, and a notch on the
+  // left and at the bottom. OpenCode's own extensions keep `extensions`.
+  puzzle: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 4.5H4.5V3.5a2 2 0 0 1 4 0V4.5H11.5V7.5H12.5a2 2 0 0 1 0 4H11.5V14.5H8.5V13.5a2 2 0 0 0-4 0V14.5H1.5V11.5H2.5a2 2 0 0 0 0-4H1.5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
   },
   "outline-globe-plus": {
     viewBox: "0 0 16 16",

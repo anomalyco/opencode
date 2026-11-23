@@ -181,6 +181,11 @@ export type SessionIdleBackground =
       readonly path: string
       readonly model: string
     }
+  | {
+      readonly kind: "video"
+      readonly sessionID: Session.ID
+      readonly path: string
+    }
 
 /**
  * Runs when a Session finishes model work and has no pending input, just before it goes idle.

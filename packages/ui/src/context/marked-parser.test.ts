@@ -139,7 +139,7 @@ test("preserves emphasis when rejecting an outer reference link", async () => {
 
 test.each([
   "Plain text with **bold**, *emphasis*, ~~deleted~~, and `inline code`.",
-  "## Heading\n\n> Quote\n\n- [x] Done\n- Nested\n  - item",
+  "## Heading\n\n> Quote\n\n- Done\n- Nested\n  - item",
   "| A | B |\n| --- | ---: |\n| one | two |",
   '[link](https://example.com "Title") and <https://example.com>',
   "[reference][key]\n\n[key]: https://example.com",
@@ -152,6 +152,7 @@ test.each([
 
 test.each([
   "```ts\nconst answer = 42\n```",
+  "- [x] Done\n- [ ] Pending",
   "~~~\ncode\n~~~",
   "    indented code",
   "> ```ts\n> const nested = true\n> ```",

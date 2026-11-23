@@ -137,9 +137,9 @@ story("renders a completed write through the production file component", async (
 story("keeps patch file disclosures independent", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "patch" } })
   const wrapper = timeline.locator('[data-timeline-part-id="prt_nested_patch"]')
-  const modified = wrapper.locator('[data-scope="apply-patch"] [data-type="update"] button')
-  const added = wrapper.locator('[data-scope="apply-patch"] [data-type="add"] button')
-  const deleted = wrapper.locator('[data-scope="apply-patch"] [data-type="delete"] button')
+  const modified = wrapper.locator('[data-scope="apply-patch"] [data-type="update"] [data-slot="accordion-trigger"]')
+  const added = wrapper.locator('[data-scope="apply-patch"] [data-type="add"] [data-slot="accordion-trigger"]')
+  const deleted = wrapper.locator('[data-scope="apply-patch"] [data-type="delete"] [data-slot="accordion-trigger"]')
   await expect(wrapper.locator('[data-scope="apply-patch"] [aria-expanded="false"]')).toHaveCount(3)
   await deleted.click()
   await expect(deleted).toHaveAttribute("aria-expanded", "true")
