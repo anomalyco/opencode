@@ -1,4 +1,4 @@
-import type { FooterSubagentState, FooterView, MiniFormRequest, MiniPermissionRequest } from "./types"
+import type { FooterSubagentState, FooterSubagentTab, FooterView, MiniFormRequest, MiniPermissionRequest } from "./types"
 
 export function pickBlockerView(input: { permission?: MiniPermissionRequest; form?: MiniFormRequest }): FooterView {
   if (input.permission) return { type: "permission", request: input.permission }
@@ -53,16 +53,13 @@ export interface ToolSummaryRow {
   elapsedMs: number
 }
 
-export function activeToolSummaries(
-  descendant: FooterSubagentState,
-  now: number,
-): ToolSummaryRow[] {
-  return descendant.tabs
-    .filter((tab) => tab.status === "running")
+export function activeToolSummaries(tabs: FooterSubagentTab[], now: number): ToolSummaryRow[] {
+  return tabs
+    .filter((tab) => tab.status === "running" && tab.activeTool !== undefined)
     .map((tab) => ({
       label: tab.label || tab.sessionID,
-      tool: tab.activeTool ?? "",
+      tool: tab.activeTool!,
       inputPreview: "",
-      elapsedMs: tab.toolStart !== undefined ? Math.max(0, now - tab.toolStart) : 0,
+      elapsedMs: Math.max(0, now - tab.toolStart!),
     }))
 }

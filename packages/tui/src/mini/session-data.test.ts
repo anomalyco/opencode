@@ -132,35 +132,26 @@ describe("activeToolSummaries", () => {
     ...overrides,
   })
 
-  const makeState = (
-    tabs: import("./types").FooterSubagentTab[],
-  ): import("./types").FooterSubagentState => ({
-    tabs,
-    details: {},
-    permissions: [],
-    forms: [],
-  })
-
   it("returns empty array when no running tabs", () => {
     const result = activeToolSummaries(
-      makeState([makeTab({ status: "completed" })]),
+      [makeTab({ status: "completed" })],
       Date.now(),
     )
     expect(result).toEqual([])
   })
 
-  it("includes running tab with no active tool", () => {
-    const result = activeToolSummaries(makeState([makeTab({})]), Date.now())
-    expect(result).toHaveLength(1)
-    expect(result[0]!.tool).toBe("")
-    expect(result[0]!.elapsedMs).toBe(0)
-    expect(result[0]!.label).toBe("developer")
+  it("excludes running tab without activeTool", () => {
+    const tabs: import("./types").FooterSubagentTab[] = [
+      { sessionID: "s1", label: "agent-1", description: "", status: "running" },
+    ]
+    const result = activeToolSummaries(tabs, 1000)
+    expect(result).toHaveLength(0)
   })
 
   it("includes running tab with active tool", () => {
     const now = Date.now()
     const result = activeToolSummaries(
-      makeState([makeTab({ activeTool: "mcp__filesystem__read_file", toolStart: now - 5000 })]),
+      [makeTab({ activeTool: "mcp__filesystem__read_file", toolStart: now - 5000 })],
       now,
     )
     expect(result).toHaveLength(1)
@@ -172,11 +163,11 @@ describe("activeToolSummaries", () => {
   it("returns one row per running tab", () => {
     const now = Date.now()
     const result = activeToolSummaries(
-      makeState([
+      [
         makeTab({ sessionID: "ses_a", label: "developer", activeTool: "bash", toolStart: now - 1000 }),
         makeTab({ sessionID: "ses_b", label: "researcher", activeTool: "websearch", toolStart: now - 2000 }),
         makeTab({ sessionID: "ses_c", label: "done", status: "completed" }),
-      ]),
+      ],
       now,
     )
     expect(result).toHaveLength(2)
@@ -186,7 +177,7 @@ describe("activeToolSummaries", () => {
 
   it("inputPreview is empty string (input not in tab snapshot)", () => {
     const result = activeToolSummaries(
-      makeState([makeTab({ activeTool: "bash", toolStart: Date.now() })]),
+      [makeTab({ activeTool: "bash", toolStart: Date.now() })],
       Date.now(),
     )
     expect(result[0]!.inputPreview).toBe("")
