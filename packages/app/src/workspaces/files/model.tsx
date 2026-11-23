@@ -10,7 +10,7 @@ import { getDirectory, getFilename } from "@opencode/util/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
-import { createPathHelpers } from "./path"
+import { createPathHelpers, isWindowsRoot } from "./path"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { usePlatform } from "@/runtime/platform/platform"
 import { fileStreamUrl } from "@/runtime/server/api"
@@ -312,6 +312,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const stop = sdk().event.on("filesystem.changed", (event) => {
         invalidateFromWatcher(event, {
           normalize: path.normalize,
+          windows: isWindowsRoot(scope()),
           hasFile: (file) => fileEntry(file) !== undefined,
           isOpen: (file) => attachment.files.opened().includes(file),
           loadFile: (file) => {
