@@ -576,39 +576,37 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.effect(
-    "keeps realtime models that answer in speech and call tools, with the voice protocol that speaks to them",
-    () =>
-      Effect.gen(function* () {
-        const realtime = (id: string, input: Record<string, unknown> = {}) =>
-          sourceModel(id, {
-            type: "realtime",
-            release_date: "2026-09-10",
-            modalities: { input: ["audio/pcm"], output: ["text", "audio/pcm"] },
-            api: { live: { base_url: "https://api.acme.test/v1", sdk: { opencodeai: "none" } } },
-            ...input,
-          })
-        const [openai] = yield* ModelsDev.decodeSnapshot(
-          JSON.stringify({
-            openai: {
-              ...fixture.acme,
-              id: "openai",
-              models: {
-                chat: sourceModel("chat"),
-                voice: realtime("voice"),
-                unknown: realtime("unknown", { api: { sessions: { base_url: "https://api.acme.test/v1" } } }),
-                translate: realtime("translate", { capabilities: { tools: { supported: false } } }),
-                streaming: realtime("streaming", { modalities: { input: ["audio/pcm"], output: ["text"] } }),
-                retired: realtime("retired", { status: "deprecated" }),
-              },
+  it.effect("keeps realtime models that answer in speech and call tools, with their voice protocol", () =>
+    Effect.gen(function* () {
+      const realtime = (id: string, input: Record<string, unknown> = {}) =>
+        sourceModel(id, {
+          type: "realtime",
+          release_date: "2026-09-10",
+          modalities: { input: ["audio/pcm"], output: ["text", "audio/pcm"] },
+          api: { live: { base_url: "https://api.acme.test/v1", sdk: { opencodeai: "none" } } },
+          ...input,
+        })
+      const [openai] = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          openai: {
+            ...fixture.acme,
+            id: "openai",
+            models: {
+              chat: sourceModel("chat"),
+              voice: realtime("voice"),
+              unknown: realtime("unknown", { api: { sessions: { base_url: "https://api.acme.test/v1" } } }),
+              translate: realtime("translate", { capabilities: { tools: { supported: false } } }),
+              streaming: realtime("streaming", { modalities: { input: ["audio/pcm"], output: ["text"] } }),
+              retired: realtime("retired", { status: "deprecated" }),
             },
-          }),
-        )
-        expect(openai?.models.map((item) => [item.id, item.type, item.realtime])).toEqual([
-          [Model.ID.make("chat"), "chat", undefined],
-          [Model.ID.make("voice"), "realtime", { protocol: "openai-live", transports: ["webrtc"] }],
-        ])
-      }),
+          },
+        }),
+      )
+      expect(openai?.models.map((item) => [item.id, item.type, item.realtime])).toEqual([
+        [Model.ID.make("chat"), "chat", undefined],
+        [Model.ID.make("voice"), "realtime", { protocol: "openai-live", transports: ["webrtc"] }],
+      ])
+    }),
   )
 
   it.live("drops model types opencode doesn't keep", () =>

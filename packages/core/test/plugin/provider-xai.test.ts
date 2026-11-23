@@ -36,14 +36,11 @@ describe("XAIPlugin", () => {
     }),
   )
 
-  it.effect("migrates browser OAuth credentials to the device method", () =>
+  it.effect("migrates browser OAuth credentials to the device method and hides voice models", () =>
     Effect.gen(function* () {
-      const providers = yield* Provider.Service
-      const providerID = Provider.ID.make("xai")
-      yield* providers.transform((editor) => {
-        editor.update(providerID, (provider) => {
-          provider.package = "@opencode/ai/providers/xai"
-          provider.activation = "enabled"
+      yield* (yield* Provider.Service).transform((editor) => {
+        editor.models.update(Provider.ID.make("xai"), Model.ID.make("grok-voice-3.0"), (model) => {
+          model.type = "realtime"
         })
       })
       const credentials = yield* Credential.Service
@@ -73,38 +70,7 @@ describe("XAIPlugin", () => {
           metadata: { account: "account" },
         }),
       })
-    }),
-  )
-
-  it.effect("hides voice models from a SuperGrok sign-in", () =>
-    Effect.gen(function* () {
-      const providers = yield* Provider.Service
-      const models = yield* Model.Service
-      const providerID = Provider.ID.make("xai")
-      yield* providers.transform((editor) => {
-        editor.update(providerID, (provider) => {
-          provider.package = "@opencode/ai/providers/xai"
-          provider.activation = "enabled"
-        })
-        editor.models.update(providerID, Model.ID.make("grok-voice-3.0"), (model) => {
-          model.type = "realtime"
-        })
-      })
-      yield* (yield* Credential.Service).create({
-        integrationID: Integration.ID.make("xai"),
-        label: "personal",
-        value: Credential.OAuth.make({
-          type: "oauth",
-          methodID: Integration.MethodID.make("device"),
-          access: "access",
-          refresh: "refresh",
-          expires: 123,
-        }),
-      })
-
-      yield* addPlugin()
-
-      expect(yield* models.available(["realtime"])).toEqual([])
+      expect(yield* (yield* Model.Service).available(["realtime"])).toEqual([])
     }),
   )
 
