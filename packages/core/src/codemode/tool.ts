@@ -110,7 +110,7 @@ const executionServices = (
     ),
   )
 
-const OPTIONS_LINE = "// @exec:"
+const OPTIONS_LINE = "// @options:"
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions. With `full_codemode`,
 // the runtime also has Bun's file APIs.
@@ -138,7 +138,8 @@ const Options = Schema.Struct({
   timeout: Schema.optionalKey(PositiveInt),
   background: Schema.optionalKey(Schema.Boolean),
 })
-const decodeOptions = Schema.decodeUnknownOption(Schema.fromJsonString(Options))
+const decodeOptions = Schema.decodeUnknownOption(Schema.fromJsonString(Options), { onExcessProperty: "error" })
+const optionsLine = new RegExp(`^[ \\t]*${RegExp.escape(OPTIONS_LINE)}(.*)\\r?\\n?`)
 
 /**
  * With `full_codemode`, moves the options line that may start an `execute` program into the call's `timeout` and
@@ -146,12 +147,12 @@ const decodeOptions = Schema.decodeUnknownOption(Schema.fromJsonString(Options))
  */
 export const splitOptions = Effect.fnUntraced(function* (input: unknown) {
   if (typeof input !== "object" || input === null || !("code" in input) || typeof input.code !== "string") return input
-  const line = /^[ \t]*\/\/ @exec:(.*)\r?\n?/.exec(input.code)
+  const line = optionsLine.exec(input.code)
   if (!line) return input
   const options = decodeOptions(line[1])
   if (Option.isNone(options))
     return yield* new Error({
-      message: `\`${OPTIONS_LINE}\` must be followed by a JSON object with \`timeout\` (a positive integer of milliseconds) and \`background\` (a boolean), for example \`${OPTIONS_LINE} {"background": true}\`.`,
+      message: `\`${OPTIONS_LINE}\` must be followed by a JSON object with only \`timeout\` (a positive integer of milliseconds) and \`background\` (a boolean), for example \`${OPTIONS_LINE} {"background": true}\`.`,
     })
   return { ...input, ...options.value, code: input.code.slice(line[0].length) }
 })

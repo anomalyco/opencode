@@ -89,32 +89,31 @@ describe("execute timeout and background", () => {
     Effect.sync(() => {
       expect(tool(true).input).toBe(CodeMode.Input)
       expect(tool(true).freeform).toEqual({ type: "text" })
-      expect(tool(true).description).toContain("make the first line `// @exec: <JSON object>`")
+      expect(tool(true).description).toContain("make the first line `// @options: <JSON object>`")
       expect(tool(true).description).toContain("do not poll")
-      expect(tool(false).description).not.toContain("// @exec:")
+      expect(tool(false).description).not.toContain("// @options:")
     }),
   )
 
   it.effect("moves a leading options line into timeout and background, and fails on one it can't apply", () =>
     Effect.gen(function* () {
       const split = (code: string) => CodeModeTool.splitOptions({ code })
-      expect(yield* split('// @exec: {"timeout": 5000, "background": true}\nreturn 1')).toEqual({
+      expect(yield* split('// @options: {"timeout": 5000, "background": true}\nreturn 1')).toEqual({
         code: "return 1",
         timeout: 5000,
         background: true,
       })
-      expect(yield* split('  // @exec: {"background":true}\r\nreturn 1')).toEqual({ code: "return 1", background: true })
-      // Keys execute doesn't take are dropped.
-      expect(yield* split('// @exec: {"yield_time_ms": 10000, "timeout": 5}\nx()')).toEqual({ code: "x()", timeout: 5 })
+      expect(yield* split('  // @options: {"background":true}\r\nreturn 1')).toEqual({ code: "return 1", background: true })
       expect(yield* split("x()")).toEqual({ code: "x()" })
       expect(yield* CodeModeTool.splitOptions("x()")).toBe("x()")
       for (const code of [
-        "// @exec: {timeout}\nx()",
-        '// @exec: {"timeout": 0}\nx()',
-        '// @exec: {"timeout": 1.5}\nx()',
-        '// @exec: ["x"]\nx()',
+        "// @options: {timeout}\nx()",
+        '// @options: {"timeout": 0}\nx()',
+        '// @options: {"timeout": 1.5}\nx()',
+        '// @options: ["x"]\nx()',
+        '// @options: {"yield_time_ms": 10000, "timeout": 5}\nx()',
       ])
-        expect((yield* split(code).pipe(Effect.flip)).message).toContain("must be followed by a JSON object")
+        expect((yield* split(code).pipe(Effect.flip)).message).toContain("must be followed by a JSON object with only")
     }),
   )
 

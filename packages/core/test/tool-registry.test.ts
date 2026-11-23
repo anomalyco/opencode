@@ -126,12 +126,12 @@ describe("execute options line", () => {
 
   codeModeIt.effect("with full_codemode, the first line's options reach the job and execute takes only code", () =>
     Effect.gen(function* () {
-      const result = yield* run('// @exec: {"timeout": 5000}\nreturn 1')
+      const result = yield* run('// @options: {"timeout": 5000}\nreturn 1')
       expect(Object.keys(result.execute.inputSchema.properties ?? {})).toEqual(["code"])
       expect(result.execute.freeform).toEqual({ type: "text" })
       expect(result.handoffs).toEqual([{ timeout: 5000 }])
       expect(result.output).toBe(1)
-      expect((yield* run('// @exec: {"timeout": "5s"}\nreturn 1').pipe(Effect.flip)).message).toContain(
+      expect((yield* run('// @options: {"timeout": "5s"}\nreturn 1').pipe(Effect.flip)).message).toContain(
         "must be followed by a JSON object",
       )
     }),
@@ -139,7 +139,7 @@ describe("execute options line", () => {
 
   it.effect("without full_codemode, the line is only a comment", () =>
     Effect.gen(function* () {
-      const result = yield* run('// @exec: {"timeout": "5s"}\nreturn 1')
+      const result = yield* run('// @options: {"timeout": "5s"}\nreturn 1')
       expect(result.handoffs).toEqual([undefined])
       expect(result.output).toBe(1)
     }),
