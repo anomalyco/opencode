@@ -93,8 +93,6 @@ import { localPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
-import { DialogVariant } from "./component/dialog-variant"
-import { DialogSpeed } from "./component/dialog-speed"
 import { destroyRenderer, setTerminalTitle } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
@@ -1035,7 +1033,7 @@ function App() {
               category: "Agent",
               slash: { name: "speed", aliases: ["fast"] },
               run: () => {
-                dialog.replace(() => <DialogSpeed />)
+                void import("./component/dialog-speed").then(({ DialogSpeed }) => dialog.replace(() => <DialogSpeed />))
               },
             },
           ]
