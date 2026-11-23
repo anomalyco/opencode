@@ -14,8 +14,6 @@ export const registry = {
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
   recommended_api: "Use each model's recommended API from models.dev instead of the first API it lists.",
-  model_speeds:
-    "Offer a model's faster and slower service tiers (fast, flex…) as speeds of that model: one entry in the model picker with a speed selector, instead of a separate entry per tier such as gpt-5.5-fast.",
   full_codemode: "Enable the full Code Mode work in progress.",
   machines: "Let a tool path name a machine, as in gpu:/work/train.py, and act on that machine's files and processes.",
   home_memory:

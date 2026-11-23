@@ -569,8 +569,6 @@ describe("ModelsDev Service", () => {
             },
           },
         }),
-        false,
-        true,
       )
       const price = Money.USDPerMillionTokens.make
       const context = {
@@ -636,7 +634,7 @@ describe("ModelsDev Service", () => {
           },
         },
       })
-      const [acme] = yield* ModelsDev.decodeSnapshot(catalog, false, true)
+      const [acme] = yield* ModelsDev.decodeSnapshot(catalog)
       const model = (id: string) => acme?.models.find((item) => item.id === id)
       const speed = (base: string, id: string, faster = true) => ({ speed: { base: Model.ID.make(base), id, faster } })
 
@@ -682,18 +680,6 @@ describe("ModelsDev Service", () => {
         body: { service_tier: "priority" },
       })
 
-      // Without speeds only the modes are models, as before, and nothing is marked.
-      const [plain] = yield* ModelsDev.decodeSnapshot(catalog)
-      expect(plain?.models.map((item) => item.id)).toEqual(
-        ["acme-1", "acme-1-fast", "acme-1-pro", "acme-2", "acme-2-flex", "claude", "nova", "kimi", "kimi-priority"].map(
-          (id) => Model.ID.make(id),
-        ),
-      )
-      expect(plain?.models.some((item) => item.experimental)).toBe(false)
-      expect(plain?.models.find((item) => item.id === "acme-1-fast")).toMatchObject({
-        body: { service_tier: "priority" },
-        headers: { "x-old": "1" },
-      })
     }),
   )
 

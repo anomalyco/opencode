@@ -1987,7 +1987,6 @@ export type ConfigInfoEncoded = {
         artifacts: boolean?,
         console_watches: boolean?,
         recommended_api: boolean?,
-        model_speeds: boolean?,
         full_codemode: boolean?,
         machines: boolean?,
         home_memory: boolean?,
