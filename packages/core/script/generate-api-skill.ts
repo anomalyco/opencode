@@ -66,7 +66,9 @@ const HIDDEN = [
   "POST /api/pair",
   "POST /api/experimental/client-mcp/token",
   "GET /api/experimental/machine/link",
-  // Let a session answer its own permission prompts, loosen its rules or change credentials.
+  "POST /api/experimental/machine",
+  "DELETE /api/experimental/machine/*",
+  // Let a session answer its own permission prompts, loosen its rules, or add, change or revoke credentials.
   "POST /api/session/{sessionID}/permission/{requestID}/reply",
   "PATCH /api/permission/saved/*",
   "DELETE /api/permission/saved/*",
@@ -74,6 +76,8 @@ const HIDDEN = [
   "POST /api/credential*",
   "PATCH /api/credential*",
   "DELETE /api/credential*",
+  "* /api/integration/*/connect*",
+  "POST /api/experimental/integration/wellknown",
   // Server maintenance.
   "* /api/debug/*",
   "* /api/experimental/migration/*",

@@ -72,16 +72,6 @@ Call any endpoint below from Code Mode with `fetch("opencode:///api/...")`. Each
 
 - GET /api/integration: List integrations
 - GET /api/integration/{integrationID}: Get integration
-- POST /api/experimental/integration/wellknown (experimental): Add wellknown integration
-- POST /api/integration/{integrationID}/connect/key: Connect with key
-- POST /api/integration/{integrationID}/connect/external: Connect with external credentials
-- POST /api/integration/{integrationID}/connect/oauth: Begin OAuth connection
-- GET /api/integration/{integrationID}/connect/oauth/{attemptID}: Get OAuth attempt status
-- DELETE /api/integration/{integrationID}/connect/oauth/{attemptID}: Cancel OAuth connection
-- POST /api/integration/{integrationID}/connect/oauth/{attemptID}/complete: Complete OAuth connection
-- POST /api/integration/{integrationID}/connect/command: Begin command connection
-- GET /api/integration/{integrationID}/connect/command/{attemptID}: Get command attempt status
-- DELETE /api/integration/{integrationID}/connect/command/{attemptID}: Cancel command connection
 
 ## api/job.md
 
@@ -96,8 +86,6 @@ Call any endpoint below from Code Mode with `fetch("opencode:///api/...")`. Each
 ## api/machine.md
 
 - GET /api/experimental/machine (experimental): List machines
-- POST /api/experimental/machine (experimental): Add or invite a machine
-- DELETE /api/experimental/machine/{name} (experimental): Remove a machine
 
 ## api/mcp.md
 
