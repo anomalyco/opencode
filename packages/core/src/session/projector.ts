@@ -674,6 +674,7 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
   })
   // Assistant content is written only by the part methods below, which also record its blob refs. Envelope updates
   // keep whatever content the row already holds: inline for a legacy row that was never split, [] once it was.
+  // json_extract rather than `->`, which the system SQLite on macOS 12 (3.37) can't parse.
   const updateMessage = (message: SessionMessage.Info) => {
     const {
       id: _,
@@ -688,7 +689,7 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
           : {}),
         data:
           message.type === "assistant"
-            ? sql`json_set(${JSON.stringify(data)}, '$.content', json(coalesce(${SessionMessageTable.data} -> '$.content', '[]')))`
+            ? sql`json_set(${JSON.stringify(data)}, '$.content', json(coalesce(json_extract(${SessionMessageTable.data}, '$.content'), '[]')))`
             : data,
       })
       .where(and(eq(SessionMessageTable.id, message.id), eq(SessionMessageTable.session_id, event.data.sessionID)))
