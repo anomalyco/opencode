@@ -418,7 +418,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       selection = option
       resetSelection = !preserve
     }
+    const groups = grouped()
     if (option) props.onMove?.(option)
+    // If onMove rebuilt the rows, their positions aren't available until layout.
+    if (groups !== grouped()) {
+      const current = selected()
+      if (current) scrollAfterLayout(center, current.value)
+      return
+    }
     scrollToSelection(center)
   }
 
