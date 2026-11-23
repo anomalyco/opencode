@@ -591,10 +591,10 @@ A **program error** is the widget template's own code failing or breaking a cont
 
 Everything else is a **client error**: rendering or translating valid WGSL, a shader too slow on this device (the 50 ms
 frame stop, GPU canvases: `the shader took over 50 ms a frame, three frames in a row`), a GPU hang (`widgets-gpu.md`:
-`the GPU work took over 250 ms; the canvas is stopped`), host internals, transport and RPC failures (a `program` fetch
-that fails), and client bugs. Clients never send client errors with `report`; they log them in dev mode like their other
-errors. Client errors are bugs to fix in the client, not a widget state. A fetch error a live program gets from
-`widget.fetch` is the program's to handle; only an exception it lets escape is a program error.
+`the GPU work hung; the canvas is stopped`), host internals, transport and RPC failures (a `program` fetch that fails),
+and client bugs. Clients never send client errors with `report`; they log them in dev mode like their other errors.
+Client errors are bugs to fix in the client, not a widget state. A fetch error a live program gets from `widget.fetch`
+is the program's to handle; only an exception it lets escape is a program error.
 
 A client that hits a program error shows it on the widget (error card or inline error) and calls `report` once with
 `{ phase, message, line?, column? }`, positions relative to the widget template's source (the lines of the program before the source subtracted:
