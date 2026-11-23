@@ -3,6 +3,7 @@ import { App } from "@opencode/core/app"
 import { Artifact } from "@opencode/core/artifact"
 import { BlobStore } from "@opencode/core/blob-store"
 import { AISDK } from "@opencode/core/aisdk"
+import { Automation } from "@opencode/core/automation"
 import { Command } from "@opencode/core/command"
 import { Config } from "@opencode/core/config"
 import { Credential } from "@opencode/core/credential"
@@ -128,6 +129,7 @@ export const makePluginTestLayer = (
       Agent.node,
       Artifact.node,
       AISDK.node,
+      Automation.node,
       BlobStore.node,
       Provider.node,
       Model.node,

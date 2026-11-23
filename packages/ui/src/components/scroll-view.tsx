@@ -448,7 +448,7 @@ export function ScrollView(props: ScrollViewProps) {
   )
 
   // Keybinds implementation
-  // We ensure the viewport has a tabindex so it can receive focus
+  // The viewport takes focus from a click but is not a Tab stop
   // Keyboard scrolling jumps immediately, like the wheel, instead of animating.
   const onKeyDown = (e: KeyboardEvent) => {
     // If user is focused on an input inside the scroll view, don't hijack keys
@@ -543,7 +543,7 @@ export function ScrollView(props: ScrollViewProps) {
         onTouchCancel={events.onTouchCancel}
         onPointerDown={events.onPointerDown}
         onClick={events.onClick}
-        tabIndex={selectShowVerticalThumb(thumbState()) || selectShowHorizontalThumb(thumbState()) ? 0 : -1}
+        tabIndex={-1}
         role="region"
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
         onKeyDown={(e) => {

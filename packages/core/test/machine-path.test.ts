@@ -97,6 +97,7 @@ const toolPlugins = makeLocationNode({
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,
+    Bus.node,
     Skill.node,
     Tool.node,
   ],
@@ -131,6 +132,7 @@ const graph = (fixture: Fixture, realPermissions = false) =>
       Machines.node,
       PluginHooks.node,
       ShellSelect.node,
+      Bus.node,
     ]),
     [
       Location.node.replace(

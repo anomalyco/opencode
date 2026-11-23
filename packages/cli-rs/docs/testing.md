@@ -254,11 +254,14 @@ A scenario is `parity/scenarios/<group>/<name>.sim.ts` with `export default defi
 - `model`: the replies, one per model call, each `{ items, finish }` with protocol items (`textDelta`,
   `reasoningDelta`, `toolCall`, …);
 - `steps`: `{ type }`, `{ press, modifiers? }`, `{ enter: true }`, `{ arrow }`, `{ mouse }` at a cell,
-  `{ resize: [cols, rows] }`, `{ until: "text" }`, and `{ checkpoint, until?, masks?, deviation? }`, which waits for
-  three identical captures before comparing.
+  `{ resize: [cols, rows] }`, `{ until: "text" }`, `{ gone: "text" }`, and `{ checkpoint, until?, masks?, deviation? }`,
+  which waits for three identical captures before comparing.
 
 Wait with `until`, not with time; on home, wait for the model line, because the TUI ignores Enter until its catalogs
-load. The Rust endpoint has no `ui.focus`, `ui.click` or `ui.state`
+load. A checkpoint must not contain a toast: it goes on a 5 s wall clock, so a screen read that comes later catches it
+on one side only, and waiting for it to appear can miss it the same way. P-APP's `E.19a/failed-toast` compares toasts,
+on a still clock; a P-TUI scenario that would show one disables `opencode.notifications` (as `E.6b/messages` does).
+The Rust endpoint has no `ui.focus`, `ui.click` or `ui.state`
 ([`T14a-drive-capabilities.md`](../parity/deviations/T14a-drive-capabilities.md)), so steps address cells: take
 coordinates from the `.txt` files of a TypeScript run (row and column from 0). A run's files are in
 `parity/out/<group>/<name>.sim/`: `<checkpoint>.<side>.json` and `.txt`, and `report.json` with every model call. On

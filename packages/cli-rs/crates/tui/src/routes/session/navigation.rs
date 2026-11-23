@@ -71,36 +71,43 @@ impl super::scroll::Controls {
 }
 
 impl Inner {
+    /// The next or previous message boundary among the mounted rows. When none is there, the window mounts more rows
+    /// that way (dropping rows far on the other side) or loads an older page, and looks again once they are laid out
+    /// (`ensureAllRows` mounted every row first).
     pub(super) fn to_message(&self, tui: &Tui, next: bool, user_only: bool) {
-        let weak = self.this.clone();
-        self.ensure_all_rows(
-            tui,
-            bind!(weak, |inner, tui| {
-                let Some(session) = inner.transcript.session() else { return };
-                let (_, top) = inner.transcript.scroll().scroll_position();
-                let anchors = inner.transcript.anchors(tui);
-                let current = inner.navigation.borrow().clone();
-                let target = tui.data.read(|state| {
-                    find_boundary(next, &anchors, state.messages(&session), top, current.as_deref(), user_only)
-                });
-                if let Some(target) = target {
-                    inner.align(tui, target.id, target.top);
-                    return;
+        let Some(session) = self.transcript.session() else { return };
+        let (_, top) = self.transcript.scroll().scroll_position();
+        let anchors = self.transcript.anchors(tui);
+        let current = self.navigation.borrow().clone();
+        let target = tui
+            .data
+            .read(|state| find_boundary(next, &anchors, state.messages(&session), top, current.as_deref(), user_only));
+        if let Some(target) = target {
+            self.align(tui, target.id, target.top);
+            return;
+        }
+        if self.transcript.extend(tui, next) {
+            after_layout(
+                &tui.app,
+                bind!(self.this, |inner| {
+                    if let Some(tui) = inner.tui.upgrade() {
+                        inner.to_message(&tui, next, user_only);
+                    }
+                }),
+            );
+            return;
+        }
+        if next || !tui.data.read(|state| state.has_more_messages(&session)) {
+            return;
+        }
+        tui.app.spawn(
+            tui.data.message_load_more(&session, LoadMore::default()),
+            bind!(self.this, |inner, _, result| {
+                let Some(tui) = inner.tui.upgrade() else { return };
+                match result {
+                    Ok(()) => after_layout(&tui.app.clone(), move || inner.to_message(&tui, next, user_only)),
+                    Err(error) => tui.toasts.error(error.tui_message()),
                 }
-                if next || !tui.data.read(|state| state.has_more_messages(&session)) {
-                    return;
-                }
-                let data = tui.data.clone();
-                tui.app.spawn(
-                    async move { data.message_load_more(&session, LoadMore::default()).await },
-                    bind!(inner.this, |inner, _, result| {
-                        let Some(tui) = inner.tui.upgrade() else { return };
-                        match result {
-                            Ok(()) => after_layout(&tui.app.clone(), move || inner.to_message(&tui, next, user_only)),
-                            Err(error) => tui.toasts.error(error.tui_message()),
-                        }
-                    }),
-                );
             }),
         );
     }
@@ -119,13 +126,17 @@ impl Inner {
     }
 
     /// `jumpToMessage`: aligns the message's first row with the top, one row higher for an
-    /// assistant message.
+    /// assistant message. The rows around the message mount first, unless they are mounted.
     pub fn jump(&self, tui: &Tui, id: String) {
-        self.ensure_all_rows(
-            tui,
-            bind!(self.this, |inner, tui| {
+        if !self.transcript.mount_message(tui, &id) {
+            return;
+        }
+        after_layout(
+            &tui.app,
+            bind!(self.this, |inner| {
+                let Some(tui) = inner.tui.upgrade() else { return };
                 let Some(session) = inner.transcript.session() else { return };
-                let Some(&(_, y)) = inner.transcript.anchors(tui).iter().find(|(message, _)| *message == id) else {
+                let Some(&(_, y)) = inner.transcript.anchors(&tui).iter().find(|(message, _)| *message == id) else {
                     return;
                 };
                 let assistant = tui.data.read(|state| {
@@ -135,16 +146,28 @@ impl Inner {
                         .any(|message| message.id() == id && matches!(message, SessionMessageInfo::Assistant(_)))
                 });
                 let top = (y - if assistant { 1.0 } else { 0.0 }).max(0.0);
-                inner.align(tui, id, top);
+                inner.align(&tui, id, top);
             }),
         );
     }
 
     /// `alignMessage`: stops following the bottom, adds the slack the target needs, and scrolls once
-    /// that is laid out.
+    /// that is laid out. Short of the newest row, newer rows mount instead of the slack.
     fn align(&self, tui: &Tui, id: String, top: f64) {
+        let slack = slack(top, self.height(), self.rows_height());
+        if slack > 0.0 && self.transcript.mount_newer(tui) {
+            after_layout(
+                &tui.app,
+                bind!(self.this, |inner| {
+                    if let Some(tui) = inner.tui.upgrade() {
+                        inner.align(&tui, id, top);
+                    }
+                }),
+            );
+            return;
+        }
         self.navigation.replace(Some(id.clone()));
-        self.set_slack(slack(top, self.height(), self.rows_height()));
+        self.set_slack(slack);
         self.update_away();
         after_layout(
             &tui.app,
@@ -156,15 +179,5 @@ impl Inner {
                 inner.update_away();
             }),
         );
-    }
-
-    /// `ensureAllRows`: navigation walks every loaded row, so they mount first.
-    fn ensure_all_rows(&self, tui: &Tui, continuation: impl FnOnce(&Tui) + 'static) {
-        if self.transcript.all_mounted() {
-            continuation(tui);
-            return;
-        }
-        self.transcript.mount_all(tui);
-        after_layout(&tui.app, bind!(self.tui, |tui| continuation(&tui)));
     }
 }

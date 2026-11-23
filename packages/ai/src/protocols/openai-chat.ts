@@ -866,6 +866,7 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean, hasActiveTool
   }
 }
 
+/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   request: LLMRequest,
   options: LoweringOptions = {},
@@ -877,7 +878,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     return yield* ProviderShared.invalidRequest(
       `OpenAI Chat reasoning field conflicts with reserved field ${reasoningField}`,
     )
-  const flattened = ProviderShared.flattenToolRequest(request)
+  const definitions = ProviderShared.flattenTools(request.tools)
   const provider = request.model.provider
   const baseURL = request.model.route.endpoint.baseURL
   const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
@@ -887,18 +888,18 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const zaiToolStream =
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
-  const hasActiveTools = flattened.tools.length > 0
+  const hasActiveTools = definitions.length > 0
   const custom = OpenAIFreeform.tools(request)
   const lowering = { ...options, cacheControl: options.cacheControl ?? declaredCacheControl(request), custom }
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(flattened.request, lowering),
+    messages: yield* lowerMessages(request, lowering),
     tools:
-      flattened.tools.length === 0
+      definitions.length === 0
         ? hasHistory
           ? []
           : undefined
-        : flattened.tools.map((tool) => lowerTool(tool, lowering, supportsStrictMode, custom.get(tool.name))),
+        : definitions.map((tool) => lowerTool(tool, lowering, supportsStrictMode, custom.get(tool.name))),
     tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice, custom) : undefined,
     stream: true as const,
     ...((request.model.capabilities?.streamUsage ?? true) ? { stream_options: { include_usage: true } } : {}),

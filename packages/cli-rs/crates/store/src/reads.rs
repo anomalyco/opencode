@@ -4,7 +4,7 @@ use std::ops::{Index, IndexMut};
 
 use crate::location::{Catalog, Location};
 use crate::sessions::SessionKey;
-use crate::state::{State, Task};
+use crate::state::State;
 
 /// Where a keyed read stands.
 #[derive(Default)]
@@ -14,8 +14,20 @@ pub(crate) enum ReadState {
     Idle,
     /// Read, until invalidated.
     Done,
-    /// A load in flight; every caller joins it.
-    Loading { token: u64, task: Task<()>, phase: Phase },
+    /// A load in flight, by token; every caller joins it.
+    Loading { token: u64, phase: Phase },
+}
+
+/// What a caller of a keyed read does ([`State::start_read`]).
+pub(crate) enum Start {
+    /// Nothing: it is read.
+    Done,
+    /// Joins the load in flight with this token.
+    Join(u64),
+    /// Begins the load with this token now.
+    Run(u64),
+    /// Begins the load with the first token once the stale load with the second settles.
+    After(u64, u64),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -152,6 +164,11 @@ impl State {
         self.read_locations.get_index(key.0 as usize)
     }
 
+    /// The location of a read's key: interned locations stay.
+    pub(crate) fn read_location(&self, key: LocationKey) -> Location {
+        self.location_at(key).expect("an interned location").clone()
+    }
+
     /// The key of `read`, while anything of it is kept.
     fn find_key(&self, read: Read) -> Option<ReadKey> {
         let location = |location| self.location_key(location);
@@ -169,6 +186,45 @@ impl State {
         match self.find_key(read)? {
             ReadKey::Session(session, read) => self.sessions.live(session).map(|session| &session.reads[read]),
             key => self.reads.get(&key),
+        }
+    }
+
+    /// Starts or joins the read `key`: what the caller does, with the token of a new load.
+    pub(crate) fn start_read(&mut self, key: ReadKey) -> Start {
+        let stale = match self.read_state_mut(key) {
+            Some(ReadState::Done) => return Start::Done,
+            Some(ReadState::Loading { token, phase: Phase::Stale }) => Some(*token),
+            Some(ReadState::Loading { token, .. }) => return Start::Join(*token),
+            _ => None,
+        };
+        let token = self.token();
+        match stale {
+            Some(stale) => Start::After(token, stale),
+            None => Start::Run(token),
+        }
+    }
+
+    /// Records the new load `token` of `key` as in flight, once a load that runs now has begun: a begin that fails
+    /// leaves the read to the next caller.
+    pub(crate) fn load_read(&mut self, key: ReadKey, token: u64, queued: bool) {
+        if let Some(read) = self.read_state_mut(key) {
+            *read = ReadState::Loading { token, phase: if queued { Phase::Queued } else { Phase::Running } };
+        }
+    }
+
+    /// The queued load `token` of `key` begins: the one it replaced settled.
+    pub(crate) fn resume_read(&mut self, key: ReadKey, token: u64) {
+        if let Some(ReadState::Loading { token: current, phase }) = self.read_state_mut(key)
+            && *current == token
+        {
+            *phase = Phase::Running;
+        }
+    }
+
+    /// Settles the load `token` of `key`; see [`ReadState::settle`].
+    pub(crate) fn settle_read(&mut self, key: ReadKey, token: u64, ok: bool) {
+        if let Some(read) = self.read_state_mut(key) {
+            read.settle(token, ok);
         }
     }
 

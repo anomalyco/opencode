@@ -15,7 +15,7 @@ fn command(args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test(flavor = "local")]
 async fn live_store_reads_locations_and_resolves_a_session() {
     if std::env::var("OPENCODE_LIVE").as_deref() != Ok("1") {
         return;
@@ -23,7 +23,7 @@ async fn live_store_reads_locations_and_resolves_a_session() {
     let server = command(&["service", "status"]);
     let client = Client::new(&server).unwrap().auth(Auth::password(command(&["service", "get", "password"])));
     let directory = std::env::current_dir().unwrap().display().to_string();
-    let data = Data::new(client.clone(), Options { directory, ..Default::default() });
+    let data = Data::local(client.clone(), Options { directory, ..Default::default() });
     data.on_error(|error| eprintln!("live: refresh failed: {error}"));
     let (connection, _task) = opencode_store::connection::connect(&data, events::Options::default());
     let mut state = connection.watch();

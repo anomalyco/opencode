@@ -453,8 +453,8 @@ impl Host for Tui {
 
     fn read(&self, f: &mut dyn FnMut(&dyn abi::Read)) {
         // One store snapshot for every read within `f`, a whole plugin call, which reads again and again: the reads
-        // nest in this one, and a batch another thread applies meanwhile waits until the call returns. Every read is
-        // pure, so nothing writes the store inside it.
+        // nest in this one, and a batch that arrives meanwhile applies once the call returns. Every read is pure, so
+        // nothing writes the store inside it.
         self.data.read(|_| f(&Reader { tui: self, theme: OnceCell::new() }));
     }
 

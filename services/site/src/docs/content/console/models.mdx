@@ -242,7 +242,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
 
 `gpt-image-2.5-sunburst`, `gemini-nano-banana-2.1`, and `grok-imagine-image-2.0` generate and edit images. They aren't chat models, so they never appear in `/models` or the models endpoint,
 and `opencode/<model-id>` doesn't select them. Call them on their native API with a Console key, or let OpenCode's
-[`experimental_image_generate`](/tools#image-generate) tool use an image model by setting
+[`generate_image`](/tools#image-generate) tool use an image model by setting
 `experimental.image_generate.model`, for example `opencode/gpt-image-2.5-sunburst`.
 
 ```bash
@@ -468,17 +468,11 @@ To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free
 
 | Model                   | Deprecation date  |
 | ----------------------- | ----------------- |
-| LongCat 2.5 Free        | November 22, 2026 |
 | LongCat-2.0             | November 22, 2026 |
-| Inkling 2 Small Free    | November 19, 2026 |
 | GLM 5.2                 | November 19, 2026 |
 | GLM 5.1                 | November 19, 2026 |
-| GLM-5.3-Flash Free      | November 18, 2026 |
 | Gemini 3.1 Pro          | November 17, 2026 |
 | Gemini 3 Flash          | November 17, 2026 |
-| MiniMax M3.1 Flash Free | November 17, 2026 |
-| Crouton Alpha Free      | November 9, 2026  |
-| Pulse Alpha Free        | November 6, 2026  |
 | DeepSeek V4 Flash       | October 26, 2026  |
 | GPT 5.2 Codex           | July 23, 2026     |
 | GPT 5.1 Codex           | July 23, 2026     |

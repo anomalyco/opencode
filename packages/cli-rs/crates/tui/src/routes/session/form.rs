@@ -451,7 +451,6 @@ impl Inner {
 
     fn reply(self: &Rc<Self>, answer: IndexMap<String, FormValue>) {
         let Some(tui) = self.tui.upgrade() else { return };
-        let data = tui.data.clone();
         let location = self.form.location.clone();
         let input = SessionFormReplyInput {
             session_id: self.form.info.session_id.clone(),
@@ -459,7 +458,7 @@ impl Inner {
             answer,
         };
         tui.app.spawn(
-            async move { data.form_reply(input, location.as_ref()).await },
+            tui.data.form_reply(input, location.as_ref()),
             bind!(self, |inner, _, result| if let Err(error) = result {
                 inner.set_error(error.to_string());
                 inner.render();
@@ -469,7 +468,6 @@ impl Inner {
 
     fn cancel(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
-        let data = tui.data.clone();
         let location = self.form.location.clone();
         let input = SessionFormCancelInput {
             session_id: self.form.info.session_id.clone(),
@@ -477,7 +475,7 @@ impl Inner {
             message: None,
         };
         tui.app.spawn(
-            async move { data.form_cancel(input, location.as_ref()).await },
+            tui.data.form_cancel(input, location.as_ref()),
             bind!(self, |inner, _, result| if let Err(error) = result {
                 inner.set_error(error.to_string());
                 inner.render();

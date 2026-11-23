@@ -138,6 +138,8 @@ pub const DEFINITIONS: &[Definition] = &[
     Definition { name: "agent.cycle.reverse", default: "\"none\"", description: "Previous agent" },
     Definition { name: "variant.cycle", default: "\"ctrl+t\"", description: "Cycle model variants" },
     Definition { name: "variant.list", default: "\"none\"", description: "List model variants" },
+    Definition { name: "speed.cycle", default: "\"none\"", description: "Cycle model speeds" },
+    Definition { name: "speed.list", default: "\"none\"", description: "List model speeds" },
     Definition { name: "session.page.up", default: "\"pageup,ctrl+alt+b,kppageup\"", description: "Scroll messages up by one page" },
     Definition { name: "session.page.down", default: "\"pagedown,ctrl+alt+f,kppagedown\"", description: "Scroll messages down by one page" },
     Definition { name: "session.line.up", default: "\"ctrl+alt+y\"", description: "Scroll messages up by one line" },

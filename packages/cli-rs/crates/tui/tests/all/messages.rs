@@ -80,7 +80,7 @@ fn open(height: u16, session: Value, messages: Vec<Value>, inbox: Vec<Value>, in
 
 impl Screen {
     fn apply(&self, kind: &str, seq: u64, data: Value) {
-        self.tui.data.apply(&[support::event(ID, kind, seq, data)]);
+        self.tui.data.apply(vec![support::event(ID, kind, seq, data)]);
     }
 
     fn row(&self, text: &str) -> u16 {

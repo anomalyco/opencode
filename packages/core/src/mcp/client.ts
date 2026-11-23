@@ -48,7 +48,7 @@ import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
 import { codecFor } from "../tool/runtime.js"
 import { McpStdio } from "./stdio.js"
-import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-errors.js"
+import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./event-stream.js"
 
 export { EventStreamRejectedError, EventStreamTerminatedError }
 

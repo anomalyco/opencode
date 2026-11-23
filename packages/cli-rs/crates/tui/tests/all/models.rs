@@ -14,7 +14,7 @@ use opencode_parity::fixtures_dir;
 use opencode_store::{Data, Options as StoreOptions};
 use opencode_tui::dialogs::go_upsell::{self, Offer};
 use opencode_tui::dialogs::model;
-use opencode_tui::dialogs::{agent, usage, usage_model, variant};
+use opencode_tui::dialogs::{agent, speed, usage, usage_model, variant};
 use opencode_tui::local::{Files, Local};
 use opencode_tui::{Deps, Route};
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
@@ -144,11 +144,7 @@ fn kit_with(width: u16, height: u16, fixture: Arc<Server>) -> Kit {
     let dialogs = Dialogs::new(&app, keymap, theme());
     let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
     let state = state();
-    let data = Data::with_runtime(
-        client,
-        StoreOptions { directory: "/project".into(), ..StoreOptions::default() },
-        app.runtime(),
-    );
+    let data = support::store(&app, client, StoreOptions { directory: "/project".into(), ..StoreOptions::default() });
     let local = Local::new(
         &app,
         data.clone(),
@@ -218,6 +214,14 @@ fn agent_and_variant_dialogs_match_typescript() {
     variant::show(&kit.local);
     kit.wait_for("high");
     support::wait_fixture(&kit.app, "E.16/variant");
+}
+
+#[test]
+fn speed_dialog_matches_typescript() {
+    let kit = kit(90, 34);
+    speed::show(&kit.local);
+    kit.wait_for("Standard");
+    support::wait_fixture(&kit.app, "E.16/speed");
 }
 
 #[test]
@@ -529,6 +533,68 @@ fn a_reload_that_read_the_file_before_a_pending_write_keeps_the_change() {
 }
 
 #[test]
+fn a_speed_switches_the_model_and_shows_beside_its_name() {
+    let h = mount();
+    let local = h.tui.local.clone();
+    let sonnet = |id: &str| Some(Model::new("anthropic", id));
+    assert_eq!(local.speed(), None);
+    let slash = h.tui.keymap.commands().into_iter().find(|command| command.id == "speed.list").and_then(|c| c.slash);
+    assert_eq!(slash.map(|slash| (slash.name, slash.aliases)), Some(("speed".to_owned(), vec!["fast".to_owned()])));
+
+    h.tui.keymap.dispatch("speed.list", None);
+    h.wait_for("Select speed");
+    h.app.press("down");
+    h.app.press("return");
+    // The speed is a model of its own; the name shown stays the model's, with its variant.
+    assert_eq!(local.current(), sonnet("claude-sonnet-fast"));
+    assert_eq!(local.speed().as_deref(), Some("fast"));
+    assert_eq!(local.standard(), sonnet("claude-sonnet"));
+    assert_eq!(local.variant().as_deref(), Some("high"));
+    h.wait_for("Claude Sonnet Anthropic · high · fast");
+    h.wait_file(|file| file["speed"]["anthropic/claude-sonnet"] == "fast");
+
+    // Slowest, standard, fastest, around.
+    h.tui.keymap.dispatch("speed.cycle", None);
+    assert_eq!(local.current(), sonnet("claude-sonnet-flex"));
+    h.tui.keymap.dispatch("speed.cycle", None);
+    assert_eq!(local.current(), sonnet("claude-sonnet"));
+    h.wait_file(|file| file["speed"].as_object().is_some_and(|speed| speed.is_empty()));
+
+    // A model without speeds has no speed commands.
+    local.set(&Model::new("openai", "gpt-5"), false);
+    assert!(h.tui.keymap.commands().iter().all(|command| !command.id.starts_with("speed.")));
+    assert_no_writes(&h.fixture);
+}
+
+#[test]
+fn a_model_runs_at_its_last_speed_and_lists_name_it_once() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(home.path());
+    std::fs::create_dir_all(&paths.state).unwrap();
+    let fast = model_ref("anthropic", "claude-sonnet-fast");
+    let preferences = json!({
+        "recent": [model_ref("anthropic", "claude-sonnet-flex"), model_ref("anthropic", "claude-sonnet")],
+        "favorite": [fast, model_ref("anthropic", "claude-sonnet")],
+        "variant": {},
+        "speed": { "anthropic/claude-sonnet": "fast", "openai/gpt-5": "fast" },
+    });
+    std::fs::write(paths.state.join("model.json"), preferences.to_string()).unwrap();
+    let deps = Deps { roots: support::roots(paths, "test"), route: Route::Home, ..support::deps(Server::new()) };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || local.ready() && local.catalog_ready() && !local.agents().is_empty()));
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet-fast")));
+    assert_eq!(local.recent(), [Model::new("anthropic", "claude-sonnet")]);
+    assert_eq!(local.favorite(), [Model::new("anthropic", "claude-sonnet")]);
+    // A speed the model does not have is its standard speed.
+    local.set(&Model::new("openai", "gpt-5"), false);
+    assert_eq!(local.current(), Some(Model::new("openai", "gpt-5")));
+    // Removing the favorite removes the entry saved at another speed too.
+    local.toggle_favorite(&Model::new("anthropic", "claude-sonnet"));
+    assert!(local.favorite().is_empty());
+}
+
+#[test]
 fn leader_a_switches_the_agent() {
     let h = mount();
     h.app.press("ctrl+x");
@@ -574,6 +640,7 @@ fn model_json_is_shared_with_the_typescript_client() {
             "recent": [model_ref("anthropic", "claude-haiku")],
             "favorite": [model_ref("anthropic", "claude-haiku"), model_ref("openai", "gpt-5")],
             "variant": { "anthropic/claude-sonnet": "default" },
+            "speed": {},
         })
     );
     // An independent writer uses the same lock; the TUI should pick up its update through the watcher.

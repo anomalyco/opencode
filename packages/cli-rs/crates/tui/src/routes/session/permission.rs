@@ -625,7 +625,6 @@ fn reply(
     message: Option<String>,
     failed: Box<dyn FnOnce()>,
 ) {
-    let data = tui.data.clone();
     let input = PermissionReplyInput {
         session_id: request.session_id.clone(),
         request_id: request.id.clone(),
@@ -633,7 +632,7 @@ fn reply(
         message,
     };
     let weak = tui.weak();
-    tui.app.spawn(async move { data.permission_reply(input).await }, move |_, result| {
+    tui.app.spawn(tui.data.permission_reply(input), move |_, result| {
         let Err(error) = result else { return };
         failed();
         if let Some(tui) = weak.upgrade() {

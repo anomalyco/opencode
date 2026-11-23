@@ -8,14 +8,14 @@ use std::sync::{Arc, mpsc};
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    AgentInfo, AgentInfoMode, IntegrationInfo, LocationQueryInput, ModelInfo, ModelRef, ProviderInfo, SessionInfo,
-    UsageLimitsInfo,
+    AgentInfo, AgentInfoMode, IntegrationInfo, LocationQueryInput, ModelInfo, ModelRef, ModelSpeed, ProviderInfo,
+    SessionInfo, UsageLimitsInfo,
 };
 use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
 use opencode_local::watch::Watch;
 use opencode_store::location::{Catalog, Location, LocationData};
-use opencode_store::{Data, Selected};
+use opencode_store::{Data, Parts, Selected};
 use opencode_ui::dialog::Dialogs;
 use opencode_ui::toast::Toasts;
 
@@ -33,6 +33,15 @@ impl Selection {
     }
 }
 
+/// One of the current model's other speeds (`local.model.speed.list()`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Speed {
+    pub id: String,
+    pub faster: bool,
+    /// Its input price against the standard speed's, when the model has prices.
+    pub price: Option<f64>,
+}
+
 /// The session route on screen. Its session's agent and model are read from the store where they are needed.
 pub struct Routed(Rc<Route>);
 
@@ -47,6 +56,16 @@ impl Routed {
 
 const CATALOGS: [Catalog; 5] =
     [Catalog::Model, Catalog::Provider, Catalog::Agent, Catalog::Integration, Catalog::Config];
+
+/// What the selections and their readers read of the location: the catalogs above, and the usage limits.
+pub(crate) const READS: Parts = Parts::catalogs(&[
+    Catalog::Model,
+    Catalog::Provider,
+    Catalog::Agent,
+    Catalog::Integration,
+    Catalog::Config,
+    Catalog::UsageLimits,
+]);
 
 pub struct Files {
     /// The state directory that holds `model.json`.
@@ -180,7 +199,7 @@ impl Local {
         let relocated = moved.is_some();
         if let Some(location) = moved {
             self.relocate(location);
-        } else if changes.all() || self.at_tui_location(|at| changes.location(at)) {
+        } else if changes.all() || self.at_tui_location(|at| changes.location_parts(at, READS)) {
             self.notify();
         }
         // A connection can open after these reads: the server does not replay what it sent before the
@@ -237,11 +256,14 @@ impl Local {
         &self,
         catalog: Catalog,
     ) -> impl Future<Output = Result<(), opencode_store::Error>> + Send + use<> {
-        let data = self.data.clone();
+        let remote = self.data.remote();
         let location = self.catalog_location();
         async move {
-            data.catalog_invalidate(catalog, Some(&location));
-            data.catalog_sync(catalog, Some(&location)).await
+            let sync = remote.call(move |data| {
+                data.catalog_invalidate(catalog, Some(&location));
+                data.catalog_sync(catalog, Some(&location))
+            });
+            sync.await?.await
         }
     }
 
@@ -437,12 +459,47 @@ impl Local {
         })
     }
 
+    /// The recent models, each once: an entry saved at another speed stands for the model.
     pub fn recent(&self) -> Vec<Model> {
-        self.state.borrow().preference.recent.clone()
+        let recent = self.state.borrow().preference.recent.clone();
+        self.unique(recent)
     }
 
+    /// The favorite models, each once, as [`Self::recent`].
     pub fn favorite(&self) -> Vec<Model> {
-        self.state.borrow().preference.favorite.clone()
+        let favorite = self.state.borrow().preference.favorite.clone();
+        self.unique(favorite)
+    }
+
+    fn unique(&self, list: Vec<Model>) -> Vec<Model> {
+        let mut seen = HashSet::new();
+        self.models(|models| {
+            list.iter().map(|item| standard_of(models, item)).filter(|item| seen.insert(item.key())).collect()
+        })
+    }
+
+    /// `standardModel`: the model whose entry stands for `model` in a list of models.
+    pub fn standard_model(&self, model: &Model) -> Model {
+        self.models(|models| standard_of(models, model))
+    }
+
+    /// The current model at its standard speed.
+    pub fn standard(&self) -> Option<Model> {
+        self.current().map(|model| self.standard_model(&model))
+    }
+
+    /// The listed models that are `standard` served faster or slower.
+    fn speeds_of(&self, standard: &Model) -> Vec<ModelInfo> {
+        self.models(|models| {
+            models
+                .iter()
+                .filter(|item| {
+                    item.provider_id.0 == standard.provider_id
+                        && speed_info(item).is_some_and(|speed| speed.base == standard.model_id)
+                })
+                .cloned()
+                .collect()
+        })
     }
 
     fn is_valid(&self, model: &Model) -> bool {
@@ -536,7 +593,7 @@ impl Local {
         if let Some(configured) = self.configured().filter(|c| self.is_valid(&c.model)) {
             return Some(configured.model);
         }
-        let recent = self.recent();
+        let recent = self.state.borrow().preference.recent.clone();
         if let Some(model) = recent.into_iter().find(|item| self.is_valid(item)) {
             return Some(model);
         }
@@ -562,7 +619,8 @@ impl Local {
     fn preferred(&self, model: &Model) -> Selection {
         let configured = self.agent().and_then(|agent| agent.model);
         let fallback = self.configured();
-        let preferred = self.state.borrow().preference.variant.get(&model.key()).cloned();
+        // A model's speeds share its variant.
+        let preferred = self.state.borrow().preference.variant.get(&self.standard_model(model).key()).cloned();
         let variant = preferred
             .or_else(|| {
                 configured
@@ -572,8 +630,13 @@ impl Local {
             .or_else(|| fallback.filter(|f| f.model == *model).and_then(|f| f.variant));
         let variant = model_pref::normalize_variant(variant.as_deref()).map(str::to_owned);
         let info = self.model_info(model);
+        // A model runs at the speed last used with it.
+        let speed = self.state.borrow().preference.speed.get(&model.key()).cloned();
+        let remembered = speed.and_then(|speed| {
+            self.speeds_of(model).into_iter().find(|item| speed_info(item).is_some_and(|item| item.id == speed))
+        });
         Selection {
-            model: model.clone(),
+            model: remembered.map_or_else(|| model.clone(), |remembered| Model::new(&model.provider_id, remembered.id)),
             variant: variant
                 .filter(|variant| info.is_some_and(|info| info.variants.iter().any(|item| item.id == *variant))),
         }
@@ -625,9 +688,11 @@ impl Local {
         let provider = self
             .provider(&selection.model.provider_id)
             .map_or(selection.model.provider_id.clone(), |provider| provider.name);
-        let info = self.model_info(&selection.model);
-        let reasoning = info.as_ref().is_some_and(|info| !info.variants.is_empty());
-        let model = info.map_or_else(|| format!("{} (unavailable)", selection.model.model_id), |info| info.name);
+        let reasoning = self.model_info(&selection.model).is_some_and(|info| !info.variants.is_empty());
+        // The speed shows beside the name, so the name is the model's own.
+        let model = self
+            .model_info(&self.standard_model(&selection.model))
+            .map_or_else(|| format!("{} (unavailable)", selection.model.model_id), |info| info.name);
         (provider, model, reasoning)
     }
 
@@ -769,14 +834,19 @@ impl Local {
         if !self.is_valid(model) {
             return;
         }
+        // An entry saved for the model at another speed is the same favorite.
+        let standard = self.standard_model(model);
+        let same: HashSet<String> =
+            self.speeds_of(&standard).iter().map(|item| format!("{}/{}", item.provider_id.0, item.id)).collect();
+        let same = move |item: &Model| item.key() == standard.key() || same.contains(&item.key());
         let enabled = {
             let mut state = self.state.borrow_mut();
-            let enabled = !state.preference.favorite.contains(model);
-            state.preference.favorite = model_pref::favorite_models(model, &state.preference.favorite, enabled);
+            let enabled = !state.preference.favorite.iter().any(&same);
+            state.preference.favorite = model_pref::favorite_models(model, &state.preference.favorite, enabled, &same);
             enabled
         };
         let model = model.clone();
-        self.write(move |file| file.set_favorite(&model, enabled));
+        self.write(move |file| file.set_favorite(&model, enabled, same));
         self.notify();
     }
 
@@ -784,7 +854,8 @@ impl Local {
         let Some(current) = self.selection() else { return };
         let recent: Vec<Model> = self.recent().into_iter().filter(|item| self.is_valid(item)).collect();
         let len = recent.len() as i64;
-        let next = match recent.iter().position(|item| *item == current.model) {
+        let standard = self.standard_model(&current.model);
+        let next = match recent.iter().position(|item| *item == standard) {
             None if direction == 1 => 0,
             None => len - 1,
             Some(index) => index as i64 + direction,
@@ -811,7 +882,10 @@ impl Local {
             return;
         }
         let len = favorites.len() as i64;
-        let index = self.selection().and_then(|current| favorites.iter().position(|item| *item == current.model));
+        let index = self.selection().and_then(|current| {
+            let standard = self.standard_model(&current.model);
+            favorites.iter().position(|item| *item == standard)
+        });
         let index = match index {
             None if direction == 1 => 0,
             None => len - 1,
@@ -853,8 +927,9 @@ impl Local {
                 Selection { variant: model_pref::normalize_variant(value).map(str::to_owned), ..current.clone() },
             );
         }
-        self.state.borrow_mut().preference.variant.insert(current.model.key(), value.unwrap_or("default").to_owned());
-        let model = current.model;
+        // A model's speeds share its variant.
+        let model = self.standard_model(&current.model);
+        self.state.borrow_mut().preference.variant.insert(model.key(), value.unwrap_or("default").to_owned());
         let value = value.map(str::to_owned);
         self.write(move |file| file.save_variant(&model, value.as_deref()));
         self.notify();
@@ -869,6 +944,100 @@ impl Local {
         let next = model_pref::cycle_variant(self.variant().as_deref(), &names);
         self.set_variant(next.as_deref());
     }
+
+    /// The current model's speed, `None` at its standard speed.
+    pub fn speed(&self) -> Option<String> {
+        let current = self.current()?;
+        self.models(|models| speed_of(models, &current))
+    }
+
+    /// The current model's other speeds.
+    pub fn speeds(&self) -> Vec<Speed> {
+        let Some(current) = self.current() else { return Vec::new() };
+        let standard = self.standard_model(&current);
+        // Catalogs from older servers may list a model without prices.
+        let price = self.model_info(&standard).and_then(|info| info.cost.first().map(|cost| cost.input));
+        let price = price.filter(|price| *price != 0.0);
+        self.speeds_of(&standard)
+            .into_iter()
+            .filter_map(|item| {
+                let speed = speed_info(&item)?;
+                let input = item.cost.first().map(|cost| cost.input);
+                Some(Speed {
+                    id: speed.id,
+                    faster: speed.faster,
+                    price: price.zip(input).map(|(price, input)| input / price),
+                })
+            })
+            .collect()
+    }
+
+    /// Switches the current model to its speed `value`, or to its standard speed, and remembers it for the model.
+    pub fn set_speed(&self, value: Option<&str>) {
+        let Some(current) = self.selection() else { return };
+        let standard = self.standard_model(&current.model);
+        let target = match value {
+            Some(value) => self
+                .speeds_of(&standard)
+                .into_iter()
+                .find(|item| speed_info(item).is_some_and(|speed| speed.id == value))
+                .map(|item| item.id),
+            None => Some(standard.model_id.clone()),
+        };
+        let Some(target) = target else { return };
+        match value {
+            Some(value) => self.state.borrow_mut().preference.speed.insert(standard.key(), value.to_owned()),
+            None => self.state.borrow_mut().preference.speed.shift_remove(&standard.key()),
+        };
+        let (saved, value) = (standard.clone(), value.map(str::to_owned));
+        self.write(move |file| file.save_speed(&saved, value.as_deref()));
+        if let Some(routed) = self.route() {
+            let model = Model::new(&standard.provider_id, target);
+            self.set_session_draft(&routed, Selection { model, ..current });
+        } else if let Some(agent) = self.agent() {
+            // A new session starts on the model, which runs at the speed just saved for it.
+            let key = self.location_agent_key(&agent.id.0);
+            self.state.borrow_mut().new_session.insert(key, standard);
+        }
+        self.notify();
+    }
+
+    pub fn cycle_speed(&self) {
+        let speeds = self.speeds();
+        if speeds.is_empty() {
+            return;
+        }
+        let order: Vec<(&str, bool)> = speeds.iter().map(|speed| (speed.id.as_str(), speed.faster)).collect();
+        self.set_speed(model_pref::cycle_speed(self.speed().as_deref(), &order).as_deref());
+    }
+}
+
+fn speed_info(info: &ModelInfo) -> Option<ModelSpeed> {
+    info.experimental.as_ref()?.speed.clone()
+}
+
+/// `standardModel`: a model that is another listed model served faster or slower ("gpt-5.5-fast") is offered as a
+/// speed of that model instead of as an entry of its own. This is the model whose entry stands for it.
+pub(crate) fn standard_of(models: &[ModelInfo], model: &Model) -> Model {
+    let base = models.iter().find(|item| is(item, model)).and_then(speed_info).map(|speed| speed.base);
+    match base.map(|base| Model::new(&model.provider_id, base)) {
+        Some(standard) if models.iter().any(|item| is(item, &standard)) => standard,
+        _ => model.clone(),
+    }
+}
+
+/// The speed `model` runs at among `models`, `None` at its standard speed.
+pub(crate) fn speed_of(models: &[ModelInfo], model: &Model) -> Option<String> {
+    if standard_of(models, model) == *model {
+        return None;
+    }
+    models.iter().find(|item| is(item, model)).and_then(speed_info).map(|speed| speed.id)
+}
+
+/// Whether `info` is a speed of another listed model, which lists choose with the speed selector instead.
+pub(crate) fn is_speed_in(models: &[ModelInfo], info: &ModelInfo) -> bool {
+    speed_info(info)
+        .is_some_and(|speed| models.iter().any(|item| item.provider_id == info.provider_id && item.id == speed.base))
 }
 
 /// The agents a user picks from: neither subagents nor hidden.

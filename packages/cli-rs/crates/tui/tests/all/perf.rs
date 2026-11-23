@@ -17,9 +17,10 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use opencode_api::client::Client;
+use opencode_api::events::Event;
 use opencode_api::generated::{SessionID, V2Event};
 use opencode_api::transport::{BoxFuture, Request, Response, Transport};
-use opencode_store::{Data, LoadMore, Options as StoreOptions};
+use opencode_store::{Data, LoadMore, Options as StoreOptions, Payload, Wanted};
 use opencode_tui::{Deps, Route, Tui};
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
@@ -29,6 +30,7 @@ use crate::support::probe::{LONG, PARTS, Probe, TURNS, long_messages};
 const SHORT: &str = "ses_short";
 const TEXT_DELTAS: usize = 20_000;
 const TOOL_DELTAS: usize = 2_000;
+const TOOL_PROGRESS: usize = 500;
 /// Events per store batch while streaming, each batch one frame.
 const BATCH: usize = 20;
 const SESSIONS: usize = 2_000;
@@ -87,14 +89,21 @@ fn stream() {
     wait_tail(&h, SHORT, 20);
     settle(&h.app);
     let events = streamed();
+    let count = events.len() as u64;
+    let batches: Vec<Vec<String>> = events.chunks(BATCH).map(<[_]>::to_vec).collect();
+    let wanted = tui.data.remote().wanted();
     let probe = Probe::start();
-    for batch in events.chunks(BATCH) {
-        tui.data.apply(batch);
-        h.app.wait_until(WAIT, || tui.synced());
-        frame(&h.app);
-    }
+    connected(
+        batches,
+        |batch| read(batch, &wanted),
+        |mut batch| {
+            tui.data.apply_payloads(&mut batch);
+            h.app.wait_until(WAIT, || tui.synced());
+            frame(&h.app);
+        },
+    );
     settle(&h.app);
-    probe.finish("stream", events.len() as u64);
+    probe.finish("stream", count);
     let screen = h.app.text();
     assert!(screen.contains("done streaming"), "the reply never finished:\n{screen}");
 }
@@ -118,6 +127,68 @@ fn scroll() {
     }
     settle(&h.app);
     probe.finish("scroll", steps);
+}
+
+/// A reader going through a whole long session: Home, Page Down until the view stops moving, then Page Up back to the
+/// head. Memory should stay bounded by the rows near the view, not grow with every page passed. Most of what a mounted
+/// row holds is OpenTUI's native memory, which the counting allocator does not see, so the line also carries the
+/// process's malloc peak and what malloc still holds at the end, over the start (`malloc_peak`, `malloc_kept`).
+#[test]
+#[ignore = "performance scenario; run with `bun run perf`"]
+fn scroll_all() {
+    let h = mount(Server::new().long(), support::session_route(LONG), 120, 40);
+    wait_tail(&h, LONG, TURNS);
+    settle(&h.app);
+    let malloc = Malloc::start();
+    let probe = Probe::start();
+    first(&h);
+    malloc.sample();
+    let mut steps = 0;
+    for command in ["session.page.down", "session.page.up"] {
+        let mut screen = h.app.text();
+        let mut still = 0;
+        while still < 2 {
+            assert!(steps < 20_000, "{command} never reached an end:\n{screen}");
+            h.dispatch(command);
+            settle(&h.app);
+            malloc.sample();
+            steps += 1;
+            let now = h.app.text();
+            still = if now == screen { still + 1 } else { 0 };
+            screen = now;
+        }
+    }
+    settle(&h.app);
+    let malloc = malloc.finish();
+    probe.finish_with("scroll_all", steps, malloc);
+    let screen = h.app.text();
+    assert!(screen.contains("Question 1 "), "the head never showed again:\n{screen}");
+}
+
+/// The jumps of a reader in a long session: Home (which loads every older page), End, Home and End again, then ten
+/// steps back by user message from the bottom. A step that finds no target among the mounted rows mounts the next
+/// chunk; it used to mount every row.
+#[test]
+#[ignore = "performance scenario; run with `bun run perf`"]
+fn jump_home_end() {
+    let h = mount(Server::new().long(), support::session_route(LONG), 120, 40);
+    wait_tail(&h, LONG, TURNS);
+    settle(&h.app);
+    let probe = Probe::start();
+    first(&h);
+    for command in ["session.last", "session.first", "session.last"] {
+        h.dispatch(command);
+        settle(&h.app);
+    }
+    for _ in 0..10 {
+        h.dispatch("session.message.user.previous");
+        settle(&h.app);
+    }
+    probe.finish("jump_home_end", 14);
+    let screen = h.app.text();
+    // The first step from the bottom lands on the last question, so ten end nine before it.
+    let question = format!("Question {} ", TURNS - 9);
+    assert!(screen.contains(&question), "the walk did not land on {question}:\n{screen}");
 }
 
 #[test]
@@ -201,16 +272,13 @@ fn model_picker() {
 #[test]
 #[ignore = "performance scenario; run with `bun run perf`"]
 fn store_open() {
-    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build_local(Default::default()).unwrap();
     let server = Arc::new(Server::new().long());
     let client = Client::with_transport("http://opencode.local", server).unwrap();
     let id = SessionID(LONG.into());
     let probe = Probe::start();
-    let data = Data::with_runtime(
-        client,
-        StoreOptions { directory: support::DIRECTORY.into(), ..StoreOptions::default() },
-        runtime.handle().clone(),
-    );
+    let options = StoreOptions { directory: support::DIRECTORY.into(), ..StoreOptions::default() };
+    let data = runtime.block_on(async { Data::local(client, options) });
     runtime.block_on(async {
         data.message_sync(&id).await.unwrap();
         while data.read(|state| state.has_more_messages(&id)) {
@@ -224,23 +292,27 @@ fn store_open() {
 #[test]
 #[ignore = "performance scenario; run with `bun run perf`"]
 fn store_stream() {
-    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build_local(Default::default()).unwrap();
     let client = Client::with_transport("http://opencode.local", Arc::new(Server::new().short())).unwrap();
     let id = SessionID(SHORT.into());
-    let data = Data::with_runtime(
-        client,
-        StoreOptions { directory: support::DIRECTORY.into(), ..StoreOptions::default() },
-        runtime.handle().clone(),
-    );
+    let options = StoreOptions { directory: support::DIRECTORY.into(), ..StoreOptions::default() };
+    let data = runtime.block_on(async { Data::local(client, options) });
     runtime.block_on(async { data.message_sync(&id).await.unwrap() });
     let deltas = data.listen_deltas();
     let events = streamed();
+    let count = events.len() as u64;
+    let batches: Vec<Vec<String>> = events.chunks(BATCH).map(<[_]>::to_vec).collect();
+    let wanted = data.remote().wanted();
     let probe = Probe::start();
-    for batch in events.chunks(BATCH) {
-        data.apply(batch);
-        drop(deltas.take());
-    }
-    probe.finish("store_stream", events.len() as u64);
+    connected(
+        batches,
+        |batch| read(batch, &wanted),
+        |mut batch| {
+            data.apply_payloads(&mut batch);
+            deltas.take(|_| ());
+        },
+    );
+    probe.finish("store_stream", count);
     let text = data.read(|state| format!("{:?}", state.messages(&id).last()));
     assert!(text.contains("done streaming"), "{text}");
 }
@@ -291,8 +363,13 @@ fn decode_responses() {
     assert_eq!(decoded, 2 * TURNS + SESSIONS + PROVIDERS * MODELS_PER_PROVIDER);
 }
 
+/// The config carries an `experimental` key, as users' configs do, so a per-frame copy of the config shows in the counts.
 fn mount(server: Server, route: Route, width: u16, height: u16) -> support::Harness {
-    let deps = Deps { config: support::config(support::still()), route, ..support::deps(Arc::new(server)) };
+    let info = opencode_local::cli_config::Info {
+        experimental: Some([("perf-probe".to_owned(), true)].into_iter().collect()),
+        ..support::still()
+    };
+    let deps = Deps { config: support::config(info), route, ..support::deps(Arc::new(server)) };
     let harness = support::mount(width, height, deps);
     harness.app.set_verify(false);
     harness
@@ -337,6 +414,49 @@ fn first(h: &support::Harness) {
     });
     assert!(loaded, "the history never loaded:\n{}", h.app.text());
     settle(&h.app);
+}
+
+/// The bytes malloc has handed out and not taken back, for every thread and for OpenTUI's native side as well as
+/// Rust, sampled where a scenario asks: its peak and its change over the start.
+struct Malloc {
+    start: Option<u64>,
+    peak: std::cell::Cell<u64>,
+}
+
+impl Malloc {
+    fn start() -> Self {
+        let start = malloc_in_use();
+        Self { start, peak: std::cell::Cell::new(start.unwrap_or(0)) }
+    }
+
+    fn sample(&self) {
+        if let Some(now) = malloc_in_use() {
+            self.peak.set(self.peak.get().max(now));
+        }
+    }
+
+    /// The fields for the `PERF` line; null where the allocator cannot tell.
+    fn finish(self) -> Value {
+        self.sample();
+        let end = malloc_in_use();
+        json!({
+            "malloc_peak": self.start.map(|start| self.peak.get() - start),
+            "malloc_kept": self.start.zip(end).map(|(start, end)| end as i64 - start as i64),
+        })
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[allow(unsafe_code)]
+fn malloc_in_use() -> Option<u64> {
+    // SAFETY: `mallinfo2` only reads the allocator's counters.
+    let info = unsafe { libc::mallinfo2() };
+    Some((info.uordblks + info.hblkhd) as u64)
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+fn malloc_in_use() -> Option<u64> {
+    None
 }
 
 /// A fake server whose answers are serialized up front, so serving one costs a copy.
@@ -523,8 +643,37 @@ fn provider(index: usize) -> Value {
     json!({ "id": format!("provider-{index}"), "name": format!("Provider {index}"), "activation": "auto", "package": "@ai-sdk/test" })
 }
 
-/// [`TOOL_DELTAS`] deltas, then the end of the step.
-fn streamed() -> Vec<V2Event> {
+/// A batch of the stream's payloads as the connection reads them, with what decoded there of adjacent deltas merged.
+fn read(batch: Vec<String>, wanted: &Wanted) -> Vec<Payload> {
+    let mut payloads: Vec<Payload> = Vec::with_capacity(batch.len());
+    for text in batch {
+        let payload = Payload::read(text, wanted).unwrap();
+        if !payloads.last_mut().is_some_and(|last| last.merge(&payload)) {
+            payloads.push(payload);
+        }
+    }
+    payloads
+}
+
+/// Hands `apply` the stream's batches as the connection sends them to the store, each made by `connection` on a thread
+/// of its own, as the connection's task runs: the probe's measured thread is the store's alone.
+fn connected<T: Send>(batches: Vec<Vec<String>>, connection: impl Fn(Vec<String>) -> T + Send, apply: impl FnMut(T)) {
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    std::thread::scope(|scope| {
+        scope.spawn(move || {
+            for batch in batches {
+                if send.send(connection(batch)).is_err() {
+                    return;
+                }
+            }
+        });
+        receive.iter().for_each(apply);
+    });
+}
+
+/// [`TOOL_DELTAS`] deltas, [`TOOL_PROGRESS`] progress events of the running tool, then the end of the step, as the JSON
+/// the event stream sends.
+fn streamed() -> Vec<String> {
     let words =
         ["The ", "parser ", "now ", "handles ", "**nested** ", "groups ", "and ", "`escapes`", ".\n\n", "- item\n"];
     let message = "msg_live";
@@ -534,7 +683,12 @@ fn streamed() -> Vec<V2Event> {
         let mut data = data;
         data["sessionID"] = json!(SHORT);
         data["assistantMessageID"] = json!(message);
-        support::event(SHORT, kind, seq, data)
+        json!({
+            "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind,
+            "durable": { "aggregateID": SHORT, "seq": seq, "version": 1 },
+            "data": data,
+        })
+        .to_string()
     };
     let mut events = vec![
         event(
@@ -562,6 +716,10 @@ fn streamed() -> Vec<V2Event> {
         "session.tool.called",
         json!({ "id": "call_live", "input": { "content": "lines", "filePath": "/project/out.txt" }, "executed": true }),
     ));
+    for index in 0..TOOL_PROGRESS {
+        let metadata = json!({ "output": format!("wrote line {index}\n"), "description": "Write the file" });
+        events.push(event("session.tool.progress", json!({ "id": "call_live", "metadata": metadata })));
+    }
     events.push(event(
         "session.tool.success",
         json!({ "id": "call_live", "executed": true, "content": [{ "type": "text", "text": "wrote" }] }),

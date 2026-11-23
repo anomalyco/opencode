@@ -153,7 +153,19 @@ export function normalize(input: unknown): Result {
     canonical(ConfigAgent.Info, ConfigMigrateV1.migrateAgent({ ...value, mode: "primary" })),
   )
   const migratedAgents = mergeMaps(legacyAgents, modeAgents, ["agents"], diagnostics)
-  const nativeAgents = decodeMap(input.agents, ConfigAgent.Info, ["agents"], diagnostics, decodeEncoded)
+  const nativeAgents = decodeMap(
+    isRecord(input.agents)
+      ? mapValues(input.agents, (agent) =>
+          isRecord(agent) && agent.permissions !== undefined
+            ? { ...agent, permissions: renameTools(agent.permissions) }
+            : agent,
+        )
+      : input.agents,
+    ConfigAgent.Info,
+    ["agents"],
+    diagnostics,
+    decodeEncoded,
+  )
   diagnoseAgentUnsupported(input.agent, ["agent"], diagnostics)
   diagnoseAgentUnsupported(input.mode, ["mode"], diagnostics)
   mergeMap(
@@ -178,7 +190,13 @@ export function normalize(input: unknown): Result {
 
   const toolRules = migrateTools(input.tools, diagnostics)
   const permissionRules = migratePermissions(input.permission, diagnostics)
-  const nativePermissions = decodeList(input.permissions, Permission.Rule, ["permissions"], diagnostics, decodeEncoded)
+  const nativePermissions = decodeList(
+    renameTools(input.permissions),
+    Permission.Rule,
+    ["permissions"],
+    diagnostics,
+    decodeEncoded,
+  )
   const permissions = [...toolRules, ...permissionRules, ...nativePermissions]
   if (permissions.length || Array.isArray(input.permissions)) encoded.permissions = permissions
 
@@ -529,6 +547,16 @@ function migrateTools(value: unknown, diagnostics: Diagnostic[]) {
     if (enabled === undefined) return []
     return [{ action: ConfigMigrateV1.normalizeAction(action), resource: "*", effect: enabled ? "allow" : "deny" }]
   })
+}
+
+// Native rules may still name the media tools by their old experimental names.
+function renameTools(rules: unknown) {
+  if (!Array.isArray(rules)) return rules
+  return rules.map((rule) =>
+    isRecord(rule) && typeof rule.action === "string"
+      ? { ...rule, action: ConfigMigrateV1.renamedTool(rule.action) }
+      : rule,
+  )
 }
 
 function migratePermissions(value: unknown, diagnostics: Diagnostic[]) {

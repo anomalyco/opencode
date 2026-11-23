@@ -1,10 +1,12 @@
 //! Expandable assistant reasoning.
 
-use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantReasoning};
+use opencode_api::generated::{
+    SessionMessageAssistant, SessionMessageAssistantContentItem, SessionMessageAssistantReasoning,
+};
 use opencode_ui::motion::Spinner;
 use opentui::widget::Markdown;
 
-use super::list::Context;
+use super::list::{Context, Switch};
 use opencode_ui::locale::duration;
 
 use crate::prelude::*;
@@ -19,7 +21,7 @@ struct Inner {
     body: View,
     markdown: Markdown,
     state: RefCell<State>,
-    expanded: Cell<bool>,
+    expanded: Switch,
     hover: Cell<bool>,
     painted: RefCell<Painted>,
 }
@@ -70,7 +72,7 @@ impl Reasoning {
             body,
             markdown,
             state: RefCell::default(),
-            expanded: Cell::new(false),
+            expanded: cx.toggles.switch(),
             hover: Cell::new(false),
             painted: RefCell::new(Painted::None),
         });
@@ -78,7 +80,7 @@ impl Reasoning {
             if !inner.state.borrow().hide {
                 return;
             }
-            inner.expanded.set(!inner.expanded.get());
+            inner.expanded.flip();
             inner.layout();
         }));
         inner.header.on_hover(bind!(inner, |inner, _, hovered| {
@@ -105,6 +107,11 @@ impl Reasoning {
     }
 
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageAssistant, part: &SessionMessageAssistantReasoning) {
+        // The part has no ID of its own: its place in the message names it.
+        let place = message.content.iter().position(|item| {
+            matches!(item, SessionMessageAssistantContentItem::Reasoning(reasoning) if std::ptr::eq(reasoning, part))
+        });
+        self.0.expanded.key(format!("reasoning {} {}", message.id, place.unwrap_or_default()));
         let content = content(part);
         let time = part.time.as_ref();
         let done = time.and_then(|time| time.completed).is_some() || message.time.completed.is_some();

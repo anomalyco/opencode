@@ -3,15 +3,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures_util::future::try_join_all;
 use indexmap::IndexMap;
-use opencode_api::client::Client;
 use opencode_api::generated::*;
 
-use crate::connection::Follow;
-use crate::reads::Read;
+use crate::changes::Parts;
+use crate::core::{CatalogRead, Effect, LocationRead, Ticket};
+use crate::reads::{Read, ReadKey};
 use crate::shells::{Shell, ShellRead};
-use crate::state::{Data, Error, State, Task};
+use crate::state::State;
 
 /// Trailing window for event bursts that each ask for the same refetch (`settleMs`).
 pub const SETTLE: Duration = Duration::from_millis(150);
@@ -123,7 +122,7 @@ impl LocationData {
 
 /// One catalog read, ready to publish.
 #[derive(Clone)]
-enum Loaded {
+pub(crate) enum Loaded {
     Vcs(VcsInfo),
     UsageLimits(Option<UsageLimitsInfo>),
     Agent(Arc<[AgentInfo]>),
@@ -180,108 +179,90 @@ impl State {
             || self.has_read(Read::Catalog(catalog, location))
     }
 
-    pub(crate) fn location_mut(&mut self, location: &Location) -> &mut LocationData {
-        self.touch_location(location);
+    /// The data of `location`, whose `parts` change.
+    pub(crate) fn location_mut(&mut self, location: &Location, parts: Parts) -> &mut LocationData {
+        self.touch_location(location, parts);
         self.locations.entry(location.clone()).or_default()
     }
 
-    fn publish(&mut self, location: &Location, loaded: Loaded) {
-        loaded.publish(self.location_mut(location));
+    fn publish(&mut self, location: &Location, catalog: Catalog, loaded: Loaded) {
+        loaded.publish(self.location_mut(location, Parts::catalogs(&[catalog])));
     }
 
     /// `refreshLocation`: invalidates the catalog and reads it again where something read it.
-    pub(crate) fn refresh_catalog(&mut self, catalog: Catalog, location: &Location) -> Vec<Follow> {
-        let active = self.has_catalog(catalog, location);
-        self.invalidate(Read::Catalog(catalog, location));
-        follow_if(active, vec![catalog], location)
+    pub(crate) fn refresh_catalog(&mut self, catalog: Catalog, location: &Location, effects: &mut Vec<Effect>) {
+        self.refresh_together(&[catalog], vec![catalog], location, effects);
     }
 
     /// Invalidates `catalogs` and reads them again together when any of `watched` was read.
-    fn refresh_together(&mut self, watched: &[Catalog], catalogs: Vec<Catalog>, location: &Location) -> Vec<Follow> {
+    fn refresh_together(
+        &mut self,
+        watched: &[Catalog],
+        catalogs: Vec<Catalog>,
+        location: &Location,
+        effects: &mut Vec<Effect>,
+    ) {
         let active = watched.iter().any(|catalog| self.has_catalog(*catalog, location));
         for catalog in &catalogs {
             self.invalidate(Read::Catalog(*catalog, location));
         }
-        follow_if(active, catalogs, location)
+        if active {
+            effects.push(Effect::Catalogs(catalogs, location.clone()));
+        }
     }
 
     /// The catalog arms of `handleEvent`: credentials, then the events that name a location.
-    pub(crate) fn on_catalog_event(&mut self, event: &V2Event) -> Vec<Follow> {
+    pub(crate) fn on_catalog_event(&mut self, event: &V2Event, effects: &mut Vec<Effect>) {
         match event {
             V2Event::CredentialUpdated(_) => {
                 let locations: Vec<Location> = self.locations.keys().cloned().collect();
-                return locations
-                    .iter()
-                    .flat_map(|location| {
-                        let mut follow = self.refresh_catalog(Catalog::UsageLimits, location);
-                        follow.extend(self.refresh_catalog(Catalog::Integration, location));
-                        follow
-                    })
-                    .collect();
+                for location in &locations {
+                    self.refresh_catalog(Catalog::UsageLimits, location, effects);
+                    self.refresh_catalog(Catalog::Integration, location, effects);
+                }
+                return;
             }
             V2Event::CredentialSwitched(event) => {
                 let locations: Vec<Location> = self.locations.keys().cloned().collect();
-                return locations
-                    .iter()
-                    .flat_map(|location| {
-                        let mut follow = self.refresh_catalog(Catalog::UsageLimits, location);
-                        self.promote_credential(location, &event.data);
-                        follow.extend(self.refresh_together(
-                            &[Catalog::Integration, Catalog::Model, Catalog::Provider],
-                            vec![Catalog::Model, Catalog::Provider],
-                            location,
-                        ));
-                        follow
-                    })
-                    .collect();
+                for location in &locations {
+                    self.refresh_catalog(Catalog::UsageLimits, location, effects);
+                    self.promote_credential(location, &event.data);
+                    let watched = [Catalog::Integration, Catalog::Model, Catalog::Provider];
+                    self.refresh_together(&watched, vec![Catalog::Model, Catalog::Provider], location, effects);
+                }
+                return;
             }
             _ => {}
         }
-        let Some(location) = located(event) else { return Vec::new() };
+        let Some(location) = located(event) else { return };
         let location = Location::from(location);
         match event {
-            V2Event::ProviderUpdated(_) => self.refresh_catalog(Catalog::Provider, &location),
-            V2Event::ModelUpdated(_) => self.refresh_catalog(Catalog::Model, &location),
-            V2Event::AgentUpdated(_) => self.refresh_catalog(Catalog::Agent, &location),
-            V2Event::CommandUpdated(_) => self.refresh_catalog(Catalog::Command, &location),
-            V2Event::SkillUpdated(_) => self.refresh_catalog(Catalog::Skill, &location),
+            V2Event::ProviderUpdated(_) => self.refresh_catalog(Catalog::Provider, &location, effects),
+            V2Event::ModelUpdated(_) => self.refresh_catalog(Catalog::Model, &location, effects),
+            V2Event::AgentUpdated(_) => self.refresh_catalog(Catalog::Agent, &location, effects),
+            V2Event::CommandUpdated(_) => self.refresh_catalog(Catalog::Command, &location, effects),
+            V2Event::SkillUpdated(_) => self.refresh_catalog(Catalog::Skill, &location, effects),
             // The event names only the current branch. Reload the rest: the default branch and
             // provider can change with it, and a read served before the location's VCS provider
             // loaded has neither.
-            V2Event::VcsBranchUpdated(_) => self.refresh_catalog(Catalog::Vcs, &location),
-            V2Event::FormCreated(event) => {
-                self.on_form_created(&event.data.form, &location);
-                Vec::new()
-            }
-            V2Event::ShellCreated(event) => {
-                self.on_shell_created(&event.data.info, &location);
-                Vec::new()
-            }
-            V2Event::ShellExited(event) => {
-                self.remove_shell(&event.data.id, &location);
-                Vec::new()
-            }
-            V2Event::ShellDeleted(event) => {
-                self.remove_shell(&event.data.id, &location);
-                Vec::new()
-            }
-            V2Event::ReferenceUpdated(_) => self.refresh_catalog(Catalog::Reference, &location),
+            V2Event::VcsBranchUpdated(_) => self.refresh_catalog(Catalog::Vcs, &location, effects),
+            V2Event::FormCreated(event) => self.on_form_created(&event.data.form, &location),
+            V2Event::ShellCreated(event) => self.on_shell_created(&event.data.info, &location),
+            V2Event::ShellExited(event) => self.remove_shell(&event.data.id, &location),
+            V2Event::ShellDeleted(event) => self.remove_shell(&event.data.id, &location),
+            V2Event::ReferenceUpdated(_) => self.refresh_catalog(Catalog::Reference, &location, effects),
             V2Event::IntegrationUpdated(_) => {
-                let mut follow = self.refresh_catalog(Catalog::UsageLimits, &location);
-                let catalogs = vec![Catalog::Integration, Catalog::Model, Catalog::Provider];
-                follow.extend(self.refresh_together(&catalogs.clone(), catalogs, &location));
-                follow
+                self.refresh_catalog(Catalog::UsageLimits, &location, effects);
+                let catalogs = [Catalog::Integration, Catalog::Model, Catalog::Provider];
+                self.refresh_together(&catalogs, catalogs.to_vec(), &location, effects);
             }
             V2Event::ConfigUpdated(_) => {
-                let mut follow = self.refresh_catalog(Catalog::Config, &location);
+                self.refresh_catalog(Catalog::Config, &location, effects);
                 if self.has_websearch(&location) {
-                    follow.push(Follow::Websearch(location));
+                    effects.push(Effect::Websearch(location));
                 }
-                follow
             }
-            V2Event::WebsearchUpdated(_) if self.has_websearch(&location) => {
-                vec![Follow::Websearch(location)]
-            }
+            V2Event::WebsearchUpdated(_) if self.has_websearch(&location) => effects.push(Effect::Websearch(location)),
             // Authenticating an MCP integration reconnects its server, which emits
             // mcp.status.changed, so the MCP list syncs here rather than off integration.updated.
             // The server emits one event per MCP server as each settles, so the read waits for the
@@ -289,14 +270,69 @@ impl State {
             V2Event::McpStatusChanged(_) => {
                 let active = self.has_catalog(Catalog::McpServer, &location);
                 self.invalidate(Read::Catalog(Catalog::McpServer, &location));
-                if !active {
-                    return Vec::new();
+                if active {
+                    effects.push(Effect::Settle(Catalog::McpServer, location));
                 }
-                vec![Follow::Settle(Catalog::McpServer, location)]
             }
-            V2Event::McpResourcesChanged(_) => self.refresh_catalog(Catalog::McpResource, &location),
-            _ => Vec::new(),
+            V2Event::McpResourcesChanged(_) => self.refresh_catalog(Catalog::McpResource, &location, effects),
+            _ => {}
         }
+    }
+
+    /// Begins a read of `catalog` at the location `at`.
+    pub(crate) fn begin_catalog(&mut self, ticket: Ticket) -> CatalogRead {
+        let ReadKey::Catalog(catalog, at) = ticket.key else { unreachable!("a catalog read") };
+        CatalogRead { ticket, catalog, location: self.read_location(at) }
+    }
+
+    /// Publishes a catalog under the location the server answered with; model and provider reads also under the
+    /// requested one.
+    pub(crate) fn complete_catalog(&mut self, read: CatalogRead, at: Location, loaded: Loaded) {
+        if read.catalog.alias() && at != read.location {
+            self.publish(&read.location, read.catalog, loaded.clone());
+        }
+        self.publish(&at, read.catalog, loaded);
+    }
+
+    /// Begins a read of the location info of `ticket`'s location; one of the default location `adopt`s the server's
+    /// directory as the default.
+    pub(crate) fn begin_location(&mut self, ticket: Ticket, adopt: bool) -> LocationRead {
+        let ReadKey::Location(at) = ticket.key else { unreachable!("a location read") };
+        LocationRead { ticket: Some(ticket), location: self.read_location(at), adopt }
+    }
+
+    /// Stores location info, under the directory the server answered with.
+    pub(crate) fn complete_location(&mut self, adopt: bool, info: LocationPublicInfo) {
+        let at = Location::new(info.directory.0.clone());
+        if adopt {
+            self.default_location = at.clone();
+        }
+        self.location_mut(&at, Parts::INFO).info = Some(info);
+    }
+
+    /// Begins the trailing refetch of `catalog` at `location`: its key, its token, and the token of the timer it
+    /// replaces.
+    pub(crate) fn begin_settle(&mut self, catalog: Catalog, location: &Location) -> (ReadKey, u64, Option<u64>) {
+        let token = self.token();
+        let key = self.read_key(Read::Catalog(catalog, location));
+        let previous = self.settling.insert(key, token);
+        (key, token, previous)
+    }
+
+    /// The trailing refetch `token` of `key` fires, unless a newer one replaced it.
+    pub(crate) fn complete_settle(
+        &mut self,
+        key: ReadKey,
+        token: u64,
+        catalog: Catalog,
+        location: Location,
+        effects: &mut Vec<Effect>,
+    ) {
+        if self.settling.get(&key) != Some(&token) {
+            return;
+        }
+        self.settling.remove(&key);
+        effects.push(Effect::Catalogs(vec![catalog], location));
     }
 
     fn has_websearch(&self, location: &Location) -> bool {
@@ -323,16 +359,9 @@ impl State {
             changed = true;
         }
         if changed {
-            self.touch_location(location);
+            self.touch_location(location, Parts::catalogs(&[Catalog::Integration]));
         }
     }
-}
-
-fn follow_if(active: bool, catalogs: Vec<Catalog>, location: &Location) -> Vec<Follow> {
-    if !active {
-        return Vec::new();
-    }
-    vec![Follow::Catalogs(catalogs, location.clone())]
 }
 
 /// The location of the events the catalog arms handle.
@@ -357,211 +386,4 @@ fn located(event: &V2Event) -> Option<&LocationRef> {
         _ => return None,
     };
     location.as_ref()
-}
-
-impl Data {
-    fn resolve(&self, location: Option<&Location>) -> Location {
-        location.cloned().unwrap_or_else(|| self.read(|state| state.default_location.clone()))
-    }
-
-    /// Reads a catalog once per invalidation. It publishes under the location the server
-    /// answers with; model and provider reads also under the requested one.
-    pub fn catalog_sync(&self, catalog: Catalog, location: Option<&Location>) -> Task<()> {
-        let location = self.resolve(location);
-        if catalog == Catalog::Shell {
-            return self.shell_read(location);
-        }
-        self.sync_run(self.keyed(Read::Catalog(catalog, &location)), move |data| async move {
-            let (at, loaded) = load(data.client(), catalog, &location).await.map_err(Error::new)?;
-            data.write(|state| {
-                if catalog.alias() && at != location {
-                    state.publish(&location, loaded.clone());
-                }
-                state.publish(&at, loaded);
-            });
-            Ok(())
-        })
-    }
-
-    pub fn catalog_invalidate(&self, catalog: Catalog, location: Option<&Location>) {
-        let location = self.resolve(location);
-        self.write(|state| state.invalidate(Read::Catalog(catalog, &location)));
-    }
-
-    /// Reads location info once per invalidation (`location.syncInfo`). A read of the default
-    /// location adopts the server's directory as the default.
-    pub fn location_sync_info(&self, location: Option<&Location>) -> Task<()> {
-        let default = location.is_none();
-        let current = self.resolve(location);
-        self.sync_run(self.keyed(Read::Location(&current)), move |data| async move {
-            let info = data
-                .client()
-                .location_get(&LocationGetInput { location: current.query() })
-                .await
-                .map_err(Error::new)?;
-            data.write(|state| {
-                let at = Location::new(info.directory.0.clone());
-                if default {
-                    state.default_location = at.clone();
-                }
-                state.location_mut(&at).info = Some(info);
-            });
-            Ok(())
-        })
-    }
-
-    /// Reads location info, then every catalog a session view shows (`location.sync`).
-    pub fn location_sync(&self, location: Option<&Location>) -> Task<()> {
-        let data = self.clone();
-        let requested = location.cloned();
-        self.spawn(async move {
-            data.location_sync_info(requested.as_ref()).await?;
-            let location = data.resolve(requested.as_ref());
-            let mut reads: Vec<Task<()>> = [
-                Catalog::Vcs,
-                Catalog::Agent,
-                Catalog::Command,
-                Catalog::Integration,
-                Catalog::McpServer,
-                Catalog::McpResource,
-                Catalog::Model,
-                Catalog::Provider,
-                Catalog::Reference,
-                Catalog::Skill,
-                Catalog::Shell,
-            ]
-            .into_iter()
-            .map(|catalog| data.catalog_sync(catalog, Some(&location)))
-            .collect();
-            reads.push(data.form_sync(crate::forms::GLOBAL, Some(&location)));
-            try_join_all(reads).await?;
-            Ok(())
-        })
-    }
-
-    /// Reads web search providers on every call; there is no cached read.
-    pub fn websearch_refresh(&self, location: Option<&Location>) -> Task<()> {
-        let location = self.resolve(location);
-        let data = self.clone();
-        self.spawn(async move {
-            let providers = data
-                .client()
-                .websearch_providers(&WebsearchProvidersInput { location: location.query() })
-                .await
-                .map_err(Error::new)?;
-            data.write(|state| {
-                state.location_mut(&Location::from(&providers.location)).websearch = Some(providers.data);
-            });
-            Ok(())
-        })
-    }
-
-    /// `server.connected`: reads the default location's info without the sync key, as TS does.
-    pub(crate) fn rehydrate_location(&self) {
-        let location = self.resolve(None);
-        self.refresh(|data| async move {
-            let info = data
-                .client()
-                .location_get(&LocationGetInput { location: location.query() })
-                .await
-                .map_err(Error::new)?;
-            let at = Location::new(info.directory.0.clone());
-            data.write(|state| state.location_mut(&at).info = Some(info));
-            Ok(())
-        });
-    }
-
-    pub(crate) fn refresh_catalogs(&self, catalogs: Vec<Catalog>, location: Location) {
-        self.refresh(|data| {
-            let reads: Vec<Task<()>> =
-                catalogs.into_iter().map(|catalog| data.catalog_sync(catalog, Some(&location))).collect();
-            async move { try_join_all(reads).await.map(|_| ()) }
-        });
-    }
-
-    /// Reads `catalog` once a burst of events that ask for it goes quiet for [`SETTLE`].
-    pub(crate) fn settle(&self, catalog: Catalog, location: Location) {
-        let data = self.clone();
-        let mut state = self.lock();
-        let token = state.token();
-        let key = state.read_key(Read::Catalog(catalog, &location));
-        // Spawned under the lock, so the timer cannot fire before its entry exists.
-        let handle = self.runtime().spawn(async move {
-            tokio::time::sleep(SETTLE).await;
-            let current = {
-                let mut state = data.lock();
-                let current = state.settling.get(&key).is_some_and(|(owner, _)| *owner == token);
-                if current {
-                    state.settling.remove(&key);
-                }
-                current
-            };
-            if current {
-                data.refresh_catalogs(vec![catalog], location);
-            }
-        });
-        if let Some((_, previous)) = state.settling.insert(key, (token, handle.abort_handle())) {
-            previous.abort();
-        }
-    }
-}
-
-async fn load(
-    client: &Client,
-    catalog: Catalog,
-    location: &Location,
-) -> Result<(Location, Loaded), opencode_api::error::Error> {
-    let query = location.query();
-    Ok(match catalog {
-        Catalog::Vcs => {
-            let response = client.vcs_get(&VcsGetInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Vcs(response.data))
-        }
-        Catalog::UsageLimits => {
-            let response = client.experimental_usage_limits(&ExperimentalUsageLimitsInput { location: query }).await?;
-            ((&response.location).into(), Loaded::UsageLimits(response.data))
-        }
-        Catalog::Agent => {
-            let response = client.agent_list(&AgentListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Agent(response.data.into()))
-        }
-        Catalog::Command => {
-            let response = client.command_list(&CommandListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Command(response.data.into()))
-        }
-        // Config answers without a location; it publishes under the requested directory.
-        Catalog::Config => {
-            let entries = client.config_get(&ConfigGetInput { location: query }).await?;
-            (Location::new(location.directory.clone()), Loaded::Config(entries.into()))
-        }
-        Catalog::Integration => {
-            let response = client.integration_list(&IntegrationListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Integration(response.data.into()))
-        }
-        Catalog::McpServer => {
-            let response = client.mcp_list(&McpListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::McpServer(response.data.into()))
-        }
-        Catalog::McpResource => {
-            let response = client.mcp_resource_catalog(&McpResourceCatalogInput { location: query }).await?;
-            ((&response.location).into(), Loaded::McpResource(response.data.resources.into()))
-        }
-        Catalog::Model => {
-            let response = client.model_list(&ModelListInput { location: query, types: None }).await?;
-            ((&response.location).into(), Loaded::Model(response.data.into()))
-        }
-        Catalog::Provider => {
-            let response = client.provider_list(&ProviderListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Provider(response.data.into()))
-        }
-        Catalog::Reference => {
-            let response = client.reference_list(&ReferenceListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Reference(response.data.into()))
-        }
-        Catalog::Skill => {
-            let response = client.skill_list(&SkillListInput { location: query }).await?;
-            ((&response.location).into(), Loaded::Skill(response.data.into()))
-        }
-        Catalog::Shell => unreachable!("Data::shell_read reads shells"),
-    })
 }

@@ -184,7 +184,7 @@ impl Harness {
             "data": data,
         }))
         .unwrap();
-        self.tui.data.apply(&[event]);
+        self.tui.data.apply(vec![event]);
     }
 
     fn ended(&self, seq: u64, message: &str, input: u64) {
@@ -213,6 +213,18 @@ impl Harness {
             .filter(|logged| logged.method == "GET" && logged.path == LIMITS)
             .map(|logged| logged.query.get("location[directory]").and_then(|values| values.first().cloned()))
             .collect()
+    }
+
+    /// The locations whose limits were asked for, each once: a read the stream made stale is read again.
+    fn location_reads(&self) -> Vec<Option<String>> {
+        let mut asked = self.limits();
+        asked.dedup();
+        asked
+    }
+
+    /// Reads of `path` the fixture answered.
+    fn reads(&self, path: &str) -> usize {
+        self.memory.requests().iter().filter(|logged| logged.method == "GET" && logged.path == path).count()
     }
 
     /// Pages up until the reader is away from the bottom, then sends a prompt.
@@ -443,35 +455,65 @@ fn a_failed_permission_read_is_read_again_on_the_next_session_change() {
 }
 
 #[test]
-fn usage_limits_are_kept_per_location() {
-    let h = mount("ses_a", json!({ "animations": false }));
-    h.wait_for("$5 left");
-    assert_eq!(h.limits(), [Some(DIRECTORY.to_owned())]);
-
-    h.tui.navigate(support::session_route("ses_wt"));
-    h.wait_for("Worktree work");
-    h.wait_for("$4 left");
-    assert_eq!(h.limits(), [Some(DIRECTORY.to_owned()), Some(WORKTREE.to_owned())]);
-
-    // Back in the project, its limits show again without another request.
-    h.tui.navigate(support::session_route("ses_a"));
-    h.wait_for("$5 left");
-    h.settle();
-    assert_eq!(h.limits().len(), 2);
-}
-
-#[test]
-fn a_credential_change_reads_the_footer_limits_again() {
-    let h = mount("ses_a", json!({ "animations": false }));
-    h.wait_for("$5 left");
-    assert_eq!(h.limits().len(), 1);
+fn a_limits_read_made_stale_is_discarded_and_its_location_read_again() {
+    // Held, so the read the credential change invalidates is in flight every time: the store discards the stale
+    // answer and the footer reads that location again, which is why a location may be asked for more than once.
+    let routes = routes().into_iter().map(|route| if route.path == LIMITS { route.held() } else { route }).collect();
+    let h = mount_with(100, "ses_a", json!({ "animations": false }), routes);
+    h.wait("the held limits request", || h.reads(LIMITS) == 1);
     let event: V2Event = serde_json::from_value(json!({
         "id": "evt_credential", "created": 1, "type": "credential.updated",
         "data": { "integrationID": "opencode", "credentialID": "credential" },
     }))
     .unwrap();
-    h.tui.data.apply(&[event]);
-    h.wait("the limits read again", || h.limits().len() == 2);
+    h.tui.data.apply(vec![event]);
+    h.memory.release(LIMITS);
+    h.wait_for("$5 left");
+    h.wait("the read after the stale one", || h.memory.in_flight() == 0);
+    assert_eq!(h.limits().len(), 2);
+    assert_eq!(h.location_reads(), [Some(DIRECTORY.to_owned())]);
+}
+
+#[test]
+fn usage_limits_are_kept_per_location() {
+    let h = mount("ses_a", json!({ "animations": false }));
+    // The first stream's `server.connected` invalidates what was read before it, so a limits read begun in that
+    // window is read again: wait for its catalogs' second read before counting any.
+    h.wait("the first connection's reads", || h.reads("/api/model") >= 2);
+    h.wait_for("$5 left");
+    h.wait("its limits read", || h.memory.in_flight() == 0);
+    assert_eq!(h.location_reads(), [Some(DIRECTORY.to_owned())]);
+
+    h.tui.navigate(support::session_route("ses_wt"));
+    h.wait_for("Worktree work");
+    h.wait_for("$4 left");
+    h.wait("the worktree's limits read", || h.memory.in_flight() == 0);
+    assert_eq!(h.location_reads(), [Some(DIRECTORY.to_owned()), Some(WORKTREE.to_owned())]);
+    let asked = h.limits();
+
+    // Back in the project, its limits show again without another request.
+    h.tui.navigate(support::session_route("ses_a"));
+    h.wait_for("$5 left");
+    h.settle();
+    assert_eq!(h.limits(), asked);
+}
+
+#[test]
+fn a_credential_change_reads_the_footer_limits_again() {
+    let h = mount("ses_a", json!({ "animations": false }));
+    // The first stream's `server.connected` invalidates what was read before it; wait for its catalogs' second read,
+    // then whatever it made the limits read is in the baseline, not the change's.
+    h.wait("the first connection's reads", || h.reads("/api/model") >= 2);
+    h.wait_for("$5 left");
+    h.wait("its limits read", || h.memory.in_flight() == 0);
+    let before = h.limits().len();
+    let event: V2Event = serde_json::from_value(json!({
+        "id": "evt_credential", "created": 1, "type": "credential.updated",
+        "data": { "integrationID": "opencode", "credentialID": "credential" },
+    }))
+    .unwrap();
+    h.tui.data.apply(vec![event]);
+    h.wait("the limits read again", || h.limits().len() > before);
 }
 
 #[test]

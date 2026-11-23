@@ -84,7 +84,7 @@ impl Fences {
         self.seq.set(seq);
         let ids = json!({ "sessionID": SESSION, "assistantMessageID": "msg_2" });
         let tui = &self.pipe.harness.tui;
-        tui.data.apply(&[support::event(SESSION, kind, seq, support::merge(ids, data))]);
+        tui.data.apply(vec![support::event(SESSION, kind, seq, support::merge(ids, data))]);
         assert!(self.pipe.harness.app.wait_until(support::WAIT, || tui.synced()), "the views never took the event");
     }
 

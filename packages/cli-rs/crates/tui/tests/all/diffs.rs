@@ -126,7 +126,7 @@ impl Diffs {
             .count()
     }
 
-    /// Deliver start and end in the same UI turn so both events arrive before the next sync.
+    /// Apply start and end before the UI's next turn, so its sync sees both at once.
     fn short_turn(&self, session: &str) {
         for (kind, status) in [
             ("session.execution.started", SessionStatus::Running),
@@ -144,6 +144,7 @@ impl Diffs {
             while self.tui.data.read(|state| state.status(&id)) != status {
                 assert!(started.elapsed() < support::WAIT, "{kind} did not set the status");
                 std::thread::sleep(Duration::from_millis(1));
+                self.tui.data.drain();
             }
         }
     }
@@ -1175,16 +1176,6 @@ fn every_end_of_a_turn_loads_last_turn_again_and_a_shutdown_does_not() {
     assert!(!reloads(&h, &[started.clone(), interrupted("shutdown")]), "a shutdown loaded again");
     assert!(reloads(&h, &[("server.connected", json!({}))]), "a reconnect did not load the turn it lost");
     assert!(!reloads(&h, &[("server.connected", json!({}))]), "a reconnect loaded with no turn running");
-    // Posted to the UI as the pump posts signals, so the start is heard before the skip.
-    let started: opencode_api::generated::V2Event = serde_json::from_value(json!({
-        "id": "evt_lagged", "created": 99, "type": "session.execution.started",
-        "durable": { "aggregateID": "ses_a", "seq": 99, "version": 1 }, "data": { "sessionID": "ses_a" },
-    }))
-    .unwrap();
-    opencode_tui::features::events::testing::signal(&h.tui, started);
-    let reads = h.diff_reads();
-    opencode_tui::features::events::testing::lagged(&h.tui);
-    h.wait("skipped signals did not load the turn again", || h.diff_reads() > reads);
 }
 
 #[test]

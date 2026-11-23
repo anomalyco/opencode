@@ -34,6 +34,8 @@ pub struct Session {
     form: form::SessionForms,
     location: crate::routes::location_missing::LocationMissing,
     prompt: crate::prompt::editor::Prompt,
+    /// The grammars of the first page are still to prewarm, once its read settles.
+    prewarm: Cell<bool>,
 }
 
 impl Session {
@@ -104,7 +106,6 @@ impl Session {
             }),
         );
         load(tui, synced.1.clone());
-        prewarm(tui, &id, synced.1.clone());
         // `restoreScrollPosition` waits for the first sync (`synced`, `rowsSynced`).
         tui.app.spawn(
             async move { futures_util::future::join(synced.0, synced.1).await },
@@ -130,6 +131,7 @@ impl Session {
             form,
             location,
             prompt,
+            prewarm: Cell::new(true),
         }
     }
 }
@@ -148,6 +150,10 @@ impl RouteView for Session {
         }
         if changes.has(&self.id, Touched::INFO) {
             crate::features::location::session(tui, &self.id);
+        }
+        if self.prewarm.get() && tui.data.read(|state| state.messages_read(&self.id)) {
+            self.prewarm.set(false);
+            prewarm(tui, &self.id);
         }
         self.transcript.sync(tui, &self.id, changes);
         let prompting = self.permission.active() || self.form.active() || self.location.active();
@@ -220,31 +226,23 @@ fn load(tui: &Tui, task: Task<()>) {
     );
 }
 
-/// Once the page lands, compiles the grammars its code fences name on workers while the UI builds the rows, so the
-/// first frame waits for less of each compile. It reads the store off the UI thread.
-fn prewarm(tui: &Tui, id: &SessionID, task: Task<()>) {
-    let (data, id) = (tui.data.clone(), id.clone());
-    tui.app.runtime().spawn(async move {
-        if task.await.is_err() {
-            return;
-        }
-        let languages: BTreeSet<String> = data.read(|state| {
-            let texts = state.messages(&id).iter().flat_map(|message| match message {
-                SessionMessageInfo::Assistant(assistant) => assistant.content.as_slice(),
-                _ => &[],
-            });
-            texts
-                .filter_map(|content| match content {
-                    SessionMessageAssistantContentItem::Text(text) => Some(text.text.as_str()),
-                    SessionMessageAssistantContentItem::Reasoning(reasoning) => Some(reasoning.text.as_str()),
-                    _ => None,
-                })
-                .flat_map(opencode_ui::grammars::fence_languages)
-                .map(str::to_owned)
-                .collect()
-        });
-        opencode_ui::grammars::prewarm(languages.iter().map(String::as_str));
+/// Once the page lands, compiles the grammars its code fences name on workers before the transcript builds its rows,
+/// so the first frame waits for less of each compile.
+fn prewarm(tui: &Tui, id: &SessionID) {
+    let state = tui.data.state();
+    let texts = state.messages(id).iter().flat_map(|message| match message {
+        SessionMessageInfo::Assistant(assistant) => assistant.content.as_slice(),
+        _ => &[],
     });
+    let languages: BTreeSet<&str> = texts
+        .filter_map(|content| match content {
+            SessionMessageAssistantContentItem::Text(text) => Some(text.text.as_str()),
+            SessionMessageAssistantContentItem::Reasoning(reasoning) => Some(reasoning.text.as_str()),
+            _ => None,
+        })
+        .flat_map(opencode_ui::grammars::fence_languages)
+        .collect();
+    opencode_ui::grammars::prewarm(languages);
 }
 
 /// Load the session. A missing session closes its tab, or returns home when tabs are off.

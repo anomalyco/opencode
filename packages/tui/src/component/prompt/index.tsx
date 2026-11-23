@@ -1543,6 +1543,7 @@ export function Prompt(props: PromptProps) {
     modelLabel: string
     providerLabel: string
     variant: string | undefined
+    speed: string | undefined
   }>(
     (previous) => {
       const location = currentLocation.ref ?? data.location.default()
@@ -1562,6 +1563,7 @@ export function Prompt(props: PromptProps) {
         modelLabel: model.model,
         providerLabel: model.provider,
         variant: local.model.variant.current(),
+        speed: local.model.speed.current(),
       }
     },
     {
@@ -1570,6 +1572,7 @@ export function Prompt(props: PromptProps) {
       modelLabel: local.model.parsed().model,
       providerLabel: local.model.parsed().provider,
       variant: undefined,
+      speed: undefined,
     },
   )
   // What the workspace's limits leave for the selected model, once it is running low. Only OpenCode Console limits
@@ -1868,6 +1871,7 @@ export function Prompt(props: PromptProps) {
                 model={promptDisplay().modelLabel}
                 provider={promptDisplay().providerLabel}
                 variant={promptDisplay().variant}
+                speed={promptDisplay().speed}
                 limit={limit()}
                 muted={!!muted()}
                 highlight={highlight()}

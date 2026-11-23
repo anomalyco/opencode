@@ -1,20 +1,16 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
-use futures_util::FutureExt;
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
 use crate::changes::Touched;
-use crate::connection::Follow;
+use crate::core::{Effect, Info, Ticket};
 use crate::forms::Form;
 use crate::inbox::{PendingUpdate, now};
 use crate::messages::{HeadRead, Transcript, from_event};
-use crate::reads::{Read, ReadState, SessionRead, SessionReads};
-use crate::state::{Compacting, Data, Error, Overlay, SessionStatus, State, Task, evict_missing};
-
-/// Children per page of a family read (`CHILD_PAGE`).
-const CHILD_PAGE: i64 = 200;
+use crate::reads::{Read, ReadKey, ReadState, SessionRead, SessionReads};
+use crate::state::{Compacting, Error, Overlay, SessionStatus, State};
 
 /// The fewest slots at which [`Sessions::sweep`] looks for records that hold nothing.
 const SWEEP_FLOOR: usize = 256;
@@ -79,10 +75,10 @@ pub(crate) struct Session {
     pub(crate) permission_read: Option<Overlay<PermissionRequest>>,
     /// The head read in flight, with what overtook it.
     pub(crate) head_read: Option<HeadRead>,
-    /// The older-page load in flight, by token.
-    pub(crate) message_load: Option<(u64, Task<bool>)>,
-    /// The last admission, by token: each admission waits for the previous one to settle.
-    pub(crate) sending: Option<(u64, Task<()>)>,
+    /// The token of the older-page load in flight.
+    pub(crate) message_load: Option<u64>,
+    /// The token of the last admission: each admission waits for the previous one to settle.
+    pub(crate) sending: Option<u64>,
     pub(crate) compacting: Option<Compacting>,
     /// As the root of a synced job tree: the job IDs the server listed, plus those events added for owners in the
     /// tree. Loaded session info only reaches direct children, so parents alone would drop a grandchild's jobs.
@@ -99,8 +95,8 @@ pub(crate) enum Life {
     Known,
     /// Deleted at deletion epoch `epoch`: one of the newest deletions.
     Missing { epoch: u64 },
-    /// An optimistic creation in flight, by token; prompts to the session wait for `gate`.
-    Creating { token: u64, gate: Task<()>, echo: Echo },
+    /// An optimistic creation in flight, by token; prompts to the session wait for it.
+    Creating { token: u64, echo: Echo },
 }
 
 /// What the server said of a creation in flight.
@@ -330,11 +326,14 @@ pub struct CreateSession {
 }
 
 /// How an execution ended.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Outcome {
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Outcome<'a> {
     Succeeded,
-    Failed,
-    Interrupted,
+    Failed(&'a SessionStructuredError),
+    /// `shutdown` when the server stopped it.
+    Interrupted {
+        shutdown: bool,
+    },
 }
 
 impl State {
@@ -551,15 +550,16 @@ impl State {
         self.session(id).is_some() || self.has_read(Read::Session(id.as_str(), SessionRead::Info))
     }
 
-    fn revalidate(&mut self, id: &SessionID) -> Vec<Follow> {
+    /// Reads the session's info again where a read is worth it; also on `session.viewed`.
+    pub(crate) fn revalidate(&mut self, id: &SessionID, effects: &mut Vec<Effect>) {
         if !self.known(id) {
-            return Vec::new();
+            return;
         }
         self.invalidate(Read::Session(id.as_str(), SessionRead::Info));
-        vec![Follow::Session(id.clone())]
+        effects.push(Effect::Session(id.clone()));
     }
 
-    pub(crate) fn on_session_created(&mut self, data: &SessionCreatedData) -> Vec<Follow> {
+    pub(crate) fn on_session_created(&mut self, data: &SessionCreatedData, effects: &mut Vec<Effect>) {
         let id = &data.session_id;
         if let Some(key) = self.sessions.key(id) {
             self.clear_deleted(key);
@@ -571,7 +571,7 @@ impl State {
         let reads = &mut self.sessions.get_or_insert(id).reads;
         reads[SessionRead::Pending].complete();
         reads[SessionRead::Messages].complete();
-        vec![Follow::Session(id.clone())]
+        effects.push(Effect::Session(id.clone()));
     }
 
     pub(crate) fn on_usage_updated(&mut self, data: &SessionUsageUpdatedData) {
@@ -597,7 +597,7 @@ impl State {
         self.insert_message(&data.session_id, SessionMessageInfo::AgentSwitched(row));
     }
 
-    pub(crate) fn on_model_selected(&mut self, event: &SessionModelSelected) -> Vec<Follow> {
+    pub(crate) fn on_model_selected(&mut self, event: &SessionModelSelected, effects: &mut Vec<Effect>) {
         let data = &event.data;
         let previous =
             data.previous.clone().or_else(|| self.session(&data.session_id).and_then(|info| info.model.clone()));
@@ -606,7 +606,7 @@ impl State {
         // A head read in flight places the row (models M2, O3).
         let shown = self.sessions.get(&data.session_id);
         if !shown.is_some_and(|session| session.transcript.is_some() || session.head_read.is_some()) {
-            return Vec::new();
+            return;
         }
         let id = from_event(&event.id);
         let row = SessionMessageModelSelected {
@@ -618,7 +618,7 @@ impl State {
             time: SessionInboxUserTime { created: event.created },
         };
         self.insert_message(&data.session_id, SessionMessageInfo::ModelSwitched(row));
-        vec![Follow::Message(data.session_id.clone(), id)]
+        effects.push(Effect::Message(data.session_id.clone(), id));
     }
 
     pub(crate) fn on_moved(&mut self, event: &SessionMoved) {
@@ -681,10 +681,10 @@ impl State {
         self.revert_messages(id, &data.to);
     }
 
-    pub(crate) fn on_execution_started(&mut self, id: &SessionID) -> Vec<Follow> {
+    pub(crate) fn on_execution_started(&mut self, id: &SessionID, effects: &mut Vec<Effect>) {
         self.set_status(id, SessionStatus::Running);
         // Revalidate so `time.busy` follows the projected execution start.
-        self.revalidate(id)
+        self.revalidate(id, effects);
     }
 
     pub(crate) fn on_execution_ended(
@@ -693,127 +693,88 @@ impl State {
         created: f64,
         id: &SessionID,
         outcome: Outcome,
-        error: Option<&SessionStructuredError>,
-        shutdown: bool,
-    ) -> Vec<Follow> {
+        effects: &mut Vec<Effect>,
+    ) {
         self.set_status(id, SessionStatus::Idle);
         self.clear_retry(id);
-        if shutdown {
-            return Vec::new();
-        }
+        let (outcome, error) = match outcome {
+            Outcome::Interrupted { shutdown: true } => return,
+            Outcome::Succeeded => (SessionInfoOutcome::Succeeded, None),
+            Outcome::Failed(error) => (SessionInfoOutcome::Failed, Some(error.clone())),
+            Outcome::Interrupted { .. } => (SessionInfoOutcome::Interrupted, None),
+        };
+        self.end_subagent_jobs(id);
         // Mirror the projected idle marker so turn boundaries match before the next read.
         let row = SessionMessageIdle {
             id: from_event(event_id),
             r#type: tag::Idle,
-            outcome: match outcome {
-                Outcome::Succeeded => SessionInfoOutcome::Succeeded,
-                Outcome::Failed => SessionInfoOutcome::Failed,
-                Outcome::Interrupted => SessionInfoOutcome::Interrupted,
-            },
-            error: error.cloned(),
+            outcome,
+            error,
             metadata: None,
             time: SessionInboxUserTime { created },
         };
         self.insert_message(id, SessionMessageInfo::Idle(row));
-        let mut follow = Vec::new();
         if self.has_live_tool(id) {
             self.invalidate(Read::Session(id.as_str(), SessionRead::Messages));
-            follow.push(Follow::Messages(id.clone()));
+            effects.push(Effect::Messages(id.clone()));
         }
         // An event can overtake the first read; revalidate when that read is still active.
-        follow.extend(self.revalidate(id));
-        follow
+        self.revalidate(id, effects);
     }
 
-    pub(crate) fn on_viewed(&mut self, id: &SessionID) -> Vec<Follow> {
-        self.revalidate(id)
-    }
-}
-
-impl Data {
-    /// Reads a session once per invalidation (`session.sync`); with `children`, also every direct
-    /// child, under its own key.
-    pub fn session_sync(&self, id: &SessionID, children: bool) -> Task<()> {
-        let read = if children { SessionRead::Family } else { SessionRead::Info };
-        let id = id.clone();
-        self.sync_start(
-            self.keyed(Read::Session(id.as_str(), read)),
-            |state, _| state.deletion_epoch,
-            move |data, started| async move {
-                let info = async {
-                    data.client()
-                        .session_get(&SessionGetInput { session_id: id.clone() })
-                        .await
-                        .map_err(|error| evict_missing(&data, error))
-                };
-                let family = async {
-                    if !children {
-                        return Ok(Vec::new());
-                    }
-                    list_children(&data, &id).await
-                };
-                let (info, family) = futures_util::future::try_join(info, family).await?;
-                data.write(|state| {
-                    for session in std::iter::once(info).chain(family) {
-                        if state.deleted_since(&session.id, started) {
-                            continue;
-                        }
-                        state.remember(session);
-                    }
-                });
-                Ok(())
-            },
-        )
+    /// Begins a read of the info of the session of `ticket`, and of its children for [`SessionRead::Family`].
+    pub(crate) fn begin_session_read(&mut self, ticket: Ticket) -> Info {
+        let id = self.sessions[ticket.session()].id.clone();
+        let children = matches!(ticket.key, ReadKey::Session(_, SessionRead::Family));
+        Info { ticket, id, children, started: self.deletion_epoch }
     }
 
-    pub fn session_invalidate(&self, id: &SessionID) {
-        self.write(|state| state.invalidate(Read::Session(id.as_str(), SessionRead::Info)));
+    /// Stores what a session read found, but not a session deleted since it began.
+    pub(crate) fn complete_session_read(
+        &mut self,
+        read: Info,
+        result: Result<(SessionInfo, Vec<SessionInfo>), Error>,
+        evicts: bool,
+    ) {
+        let (info, children) = match result {
+            Ok(found) => found,
+            Err(error) => {
+                if evicts {
+                    self.evict_missing(&error);
+                }
+                return;
+            }
+        };
+        for session in std::iter::once(info).chain(children) {
+            if self.deleted_since(&session.id, read.started) {
+                continue;
+            }
+            self.remember(session);
+        }
     }
 
-    /// Stores fetched info, as a list read does.
-    pub fn remember(&self, info: SessionInfo) {
-        self.write(|state| state.remember(info));
-    }
-
-    pub fn set_status(&self, id: &SessionID, status: SessionStatus) {
-        self.write(|state| state.set_status(id, status));
-    }
-
-    /// Forgets a session as deleted.
-    pub fn forget(&self, id: &SessionID) {
-        self.write(|state| state.mark_deleted(id));
-    }
-
-    /// Clears heavy cached data of the family of `id`.
-    pub fn evict(&self, id: &SessionID) {
-        self.write(|state| state.evict(id));
-    }
-
-    /// Optimistic creation: admits a local record under a client-minted ID so a session view can
-    /// open at once, then creates the session. Prompts to it wait for the request; a failure
-    /// removes the record unless the server acknowledged it.
-    pub fn session_create(&self, input: CreateSession) -> (SessionID, Task<SessionInfo>) {
+    /// Admits an optimistic session under `input.id` or a fresh ID, so a session view can open at once, and says how
+    /// to create it. Admissions to it wait for the creation.
+    pub(crate) fn begin_creation(&mut self, input: CreateSession) -> Creation {
         let id = input.id.clone().unwrap_or_else(|| SessionID(opencode_api::id::session()));
-        let mut state = self.lock();
         let location = input.location.clone().unwrap_or_else(|| LocationPublicRef {
-            directory: AbsolutePath(state.default_location().directory.clone()),
+            directory: AbsolutePath(self.default_location().directory.clone()),
         });
-        let fresh = state.session(&id).is_none();
-        let key = state.sessions.entry(&id);
-        state.clear_deleted(key);
+        let fresh = self.session(&id).is_none();
+        let key = self.sessions.entry(&id);
+        self.clear_deleted(key);
         if fresh {
             let created = now();
             let project_id = input
                 .project_id
                 .clone()
                 .or_else(|| {
-                    state
-                        .location(Some(&(&location).into()))
+                    self.location(Some(&(&location).into()))
                         .and_then(|data| data.info.as_ref())
                         .map(|info| info.project.id.clone())
                 })
                 .unwrap_or_default();
-            state.remember(SessionInfo {
+            self.remember(SessionInfo {
                 id: id.clone(),
                 project_id,
                 agent: input.agent.clone(),
@@ -828,10 +789,10 @@ impl Data {
             // A mounted optimistic session must not read its empty collections before creation
             // settles; the `session.created` echo reads its info again.
             for read in [SessionRead::Family, SessionRead::Pending, SessionRead::Messages] {
-                state.sessions[key].reads[read].complete();
+                self.sessions[key].reads[read].complete();
             }
         }
-        let request = SessionCreateInput {
+        let input = SessionCreateInput {
             id: Some(Some(id.clone())),
             title: input.title.map(Some),
             agent: input.agent.map(Some),
@@ -839,103 +800,110 @@ impl Data {
             location: Some(Some(location)),
             ..Default::default()
         };
-        let token = state.token();
-        let data = self.clone();
-        let session = id.clone();
-        let task = self.spawn(async move {
-            let result = data.client().session_create(&request).await.map_err(Error::new);
-            data.write(|state| {
-                // A failure of a call that admitted nothing leaves another call's creation unacknowledged.
-                let acknowledged = (result.is_ok() || fresh)
-                    && state.sessions.get_mut(&session).is_some_and(|record| record.life.acknowledge());
-                match &result {
-                    Ok(info) => state.remember(info.clone()),
-                    // Roll back only a record this call admitted and neither the echo nor the
-                    // response acknowledged: anything else is server state.
-                    Err(_) => {
-                        if acknowledged {
-                            state.remove_session(&session);
-                        }
-                    }
-                }
-                if state.sessions.get_mut(&session).is_some_and(|record| record.life.end_creation(token)) {
-                    // `is_creating` is part of the session's view.
-                    state.touch(&session, Touched::INFO);
-                }
-            });
-            result
-        });
+        let token = self.token();
         if fresh {
-            let gate = task.clone().map(|result| result.map(|_| ())).boxed().shared();
-            state.sessions[key].life = Life::Creating { token, gate, echo: Echo::Awaited };
+            self.sessions[key].life = Life::Creating { token, echo: Echo::Awaited };
         }
-        self.flush(&mut state);
-        (id, task)
+        Creation { id, token, fresh, input }
     }
-}
 
-/// Every direct child, newest first, through every page (`listChildren`).
-async fn list_children(data: &Data, parent: &SessionID) -> Result<Vec<SessionInfo>, Error> {
-    let mut input = SessionListInput {
-        parent_id: Some(Some(parent.clone())),
-        order: Some(SessionListInputOrder::Desc),
-        limit: Some(CHILD_PAGE),
-        ..Default::default()
-    };
-    let mut children = Vec::new();
-    loop {
-        let page = data.client().session_list(&input).await.map_err(Error::new)?;
-        let full = page.data.len() as i64 >= CHILD_PAGE;
-        children.extend(page.data);
-        let Some(next) = page.cursor.next.flatten().filter(|_| full) else { return Ok(children) };
-        // Later pages carry only the cursor and the size, as in TS.
-        input = SessionListInput { cursor: Some(next), limit: Some(CHILD_PAGE), ..Default::default() };
-    }
-}
-
-impl Data {
-    /// Refetches one projected message and upserts it (the `session.model.selected` read). A response that
-    /// arrives after the transcript was deleted, evicted or reverted publishes nothing (deviation
-    /// O6-held-message-read).
-    pub(crate) fn fetch_message(&self, session: SessionID, message: SessionMessageID) {
-        let incarnation = self.read(|state| state.incarnation(&session));
-        self.refresh(move |data| async move {
-            let item = data
-                .client()
-                .session_message_get(&SessionMessageGetInput { session_id: session.clone(), message_id: message })
-                .await
-                .map_err(Error::new)?;
-            data.write(|state| {
-                // A head read dropped the row as older than its page, or the window ended.
-                if state.incarnation(&session) != incarnation || state.message(&session, item.id()).is_none() {
-                    return;
+    /// Ends the creation `token` of `id`.
+    pub(crate) fn complete_creation(
+        &mut self,
+        id: &SessionID,
+        token: u64,
+        fresh: bool,
+        result: Result<SessionInfo, Error>,
+    ) {
+        // A failure of a call that admitted nothing leaves another call's creation unacknowledged.
+        let acknowledged =
+            (result.is_ok() || fresh) && self.sessions.get_mut(id).is_some_and(|record| record.life.acknowledge());
+        match result {
+            Ok(info) => self.remember(info),
+            // Roll back only a record this call admitted and neither the echo nor the
+            // response acknowledged: anything else is server state.
+            Err(_) => {
+                if acknowledged {
+                    self.remove_session(id);
                 }
-                let item = state.stored(item);
-                state.upsert_message(&session, item);
-            });
-            Ok(())
-        });
+            }
+        }
+        if self.sessions.get_mut(id).is_some_and(|record| record.life.end_creation(token)) {
+            // `is_creating` is part of the session's view.
+            self.touch(id, Touched::INFO);
+        }
     }
 
-    /// Applies a live title after the session's reads, so a racing read cannot overwrite it.
-    pub(crate) fn renamed(&self, session: SessionID, title: String) {
-        self.refresh(|data| async move {
-            let family = data.read(|state| {
-                matches!(
-                    state.read_state(Read::Session(session.as_str(), SessionRead::Family)),
-                    Some(ReadState::Loading { .. })
-                )
-            });
-            let own = data.session_sync(&session, false);
-            if family {
-                futures_util::future::try_join(own, data.session_sync(&session, true)).await?;
-            } else {
-                own.await?;
-            }
-            data.write(|state| state.edit_info(&session, |info| info.title = Some(title)));
-            Ok(())
-        });
+    /// Applies a live title.
+    pub(crate) fn rename(&mut self, id: &SessionID, title: String) {
+        self.edit_info(id, |info| info.title = Some(title));
     }
+
+    /// True while the session's family read is in flight: a live title waits for it too.
+    pub(crate) fn family_loading(&self, id: &SessionID) -> bool {
+        matches!(self.read_state(Read::Session(id.as_str(), SessionRead::Family)), Some(ReadState::Loading { .. }))
+    }
+
+    /// Reconciles session status with the `session.active` snapshot of connection `token`. Status events received
+    /// during the read supersede the snapshot; a snapshot of an older connection is ignored.
+    pub(crate) fn complete_active(
+        &mut self,
+        token: u64,
+        result: Result<SessionActiveOutput, Error>,
+        effects: &mut Vec<Effect>,
+    ) {
+        let active = match result {
+            Ok(active) => active,
+            Err(_) => {
+                if self.active_updates.as_ref().is_some_and(|(current, _)| *current == token) {
+                    self.active_updates = None;
+                }
+                return;
+            }
+        };
+        let Some((current, updates)) = self.active_updates.take() else { return };
+        if current != token {
+            self.active_updates = Some((current, updates));
+            return;
+        }
+        let mut snapshot: HashMap<SessionID, SessionStatus> =
+            active.into_keys().map(|id| (SessionID(id), SessionStatus::Running)).collect();
+        for (id, status) in updates {
+            match status {
+                Some(status) => snapshot.insert(id, status),
+                None => snapshot.remove(&id),
+            };
+        }
+        for (key, session) in self.sessions.entries_mut() {
+            let status = snapshot.remove(&session.id);
+            if session.status != status {
+                session.status = status;
+                self.log.touch(session, key, Touched::STATUS);
+            }
+        }
+        // What is left names sessions the store holds nothing of.
+        for (id, status) in snapshot {
+            let key = self.sessions.entry(&id);
+            self.sessions[key].status = Some(status);
+            self.touch_key(key, Touched::STATUS);
+        }
+        // Sessions created before this connection never delivered `session.created`;
+        // without their info a running child never joins its root's family.
+        let unknown = self
+            .sessions
+            .iter()
+            .filter(|session| session.status == Some(SessionStatus::Running) && session.info.is_none())
+            .map(|session| Effect::Session(session.id.clone()));
+        effects.extend(unknown);
+    }
+}
+
+/// An optimistic creation to send: the ID it admitted, under `token` when `fresh`.
+pub(crate) struct Creation {
+    pub(crate) id: SessionID,
+    pub(crate) token: u64,
+    pub(crate) fresh: bool,
+    pub(crate) input: SessionCreateInput,
 }
 
 #[cfg(test)]

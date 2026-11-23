@@ -49,7 +49,7 @@ export class Types {
   private readonly taggedKeys = new Map<string, string>()
   // The fields of every generated struct, the target of every `pub type` alias, the string newtypes, and
   // `Copy` scalars with their aliases (`EventSeq`), so a tagged enum can read the fields its members share.
-  private readonly structs = new Map<string, Array<{ key: string; ident: string; type: string }>>()
+  private readonly structs = new Map<string, Array<{ key: string; ident: string; type: string; attrs: Array<string> }>>()
   private readonly aliases = new Map<string, string>()
   private readonly strings = new Set<string>()
   private readonly scalars = new Map<string, string>([
@@ -216,7 +216,7 @@ export class Types {
       return `IndexMap<String, ${value}>`
     }
     const used = new Set<string>()
-    const record: Array<{ key: string; ident: string; type: string }> = []
+    const record: Array<{ key: string; ident: string; type: string; attrs: Array<string> }> = []
     const fields = r.propertySignatures.flatMap((property) => {
       const key = String(property.name)
       const field = this.field(property.type, property.isOptional, `${hint}${pascal(key)}`)
@@ -224,9 +224,11 @@ export class Types {
       let ident = snake(key)
       for (let i = 2; used.has(ident); i++) ident = `${snake(key)}_${i}`
       used.add(ident)
-      record.push({ key, ident, type: field.type })
       const plain = ident.replace(/^r#/, "")
-      const attrs = [plain === key ? undefined : `rename = ${JSON.stringify(key)}`, ...field.attrs].filter(Boolean)
+      const attrs = [plain === key ? undefined : `rename = ${JSON.stringify(key)}`, ...field.attrs].filter(
+        (attr) => attr !== undefined,
+      )
+      record.push({ key, ident, type: field.type, attrs })
       const doc = docOf(property.annotations)
       return [
         `${doc}${attrs.length ? `    #[serde(${attrs.join(", ")})]\n` : ""}    pub ${ident}: ${field.type},`,
@@ -570,6 +572,52 @@ export class Types {
         return lines
       }, [])
     return `/// Union members' tags. Each serializes as its literal and decodes from any string, since the union has picked the member.\npub mod tag {\n    tags! {\n${lines.map((line) => `        ${line}`).join("\n")}\n    }\n}`
+  }
+
+  /**
+   * Emits a view of each struct in `names` that decodes what the struct decodes, field for field, but borrows its
+   * strings from the JSON (`de::Str`), and of each struct with strings it reaches through a field. For events that
+   * are applied and dropped, whose strings nothing keeps.
+   */
+  views(names: Array<string>) {
+    const made = new Map<string, string | undefined>()
+    const fieldView = (type: string): string => {
+      const option = /^Option<(.*)>$/.exec(type)
+      if (option !== null) return `Option<${fieldView(option[1])}>`
+      if (type === "String" || (this.strings.has(type) && !type.startsWith("tag::"))) return "crate::de::Str<'a>"
+      const struct = this.aliases.get(type) ?? type
+      if (!this.structs.has(struct)) return type
+      const view = structView(struct)
+      return view === undefined ? type : `${view}<'a>`
+    }
+    const structView = (struct: string): string | undefined => {
+      if (made.has(struct)) return made.get(struct)
+      made.set(struct, undefined)
+      const fields = this.structs.get(struct)!.map((field) => ({ ...field, view: fieldView(field.type) }))
+      if (fields.every((field) => !field.view.includes("'a"))) return undefined
+      const name = this.name(`${struct}View`)
+      made.set(struct, name)
+      const lines = fields.map((field) => {
+        const attrs = [
+          ...(field.view.includes("'a") ? ["borrow"] : []),
+          ...field.attrs.filter((attr) => !/^(serialize_with|skip_serializing_if)\b/.test(attr)),
+        ]
+        return `${attrs.length ? `    #[serde(${attrs.join(", ")})]\n` : ""}    pub ${field.ident}: ${field.view},`
+      })
+      const borrowed = fields
+        .filter((field) => field.view.includes("'a"))
+        .map((field) => {
+          const inner = /^Option<(.*)>$/.exec(field.view)?.[1]
+          const check = (view: string) => `${view.replace("<'a>", "")}::borrowed`
+          if (inner !== undefined) return `self.${field.ident}.as_ref().is_none_or(${check(inner)})`
+          return `${check(field.view)}(&self.${field.ident})`
+        })
+      this.items.push(
+        `/// [\`${struct}\`], with its strings borrowed from the JSON.\n#[derive(Debug, Deserialize)]\npub struct ${name}<'a> {\n${lines.join("\n")}\n}\n\nimpl ${name}<'_> {\n    /// Whether every string borrows from the JSON, none having had an escape to decode.\n    pub fn borrowed(&self) -> bool {\n        ${borrowed.join("\n            && ")}\n    }\n}`,
+      )
+      return name
+    }
+    for (const name of names) if (structView(name) === undefined) throw new Error(`${name} has no strings to borrow`)
   }
 
   /**

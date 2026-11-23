@@ -1,10 +1,10 @@
 //! Pending forms are kept in their session's record, or under [`GLOBAL`] for elicitations without a session.
-use opencode_api::client::Client;
 use opencode_api::generated::*;
 
+use crate::core::{Effect, Forms, Ticket};
 use crate::location::Location;
-use crate::reads::{Read, SessionRead};
-use crate::state::{Data, Error, Overlay, State, Task, evict_missing};
+use crate::reads::{Read, ReadKey, SessionRead};
+use crate::state::{Error, Overlay, State};
 
 /// The owner of global MCP elicitations. They temporarily use "global" instead of a real session
 /// ID, so the server cannot recover their location when settling them; the store keeps the event
@@ -22,7 +22,7 @@ pub struct Form {
 pub(crate) type FormRead = (String, Option<Location>);
 
 /// The keyed read of `owner`'s forms: a session's own, or the global forms of `location`.
-fn form_read<'a>(owner: &'a str, location: &'a Location) -> Read<'a> {
+pub(crate) fn form_read<'a>(owner: &'a str, location: &'a Location) -> Read<'a> {
     match owner {
         GLOBAL => Read::GlobalForms(location),
         _ => Read::Session(owner, SessionRead::Forms),
@@ -118,6 +118,67 @@ impl State {
         }
     }
 
+    /// Begins a read of the forms of `ticket`'s owner, with an overlay of the forms created and settled meanwhile.
+    pub(crate) fn begin_forms(&mut self, ticket: Ticket) -> Forms {
+        let (owner, location) = match ticket.key {
+            ReadKey::Session(key, _) => (self.sessions[key].id.0.clone(), None),
+            ReadKey::GlobalForms(at) => (GLOBAL.to_owned(), self.location_at(at).cloned()),
+            _ => unreachable!("a form read"),
+        };
+        let read = self.token();
+        let form = (owner, location);
+        self.form_reads.insert(form.clone(), Overlay::new(read));
+        Forms { ticket, form, read, started: self.deletion_epoch }
+    }
+
+    /// Publishes the form read `read` with the forms created and settled during it, unless a newer read or a
+    /// deletion of the owner since it began supersedes it. An overflowed overlay reads again instead.
+    pub(crate) fn complete_forms(
+        &mut self,
+        forms: Forms,
+        result: Result<(Vec<Form>, Option<Location>), Error>,
+        effects: &mut Vec<Effect>,
+    ) {
+        let overlay = Overlay::take(&mut self.form_reads, &forms.form, forms.read);
+        let (owner, location) = forms.form;
+        let (list, at) = match result {
+            Ok(found) => found,
+            Err(error) => {
+                if owner != GLOBAL {
+                    self.evict_missing(&error);
+                }
+                return;
+            }
+        };
+        let Some(overlay) = overlay else { return };
+        if self.deleted_since(&owner, forms.started) {
+            return;
+        }
+        match overlay.apply(list, |form| &form.info.id.0) {
+            Some(list) => self.publish_forms(&owner, list, at),
+            None => {
+                self.invalidate_key(forms.ticket.key);
+                effects.push(Effect::Forms(owner, location));
+            }
+        }
+    }
+
+    /// Drops the form a reply or a cancel settled; the owner's other forms are read again at once.
+    pub(crate) fn complete_form_reply(
+        &mut self,
+        owner: String,
+        id: &FormID,
+        location: Option<Location>,
+        effects: &mut Vec<Effect>,
+    ) {
+        if !self.remove_form(&owner, id, location.as_ref()) {
+            return;
+        }
+        let at = location.unwrap_or_else(|| self.default_location().clone());
+        self.invalidate(form_read(&owner, &at));
+        effects.push(Effect::FormsReplied(owner, at));
+    }
+
     /// Publishes a form read; a global read only replaces the forms of `at`, where the server read them.
     fn publish_forms(&mut self, owner: &str, mut list: Vec<Form>, at: Option<Location>) {
         let forms = self.owner_forms(owner);
@@ -131,105 +192,5 @@ impl State {
             None => *forms = list,
         }
         self.touch_forms(owner);
-    }
-}
-
-impl Data {
-    /// Reads pending forms for a session or location. Forms created or settled during the read take precedence over
-    /// its snapshot.
-    pub fn form_sync(&self, owner: &str, location: Option<&Location>) -> Task<()> {
-        let location = location.cloned().unwrap_or_else(|| self.read(|state| state.default_location().clone()));
-        let owner = owner.to_owned();
-        let read: FormRead = (owner.clone(), (owner == GLOBAL).then(|| location.clone()));
-        let again = (owner.clone(), location.clone());
-        self.overlay_sync(
-            self.keyed(form_read(&owner, &location)),
-            SessionID(owner.clone()),
-            read,
-            |state, read, overlay| {
-                state.form_reads.insert(read.clone(), overlay);
-            },
-            |state, read, ticket| Overlay::take(&mut state.form_reads, read, ticket),
-            |form| &form.info.id.0,
-            move |data| async move {
-                if owner == GLOBAL {
-                    let response = data
-                        .client()
-                        .form_list(&FormListInput { location: location.query() })
-                        .await
-                        .map_err(Error::new)?;
-                    let at = Location::from(&response.location);
-                    let list = response
-                        .data
-                        .into_iter()
-                        .filter(|form| form.session_id == GLOBAL)
-                        .map(|info| Form { info, location: Some(at.clone()) });
-                    return Ok((list.collect(), Some(at)));
-                }
-                let list = data
-                    .client()
-                    .session_form_list(&SessionFormListInput { session_id: owner.clone() })
-                    .await
-                    .map_err(|error| evict_missing(&data, error))?;
-                Ok((list.into_iter().map(|info| Form { info, location: None }).collect(), None))
-            },
-            |state, read, list, at| state.publish_forms(&read.0, list, at),
-            move |data| data.form_sync(&again.0, Some(&again.1)),
-        )
-    }
-
-    pub fn form_invalidate(&self, owner: &str, location: Option<&Location>) {
-        self.write(|state| {
-            let location = location.unwrap_or(state.default_location()).clone();
-            state.invalidate(form_read(owner, &location));
-        });
-    }
-
-    /// Answers a form and drops it. A form that is already settled counts as answered. A global
-    /// form needs its location, which the request names in a header.
-    pub async fn form_reply(&self, input: SessionFormReplyInput, location: Option<&Location>) -> Result<(), Error> {
-        let result = form_client(self.client(), &input.session_id, location).session_form_reply(&input).await;
-        self.settle_form(&input.session_id, &input.form_id, location, result)
-    }
-
-    /// Cancels a form and drops it; see [`Data::form_reply`].
-    pub async fn form_cancel(&self, input: SessionFormCancelInput, location: Option<&Location>) -> Result<(), Error> {
-        let result = form_client(self.client(), &input.session_id, location).session_form_cancel(&input).await;
-        self.settle_form(&input.session_id, &input.form_id, location, result)
-    }
-
-    fn settle_form(
-        &self,
-        owner: &str,
-        id: &FormID,
-        location: Option<&Location>,
-        result: Result<(), opencode_api::error::Error>,
-    ) -> Result<(), Error> {
-        if let Err(error) = result {
-            let settled = error.declared().is_some_and(|declared| {
-                matches!(declared.tag.as_deref(), Some("FormNotFoundError" | "FormAlreadySettledError"))
-                    && declared.body.get("id").and_then(serde_json::Value::as_str) == Some(id.0.as_str())
-            });
-            if !settled {
-                return Err(Error::new(error));
-            }
-        }
-        if !self.write(|state| state.remove_form(owner, id, location)) {
-            return Ok(());
-        }
-        // The form may have been one of several; read the rest again.
-        self.form_invalidate(owner, location);
-        drop(self.form_sync(owner, location));
-        Ok(())
-    }
-}
-
-/// Global forms name their location in a header (`formRequestOptions`).
-fn form_client(client: &Client, owner: &str, location: Option<&Location>) -> Client {
-    match (owner, location) {
-        (GLOBAL, Some(location)) => {
-            client.with_header("x-opencode-directory", opencode_api::js::encode_component(&location.directory))
-        }
-        _ => client.clone(),
     }
 }

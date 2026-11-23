@@ -75,7 +75,7 @@ async fn consumed(action: &str) {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn late_snapshots_cannot_resurrect_consumed_items() {
     for case in ["delivered", "cancelled"] {
         consumed(case).await;
@@ -83,7 +83,7 @@ async fn late_snapshots_cannot_resurrect_consumed_items() {
 }
 
 /// An item the pending read no longer lists was settled by an event lost in a reconnect: its row goes.
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn an_item_the_pending_read_drops_leaves_the_transcript() {
     let response = Slot::<Reply>::default();
     let data = fixture(&response, None);
@@ -122,14 +122,14 @@ async fn retains(action: &str) {
     assert_eq!(pending(&data), items(json!([item()])));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn hydration_retains_concurrent_inbox_events() {
     for case in ["enqueue", "delivery"] {
         retains(case).await;
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn hydration_preserves_submission_order_across_optimistic_admissions() {
     let response = Slot::<Reply>::default();
     let admission = Slot::<Reply>::default();
@@ -172,7 +172,7 @@ async fn hydration_preserves_submission_order_across_optimistic_admissions() {
     second.await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn hydration_coalesces_a_concurrent_optimistic_compaction_even_if_its_post_fails() {
     let response = Slot::<Reply>::default();
     let admission = Slot::<Reply>::default();
@@ -199,7 +199,7 @@ fn transcript() -> Value {
     })
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_transcript_read_clears_a_prompt_whose_delivery_event_was_missed() {
     let data = data(
         handler(|req: Req| async move {
@@ -215,7 +215,7 @@ async fn a_transcript_read_clears_a_prompt_whose_delivery_event_was_missed() {
     assert_eq!(created, Some(2.0));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_transcript_read_clears_an_accepted_prompt_whose_events_were_all_missed() {
     let data = data(
         handler(|req: Req| async move {

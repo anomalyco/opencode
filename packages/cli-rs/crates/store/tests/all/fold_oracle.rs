@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use common::*;
 use opencode_api::generated::{SessionID, V2Event};
-use opencode_store::{Catalog, Data, Location, Options, Shell, State};
+use opencode_store::{Catalog, Data, Location, Options, Payload, Shell, State};
 use serde_json::{Map, Value, json};
 
 const FIXTURE: &str = include_str!("../../../../parity/fixtures/F.7/folds.json");
@@ -15,7 +15,7 @@ const DEVIATIONS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../parity/devi
 const SESSIONS: [&str; 2] = ["ses_a", "ses_b"];
 const DIRECTORY: &str = "/project";
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn every_event_folds_as_in_typescript() {
     let fixture: Value = serde_json::from_str(FIXTURE).unwrap();
     let allowed: BTreeMap<(String, String), String> = fixture["allow"]
@@ -45,7 +45,7 @@ async fn every_event_folds_as_in_typescript() {
         let event: V2Event = serde_json::from_value(case["event"].clone())
             .unwrap_or_else(|error| panic!("{name}: the event does not decode: {error}"));
         assert!(!matches!(event, V2Event::Unknown(_)), "{name}: the event decodes as unknown");
-        let actual = fold(&fixture["routes"], event, case["state"] == "loaded").await;
+        let actual = fold(&fixture["routes"], &case["event"], case["state"] == "loaded").await;
         for (field, expected, actual) in fields(&case["expected"], &actual) {
             if expected == actual {
                 continue;
@@ -66,8 +66,9 @@ async fn every_event_folds_as_in_typescript() {
     assert!(differences.is_empty(), "{} fold differences:\n{}", differences.len(), differences.join("\n"));
 }
 
-/// The store after `event`, with the reads it started, in the shape the TS oracle writes.
-async fn fold(routes: &Value, event: V2Event, loaded: bool) -> Value {
+/// The store after `event`, handed over as the JSON its connection reads, with the reads it started, in the shape the TS
+/// oracle writes.
+async fn fold(routes: &Value, event: &Value, loaded: bool) -> Value {
     let requests = Log::<String>::default();
     let log = requests.clone();
     let routes = routes.clone();
@@ -89,7 +90,7 @@ async fn fold(routes: &Value, event: V2Event, loaded: bool) -> Value {
     );
     data.on_error(|_| {});
     if loaded {
-        data.apply(&[common::event(json!({ "id": "evt_connected", "type": "server.connected", "data": {} }))]);
+        data.apply(vec![common::event(json!({ "id": "evt_connected", "type": "server.connected", "data": {} }))]);
         quiet(&data, &requests).await;
         let session = SessionID("ses_a".into());
         // The reads start at once and run together, as the TS ones do.
@@ -108,8 +109,8 @@ async fn fold(routes: &Value, event: V2Event, loaded: bool) -> Value {
         quiet(&data, &requests).await;
     }
     let before = requests.len();
-    let mcp = matches!(event, V2Event::McpStatusChanged(_));
-    data.apply(&[event]);
+    let mcp = event["type"] == "mcp.status.changed";
+    data.apply([Payload::read(event.to_string(), &data.remote().wanted()).unwrap()]);
     quiet(&data, &requests).await;
     // `mcp.status.changed` reads once its burst has been quiet for `SETTLE`.
     if mcp {

@@ -96,6 +96,15 @@ impl<T> SseResponse<T> {
     pub fn new(response: Response) -> Self {
         Self { response, event: PhantomData }
     }
+
+    /// The events, each payload made an item by `item`, as [`crate::sse::read`] frames them.
+    pub fn read<U: Send>(
+        self,
+        activity: impl FnMut() + Send + 'static,
+        item: impl FnMut(String) -> Result<U, crate::sse::Error> + Send + 'static,
+    ) -> impl Stream<Item = Result<U, Error>> + Send {
+        crate::sse::read(self.response.body, activity, item).map(|item| item.map_err(Error::from))
+    }
 }
 
 impl<T: DeserializeOwned + Send> SseResponse<T> {
@@ -107,8 +116,8 @@ impl<T: DeserializeOwned + Send> SseResponse<T> {
 }
 
 impl crate::events::Event for V2Event {
-    fn tag(&self) -> &str {
-        V2Event::tag(self)
+    fn connected(&self) -> bool {
+        matches!(self, V2Event::ServerConnected(_))
     }
 
     /// Joins adjacent deltas of one text or reasoning part (same session, message, and ordinal) or of

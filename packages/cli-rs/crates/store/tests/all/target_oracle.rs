@@ -71,7 +71,7 @@ fn optional(value: &Value) -> Option<String> {
     value.as_str().map(str::to_owned)
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn session_targets_match_the_typescript_resolver() {
     let fixture: Value = serde_json::from_str(FIXTURE).unwrap();
     for case in fixture["targets"].as_array().unwrap() {
@@ -118,7 +118,7 @@ async fn session_targets_match_the_typescript_resolver() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn worktree_locations_match_the_typescript_resolver() {
     let fixture: Value = serde_json::from_str(FIXTURE).unwrap();
     for case in fixture["worktrees"].as_array().unwrap() {

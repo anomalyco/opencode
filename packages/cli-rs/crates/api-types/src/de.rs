@@ -196,7 +196,7 @@ impl<'de: 'a, 'a> Visitor<'de> for RawVisitor<'a> {
         // serde_json hands the text over as a map of one entry keyed by the token.
         let Some(first) = map.next_key::<Key>()? else { return Ok(Raw::Value(Value::Object(serde_json::Map::new()))) };
         let first = match first {
-            Key::Token => return map.next_value::<Text>().map(|text| Raw::Text(text.0)),
+            Key::Token => return map.next_value::<Str>().map(|text| Raw::Text(text.0)),
             Key::Other(key) => key,
         };
         let mut object = serde_json::Map::new();
@@ -229,59 +229,82 @@ impl<'de> Deserialize<'de> for Key {
     }
 }
 
-struct Text<'de>(Cow<'de, str>);
+/// A string borrowed from the JSON when it has no escape, as the generated views of streamed events decode one. It
+/// accepts what a `String` accepts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Str<'a>(pub Cow<'a, str>);
 
-impl<'de> Deserialize<'de> for Text<'de> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct TextVisitor;
-        impl<'de> Visitor<'de> for TextVisitor {
-            type Value = Text<'de>;
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("the JSON text")
-            }
-            fn visit_borrowed_str<E: Error>(self, value: &'de str) -> Result<Text<'de>, E> {
-                Ok(Text(Cow::Borrowed(value)))
-            }
-            fn visit_str<E: Error>(self, value: &str) -> Result<Text<'de>, E> {
-                Ok(Text(Cow::Owned(value.to_owned())))
-            }
-            fn visit_string<E: Error>(self, value: String) -> Result<Text<'de>, E> {
-                Ok(Text(Cow::Owned(value)))
-            }
-        }
-        deserializer.deserialize_str(TextVisitor)
+impl Str<'_> {
+    /// Whether it borrows from the JSON, having had no escape to decode.
+    pub fn borrowed(&self) -> bool {
+        matches!(self.0, Cow::Borrowed(_))
     }
 }
 
-/// `Raw::field` over text that serde_json already checked is one valid JSON value, so the scan only
-/// needs to find where each token ends. A string with an escape is decoded by serde_json.
+impl std::ops::Deref for Str<'_> {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<'de: 'a, 'a> Deserialize<'de> for Str<'a> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct StrVisitor;
+        impl<'de> Visitor<'de> for StrVisitor {
+            type Value = Str<'de>;
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string")
+            }
+            fn visit_borrowed_str<E: Error>(self, value: &'de str) -> Result<Str<'de>, E> {
+                Ok(Str(Cow::Borrowed(value)))
+            }
+            fn visit_str<E: Error>(self, value: &str) -> Result<Str<'de>, E> {
+                Ok(Str(Cow::Owned(value.to_owned())))
+            }
+            fn visit_string<E: Error>(self, value: String) -> Result<Str<'de>, E> {
+                Ok(Str(Cow::Owned(value)))
+            }
+        }
+        deserializer.deserialize_str(StrVisitor)
+    }
+}
+
+/// `Raw::field`, read from the text up to that field. On text that is not valid JSON it may find nothing or the wrong
+/// field, but it never reads past the end, so it can read the tag of text nothing has checked yet. A string with an
+/// escape is decoded by serde_json.
 fn scan_field<'a>(text: &'a str, key: &str) -> Field<'a> {
+    scan(text, key).unwrap_or(Field::Absent)
+}
+
+fn scan<'a>(text: &'a str, key: &str) -> Option<Field<'a>> {
     let bytes = text.as_bytes();
     let mut at = skip_space(bytes, 0);
     if bytes.get(at) != Some(&b'{') {
-        return Field::Absent;
+        return None;
     }
     at += 1;
     loop {
         at = skip_space(bytes, at);
         if bytes.get(at) != Some(&b'"') {
-            return Field::Absent;
+            return None;
         }
-        let end = string_end(bytes, at);
+        let end = string_end(bytes, at)?;
         let matches = string(text, at, end) == key;
-        at = skip_space(bytes, end) + 1;
+        at = skip_space(bytes, end.0) + 1;
         at = skip_space(bytes, at);
         if matches {
-            return match bytes[at] {
-                b'"' => Field::Str(string(text, at, string_end(bytes, at))),
+            return Some(match *bytes.get(at)? {
+                b'"' => Field::Str(string(text, at, string_end(bytes, at)?)),
                 b't' => Field::Bool(true),
                 b'f' => Field::Bool(false),
                 _ => Field::Other,
-            };
+            });
         }
-        at = skip_space(bytes, value_end(bytes, at));
+        at = skip_space(bytes, value_end(bytes, at)?);
         if bytes.get(at) != Some(&b',') {
-            return Field::Absent;
+            return None;
         }
         at += 1;
     }
@@ -294,41 +317,47 @@ fn skip_space(bytes: &[u8], mut at: usize) -> usize {
     at
 }
 
-/// The index after the closing quote of the string that opens at `start`.
-fn string_end(bytes: &[u8], start: usize) -> usize {
-    let mut at = start + 1;
-    while bytes[at] != b'"' {
-        at += if bytes[at] == b'\\' { 2 } else { 1 };
+/// The index after the closing quote of the string that opens at `start`, and whether the string has an escape.
+fn string_end(bytes: &[u8], start: usize) -> Option<(usize, bool)> {
+    let (mut at, mut escaped) = (start + 1, false);
+    loop {
+        match *bytes.get(at)? {
+            b'"' => return Some((at + 1, escaped)),
+            b'\\' => {
+                escaped = true;
+                at += 2;
+            }
+            _ => at += 1,
+        }
     }
-    at + 1
 }
 
-fn string(text: &str, start: usize, end: usize) -> Cow<'_, str> {
-    let inner = &text[start + 1..end - 1];
-    if !inner.contains('\\') {
-        return Cow::Borrowed(inner);
+/// The string that opens at `start` and that [`string_end`] ended, decoded by serde_json only when it has an escape.
+fn string(text: &str, start: usize, (end, escaped): (usize, bool)) -> Cow<'_, str> {
+    if !escaped {
+        return Cow::Borrowed(&text[start + 1..end - 1]);
     }
     Cow::Owned(serde_json::from_str(&text[start..end]).unwrap_or_default())
 }
 
 /// The index after the value that starts at `start`.
-fn value_end(bytes: &[u8], start: usize) -> usize {
-    match bytes[start] {
-        b'"' => string_end(bytes, start),
+fn value_end(bytes: &[u8], start: usize) -> Option<usize> {
+    match *bytes.get(start)? {
+        b'"' => string_end(bytes, start).map(|(end, _)| end),
         b'{' | b'[' => {
             let mut depth = 0usize;
             let mut at = start;
             loop {
-                match bytes[at] {
+                match *bytes.get(at)? {
                     b'"' => {
-                        at = string_end(bytes, at);
+                        at = string_end(bytes, at)?.0;
                         continue;
                     }
                     b'{' | b'[' => depth += 1,
                     b'}' | b']' => {
                         depth -= 1;
                         if depth == 0 {
-                            return at + 1;
+                            return Some(at + 1);
                         }
                     }
                     _ => {}
@@ -341,7 +370,7 @@ fn value_end(bytes: &[u8], start: usize) -> usize {
             while !matches!(bytes.get(at), None | Some(b',' | b'}' | b']')) && !bytes[at].is_ascii_whitespace() {
                 at += 1;
             }
-            at
+            Some(at)
         }
     }
 }
@@ -378,6 +407,15 @@ mod tests {
             assert_eq!(text.field("type").as_bool(), value.get("type").and_then(Value::as_bool), "{json}");
             assert_eq!(text.unknown::<serde_json::Error>().unwrap(), value, "{json}");
         }
+    }
+
+    #[test]
+    fn a_tag_reads_from_text_nothing_checked() {
+        let json = r#"{ "a" : [1, "x]}\"", {"b": "}"}], "c":{"d":"\\"}, "type" : "a\"b" }"#;
+        for end in 0..=json.len() {
+            let _ = Raw::Text(Cow::Borrowed(&json[..end])).field("type");
+        }
+        assert_eq!(Raw::Text(Cow::Borrowed(json)).field("type").as_str(), Some("a\"b"));
     }
 
     #[test]

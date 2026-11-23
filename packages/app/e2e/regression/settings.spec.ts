@@ -1137,6 +1137,18 @@ test("single extension rows stay aligned when switching tabs", async ({ page }) 
   }
 })
 
+test("a settings page takes focus from a click on its text without a ring around the whole page", async ({ page }) => {
+  const { settings } = await open(page)
+
+  const panel = settings.getByRole("tabpanel").filter({ has: page.getByRole("heading", { name: "Preferences" }) })
+
+  await panel.getByRole("heading", { name: "Preferences", exact: true }).click()
+  // Chromium matches :focus-visible on the focused page once a key is pressed; the controls inside show focus instead.
+  await page.keyboard.press("ArrowDown")
+  await expect(panel).toBeFocused()
+  await expect(panel).toHaveCSS("outline-style", "none")
+})
+
 test.describe("pages open before slow data", () => {
   test("worktrees", async ({ page }) => {
     const { settings } = await open(page)
@@ -1805,6 +1817,8 @@ for (const row of [
     // Anthropic only exists in the integration fixture, so its row proves the integration list has loaded.
     await expect(settings.getByText("Anthropic", { exact: true })).toBeVisible()
     await expect(settings.getByText("OpenCode Console", { exact: true })).toHaveCount(row.console ? 1 : 0)
+    // OpenCode Go connects through OpenCode, so it isn't offered without a saved Go key.
+    await expect(settings.getByText("OpenCode Go", { exact: true })).toHaveCount(0)
   })
 }
 
@@ -1855,7 +1869,16 @@ test("providers: OpenCode Go connects with its own methods, not the Console sign
   const attempts: string[] = []
 
   const { settings } = await open(page, {
-    integrations: consoleIntegrations,
+    // Settings lists OpenCode Go only for people who already saved a Go key.
+    integrations: [
+      ...consoleIntegrations.filter((integration) => integration.id !== "opencode-go"),
+      {
+        id: "opencode-go",
+        name: "OpenCode Go",
+        methods: [{ type: "key" }],
+        connections: [{ type: "credential", id: "cred_go", label: "Go key", method: "key" }],
+      },
+    ],
     onIntegrationOAuth: (input) => {
       attempts.push(input.integrationID)
 

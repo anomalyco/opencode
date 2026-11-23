@@ -108,6 +108,8 @@ const SourceModel = Schema.Struct({
     tools: Schema.Struct({ supported: Schema.Boolean }),
     reasoning: ConfigProvider.Reasoning,
     temperature: Schema.optional(Schema.Boolean),
+    // The faster and slower ways the provider serves the model, such as "priority" or "flex".
+    service_tier: Schema.optional(Schema.Array(Schema.String)),
   }),
   limit: Schema.optional(
     Schema.Struct({
@@ -184,6 +186,7 @@ const Subscription = Schema.Struct({
 const decodeSubscription = Schema.decodeUnknownOption(Subscription)
 
 type Route = {
+  readonly protocol: string
   readonly package: string
   readonly freeform?: Model.Capabilities["freeform"]
   readonly baseURL?: string
@@ -210,7 +213,11 @@ const BUILDS_OWN_URL = new Set([
   "aisdk:watsonx-ai-provider",
 ])
 
-const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>, recommended: boolean) {
+const normalize = Effect.fnUntraced(function* (
+  catalog: Record<string, unknown>,
+  recommended: boolean,
+  speeds: boolean,
+) {
   const failed: { readonly model: string; readonly issue: unknown }[] = []
   const unknown = new Set<string>()
   const source = isV1(catalog) ? toV2(catalog) : catalog
@@ -259,6 +266,7 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
       package: packageName,
       ...(baseURL ? { settings: { baseURL } } : {}),
     } satisfies Provider.Info
+    const ids = new Set(sources.map((source) => source.model.id))
     const models = sources.flatMap((source) => {
       const baseCost = cost(source.model.cost)
       const id = Model.ID.make(source.model.id)
@@ -267,16 +275,48 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
         { ...base, package: source.route.package },
         Variant.supports(source.model.capabilities.reasoning),
       )
+      const modes = entries(source.model.experimental?.modes, decodeMode)
+      // Each service tier is a model of its own ("gpt-5.5-fast"), marked as a speed of this one. Only the request
+      // code of an @opencode/ai package knows where a tier goes in the request.
+      const tiers =
+        speeds && !Provider.isAISDK(source.route.package)
+          ? [...(source.model.capabilities.service_tier ?? [])].sort((a, b) => tierRank(a) - tierRank(b))
+          : []
+      const speed = (name: string, tier: string) => ({
+        name: `${source.model.name} ${name.charAt(0).toUpperCase()}${name.slice(1)}`,
+        variants,
+        ...(speeds ? { speed: { base: id, id: name, faster: !SLOWER.has(tier) } } : {}),
+      })
       return [
         { ...base, variants },
-        ...entries(source.model.experimental?.modes, decodeMode).map(([mode, options]) =>
-          modelInfo(providerID, { packageName, baseURL }, Model.ID.make(`${source.model.id}-${mode}`), source, {
-            name: `${source.model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`,
-            cost: modeCost(source.model, baseCost, mode, options),
-            request: options,
-            variants,
-          }),
-        ),
+        ...tiers.flatMap((tier) => {
+          // "priority" is the tier people know as fast.
+          const name = tier === "priority" && !tiers.includes("fast") ? "fast" : tier
+          const speedID = Model.ID.make(`${source.model.id}-${name}`)
+          if (ids.has(speedID)) return []
+          // Until every tier has a multiplier, a mode for the tier may still carry its price.
+          const mode = modes.find(([key, options]) => (options.service_tier ?? key) === tier)?.[1]
+          return [
+            modelInfo(providerID, { packageName, baseURL }, speedID, source, {
+              ...speed(name, tier),
+              cost: modeCost(source.model, baseCost, tier, { cost: mode?.cost }),
+              request: tierRequest(source.route.protocol, tier),
+            }),
+          ]
+        }),
+        // A mode says how to ask for it itself. models.dev keeps the modes of a service tier for versions that
+        // don't read the tiers, so here they only add what the tiers don't cover, such as OpenAI's "pro".
+        ...modes
+          .filter(([mode, options]) => !tiers.includes(options.service_tier ?? mode))
+          .map(([mode, options]) =>
+            modelInfo(providerID, { packageName, baseURL }, Model.ID.make(`${source.model.id}-${mode}`), source, {
+              ...(TIERS.includes(mode)
+                ? speed(mode, mode)
+                : { name: `${source.model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`, variants }),
+              cost: modeCost(source.model, baseCost, mode, options),
+              request: options,
+            }),
+          ),
       ]
     })
     return [
@@ -301,6 +341,22 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
     })
   return snapshots as readonly Snapshot[]
 })
+
+// The service tiers models.dev names, slowest first. Any other tier counts as faster than the standard one.
+const TIERS = ["standby", "flex", "priority", "fast", "ultrafast"]
+const SLOWER = new Set(["standby", "flex"])
+const tierRank = (tier: string) => (TIERS.includes(tier) ? TIERS.indexOf(tier) : TIERS.length)
+
+// How a model is asked for a service tier. The request code of each API puts the `serviceTier` setting where
+// that API reads it.
+function tierRequest(protocol: string, tier: string) {
+  // The Messages API calls its fast tier a speed.
+  if (protocol === "messages" && tier === "fast") return { settings: { speed: "fast" } }
+  // Converse only names Bedrock's own tiers. A model reads its own tier as one of its request fields.
+  if (protocol === "converse" && tier !== "priority" && tier !== "flex")
+    return { body: { additionalModelRequestFields: { service_tier: tier } } }
+  return { settings: { serviceTier: tier } }
+}
 
 function entries<A>(record: Record<string, unknown> | undefined, decode: (input: unknown) => Option.Option<A>) {
   return Object.entries(record ?? {}).flatMap(([key, value]) =>
@@ -339,6 +395,7 @@ function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>
     ...(mediaInput ? { mediaInput } : {}),
   }
   return {
+    protocol,
     package: packageName,
     freeform: api.capabilities?.tools?.freeform?.filter(knownFreeformFormat),
     // An empty base_url is how models.dev says it has no URL for the API.
@@ -424,18 +481,30 @@ function cacheWrite(cache: typeof CachePrices.Type | undefined) {
   return first(cache?.write) ?? first(cache?.explicit?.write)
 }
 
-// A mode without its own cost takes the base prices scaled by its service tier's
-// multiplier (the mode name by default). The base context tiers are kept unscaled.
+// A mode (a speed, or a mode listed as its own model) without its own cost takes the base prices scaled by its
+// service tier's multiplier (the mode name by default), or else the tier's own prices. The base context tiers are kept
+// as they are.
 function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mode: SourceMode): Model.Info["cost"] {
   const [baseDefault, ...baseTiers] = base
   if (mode.cost) return [cost(mode.cost)[0], ...baseTiers]
   const tier = mode.service_tier ?? name
-  const factor = model.cost?.multipliers?.find(
-    (multiplier) =>
-      Object.keys(multiplier.when).length === 1 &&
-      Option.getOrUndefined(decodeServiceTier(multiplier.when.service_tier))?.equals === tier,
-  )?.factor
-  if (factor === undefined || !baseDefault) return base
+  // A tier's multiplier may only hold for some dates (an introductory price); the one for today is used.
+  const today = new Date().toISOString().slice(0, 10)
+  const factor = model.cost?.multipliers?.find((multiplier) => {
+    if (!Object.keys(multiplier.when).every((key) => key === "service_tier" || key === "date")) return false
+    if (Option.getOrUndefined(decodeServiceTier(multiplier.when.service_tier))?.equals !== tier) return false
+    if (multiplier.when.date === undefined) return true
+    const date = Option.getOrUndefined(decodeDate(multiplier.when.date))
+    return (
+      date !== undefined &&
+      (date.lt === undefined || today < date.lt) &&
+      (date.lte === undefined || today <= date.lte) &&
+      (date.gt === undefined || today > date.gt) &&
+      (date.gte === undefined || today >= date.gte)
+    )
+  })?.factor
+  if (!baseDefault) return base
+  if (factor === undefined) return [tierPrices(model.cost, baseDefault, tier), ...baseTiers]
   const scale = (price: Money.USDPerMillionTokens, path: readonly string[]) =>
     Money.USDPerMillionTokens.make(Math.round(price * factorAt(factor, path) * 1e10) / 1e10)
   return [
@@ -451,7 +520,29 @@ function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mo
   ]
 }
 
+// Hosts such as DigitalOcean list a tier's prices instead of a multiplier, as overrides of the base prices.
+function tierPrices(source: SourceCost | undefined, base: Model.Info["cost"][number], tier: string) {
+  const matches = (when: Record<string, unknown>) =>
+    Object.keys(when).length === 1 && Option.getOrUndefined(decodeServiceTier(when.service_tier))?.equals === tier
+  const input = source?.text?.input?.overrides?.find((override) => matches(override.when))
+  const output = source?.text?.output?.overrides?.find((override) => matches(override.when))
+  return {
+    input: input?.price ?? base.input,
+    output: output?.price ?? base.output,
+    cache: { read: input?.cache?.read ?? base.cache.read, write: cacheWrite(input?.cache) ?? base.cache.write },
+  }
+}
+
 const decodeServiceTier = Schema.decodeUnknownOption(Schema.Struct({ equals: Schema.optional(Schema.String) }))
+// ISO dates (YYYY-MM-DD), which compare as strings.
+const decodeDate = Schema.decodeUnknownOption(
+  Schema.Struct({
+    lt: Schema.optional(Schema.String),
+    lte: Schema.optional(Schema.String),
+    gt: Schema.optional(Schema.String),
+    gte: Schema.optional(Schema.String),
+  }),
+)
 
 // Prices an object factor doesn't name keep factor 1.
 function factorAt(factor: Factor, path: readonly string[]): number {
@@ -485,8 +576,13 @@ function modelInfo(
   input: {
     readonly name?: string
     readonly cost?: Model.Info["cost"]
-    readonly request?: { readonly body?: Provider.Settings; readonly headers?: Readonly<Record<string, string>> }
+    readonly request?: {
+      readonly settings?: Provider.Settings
+      readonly body?: Provider.Settings
+      readonly headers?: Readonly<Record<string, string>>
+    }
     readonly variants?: NonNullable<Model.Info["variants"]>
+    readonly speed?: NonNullable<Model.Info["experimental"]>["speed"]
   } = {},
 ): Model.Info {
   const model = source.model
@@ -497,6 +593,7 @@ function modelInfo(
       ? { baseURL: source.route.baseURL }
       : {}),
     ...(COMPATIBLE.has(source.route.package) ? { provider: providerID } : {}),
+    ...input.request?.settings,
   }
   return {
     id,
@@ -516,6 +613,7 @@ function modelInfo(
       temperature: model.capabilities.temperature,
     },
     variants: [...(input.variants ?? [])],
+    ...(input.speed ? { experimental: { speed: input.speed } } : {}),
     time: { released: released(model.release_date) },
     cost: (input.cost ?? cost(model.cost)).map((item) => ({
       ...item,
@@ -533,7 +631,8 @@ function modelInfo(
 export { Event } from "@opencode/schema/models-dev"
 
 export interface Interface {
-  readonly get: (recommended?: boolean) => Effect.Effect<readonly Snapshot[]>
+  /** `speeds` also lists each of a model's service tiers as a model of its own, marked as a speed of it. */
+  readonly get: (recommended?: boolean, speeds?: boolean) => Effect.Effect<readonly Snapshot[]>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
@@ -566,8 +665,8 @@ const defaultSource = "https://models.opencode.ai"
 // The experimental v2 API, limited to the model types opencode keeps, with the hidden OpenAI subscription lists included.
 export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}&include=${OPENAI_SUBSCRIPTIONS.join(",")}`
 
-export const decodeSnapshot = (text: string, recommended = false) =>
-  decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended)))
+export const decodeSnapshot = (text: string, recommended = false, speeds = false) =>
+  decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended, speeds)))
 
 // Bundled snapshot of the catalog at `catalogPath`, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
@@ -576,14 +675,15 @@ export const decodeSnapshot = (text: string, recommended = false) =>
 // flag value per isolate: the snapshot is a multi-MB module-level constant and one isolate can
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
-const bundledCache = new Map<boolean, readonly Snapshot[]>()
-const bundledSnapshot = (recommended: boolean) =>
+const bundledCache = new Map<string, readonly Snapshot[]>()
+const bundledSnapshot = (recommended: boolean, speeds: boolean) =>
   Effect.suspend(() => {
-    const cached = bundledCache.get(recommended)
+    const key = `${recommended}:${speeds}`
+    const cached = bundledCache.get(key)
     return cached
       ? Effect.succeed(cached)
-      : decodeSnapshot(snapshotText, recommended).pipe(
-          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(recommended, snapshot))),
+      : decodeSnapshot(snapshotText, recommended, speeds).pipe(
+          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(key, snapshot))),
         )
   })
 
@@ -704,13 +804,13 @@ export const layer = (options?: Options) =>
         return catalog
       })
 
-      const populate = Effect.fn("ModelsDev.populate")(function* (recommended: boolean) {
+      const populate = Effect.fn("ModelsDev.populate")(function* (recommended: boolean, speeds: boolean) {
         const fromFile = yield* loadFromFile
-        if (fromFile) return yield* normalize(fromFile, recommended)
+        if (fromFile) return yield* normalize(fromFile, recommended, speeds)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return yield* normalize(cached.catalog, recommended)
+        if (cached) return yield* normalize(cached.catalog, recommended, speeds)
         // The bundled snapshot is the boot-time floor until the periodic fetch refreshes it.
-        const bundled = options?.snapshot === false ? undefined : yield* bundledSnapshot(recommended)
+        const bundled = options?.snapshot === false ? undefined : yield* bundledSnapshot(recommended, speeds)
         if (bundled) return bundled
         if (!fetch) return []
         const catalog = yield* lock.withPermit(
@@ -720,13 +820,15 @@ export const layer = (options?: Options) =>
             return yield* fetchAndWrite()
           }),
         )
-        return yield* normalize(catalog, recommended)
+        return yield* normalize(catalog, recommended, speeds)
       }, Effect.orDie)
 
-      const caches = yield* Effect.forEach([false, true], (recommended) =>
-        Effect.cachedInvalidateWithTTL(populate(recommended), Duration.infinity),
+      // One per combination of the two flags, each normalized on first use.
+      const caches = yield* Effect.forEach(
+        [false, true].flatMap((recommended) => [false, true].map((speeds) => [recommended, speeds] as const)),
+        ([recommended, speeds]) => Effect.cachedInvalidateWithTTL(populate(recommended, speeds), Duration.infinity),
       )
-      const get = (recommended = false) => caches[Number(recommended)][0]
+      const get = (recommended = false, speeds = false) => caches[Number(recommended) * 2 + Number(speeds)][0]
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
         yield* lock

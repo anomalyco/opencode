@@ -56,7 +56,7 @@ import { KVTable } from "./kv/sql.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { Permission } from "./permission.js"
-import { Plugin } from "./plugin.js"
+import { Plugin } from "./plugin/service.js"
 import { Project } from "./project.js"
 import { Session } from "./session.js"
 import { SessionExecution } from "./session/execution.js"
@@ -93,6 +93,8 @@ export class DisabledError extends Schema.TaggedError<DisabledError>()("Automati
 export interface ListInput {
   readonly sessionID?: SessionSchema.ID
   readonly projectID?: ProjectID
+  /** Only automations in the project that owns this absolute directory, or that ran in it. */
+  readonly directory?: string
 }
 
 export interface Interface {
@@ -100,11 +102,13 @@ export interface Interface {
     input: CreateInput,
     invocation?: Invocation,
   ) => Effect.Effect<Info, InvalidError | DisabledError | Session.NotFoundError | Permission.Error>
-  readonly list: (input?: ListInput) => Effect.Effect<Info[]>
-  readonly get: (id: ID) => Effect.Effect<Info, NotFoundError>
-  readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError>
-  readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError>
-  readonly remove: (id: ID) => Effect.Effect<void, NotFoundError>
+  /** Oldest first, leaving out automations whose directory has automations off. */
+  readonly list: (input?: ListInput) => Effect.Effect<Info[], InvalidError | DisabledError | Session.NotFoundError>
+  /** These fail with DisabledError when the automation's directory has automations off. */
+  readonly get: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
+  readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
+  readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
+  readonly remove: (id: ID) => Effect.Effect<void, NotFoundError | DisabledError>
   /** Whether automations are enabled in the config of `directory`. */
   readonly enabled: (directory: string) => Effect.Effect<boolean, FileSystem.DirectoryNotFoundError>
   /** Runs every automation that is due now, at most once each. */
@@ -304,6 +308,21 @@ const layer = Layer.effect(
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(inDirectory(directory))
+
+    // An automation whose folder is gone stays manageable, so it can be inspected and deleted.
+    const visible = (directory: string) =>
+      settings(directory).pipe(
+        Effect.map((value) => value.enabled),
+        Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(true)),
+      )
+
+    /** The row of an automation callers may manage: it exists and its directory has automations on. */
+    const findVisible = (id: ID) =>
+      Effect.gen(function* () {
+        const row = yield* find(id)
+        if (!(yield* visible(row.directory))) return yield* new DisabledError()
+        return row
+      })
 
     const find = (id: ID) =>
       db
@@ -554,8 +573,15 @@ const layer = Layer.effect(
 
         if (action.type === "prompt") {
           const text = event ? AutomationEvent.prompt(action.prompt, event) : action.prompt
+          // One oversized event is skipped, so the watch moves past it instead of stopping on it.
           if (event && Buffer.byteLength(text) > 32_768)
-            return yield* new InvalidError({ reason: "Event prompt exceeds 32 KiB" })
+            return yield* settle(row, {
+              last_outcome: "skipped",
+              last_output: "Event prompt exceeds 32 KiB",
+              retry_at: null,
+              ...advance(row, now, false, event),
+              time_updated: now,
+            })
           const target = yield* promptTarget(row, action.to)
           // Only an unchanging timer prompt can be coalesced. Re-wake it in case the first wake was lost.
           if (!event && action.to.session && row.last_message_id && (yield* pending(row.last_message_id))) {
@@ -581,6 +607,7 @@ const layer = Layer.effect(
             "The session that authorized this automation's tools moved to another project",
           )
         const outcome = yield* AutomationCode.run(owner, action, {
+          automationID: row.id,
           messageID: SessionMessage.ID.make(id),
           state: row.state,
           now,
@@ -776,11 +803,6 @@ const layer = Layer.effect(
 
     // Re-check the original placement and the resource-specific grant before opening a stream or running an action.
     const checkWatch = Effect.fnUntraced(function* (row: Row, server: string) {
-      const config = yield* settings(row.directory)
-      if (!config.enabled)
-        return yield* new InvalidError({
-          reason: "Event automations are disabled",
-        })
       const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
       if (
         !owner ||
@@ -812,6 +834,16 @@ const layer = Layer.effect(
       }).pipe(inDirectory(row.directory))
     })
 
+    // Like a timer, a watch where automations are off stays active and is checked again later. It starts from now
+    // when it reopens, so nothing that happened while it was off runs.
+    const disableWatch = (row: Row, now: number) =>
+      settle(row, {
+        last_outcome: "disabled",
+        retry_at: now + DISABLED_RETRY,
+        event_position: row.event_position && { ...row.event_position, cursor: null },
+        time_updated: now,
+      })
+
     const expireWatch = (row: Row, now: number) =>
       settle(row, {
         status: "done",
@@ -831,6 +863,7 @@ const layer = Layer.effect(
         if (row.status !== "active" || trigger.type !== "event") return Stream.empty
         const now = yield* Clock.currentTimeMillis
         if (row.expires_at !== null && now >= row.expires_at) return Stream.fromEffectDrain(expireWatch(row, now))
+        if (!(yield* settings(row.directory)).enabled) return Stream.fromEffectDrain(disableWatch(row, now))
         yield* checkWatch(row, trigger.server)
         const position = row.event_position
         if (!position)
@@ -849,6 +882,10 @@ const layer = Layer.effect(
               if (current.status !== "active" || !(yield* claimLeader(at))) return false
               if (current.expires_at !== null && at >= current.expires_at) {
                 yield* expireWatch(current, at)
+                return false
+              }
+              if (!(yield* settings(current.directory)).enabled) {
+                yield* disableWatch(current, at)
                 return false
               }
               yield* checkWatch(current, trigger.server)
@@ -894,17 +931,37 @@ const layer = Layer.effect(
     })
 
     // The lease/doorbell loop also sees changes from other processes. It never polls a producer for events.
-    const reconcileWatches = Effect.gen(function* () {
+    const reconcileWatches = Effect.fnUntraced(function* (now: number) {
       const active = yield* db
-        .select({ id: AutomationTable.id, expires: AutomationTable.expires_at })
+        .select()
         .from(AutomationTable)
-        .where(and(eq(AutomationTable.status, "active"), isNull(AutomationTable.next_due_at)))
+        .where(
+          and(
+            eq(AutomationTable.status, "active"),
+            isNull(AutomationTable.next_due_at),
+            or(isNull(AutomationTable.retry_at), lte(AutomationTable.retry_at, now)),
+          ),
+        )
         .all()
         .pipe(Effect.orDie)
       const ids = new Set(active.map((row) => row.id))
       for (const [id] of Array.from(watches)) if (!ids.has(id)) yield* FiberMap.remove(watches, id)
-      for (const row of active)
-        yield* FiberMap.run(watches, row.id, watch(row.id, row.expires), { onlyIfMissing: true })
+      for (const row of active) {
+        // An open watch whose directory turned automations off closes now, not on its next event. Its directory is
+        // already loaded, so reading its config is cheap.
+        if (yield* FiberMap.has(watches, row.id)) {
+          // A missing directory is left to the watch, which pauses on it.
+          const enabled = yield* settings(row.directory).pipe(
+            Effect.map((config) => config.enabled),
+            Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(true)),
+          )
+          if (enabled) continue
+          yield* FiberMap.remove(watches, row.id)
+          yield* disableWatch(row, now)
+          continue
+        }
+        yield* FiberMap.run(watches, row.id, watch(row.id, row.expires_at), { onlyIfMissing: true })
+      }
       return active.length
     })
 
@@ -933,7 +990,7 @@ const layer = Layer.effect(
         return yield* idle
       }
       // No timer tick or next-slot query for event-only databases; timer-only databases need no extra probe.
-      if ((yield* reconcileWatches) > 0 && !(yield* hasActiveRows(true))) return yield* idle
+      if ((yield* reconcileWatches(now)) > 0 && !(yield* hasActiveRows(true))) return yield* idle
       yield* Effect.scoped(
         Effect.forkScoped(heartbeat).pipe(
           Effect.andThen(
@@ -1125,6 +1182,19 @@ const layer = Layer.effect(
         return toInfo(row)
       }),
       list: Effect.fn("Automation.list")(function* (input) {
+        if (input?.sessionID !== undefined) {
+          const session = yield* sessions.get(input.sessionID)
+          if (!(yield* visible(session.location.directory))) return yield* new DisabledError()
+        }
+        const directory = input?.directory
+        if (directory !== undefined && !path.isAbsolute(directory))
+          return yield* new InvalidError({ reason: `Directory must be an absolute path: ${directory}` })
+        if (directory !== undefined && !(yield* visible(directory))) return yield* new DisabledError()
+        // Reading ownership must not record a Project for a folder that was only asked about.
+        const owner =
+          directory === undefined
+            ? undefined
+            : (yield* projects.resolve(AbsolutePath.make(directory), { persist: false })).id
         const rows = yield* db
           .select()
           .from(AutomationTable)
@@ -1137,13 +1207,20 @@ const layer = Layer.effect(
           .orderBy(asc(AutomationTable.time_created), asc(AutomationTable.id))
           .all()
           .pipe(Effect.orDie)
-        return rows.map(toInfo)
+        // A deleted folder may no longer resolve to its Project, so also match automations that ran there.
+        const matching = rows.filter(
+          (row) => directory === undefined || row.project_id === owner || row.directory === directory,
+        )
+        const shown = new Set(
+          yield* Effect.filter(new Set(matching.map((row) => row.directory)), (item) => visible(item)),
+        )
+        return matching.filter((row) => shown.has(row.directory)).map(toInfo)
       }),
       get: Effect.fn("Automation.get")(function* (id) {
-        return toInfo(yield* find(id))
+        return toInfo(yield* findVisible(id))
       }),
       pause: Effect.fn("Automation.pause")(function* (id) {
-        const row = yield* find(id)
+        const row = yield* findVisible(id)
         if (row.status !== "active") return toInfo(row)
         yield* db
           .update(AutomationTable)
@@ -1155,7 +1232,7 @@ const layer = Layer.effect(
         return toInfo(yield* find(id))
       }),
       resume: Effect.fn("Automation.resume")(function* (id) {
-        const row = yield* find(id)
+        const row = yield* findVisible(id)
         if (row.status !== "paused") return toInfo(row)
         const now = yield* Clock.currentTimeMillis
         // An `at` that fell due while paused runs once, late, unless it has expired; a repeating automation resumes at
@@ -1179,7 +1256,7 @@ const layer = Layer.effect(
         return toInfo(yield* find(id))
       }),
       remove: Effect.fn("Automation.remove")(function* (id) {
-        yield* find(id)
+        yield* findVisible(id)
         yield* db.delete(AutomationTable).where(eq(AutomationTable.id, id)).run().pipe(Effect.orDie)
         yield* FiberMap.remove(watches, id)
       }),

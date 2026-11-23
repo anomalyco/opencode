@@ -1985,6 +1985,15 @@ export type ConfigInfoEncoded = {
         todo: boolean?,
         media_blob: boolean?,
         artifacts: boolean?,
+        console_watches: boolean?,
+        recommended_api: boolean?,
+        model_speeds: boolean?,
+        full_codemode: boolean?,
+        machines: boolean?,
+        home_memory: boolean?,
+        project_overlay: boolean?,
+        opencode_api: boolean?,
+        sqlite_fts: boolean?,
         video_generate: (boolean | {
             model: (string | {
                 providerID: string,
@@ -1992,13 +2001,6 @@ export type ConfigInfoEncoded = {
                 variant: string?,
             })?,
         })?,
-        console_watches: boolean?,
-        recommended_api: boolean?,
-        full_codemode: boolean?,
-        machines: boolean?,
-        home_memory: boolean?,
-        project_overlay: boolean?,
-        sqlite_fts: boolean?,
         part_rows: boolean?,
         image_generate: (boolean | {
             model: (string | {
@@ -3072,6 +3074,9 @@ export type ModelInfo = {
     body: { [string]: any }?,
     capabilities: ModelCapabilities,
     variants: { ModelVariant },
+    experimental: {
+        speed: ModelSpeed?,
+    }?,
     time: {
         released: number,
     },
@@ -3098,6 +3103,12 @@ export type ModelRef = {
 }
 
 export type ModelSettings = { [string]: any }
+
+export type ModelSpeed = {
+    base: string,
+    id: string,
+    faster: boolean,
+}
 
 export type ModelType = (("chat" | "decision" | "image" | "video") | string)
 
@@ -3348,6 +3359,7 @@ export type ProjectUpdated = _Event1<"project.updated", {
 
 export type ProjectVcs = string
 
+--- An agent @-mentioned in the prompt, such as @explore, to suggest the model use it. Only the @name in text reaches the model; this records which agent it names and doesn't change the session's own agent.
 export type PromptAgentAttachment = {
     name: string,
     mention: PromptMention?,
@@ -3633,6 +3645,7 @@ export type SessionInboxDelivered = _Event2<"session.inbox.delivered", {
     inboxID: SessionMessageID,
 }>
 
+--- steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer.
 export type SessionInboxDelivery = ("steer" | "queue")
 
 export type SessionInboxDeliveryChanged = _Event2<"session.inbox.delivery.changed", {

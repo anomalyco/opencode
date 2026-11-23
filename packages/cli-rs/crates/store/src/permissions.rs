@@ -1,8 +1,8 @@
 use opencode_api::generated::*;
 
 use crate::changes::Touched;
-use crate::reads::{Read, SessionRead};
-use crate::state::{Data, Error, State, Task, evict_missing, is_tag};
+use crate::core::{Effect, List, Ticket};
+use crate::state::{Error, Overlay, State};
 
 impl State {
     /// Pending permission requests of a session; none until read or asked.
@@ -58,43 +58,46 @@ impl State {
             self.touch(session, Touched::PERMISSIONS);
         }
     }
-}
 
-impl Data {
-    /// Reads pending permissions once per invalidation. Requests opened or settled during the read take precedence
-    /// over its snapshot.
-    pub fn permission_sync(&self, session: &SessionID) -> Task<()> {
-        let (fetched, again) = (session.clone(), session.clone());
-        self.overlay_sync(
-            self.keyed(Read::Session(session.as_str(), SessionRead::Permissions)),
-            session.clone(),
-            session.clone(),
-            |state, session, overlay| state.sessions.get_or_insert(session).permission_read = Some(overlay),
-            |state, session, ticket| {
-                state.sessions.get_mut(session)?.permission_read.take_if(|read| read.ticket() == ticket)
-            },
-            |request| &request.id.0,
-            move |data| async move {
-                let list = data.client().permission_list(&PermissionListInput { session_id: fetched }).await;
-                Ok((list.map_err(|error| evict_missing(&data, error))?, ()))
-            },
-            |state, session, list, ()| {
-                state.sessions.get_or_insert(session).permissions = Some(list);
-                state.touch(session, Touched::PERMISSIONS);
-            },
-            move |data| data.permission_sync(&again),
-        )
+    /// Begins a read of the pending permission requests of the session of `ticket`, with an overlay of the requests asked
+    /// and replied to meanwhile.
+    pub(crate) fn begin_permissions(&mut self, ticket: Ticket) -> List {
+        let read = self.token();
+        let record = &mut self.sessions[ticket.session()];
+        record.permission_read = Some(Overlay::new(read));
+        List { ticket, session: record.id.clone(), read, started: self.deletion_epoch }
     }
 
-    /// Replies and drops the request; an already settled request counts as replied.
-    pub async fn permission_reply(&self, input: PermissionReplyInput) -> Result<(), Error> {
-        if let Err(error) = self.client().permission_reply(&input).await {
-            let error = Error::new(error);
-            if !is_tag(&error, "PermissionNotFoundError") {
-                return Err(error);
+    /// Publishes the permission read `read` with the requests asked and replied to during it, unless a newer read or
+    /// a deletion of the session since it began supersedes it. An overflowed overlay reads again instead.
+    pub(crate) fn complete_permissions(
+        &mut self,
+        list: List,
+        result: Result<Vec<PermissionRequest>, Error>,
+        effects: &mut Vec<Effect>,
+    ) {
+        let session = list.session;
+        let overlay = self
+            .sessions
+            .get_mut(&session)
+            .and_then(|record| record.permission_read.take_if(|current| current.ticket() == list.read));
+        let requests = match result {
+            Ok(requests) => requests,
+            Err(error) => return self.evict_missing(&error),
+        };
+        let Some(overlay) = overlay else { return };
+        if self.deleted_since(&session, list.started) {
+            return;
+        }
+        match overlay.apply(requests, |request| &request.id.0) {
+            Some(requests) => {
+                self.sessions.get_or_insert(&session).permissions = Some(requests);
+                self.touch(&session, Touched::PERMISSIONS);
+            }
+            None => {
+                self.invalidate_key(list.ticket.key);
+                effects.push(Effect::Permissions(session));
             }
         }
-        self.write(|state| state.remove_permission(&input.session_id, &input.request_id));
-        Ok(())
     }
 }

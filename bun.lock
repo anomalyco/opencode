@@ -29,7 +29,7 @@
     },
     "packages/ai": {
       "name": "@opencode/ai",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@aws-sdk/credential-providers": "3.1057.0",
         "@opencode/schema": "workspace:*",
@@ -51,7 +51,7 @@
     },
     "packages/app": {
       "name": "@opencode/app",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@corvu/drawer": "catalog:",
         "@dnd-kit/abstract": "0.5.0",
@@ -107,7 +107,7 @@
     },
     "packages/cli": {
       "name": "@opencode/cli",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "bin": {
         "opencode": "./bin/opencode.cjs",
         "opencode2": "./bin/opencode2.cjs",
@@ -188,7 +188,7 @@
     },
     "packages/client": {
       "name": "@opencode/client",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@opencode/protocol": "workspace:*",
         "@opencode/schema": "workspace:*",
@@ -214,7 +214,7 @@
     },
     "packages/codemode": {
       "name": "@opencode/codemode",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "acorn": "8.15.0",
         "effect": "catalog:",
@@ -228,7 +228,7 @@
     },
     "packages/core": {
       "name": "@opencode/core",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@ai-sdk/provider": "3.0.19",
         "@effect/platform-node": "catalog:",
@@ -308,7 +308,7 @@
     },
     "packages/data/app": {
       "name": "@opencode/data-app",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode/data-core": "workspace:*",
@@ -336,7 +336,7 @@
     },
     "packages/data/core": {
       "name": "@opencode/data-core",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@planetscale/database": "1.19.0",
         "drizzle-orm": "catalog:",
@@ -353,7 +353,7 @@
     },
     "packages/data/server": {
       "name": "@opencode/data-server",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@opencode/data-core": "workspace:*",
         "effect": "catalog:",
@@ -369,7 +369,7 @@
     },
     "packages/desktop": {
       "name": "@opencode/desktop",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@zip.js/zip.js": "2.7.62",
         "electron-context-menu": "5.0.0",
@@ -417,7 +417,7 @@
     },
     "packages/gui-plugins": {
       "name": "@opencode/gui-plugins",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@betteroffice/docx": "0.4.3",
         "@betteroffice/fonts": "0.4.0",
@@ -464,7 +464,7 @@
     },
     "packages/http-recorder": {
       "name": "@opencode/http-recorder",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@effect/platform-node-shared": "catalog:",
       },
@@ -483,7 +483,7 @@
     },
     "packages/httpapi-codegen": {
       "name": "@opencode/httpapi-codegen",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "effect": "catalog:",
         "prettier": "3.6.2",
@@ -496,7 +496,7 @@
     },
     "packages/latex": {
       "name": "@opencode/latex",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opentui/core": "catalog:",
@@ -510,7 +510,7 @@
     },
     "packages/merman": {
       "name": "@opencode/merman",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opentui/core": "catalog:",
@@ -525,7 +525,7 @@
     },
     "packages/nav-menus": {
       "name": "@opencode/nav-menus",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "devDependencies": {
         "@happy-dom/global-registrator": "20.0.11",
         "@types/bun": "catalog:",
@@ -536,7 +536,7 @@
     },
     "packages/patchmark": {
       "name": "@opencode/patchmark",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
@@ -549,7 +549,7 @@
     },
     "packages/plugin": {
       "name": "@opencode/plugin",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@ai-sdk/provider": "3.0.8",
         "@opencode/ai": "workspace:*",
@@ -575,8 +575,8 @@
       },
       "peerDependencies": {
         "@opencode/theme": "workspace:*",
-        "@opentui/core": ">=0.9.4",
-        "@opentui/solid": ">=0.9.4",
+        "@opentui/core": ">=0.8.0",
+        "@opentui/solid": ">=0.8.0",
         "electron": "*",
         "solid-js": ">=1.9.0",
         "vite": ">=6",
@@ -594,7 +594,7 @@
     },
     "packages/plugin-browser": {
       "name": "@opencode/plugin-browser",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
@@ -610,7 +610,7 @@
     },
     "packages/plugins/figma": {
       "name": "@opencode/plugin-figma",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "gray-matter": "4.0.3",
       },
@@ -625,7 +625,7 @@
     },
     "packages/protocol": {
       "name": "@opencode/protocol",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@opencode/schema": "workspace:*",
         "effect": "catalog:",
@@ -640,7 +640,7 @@
     },
     "packages/schema": {
       "name": "@opencode/schema",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@standard-schema/spec": "catalog:",
         "effect": "catalog:",
@@ -664,7 +664,7 @@
     },
     "packages/sdk": {
       "name": "@opencode/sdk",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -685,7 +685,7 @@
     },
     "packages/server": {
       "name": "@opencode/server",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "@effect/platform-node-shared": "catalog:",
@@ -708,7 +708,7 @@
     },
     "packages/session-ui": {
       "name": "@opencode/session-ui",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@kitlangton/solid-motion": "0.2.2",
         "@kobalte/core": "catalog:",
@@ -740,7 +740,7 @@
     },
     "packages/simulation": {
       "name": "@opencode/simulation",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@opencode/ai": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -778,7 +778,7 @@
     },
     "packages/theme": {
       "name": "@opencode/theme",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@opentui/core": "catalog:",
         "effect": "catalog:",
@@ -792,7 +792,7 @@
     },
     "packages/tui": {
       "name": "@opencode/tui",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -824,7 +824,7 @@
     },
     "packages/ui": {
       "name": "@opencode/ui",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@kitlangton/solid-motion": "0.2.2",
         "@kobalte/core": "catalog:",
@@ -860,7 +860,7 @@
     },
     "packages/util": {
       "name": "@opencode/util",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "@effect/opentelemetry": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -999,7 +999,7 @@
     },
     "services/update": {
       "name": "@opencode/update",
-      "version": "2.3.0",
+      "version": "2.4.1",
       "dependencies": {
         "jose": "6.0.11",
         "semver": "catalog:",
@@ -1057,7 +1057,7 @@
     "@effect/platform-node-shared": "4.1.0",
     "@effect/sql-sqlite-bun": "4.1.0",
     "@effect/sql-sqlite-node": "4.1.0",
-    "@hona/strobe": "0.42.0",
+    "@hona/strobe": "0.44.1",
     "@kobalte/core": "0.13.13",
     "@lydell/node-pty": "1.2.0-beta.12",
     "@npmcli/arborist": "9.4.0",
@@ -1599,19 +1599,19 @@
 
     "@happy-dom/global-registrator": ["@happy-dom/global-registrator@20.0.11", "", { "dependencies": { "@types/node": "^20.0.0", "happy-dom": "^20.0.11" } }, "sha512-GqNqiShBT/lzkHTMC/slKBrvN0DsD4Di8ssBk4aDaVgEn+2WMzE6DXxq701ndSXj7/0cJ8mNT71pM7Bnrr6JRw=="],
 
-    "@hona/strobe": ["@hona/strobe@0.42.0", "", { "optionalDependencies": { "@hona/strobe-darwin-arm64": "0.42.0", "@hona/strobe-darwin-x64": "0.42.0", "@hona/strobe-linux-arm64": "0.42.0", "@hona/strobe-linux-x64": "0.42.0", "@hona/strobe-win32-arm64": "0.42.0", "@hona/strobe-win32-x64": "0.42.0" }, "bin": { "strobe": "bin/strobe.js" } }, "sha512-9yGVLIZszb4rw91ew9MYn+K+19WiEd24pY104fz8vKF3VF21qn+bv/MdrLHqGrE3fwEZvocR9uwrRuWjyDS7YQ=="],
+    "@hona/strobe": ["@hona/strobe@0.44.1", "", { "optionalDependencies": { "@hona/strobe-darwin-arm64": "0.44.1", "@hona/strobe-darwin-x64": "0.44.1", "@hona/strobe-linux-arm64": "0.44.1", "@hona/strobe-linux-x64": "0.44.1", "@hona/strobe-win32-arm64": "0.44.1", "@hona/strobe-win32-x64": "0.44.1" }, "bin": { "strobe": "bin/strobe.js" } }, "sha512-9HKNumRLqJm9OlAPCSNcB8HykhF5F7I4wcTwRf+CJ78xzDcMUSIekjRWz8MjpsTL5t4GdIckmMtyY7duiwo46A=="],
 
-    "@hona/strobe-darwin-arm64": ["@hona/strobe-darwin-arm64@0.42.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-b3UmIH7pzDzmXSZJKzj6B0UNIO9D/zU0scI/Be9l6Lx7FOXVTMM9UyHdYlDOAUyC8ew4GIRW4Owksq8qu9Vdxw=="],
+    "@hona/strobe-darwin-arm64": ["@hona/strobe-darwin-arm64@0.44.1", "", { "os": "darwin", "cpu": "arm64" }, "sha512-WsTn+iyJMy0/UTSCv5ZaS8JQ984ZSA724OcyYP+znncSEVFDkJbtWSKMQOCYJ6Z7TDP9PPSXIs/YhwdfPXvPow=="],
 
-    "@hona/strobe-darwin-x64": ["@hona/strobe-darwin-x64@0.42.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-rMcTyYJH6Dg+NRur4Id8EyM3lZJSAxCCGFVe9qc+cy1GwBdDFjRmvSxqsdCQ/ah6txlkCOIWpyAxOuCk1z4liA=="],
+    "@hona/strobe-darwin-x64": ["@hona/strobe-darwin-x64@0.44.1", "", { "os": "darwin", "cpu": "x64" }, "sha512-lYnOotxHyBLJKrUZ+OPoMzDHqbv8MNU6rw4hy9LxIlbjJQ6szfl1WmQWDJVjGNlTH7xgd8nfQQDCSSdDNGJ1YA=="],
 
-    "@hona/strobe-linux-arm64": ["@hona/strobe-linux-arm64@0.42.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-3QAWiuMc7kvpKvEtf0XE115PIAsQ+jXqgKrIUpcex943maskLTI1ZQIfJZTFqQm8EeeLe9nRI5X6jJt3ezsxhQ=="],
+    "@hona/strobe-linux-arm64": ["@hona/strobe-linux-arm64@0.44.1", "", { "os": "linux", "cpu": "arm64" }, "sha512-lHtb1VIYCK64OpannKujYtmUUr58inwZYyI+D6m/FcqSYnHadMdXSIhDoVWDFQwH0kDJ1uB5Jbu+sYMQDXMujw=="],
 
-    "@hona/strobe-linux-x64": ["@hona/strobe-linux-x64@0.42.0", "", { "os": "linux", "cpu": "x64" }, "sha512-LJLtYy3HrYzXAA5mKrTAZ4oWnEQHig6MwfYaqLaBoR3q/0z8qDR5u1dPcsppzI1jlS6WD3isjmXSmWYHe32CcQ=="],
+    "@hona/strobe-linux-x64": ["@hona/strobe-linux-x64@0.44.1", "", { "os": "linux", "cpu": "x64" }, "sha512-a0uTF+Er8qBEzcusczs4r+DTBmEWHEvvMGkEE4hRzNIWw/b3o4x9khGh0vaoyXFp3H7S0x4mI4LcFItyc2kamA=="],
 
-    "@hona/strobe-win32-arm64": ["@hona/strobe-win32-arm64@0.42.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-upHLoBRbDsqMTmbm5QoryhUBPiQchp1MWo8FaImfPElsy25uiQKnlWfS5y4NlRLfZFZBStiSbiC0zupmXKxx0g=="],
+    "@hona/strobe-win32-arm64": ["@hona/strobe-win32-arm64@0.44.1", "", { "os": "win32", "cpu": "arm64" }, "sha512-CpOrG4ruzC7pq01WQR01HisipFgBd3ZTLl4QHirMk9khCmOE/E32lEqaEaIZ24q9hub3ozDfbVdzHRWXkHKAXw=="],
 
-    "@hona/strobe-win32-x64": ["@hona/strobe-win32-x64@0.42.0", "", { "os": "win32", "cpu": "x64" }, "sha512-cD64z5dlcNBDOgYnJlN5bcvGo1m8KUn7Ax3ttzZH33G9dVpeWdb+QhLgBq/CtPDKHf21mD+5WklCYaLMRBHk6A=="],
+    "@hona/strobe-win32-x64": ["@hona/strobe-win32-x64@0.44.1", "", { "os": "win32", "cpu": "x64" }, "sha512-eH1/RvKy2en7DAUFinyq1ITw9FR/S0IJVrgXcHigxSyjUQIBsvII0UenbVeBoE4/ljd/BOw4aLx/GBsznrn1Zg=="],
 
     "@hono/node-server": ["@hono/node-server@2.1.5", "", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q=="],
 

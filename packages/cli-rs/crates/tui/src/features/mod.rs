@@ -14,6 +14,7 @@ pub mod links;
 pub mod location;
 pub mod overlays;
 pub mod quick_switch;
+pub mod release;
 pub mod route_missing;
 pub mod selection;
 pub mod session_links;

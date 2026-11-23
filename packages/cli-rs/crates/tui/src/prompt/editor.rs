@@ -139,6 +139,8 @@ pub struct Inner {
     edge: View,
     bottom: View,
     metadata: Row,
+    /// The metadata row's box, which [`Row::measure`] measures.
+    meta: View,
     /// The page theme the prompt last painted in, which its marks' styles came from.
     theme: RefCell<Theme>,
     footer: Text,
@@ -216,8 +218,11 @@ impl Prompt {
     }
 
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
-        if changes.any_location() && changes.location(&self.inner.location(tui)) {
-            self.inner.read_catalog(tui);
+        let location = changes.any_location().then(|| self.inner.location(tui));
+        if let Some(location) = location.filter(|location| changes.location(location)) {
+            if changes.location_parts(&location, Catalog::READS) {
+                self.inner.read_catalog(tui);
+            }
             if let Some(complete) = self.inner.autocomplete.get() {
                 complete.sync();
             }
@@ -359,6 +364,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         edge,
         bottom,
         metadata,
+        meta,
         theme: RefCell::new(theme),
         footer,
         editor_file,
@@ -601,7 +607,9 @@ impl Inner {
     fn read_catalog(&self, tui: &Tui) {
         let location = self.location(tui);
         let catalog = tui.data.read(|state| Catalog::read(state, &location));
-        if let Some(catalog) = catalog {
+        // Read again unchanged, it shows nothing new.
+        if let Some(catalog) = catalog.filter(|new| !self.catalog.borrow().as_deref().is_some_and(|old| old.same(new)))
+        {
             *self.catalog.borrow_mut() = Some(Rc::new(catalog));
             self.refresh(tui);
             self.submit_startup(tui);
@@ -655,6 +663,7 @@ impl Inner {
                     model,
                     provider,
                     variant: selection.model.as_ref().and_then(|model| model.variant.clone()),
+                    speed: selection.model.as_ref().and_then(|model| catalog.speed(model)),
                     limit: tui.local.limit_label(),
                 }
             }
@@ -867,6 +876,13 @@ fn connect(inner: &Rc<Inner>) {
 
 /// Show and open the working directory from the footer.
 fn connect_location(inner: &Rc<Inner>) {
+    inner.meta.on_resize(bind!(inner, |prompt, _, rect| {
+        if prompt.metadata.measure(rect.width.max(0.0) as u16)
+            && let Some(tui) = prompt.tui.upgrade()
+        {
+            prompt.refresh(&tui);
+        }
+    }));
     inner.location_box.on_resize(bind!(inner, |prompt, _, rect| {
         let width = rect.width.max(0.0) as u16;
         if prompt.location_width.replace(width) != width
