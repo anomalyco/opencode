@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { descendantActivityModel, descendantActivityStatus, footerActivityStatus } from "./session-data"
+import { descendantActivityModel, descendantActivityStatus, footerActivityStatus, activeToolSummaries } from "./session-data"
 
 describe("descendantActivityStatus", () => {
   it("shows running child", () => {
@@ -118,5 +118,77 @@ describe("footerActivityStatus", () => {
     // Phase must stay idle so the footer renders task: status without enabling the parent interrupt.
     expect(child.phase).toBe("idle")
     expect(child.status).toContain("task:")
+  })
+})
+
+describe("activeToolSummaries", () => {
+  const makeTab = (
+    overrides: Partial<import("./types").FooterSubagentTab>,
+  ): import("./types").FooterSubagentTab => ({
+    sessionID: "ses_test",
+    label: "developer",
+    description: "",
+    status: "running",
+    ...overrides,
+  })
+
+  const makeState = (
+    tabs: import("./types").FooterSubagentTab[],
+  ): import("./types").FooterSubagentState => ({
+    tabs,
+    details: {},
+    permissions: [],
+    forms: [],
+  })
+
+  it("returns empty array when no running tabs", () => {
+    const result = activeToolSummaries(
+      makeState([makeTab({ status: "completed" })]),
+      Date.now(),
+    )
+    expect(result).toEqual([])
+  })
+
+  it("includes running tab with no active tool", () => {
+    const result = activeToolSummaries(makeState([makeTab({})]), Date.now())
+    expect(result).toHaveLength(1)
+    expect(result[0]!.tool).toBe("")
+    expect(result[0]!.elapsedMs).toBe(0)
+    expect(result[0]!.label).toBe("developer")
+  })
+
+  it("includes running tab with active tool", () => {
+    const now = Date.now()
+    const result = activeToolSummaries(
+      makeState([makeTab({ activeTool: "mcp__filesystem__read_file", toolStart: now - 5000 })]),
+      now,
+    )
+    expect(result).toHaveLength(1)
+    expect(result[0]!.tool).toBe("mcp__filesystem__read_file")
+    expect(result[0]!.elapsedMs).toBeGreaterThanOrEqual(4900)
+    expect(result[0]!.elapsedMs).toBeLessThanOrEqual(5100)
+  })
+
+  it("returns one row per running tab", () => {
+    const now = Date.now()
+    const result = activeToolSummaries(
+      makeState([
+        makeTab({ sessionID: "ses_a", label: "developer", activeTool: "bash", toolStart: now - 1000 }),
+        makeTab({ sessionID: "ses_b", label: "researcher", activeTool: "websearch", toolStart: now - 2000 }),
+        makeTab({ sessionID: "ses_c", label: "done", status: "completed" }),
+      ]),
+      now,
+    )
+    expect(result).toHaveLength(2)
+    expect(result[0]!.label).toBe("developer")
+    expect(result[1]!.label).toBe("researcher")
+  })
+
+  it("inputPreview is empty string (input not in tab snapshot)", () => {
+    const result = activeToolSummaries(
+      makeState([makeTab({ activeTool: "bash", toolStart: Date.now() })]),
+      Date.now(),
+    )
+    expect(result[0]!.inputPreview).toBe("")
   })
 })

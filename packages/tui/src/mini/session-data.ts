@@ -45,3 +45,24 @@ export function footerActivityStatus(
   if (child) return { phase: "idle", status: child }
   return { phase: "idle", status: "" }
 }
+
+export interface ToolSummaryRow {
+  label: string
+  tool: string
+  inputPreview: string
+  elapsedMs: number
+}
+
+export function activeToolSummaries(
+  descendant: FooterSubagentState,
+  now: number,
+): ToolSummaryRow[] {
+  return descendant.tabs
+    .filter((tab) => tab.status === "running")
+    .map((tab) => ({
+      label: tab.label || tab.sessionID,
+      tool: tab.activeTool ?? "",
+      inputPreview: "",
+      elapsedMs: tab.toolStart !== undefined ? Math.max(0, now - tab.toolStart) : 0,
+    }))
+}
