@@ -48,7 +48,7 @@ test("ownedJobs follows a subagent job to its child when the child's parent is n
   ])
 })
 
-test("scriptLabel names a script by its first line of code, then its title", () => {
+test("scriptLabel names a script by its first line of code past directives, then its title", () => {
   const job: JobInfo = { kind: "codemode", id: "cm_1", sessionID: "session", status: "running", time: { started: 1 } }
   const messages = [
     {
@@ -59,7 +59,11 @@ test("scriptLabel names a script by its first line of code, then its title", () 
           type: "tool",
           id: "part",
           name: "execute",
-          state: { status: "completed", input: { code: "\n  // Build both\nawait 1" }, metadata: { jobID: "cm_1" } },
+          state: {
+            status: "completed",
+            input: { code: '// @options: {"background": true}\n  // Build both\nawait 1' },
+            metadata: { jobID: "cm_1" },
+          },
         },
       ],
     },

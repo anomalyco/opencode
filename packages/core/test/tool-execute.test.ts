@@ -8,7 +8,10 @@ import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
-import { execute } from "@opencode/core/tool/runtime"
+import { definition, execute } from "@opencode/core/tool/runtime"
+import { ai, type LanguageModel } from "@opencode/ai/effect"
+import { Anthropic, OpenAI } from "@opencode/ai/providers"
+import { compileRequest } from "@opencode/ai/testing"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -36,8 +39,16 @@ const createCodeMode = (
   permission = allowAll,
   services?: Context.Context<CodeModeTool.Services>,
   api?: Context.Context<CodeModeTool.Api>,
+  rawText?: boolean,
 ) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, services, api)
+  CodeModeTool.create(
+    { tools },
+    (_, tool, input, context) => execute(tool, input, context),
+    permission,
+    services,
+    api,
+    rawText,
+  )
 
 test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
   const input = Schema.Struct({ text: Schema.NonEmptyString })
@@ -85,6 +96,26 @@ test("with full_codemode, execute names Bun's file APIs instead of ruling out fi
     "`fetch` is available for HTTP requests, and Bun's file APIs (`Bun.file`, `Bun.write`, `Bun.Glob`) for files, in place of Node's `fs`. Imports and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
   )
   expect(description).not.toContain("direct filesystem access")
+})
+
+test("with full_codemode, execute goes out as raw code with an options line for raw-text models and as JSON otherwise", async () => {
+  const body = (model: LanguageModel, rawText?: boolean) =>
+    Effect.runPromise(
+      compileRequest(
+        ai.request({
+          model,
+          prompt: "Run it.",
+          tools: [definition(createCodeMode(new Map(), allowAll, codeModeServices(process.cwd()), undefined, rawText))],
+        }),
+      ).pipe(Effect.map((prepared) => prepared.body)),
+    )
+  const gpt = await body(OpenAI.model("gpt-6.2-sol", { apiKey: "test" }), true)
+  expect(gpt.tools).toMatchObject([{ type: "custom", name: "execute", format: { type: "text" } }])
+  expect(gpt.tools[0].description).toContain("`// @options: <JSON object>`")
+  const claude = await body(Anthropic.model("claude-opus-5-5", { apiKey: "test" }))
+  expect(claude.tools).toMatchObject([
+    { name: "execute", input_schema: { properties: { timeout: {}, background: {} } } },
+  ])
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {

@@ -246,11 +246,12 @@ function oldestFirst<T extends { id: string }>(items: readonly T[], created: (it
   return items.toSorted((a, b) => created(a) - created(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
+// A `// @` directive, such as execute's options line, doesn't name a script.
 function firstLine(code: string | undefined) {
   return code
     ?.split("\n")
     .map((line) => line.trim())
-    .find((line) => line.length > 0)
+    .find((line) => line.length > 0 && !line.startsWith("// @"))
 }
 
 // The commands of the shells a running script has started and not finished.
