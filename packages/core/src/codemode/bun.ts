@@ -258,6 +258,12 @@ const typeOf = (files: Environment.Files, absolute: string) =>
 const text = (bytes: Uint8Array) =>
   isUtf8(bytes) ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString() : undefined
 
+/** A BunFile given as a `fetch` body, read to the bytes it names. Any other value is left as it is. */
+export const body = <A>(value: A) => {
+  const from = handleOf(value)
+  return from ? Effect.map(read(from), (bytes) => new Uint8Array(bytes)) : Effect.succeed(value)
+}
+
 const handleOf = (value: unknown) => {
   const bytes = method(value, "bytes")
   return bytes && handles.get(bytes)
