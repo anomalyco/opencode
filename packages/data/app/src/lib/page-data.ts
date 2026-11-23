@@ -177,6 +177,7 @@ function newModelsFromCatalog(candidates: NewModelCandidate[], catalog: ModelCat
       return [
         {
           ...item,
+          free: catalog.freeModels.includes(item.model),
           releaseDate,
           daysLive: Math.round((Date.parse(latest) - Date.parse(launch)) / DAY_MS) + 1,
           tokens: daily.reduce((sum, day) => sum + day.tokens, 0),

@@ -1,7 +1,8 @@
 import { ProviderIcon } from "@opencode/ui/provider-icon"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { ChartDataTable } from "../component/chart-data-table"
 import { useLanguage } from "../context/language"
+import { selectBreakout } from "../lib/breakout"
 import { formatTokens } from "../lib/format"
 import type { HomePageData } from "../lib/page-data"
 import { providerIconId } from "../lib/provider-icon"
@@ -11,134 +12,114 @@ import "./new-models.css"
 
 type NewModel = HomePageData["newModels"][number]
 
-const colors = ["#ed6aff", "#7c86ff", "#00d3f2", "#00bc7d", "#ffb900", "#ff8904", "#a684ff", "#51a2ff"]
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 export function NewModelsSection(props: { data: NewModel[]; catalogLabs: readonly string[] }) {
-  const [active, setActive] = createSignal<string>()
-
-  return (
-    <section id="new-models" data-section="new-models">
-      <SectionHeading href="#new-models" title="New Models" description="Released in the past 30 days." />
-      <Show
-        when={props.data.length > 0}
-        fallback={
-          <div data-component="empty-state">
-            <strong>No new models</strong>
-            <p>No model released in the past 30 days has usage yet.</p>
-          </div>
-        }
-      >
-        <UsersTokensSplit data={props.data} active={active()} onActive={setActive} catalogLabs={props.catalogLabs} />
-        <ChartDataTable
-          caption="New models"
-          headers={["Model", "Released", "Days live", "Tokens", "Peak daily users", "Sessions"]}
-          rows={props.data.map((item) => [
-            item.name,
-            item.releaseDate,
-            item.daysLive,
-            formatTokens(item.tokens),
-            formatCount(item.peakUsers),
-            formatCount(item.sessions),
-          ])}
-        />
-      </Show>
-    </section>
-  )
-}
-
-// People on the left, tokens on the right, with each model's daily tokens since launch in between.
-function UsersTokensSplit(props: {
-  data: NewModel[]
-  active: string | undefined
-  onActive: (model?: string) => void
-  catalogLabs: readonly string[]
-}) {
   const language = useLanguage()
-  const maxUsers = createMemo(() => Math.max(1, ...props.data.map((item) => item.peakUsers)))
-  const maxTokens = createMemo(() => Math.max(1, ...props.data.map((item) => item.tokens)))
+  const breakout = createMemo(() => selectBreakout(props.data))
 
   return (
-    <div data-component="new-models-split" onPointerLeave={() => props.onActive(undefined)}>
-      <div data-slot="split-heading" aria-hidden="true">
-        <span>Peak daily users</span>
-        <span>Model</span>
-        <span>Tokens since launch</span>
-      </div>
-      <For each={props.data}>
-        {(item, index) => {
-          const known = () => isKnownCatalogLab(item.provider, props.catalogLabs)
-          return (
+    <Show when={breakout()}>
+      {(item) => {
+        const model = () => item().model
+        const peak = () => item().peak
+        const days = () => item().days
+        const known = () => isKnownCatalogLab(model().provider, props.catalogLabs)
+        return (
+          <section id="new-models" data-section="new-models">
+            <SectionHeading
+              href="#new-models"
+              title="New Models"
+              description="The biggest launch of the past 30 days."
+            />
             <a
-              data-slot="split-row"
-              href={language.route(item.path)}
-              data-active={props.active === item.model ? "true" : undefined}
-              data-featured={index() === 0 ? "true" : undefined}
-              onPointerEnter={() => props.onActive(item.model)}
-              onFocus={() => props.onActive(item.model)}
+              data-slot="breakout-card"
+              href={language.route(model().path)}
+              aria-label={`${model().name}: ${formatShare(peak().share)} of daily tokens on ${formatDay(peak().date)}`}
             >
-              <span data-slot="split-users">
-                <b>{formatCount(item.peakUsers)}</b>
-                <i style={{ width: `${(item.peakUsers / maxUsers()) * 100}%` }} />
-              </span>
-              <span data-slot="split-model">
-                <Show when={index() === 0}>
-                  <ProviderIcon
-                    data-slot="split-watermark"
-                    aria-hidden="true"
-                    id={known() ? providerIconId(item.author) : "synthetic"}
-                  />
-                </Show>
-                <span data-slot="split-rank">{String(index() + 1).padStart(2, "0")}</span>
-                <ProviderIcon
-                  data-slot="split-icon"
-                  aria-hidden="true"
-                  id={known() ? providerIconId(item.author) : "synthetic"}
-                />
-                <span data-slot="split-name">
-                  <strong>{item.name}</strong>
-                  <em>
-                    {formatReleaseDate(item.releaseDate)} · {item.daysLive}d live
-                  </em>
+              <span data-slot="breakout-summary">
+                <span data-slot="breakout-model">
+                  <ProviderIcon aria-hidden="true" id={known() ? providerIconId(model().author) : "synthetic"} />
+                  <span>
+                    <strong>{model().name}</strong>
+                    <em>
+                      {known() ? `${model().author}, released` : "Released"} {formatDay(model().releaseDate)}
+                    </em>
+                  </span>
                 </span>
-                <Sparkline values={item.daily.map((day) => day.tokens)} color={colors[index() % colors.length]} />
+                <Show when={model().free}>
+                  <span data-slot="breakout-label">Free on OpenCode</span>
+                </Show>
+                <span data-slot="breakout-share">{formatShare(peak().share)}</span>
+                <span data-slot="breakout-caption">of daily tokens on its {item().peakDay} day</span>
+                <span data-slot="breakout-stats">
+                  <span>
+                    <b>#{peak().rank}</b>
+                    <small>model on {formatDay(peak().date)}</small>
+                  </span>
+                  <span>
+                    <b>{formatCount(peak().users)}</b>
+                    <small>users on {formatDay(peak().date)}</small>
+                  </span>
+                </span>
               </span>
-              <span data-slot="split-tokens">
-                <i style={{ width: `${(item.tokens / maxTokens()) * 100}%` }} />
-                <b>{formatTokens(item.tokens)}</b>
+              <span
+                data-slot="breakout-chart"
+                aria-hidden="true"
+                data-crowded={days().length > 7 ? "true" : undefined}
+                data-dense={days().length > 14 ? "true" : undefined}
+                style={{ "grid-template-columns": `repeat(${days().length}, minmax(0, 1fr))` }}
+              >
+                <For each={days()}>
+                  {(day, index) => (
+                    <span data-slot="breakout-day" data-peak={day === peak() ? "true" : undefined}>
+                      <span data-slot="breakout-plot">
+                        <i style={{ height: `${(day.share / peak().share) * 100}%` }}>
+                          <b>{formatShare(day.share)}</b>
+                        </i>
+                      </span>
+                      <small data-end={index() > 0 ? "true" : undefined}>
+                        {index() === 0 || index() === days().length - 1 ? formatDay(day.date) : ""}
+                      </small>
+                    </span>
+                  )}
+                </For>
               </span>
             </a>
-          )
-        }}
-      </For>
-    </div>
+            <Show when={item().alsoNew.length > 0}>
+              <p data-slot="breakout-also">
+                <span>Also new</span>
+                <For each={item().alsoNew}>{(other) => <a href={language.route(other.path)}>{other.name}</a>}</For>
+              </p>
+            </Show>
+            <ChartDataTable
+              caption={`${model().name} daily usage`}
+              headers={["Date", "Share of daily tokens", "Rank", "Tokens", "Users"]}
+              rows={days().map((day) => [
+                day.date,
+                formatShare(day.share),
+                day.rank,
+                formatTokens(day.tokens),
+                formatCount(day.users),
+              ])}
+            />
+          </section>
+        )
+      }}
+    </Show>
   )
 }
 
-function Sparkline(props: { values: number[]; color: string }) {
-  const max = () => Math.max(1, ...props.values)
-  const points = () =>
-    props.values
-      .map(
-        (value, index) =>
-          `${props.values.length > 1 ? (index / (props.values.length - 1)) * 100 : 50},${100 - (value / max()) * 100}`,
-      )
-      .join(" ")
-  return (
-    <svg data-slot="split-spark" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      <polygon points={`0,100 ${points()} 100,100`} fill={props.color} />
-      <polyline points={points()} stroke={props.color} vector-effect="non-scaling-stroke" />
-    </svg>
-  )
+function formatShare(value: number) {
+  return `${(value * 100).toFixed(1)}%`
 }
 
 function formatCount(value: number) {
-  if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`
-  if (value >= 1_000) return `${Number((value / 1_000).toFixed(value >= 10_000 ? 0 : 1))}K`
+  if (value >= 1_000) return `${Number((value / 1_000).toFixed(1))}K`
   return String(Math.round(value))
 }
 
-function formatReleaseDate(value: string) {
+function formatDay(value: string) {
   const date = new Date(`${value}T00:00:00Z`)
   return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`
 }
