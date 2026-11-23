@@ -389,8 +389,13 @@
     --markdown-code-background: var(--color-background-stronger);
   }
 
-  /* A completed block's highlighter paints its own background inline, which the shell colours don't override. */
-  [data-component="markdown-code"][data-code-kind="shell"]:has(> pre:not([style*="background"])) {
+  /* A completed block's highlighter paints its own background inline, which the shell colours don't override. Matched
+     from the toolbar after the code rather than with :has(): a style attribute in a :has() argument makes Chromium
+     recheck every :has() above each element whose inline style changes, and the session timeline sets its rows'
+     positions inline, so each change restyled the whole timeline. */
+  [data-component="markdown-code"][data-code-kind="shell"]
+    > pre:not([style*="background"])
+    ~ [data-slot="markdown-code-toolbar"] {
     --markdown-code-background: var(--markdown-shell-code-background);
   }
 

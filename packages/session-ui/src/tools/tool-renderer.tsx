@@ -62,7 +62,9 @@ import {
   currentToolMetadata,
   currentToolOutput,
   executeToolCallArgs,
+  executeToolCallCount,
   executeToolCalls,
+  executeToolErrorIndex,
   executeToolSubtitle,
   readImagePath,
   type ExecuteToolCall,
@@ -1626,8 +1628,7 @@ export function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
 
   if (props.tool === "read" || props.tool === "edit" || props.tool === "write") return getFilename(input.path ?? "")
 
-  if (props.tool === "list" || props.tool === "glob" || props.tool === "grep")
-    return displayFolder(input.path)
+  if (props.tool === "list" || props.tool === "glob" || props.tool === "grep") return displayFolder(input.path)
 
   if (props.tool === "webfetch") return input.url || undefined
 
@@ -2100,8 +2101,8 @@ ToolRegistry.register({
     const i18n = useI18n()
     const dialog = useDialog()
     const pending = () => props.status === "streaming" || props.status === "running"
-    const calls = createMemo(() => executeToolCalls(props.metadata))
-    const subtitle = createMemo(() => executeToolSubtitle(calls()))
+    const count = createMemo(() => executeToolCallCount(props.metadata))
+    const subtitle = createMemo(() => executeToolSubtitle(props.metadata))
     const code = createMemo(() => (toolInput(props.input).code ?? "").trimEnd())
 
     // A runtime failure shows its output on the failing row; a successful script shows its result below the calls.
@@ -2122,16 +2123,32 @@ ToolRegistry.register({
     )
 
     // A runtime failure belongs to the call that raised it; scripts can also fail outside any call.
-    const owner = createMemo(() => calls().findLastIndex((call) => call.status === "error"))
+    const owner = createMemo(() => executeToolErrorIndex(props.metadata))
+
+    // A script can make thousands of calls, and a row costs as much to style as a line of a diff, so the list shows the
+    // latest and reveals earlier ones on request.
+    const [shown, setShown] = createSignal(executeCallsShown)
+    const hidden = createMemo(() => Math.max(0, count() - shown()))
+    const visible = createMemo(() => executeToolCalls(props.metadata, hidden()))
+
+    const reveal = (event: { currentTarget: HTMLElement }) => {
+      const list = event.currentTarget.parentElement
+      setShown((count) => count + executeCallsRevealed)
+
+      // The button leaves with the last hidden call, so focus moves on to the first call rather than the page.
+      if (hidden() === 0) list?.querySelector<HTMLElement>('[data-slot="execute-tool-call"][tabindex]')?.focus()
+    }
 
     const sawPending = pending()
+    // A shimmer is six elements; a group opens dozens of finished scripts, so only one that ran while shown gets it.
+    const shimmered = createMemo((was: boolean) => was || pending(), false)
 
     // The script is complete once the call leaves streaming, so the dialog can show it while it runs.
     const viewable = () => props.status !== "streaming" && !!code()
 
     const openDetails = () =>
       dialog.show(() => (
-        <ExecuteDetails code={code()} output={output()} error={error()} calls={calls().length} status={props.status} />
+        <ExecuteDetails code={code()} output={output()} error={error()} calls={count()} status={props.status} />
       ))
 
     return (
@@ -2139,14 +2156,16 @@ ToolRegistry.register({
         {...props}
         icon="terminal"
         rail={false}
-        hasContent={calls().length > 0 || !!error() || !!output()}
+        hasContent={count() > 0 || !!error() || !!output()}
         compact
         allowOpenWhilePending
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
+                <Show when={shimmered()} fallback={i18n.t("ui.tool.execute")}>
+                  <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
+                </Show>
               </span>
               <Show when={!open() && subtitle()}>
                 {(text) => <ShellSubmessage text={text()} animate={sawPending} />}
@@ -2170,8 +2189,15 @@ ToolRegistry.register({
         }
       >
         <div data-component="execute-tool-calls">
-          <Index each={calls()}>
-            {(call, index) => <ExecuteCallRow call={call()} error={index === owner() ? error() : undefined} />}
+          <Show when={hidden()}>
+            {(count) => (
+              <button type="button" data-slot="execute-tool-call-more" onClick={reveal}>
+                {i18n.plural("ui.common.moreCount", count())}
+              </button>
+            )}
+          </Show>
+          <Index each={visible()}>
+            {(item) => <ExecuteCallRow call={item().call} error={item().index === owner() ? error() : undefined} />}
           </Index>
           <Show when={owner() === -1 && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
           <Show when={output()}>{(value) => <ExecuteOutputRow output={value()} />}</Show>
@@ -2180,6 +2206,10 @@ ToolRegistry.register({
     )
   },
 })
+
+const executeCallsShown = 10
+
+const executeCallsRevealed = 50
 
 function ExecuteDetails(props: { code: string; output: string; error?: string; calls: number; status?: string }) {
   const i18n = useI18n()
@@ -2358,6 +2388,8 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
   const failed = () => !props.call || props.call.status === "error"
   const expandable = () => input().length > 0 || !!props.error
   const summary = () => (props.call ? args().join(", ") : props.error?.split("\n", 1)[0])
+  // Only a call that ran while shown gets a shimmer, kept so it fades out when the call finishes.
+  const shimmered = createMemo((was: boolean) => was || props.call?.status === "running", false)
 
   const toggle = (event: { currentTarget: HTMLElement }) => {
     if (!expandable() || selectsRowText(event.currentTarget)) return
@@ -2389,7 +2421,9 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
         <Show when={props.call}>
           {(call) => (
             <span data-slot="execute-tool-call-name">
-              <TextShimmer text={call().tool} active={call().status === "running"} />
+              <Show when={shimmered()} fallback={call().tool}>
+                <TextShimmer text={call().tool} active={call().status === "running"} />
+              </Show>
             </span>
           )}
         </Show>
