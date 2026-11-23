@@ -94,15 +94,16 @@ describe("OpenAI freeform tools with an options line", () => {
   const options = OpenAIFreeform.resolve(tool({ inputSchema: optionsSchema, freeform: format }))!
 
   test("resolves the optional parameters and a grammar for the line", () => {
-    expect(options.options?.fields).toEqual(["timeout", "background"])
+    // Keys are sorted by name, whatever order the schema lists them in.
+    expect(options.options?.fields).toEqual(["background", "timeout"])
     expect(options.options?.grammar).toBe(
       [
         "start: options_line body | plain",
         'options_line: "// @options: {" (option_0 | option_1) "}\\n"',
         'option_0: pair_0 ("," pair_1)?',
         "option_1: pair_1",
-        'pair_0: "\\"timeout\\":" /[1-9][0-9]{0,14}/',
-        'pair_1: "\\"background\\":" ("true" | "false")',
+        'pair_0: "\\"background\\":" ("true" | "false")',
+        'pair_1: "\\"timeout\\":" /[1-9][0-9]{0,14}/',
         "body: /[\\s\\S]+/",
         String.raw`plain: /(?:[^\/]|\/[^\/]|\/\/[^ ]|\/\/ [^@]|\/\/ @[^o]|\/\/ @o[^p]|\/\/ @op[^t]|\/\/ @opt[^i]|\/\/ @opti[^o]|\/\/ @optio[^n]|\/\/ @option[^s]|\/\/ @options[^:])[\s\S]*|\/|\/\/|\/\/ |\/\/ @|\/\/ @o|\/\/ @op|\/\/ @opt|\/\/ @opti|\/\/ @optio|\/\/ @option|\/\/ @options/`,
       ].join("\n"),
@@ -138,7 +139,7 @@ describe("OpenAI freeform tools with an options line", () => {
   test("reads the line into fields and writes it back exactly", () => {
     const cases = [
       ['// @options: {"timeout":5000}\nawait build()', { code: "await build()", timeout: 5000 }],
-      ['// @options: {"timeout":1,"background":true}\nx', { code: "x", timeout: 1, background: true }],
+      ['// @options: {"background":true,"timeout":1}\nx', { code: "x", timeout: 1, background: true }],
       ["await build()", { code: "await build()" }],
     ] as const
     for (const [raw, input] of cases) {

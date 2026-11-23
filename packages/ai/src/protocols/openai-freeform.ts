@@ -39,9 +39,11 @@ export const resolve = (tool: ToolDefinition): Custom | undefined => {
   const properties = Object.entries(
     Schema.is(JsonSchema)(tool.inputSchema.properties) ? tool.inputSchema.properties : {},
   )
-  const values = properties.flatMap(([name, schema]) =>
-    name === field ? [] : [{ name, value: Schema.is(JsonSchema)(schema) ? valueRule(schema) : undefined }],
-  )
+  const values = properties
+    .flatMap(([name, schema]) =>
+      name === field ? [] : [{ name, value: Schema.is(JsonSchema)(schema) ? valueRule(schema) : undefined }],
+    )
+    .toSorted((a, b) => (a.name < b.name ? -1 : 1))
   if (values.length === 0 || values.some((item) => item.value === undefined)) return undefined
   const prefix = tool.freeform.options.prefix
   return {
@@ -56,7 +58,7 @@ export const resolve = (tool: ToolDefinition): Custom | undefined => {
   }
 }
 
-// The options line is canonical JSON: keys in schema order, no spaces, so a replayed call reproduces the model's text.
+// The options line is canonical JSON: keys sorted by name, no spaces, so a replayed call reproduces the model's text.
 // Without a body grammar the raw text can't start with the prefix otherwise, so a call either writes a valid line or
 // none.
 const optionsGrammar = (
