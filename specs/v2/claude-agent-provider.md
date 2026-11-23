@@ -45,7 +45,7 @@ The provider is called "Claude Agent", with the ID `claude-agent`. The SDK's [br
 - Why: opencode's own search providers need an API key, while Claude plans include WebSearch. Results go through opencode's `websearch` tool, so they are saved as ordinary tool output and survive switching to a non-Claude model.
 - Each search is a one-off Haiku run with only WebSearch, no transcript and thinking off, stopped as soon as the results arrive. A model has to run it because Claude Code returns page contents encrypted.
 - It uses the provider's connection settings and the account folder chats used last, and times out after a minute.
-- Copies of one page (translated folders, `hl`/`authuser` variants, `.md.txt` mirrors) are listed once, under the shortest URL. Claude's summary rides on the first result.
+- Claude's summary rides on the first result.
 
 ## Claude Code Settings
 

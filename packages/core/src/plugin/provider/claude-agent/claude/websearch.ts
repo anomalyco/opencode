@@ -77,22 +77,13 @@ export function results(message: SDKMessage): WebSearch.Result[] | undefined {
   if (message.type !== "user") return
   const output = Schema.decodeUnknownOption(Output)(message.tool_use_result)
   if (Option.isNone(output)) return
-  const links = new Map<string, { readonly title: string; readonly url: string }>()
-  const notes: string[] = []
-  for (const item of output.value.results) {
-    if (typeof item === "string") {
-      notes.push(item.trim())
-      continue
-    }
-    for (const link of item.content) {
-      const key = page(link.url)
-      const kept = links.get(key)
-      // The shortest URL is the page itself. A copy listed first is often a translation, title included.
-      if (!kept || link.url.length < kept.url.length) links.set(key, link)
-    }
-  }
-  const found: WebSearch.Result[] = [...links.values()].map((link) => ({ url: link.url, title: link.title, time: {} }))
-  const summary = notes.filter(Boolean).join("\n\n")
+  const found: WebSearch.Result[] = output.value.results.flatMap((item) =>
+    typeof item === "string" ? [] : item.content.map((link) => ({ url: link.url, title: link.title, time: {} })),
+  )
+  const summary = output.value.results
+    .flatMap((item) => (typeof item === "string" ? [item.trim()] : []))
+    .filter(Boolean)
+    .join("\n\n")
   const first = found[0]
   if (!summary || !first) return found
   // opencode lists results without a field for the whole search, so the summary rides on the first one, which says so
@@ -102,20 +93,4 @@ export function results(message: SDKMessage): WebSearch.Result[] | undefined {
     content: summary,
   }
   return found
-}
-
-const LANGUAGES = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" })
-
-// Claude's search often lists one page many times: translated copies (/de/..., ?hl=fr), account variants
-// (?authuser=2) and Markdown mirrors (page.md.txt). They share one key.
-function page(url: string) {
-  const parsed = URL.parse(url)
-  if (!parsed) return url
-  parsed.searchParams.delete("hl")
-  parsed.searchParams.delete("authuser")
-  parsed.pathname = parsed.pathname
-    // A two-letter folder is a locale only when it names a language: /de/ does, /go/ and /js/ don't
-    .replace(/^\/([a-z]{2})(-[a-z]{2,4})?(?=\/)/i, (folder, language) => (LANGUAGES.of(language) ? "" : folder))
-    .replace(/\.md\.txt$/, "")
-  return parsed.href
 }
