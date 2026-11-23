@@ -312,4 +312,121 @@ describe("freeform tools", () => {
       expect(make(Schema.Struct({ code: Schema.String }))._definition.freeform).toEqual({ type: "text" })
     }),
   )
+
+  // A tool with optional parameters besides its raw body writes them on a first line.
+  const optionsTool = toDefinitions([
+    tool({
+      name: "run",
+      description: "Run code",
+      input: Schema.Struct({ code: Schema.String, background: Schema.optionalKey(Schema.Boolean) }),
+      success: Schema.String,
+      freeform: {
+        type: "lark",
+        field: "code",
+        options: {
+          prefix: "// @options:",
+          description: 'Start with `// @options: {"background": true}` to background it.',
+        },
+      },
+    }),
+  ])
+  const LINE = '// @options: {"background":true}\n'
+
+  it.effect("sends an options line tool with its grammar and line description", () =>
+    Effect.gen(function* () {
+      const [sent] = (yield* body(responses, optionsTool)).tools
+      expect(sent).toMatchObject({
+        type: "custom",
+        name: "run",
+        description: 'Run code\n\nStart with `// @options: {"background": true}` to background it.',
+        format: { type: "grammar", syntax: "lark" },
+      })
+      expect(sent.format.definition).toContain('pair_0: "\\"background\\":" ("true" | "false")')
+      expect((yield* body(chat, optionsTool)).tools[0]).toMatchObject({
+        type: "custom",
+        custom: { format: { type: "grammar", grammar: { syntax: "lark", definition: sent.format.definition } } },
+      })
+      // Other protocols get the JSON tool and its description as is.
+      expect((yield* body(Anthropic.model("claude-sonnet-4-5", { apiKey: "test" }), optionsTool)).tools).toMatchObject([
+        { name: "run", description: "Run code", input_schema: { properties: { background: {} } } },
+      ])
+    }),
+  )
+
+  it.effect("reads the options line into fields on Responses and Chat, and replays it exactly", () =>
+    Effect.gen(function* () {
+      const item = { type: "custom_tool_call", id: "ctc_1", call_id: "call_1", name: "run", input: "" }
+      const raw = `${LINE}await build()`
+      const response = yield* LLMClient.generate(
+        ai.request({ model: responses, prompt: "Run it.", tools: optionsTool }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item },
+              { type: "response.custom_tool_call_input.delta", output_index: 0, item_id: "ctc_1", delta: LINE },
+              {
+                type: "response.custom_tool_call_input.delta",
+                output_index: 0,
+                item_id: "ctc_1",
+                delta: "await build()",
+              },
+              { type: "response.output_item.done", output_index: 0, item: { ...item, input: raw } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+      const input = { code: "await build()", background: true }
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([expect.objectContaining({ id: "call_1", input })])
+      const replay = yield* compileRequest(
+        ai.request({ model: responses, messages: [response.message], tools: optionsTool }),
+      )
+      expect(replay.body.input[0]).toMatchObject({ type: "custom_tool_call", call_id: "call_1", input: raw })
+
+      const chunk = (call: Record<string, unknown>) => ({
+        id: "chatcmpl_1",
+        choices: [{ index: 0, delta: { tool_calls: [{ index: 0, ...call }] }, finish_reason: null }],
+      })
+      const chatResponse = yield* LLMClient.generate(
+        ai.request({ model: chat, prompt: "Run it.", tools: optionsTool }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              chunk({ id: "call_1", type: "custom", custom: { name: "run", input: LINE } }),
+              chunk({ custom: { input: "await build()" } }),
+              { id: "chatcmpl_1", choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+            ),
+          ),
+        ),
+      )
+      expect(chatResponse.events.filter(LLMEvent.is.toolCall)).toEqual([
+        expect.objectContaining({ id: "call_1", input }),
+      ])
+    }),
+  )
+
+  it.effect("fails a call with a bad options line as malformed input", () =>
+    Effect.gen(function* () {
+      const raw = "// @options: {background: true}\nawait build()"
+      const item = { type: "custom_tool_call", id: "ctc_1", call_id: "call_1", name: "run", input: raw }
+      const response = yield* LLMClient.generate(
+        ai.request({ model: responses, prompt: "Run it.", tools: optionsTool }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.done", output_index: 0, item },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([])
+      expect(response.events.filter((event) => event.type === "tool-input-error")).toMatchObject([
+        { id: "call_1", raw },
+      ])
+    }),
+  )
 })

@@ -9,15 +9,29 @@ import type { SessionMessage } from "./session-message.js"
 
 export type Metadata = Readonly<Record<string, any>>
 
-/** Optional wire encoding of a tool's single required string field. Execution still receives the object. */
+/**
+ * Optional wire encoding of a tool's single required string field. Execution still receives the object.
+ *
+ * The `lark` form with `options` also allows optional fields besides `field`: the model writes them as JSON on a
+ * first line that starts with `options.prefix`, then `field`'s raw value. The grammar for that line is derived from
+ * the optional fields' schemas; `grammar`, when given, constrains the raw value and must define a `body` rule.
+ * `options.description` tells the model how to write the line, and is only sent with this encoding.
+ */
 export const Freeform = Schema.Union([
   Schema.Struct({ type: Schema.Literal("text") }),
   Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
+  // Before the plain `lark` form, which would otherwise match a grammar with options and drop them.
+  Schema.Struct({
+    type: Schema.Literal("lark"),
+    field: Schema.String,
+    options: Schema.Struct({ prefix: Schema.String, description: Schema.String }),
+    grammar: Schema.optionalKey(Schema.String),
+  }),
   Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
 ]).annotate({ identifier: "Tool.Freeform" })
 export type Freeform = typeof Freeform.Type
 
-export const FreeformFormat = Schema.Literals(Freeform.members.map((member) => member.fields.type.literal)).annotate({
+export const FreeformFormat = Schema.Literals(["text", "regex", "lark"]).annotate({
   identifier: "Tool.FreeformFormat",
 })
 

@@ -406,12 +406,12 @@ const lowerTool = (
   custom: OpenAIFreeform.Custom | undefined,
 ): OpenAIChatTool => {
   if (custom) {
-    const grammar = OpenAIFreeform.grammar(custom.format)
+    const grammar = OpenAIFreeform.grammar(custom)
     return {
       type: "custom",
       custom: {
         name: tool.name,
-        description: tool.description,
+        description: OpenAIFreeform.description(tool, custom),
         format: grammar ? { type: "grammar", grammar } : { type: "text" },
       },
       cache_control: options.cacheControl?.(tool.cache),
@@ -1288,7 +1288,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       !incompleteTools &&
       state.finishReason === undefined &&
       Object.keys(tools).length > 0
-        ? yield* finishTools(tools, customCalls)
+        ? yield* finishTools(tools, customCalls, state.custom)
         : undefined
 
     return [
@@ -1317,8 +1317,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
   })
 
 // Custom calls close their JSON fragment before every pending call finishes.
-const finishTools = Effect.fnUntraced(function* (tools: ParserState["tools"], customCalls: ReadonlySet<number>) {
-  const closed = OpenAIFreeform.close(tools, customCalls)
+const finishTools = Effect.fnUntraced(function* (
+  tools: ParserState["tools"],
+  customCalls: ReadonlySet<number>,
+  custom: ParserState["custom"],
+) {
+  const closed = OpenAIFreeform.close(tools, customCalls, custom)
   const finished = yield* ToolStream.finishAll(ADAPTER, closed.tools)
   return { tools: finished.tools, events: [...closed.events, ...finished.events] }
 })
@@ -1335,7 +1339,7 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
   const events: LLMEvent[] = []
   const toolCallEvents =
     state.finishReason === undefined && Object.keys(state.tools).length > 0
-      ? (yield* finishTools(state.tools, state.customCalls)).events
+      ? (yield* finishTools(state.tools, state.customCalls, state.custom)).events
       : state.toolCallEvents
   const hasToolCalls = toolCallEvents.length > 0
   const reason = state.finishReason

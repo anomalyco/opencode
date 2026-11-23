@@ -496,11 +496,11 @@ export const lowerTool = Effect.fnUntraced(function* (protocolName: string, tool
 })
 
 export const lowerCustomTool = (tool: ToolDefinition, custom: OpenAIFreeform.Custom) => {
-  const grammar = OpenAIFreeform.grammar(custom.format)
+  const grammar = OpenAIFreeform.grammar(custom)
   return {
     type: "custom" as const,
     name: tool.name,
-    description: tool.description,
+    description: OpenAIFreeform.description(tool, custom),
     format: grammar ? { type: "grammar" as const, ...grammar } : { type: "text" as const },
   }
 }
@@ -1340,7 +1340,7 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
     const final = { custom: state.custom.get(item.name), raw: rawInput(item) }
     const input = custom ? OpenAIFreeform.fromRaw(final.custom, final.raw) : item.arguments
     const registered = state.tools[item.id] !== undefined
-    const closed = custom ? OpenAIFreeform.close(state.tools, [item.id], final) : undefined
+    const closed = custom ? OpenAIFreeform.close(state.tools, [item.id], state.custom, final.raw) : undefined
     const tools = registered
       ? (closed?.tools ?? state.tools)
       : ToolStream.start(state.tools, item.id, {
