@@ -76,7 +76,7 @@ export async function run(item: GpuCase): Promise<Recorded> {
         if (given.type === "event") widget.event(given.event)
         if (given.type === "canvas") widget.canvas(given.key, given.width, given.height)
         if (given.type === "gpu" && given.lost !== undefined)
-          widget.loseDevice(given.lost, (input as { inFlight?: boolean }).inFlight === true)
+          widget.loseDevice(given.lost, input as { inFlight?: boolean; finished?: boolean })
       }
     }
     send(false)

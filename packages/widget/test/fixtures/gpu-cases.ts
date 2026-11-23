@@ -4,7 +4,7 @@ import path from "node:path"
 // The GPU conformance fixtures' programs (`gpu/*.json`): the example widget templates, run for a few frames, and
 // programs that break the subset's structure, handles or limits. `canvases`: sizes the host sends before the first
 // frame (physical sizes, which it clamps); `inputs`: what the client sends before frame `frame` (an `event`, a
-// `canvas` size, or a device loss, `{ type: "gpu", lost, inFlight? }`), or right after it with `after`.
+// `canvas` size, or a device loss, `{ type: "gpu", lost, inFlight?, finished? }`), or right after it with `after`.
 export interface GpuCase {
   readonly name: string
   readonly source: string
@@ -379,6 +379,18 @@ export const gpuCases: ReadonlyArray<GpuCase> = [
     inputs: [
       { frame: 1, input: { type: "gpu", lost: "unknown", inFlight: true } },
       { frame: 3, input: { type: "gpu", lost: "unknown", inFlight: true } },
+    ],
+  },
+  {
+    // One reset that loses the device three times (each new device's first work discarded, nothing finished in between)
+    // is one strike: no stop.
+    name: "hang-one-reset-several-losses",
+    source: relost,
+    canvases: scene,
+    inputs: [
+      { frame: 1, input: { type: "gpu", lost: "unknown", inFlight: true } },
+      { frame: 2, input: { type: "gpu", lost: "unknown", inFlight: true, finished: false } },
+      { frame: 3, input: { type: "gpu", lost: "unknown", inFlight: true, finished: false } },
     ],
   },
   {

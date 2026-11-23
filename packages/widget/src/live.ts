@@ -155,9 +155,11 @@ export interface LiveWidget {
   readonly canvas: (key: string, width: number, height: number) => void
   /**
    * Loses the GPU device: every handle is gone, and the program's `device.lost` resolves. `inFlight`: the run had GPU
-   * work submitted and not seen finished, a strike; a second strike within 30 s stops every GPU canvas (a GPU hang).
+   * work submitted and not seen finished. `finished` (default true): some of the run's GPU work finished on a device
+   * since the previous loss; this host has no GPU, so its caller says. A loss with work in flight is a strike if work
+   * finished since the previous strike (or the run's start); a second strike within 30 s stops every GPU canvas.
    */
-  readonly loseDevice: (reason: string, inFlight?: boolean) => void
+  readonly loseDevice: (reason: string, options?: { readonly inFlight?: boolean; readonly finished?: boolean }) => void
   /**
    * Holds everything for the program: events, timer firings and fetch results wait, and `now()` stops, until `resume`,
    * which first delivers `{ type: "resumed", pausedMs }`.
@@ -221,8 +223,10 @@ export const LiveWidget = {
       fetches: { inFlight: 0, starts: [] as number[] },
       // The last rendered view's tree, for `draw` keys.
       tree: undefined as Tree | undefined,
-      // When the run last got a strike (a device loss with GPU work in flight).
+      // When the run last got a strike (a device loss with GPU work in flight), and whether its GPU work has finished
+      // on a device since then (or since the run started): losses with none in between are one reset.
       strike: undefined as number | undefined,
+      finished: false,
     }
     // Inputs and fetch results that arrive while paused, released in order on resume.
     const held: Array<() => void> = []
@@ -584,12 +588,14 @@ export const LiveWidget = {
         const [width, height] = canvasSize(...size)
         deliver({ type: "canvas", key, width, height })
       },
-      loseDevice: (reason, inFlight = false) => {
-        if (inFlight) {
+      loseDevice: (reason, options) => {
+        if (options?.finished !== false) current.finished = true
+        if (options?.inFlight && current.finished) {
           const at = clock.now()
           const hang = current.strike !== undefined && at - current.strike <= STRIKE_MS ? gpu.hung() : undefined
           if (hang) gpuErrors.push(hang)
           current.strike = at
+          current.finished = false
         }
         gpu.lost()
         deliver({ type: "gpu", lost: reason })

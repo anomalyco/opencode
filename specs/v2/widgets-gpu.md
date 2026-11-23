@@ -265,11 +265,13 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
   shader's 50 ms rule has counted (`widgets.md`, GPU canvases), and catches GPUs without a watchdog. (On a host whose
   widgets share one device and queue, as Rune and mobile do, only the hung submit's widget stops; work queued behind it
   isn't blamed.)
-- **Strikes.** At a device loss, a widget run that had GPU work submitted and not yet seen finished gets a strike. A run
-  with two strikes 30 s apart or less is stopped: every GPU canvas of the run stops for the rest of the run with the
-  same message, and no new device restarts them. A run's first strike changes nothing visible: the loss restarts it as
-  usual. (A GPU reset can't be attributed reliably on every platform, so a run present at two resets is treated as
-  their cause, as browsers do.)
+- **Strikes.** At a device loss, a widget run that had GPU work submitted and not yet seen finished gets a strike, if
+  its GPU work has finished on a device at least once since its previous strike (or since the run started): losses in a
+  row with no finished work in between belong to the same reset and count once (a reset in progress may discard a new
+  device's first work and lose it again). A run with two strikes 30 s apart or less is stopped: every GPU canvas of the
+  run stops for the rest of the run with the same message, and no new device restarts them. A run's first strike changes
+  nothing visible: the loss restarts it as usual. (A GPU reset can't be attributed reliably on every platform, so a run
+  present at two resets is treated as their cause, as browsers do.)
 - **Device loss.** When the client loses its device (a reset, the app backgrounded long enough, a live program
   restored from a snapshot), it sends `{ type: "gpu", lost: reason, message? }`; the prelude resolves `device.lost` with
   `{ reason, message }` (`message` `""` when absent) and every handle is gone. While the program has read a live
@@ -362,13 +364,14 @@ batches?, errors, end }`. The driver: start the live program of `source`
 (`widgets.md`, Prelude and step ABI) with `{ data, gpu }` and no 50 ms slice; send each of `canvases` as a `canvas`
 message (sizes in physical pixels, clamped as Canvas size says); then, while the program asks for a frame (at most 10),
 send the `inputs` for frame `i` (client `event`s, `canvas` messages, and device losses
-`{ type: "gpu", lost, inFlight? }`, the host losing the device first, with `inFlight: true` when the run had GPU work in
-flight then, a strike), frame `i` (`t` = `i` / 60, `dt` 1/60, 300 × 200 at scale 2, `pointer` `null`, `dark` `false`),
-then frame `i`'s inputs marked `after: true`, before the program runs on. Timers run on a clock that moves while the
-program waits. `batches` are the batches it posts, in order (`frame`: in a frame request; `bytes` base64, or `null` when
-the program posted something other than an `ArrayBuffer`; `ops` as posted, a list or not, with each number JSON can't
-hold written `{ "$num": "NaN" }`, `{ "$num": "Infinity" }` or `{ "$num": "-Infinity" }`, which a driver that replays
-`batches` reads back as that number), with each frame request that carries no batch in its place as
+`{ type: "gpu", lost, inFlight?, finished? }`, the host losing the device first, with `inFlight: true` when the run had
+GPU work in flight then and `finished: false` when none of its GPU work finished on a device since the previous loss),
+frame `i` (`t` = `i` / 60, `dt` 1/60, 300 × 200 at scale 2, `pointer` `null`, `dark` `false`), then frame `i`'s inputs
+marked `after: true`, before the program runs on. Timers run on a clock that moves while the program waits. `batches`
+are the batches it posts, in order (`frame`: in a frame request; `bytes` base64, or `null` when the program posted
+something other than an `ArrayBuffer`; `ops` as posted, a list or not, with each number JSON can't hold written
+`{ "$num": "NaN" }`, `{ "$num": "Infinity" }` or `{ "$num": "-Infinity" }`, which a driver that replays `batches` reads
+back as that number), with each frame request that carries no batch in its place as
 `{ frame: true, ops: [], bytes: "" }`, so every frame's end is there (the per-frame counts start again at each
 `frame: true` entry); a repeated frame request while one is pending isn't one (its batch, if any, is recorded with
 `frame: false`). `raw-*` programs post their own and omit them, except one whose batch has the wrong shape (`ops` not a
