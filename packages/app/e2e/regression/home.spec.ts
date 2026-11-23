@@ -90,12 +90,17 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
   await expect(sessionRow).toHaveCSS("outline-offset", "-2px")
 
   await page.setViewportSize({ width: 1280, height: 200 })
-  await expect(viewport).toHaveAttribute("tabindex", "0")
-  await viewport.press("Shift+Tab")
-  await page.keyboard.press("Tab")
-  // The list takes focus so the keyboard can scroll it, without a ring around the whole area.
+  await expect.poll(() => viewport.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expect(viewport).toHaveAttribute("tabindex", "-1")
+  await projects.getByRole("button", { name: "Add project", exact: true }).press("Shift+Tab")
+  await expect(viewport).not.toBeFocused()
+
+  // A click still focuses the list so the keyboard can scroll it, without a ring around the whole area.
+  await viewport.click({ position: { x: 4, y: 4 } })
   await expect(viewport).toBeFocused()
   await expect(viewport).toHaveCSS("outline-style", "none")
+  await page.keyboard.press("PageDown")
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
 })
 
 test("Home keeps the session list in every interface mode", async ({ page }) => {
