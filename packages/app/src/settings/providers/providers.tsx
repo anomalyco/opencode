@@ -37,7 +37,6 @@ type ProviderSource = "env" | "api" | "account" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
 
 const PROVIDER_NOTES = [
-  { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
   { match: (id: string) => id === "opencode-go", key: "dialog.provider.opencodeGo.tagline" },
   { match: (id: string) => id === "anthropic", key: "dialog.provider.anthropic.note" },
   { match: (id: string) => id === "claude-agent", key: "dialog.provider.claudeAgent.note" },
@@ -232,12 +231,13 @@ export const SettingsProviders: Component<{
     // key, including one imported from a v1 auth.json, makes Zen "connected" without any account, so
     // the Popular list keeps the sign-in row until the active credential is an OAuth grant. Until the
     // integration list arrives the row is still the models.dev Zen provider, so dedupe it as before.
-    // OpenCode Go connects through OpenCode, so it's never offered here: a saved Go key lists it as connected.
+    // OpenCode Go connects through OpenCode, so it's only listed for people who already saved a Go key.
     const account = integrations.list().find((entry) => entry.id === CONSOLE_INTEGRATION)
+    const go = integrations.list().find((entry) => entry.id === "opencode-go")
 
     const items = providers
       .popular()
-      .filter((p) => p.id !== "opencode-go")
+      .filter((p) => p.id !== "opencode-go" || !!go?.connections.some((connection) => connection.type === "credential"))
       .filter((p) => {
         if (p.id !== CONSOLE_INTEGRATION || !account) return !connectedIDs.has(p.id)
 
@@ -642,7 +642,7 @@ export const SettingsProviders: Component<{
                     <div class="settings-provider-copy">
                       <div class="settings-provider-main">
                         <span class="settings-provider-name">{item.name}</span>
-                        <Show when={item.id === "opencode"}>
+                        <Show when={item.id === "opencode" || item.id === "opencode-go"}>
                           <Badge>{language.t("dialog.provider.tag.recommended")}</Badge>
                         </Show>
                       </div>
