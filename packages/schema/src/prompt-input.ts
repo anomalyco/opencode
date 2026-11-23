@@ -9,13 +9,11 @@ export interface FileAttachment extends Schema.Schema.Type<typeof FileAttachment
 export const FileAttachment = Schema.Struct({
   uri: Schema.String.annotate({
     description:
-      "A file: URL to a file or directory on the server (add ?start=N&end=M to send only those lines of a text file), a data: URL with the content inline, or a media: ref read back from a message. Up to 20 MB.",
+      "A file: URL on the server (a file, a directory, or ?start=N&end=M for lines of a text file), a data: URL, or a media: ref from a message. Up to 20 MB.",
   }),
   // Source metadata does not require reopening the original file.
   source: FileSource.pipe(optional),
-  name: Schema.String.annotate({
-    description: "File name shown for the attachment. Defaults to the file's base name for file: URLs.",
-  }).pipe(optional),
+  name: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),
   mention: PromptMention.pipe(optional),
 }).annotate({ identifier: "PromptInput.FileAttachment" })
@@ -29,20 +27,11 @@ export const SkillAttachment = Schema.Struct({
 
 export const Prompt = Schema.Struct({
   text: Schema.String,
-  files: Schema.Array(FileAttachment)
-    .annotate({
-      description: "Files sent to the model with the message. The server reads them when the request arrives.",
-    })
-    .pipe(optional),
+  files: Schema.Array(FileAttachment).pipe(optional),
   agents: Schema.Array(AgentAttachment)
     .annotate({
-      description: "Agents mentioned in text, kept on the message for display.",
+      description: "Display only: kept on the message, doesn't change which agent runs.",
     })
     .pipe(optional),
-  skills: Schema.Array(SkillAttachment)
-    .annotate({
-      description:
-        "Skills to load with the message. Each skill's instructions are added to what the model sees. An unknown skill ID fails the request.",
-    })
-    .pipe(optional),
+  skills: Schema.Array(SkillAttachment).pipe(optional),
 }).annotate({ identifier: "PromptInput" })

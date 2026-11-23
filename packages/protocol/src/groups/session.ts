@@ -101,7 +101,7 @@ const FormCreatePayload = Schema.Struct({
 }).annotate({ identifier: "Form.CreatePayload" })
 
 const deliveryDescription =
-  "When to hand the item to the agent. steer (the default) delivers it before the agent's next model call, even while the agent is working. queue waits until the agent has finished its current work, then delivers one queued item at a time."
+  "steer (default) delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time."
 
 const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
   Schema.decodeTo(Schema.Boolean, {
@@ -170,34 +170,24 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.post("session.create", "/api/session", {
         payload: Schema.Struct({
           id: Session.ID.pipe(Schema.optional).annotate({
-            description:
-              "ID for the new session. If a session with this ID already exists, it is returned unchanged, so retrying a create is safe.",
+            description: "If a session with this ID already exists, it is returned unchanged, so retries are safe.",
           }),
           parentID: Session.ID.pipe(Schema.optional).annotate({
             description:
-              'Create a child (subagent) session of this session. The child runs at the parent\'s location. Each time the child finishes running, it reports its last reply to the parent as a `<background-result kind="subagent">` message and wakes the parent, unless the parent has a staged revert.',
+              'Creates a child session at the parent\'s location. Each time the child finishes running, it sends its last reply to the parent as a `<background-result kind="subagent">` message and wakes the parent, unless the parent has a staged revert.',
           }),
-          title: Schema.String.pipe(Schema.optional).annotate({
-            description:
-              "Session title. When omitted, a title is generated from the first message, except for child sessions.",
-          }),
-          agent: Agent.ID.pipe(Schema.optional).annotate({
-            description: "Agent the session runs. Defaults to the location's default agent.",
-          }),
-          model: Model.Ref.pipe(Schema.optional).annotate({
-            description: "Model the session uses. Defaults to the agent's model, or the configured default model.",
-          }),
+          title: Schema.String.pipe(Schema.optional),
+          agent: Agent.ID.pipe(Schema.optional),
+          model: Model.Ref.pipe(Schema.optional),
           location: Location.PublicRef.pipe(Schema.optional).annotate({
-            description:
-              "Directory the session works in. Defaults to the server's working directory. Ignored when parentID is set.",
+            description: "Defaults to the server's working directory. Ignored when parentID is set.",
           }),
           metadata: Session.Metadata.pipe(Schema.optional).annotate({
-            description:
-              "Your own JSON key-value data, stored on the session and returned with it. Child sessions copy the parent's metadata unless you pass your own.",
+            description: "Opaque to OpenCode. Child sessions inherit the parent's metadata unless you pass your own.",
           }),
           permissions: Permission.Ruleset.pipe(Schema.optional).annotate({
             description:
-              "Permission rules for this session, applied on top of the agent's rules. Child sessions copy the parent's rules unless you pass your own.",
+              "Applied on top of the agent's rules. Child sessions inherit the parent's rules unless you pass your own.",
           }),
         }),
         success: Schema.Struct({ data: PublicSessionInfo }),
@@ -207,7 +197,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.create",
           summary: "Create session",
           description:
-            "Create a session. Send it work with session.prompt. With parentID, it creates a child session that runs at the parent's location and reports back to the parent.",
+            "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
         }),
       ),
     )
@@ -292,7 +282,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.fork",
           summary: "Fork session",
           description:
-            "Create a child session with a copy of this session's history up to, but not including, a message. Omit before to copy the full history.",
+            "Create a child session with this session's history before a message. Omit before to copy the full history.",
         }),
       ),
     )
@@ -366,19 +356,18 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional).annotate({
             description:
-              "ID for the message. Sending the same ID again returns the original item instead of adding a second message, so retries are safe. Reusing an ID from another session or a different kind of item fails with 409.",
+              "Sending the same ID again returns the original item instead of adding a second one, so retries are safe. Reusing it in another session or for another kind of item fails with 409.",
           }),
           ...PromptInput.Prompt.fields,
-          text: PromptInput.Prompt.fields.text.annotate({ description: "The message text." }),
           metadata: Schema.Record(Schema.String, Schema.Unknown)
             .annotate({
-              description: "Your own JSON data, stored on the message and returned with it. The model doesn't see it.",
+              description: "Stored on the message. The model doesn't see it.",
             })
             .pipe(optional),
           delivery: SessionInbox.Delivery.pipe(Schema.optional).annotate({ description: deliveryDescription }),
           resume: Schema.Boolean.pipe(Schema.optional).annotate({
             description:
-              "Set to false to only add the message to the inbox without starting the agent. It is delivered the next time the session runs.",
+              "false adds the message to the inbox without starting the agent; it is delivered the next time the session runs.",
           }),
         }),
         success: Schema.Struct({ data: SessionInbox.User }),
@@ -390,7 +379,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             identifier: "session.prompt",
             summary: "Send message",
             description:
-              "Send a user message to the session and start the agent unless resume is false. Returns once the message is in the session's inbox, not when the agent finishes. To wait for the result, call experimental.session.wait or watch for a session.execution.succeeded, failed or interrupted event, then read the reply with session.message.list.",
+              "Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with experimental.session.wait or the session.execution.* events, then read the reply with session.message.list.",
           }),
         ),
     )
@@ -398,15 +387,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.post("session.command", "/api/session/:sessionID/command", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
-          name: Schema.String.annotate({
-            description: "Command name, as listed by command.list, without the leading slash.",
-          }),
+          name: Schema.String,
           ...PromptInput.Prompt.fields,
           text: PromptInput.Prompt.fields.text.annotate({
-            description: "Arguments for the command, the text a user types after the command name.",
+            description: "The command's arguments.",
           }),
           delivery: SessionInbox.Delivery.pipe(Schema.optional).annotate({
-            description: `${deliveryDescription} Applies to the message the command sends.`,
+            description: deliveryDescription,
           }),
         }),
         success: HttpApiSchema.NoContent,
@@ -418,7 +405,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             identifier: "session.command",
             summary: "Run command",
             description:
-              "Run a named command in the session. Returns once the command has run. Most commands expand a template and send the result to the session like session.prompt, so the agent may still be working when this returns.",
+              "Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes.",
           }),
         ),
     )
@@ -447,21 +434,21 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional).annotate({
             description:
-              "ID for the message. Sending the same ID again returns the original item instead of adding a second message, so retries are safe. Reusing an ID from another session or a different kind of item fails with 409.",
+              "Sending the same ID again returns the original item instead of adding a second one, so retries are safe. Reusing it in another session or for another kind of item fails with 409.",
           }),
-          text: Schema.String.annotate({ description: "Text the model reads, as a user-role message." }),
+          text: Schema.String,
           description: Schema.String.pipe(Schema.optional).annotate({
             description: "Short label shown in the transcript instead of the full text.",
           }),
           metadata: Schema.Record(Schema.String, Schema.Unknown)
             .annotate({
-              description: "Your own JSON data, stored on the message and returned with it. The model doesn't see it.",
+              description: "Stored on the message. The model doesn't see it.",
             })
             .pipe(optional),
           delivery: SessionInbox.Delivery.pipe(Schema.optional).annotate({ description: deliveryDescription }),
           resume: Schema.Boolean.pipe(Schema.optional).annotate({
             description:
-              "Set to false to only add the message to the inbox without starting the agent. It is delivered the next time the session runs.",
+              "false adds the message to the inbox without starting the agent; it is delivered the next time the session runs.",
           }),
         }),
         success: Schema.Struct({ data: SessionInbox.Synthetic }),
@@ -471,7 +458,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.synthetic",
           summary: "Add synthetic message",
           description:
-            "Add a message that the model reads as user input but that the user didn't type, such as a notification or a background result. Returns once it is in the inbox, and starts the agent unless resume is false or the session has a staged revert.",
+            "Add a message the model reads as user input but the user didn't type, such as a notification. Starts the agent unless resume is false or the session has a staged revert.",
         }),
       ),
     )
@@ -509,7 +496,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.compact",
           summary: "Compact session",
           description:
-            "Ask the session to summarize its history to free up context. Returns once the request is in the inbox. Steers by default: it runs before the next model call instead of waiting behind queued messages.",
+            "Queue a summary of the session's history. Steers by default: it runs before the next model call, ahead of queued messages.",
         }),
       ),
     )
@@ -523,7 +510,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "experimental.session.wait",
           summary: "Wait for session",
           description:
-            "Wait until the session's agent stops running in this server process. Returns right away when it is already idle, and never starts work. Experimental: may change without compatibility guarantees.",
+            "Wait until the session's agent stops running in this server process. Returns at once when idle. Experimental: may change without compatibility guarantees.",
         }),
       ),
     )
@@ -607,7 +594,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.inbox.list",
           summary: "List session inbox",
           description:
-            "List items sent to the session that the agent hasn't picked up yet, oldest first: user, synthetic, compaction and move items. Once delivered, an item leaves the inbox and user and synthetic items appear in session.message.list.",
+            "List user, synthetic, compaction and move items not yet delivered to the agent, oldest first. Delivered user and synthetic items move to session.message.list.",
         }),
       ),
     )
@@ -634,8 +621,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "session.inbox.update",
           summary: "Update inbox item",
-          description:
-            "Switch a pending inbox item between steer and queue. Switching to steer starts the agent if it is idle.",
+          description: "Change a pending inbox item's delivery mode. Steering wakes session execution.",
         }),
       ),
     )
@@ -747,7 +733,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.interrupt",
           summary: "Interrupt session execution",
           description:
-            "Stop the session's agent if it is running in this server process. Returns interrupted=false when nothing was running. With resume=true, the agent then continues with pending steer items and next-in-line compaction or move requests, while queued messages keep waiting.",
+            "Stop the session's agent if it is running in this server process; interrupted=false means nothing was running. With resume=true it continues with pending steer items, compaction and moves, while queued messages keep waiting.",
         }),
       ),
     )
