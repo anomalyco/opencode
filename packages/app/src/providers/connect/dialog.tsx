@@ -107,9 +107,8 @@ export const DialogConnectProvider: Component<{
 
   return (
     <Dialog
-      size="normal"
+      size="large"
       fit
-      anchored
       preventBackdropDismiss={view().preventBackdropDismiss}
       onCloseAutoFocus={(event) => {
         if (view().completed && props.selection && props.onDone) {
@@ -126,13 +125,11 @@ export const DialogConnectProvider: Component<{
       }}
       class="[font-family:var(--v2-font-family-sans)]"
       classList={{
-        "[&_[data-slot=dialog-header]]:!px-4 [&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-close-button]]:!mt-0 [&_[data-slot=dialog-close-button]]:!-me-0.5": true,
+        "[&_[data-slot=dialog-header]]:!px-4 [&_[data-slot=dialog-header]]:!pt-3.5 [&_[data-slot=dialog-close-button]]:!mt-0 [&_[data-slot=dialog-close-button]]:!-me-0.5": true,
         "[&_[data-slot=dialog-header]]:!pb-2": frame() !== "models",
         "[&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]":
           frame() === "models",
         "search-dialog": frame() === "picker" || frame() === "accounts",
-        "[&_[data-slot=dialog-description]]:!text-[13px] [&_[data-slot=dialog-description]]:!tracking-[-0.04px]":
-          frame() === "picker",
       }}
     >
       <DialogHeader closeLabel={language.t("common.close")}>
@@ -177,7 +174,7 @@ export const DialogConnectProvider: Component<{
                       return (
                         <>
                           <Show when={index() > 0}>
-                            <Icon name="chevron-right" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                            <Icon name="chevron-right" class="shrink-0 text-v2-icon-icon-muted" />
                           </Show>
                           <Switch>
                             <Match when={last()}>
@@ -193,7 +190,7 @@ export const DialogConnectProvider: Component<{
                                 {(value) => (
                                   <button
                                     type="button"
-                                    class="flex min-w-0 items-center gap-1.5 rounded-sm font-[530] text-v2-text-text-base hover:text-v2-text-text-muted focus-visible:text-v2-text-text-muted focus-visible:outline-none"
+                                    class="flex min-w-0 items-center gap-1.5 rounded-[4px] font-[530] text-v2-text-text-base hover:text-v2-text-text-muted"
                                     onClick={() => controller.navigate(value())}
                                   >
                                     {content()}
@@ -205,7 +202,7 @@ export const DialogConnectProvider: Component<{
                               {(value) => (
                                 <button
                                   type="button"
-                                  class="flex min-w-0 shrink items-center gap-1.5 rounded-sm font-[440] text-v2-text-text-faint hover:text-v2-text-text-base focus-visible:text-v2-text-text-base focus-visible:outline-none"
+                                  class="flex min-w-0 shrink items-center gap-1.5 rounded-[4px] font-[440] text-v2-text-text-faint hover:text-v2-text-text-base"
                                   onClick={() => controller.navigate(value())}
                                 >
                                   {content()}
@@ -244,9 +241,9 @@ export const DialogConnectProvider: Component<{
               placement="bottom"
               contentClass="!max-w-64 !whitespace-normal"
               triggerTabIndex={0}
-              class="me-3 flex min-w-0 shrink-0 !cursor-default items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted focus-visible:outline-none focus-visible:text-v2-text-text-base"
+              class="me-3 flex min-w-0 shrink-0 !cursor-default items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
             >
-              <Icon name="server" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
               <span class="max-w-40 truncate">{language.t("provider.connect.remote.label", { server: server() })}</span>
             </Tooltip>
           )}
@@ -286,14 +283,19 @@ const methodLabel = (language: ReturnType<typeof useLanguage>, value: ProviderCo
   value.type === "key" ? (value.label ?? language.t("provider.connect.method.apiKey")) : value.label
 
 const METHOD_ICON = {
-  oauth: "window-cursor",
+  oauth: "select-element",
   key: "keyboard",
   command: "terminal",
   external: "server",
 } as const satisfies Record<ProviderConnectMethod["type"], string>
 
-// The TUI's integration groups and order, with connected integrations pulled up into their own group first.
-const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"]
+// The TUI's integration groups, with connected integrations pulled up into their own group first. Unlike the TUI,
+// Go comes before Console here.
+const POPULAR = ["opencode-go", "opencode", "openai", "github-copilot", "anthropic", "google"]
+
+const providerNote = (id: string) => {
+  if (id === "opencode-go") return "dialog.provider.opencodeGo.tagline" as const
+}
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
   const integrations = useIntegrations(() => props.directory)
@@ -306,13 +308,15 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     filter: "",
   })
 
-  // MCP servers are connected and managed from the MCP dialog, not here.
+  // MCP servers are connected and managed from the MCP dialog, not here. OpenCode Go connects through OpenCode, so
+  // it's only listed for people who already saved a Go key.
   const all = createMemo(() => {
     const query = store.filter.trim().toLowerCase()
 
     return integrations
       .list()
       .filter((row) => row.metadata?.source !== "mcp")
+      .filter((row) => row.id !== "opencode-go" || row.connections.some((item) => item.type === "credential"))
       .filter((row) => !query || `${row.id} ${row.name}`.toLowerCase().includes(query))
   })
 
@@ -422,7 +426,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                         <button
                           type="button"
                           data-provider-id={provider.id}
-                          class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none disabled:pointer-events-none"
+                          class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 disabled:pointer-events-none"
                           classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
                           onMouseEnter={() => setStore("active", provider.id)}
                           disabled={disabled(provider)}
@@ -445,6 +449,13 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                             <span class="min-w-0 truncate font-[440] text-v2-text-text-faint">
                               {language.t("dialog.provider.environmentOnly")}
                             </span>
+                          </Show>
+                          <Show when={!disabled(provider) && !account() && providerNote(provider.id)}>
+                            {(key) => (
+                              <span class="min-w-0 shrink-[999] truncate font-[440] text-v2-text-text-muted">
+                                {language.t(key())}
+                              </span>
+                            )}
                           </Show>
                           <Show when={account()}>
                             {(label) => (
@@ -833,16 +844,15 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
             <button
               type="button"
               data-action="provider-connect-method"
-              class="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+              class="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
               onClick={() => props.controller.input({ type: "method.selected", index: index() })}
             >
-              <Icon name={METHOD_ICON[item.type]} size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <Icon name={METHOD_ICON[item.type]} class="shrink-0 text-v2-icon-icon-muted" />
               <span class="min-w-0 flex-1 truncate font-[530] text-v2-text-text-base">
                 {methodLabel(language, item)}
               </span>
               <Icon
                 name="chevron-right"
-                size="small"
                 class="shrink-0 text-v2-icon-icon-muted opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
               />
             </button>
@@ -884,7 +894,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
   function ErrorLine(input: { children: JSX.Element }) {
     return (
       <div class="flex items-start gap-2 text-v2-text-text-base">
-        <Icon name="circle-ban-sign" size="small" class="mt-0.5 shrink-0 text-v2-state-fg-danger" />
+        <Icon name="circle-ban-sign" class="mt-0.5 shrink-0 text-v2-state-fg-danger" />
         <span role="alert">{input.children}</span>
       </div>
     )
@@ -1059,12 +1069,11 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
               <button
                 type="button"
                 aria-expanded={pasteOpen()}
-                class="flex h-12 items-center gap-1.5 text-start font-[440] text-v2-text-text-base focus-visible:outline-none focus-visible:underline"
+                class="flex h-12 items-center gap-1.5 rounded-md text-start font-[440] text-v2-text-text-base focus-visible:-outline-offset-2"
                 onClick={() => props.controller.input({ type: "paste.toggled", open: !pasteOpen() })}
               >
                 <Icon
                   name="chevron-right"
-                  size="small"
                   class="shrink-0 text-v2-icon-icon-muted transition-transform"
                   classList={{ "rotate-90": pasteOpen() }}
                 />
@@ -1170,13 +1179,13 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                       type="button"
                       role="radio"
                       aria-checked={input.body.activeID === account.id}
-                      class="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 ps-2 pe-2 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
+                      class="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md ps-2 pe-2 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:-outline-offset-2"
                       disabled={input.body.busy}
                       onClick={() => props.controller.chooseAccount(account)}
                     >
                       <span class="flex size-4 shrink-0 items-center justify-center">
                         <Show when={input.body.activeID === account.id}>
-                          <Icon name="check" size="small" class="text-v2-icon-icon-base" />
+                          <Icon name="check" class="text-v2-icon-icon-base" />
                         </Show>
                       </span>
                       <span class="min-w-0 truncate font-[440] text-v2-text-text-base">{account.label}</span>
@@ -1239,7 +1248,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
         <button
           type="button"
           data-action="provider-account-add"
-          class="flex h-8 w-full items-center gap-1.5 rounded-md ps-2 pe-2 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none disabled:pointer-events-none"
+          class="flex h-8 w-full items-center gap-1.5 rounded-md ps-2 pe-2 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:-outline-offset-2 disabled:pointer-events-none"
           disabled={!input.body.canAdd}
           onClick={() => props.controller.dispatch({ type: "account.add" })}
         >
@@ -1372,7 +1381,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                     data-first-provider-model=""
                     data-selected={checked() ? "" : undefined}
                     aria-checked={checked()}
-                    class="connected-model-row text-start focus-visible:outline-none"
+                    class="connected-model-row text-start"
                     onClick={() => props.controller.dispatch({ type: "model.selected", modelKey: modelKey(model) })}
                   >
                     <div data-slot="settings-row-copy">
@@ -1382,7 +1391,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                     </div>
                     <div data-slot="settings-row-control" class="size-4">
                       <Show when={checked()}>
-                        <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
+                        <Icon name="check" class="shrink-0 text-v2-icon-icon-base" />
                       </Show>
                     </div>
                   </button>
@@ -1428,7 +1437,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                               onClick={() => collapse(group.provider.id, expanded())}
                             >
                               <span class="settings-models-group-chevron">
-                                <Icon name="chevron-down" size="small" classList={{ collapsed: !expanded() }} />
+                                <Icon name="chevron-down" classList={{ collapsed: !expanded() }} />
                               </span>
                               <span class="settings-models-group-label">
                                 <ProviderModelIcon provider={group.provider} class="shrink-0" />

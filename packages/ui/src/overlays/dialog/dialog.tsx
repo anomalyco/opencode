@@ -21,14 +21,12 @@ const TEXT_FIELD = [
 
 export interface DialogProps extends ParentProps {
   /**
-   * normal: 480px wide, for confirmations and small forms. large: 880×600, for palettes, pickers and lists.
-   * x-large: 1040×680, for long documents and settings-like panels. Each clamps to the window.
+   * normal: 480px wide, for confirmations and small forms. large: 680×600, for palettes, pickers and lists.
+   * x-large: 880×680, for long documents and settings-like panels. Each clamps to the window.
    */
   size?: "normal" | "large" | "x-large"
   /** Height follows the content, up to the size's height. Large sizes grow down from a fixed top edge. */
   fit?: boolean
-  /** Fit within the preset's height and keep its top edge as content changes. */
-  anchored?: boolean
   variant?: "default" | "settings"
   class?: ComponentProps<"div">["class"]
   containerClass?: ComponentProps<"div">["class"]
@@ -115,7 +113,6 @@ export function Dialog(props: DialogProps) {
     "containerClass",
     "classList",
     "fit",
-    "anchored",
     "children",
     "onCloseAutoFocus",
     "preventBackdropDismiss",
@@ -131,12 +128,12 @@ export function Dialog(props: DialogProps) {
       data-component="dialog-v2"
       data-variant={local.variant === "settings" ? "settings" : undefined}
       data-fit={local.fit ? true : undefined}
-      data-anchored={local.anchored ? true : undefined}
       data-size={local.size || "normal"}
     >
       <div data-slot="dialog-container" class={local.containerClass}>
         <Content
           data-slot="dialog-content"
+          data-focus-scope
           onCloseAutoFocus={local.onCloseAutoFocus}
           onPointerDownOutside={(event) => {
             if (local.preventBackdropDismiss) event.preventDefault()
@@ -174,11 +171,14 @@ export function Dialog(props: DialogProps) {
                   ? active
                   : undefined
 
-              const field = Array.from(content.querySelectorAll<HTMLElement>(TEXT_FIELD)).find(
-                (element) => element.getClientRects().length > 0,
-              )
+              const target =
+                autofocus ??
+                kept ??
+                Array.from(content.querySelectorAll<HTMLElement>(TEXT_FIELD)).find(
+                  (element) => element.getClientRects().length > 0,
+                ) ??
+                content
 
-              const target = autofocus ?? kept ?? field ?? content
               target.focus({ preventScroll: true })
             })
           }}

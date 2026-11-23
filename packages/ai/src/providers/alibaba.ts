@@ -11,6 +11,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
 import {
+  mergeTransport,
   ProviderConfigurationError,
   ProviderID,
   ToolDefinition,
@@ -123,8 +124,7 @@ export const configure = (input: Config) => {
     provider: id,
     endpoint: common.endpoint,
     auth: opts.auth,
-    headers: input.headers,
-    http: input.http,
+    ...mergeTransport(input),
   })
   const embedding = (id: string | ModelID, providerOptions?: ProviderOptions) =>
     embeddingRoute.model({ id, providerOptions })

@@ -15,4 +15,13 @@ export default {
   "settings.wrapLines.title": "Ajusta les línies",
   "settings.wrapLines.description":
     "Ajustar les línies llargues en diffs mòbils en lloc de desplaçar-se horitzontalment",
+  "menu.count.one": "{{count}} fitxer modificat",
+  "menu.count.other": "{{count}} fitxers modificats",
+  "folder.more": "{{count}} · n'hi ha més que no es mostren",
+  "folder.failed": "No s'han pogut carregar els canvis",
+  "command.open": "Obre la revisió",
+  "load.failed": "No s'han pogut carregar els canvis",
+  "load.timeout": "El servidor ha trigat massa a respondre",
+  offline: "No es pot accedir a aquest servidor",
+  "menu.count.many": "{{count}} fitxers modificats",
 }

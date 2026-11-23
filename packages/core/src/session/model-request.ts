@@ -128,9 +128,7 @@ export const baseTranscript = (input: {
     messages: input.messages.flatMap((message) =>
       toLLMMessages([message], input.model.ref, providerMetadataKey).map(
         (item): SessionRequestMessage =>
-          message.metadata === undefined || item.id !== message.id
-            ? item
-            : { ...item, metadata: message.metadata },
+          message.metadata === undefined || item.id !== message.id ? item : { ...item, metadata: message.metadata },
       ),
     ),
   }

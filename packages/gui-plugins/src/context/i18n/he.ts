@@ -5,7 +5,6 @@ export default {
   "usage.usage": "שימוש",
   "usage.cost": "עלות",
   "usage.view": "הצג שימוש בהקשר",
-  "systemPrompt.title": "פרומפט מערכת",
   "rawMessages.title": "הודעות גולמיות",
   "export.session": "ייצוא הפעלה",
   "stats.session": "הפעלה",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "ההפעלה נשמרה בקובץ {{filename}}",
   "export.failed.title": "ייצוא ההפעלה נכשל",
   "export.failed.description": "אירעה שגיאה במהלך ייצוא ההפעלה",
+  "usage.toggle": "הצגה או הסתרה של הקשר ההפעלה",
 }

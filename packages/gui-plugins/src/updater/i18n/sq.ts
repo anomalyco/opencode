@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Tjetra",
   "releaseNotes.action.hideFuture": "Mos i shfaq këto në të ardhmen",
   "releaseNotes.media.alt": "Pamja paraprake e publikimit",
+  "action.reload": "Ringarko për të përditësuar",
+  "action.reloading": "Po ringarkohet…",
+  "web.ready.title": "Përditësimi është gati",
+  "web.ready.message": "Një version i ri i OpenCode është gati. Ringarkoni për ta përdorur në çdo dritare të hapur.",
+  "web.reload": "Ringarko",
+  "web.reset.title": "Ringarko nga serveri",
+  "web.reset.description": "Pastro kopjen e ruajtur të aplikacionit dhe ngarko versionin aktual të serverit",
+  "web.reset.action": "Ringarko nga serveri",
 }

@@ -52,11 +52,12 @@ export function start<RequestType extends Request, Error, Services>(options: {
     const url = yield* Effect.try({ try: () => new URL(options.endpoint), catch: (cause) => cause })
     const websocket = yield* Effect.promise(() => import("ws"))
     const runPromise = yield* FiberSet.makeRuntimePromise<Services, void, never>()
-    yield* Effect.acquireRelease(
+    const endpoint = yield* Effect.acquireRelease(
       Effect.tryPromise(
         () =>
           new Promise<{
             readonly close: () => Promise<void>
+            readonly url: string
           }>((resolve, reject) => {
             const server = new websocket.WebSocketServer({ host: url.hostname, port: Number(url.port) })
             const sockets = new Map<
@@ -74,7 +75,11 @@ export function start<RequestType extends Request, Error, Services>(options: {
             const onListening = () => {
               server.off("error", onStartupError)
               server.on("error", onServerError)
+              // Port 0 asks the kernel for one; report the address it gave, as the Rust endpoint does.
+              const address = server.address()
+              const port = typeof address === "object" && address !== null ? address.port : Number(url.port)
               resolve({
+                url: `ws://${url.hostname}:${port}`,
                 close: async () => {
                   const accepted = Array.from(sockets.entries())
                   accepted.forEach(([connection, record]) => {
@@ -172,7 +177,7 @@ export function start<RequestType extends Request, Error, Services>(options: {
       ),
       ({ close }) => Effect.promise(close),
     )
-    return { url: options.endpoint } satisfies Server
+    return { url: endpoint.url } satisfies Server
   })
 }
 

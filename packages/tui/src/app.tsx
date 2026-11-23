@@ -16,6 +16,7 @@ import { Selection } from "./util/selection"
 import {
   CliRenderEvents,
   createCliRenderer,
+  getTreeSitterClient,
   MouseButton,
   type CliRenderer,
   type CliRendererConfig,
@@ -104,6 +105,7 @@ import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
 import { DialogVariant } from "./component/dialog-variant"
+import { DialogSpeed } from "./component/dialog-speed"
 import { destroyRenderer, setTerminalTitle } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
@@ -161,6 +163,8 @@ const appBindingCommands = [
   "agent.cycle.reverse",
   "variant.cycle",
   "variant.list",
+  "speed.cycle",
+  "speed.list",
   "provider.connect",
   "opencode.settings",
   "opencode.status",
@@ -516,12 +520,28 @@ function App() {
   const clipboard = useClipboard()
   const terminalEnvironment = useTuiTerminalEnvironment()
   let paletteTimer: ReturnType<typeof setTimeout> | undefined
+  let disposed = false
+  // OpenTUI draws Markdown prose natively, so the first thought or code fence would start the tree-sitter worker
+  // and load the markdown grammars itself. Do that once the first frame is out, off the main thread.
+  const warmHighlighter = async () => {
+    if (disposed) return
+    const client = getTreeSitterClient()
+    await client.initialize()
+    for (const filetype of ["markdown", "markdown_inline"]) {
+      if (disposed) return
+      await client.preloadParser(filetype)
+    }
+  }
   const afterFrame = () => {
     // The native writer can still be flushing the frame when FRAME fires. Keep OSC probes behind visible app output.
-    paletteTimer = setTimeout(afterPaint, 50)
+    paletteTimer = setTimeout(() => {
+      afterPaint()
+      warmHighlighter().catch(() => {})
+    }, 50)
   }
   onMount(() => renderer.once(CliRenderEvents.FRAME, afterFrame))
   onCleanup(() => {
+    disposed = true
     renderer.off(CliRenderEvents.FRAME, afterFrame)
     if (paletteTimer) clearTimeout(paletteTimer)
   })
@@ -1006,6 +1026,28 @@ function App() {
           dialog.replace(() => <DialogVariant />)
         },
       },
+      // Only for a model that has other speeds, so nothing about speeds shows for the rest.
+      ...(local.model.speed.list().length > 0
+        ? [
+            {
+              name: "speed.cycle",
+              title: "Speed cycle",
+              category: "Agent",
+              run: () => {
+                local.model.speed.cycle()
+              },
+            },
+            {
+              name: "speed.list",
+              title: "Switch model speed",
+              category: "Agent",
+              slash: { name: "speed", aliases: ["fast"] },
+              run: () => {
+                dialog.replace(() => <DialogSpeed />)
+              },
+            },
+          ]
+        : []),
       {
         name: "agent.cycle.reverse",
         title: "Agent cycle reverse",
@@ -1019,7 +1061,7 @@ function App() {
         name: "provider.connect",
         title: "Connect an integration",
         suggested: !connected(),
-        slash: { name: "connect" },
+        slash: { name: "connect", aliases: ["login", "auth"] },
         run: () => {
           dialog.replace(() => (
             <DialogIntegration

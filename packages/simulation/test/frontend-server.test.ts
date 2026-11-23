@@ -3,17 +3,15 @@ import { Effect, FileSystem, Queue } from "effect"
 import { SimulationActions } from "../src/frontend/actions"
 import { SimulationRenderer } from "../src/frontend/renderer"
 import { SimulationServer } from "../src/frontend/server"
-import { availableEndpoint, connect } from "./fixture/websocket"
+import { connect } from "./fixture/websocket"
 
 test("scopes the frontend control server and reports malformed JSON", async () => {
-  const endpoint = availableEndpoint()
-
-  await Effect.runPromise(
+  const bound = await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const renderer = yield* SimulationRenderer.create({})
-        yield* SimulationServer.start(SimulationActions.createHarness(renderer), endpoint)
-        const socket = yield* connect(endpoint)
+        const server = yield* SimulationServer.start(SimulationActions.createHarness(renderer), "ws://127.0.0.1:0")
+        const socket = yield* connect(server.url)
         const messages = yield* Queue.unbounded<unknown>()
         socket.addEventListener("message", (event) => {
           Queue.offerUnsafe(messages, JSON.parse(String(event.data)))
@@ -72,11 +70,12 @@ test("scopes the frontend control server and reports malformed JSON", async () =
           id: null,
           error: { code: -32000 },
         })
+        return server.url
       }),
     ).pipe(Effect.provide(FileSystem.layerNoop({}))),
   )
 
-  const url = new URL(endpoint)
+  const url = new URL(bound)
   const rebound = Bun.serve({ hostname: url.hostname, port: Number(url.port), fetch: () => new Response() })
   await rebound.stop(true)
 })

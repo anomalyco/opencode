@@ -10,6 +10,7 @@ import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
 import { Artifact } from "../artifact.js"
 import { AISDK } from "../aisdk.js"
+import { Automation } from "../automation.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -54,6 +55,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const app = yield* App.Service
   const agents = yield* Agent.Service
   const artifacts = yield* Artifact.Service
+  const automations = yield* Automation.Service
   const aisdk = yield* AISDK.Service
   const providers = yield* Provider.Service
   const models = yield* Model.Service
@@ -316,6 +318,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
               },
             })
           }),
+      },
+      automation: {
+        // A plugin has no UI listener to answer an interactive ask, so asks settle unattended, as they do over HTTP.
+        create: (input) => automations.create(input).pipe(Effect.provideService(Permission.Unattended, [])),
+        list: (input) => automations.list(input),
+        delete: (input) => automations.remove(input.automationID),
       },
     },
     generate: {
@@ -635,6 +643,7 @@ export const requirements = LayerNode.group([
   Agent.node,
   Artifact.node,
   AISDK.node,
+  Automation.node,
   Provider.node,
   Model.node,
   Command.node,
@@ -711,6 +720,7 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
           }),
         ),
       ...(refresh ? { refresh: (value: Credential.OAuth) => refresh(value).pipe(Effect.map(credential)) } : {}),
+      ...(input.revoke ? { revoke: input.revoke } : {}),
       ...(input.label ? { label: input.label } : {}),
     }
   }

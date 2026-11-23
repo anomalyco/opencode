@@ -10,7 +10,18 @@ import {
 } from "../../components/line-comment-annotations"
 import { viewCommentItem } from "../../components/line-comment-machine"
 import { useI18n } from "@opencode/ui/context/i18n"
-import { LineCommentEditor, LineComment, type LineCommentEditorMention } from "@opencode/ui/line-comment"
+import {
+  LineCommentEditor,
+  LineComment,
+  type LineCommentEditorMention,
+  type LineCommentEditorProps,
+} from "@opencode/ui/line-comment"
+
+export type LineCommentSendAction = {
+  label: string
+  keys: string[]
+  disabled: boolean
+}
 
 type LineCommentControllerV2Props<T extends SavedLineComment> = {
   comments: Accessor<T[]>
@@ -19,12 +30,13 @@ type LineCommentControllerV2Props<T extends SavedLineComment> = {
   machine?: LineCommentMachine
   onSyncSelected?: (range: SelectedLineRange | null) => void
   getSide: (range: SelectedLineRange) => "additions" | "deletions"
-  onSubmit: (input: { comment: string; selection: SelectedLineRange }) => void
-  onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange }) => void
+  onSubmit: (input: { comment: string; selection: SelectedLineRange; send: boolean }) => void
+  onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange; send: boolean }) => void
   onDelete?: (comment: T) => void
   renderCommentActions?: (comment: T, controls: { edit: VoidFunction; remove: VoidFunction }) => JSX.Element
   editSubmitLabel?: string
   mention?: LineCommentEditorMention
+  send?: Accessor<LineCommentSendAction | undefined>
 }
 
 type CommentProps = {
@@ -42,6 +54,7 @@ type DraftProps = {
   onInput: (value: string) => void
   onCancel: VoidFunction
   onSubmit: (value: string) => void
+  alternateSubmit?: LineCommentEditorProps["alternateSubmit"]
   cancelLabel?: string
   submitLabel?: string
   mention?: LineCommentEditorMention
@@ -70,6 +83,7 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
             onInput={editor().onInput}
             onCancel={editor().onCancel}
             onSubmit={editor().onSubmit}
+            alternateSubmit={editor().alternateSubmit}
             cancelLabel={editor().cancelLabel}
             submitLabel={editor().submitLabel}
             mention={editor().mention}
@@ -88,6 +102,7 @@ function lineCommentDraftElementV2(view: Accessor<DraftProps>) {
         onInput={view().onInput}
         onCancel={view().onCancel}
         onSubmit={view().onSubmit}
+        alternateSubmit={view().alternateSubmit}
         cancelLabel={view().cancelLabel}
         submitLabel={view().submitLabel}
         mention={view().mention}
@@ -99,6 +114,12 @@ function lineCommentDraftElementV2(view: Accessor<DraftProps>) {
 export function createLineCommentControllerV2<T extends SavedLineComment>(props: LineCommentControllerV2Props<T>) {
   const i18n = useI18n()
   const driver = createLineCommentDriver(props)
+
+  const alternateSubmit = (submit: (text: string) => void) => {
+    const send = props.send?.()
+
+    return send && { ...send, onSubmit: submit }
+  }
 
   const annotations = createLineCommentAnnotations({
     comments: props.comments,
@@ -138,6 +159,9 @@ export function createLineCommentControllerV2<T extends SavedLineComment>(props:
                 onInput: (text: string) => driver.send({ type: "edit.changed", text }),
                 onCancel: () => driver.send({ type: "edit.cancelled" }),
                 onSubmit: (text: string) => driver.send({ type: "edit.submitted", text }),
+                get alternateSubmit() {
+                  return alternateSubmit((text) => driver.send({ type: "edit.submitted", text, send: true }))
+                },
                 cancelLabel: i18n.t("ui.lineComment.cancel"),
                 submitLabel: props.editSubmitLabel,
                 mention: props.mention,
@@ -158,6 +182,9 @@ export function createLineCommentControllerV2<T extends SavedLineComment>(props:
       onInput: (text) => driver.send({ type: "draft.changed", text }),
       onCancel: () => driver.send({ type: "draft.cancelled" }),
       onSubmit: (text) => driver.send({ type: "draft.submitted", text }),
+      get alternateSubmit() {
+        return alternateSubmit((text) => driver.send({ type: "draft.submitted", text, send: true }))
+      },
       cancelLabel: i18n.t("ui.lineComment.cancel"),
       submitLabel: i18n.t("ui.lineComment.submit"),
       mention: props.mention,
@@ -179,5 +206,10 @@ export function createLineCommentControllerV2<T extends SavedLineComment>(props:
     }),
     onLineSelected: (range: SelectedLineRange | null) => driver.send({ type: "line.selected", range }),
     onLineSelectionEnd: (range: SelectedLineRange | null) => driver.send({ type: "line.selection-ended", range }),
+    /** Opens a draft on text selected in the code. Unset while a saved comment is edited, which keeps its range. */
+    commentSelection: () =>
+      driver.mode().status === "editing"
+        ? undefined
+        : (range: SelectedLineRange) => driver.send({ type: "draft.opened", range }),
   }
 }

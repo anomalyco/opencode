@@ -129,10 +129,13 @@ describe("MiniMax Video / H3 start", () => {
     }),
   )
 
-  it.effect("leaves resolution, duration and ratio unset for MiniMax to require", () =>
+  it.effect("defaults a text-only ratio to 16:9 and leaves resolution and duration unset", () =>
     Effect.gen(function* () {
-      const requests = yield* sent([{ model: h3 }])
-      expect(requests[0].body).toEqual({ model: "MiniMax-H3-Lite", content: [{ type: "text", text: "test" }] })
+      const requests = yield* sent([{ model: h3 }, { model: h3, aspect: "auto" }])
+      expect(requests.map((request) => request.body)).toEqual([
+        { model: "MiniMax-H3-Lite", content: [{ type: "text", text: "test" }], ratio: "16:9" },
+        { model: "MiniMax-H3-Lite", content: [{ type: "text", text: "test" }], ratio: "16:9" },
+      ])
     }),
   )
 

@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "زمان {{command}} {{args}} پس از {{timeout}}ms تمام شد",
   "error.failedPort": "پورت دریافت نشد",
   "menu.remove": "حذف",
+  "error.busy": "⁨{{distro}}⁩ مشغول کار دیگری است. پس از پایان آن دوباره تلاش کنید.",
 }

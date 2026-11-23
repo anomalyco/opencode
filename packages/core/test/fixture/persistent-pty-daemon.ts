@@ -5,7 +5,7 @@ import os from "node:os"
 import path from "node:path"
 import { Effect } from "effect"
 
-export const pong = { type: "pong", instance_id: "test", pid: process.pid, protocol: 8, features: [] }
+export const pong = { type: "pong", instance_id: "test", pid: process.pid, protocol: 9, features: [] }
 
 export function temporaryDirectory() {
   return Effect.acquireRelease(
@@ -105,7 +105,7 @@ export function frame(value: object) {
 export function writeRegistration(directory: string, socket: string, instance = "test", token = "test") {
   return writeFile(
     path.join(directory, "service.json"),
-    JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 8, socket, token, features: [] }),
+    JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 9, socket, token, features: [] }),
   )
 }
 

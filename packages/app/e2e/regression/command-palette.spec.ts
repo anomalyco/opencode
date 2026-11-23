@@ -120,7 +120,7 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   const input = dialog.getByRole("combobox")
   await expect(input).toBeFocused()
   await expect(input).toHaveAttribute("placeholder", "Search sessions")
-  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeVisible()
+  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeHidden()
   await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toHaveAttribute("aria-selected", "true")
   // Session search lists sessions only, never commands.
   await input.fill("settings")

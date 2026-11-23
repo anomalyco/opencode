@@ -4,9 +4,13 @@ import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DeepLinks } from "../deep-links"
+import { jumpList, jumpTask } from "../native/jump-list"
+import { deepLinkArguments, takeLaunchLinks } from "./launch-links"
 import { DesktopLogging, scoped } from "../native/logging"
+import { sendMenuCommand } from "../native/menu"
+import { onNativeTranslations } from "../native/translations"
 import { DesktopStorage } from "../storage"
-import { safeWebContentsURL } from "../windows/state"
+import { safeWebContentsOrigin } from "../windows/state"
 import { getLastFocusedWindow, mainWindows } from "../windows"
 import type { Scope } from "@opencode/plugin/gui/host"
 import { marks } from "./marks"
@@ -102,8 +106,37 @@ const runtime = Layer.effect(
 
     const deepLinks = yield* DeepLinks.make(focusWindow)
 
+    // A development build's jump list would start Electron without the app, so only installed builds set one.
+    if (process.platform === "win32" && app.isPackaged) {
+      const setJumpList = () => {
+        const result = app.setJumpList(jumpList(process.execPath))
+
+        if (result !== "ok") runFork(Effect.logWarning("jump list not set", { result }))
+      }
+
+      setJumpList()
+      const stopJumpList = onNativeTranslations(setJumpList)
+      yield* Effect.addFinalizer(() => Effect.sync(stopJumpList))
+    }
+
     const secondInstance = (_event: Event, argv: string[]) => {
-      const urls = argv.filter((arg) => arg.startsWith("opencode://"))
+      const task = process.platform === "win32" ? jumpTask(argv) : undefined
+
+      if (task === "new-window") {
+        createWindow()
+
+        return
+      }
+
+      if (task === "new-session") {
+        const win = getLastFocusedWindow() ?? createWindow()
+        focusWindow(win)
+        sendMenuCommand(win, "tab.new", false)
+
+        return
+      }
+
+      const urls = deepLinkArguments(argv)
 
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
@@ -135,8 +168,13 @@ const runtime = Layer.effect(
       webContents: Electron.WebContents,
       details: Electron.RenderProcessGoneDetails,
     ) => {
+      // Every page's process reports here, a plugin's views included (the in-app browser's pages), and logs go into
+      // bug reports: the origin only. A window's own line has its address (recovery.ts).
       runFork(
-        scoped("window", Effect.logError("app render process gone", { url: safeWebContentsURL(webContents), details })),
+        scoped(
+          "window",
+          Effect.logError("app render process gone", { origin: safeWebContentsOrigin(webContents), details }),
+        ),
       )
     }
 
@@ -162,6 +200,15 @@ const runtime = Layer.effect(
     app.on("render-process-gone", renderProcessGone)
     process.on("SIGINT", signal)
     process.on("SIGTERM", signal)
+
+    // The router waits for a window to be ready, so the links the app was started with open once one is.
+    const launched = takeLaunchLinks()
+
+    if (launched.length) {
+      runFork(Effect.logInfo("deep link received at launch", { urls: launched }))
+      deepLinks.receive(launched)
+    }
+
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         app.off("second-instance", secondInstance)

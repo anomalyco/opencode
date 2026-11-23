@@ -149,25 +149,6 @@ const GeminiThinkingConfig = Schema.Struct({
   thinkingLevel: Schema.optional(GeminiThinkingLevel),
 })
 
-const GeminiSafetySetting = Schema.Struct({
-  category: knownString<
-    | "HARM_CATEGORY_UNSPECIFIED"
-    | "HARM_CATEGORY_HATE_SPEECH"
-    | "HARM_CATEGORY_DANGEROUS_CONTENT"
-    | "HARM_CATEGORY_HARASSMENT"
-    | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
-    | "HARM_CATEGORY_CIVIC_INTEGRITY"
-  >(),
-  threshold: knownString<
-    | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
-    | "BLOCK_LOW_AND_ABOVE"
-    | "BLOCK_MEDIUM_AND_ABOVE"
-    | "BLOCK_ONLY_HIGH"
-    | "BLOCK_NONE"
-    | "OFF"
-  >(),
-})
-
 // =============================================================================
 // Provider Options
 // =============================================================================
@@ -180,7 +161,7 @@ const GeminiThinkingConfigInput = Schema.Struct({
 })
 const Options = Schema.Struct({
   cachedContent: lenient(Schema.String),
-  safetySettings: lenient(Schema.Array(GeminiSafetySetting)),
+  safetySettings: lenient(Schema.Array(GeminiGenerateContent.SafetySetting)),
   serviceTier: lenient(knownString<"standard" | "flex" | "priority">()),
   thinkingConfig: lenient(GeminiThinkingConfigInput),
 })
@@ -202,7 +183,7 @@ const GeminiBodyFields = {
   cachedContent: Schema.optional(Schema.String),
   contents: Schema.Array(GeminiContent),
   labels: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  safetySettings: optionalArray(GeminiSafetySetting),
+  safetySettings: optionalArray(GeminiGenerateContent.SafetySetting),
   serviceTier: Schema.optional(Schema.String),
   systemInstruction: Schema.optional(GeminiSystemInstruction),
   tools: optionalArray(GeminiTool),
@@ -442,8 +423,8 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
 })
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
-  const flattened = ProviderShared.flattenToolRequest(request)
-  const hasTools = flattened.tools.length > 0
+  const definitions = ProviderShared.flattenTools(request.tools)
+  const hasTools = definitions.length > 0
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const generationConfig = {
     maxOutputTokens: request.maxTokens,
@@ -474,7 +455,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 
   return {
     cachedContent: options.cachedContent,
-    contents: yield* lowerMessages(flattened.request),
+    contents: yield* lowerMessages(request),
     safetySettings: options.safetySettings,
     serviceTier: options.serviceTier,
     systemInstruction:
@@ -482,7 +463,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     tools: hasTools
       ? [
           {
-            functionDeclarations: flattened.tools.map(lowerTool),
+            functionDeclarations: definitions.map(lowerTool),
           },
         ]
       : undefined,

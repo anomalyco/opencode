@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Хэрэглээ",
   "usage.cost": "Зардал",
   "usage.view": "Контекст ашиглалтыг харах",
-  "systemPrompt.title": "Системийн промпт",
   "rawMessages.title": "Түүхий мессежүүд",
   "export.session": "Экспортын сесс",
   "stats.session": "Сесс",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "сессийг {{filename}}-д хадгалсан",
   "export.failed.title": "Сешн экспорт хийж чадсангүй",
   "export.failed.description": "Сешн экспортлох явцад алдаа гарлаа",
+  "usage.toggle": "Сессийн контекстийг сэлгэх",
 }

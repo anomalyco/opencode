@@ -12,10 +12,6 @@ export const fileTabPath = (file: Files, id: string) => file.resolve(`file:${id}
 
 export const isFileTab = (id: string) => id.startsWith("//")
 
-/** The file:// URL the browser pane loads for a workspace file. */
-export const workspaceFileUrl = (root: string, path: string) =>
-  pathToFileUrl(`${root.replaceAll("\\", "/").replace(/\/+$/, "")}/${path}`)
-
 export function resolveOpenInAppPath(root: string, path: string) {
   if (!path) return root
 

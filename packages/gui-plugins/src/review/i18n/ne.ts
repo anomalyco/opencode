@@ -12,4 +12,12 @@ export default {
   noChanges: "कुनै परिवर्तन छैन",
   "settings.wrapLines.title": "लाइनहरू बेर्नुहोस्",
   "settings.wrapLines.description": "मोबाइल डिफमा तेर्सो स्क्रोल गर्नुको सट्टा लामा लाइनहरू बेर्नुहोस्",
+  "menu.count.one": "{{count}} फाइल परिवर्तन भयो",
+  "menu.count.other": "{{count}} फाइलहरू परिवर्तन भए",
+  "folder.more": "{{count}} · थप देखाइएको छैन",
+  "folder.failed": "परिवर्तनहरू लोड गर्न सकिएन",
+  "command.open": "समीक्षा खोल्नुहोस्",
+  "load.failed": "परिवर्तनहरू लोड गर्न सकिएन",
+  "load.timeout": "सर्भरले जवाफ दिन धेरै समय लियो",
+  offline: "यो सर्भरमा पुग्न सकिँदैन",
 }
