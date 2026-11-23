@@ -201,22 +201,6 @@ const WrittenSource = {
   ),
 }
 
-const LongWrittenSource = {
-  render: () => (
-    <CurrentSessionTimelineStory
-      title="Create a long source file"
-      description="A write taller than the fold shows its first lines, and Show more opens the rest."
-      document={storyDocument([
-        storyTool("prt_file_projection_long_write", "write", "completed", {
-          path: "src/long.ts",
-          content: Array.from({ length: 200 }, (_, index) => `export const value${index} = ${index}\n`).join(""),
-        }),
-      ])}
-      editToolDefaultOpen
-    />
-  ),
-}
-
 // A finished turn: the step records which files changed, and the idle marker ends the turn.
 function finishedTurnDocument(files: { file: string; before: string; after: string }[]): SessionDocument {
   const document = storyDocument([
@@ -331,7 +315,6 @@ const fileScenarios = {
   streaming: EditWithStreamedSibling,
   patch: ThreeFilePatch,
   write: WrittenSource,
-  longWrite: LongWrittenSource,
 }
 
 export const AppendingToolCalls = {

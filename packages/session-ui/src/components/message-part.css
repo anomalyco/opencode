@@ -1839,58 +1839,6 @@
   }
 }
 
-/* A folded diff fades out under its toggle, which lies over the last of it. */
-[data-slot="file-diff-fold"] {
-  overflow: hidden;
-  border-radius: inherit;
-
-  &[data-folded] {
-    mask-image: linear-gradient(to bottom, #000 calc(100% - 72px), transparent calc(100% - 24px));
-  }
-}
-
-[data-slot="file-diff-fold-toggle"] {
-  position: relative;
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 530;
-  line-height: var(--line-height-compact);
-  white-space: nowrap;
-  user-select: none;
-  color: var(--v2-text-text-muted);
-
-  [data-slot="icon-svg"] {
-    color: var(--v2-icon-icon-muted);
-  }
-
-  &[aria-expanded="false"] {
-    margin-top: -32px;
-  }
-
-  &[aria-expanded="true"] [data-slot="icon-svg"] {
-    transform: rotate(180deg);
-  }
-
-  &:hover {
-    color: var(--v2-text-text-base);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: -2px;
-    border-radius: 4px;
-  }
-}
-
 [data-component="apply-patch-file-diff"] {
   border-radius: inherit;
   overflow-x: hidden;
