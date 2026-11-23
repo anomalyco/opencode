@@ -535,6 +535,57 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.effect("prices a speed from its tier's own prices when the tier has no multiplier", () =>
+    Effect.gen(function* () {
+      const flex = { service_tier: { equals: "flex" } }
+      const [acme] = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          acme: {
+            ...fixture.acme,
+            models: {
+              "acme-1": sourceModel("acme-1", {
+                capabilities: { tools: { supported: true }, reasoning: { supported: false }, service_tier: ["flex"] },
+                cost: {
+                  text: {
+                    input: {
+                      price: 2.5,
+                      cache: { read: 0.25 },
+                      overrides: [
+                        { when: { context: { gt: 272000 } }, price: 5, cache: { read: 0.5 } },
+                        { when: flex, price: 1.25, cache: { read: 0.13 } },
+                        { when: { ...flex, context: { gt: 272000 } }, price: 2.5, cache: { read: 0.25 } },
+                      ],
+                    },
+                    output: {
+                      price: 15,
+                      overrides: [
+                        { when: { context: { gt: 272000 } }, price: 22.5 },
+                        { when: flex, price: 7.5 },
+                      ],
+                    },
+                  },
+                },
+              }),
+            },
+          },
+        }),
+        false,
+        true,
+      )
+      const price = Money.USDPerMillionTokens.make
+      const context = {
+        tier: { type: "context" as const, size: 272000 },
+        input: price(5),
+        output: price(22.5),
+        cache: { read: price(0.5), write: price(0) },
+      }
+      expect(acme?.models.find((item) => item.id === "acme-1-flex")?.cost).toEqual([
+        { input: price(1.25), output: price(7.5), cache: { read: price(0.13), write: price(0) } },
+        context,
+      ])
+    }),
+  )
+
   it.effect("lists each service tier as a model of its own, marked as a speed of the model", () =>
     Effect.gen(function* () {
       const api = (protocol: string, opencodeai: string) => ({
