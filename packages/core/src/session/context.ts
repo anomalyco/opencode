@@ -5,6 +5,7 @@ import { Permission } from "../permission.js"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
+import { CodeModeApi } from "../codemode/api.js"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { CodeModeTool } from "../codemode/tool.js"
 import { Database } from "../database/database.js"
@@ -18,6 +19,8 @@ import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
+import { MachineInstructions } from "../machine/instructions.js"
+import { Machines } from "../machine/machines.js"
 import { McpInstructions } from "../mcp/instructions.js"
 import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
@@ -25,6 +28,8 @@ import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
 import { modelTools } from "../tool/model-policy.js"
 import { WebSearch } from "../websearch.js"
+import { SessionCwd } from "./cwd.js"
+import { SessionCwdInstructions } from "./cwd-instructions.js"
 import { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
 import { InstructionEntry } from "./instruction-entry.js"
@@ -90,7 +95,11 @@ const layer = Layer.effect(
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
     const flags = yield* Flag.Service
+    const environment = yield* Environment.Service
     const location = yield* Location.Service
+    const sessionCwd = yield* SessionCwd.make
+    const cwdInstructions = yield* SessionCwdInstructions.Service
+    const machineInstructions = yield* MachineInstructions.Service
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
@@ -100,6 +109,7 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
     const services = yield* CodeModeTool.services
+    const api = yield* CodeModeApi.Service
     const websearch = yield* WebSearch.Service
 
     const resolveModel = (
@@ -155,11 +165,12 @@ const layer = Layer.effect(
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
       const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
-      const [selected, hasWebSearch, fullCodeMode] = yield* Effect.all(
+      const [selected, hasWebSearch, fullCodeMode, opencodeApi] = yield* Effect.all(
         [
           models.select(session, model.available).pipe(Effect.orElseSucceed(() => undefined)),
           websearch.available(),
           flags.enabled("full_codemode"),
+          flags.enabled("opencode_api"),
         ],
         { concurrency: "unbounded" },
       )
@@ -167,15 +178,26 @@ const layer = Layer.effect(
       const policyModel = selected?.info ?? (fallbackRef && Model.Info.default(fallbackRef.providerID, fallbackRef.id))
       const tools = yield* registry.snapshot(permissions, {
         services,
-        tools: modelTools({ model: policyModel, websearch: hasWebSearch, fullCodeMode }),
+        api: Context.make(CodeModeApi.Service, opencodeApi ? api : CodeModeApi.disabled).pipe(
+          Context.add(Location.Service, location),
+        ),
+        // An agent that can't run `execute` (such as explore) keeps every tool direct, so give it the flag-off policy.
+        tools: modelTools({
+          model: policyModel,
+          websearch: hasWebSearch,
+          fullCodeMode: fullCodeMode && Tool.codeModeAvailable(permissions),
+        }),
       })
+      const cwd = yield* sessionCwd.current(session.id)
       const loaded = yield* Effect.all(
         {
-          builtins: builtins.load(),
+          builtins: builtins.load({ cwd: cwd && SessionCwd.describe(cwd, environment.id) }),
+          cwd: cwdInstructions.load(cwd, session.id),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),
           mcp: mcpInstructions.load(tools),
+          machines: machineInstructions.load(),
           entries: entries.load(sessionID),
         },
         { concurrency: "unbounded" },
@@ -191,8 +213,10 @@ const layer = Layer.effect(
           loaded.mcp,
           loaded.references,
           loaded.skills,
+          loaded.machines,
           loaded.discovery,
           loaded.builtins,
+          loaded.cwd,
           loaded.entries,
         ]),
         tools,
@@ -241,6 +265,7 @@ export const node = makeLocationNode({
   layer,
   deps: [
     Agent.node,
+    CodeModeApi.node,
     Model.node,
     Database.node,
     Environment.node,
@@ -252,9 +277,12 @@ export const node = makeLocationNode({
     InstructionDiscovery.node,
     InstructionEntry.node,
     Location.node,
+    MachineInstructions.node,
+    Machines.node,
     McpInstructions.node,
     McpTool.node,
     ReferenceInstructions.node,
+    SessionCwdInstructions.node,
     SessionRunnerModel.node,
     SessionModelRequest.node,
     SessionStore.node,

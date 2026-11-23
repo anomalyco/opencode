@@ -193,6 +193,16 @@ describe("toSessionError", () => {
       })
   })
 
+  test("types the ChatGPT workspace usage limit", () => {
+    const body = JSON.stringify({
+      error: { code: "subscription_sharing_workplace_individual_usage_limit_exceeded", message: "Limit" },
+    })
+    expect(toSessionError(llm(new RateLimitError({ message: "Too many requests", body })))).toMatchObject({
+      type: "provider.chatgpt-workspace-limit",
+      message: expect.stringContaining("workspace admin"),
+    })
+  })
+
   test("preserves the permission rejection type without exposing internal fields", () => {
     const blocked = new Permission.BlockedError({ rules: [], permission: "external_directory", resources: [] })
     expect(toSessionError(blocked)).toEqual({

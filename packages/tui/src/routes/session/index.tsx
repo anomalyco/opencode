@@ -77,6 +77,7 @@ import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
 import { useStorage } from "../../context/storage"
 import { Composer } from "./composer"
+import { busyCounts, busyTab } from "./composer/tabs"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
@@ -229,6 +230,7 @@ export function Session(props: {
       item.delivery === "queue" ? [{ id: item.id, text: item.payload.text, payload: item.payload }] : [],
     ),
   )
+  const openingTab = () => busyTab(busyCounts({ data, sessionID: route.sessionID, location: location() }))
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
@@ -362,6 +364,7 @@ export function Session(props: {
         return
       }
       editor.reconnect(info.location.directory)
+      void data.job.sync(data.session.root(sessionID)).catch(() => undefined)
       setSynced(true)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -1406,9 +1409,9 @@ export function Session(props: {
       id: "session.child.first",
       group: "Session",
       run: (tab?: string) => {
-        if (tab === "shell" || tab === "subagents") setComposer({ open: true, tab })
+        if (tab === "shell" || tab === "subagents" || tab === "scripts") setComposer({ open: true, tab })
         else if (composer.open || session()?.parentID) setComposer("open", false)
-        else setComposer({ open: true, tab: "subagents" })
+        else setComposer({ open: true, tab: openingTab() })
         dialog.clear()
       },
     },
@@ -1547,6 +1550,8 @@ export function Session(props: {
                 }}
                 stickyScroll={!navigationMessage() && !navigationSlack()}
                 stickyStart="bottom"
+                // Rows never grow or shrink, so a change to one row lays out only that row.
+                contentOptions={{ layoutMode: "list" }}
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
@@ -2235,9 +2240,8 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
           <markdown
             ref={useSessionLinks()}
             syntaxStyle={syntax()}
-            renderNode={plugins.markdown()}
-            streaming={true}
-            internalBlockMode="top-level"
+            renderBlock={plugins.markdown()}
+            streaming={status() === "running"}
             content={content()}
             tableOptions={{ style: "grid", cellPaddingX: 1 }}
             conceal={ctx.markdownMode() === "rendered"}
@@ -3260,7 +3264,7 @@ function Read(props: ToolProps) {
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.text.muted}>
+            <text fg={theme.text.muted}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>
           </box>
@@ -3426,6 +3430,8 @@ function Execute(props: ToolProps) {
   const dialog = useDialog()
   const isLoading = createMemo(() => props.part.state.status === "streaming" || props.part.state.status === "running")
   const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
+  // One block per change a script made, in order; a change past the size cap or to a binary file has no patch.
+  const files = createMemo(() => parseScriptChanges(props.metadata.files))
   const output = createMemo(() => stripAnsi(props.output?.trim() ?? ""))
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
@@ -3455,12 +3461,17 @@ function Execute(props: ToolProps) {
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
-              <text paddingLeft={3} fg={theme.text.feedback.error.base}>
+              <text fg={theme.text.feedback.error.base}>
                 {index() === 0 ? "↳ " : "  "}
                 {line}
               </text>
             )}
           </For>
+        </box>
+      </Show>
+      <Show when={files().length > 0}>
+        <box marginTop={1}>
+          <PatchedFiles files={files()} />
         </box>
       </Show>
     </>
@@ -3534,7 +3545,6 @@ function Edit(props: ToolProps) {
 function ApplyPatch(props: ToolProps) {
   const ctx = use()
   const theme = useTheme()
-  const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
   const targets = createMemo(() => {
@@ -3552,60 +3562,10 @@ function ApplyPatch(props: ToolProps) {
       return type && resource ? [{ type, resource }] : []
     })
   })
-  const view = createMemo(() => {
-    if (ctx.config.diffs?.view === "unified") return "unified"
-    if (ctx.config.diffs?.view === "split") return "split"
-    return ctx.width > 120 ? "split" : "unified"
-  })
-
   return (
     <Switch>
       <Match when={files().length > 0}>
-        <box flexDirection="column" gap={1}>
-          <For each={files()}>
-            {(file) => (
-              <BlockTool
-                path={{
-                  label: file.type === "add" ? "# Created" : file.type === "delete" ? "# Deleted" : "← Patched",
-                  value: pathFormatter.format(file.relativePath),
-                }}
-                part={props.part}
-              >
-                <Show
-                  when={file.type !== "delete"}
-                  fallback={
-                    <text fg={theme.diff.text.removed}>
-                      -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
-                    </text>
-                  }
-                >
-                  <box paddingLeft={1} paddingRight={1}>
-                    <PatchDiff
-                      diff={file.patch}
-                      hunkFg={theme.diff.text.hunkHeader}
-                      view={view()}
-                      filetype={filetype(file.relativePath)}
-                      syntaxStyle={syntax()}
-                      showLineNumbers={true}
-                      width="100%"
-                      wrapMode={ctx.diffWrapMode()}
-                      fg={theme.text.base}
-                      addedBg={theme.diff.background.added}
-                      removedBg={theme.diff.background.removed}
-                      contextBg={theme.diff.background.context}
-                      addedSignColor={theme.diff.highlight.added}
-                      removedSignColor={theme.diff.highlight.removed}
-                      lineNumberFg={theme.diff.lineNumber.text}
-                      lineNumberBg={theme.diff.background.context}
-                      addedLineNumberBg={theme.diff.lineNumber.background.added}
-                      removedLineNumberBg={theme.diff.lineNumber.background.removed}
-                    />
-                  </box>
-                </Show>
-              </BlockTool>
-            )}
-          </For>
-        </box>
+        <PatchedFiles files={files()} part={props.part} />
       </Match>
       <Match when={applied().length > 0}>
         <box flexDirection="column" gap={1}>
@@ -3786,6 +3746,121 @@ function formatSessionTranscript(
     return [`## Assistant\n\n${content.join("\n\n")}`]
   })
   return `# ${withTimestampedFallback(session)}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
+}
+
+// Files a patch, or a Code Mode script, changed: one block per change with its diff, or its counts when the diff is
+// missing (a deleted file, or a script's change past the size cap). A change without counts shows only its path.
+// Blocks are kept by position, so a running script's stay put as its changes arrive.
+// A script's error and permission request stay on its own row, so its changes take no part.
+function PatchedFiles(props: { files: ReturnType<typeof parseScriptChanges>; part?: ToolProps["part"] }) {
+  const ctx = use()
+  const theme = useTheme()
+  const { currentSyntax: syntax } = useThemes()
+  const pathFormatter = usePathFormatter()
+  const view = createMemo(() => {
+    if (ctx.config.diffs?.view === "unified") return "unified"
+    if (ctx.config.diffs?.view === "split") return "split"
+    return ctx.width > 120 ? "split" : "unified"
+  })
+
+  return (
+    <box flexDirection="column" gap={1}>
+      <Index each={props.files}>
+        {(file) => (
+          <BlockTool
+            path={{
+              label: file().type === "add" ? "# Created" : file().type === "delete" ? "# Deleted" : "← Patched",
+              value: pathFormatter.format(file().relativePath),
+            }}
+            part={props.part}
+          >
+            <Show
+              when={file().type !== "delete" && file().patch.includes("@@")}
+              fallback={
+                <Show when={changeCounts(file())}>
+                  {(counts) => (
+                    <text>
+                      <Show when={counts().additions}>
+                        {(text) => <span style={{ fg: theme.diff.text.added }}>{text()}</span>}
+                      </Show>
+                      <Show when={counts().additions && counts().deletions}> </Show>
+                      <Show when={counts().deletions}>
+                        {(text) => <span style={{ fg: theme.diff.text.removed }}>{text()}</span>}
+                      </Show>
+                      {counts().unit}
+                    </text>
+                  )}
+                </Show>
+              }
+            >
+              <box paddingLeft={1} paddingRight={1}>
+                <PatchDiff
+                  diff={file().patch}
+                  hunkFg={theme.diff.text.hunkHeader}
+                  view={view()}
+                  filetype={filetype(file().relativePath)}
+                  syntaxStyle={syntax()}
+                  showLineNumbers={true}
+                  width="100%"
+                  wrapMode={ctx.diffWrapMode()}
+                  fg={theme.text.base}
+                  addedBg={theme.diff.background.added}
+                  removedBg={theme.diff.background.removed}
+                  contextBg={theme.diff.background.context}
+                  addedSignColor={theme.diff.highlight.added}
+                  removedSignColor={theme.diff.highlight.removed}
+                  lineNumberFg={theme.diff.lineNumber.text}
+                  lineNumberBg={theme.diff.background.context}
+                  addedLineNumberBg={theme.diff.lineNumber.background.added}
+                  removedLineNumberBg={theme.diff.lineNumber.background.removed}
+                />
+              </box>
+            </Show>
+          </BlockTool>
+        )}
+      </Index>
+    </box>
+  )
+}
+
+/**
+ * The line counts a change shows without its diff: "+2 lines", "-40 lines", "+5 -1 lines". Nothing where they are
+ * unknown or zero, so a change without counts shows only its path.
+ */
+export function changeCounts(file: { additions?: number; deletions?: number }) {
+  const additions = file.additions ?? 0
+  const deletions = file.deletions ?? 0
+  if (additions === 0 && deletions === 0) return undefined
+  return {
+    additions: additions > 0 ? `+${additions}` : "",
+    deletions: deletions > 0 ? `-${deletions}` : "",
+    unit: additions + deletions === 1 ? " line" : " lines",
+  }
+}
+
+// A script's changes, like a patch's files, but a change may have no patch and, where nothing could be derived
+// without reading the file, no counts.
+export function parseScriptChanges(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const file = recordValue(item)
+    const status = stringValue(file?.status)
+    const type =
+      status === "added" ? "add" : status === "deleted" ? "delete" : status === "modified" ? "update" : undefined
+    const relativePath = stringValue(file?.file)
+    if (!file || !type || !relativePath) return []
+    return [
+      {
+        type,
+        relativePath,
+        filePath: relativePath,
+        patch: stringValue(file.patch) ?? "",
+        additions: finiteNumber(file.additions),
+        deletions: finiteNumber(file.deletions),
+        movePath: undefined as string | undefined,
+      },
+    ]
+  })
 }
 
 export function parseApplyPatchFiles(value: unknown) {

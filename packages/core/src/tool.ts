@@ -71,15 +71,18 @@ export interface SnapshotOptions {
    * session's Location and file services.
    */
   readonly services?: Context.Context<CodeModeTool.Services>
+  /** What `opencode://` fetch sends requests through; see the `opencode_api` flag. */
+  readonly api?: Context.Context<CodeModeTool.Api>
   readonly tools?: Policy
 }
 
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<RegisteredTool>>
+  readonly codeModeTools: (paths: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, RegisteredTool>>
   readonly snapshot: (permissions?: Permission.Ruleset, options?: SnapshotOptions) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
-   * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
+   * whole-tool permission filtering and each tool's own executor policy).
    */
   readonly check: (input: CheckInput) => Effect.Effect<CodeMode.Result>
 }
@@ -90,6 +93,7 @@ export interface CheckInput {
   readonly bindings: Readonly<Record<string, CodeMode.DataValue>>
   readonly permissions: Permission.Ruleset
   readonly limits: CodeMode.ExecutionLimits
+  readonly services?: Context.Context<CodeModeTool.Services>
   readonly context: Omit<Tool.Context, "id">
 }
 
@@ -302,11 +306,12 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
+      codeModeTools: (paths) => Effect.sync(() => new Map(codeModeTools(state.get().tools, paths))),
       snapshot: Effect.fn("Tool.snapshot")((permissions, options) =>
         Effect.gen(function* () {
           const rules = permissions ?? []
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
-          const codeModeEnabled = !whollyDisabled("execute", rules)
+          const codeModeEnabled = codeModeAvailable(rules)
           const full = codeModeEnabled && options?.services !== undefined && (yield* flags.enabled("full_codemode"))
           const data = state.get()
           if (catalogData !== data) {
@@ -347,6 +352,7 @@ const layer = Layer.effect(
                   (name, item, input, context) => run(inventory.tools, item, name, input, context),
                   permission,
                   full ? options.services : undefined,
+                  options?.api,
                 )
                 const entry = cached ?? {
                   inventory,
@@ -360,7 +366,7 @@ const layer = Layer.effect(
                   }
                   catalogs.set(key, entry)
                 }
-                return { tool, catalog: entry.value, definition: entry.definition }
+                return { tool, inventory, catalog: entry.value, definition: entry.definition }
               })()
           return {
             ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog }),
@@ -387,10 +393,25 @@ const layer = Layer.effect(
               if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codemode) {
-                const run = (ctx: Tool.Context) => executeTool(codemode.tool, name, event.input, ctx)
+              // A tool this request only offers inside Code Mode, called by the model at the top level or renamed there by
+              // a plugin, runs as a Code Mode call when the request offered execute.
+              const found =
+                codemode &&
+                name !== "execute" &&
+                !direct.has(name) &&
+                (!input.definitions || Array.from(input.definitions.values()).some((item) => item.name === "execute"))
+                  ? CodeModeTool.find(codemode.inventory, name)
+                  : undefined
+              if (codemode && (name === "execute" || found)) {
+                // Like an execute program, it moves to the background when it runs long.
+                const run = (ctx: Tool.Context) =>
+                  found
+                    ? executeTool(found.registration, found.id, event.input, { ...ctx, codemode: true })
+                    : executeTool(codemode.tool, name, event.input, ctx)
                 const background = yield* CodeModeJob.Current
-                return yield* background ? background(context, run) : run(context)
+                return yield* background
+                  ? background(context, run, full && !found ? executeOptions(event.input) : undefined)
+                  : run(context)
               }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
@@ -410,21 +431,21 @@ const layer = Layer.effect(
           } satisfies CodeMode.Result
         }
         const data = state.get()
-        const allowed = new Set(input.tools)
         const tools = new Map(
-          Array.from(data.tools).filter(
-            ([name, tool]) =>
-              defaultCodeMode(tool) &&
-              allowed.has(CodeModeTool.qualifiedName(tool)) &&
-              !whollyDisabled(tool.options?.permission ?? name, input.permissions),
-          ),
+          codeModeTools(data.tools, input.tools)
+            .filter(([, tool]) => !whollyDisabled(tool.options?.permission ?? tool.id, input.permissions))
+            .map(([, tool]) => [tool.id, tool] as const),
         )
         const callSeq = yield* Ref.make(0)
+        const full = input.services !== undefined && (yield* flags.enabled("full_codemode"))
         return yield* CodeModeTool.check(
           { tools, namespaces: data.namespaces },
-          input.code,
-          input.bindings,
-          input.limits,
+          {
+            ...input,
+            context: { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) },
+            permission,
+            services: full ? input.services : undefined,
+          },
           (name, tool, toolInput) =>
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callSeq, (value) => value + 1)
@@ -469,10 +490,20 @@ function commit(editor: Data, id: string, input: RegisteredTool) {
   editor.definitions.set(id, registered.success)
 }
 
+function* codeModeTools(registered: Data["tools"], paths: ReadonlyArray<string>) {
+  for (const path of paths) {
+    const tool = registered.get(path.replaceAll(".", "_"))
+    if (tool && defaultCodeMode(tool) && CodeModeTool.qualifiedName(tool) === path) yield [path, tool] as const
+  }
+}
+
 const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
   const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
   return rule?.resource === "*" && rule.effect === "deny"
 }
+
+/** Whether the rules leave Code Mode's `execute` reachable, as `snapshot` decides it. */
+export const codeModeAvailable = (rules: Permission.Ruleset) => !whollyDisabled("execute", rules)
 
 const CATALOG_CACHE_LIMIT = 5
 
@@ -539,3 +570,13 @@ export const node = makeLocationNode({
   layer,
   deps: [PluginHooks.node, Image.node, Permission.node, Flag.node],
 })
+
+// Only read once the input has the shape the full_codemode schema accepts; the tool still validates it when it runs.
+const executeOptions = (input: unknown): CodeModeJob.Options | undefined => {
+  if (typeof input !== "object" || input === null) return undefined
+  const { timeout, background } = input as Record<string, unknown>
+  return {
+    ...(typeof timeout === "number" && Number.isInteger(timeout) && timeout > 0 ? { timeout } : {}),
+    ...(background === true ? { background } : {}),
+  }
+}

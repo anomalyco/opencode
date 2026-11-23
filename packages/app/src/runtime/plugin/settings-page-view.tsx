@@ -1,5 +1,5 @@
 import { For } from "solid-js"
-import { Tabs } from "@opencode/ui/tabs"
+import { SettingsPanel } from "@/settings/navigation"
 import { useSettingsSurface } from "@/settings/surface"
 import { Contribution } from "./render"
 
@@ -10,7 +10,7 @@ export function PluginSettingsPages() {
   return (
     <For each={surface.plugins.pages()}>
       {(item) => (
-        <Tabs.Content value={item.value.id} class="settings-panel">
+        <SettingsPanel value={item.value.id}>
           <Contribution plugin={item.plugin}>
             {() =>
               item.value.render({
@@ -22,7 +22,7 @@ export function PluginSettingsPages() {
               })
             }
           </Contribution>
-        </Tabs.Content>
+        </SettingsPanel>
       )}
     </For>
   )

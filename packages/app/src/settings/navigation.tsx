@@ -2,12 +2,23 @@ import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { Tabs } from "@opencode/ui/tabs"
-import { createEffect, ErrorBoundary, For, on, Show, type ComponentProps, type JSX } from "solid-js"
+import {
+  createEffect,
+  ErrorBoundary,
+  For,
+  on,
+  onCleanup,
+  Show,
+  type ComponentProps,
+  type JSX,
+  type ParentProps,
+} from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ErrorPage } from "@/shell/errors/error"
 import { CollapsedSidebarToggleSpace } from "@/shell/sidebar-toggle"
 import { useSettingsSurface } from "./surface"
 import { SettingsSearch } from "./search"
+import { trackTabHeader } from "./tab-header"
 import "./search.css"
 
 type SettingsNavItem = {
@@ -22,6 +33,19 @@ export type SettingsNavGroup = {
   label?: string
   action?: JSX.Element
   items: readonly SettingsNavItem[]
+}
+
+// Tabs make a panel with nothing to Tab to a Tab stop of its own, which rings the whole page and does nothing.
+export function SettingsPanel(props: ParentProps<{ value: string; class?: string }>) {
+  return (
+    <Tabs.Content
+      value={props.value}
+      class={props.class ? `settings-panel ${props.class}` : "settings-panel"}
+      tabIndex={-1}
+    >
+      {props.children}
+    </Tabs.Content>
+  )
 }
 
 export function SettingsNavigation(props: {
@@ -61,6 +85,27 @@ export function SettingsNavigation(props: {
       () => props.value,
       () => root?.scrollTo({ top: 0 }),
       { defer: true },
+    ),
+  )
+
+  // Each page renders its own header, so it is found again once the selected page has mounted.
+  createEffect(
+    on(
+      () => props.value,
+      () => {
+        let release: (() => void) | undefined
+
+        const frame = requestAnimationFrame(() => {
+          const header = root?.querySelector<HTMLElement>(".settings-content .settings-tab-header")
+
+          if (root && header) release = trackTabHeader(root, header)
+        })
+
+        onCleanup(() => {
+          cancelAnimationFrame(frame)
+          release?.()
+        })
+      },
     ),
   )
 

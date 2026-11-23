@@ -20,6 +20,8 @@ import { usePluginClaims, usePluginScoped } from "@/runtime/plugin/commands"
 import type { Region } from "@/runtime/plugin/panels"
 import { sideTabShortcuts } from "@/runtime/plugin/closed-tabs"
 import { useTabs } from "@/shell/tabs/tabs"
+import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
+import { useQueryClient } from "@tanstack/solid-query"
 import {
   createCloseTabGuardState,
   createSessionCommandsState,
@@ -108,6 +110,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const pluginScoped = usePluginScoped()
   const pluginClaims = usePluginClaims()
   const tabs = useTabs()
+  const queryClient = useQueryClient()
 
   // The file the selected side tab shows; other tabs have no line selection.
   const activeFile = () => actions.region.selected()?.tab.file
@@ -334,6 +337,33 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }
   }
 
+  // Root sessions only, as in the sidebar. Removing the session's tab moves the view to the next open session.
+  const archivable = () => {
+    const info = actions.session.data.info()
+
+    return !!info && !info.parentID && info.time.archived === undefined
+  }
+
+  const archiveSession = async () => {
+    const info = actions.session.data.info()
+
+    if (!info || !archivable()) return
+
+    try {
+      await serverSDK.api.session.update({ sessionID: info.id, archived: true })
+    } catch (cause) {
+      showToast({ title: formatServerError(cause, language.t, language.t("common.requestFailed")) })
+
+      return
+    }
+
+    for (const queryKey of ["home-sessions", "inbox-sessions", "inbox-archived-sessions"]) {
+      void queryClient.invalidateQueries({ queryKey: [queryKey, server.conn], exact: true })
+    }
+
+    notifySessionTabsRemoved({ server: server.key, directory: info.location.directory, sessionIDs: [info.id] })
+  }
+
   const copyProjectID = async () => {
     const projectID = actions.session.data.info()?.projectID
 
@@ -540,6 +570,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.copyID"),
       disabled: !actions.session.identity.params.id,
       onSelect: copySessionID,
+    }),
+    sessionCommand({
+      id: "session.archive",
+      title: language.t("command.session.archive"),
+      keybind: "mod+shift+s",
+      disabled: !archivable(),
+      onSelect: archiveSession,
     }),
   ]
 

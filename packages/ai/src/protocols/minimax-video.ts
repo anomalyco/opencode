@@ -183,6 +183,13 @@ const fromRequest = Effect.fn("MiniMaxVideo.fromRequest")(function* (request: Re
     ...(request.end === undefined ? [] : [yield* item(request.end, "last_frame")]),
     ...(yield* Effect.forEach(request.references ?? [], reference)),
   ]
+  // H3 rejects a t2va (text-only) request without a concrete `ratio`, so `auto` and unset default to `16:9`.
+  const ratio =
+    content.length === 1 && (request.aspect === undefined || request.aspect === "auto")
+      ? "16:9"
+      : request.aspect === "auto"
+        ? "adaptive"
+        : request.aspect
   return MediaProtocol.json(
     mergeJsonRecords(
       {
@@ -190,7 +197,7 @@ const fromRequest = Effect.fn("MiniMaxVideo.fromRequest")(function* (request: Re
         content,
         resolution: resolution(request),
         duration: request.duration === undefined ? undefined : seconds(request.duration),
-        ratio: request.aspect === "auto" ? "adaptive" : request.aspect,
+        ratio,
       },
       request.providerOptions,
       request.http?.body,

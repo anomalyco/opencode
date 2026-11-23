@@ -46,7 +46,6 @@ const readToolNode = makeLocationNode({
   layer: Layer.effectDiscard(registerToolPlugin(ReadTool.Plugin)),
   deps: [
     Tool.node,
-    ReadToolFileSystem.node,
     FileAccess.node,
     Image.node,
     Permission.node,
@@ -75,7 +74,6 @@ const testLayer = AppNodeBuilder.build(
     Location.node,
     FSUtil.node,
     FileAccess.node,
-    ReadToolFileSystem.node,
     readToolNode,
     Tool.node,
     PluginHooks.node,

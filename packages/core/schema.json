@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "ab8fea18-0d95-48a1-b631-c112235dc492",
-  "prevIds": ["0709c7fb-3e7c-4bec-a6c5-0dd42ae64919"],
+  "id": "6fdb1fc8-74cd-4f15-8faa-e109d3030da9",
+  "prevIds": ["74cace2e-430e-4672-bf3b-eba14ae0c399"],
   "ddl": [
     {
       "name": "account_state",
@@ -38,6 +38,10 @@
     },
     {
       "name": "kv",
+      "entityType": "tables"
+    },
+    {
+      "name": "machine",
       "entityType": "tables"
     },
     {
@@ -845,6 +849,36 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "kv"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "machine"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "machine"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "machine"
     },
     {
       "type": "text",
@@ -2271,6 +2305,13 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
+      "name": "machine_pk",
+      "table": "machine",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
       "name": "permission_pk",
       "table": "permission",
       "entityType": "pks"
@@ -2454,6 +2495,20 @@
       "name": "job_id_idx",
       "entityType": "indexes",
       "table": "job"
+    },
+    {
+      "columns": [
+        {
+          "value": "key",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "machine_key_idx",
+      "entityType": "indexes",
+      "table": "machine"
     },
     {
       "columns": [

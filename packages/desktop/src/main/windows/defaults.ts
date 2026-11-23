@@ -1,7 +1,7 @@
 import { resolveThemeVariant } from "@opencode/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode/ui/theme/types"
 import { desktopZoomLevels } from "@opencode/app/desktop-menu"
-import { nativeTheme, type BrowserWindowConstructorOptions } from "electron"
+import { nativeTheme, systemPreferences, type BrowserWindowConstructorOptions } from "electron"
 import { Predicate } from "effect"
 import oc2ThemeJson from "../../../../ui/src/theme/themes/oc-2.json"
 import { BACKGROUND_COLOR_KEY, ZOOM_LEVEL_KEY } from "../storage/keys"
@@ -49,9 +49,18 @@ export function storedZoomLevel() {
 export function titlebarOverlay(mode: "light" | "dark" = tone(), zoom = 1) {
   return {
     color: "#00000000",
-    symbolColor: mode === "dark" ? "white" : "black",
+    symbolColor: captionSymbolColor(mode),
     height: Math.max(titlebarHeight, Math.round(titlebarHeight * zoom)),
   }
+}
+
+// A Windows contrast theme repaints the page in system colours (`forced-colors`), whatever theme the app picked, so the
+// caption buttons draw in the theme's window text colour too instead of the app theme's black or white.
+function captionSymbolColor(mode: "light" | "dark") {
+  if (process.platform === "win32" && nativeTheme.shouldUseHighContrastColors)
+    return systemPreferences.getColor("window-text")
+
+  return mode === "dark" ? "white" : "black"
 }
 
 // macOS and Windows hide the titlebar; Windows draws its window controls in an overlay sized to the zoom.

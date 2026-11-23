@@ -165,16 +165,14 @@ interface Ctx {
 
 type GitOps = ReturnType<typeof makeGit>
 
+// Unlike the snapshot repository, this is the user's checkout: line endings and symlinks follow its own config, as
+// `git status` does, or every CRLF checkout and symlink placeholder reads as changed.
 const cfg = [
   "--no-optional-locks",
-  "-c",
-  "core.autocrlf=false",
   "-c",
   "core.fsmonitor=false",
   "-c",
   "core.longpaths=true",
-  "-c",
-  "core.symlinks=true",
   "-c",
   "core.quotepath=false",
 ] as const

@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { CodeRenderable, SyntaxStyle, TextAttributes, type MarkdownRenderable, type Renderable } from "@opentui/core"
+import { SyntaxStyle, TextAttributes, type MarkdownRenderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import { onCleanup, onMount, type JSX } from "solid-js"
 import { ConfigProvider } from "../../src/config"
@@ -36,7 +36,7 @@ const archived = session(id("archived"), "Old work", 1)
 const unknown = id("unknown")
 const missing = id("missing")
 
-test.each(["top-level", "coalesced"] as const)("session links in %s markdown", async (mode) => {
+test("session links in markdown", async () => {
   await using state = await tmpdir()
   const lookup = Promise.withResolvers<void>()
   const requested: string[] = []
@@ -69,7 +69,6 @@ test.each(["top-level", "coalesced"] as const)("session links in %s markdown", a
     return (
       <markdown
         ref={useSessionLinks()}
-        internalBlockMode={mode}
         syntaxStyle={syntaxStyle}
         content={[
           `**中文** see ${known.id} now`,
@@ -101,7 +100,12 @@ test.each(["top-level", "coalesced"] as const)("session links in %s markdown", a
     await Promise.all([...fetched.values()].map((request) => request.promise))
     // The client marks the session missing once it has read the 404.
     await app.waitFor(() => data.session.missing(missing))
-    await waitForHighlightedFrame(app, () => linked().length > 0)
+    // In top-level mode every block highlights on its own, so the link can land before the list does.
+    await waitForHighlightedFrame(
+      app,
+      (frame) =>
+        linked().length > 0 && [current, archived.id, unknown, missing, known.id].every((id) => frame.includes(id)),
+    )
     const frame = app.captureCharFrame()
     // The long title wraps; the current, archived, missing and still-loading sessions stay IDs.
     expect(linked()).toBe("@Fix the flaky reconnect test on Windows")
@@ -112,10 +116,13 @@ test.each(["top-level", "coalesced"] as const)("session links in %s markdown", a
     // Joins the lookup already in flight rather than fetching again.
     await data.session.sync(unknown)
     await waitForHighlightedFrame(app, () => linked().includes("@Looked up"))
+    // The hook runs on the first frame, so a lookup can start before the client connects, which the client redoes.
+    const looked = requested.length
     data.session.remember({ ...known, title: "Renamed" })
     await waitForHighlightedFrame(app, () => linked() === "@Renamed @Looked up")
     // Lookups are cached, misses included.
-    expect(requested.toSorted()).toEqual([missing, unknown])
+    expect(requested.length).toBe(looked)
+    expect([...new Set(requested)].toSorted()).toEqual([missing, unknown])
 
     const rows = app.captureCharFrame().split("\n")
     const clicked = rows.findIndex((row) => row.includes("@Looked up"))
@@ -138,14 +145,7 @@ test("a wrapped title opens its session from either row, and plain text does not
     const renderer = useRenderer()
     const syntaxStyle = SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, renderer.nativeScene)
     onCleanup(() => syntaxStyle.destroy())
-    return (
-      <markdown
-        ref={useSessionLinks()}
-        internalBlockMode="top-level"
-        syntaxStyle={syntaxStyle}
-        content={`**中文** see ${known.id} now`}
-      />
-    )
+    return <markdown ref={useSessionLinks()} syntaxStyle={syntaxStyle} content={`**中文** see ${known.id} now`} />
   }
 
   const app = await mount(state.path, calls.fetch, () => <Transcript />, 30, 6)
@@ -216,7 +216,6 @@ test.each([true, false])("code spans link only when they are exactly an ID, conc
     return (
       <markdown
         ref={useSessionLinks()}
-        internalBlockMode="top-level"
         conceal={conceal}
         syntaxStyle={syntaxStyle}
         content={`Run \`opencode --session ${known.id}\` or open \`${known.id}\`.`}
@@ -241,7 +240,7 @@ test.each([true, false])("code spans link only when they are exactly an ID, conc
   }
 })
 
-test("a label change re-highlights only the blocks that mention that session", async () => {
+test("a label change reruns the hook only on the blocks that mention that session", async () => {
   await using state = await tmpdir()
   const calls = createFetch(async () => undefined)
   const other = session(id("other"), "Other work")
@@ -262,7 +261,6 @@ test("a label change re-highlights only the blocks that mention that session", a
           links(renderable)
           markdown = renderable
         }}
-        internalBlockMode="top-level"
         syntaxStyle={syntaxStyle}
         content={`First ${known.id}\n\nSecond ${other.id}`}
       />
@@ -273,28 +271,16 @@ test("a label change re-highlights only the blocks that mention that session", a
 
   try {
     await waitForHighlightedFrame(app, (frame) => frame.includes("@Fix") && frame.includes("@Other"))
-    // Record which blocks get their chunk callback reset, the refresh's re-highlight trigger.
-    const reset: string[] = []
-    const descriptor = Object.getOwnPropertyDescriptor(CodeRenderable.prototype, "onChunks")!
-    const blocks = (renderable: Renderable): CodeRenderable[] => [
-      ...(renderable instanceof CodeRenderable ? [renderable] : []),
-      ...renderable.getChildren().flatMap(blocks),
-    ]
-    blocks(markdown).forEach((block) =>
-      Object.defineProperty(block, "onChunks", {
-        configurable: true,
-        get: () => descriptor.get!.call(block),
-        set: (value) => {
-          reset.push(block.plainText)
-          descriptor.set!.call(block, value)
-        },
-      }),
-    )
+    // Record the blocks the hook runs on again.
+    const hook = markdown.inlineHook!
+    const reran: string[] = []
+    markdown.inlineHook = (spans, context) => (reran.push(context.source), hook(spans, context))
+    await app.renderOnce()
+    reran.length = 0
 
     data.session.remember({ ...known, title: "Renamed" })
     await waitForHighlightedFrame(app, (frame) => frame.includes("@Renamed"))
-    expect(reset.length).toBeGreaterThan(0)
-    expect(reset.every((text) => text.startsWith("First"))).toBe(true)
+    expect(reran).toEqual([`First ${known.id}`])
   } finally {
     app.renderer.destroy()
   }

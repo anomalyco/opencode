@@ -424,7 +424,11 @@ function titleInlineStart(title: Locator) {
   return title.evaluate((element) => {
     const range = document.createRange()
 
-    range.selectNodeContents(element)
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    const text = walker.nextNode()
+
+    if (!text) return 0
+    range.selectNodeContents(text)
 
     const bounds = range.getBoundingClientRect()
 

@@ -1,0 +1,551 @@
+//! Renders tool patches as split or unified diffs.
+
+use std::cell::RefCell;
+
+use opentui::prelude::*;
+use opentui::syntax::SyntaxTheme;
+use opentui::widget::{Diff, DiffColors, DiffGutter, DiffView};
+
+use crate::theme::{Paints, Theme};
+
+/// One hunk of a patch: its `@@` line, and the file headers followed by the hunk alone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Hunk {
+    pub header: Option<String>,
+    pub patch: String,
+}
+
+/// Keep single-hunk patches intact.
+pub fn split_hunks(patch: &str) -> Vec<Hunk> {
+    let mut offset = 0;
+    let starts: Vec<usize> = patch
+        .split_inclusive('\n')
+        .filter_map(|line| {
+            let start = offset;
+            offset += line.len();
+            is_hunk_header(line.trim_end_matches('\n')).then_some(start)
+        })
+        .collect();
+    if starts.len() <= 1 {
+        return vec![Hunk { header: None, patch: patch.to_owned() }];
+    }
+    let prefix = &patch[..starts[0]];
+    starts
+        .iter()
+        .enumerate()
+        .map(|(index, &start)| {
+            let end = starts.get(index + 1).copied().unwrap_or(patch.len());
+            let line_end = patch[start..end].find('\n').map_or(end, |at| start + at);
+            Hunk { header: Some(patch[start..line_end].to_owned()), patch: format!("{prefix}{}", &patch[start..end]) }
+        })
+        .collect()
+}
+
+/// The hunks [`split_hunks`] finds in `patch`, counted without splitting it: at least one.
+pub fn hunk_count(patch: &str) -> usize {
+    patch.lines().filter(|line| is_hunk_header(line)).count().max(1)
+}
+
+/// `@@ -a[,b] +c[,d] @@` followed by anything.
+fn is_hunk_header(line: &str) -> bool {
+    let range = |text: &str, sign: char| -> Option<usize> {
+        let rest = text.strip_prefix(sign)?;
+        let digits = |text: &str| text.bytes().take_while(u8::is_ascii_digit).count();
+        let start = digits(rest);
+        if start == 0 {
+            return None;
+        }
+        let Some(count) = rest[start..].strip_prefix(',') else { return Some(1 + start) };
+        let length = digits(count);
+        (length > 0).then_some(1 + start + 1 + length)
+    };
+    let Some(rest) = line.strip_prefix("@@ ") else { return false };
+    let Some(old) = range(rest, '-') else { return false };
+    let Some(rest) = rest[old..].strip_prefix(' ') else { return false };
+    range(rest, '+').is_some_and(|new| rest[new..].starts_with(" @@"))
+}
+
+/// The `diff.*` tokens as the Edit tool passes them to `<diff>`.
+pub fn colors(theme: &Theme) -> DiffColors {
+    let diff = &theme.diff;
+    DiffColors {
+        line_number: diff.line_number.text,
+        line_number_bg: diff.background.context,
+        added_bg: diff.background.added,
+        removed_bg: diff.background.removed,
+        context_bg: diff.background.context,
+        added_content_bg: None,
+        removed_content_bg: None,
+        context_content_bg: None,
+        added_sign: diff.highlight.added,
+        removed_sign: diff.highlight.removed,
+        added_line_number_bg: diff.line_number.background.added,
+        removed_line_number_bg: diff.line_number.background.removed,
+    }
+}
+
+/// The colors of a patch view: the diff's own, the code's text, and the `@@` rows of later hunks.
+#[derive(Clone, Copy, Debug)]
+pub struct Look {
+    pub colors: DiffColors,
+    pub text: Color,
+    pub hunk_header: Color,
+    pub hunk_header_bg: Color,
+}
+
+/// A patch with line numbers, highlighted as `filetype`: a column of one [`Diff`] per hunk, with the `@@` line of
+/// each later hunk in a row of its own. The hunks share one gutter width, with `gutter_padding` extra cells before
+/// the line numbers (`PatchDiff`'s `gutterPadding`).
+#[allow(clippy::too_many_arguments)]
+pub fn view(
+    app: &App,
+    theme: &Theme,
+    syntax: &SyntaxTheme,
+    patch: &str,
+    view: DiffView,
+    filetype: Option<&str>,
+    wrap: WrapMode,
+    gutter_padding: u32,
+) -> View {
+    view_with(app, &look(theme), syntax, patch, view, filetype, wrap, gutter_padding)
+}
+
+/// [`view`], restyled in place by `paints`: the diffs keep their code and its highlight.
+#[allow(clippy::too_many_arguments)]
+pub fn view_painted(
+    app: &App,
+    theme: &Theme,
+    syntax: &SyntaxTheme,
+    patch: &str,
+    view: DiffView,
+    filetype: Option<&str>,
+    wrap: WrapMode,
+    gutter_padding: u32,
+    paints: &Paints,
+) -> View {
+    let patch = Patch::new(app, theme, syntax, patch, view, filetype, wrap, gutter_padding);
+    let column = patch.view().clone();
+    paints.keep(move |theme| patch.restyle(theme, &crate::code::syntax_theme(theme)));
+    column
+}
+
+/// A [`view`] that changes in place: its theme, unified or split, and the patch it shows. Its column stays, so it
+/// keeps its place in its parent, and a theme or a view keeps the diffs, their code and its highlight.
+pub struct Patch {
+    column: View,
+    parts: RefCell<Vec<Part>>,
+}
+
+impl Patch {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        app: &App,
+        theme: &Theme,
+        syntax: &SyntaxTheme,
+        patch: &str,
+        view: DiffView,
+        filetype: Option<&str>,
+        wrap: WrapMode,
+        gutter_padding: u32,
+    ) -> Self {
+        let (column, parts) = build(app, &look(theme), syntax, patch, view, filetype, wrap, gutter_padding);
+        Self { column, parts: RefCell::new(parts) }
+    }
+
+    /// The column the patch shows in.
+    pub fn view(&self) -> &View {
+        &self.column
+    }
+
+    /// Shows the hunks unified or split.
+    pub fn set_view(&self, view: DiffView) {
+        for part in self.parts.borrow().iter() {
+            if let Part::Diff(diff) = part {
+                diff.view(view);
+            }
+        }
+    }
+
+    /// Shows `patch` instead, as [`Patch::new`] would; the column stays and the hunks in it are built again.
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_patch(
+        &self,
+        app: &App,
+        theme: &Theme,
+        syntax: &SyntaxTheme,
+        patch: &str,
+        view: DiffView,
+        filetype: Option<&str>,
+        wrap: WrapMode,
+        gutter_padding: u32,
+    ) {
+        self.column.clear();
+        *self.parts.borrow_mut() =
+            fill(&self.column, app, &look(theme), syntax, patch, view, filetype, wrap, gutter_padding);
+    }
+
+    /// The first row of each hunk: the first hunk's diff, then each later hunk's `@@` row.
+    pub fn hunk_rows(&self) -> Vec<AnyWidget> {
+        let parts = self.parts.borrow();
+        parts
+            .iter()
+            .enumerate()
+            .filter_map(|(index, part)| match part {
+                Part::Diff(diff) if index == 0 => Some(diff.as_any()),
+                Part::Header(row, _) => Some(row.as_any()),
+                Part::Diff(_) => None,
+            })
+            .collect()
+    }
+
+    /// Paints the patch in `theme`, whose syntax theme is `syntax`.
+    pub fn restyle(&self, theme: &Theme, syntax: &SyntaxTheme) {
+        let look = look(theme);
+        for part in self.parts.borrow().iter() {
+            match part {
+                Part::Header(row, text) => {
+                    row.bg(look.hunk_header_bg);
+                    text.fg(look.hunk_header).bg(look.hunk_header_bg);
+                }
+                Part::Diff(diff) => {
+                    diff.syntax_theme(syntax.clone()).colors(look.colors);
+                    let (left, right) = diff.code_views();
+                    for code in [left, right] {
+                        code.fg(look.text);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A widget of a patch view that takes the theme's colors.
+enum Part {
+    /// A later hunk's `@@` row and its text.
+    Header(View, Text),
+    Diff(Diff),
+}
+
+fn look(theme: &Theme) -> Look {
+    Look {
+        colors: colors(theme),
+        text: theme.text.base,
+        hunk_header: theme.diff.text.hunk_header,
+        hunk_header_bg: theme.diff.background.context,
+    }
+}
+
+/// Added files longer than this go in chunks (`VIRTUAL_MIN_LINES`).
+const CHUNKED_MIN_LINES: usize = 3000;
+/// The lines of one chunk (`VIRTUAL_CHUNK_LINES`).
+const CHUNK_LINES: usize = 128;
+
+/// One chunk of an added file: a patch of its own, `rows` lines tall.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddedChunk {
+    pub patch: String,
+    pub rows: usize,
+}
+
+/// `splitAddedPatch`: a patch that only adds one whole file, in chunks of `size` lines, each with the file headers
+/// and its own `@@` line. `None` for any other patch.
+pub fn split_added(patch: &str, size: usize) -> Option<Vec<AddedChunk>> {
+    let header = patch.split_inclusive('\n').scan(0, |offset, line| {
+        let start = *offset;
+        *offset += line.len();
+        Some((start, line))
+    });
+    let (start, line) = header.into_iter().find(|(_, line)| line.starts_with("@@ -0,0 +1,"))?;
+    let count: usize = line["@@ -0,0 +1,".len()..].split_once(" @@")?.0.parse().ok()?;
+    let body = &patch[start + line.len()..];
+    let mut lines: Vec<&str> = body.strip_suffix('\n').unwrap_or(body).split('\n').collect();
+    let marker = lines.last().is_some_and(|line| line.starts_with("\\ No newline at end of file")).then(|| lines.pop());
+    if lines.len() != count || lines.iter().any(|line| !line.starts_with('+')) {
+        return None;
+    }
+    let prefix = &patch[..start];
+    let chunks = lines.chunks(size).enumerate().map(|(index, slice)| {
+        let first = index * size;
+        let end = match marker.flatten() {
+            Some(marker) if first + size >= count => format!("\n{marker}"),
+            _ => String::new(),
+        };
+        AddedChunk {
+            patch: format!("{prefix}@@ -0,0 +{},{} @@\n{}{end}", first + 1, slice.len(), slice.join("\n")),
+            rows: slice.len(),
+        }
+    });
+    Some(chunks.collect())
+}
+
+/// Whether [`Chunked::new`] takes `patch`: it adds one whole file of more than 3,000 lines.
+pub fn chunks(patch: &str) -> bool {
+    added_lines(patch).is_some_and(|lines| lines > CHUNKED_MIN_LINES)
+}
+
+/// The lines of the file `patch` adds, when [`split_added`] takes it, counted without splitting it; `None` for any
+/// other patch.
+pub fn added_lines(patch: &str) -> Option<usize> {
+    let mut offset = 0;
+    let (start, line) = patch.split_inclusive('\n').find_map(|line| {
+        let start = offset;
+        offset += line.len();
+        line.starts_with("@@ -0,0 +1,").then_some((start, line))
+    })?;
+    let count: usize = line["@@ -0,0 +1,".len()..].split_once(" @@")?.0.parse().ok()?;
+    let body = &patch[start + line.len()..];
+    let mut lines = body.strip_suffix('\n').unwrap_or(body).split('\n').peekable();
+    let mut added = 0;
+    while let Some(line) = lines.next() {
+        if lines.peek().is_none() && line.starts_with("\\ No newline at end of file") {
+            break;
+        }
+        if !line.starts_with('+') {
+            return None;
+        }
+        added += 1;
+    }
+    (added == count).then_some(count)
+}
+
+/// Virtualizes added files over 3,000 lines in unwrapped 128-row chunks. Unmounted chunks reserve their full height;
+/// mounted chunks highlight independently.
+pub struct Chunked {
+    root: View,
+    app: App,
+    filetype: Option<String>,
+    gutter_padding: u32,
+    /// Each chunk's slot and patch, and its diff while mounted.
+    chunks: RefCell<Vec<(View, String)>>,
+    mounted: RefCell<Vec<Option<Diff>>>,
+    gutter: std::cell::Cell<DiffGutter>,
+    look: std::cell::Cell<Look>,
+    syntax: RefCell<SyntaxTheme>,
+}
+
+impl Chunked {
+    /// The chunks of `patch` when it adds one file of more than 3,000 lines, drawn as [`view`] draws a patch.
+    pub fn new(
+        app: &App,
+        theme: &Theme,
+        syntax: &SyntaxTheme,
+        patch: &str,
+        filetype: Option<&str>,
+        gutter_padding: u32,
+    ) -> Option<Self> {
+        let chunked = Self {
+            root: View::new(app).width(Length::Percent(100.0)),
+            app: app.clone(),
+            filetype: filetype.map(str::to_owned),
+            gutter_padding,
+            chunks: RefCell::default(),
+            mounted: RefCell::default(),
+            gutter: std::cell::Cell::new(DiffGutter { padding_left: 1 + gutter_padding, min_digits: None }),
+            look: std::cell::Cell::new(look(theme)),
+            syntax: RefCell::new(syntax.clone()),
+        };
+        chunked.set_patch(patch).then_some(chunked)
+    }
+
+    pub fn root(&self) -> &View {
+        &self.root
+    }
+
+    /// Shows `patch` instead, in the same root, when it adds one file of more than 3,000 lines; `false`, changing
+    /// nothing, for any other patch.
+    pub fn set_patch(&self, patch: &str) -> bool {
+        if !chunks(patch) {
+            return false;
+        }
+        let Some(chunks) = split_added(patch, CHUNK_LINES) else { return false };
+        let lines: usize = chunks.iter().map(|chunk| chunk.rows).sum();
+        crate::grammars::register();
+        self.gutter.set(DiffGutter {
+            padding_left: 1 + self.gutter_padding,
+            min_digits: Some(lines.to_string().len() as u32),
+        });
+        self.root.clear();
+        let chunks: Vec<(View, String)> = chunks
+            .into_iter()
+            .map(|chunk| {
+                let slot = View::new(&self.app).height(chunk.rows as u32).shrink(0.0);
+                self.root.add(&slot);
+                (slot, chunk.patch)
+            })
+            .collect();
+        *self.mounted.borrow_mut() = vec![None; chunks.len()];
+        *self.chunks.borrow_mut() = chunks;
+        // Until the first `show`, the first chunks, as TS's first frame has them.
+        self.show(0, 0);
+        true
+    }
+
+    /// Paints the mounted chunks in `theme`, whose syntax theme is `syntax`, and the ones mounted from now on.
+    pub fn restyle(&self, theme: &Theme, syntax: &SyntaxTheme) {
+        let look = look(theme);
+        self.look.set(look);
+        *self.syntax.borrow_mut() = syntax.clone();
+        for diff in self.mounted.borrow().iter().flatten() {
+            diff.syntax_theme(syntax.clone()).colors(look.colors);
+            let (left, right) = diff.code_views();
+            for code in [left, right] {
+                code.fg(look.text);
+            }
+        }
+    }
+
+    fn make(&self, patch: &str) -> Diff {
+        let look = self.look.get();
+        let diff = Diff::new(&self.app)
+            .view(DiffView::Unified)
+            .filetype(self.filetype.as_deref())
+            .syntax_theme(self.syntax.borrow().clone())
+            .wrap(WrapMode::None)
+            .colors(look.colors)
+            .gutter(self.gutter.get())
+            .set_diff(patch);
+        let (left, right) = diff.code_views();
+        for code in [left, right] {
+            code.fg(look.text).focusable(false);
+        }
+        diff
+    }
+
+    /// Mounts the chunks that rows `top..top + height` of the file overlap, and one on each side, and unmounts the
+    /// others; whether it mounted or unmounted any.
+    pub fn show(&self, top: i64, height: i64) -> bool {
+        let size = CHUNK_LINES as i64;
+        let (first, last) = (top.div_euclid(size) - 1, top.saturating_add(height).div_euclid(size) + 1);
+        let chunks = self.chunks.borrow();
+        let mut mounted = self.mounted.borrow_mut();
+        let mut changed = false;
+        for (index, ((slot, patch), diff)) in chunks.iter().zip(mounted.iter_mut()).enumerate() {
+            let near = (first..=last).contains(&(index as i64));
+            match (near, diff.is_some()) {
+                (true, false) => {
+                    let made = self.make(patch);
+                    slot.add(&made);
+                    *diff = Some(made);
+                    changed = true;
+                }
+                (false, true) => {
+                    slot.clear();
+                    *diff = None;
+                    changed = true;
+                }
+                _ => {}
+            }
+        }
+        changed
+    }
+
+    /// The patch lines of the mounted chunks.
+    pub fn mounted_lines(&self) -> usize {
+        let mounted = self.mounted.borrow();
+        mounted.iter().flatten().map(|diff| diff.diff().lines().count()).sum()
+    }
+}
+
+/// [`view`] in the colors of `look`, for clients with their own theme roles (mini).
+#[allow(clippy::too_many_arguments)]
+pub fn view_with(
+    app: &App,
+    look: &Look,
+    syntax: &SyntaxTheme,
+    patch: &str,
+    view: DiffView,
+    filetype: Option<&str>,
+    wrap: WrapMode,
+    gutter_padding: u32,
+) -> View {
+    build(app, look, syntax, patch, view, filetype, wrap, gutter_padding).0
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build(
+    app: &App,
+    look: &Look,
+    syntax: &SyntaxTheme,
+    patch: &str,
+    view: DiffView,
+    filetype: Option<&str>,
+    wrap: WrapMode,
+    gutter_padding: u32,
+) -> (View, Vec<Part>) {
+    let column = View::new(app).width(Length::Percent(100.0));
+    let parts = fill(&column, app, look, syntax, patch, view, filetype, wrap, gutter_padding);
+    (column, parts)
+}
+
+/// Adds the hunks of `patch` to `column`, as [`build`] does.
+#[allow(clippy::too_many_arguments)]
+fn fill(
+    column: &View,
+    app: &App,
+    look: &Look,
+    syntax: &SyntaxTheme,
+    patch: &str,
+    view: DiffView,
+    filetype: Option<&str>,
+    wrap: WrapMode,
+    gutter_padding: u32,
+) -> Vec<Part> {
+    crate::grammars::register();
+    let mut parts = Vec::new();
+    let gutter =
+        DiffGutter { padding_left: 1 + gutter_padding, min_digits: Some(last_line(patch).to_string().len() as u32) };
+    for (index, hunk) in split_hunks(patch).into_iter().enumerate() {
+        if index > 0 {
+            let header = format!(" {}", hunk.header.unwrap_or_default());
+            let header = Text::new(app, header).fg(look.hunk_header).bg(look.hunk_header_bg);
+            let row = View::new(app).width(Length::Percent(100.0)).height(1).bg(look.hunk_header_bg).child(&header);
+            column.add(&row);
+            parts.push(Part::Header(row, header));
+        }
+        let diff = Diff::new(app)
+            .view(view)
+            .filetype(filetype)
+            .syntax_theme(syntax.clone())
+            .wrap(wrap)
+            .colors(look.colors)
+            .gutter(gutter)
+            .set_diff(hunk.patch);
+        let (left, right) = diff.code_views();
+        for code in [left, right] {
+            code.fg(look.text).focusable(false);
+        }
+        column.add(&diff);
+        parts.push(Part::Diff(diff));
+    }
+    parts
+}
+
+/// The largest line number the patch's `@@` lines reach on either side, at least 1.
+fn last_line(patch: &str) -> i64 {
+    let end = |range: &str| {
+        let (start, count) = range.split_once(',').unwrap_or((range, "1"));
+        Some(start.parse::<i64>().ok()? + count.parse::<i64>().ok()? - 1)
+    };
+    patch
+        .lines()
+        .filter_map(|line| {
+            let (old, rest) = line.strip_prefix("@@ -")?.split_once(" +")?;
+            let (new, _) = rest.split_once(" @@")?;
+            Some([end(old)?, end(new)?])
+        })
+        .flatten()
+        .fold(1, i64::max)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A patch from a tool is untrusted text: a line that only looks like a hunk header starts no hunk.
+    #[test]
+    fn malformed_hunk_headers_start_no_hunk() {
+        for line in ["@@ -1, +1 @@", "@@ -a +1 @@", "@@ -1 +1@@", " @@ -1 +1 @@"] {
+            assert!(!is_hunk_header(line), "{line}");
+        }
+    }
+}

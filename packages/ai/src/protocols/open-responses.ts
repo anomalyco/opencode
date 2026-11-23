@@ -886,23 +886,25 @@ export const allowedToolChoice = (
   }
 }
 
+/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAdapter")(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
-  const projected = ProviderShared.flattenToolRequest(request)
+  const definitions = ProviderShared.flattenTools(request.tools)
   const options = OpenResponsesOptions.resolve(request)
   const custom = OpenAIFreeform.tools(request)
   return {
-    ...(yield* lowerConversation(projected.request, adapter)),
+    ...(yield* lowerConversation(request, adapter)),
     ...lowerGeneration(request, options),
-    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter, custom),
+    tools: definitions.length === 0 ? undefined : yield* lowerTools(definitions, adapter, custom),
     tool_choice:
       allowedToolChoice(options, custom) ??
       (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice, custom) : undefined),
   }
 })
 
+/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(request, BASE_ADAPTER)
 
 // =============================================================================
