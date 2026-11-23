@@ -116,7 +116,23 @@ export const SessionsQuery = Schema.Struct({
     description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
   }),
   ...Session.ListFilter.fields,
-  cursor: Session.ListCursor.pipe(Schema.optional),
+  search: Session.ListFilter.fields.search.annotateKey({
+    description: "Only sessions whose title contains this text, ignoring case. % and _ act as wildcards.",
+  }),
+  archived: Session.ListFilter.fields.archived.annotateKey({
+    description:
+      "Filter by archive state. Use true to return only archived sessions or false to exclude them. Omit to include both.",
+  }),
+  directory: Session.ListFilter.fields.directory.annotateKey({
+    description: "Only sessions whose directory is exactly this absolute path.",
+  }),
+  subpath: Session.ListFilter.fields.subpath.annotateKey({
+    description: "With project, only sessions at this path relative to the project directory.",
+  }),
+  cursor: Session.ListCursor.pipe(Schema.optional).annotateKey({
+    description:
+      "Opaque cursor from a previous page's cursor.next or cursor.previous. It carries that page's filters and order, so other filters are ignored.",
+  }),
 }).annotate({ identifier: "SessionsQuery" })
 
 export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI extends HttpApiMiddleware.AnyId, FormS>(
@@ -147,11 +163,21 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.get("session.stats", "/api/experimental/session/stats", {
         query: Schema.Struct({
-          from: Schema.NumberFromString.pipe(Schema.optional),
-          to: Schema.NumberFromString.pipe(Schema.optional),
+          from: Schema.NumberFromString.pipe(Schema.optional).annotateKey({
+            description:
+              "Start of the range in Unix milliseconds, inclusive. Defaults to the earliest recorded message.",
+          }),
+          to: Schema.NumberFromString.pipe(Schema.optional).annotateKey({
+            description: "End of the range in Unix milliseconds, exclusive. Defaults to now.",
+          }),
           project: Project.ID.pipe(Schema.optional),
-          timezone: Schema.String.pipe(Schema.optional),
-          tools: SessionStats.ToolMode.pipe(Schema.optional),
+          timezone: Schema.String.pipe(Schema.optional).annotateKey({
+            description: "IANA time zone used to group activity by day. Defaults to UTC.",
+          }),
+          tools: SessionStats.ToolMode.pipe(Schema.optional).annotateKey({
+            description:
+              "How much tool usage to report: none, summary totals, or per-tool detail. Defaults to summary.",
+          }),
         }),
         success: Schema.Struct({ data: SessionStats.Info }),
         error: InvalidRequestError,
@@ -219,7 +245,11 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.get("session.export", "/api/experimental/session/:sessionID/export", {
         params: { sessionID: Session.ID },
-        query: Schema.Struct({ sanitize: BooleanFromString.pipe(Schema.optional) }),
+        query: Schema.Struct({
+          sanitize: BooleanFromString.pipe(Schema.optional).annotateKey({
+            description: "Set to true to redact titles, message text, file data, paths and metadata from the export.",
+          }),
+        }),
         success: Schema.Struct({ data: PublicSessionTransfer }),
         error: [SessionNotFoundError, UnknownError],
       }).annotateMerge(
@@ -697,8 +727,12 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.get("session.log", "/api/experimental/session/:sessionID/log", {
         params: { sessionID: Session.ID },
         query: {
-          after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional),
-          follow: BooleanFromString.pipe(Schema.optional),
+          after: Schema.NumberFromString.pipe(Schema.decodeTo(Event.Seq), Schema.optional).annotateKey({
+            description: "Only return events after this sequence number.",
+          }),
+          follow: BooleanFromString.pipe(Schema.optional).annotateKey({
+            description: "Set to true to keep the stream open and send live events after the stored ones.",
+          }),
         },
         success: HttpApiSchema.StreamSse({
           data: Schema.Union([SessionEvent.Durable, EventLog.Synced]).annotate({ identifier: "SessionLogItem" }),
@@ -716,7 +750,12 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.interrupt", "/api/session/:sessionID/interrupt", {
         params: { sessionID: Session.ID },
-        query: { resume: BooleanFromString.pipe(Schema.optional) },
+        query: {
+          resume: BooleanFromString.pipe(Schema.optional).annotateKey({
+            description:
+              "Set to true to resume pending steering input and next-in-line control items after interrupting.",
+          }),
+        },
         success: Schema.Struct({
           interrupted: Schema.Boolean.annotate({
             description: "Whether an active execution owned by this OpenCode process was interrupted.",
@@ -824,7 +863,11 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.delete("session.form.cancel", "/api/session/:sessionID/form/:formID", {
         params: { sessionID: Schema.String, formID: Form.ID },
-        query: Schema.Struct({ message: Schema.optional(Schema.String) }),
+        query: Schema.Struct({
+          message: Schema.optional(Schema.String).annotateKey({
+            description: "Why the form was not answered, passed on to the asker.",
+          }),
+        }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, FormAlreadySettledError, FormNotFoundError],
       })
