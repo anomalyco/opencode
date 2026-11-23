@@ -2150,8 +2150,7 @@
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/Prompt.AgentAttachment"
-                    },
-                    "description": "Display only: kept on the message, doesn't change which agent runs."
+                    }
                   },
                   "skills": {
                     "type": "array",
@@ -2171,8 +2170,7 @@
                       {
                         "type": "null"
                       }
-                    ],
-                    "description": "steer (default) delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time."
+                    ]
                   },
                   "resume": {
                     "anyOf": [
@@ -2290,8 +2288,7 @@
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/Prompt.AgentAttachment"
-                    },
-                    "description": "Display only: kept on the message, doesn't change which agent runs."
+                    }
                   },
                   "skills": {
                     "type": "array",
@@ -2307,8 +2304,7 @@
                       {
                         "type": "null"
                       }
-                    ],
-                    "description": "steer (default) delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time."
+                    ]
                   }
                 },
                 "required": ["name", "text"],
@@ -2530,8 +2526,7 @@
                       {
                         "type": "null"
                       }
-                    ],
-                    "description": "steer (default) delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time."
+                    ]
                   },
                   "resume": {
                     "anyOf": [
@@ -23136,7 +23131,8 @@
           }
         },
         "required": ["name"],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "An agent the prompt mentions, such as @explore, to point the model at using it. It doesn't change the session's own agent."
       },
       "Prompt.Base64": {
         "type": "string",
@@ -24114,7 +24110,8 @@
       },
       "Session.Inbox.Delivery": {
         "type": "string",
-        "enum": ["steer", "queue"]
+        "enum": ["steer", "queue"],
+        "description": "steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer."
       },
       "Session.Inbox.Info": {
         "anyOf": [

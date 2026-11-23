@@ -28,10 +28,6 @@ export const SkillAttachment = Schema.Struct({
 export const Prompt = Schema.Struct({
   text: Schema.String,
   files: Schema.Array(FileAttachment).pipe(optional),
-  agents: Schema.Array(AgentAttachment)
-    .annotate({
-      description: "Display only: kept on the message, doesn't change which agent runs.",
-    })
-    .pipe(optional),
+  agents: Schema.Array(AgentAttachment).pipe(optional),
   skills: Schema.Array(SkillAttachment).pipe(optional),
 }).annotate({ identifier: "PromptInput" })

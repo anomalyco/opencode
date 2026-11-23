@@ -81,7 +81,11 @@ export interface AgentAttachment extends Schema.Schema.Type<typeof AgentAttachme
 export const AgentAttachment = Schema.Struct({
   name: Schema.String,
   mention: PromptMention.pipe(optional),
-}).annotate({ identifier: "Prompt.AgentAttachment" })
+}).annotate({
+  identifier: "Prompt.AgentAttachment",
+  description:
+    "An agent the prompt mentions, such as @explore, to point the model at using it. It doesn't change the session's own agent.",
+})
 
 export interface SkillAttachment extends Schema.Schema.Type<typeof SkillAttachment> {}
 export const SkillAttachment = Schema.Struct({

@@ -100,9 +100,6 @@ const FormCreatePayload = Schema.Struct({
   fields: Form.Info.fields.fields,
 }).annotate({ identifier: "Form.CreatePayload" })
 
-const deliveryDescription =
-  "steer (default) delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time."
-
 const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
   Schema.decodeTo(Schema.Boolean, {
     decode: SchemaGetter.transform((value) => value === "true"),
@@ -364,7 +361,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
               description: "Stored on the message. The model doesn't see it.",
             })
             .pipe(optional),
-          delivery: SessionInbox.Delivery.pipe(Schema.optional).annotate({ description: deliveryDescription }),
+          delivery: SessionInbox.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional).annotate({
             description:
               "false adds the message to the inbox without starting the agent; it is delivered the next time the session runs.",
@@ -392,9 +389,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           text: PromptInput.Prompt.fields.text.annotate({
             description: "The command's arguments.",
           }),
-          delivery: SessionInbox.Delivery.pipe(Schema.optional).annotate({
-            description: deliveryDescription,
-          }),
+          delivery: SessionInbox.Delivery.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, CommandNotFoundError, CommandExecutionError],
@@ -445,7 +440,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
               description: "Stored on the message. The model doesn't see it.",
             })
             .pipe(optional),
-          delivery: SessionInbox.Delivery.pipe(Schema.optional).annotate({ description: deliveryDescription }),
+          delivery: SessionInbox.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional).annotate({
             description:
               "false adds the message to the inbox without starting the agent; it is delivered the next time the session runs.",
