@@ -364,7 +364,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const [promptRows, setPromptRows] = createSignal(1)
   const [expanded, setExpanded] = createSignal(false)
   const toolSummaries = createMemo(() =>
-    expanded() ? activeToolSummaries(tabs(), performance.now()) : [],
+    expanded() ? activeToolSummaries(tabs(), Date.now()) : [],
   )
   const activityShortcut = () => shortcut("session.child.activity")
   const composer = createPromptState({

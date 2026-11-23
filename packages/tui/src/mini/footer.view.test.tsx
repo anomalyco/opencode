@@ -141,6 +141,25 @@ describe("toolSummaries memo", () => {
     })
   })
 
+  it("elapsed is greater than 0 for a tab started 3 seconds ago", () => {
+    createRoot((dispose) => {
+      const toolStart = Date.now() - 3000
+      const now = Date.now()
+      const tabs: FooterSubagentTab[] = [
+        makeRunningTab({ sessionID: "ses_a", label: "developer", activeTool: "Bash", toolStart }),
+      ]
+
+      const summaries = activeToolSummaries(tabs, now)
+
+      expect(summaries).toHaveLength(1)
+      expect(summaries[0]!.elapsedMs).toBeGreaterThan(0)
+      // Should be approximately 3000ms (allow a small margin for execution time)
+      expect(summaries[0]!.elapsedMs).toBeGreaterThanOrEqual(3000)
+
+      dispose()
+    })
+  })
+
   it("returns empty when expanded but no tabs have activeTool set", () => {
     createRoot((dispose) => {
       const [expanded] = createSignal(true)
