@@ -107,14 +107,16 @@ export function drawShareCard(ctx: CanvasRenderingContext2D, card: ShareCard, op
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = colors.background
   ctx.fillRect(0, 0, width, height)
-  drawBackground(ctx, options.background, colors, width, height)
+  // The footer's baseline sits as far from the bottom as its text from the side; the rule is 56px above its type.
+  const footer = height - pad
+  const rule = footer - 26 - 56
+  const legend = card.chart.kind === "stacked" ? legendLayout(card.chart.series, width) : undefined
+  const chartBottom = rule - 64 - (legend ? legend.height + 40 : 0)
+  drawBackground(ctx, options.background, colors, width, height, dotGrid(card.chart, width), chartBottom + 160)
   drawLogo(ctx, options.logo, colors, pad, pad)
 
   const focus = focusAt(card, options, time)
   const top = drawIntro(ctx, card, options, colors, width, pad + 136)
-  const footer = height - pad - 28
-  const legend = card.chart.kind === "stacked" ? legendLayout(card.chart.series, width) : undefined
-  const chartBottom = footer - 72 - (legend ? legend.height + 40 : 0)
   const progress = Math.min(1, time / build)
 
   if (card.chart.kind === "stacked") {
@@ -138,7 +140,7 @@ export function drawShareCard(ctx: CanvasRenderingContext2D, card: ShareCard, op
       focus,
     )
 
-  drawFooter(ctx, card, colors, width, footer)
+  drawFooter(ctx, card, colors, width, footer, rule)
   ctx.restore()
 }
 
@@ -170,21 +172,36 @@ function drawBackground(
   colors: Palette,
   width: number,
   height: number,
+  grid: { center: number; pitch: number },
+  fadeEnd: number,
 ) {
   if (kind === "plain") return
-  // The banner's dot grid: 8px squares on a 24px pitch, fading out down the card (og/card.ts). The grid is centred
-  // across the card, and its first row sits as far from the top as its first column from the side.
-  const inset = (width - (Math.floor((width - 8) / 24) * 24 + 8)) / 2
-  const fade = kind === "band" ? 0.28 : 0.6
-  for (let y = inset; y < height * fade; y += 24) {
-    ctx.globalAlpha = Math.max(0, 1 - y / (height * fade))
-    ctx.fillStyle = colors.dot
-    for (let x = inset; x < width - 8; x += 24) ctx.fillRect(x, y, 8, 8)
+  // The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells, fading out down the
+  // card to past the chart's baseline. The first row sits as far from the top as the first column from the side.
+  const dot = Math.min(8, Math.max(4, Math.round(grid.pitch * 0.36)))
+  const first = grid.center - Math.floor(grid.center / grid.pitch) * grid.pitch
+  const inset = Math.max(0, first - dot / 2)
+  const end = kind === "band" ? height * 0.28 : fadeEnd
+  const columns = Array.from(
+    { length: Math.floor((width - inset - dot) / grid.pitch) + 1 },
+    (_, index) => inset + index * grid.pitch,
+  )
+  ctx.fillStyle = colors.dot
+  for (let y = inset; y < end; y += grid.pitch) {
+    ctx.globalAlpha = Math.max(0, 1 - y / end)
+    columns.forEach((x) => ctx.fillRect(x, y, dot, dot))
   }
   ctx.globalAlpha = 1
   if (kind !== "band") return
-  ctx.fillStyle = colors.dot
-  for (let x = inset; x < width - 8; x += 24) ctx.fillRect(x, height - inset - 8, 8, 8)
+  columns.forEach((x) => ctx.fillRect(x, height - inset - dot, dot, dot))
+}
+
+// A column of dots over every bar of a stacked chart (every second or third when the bars are narrow), lined up
+// with the last bar; other charts take the banner's 24px pitch, centred.
+function dotGrid(chart: ShareChart, width: number) {
+  if (chart.kind !== "stacked" || chart.columns.length === 0) return { center: width / 2, pitch: 24 }
+  const slot = (width - pad * 2) / chart.columns.length
+  return { center: pad + (chart.columns.length - 0.5) * slot, pitch: slot * Math.ceil(14 / slot) }
 }
 
 // The header lockup: the OpenCode mark, then DATA (or OPENCODE DATA), set like the site's header.
@@ -401,10 +418,18 @@ function drawRanked(
   })
 }
 
-function drawFooter(ctx: CanvasRenderingContext2D, card: ShareCard, colors: Palette, width: number, y: number) {
-  ctx.fillStyle = colors.line
-  ctx.fillRect(pad, y - 48, width - pad * 2, 1)
-  ctx.textBaseline = "middle"
+function drawFooter(
+  ctx: CanvasRenderingContext2D,
+  card: ShareCard,
+  colors: Palette,
+  width: number,
+  y: number,
+  rule: number,
+) {
+  // The rule takes the Updated line's colour.
+  ctx.fillStyle = colors.faint
+  ctx.fillRect(pad, rule, width - pad * 2, 1)
+  ctx.textBaseline = "alphabetic"
   ctx.font = `700 34px ${font}`
   ctx.fillStyle = colors.text
   ctx.fillText(card.url, pad, y)

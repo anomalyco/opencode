@@ -40,10 +40,10 @@ export function ShareButton(props: { card: () => ShareDraft | undefined; label: 
 type Tab = "layout" | "size" | "style" | "video"
 
 const sizes = [
-  { value: "4:5", label: "Feed", hint: "X, LinkedIn, Instagram" },
-  { value: "1:1", label: "Square", hint: "Any feed" },
-  { value: "9:16", label: "Story", hint: "Stories, Reels" },
-  { value: "16:9", label: "Wide", hint: "Slides, YouTube" },
+  { value: "4:5", label: "Feed" },
+  { value: "1:1", label: "Square" },
+  { value: "9:16", label: "Story" },
+  { value: "16:9", label: "Wide" },
 ] as const
 
 const layouts = [
@@ -482,17 +482,18 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                         aria-pressed={options().size === item.value}
                         onClick={() => setShareOption("size", item.value)}
                       >
-                        <i
-                          data-slot="aspect"
-                          style={{
-                            "aspect-ratio": `${shareSizes[item.value][0]} / ${shareSizes[item.value][1]}`,
-                          }}
-                        />
+                        <i data-slot="aspect" aria-hidden="true">
+                          <b
+                            style={{
+                              width: `${aspectSide(item.value, 0)}px`,
+                              height: `${aspectSide(item.value, 1)}px`,
+                            }}
+                          />
+                        </i>
                         <span>
                           <strong>
                             {item.label} <em>{item.value}</em>
                           </strong>
-                          <small>{item.hint}</small>
                         </span>
                       </button>
                     )}
@@ -818,4 +819,10 @@ async function soundtrack(context: AudioContext, url: string, length: number) {
       source.stop(now + length + 0.1)
     },
   }
+}
+
+// One side of a size's glyph: the longer side is 24px, the other in proportion, in a 28px square.
+function aspectSide(size: ShareOptions["size"], side: 0 | 1) {
+  const [width, height] = shareSizes[size]
+  return Math.round((24 * (side === 0 ? width : height)) / Math.max(width, height))
 }

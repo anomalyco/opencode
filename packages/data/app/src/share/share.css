@@ -550,13 +550,18 @@
     background: var(--stats-layer-2);
   }
 
+  /* A 28px slot for every size, so the labels line up; the frame inside has the size's shape. */
   [data-slot="aspect"] {
+    display: grid;
     flex: none;
-    width: auto;
+    place-items: center;
+    width: 28px;
     height: 28px;
-    max-width: 28px;
-    border: 1.5px solid currentColor;
-    box-sizing: border-box;
+
+    b {
+      box-sizing: border-box;
+      border: 1.5px solid currentColor;
+    }
   }
 
   [data-slot="swatch"] {
@@ -564,10 +569,10 @@
     width: 28px;
     height: 28px;
     border: 1px solid var(--stats-line-strong);
-    background: linear-gradient(135deg, transparent 55%, #8190ff 55% 70%, transparent 70%), #161616;
+    background: #161616;
 
     &[data-theme="light"] {
-      background: linear-gradient(135deg, transparent 55%, #3b5cf6 55% 70%, transparent 70%), #fbfbfb;
+      background: #fbfbfb;
     }
   }
 
