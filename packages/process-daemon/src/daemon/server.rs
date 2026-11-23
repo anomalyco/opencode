@@ -23,6 +23,9 @@ pub fn run(directory: &Path) -> Result<()> {
     // this inherits the mask, so only the signal thread ever receives them.
     #[cfg(unix)]
     let signals = signals::block()?;
+    // Before bind and before any terminal starts, which inherits the setting.
+    #[cfg(windows)]
+    platform::accept_ctrl_c()?;
     // Before bind, so a failure here leaves nothing to clean up.
     let wake = Wake::new()?;
     let (runtime, listener) = platform::Runtime::bind(directory)?;

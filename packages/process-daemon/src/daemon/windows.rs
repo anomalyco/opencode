@@ -20,6 +20,7 @@ use windows_sys::Win32::Storage::FileSystem::{
     GetFileInformationByHandle, GetFinalPathNameByHandleW, OPEN_ALWAYS, OPEN_EXISTING,
     READ_CONTROL, SetFileInformationByHandle, WRITE_DAC,
 };
+use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
 use windows_sys::Win32::System::Threading::{
     OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
 };
@@ -31,6 +32,19 @@ use super::{LOCK_FILE, REGISTRATION_FILE, Registration, registration_path, sweep
 use crate::protocol::{PROTOCOL_VERSION, features};
 use crate::transport::Listener;
 use crate::transport::windows::{owned_handle, security::PrivateSecurity, wide};
+
+/// Node starts the daemon detached, in a process group of its own, and such a process starts with Ctrl+C ignored.
+/// Every terminal the daemon starts inherits that, so Ctrl+C never stopped a program (`ping -t` ran on). The server's
+/// in-process terminals clear it the same way (`core/src/pty/pty.bun.ts`). The daemon has no console of its own, so
+/// no Ctrl+C reaches it; registered handlers are kept.
+pub(super) fn accept_ctrl_c() -> Result<()> {
+    // SAFETY: a null handler with FALSE only clears this process's ignore-Ctrl+C attribute.
+    if unsafe { SetConsoleCtrlHandler(None, 0) } == 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("could not let terminals receive Ctrl+C");
+    }
+    Ok(())
+}
 
 pub(super) fn read_registration(directory: &Path) -> Result<Registration> {
     let security = PrivateSecurity::new()?;

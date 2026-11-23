@@ -7,6 +7,7 @@ mod terminal_fixture;
 
 use std::io::Write;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
@@ -35,9 +36,14 @@ struct Daemon {
 
 impl Daemon {
     fn start() -> Self {
+        Self::start_with(0)
+    }
+
+    /// Started with process creation `flags`, as Node's `detached` starts it with its own.
+    fn start_with(flags: u32) -> Self {
         let root = TempDir::new();
         let directory = root.0.join("runtime");
-        let mut child = spawn(&directory);
+        let mut child = spawn(&directory, flags);
         let registration = registration(&mut child, &directory);
         Self {
             child,
@@ -177,8 +183,9 @@ impl Drop for Daemon {
     }
 }
 
-fn spawn(directory: &Path) -> Child {
+fn spawn(directory: &Path, flags: u32) -> Child {
     Command::new(env!("CARGO_BIN_EXE_opencode-pty"))
+        .creation_flags(flags)
         .args(["daemon", "--name"])
         .arg(directory.file_name().unwrap())
         .arg("--runtime-dir")
@@ -242,6 +249,56 @@ fn wait(child: &mut Child) -> std::process::ExitStatus {
 }
 
 #[test]
+fn ctrl_c_stops_a_program_in_a_terminal_of_a_detached_daemon() {
+    // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, as Node's `detached` starts the daemon: a new process group
+    // starts with Ctrl+C ignored, and its terminals would inherit that.
+    const DETACHED: u32 = 0x0000_0008 | 0x0000_0200;
+    let _deadline = Deadline::new();
+    let mut daemon = Daemon::start_with(DETACHED);
+    let (owner, response) = daemon.own(None);
+    assert!(matches!(response, Response::Owned));
+    let mut request = Fixture::new().request();
+    request.program = PathBuf::from(std::env::var("SystemRoot").unwrap())
+        .join(r"System32\PING.EXE")
+        .to_str()
+        .unwrap()
+        .into();
+    request.args = ["-n", "30", "127.0.0.1"].map(str::to_owned).into();
+    let terminal = daemon.create(request);
+    let mut subscription = daemon.subscribe(terminal.id, AttachmentRole::Observer);
+    let mut bytes = Vec::new();
+    while !String::from_utf8_lossy(&bytes).contains("127.0.0.1") {
+        if let SubscriptionEvent::Output { bytes: output, .. } =
+            read_subscription_event(&mut subscription).unwrap()
+        {
+            bytes.extend(output);
+        }
+    }
+    // SAFETY: opens the live child only to wait for it.
+    let process = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, terminal.pid.unwrap()) };
+    assert!(!process.is_null());
+    let process = unsafe { OwnedHandle::from_raw_handle(process) };
+    assert!(matches!(
+        daemon.request(Request::Write {
+            id: terminal.id,
+            attachment_id: None,
+            data_base64: base64::engine::general_purpose::STANDARD.encode(b"\x03")
+        }),
+        Response::Ok
+    ));
+    // Ignoring Ctrl+C, ping would run its 30 echoes.
+    assert_eq!(
+        unsafe { WaitForSingleObject(process.as_raw_handle(), 10_000) },
+        WAIT_OBJECT_0,
+        "Ctrl+C did not stop the program"
+    );
+    drop(subscription);
+    assert!(matches!(daemon.request(Request::Shutdown), Response::Ok));
+    drop(owner);
+    daemon.wait();
+}
+
+#[test]
 fn authenticated_ownership_handoff_and_shutdown_use_real_pipes() {
     let _deadline = Deadline::new();
     let mut daemon = Daemon::start();
@@ -300,13 +357,13 @@ fn authenticated_ownership_handoff_and_shutdown_use_real_pipes() {
 fn service_lock_and_stale_registration_are_instance_scoped() {
     let _deadline = Deadline::new();
     let mut daemon = Daemon::start();
-    let mut duplicate = spawn(&daemon.directory);
+    let mut duplicate = spawn(&daemon.directory, 0);
     assert!(!wait(&mut duplicate).success());
     let old = daemon.registration.clone();
     daemon.child.kill().unwrap();
     daemon.child.wait().unwrap();
     assert!(daemon.directory.join("service.json").exists());
-    daemon.child = spawn(&daemon.directory);
+    daemon.child = spawn(&daemon.directory, 0);
     daemon.registration = registration(&mut daemon.child, &daemon.directory);
     assert_ne!(old.instance_id, daemon.registration.instance_id);
     assert_ne!(old.token, daemon.registration.token);
