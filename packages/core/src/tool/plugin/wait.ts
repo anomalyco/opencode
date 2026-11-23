@@ -82,18 +82,19 @@ export const Plugin = {
               const ids = all ? [...new Set(input.ids)] : [...owned]
               const waitable = ids.filter((id) => owned.has(id))
               const waits = waitable.map((id) => jobs.wait({ id }))
-              // The calling script keeps blocking while this waits, instead of moving to the background.
-              if (waits.length > 0) yield* extend(timeout)
-              // Finished results are taken, so their notifications are skipped.
-              const infos = yield* jobs.collect(
-                waitable,
-                waits.length === 0
-                  ? Effect.void
-                  : (all ? Effect.all(waits, { concurrency: "unbounded", discard: true }) : Effect.raceAll(waits)).pipe(
-                      Effect.timeoutOption(Duration.millis(timeout)),
-                      Effect.asVoid,
-                    ),
-              )
+              // Finished results are taken, so their notifications are skipped. The calling script keeps blocking
+              // while this waits, instead of moving to the background.
+              const infos = yield* jobs
+                .collect(
+                  waitable,
+                  waits.length === 0
+                    ? Effect.void
+                    : (all
+                        ? Effect.all(waits, { concurrency: "unbounded", discard: true })
+                        : Effect.raceAll(waits)
+                      ).pipe(Effect.timeoutOption(Duration.millis(timeout)), Effect.asVoid),
+                )
+                .pipe(extend(timeout))
               const found = new Map(waitable.map((id, index) => [id, infos[index]]))
               const results = ids.map((id): typeof Result.Type => {
                 const info = found.get(id)

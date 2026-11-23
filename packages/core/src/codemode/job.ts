@@ -32,10 +32,13 @@ type Run = (context: Tool.Context, execute: Execute, options?: Options) => Retur
 /** Only a session drain can hand off work and report its result. */
 export const Current = Context.Reference<Run | undefined>("@opencode/CodeModeJob", { defaultValue: () => undefined })
 
-/** Lets a nested call, such as `wait`, keep its script blocking for up to `ms` more, within `MAX_BLOCK_MS`. */
-export const Extend = Context.Reference<(ms: number) => Effect.Effect<void>>("@opencode/CodeModeJob/Extend", {
-  defaultValue: () => () => Effect.void,
-})
+/**
+ * Keeps a nested call's script blocking while the call runs, for up to `ms`, within `MAX_BLOCK_MS`. The time it runs
+ * doesn't count toward the script's usual block.
+ */
+export const Extend = Context.Reference<
+  (ms: number) => <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+>("@opencode/CodeModeJob/Extend", { defaultValue: () => () => (self) => self })
 
 export const make = Effect.fnUntraced(function* (
   jobs: Job.Interface,
@@ -62,16 +65,47 @@ export const make = Effect.fnUntraced(function* (
     const detached = yield* Deferred.make<void>()
     const progress = Semaphore.makeUnsafe(1)
     const began = yield* Clock.currentTimeMillis
-    const deadline = yield* Ref.make(began + BLOCK_TIMEOUT_MS)
-    const extend = (ms: number) =>
-      Clock.currentTimeMillis.pipe(
-        Effect.flatMap((now) => Ref.update(deadline, (at) => Math.max(at, Math.min(now + ms, began + MAX_BLOCK_MS)))),
-      )
+    // The script blocks until `base`, or the end of a running extension. Time spent in an extension doesn't use up
+    // the base block, and a signal tells the blocker when an extension ends.
+    const block = yield* Ref.make({
+      base: began + BLOCK_TIMEOUT_MS,
+      extensions: [] as ReadonlyArray<{ readonly end: number; readonly left: number }>,
+    })
+    const ended = yield* Ref.make(yield* Deferred.make<void>())
+    const extend =
+      (ms: number) =>
+      <A, E, R>(self: Effect.Effect<A, E, R>) =>
+        Effect.acquireUseRelease(
+          Clock.currentTimeMillis.pipe(
+            Effect.flatMap((now) =>
+              Ref.modify(block, (state) => {
+                const extension = { end: Math.min(now + ms, began + MAX_BLOCK_MS), left: Math.max(0, state.base - now) }
+                return [extension, { ...state, extensions: [...state.extensions, extension] }]
+              }),
+            ),
+          ),
+          () => self,
+          (extension) =>
+            Clock.currentTimeMillis.pipe(
+              Effect.flatMap((now) =>
+                Ref.update(block, (state) => ({
+                  base: Math.min(began + MAX_BLOCK_MS, Math.max(state.base, now + extension.left)),
+                  extensions: state.extensions.filter((item) => item !== extension),
+                })),
+              ),
+              Effect.andThen(Deferred.make<void>()),
+              Effect.flatMap((next) => Ref.getAndSet(ended, next)),
+              Effect.flatMap((signal) => Deferred.succeed(signal, undefined)),
+            ),
+        )
     const untilDeadline = Effect.gen(function* () {
       while (true) {
-        const left = (yield* Ref.get(deadline)) - (yield* Clock.currentTimeMillis)
+        const signal = yield* Ref.get(ended)
+        const state = yield* Ref.get(block)
+        const left =
+          Math.max(state.base, ...state.extensions.map((item) => item.end)) - (yield* Clock.currentTimeMillis)
         if (left <= 0) return
-        yield* Effect.sleep(Duration.millis(left))
+        yield* Effect.raceFirst(Effect.sleep(Duration.millis(left)), Deferred.await(signal))
       }
     })
     return yield* Effect.uninterruptibleMask((restore) =>
