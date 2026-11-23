@@ -1092,6 +1092,12 @@ describe("Tool", () => {
           { action: "*", resource: "*", effect: "deny" },
         ]),
       ).toEqual([])
+      expect(
+        yield* names([
+          { action: "question", resource: "*", effect: "deny" },
+          { action: "question", resource: "private", effect: "deny" },
+        ]),
+      ).toEqual(["bash", "edit", "write", "execute"])
       expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["bash", "question", "execute"])
     }),
   )
