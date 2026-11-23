@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { generateText, streamText } from "ai"
-import { createOpenCode, protocol } from "../src/index.js"
+import { generateImage, generateText, streamText } from "ai"
+import { createOpenCode, imageAPI, protocol } from "../src/index.js"
 
 const billing = {
   cost: 0.000079,
@@ -29,6 +29,12 @@ const server = Bun.serve({
     const url = new URL(request.url)
     requests.push(url.pathname)
     const body = await request.json()
+    if (url.pathname === "/openai/v1/images/generations")
+      return Response.json({
+        created: 1,
+        data: [{ b64_json: "aGk=" }],
+        usage: { input_tokens: 9, output_tokens: 14, ...billing },
+      })
     if (url.pathname === "/anthropic/v1/messages") {
       return Response.json({
         id: "msg_1",
@@ -74,7 +80,23 @@ describe("protocol", () => {
   })
 })
 
+describe("imageAPI", () => {
+  test("uses the API the model list names, else guesses from the name", () => {
+    expect(imageAPI("grok-imagine-image-2.0")).toBe("xai")
+    expect(imageAPI("console-vertex/gemini-9-image")).toBe("google")
+    expect(imageAPI("console-acme/grok-imagine-3")).toBe("xai")
+    expect(imageAPI("console-acme/some-image-model")).toBe("openai")
+  })
+})
+
 describe("usage", () => {
+  // generateImage keeps only `images` from a provider's top-level metadata, so the usage is on each call.
+  test("an image response reports it on its call", async () => {
+    const result = await generateImage({ model: opencode.imageModel("gpt-image-2.5-sunburst"), prompt: "a dot" })
+    expect(requests.at(-1)).toBe("/openai/v1/images/generations")
+    expect(result.calls[0].providerMetadata?.opencode).toEqual({ images: [{}], usage })
+  })
+
   test("generate reports OpenCode's billing in providerMetadata.opencode.usage", async () => {
     const result = await generateText({ model: opencode.chat("deepseek-v4.1-flash"), prompt: "hi" })
     expect(result.providerMetadata?.opencode?.usage).toEqual(usage)

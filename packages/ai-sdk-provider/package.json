@@ -33,7 +33,8 @@
     "@ai-sdk/openai": "4.0.121",
     "@ai-sdk/openai-compatible": "3.0.93",
     "@ai-sdk/provider": "4.0.39",
-    "@ai-sdk/provider-utils": "5.0.82"
+    "@ai-sdk/provider-utils": "5.0.82",
+    "@ai-sdk/xai": "5.0.47"
   },
   "peerDependencies": {
     "zod": "^3.25.76 || ^4.1.8"

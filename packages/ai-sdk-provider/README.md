@@ -75,10 +75,23 @@ const { embedding, providerMetadata } = await embed({
 })
 ```
 
+Image models use their own images API: OpenAI Images for `gpt-image-*`, Gemini `generateContent` for `gemini-*`,
+and xAI Images for `grok-imagine-*`:
+
+```ts
+import { generateImage } from "ai"
+
+const { image, calls } = await generateImage({
+  model: opencode.imageModel("gemini-nano-banana-2.1"),
+  prompt: "A lighthouse at dusk",
+})
+```
+
 ## Usage and cost
 
 Every response carries what OpenCode charged at `providerMetadata.opencode.usage`, on `generateText`, at the end of
-`streamText` (`await result.providerMetadata`) and on `embed`:
+`streamText` (`await result.providerMetadata`) and on `embed`. `generateImage` keeps only each image's metadata at the top
+level, so an image request's is on each call, at `calls[i].providerMetadata.opencode.usage`:
 
 - `cost`: USD charged to the balance or the next invoice, `0` when the model is free or Go's allowance covers it. For a
   workspace connection it's an estimate of what the provider charges, with `estimated: true`, or the provider's own

@@ -111,6 +111,11 @@ export const models = {
   "qwen3.6-plus": "messages",
   "qwen3.8-flash": "messages",
   "qwen3.8-max": "chat",
-  "qwen4-max-free": "messages",
   "tidepool-alpha-free": "chat",
+} as const
+
+export const imageModels = {
+  "gemini-nano-banana-2.1": "google",
+  "gpt-image-2.5-sunburst": "openai",
+  "grok-imagine-image-2.0": "xai",
 } as const

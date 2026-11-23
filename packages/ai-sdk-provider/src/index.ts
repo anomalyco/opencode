@@ -2,8 +2,8 @@ import { createAnthropic } from "@ai-sdk/anthropic"
 import { createGoogle } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import { createXai } from "@ai-sdk/xai"
 import {
-  NoSuchModelError,
   type EmbeddingModelV4,
   type ImageModelV4,
   type LanguageModelV4,
@@ -13,13 +13,19 @@ import {
 } from "@ai-sdk/provider"
 import { loadApiKey, withoutTrailingSlash, type FetchFunction } from "@ai-sdk/provider-utils"
 import { z } from "zod"
-import { models } from "./models.js"
+import { imageModels, models } from "./models.js"
 
 /** A model OpenCode serves, `opencode-go/<model>` for Go, or `<connection key>/<model>` for a workspace connection. */
 export type OpenCodeModelId = keyof typeof models | (string & {})
 
+/** An image model OpenCode serves. */
+export type OpenCodeImageModelId = keyof typeof imageModels | (string & {})
+
 /** The API a language model is called through. */
 export type OpenCodeProtocol = "messages" | "responses" | "chat" | "google"
+
+/** The images API an image model is called through. */
+export type OpenCodeImageAPI = "openai" | "google" | "xai"
 
 export interface OpenCodeProviderSettings {
   /** Defaults to the `OPENCODE_API_KEY` environment variable, read when a request is sent. */
@@ -45,7 +51,8 @@ export interface OpenCodeProvider extends ProviderV4 {
   embeddingModel(modelId: string): EmbeddingModelV4
   /** @deprecated Use `embeddingModel`. */
   textEmbeddingModel(modelId: string): EmbeddingModelV4
-  imageModel(modelId: string): ImageModelV4
+  /** Calls the model through its images API: OpenAI Images, Gemini `generateContent` or xAI Images. */
+  imageModel(modelId: OpenCodeImageModelId): ImageModelV4
 }
 
 /** What OpenCode charged for a request, at `providerMetadata.opencode.usage`. */
@@ -86,6 +93,15 @@ export function createOpenCode(settings: OpenCodeProviderSettings = {}): OpenCod
     includeUsage: true,
   })
   const google = createGoogle({ ...shared, baseURL: `${baseURL}/google/v1beta`, apiKey })
+  // Image results keep no response body, so each call gets a client whose fetch reads the cost from the response.
+  const images = {
+    openai: (modelId: string, fetch: FetchFunction) =>
+      createOpenAI({ ...shared, fetch, baseURL: `${baseURL}/openai/v1`, apiKey }).image(modelId),
+    google: (modelId: string, fetch: FetchFunction) =>
+      createGoogle({ ...shared, fetch, baseURL: `${baseURL}/google/v1beta`, apiKey }).image(modelId),
+    xai: (modelId: string, fetch: FetchFunction) =>
+      createXai({ ...shared, fetch, baseURL: `${baseURL}/xai/v1`, apiKey }).image(modelId),
+  } satisfies Record<OpenCodeImageAPI, (modelId: string, fetch: FetchFunction) => ImageModelV4>
 
   const clients = {
     messages: (modelId: string) => anthropic.messages(modelId),
@@ -105,9 +121,8 @@ export function createOpenCode(settings: OpenCodeProviderSettings = {}): OpenCod
     google: (modelId: string) => withUsage(clients.google(modelId)),
     embeddingModel,
     textEmbeddingModel: embeddingModel,
-    imageModel: (modelId: string): ImageModelV4 => {
-      throw new NoSuchModelError({ modelId, modelType: "imageModel" })
-    },
+    imageModel: (modelId: string) =>
+      withImageUsage((fetch) => images[imageAPI(modelId)](modelId, fetch), settings.fetch ?? globalThis.fetch),
   })
 }
 
@@ -127,6 +142,17 @@ export function protocol(modelId: string): OpenCodeProtocol {
   if (/^(gpt-(?!oss)|o\d)/.test(name)) return "responses"
   if (name.startsWith("gemini")) return "google"
   return "chat"
+}
+
+/** The image model's API from the list built into this release, else guessed from its name. */
+export function imageAPI(modelId: string): OpenCodeImageAPI {
+  const known: Partial<Record<string, OpenCodeImageAPI>> = imageModels
+  const listed = known[modelId]
+  if (listed !== undefined) return listed
+  const name = modelId.slice(modelId.lastIndexOf("/") + 1).toLowerCase()
+  if (name.startsWith("gemini")) return "google"
+  if (name.startsWith("grok")) return "xai"
+  return "openai"
 }
 
 // Each response carries its cost beside the usage its protocol reports: Chat and Responses in `usage` (a Responses
@@ -217,6 +243,50 @@ function withUsage(model: LanguageModelV4): LanguageModelV4 {
         }),
       )
       return { ...result, stream }
+    },
+  }
+}
+
+function withImageUsage(create: (fetch: FetchFunction) => ImageModelV4, fetch: FetchFunction): ImageModelV4 {
+  const model = create(fetch)
+  return {
+    specificationVersion: "v4",
+    provider: model.provider,
+    modelId: model.modelId,
+    get maxImagesPerCall() {
+      return model.maxImagesPerCall
+    },
+    get supportsFileInputs() {
+      return model.supportsFileInputs
+    },
+    get supportsMaskInputs() {
+      return model.supportsMaskInputs
+    },
+    doGenerate: async (options) => {
+      const state: { usage?: OpenCodeUsage } = {}
+      const capture = async (...args: Parameters<FetchFunction>) => {
+        const response = await fetch(...args)
+        state.usage =
+          readUsage(
+            await response
+              .clone()
+              .json()
+              .catch(() => undefined),
+          ) ?? state.usage
+        return response
+      }
+      const result = await create(Object.assign(capture, { preconnect: fetch.preconnect })).doGenerate(options)
+      if (state.usage === undefined) return result
+      return {
+        ...result,
+        providerMetadata: {
+          ...result.providerMetadata,
+          opencode: {
+            images: result.images.map(() => ({})),
+            usage: { ...state.usage, tokens: { ...state.usage.tokens } },
+          },
+        },
+      }
     },
   }
 }
