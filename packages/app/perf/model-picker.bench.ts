@@ -1,5 +1,4 @@
-// Opening, scrolling, and selecting in the desktop model picker with a ~100-model, 19-provider catalog (matching a
-// signed-in Console workspace with multiple connected providers), at 1440×900.
+// Opening, scrolling and selecting in the desktop model picker with 96 models from 19 providers, at 1440×900.
 import { bench, web, type Case } from "@hona/strobe"
 import { draftHref } from "../e2e/utils/app"
 import { mockOpenCodeServer, type MockProviderCatalog } from "../e2e/utils/mock-server"
@@ -18,58 +17,58 @@ const row = '[data-slot="search-list-row"]'
 
 const scroller = '[data-slot="search-list-scroll"]'
 
-const providerSpecs: ReadonlyArray<{ id: string; name: string; count: number; integrationID?: string }> = [
-  { id: "opencode", name: "Anomaly / OpenCode", count: 47, integrationID: "opencode" },
-  { id: "console-fireworks-ai", name: "Anomaly / Fireworks AI", count: 9, integrationID: "opencode" },
-  { id: "console-openai-test", name: "Anomaly / RITB", count: 7, integrationID: "opencode" },
-  { id: "console-google", name: "Anomaly / Google", count: 5, integrationID: "opencode" },
-  { id: "claude-agent", name: "Claude Agent", count: 4 },
-  { id: "console-meta", name: "Anomaly / Meta", count: 3, integrationID: "opencode" },
-  { id: "console-moonshot-ai", name: "Anomaly / Moonshot AI", count: 3, integrationID: "opencode" },
-  { id: "console-openai-2", name: "Anomaly / OpenAI", count: 3, integrationID: "opencode" },
-  { id: "console-alibaba-qwen-preview", name: "Anomaly / Alibaba Qwen Preview", count: 2, integrationID: "opencode" },
-  { id: "console-deepinfra", name: "Anomaly / DeepInfra", count: 2, integrationID: "opencode" },
-  { id: "console-deepseek", name: "Anomaly / DeepSeek", count: 2, integrationID: "opencode" },
-  { id: "console-humansand", name: "Anomaly / humans&", count: 2, integrationID: "opencode" },
-  { id: "console-manhattan-project", name: "Anomaly / Manhattan DeepSeek", count: 1, integrationID: "opencode" },
-  { id: "console-manhattan-glm-5-3", name: "Anomaly / Manhattan GLM", count: 1, integrationID: "opencode" },
-  { id: "console-microsoft-ai", name: "Anomaly / Microsoft AI", count: 1, integrationID: "opencode" },
-  { id: "console-nvidia", name: "Anomaly / NVIDIA", count: 1, integrationID: "opencode" },
-  { id: "console-pearl-research", name: "Anomaly / Pareto", count: 1, integrationID: "opencode" },
-  { id: "console-radixark", name: "Anomaly / Mirendil", count: 1, integrationID: "opencode" },
-  { id: "console-z-ai", name: "Anomaly / Z.AI", count: 1, integrationID: "opencode" },
+// One large provider and a long tail: 96 models in all.
+const providers: ReadonlyArray<{ id: string; models: number }> = [
+  { id: "lorem", models: 47 },
+  { id: "ipsum", models: 9 },
+  { id: "dolor", models: 7 },
+  { id: "sit", models: 5 },
+  { id: "amet", models: 4 },
+  { id: "consectetur", models: 3 },
+  { id: "adipiscing", models: 3 },
+  { id: "elit", models: 3 },
+  { id: "sed", models: 2 },
+  { id: "eiusmod", models: 2 },
+  { id: "tempor", models: 2 },
+  { id: "incididunt", models: 2 },
+  { id: "labore", models: 1 },
+  { id: "dolore", models: 1 },
+  { id: "magna", models: 1 },
+  { id: "aliqua", models: 1 },
+  { id: "enim", models: 1 },
+  { id: "minim", models: 1 },
+  { id: "veniam", models: 1 },
 ]
 
-// 96 visible models across 19 providers with 3 variants each.
-function realisticCatalog(): MockProviderCatalog {
-  const all = providerSpecs.map((spec) => ({
-    id: spec.id,
-    name: spec.name,
-    integrationID: spec.integrationID,
-    models: Object.fromEntries(
-      Array.from({ length: spec.count }, (_, index) => {
-        const id = `${spec.id}-model-${index}`
+const title = (id: string) => id[0].toUpperCase() + id.slice(1)
 
-        return [
-          id,
-          {
-            id,
-            name: `${spec.name.replace(/^Anomaly \/ /, "")} Model ${index + 1}`,
-            cost: { input: 2, output: 10 },
-            limit: { context: 200_000, output: 32_000 },
-            variants: { low: {}, medium: {}, high: {} },
-            // released: 0 decodes as release_date: "" so every model stays visible instead of collapsing by family.
-            time: { released: 0 },
-          },
-        ]
-      }),
-    ),
-  }))
-
+// Every model has three variants, so each row's flyout lists them.
+function catalog(): MockProviderCatalog {
   return {
-    all,
-    connected: providerSpecs.map((spec) => spec.id),
-    default: { providerID: "opencode", modelID: "opencode-model-0" },
+    all: providers.map((provider) => ({
+      id: provider.id,
+      name: title(provider.id),
+      models: Object.fromEntries(
+        Array.from({ length: provider.models }, (_, index) => {
+          const id = `${provider.id}-${index + 1}`
+
+          return [
+            id,
+            {
+              id,
+              name: `${title(provider.id)} ${index + 1}`,
+              cost: { input: 2, output: 10 },
+              limit: { context: 200_000, output: 32_000 },
+              variants: { low: {}, medium: {}, high: {} },
+              // A release date of 0 reads as none, so the picker lists every model, not only each family's newest.
+              time: { released: 0 },
+            },
+          ]
+        }),
+      ),
+    })),
+    connected: providers.map((provider) => provider.id),
+    default: { providerID: "lorem", modelID: "lorem-1" },
   }
 }
 
@@ -133,7 +132,7 @@ export default bench({
         await mockOpenCodeServer(page, {
           server,
           sessions: fixture.sessions,
-          provider: realisticCatalog(),
+          provider: catalog(),
           directory: fixture.directory,
           project: fixture.project,
           pageMessages: () => ({ items: [] }),
