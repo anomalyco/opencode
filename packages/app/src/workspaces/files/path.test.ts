@@ -35,6 +35,7 @@ describe("file path helpers", () => {
       () => "/Users/me/repo",
       () => "/Users/me",
     )
+
     expect(posix.normalize("~/Downloads/clip.mp4")).toBe("/Users/me/Downloads/clip.mp4")
     expect(posix.normalize("~")).toBe("/Users/me")
     expect(posix.normalize("~/repo/src/app.ts")).toBe("src/app.ts")
@@ -45,6 +46,7 @@ describe("file path helpers", () => {
       () => "C:\\repo",
       () => "C:\\Users\\me\\",
     )
+
     expect(windows.normalize("~\\Downloads\\clip.mp4")).toBe("C:\\Users\\me\\Downloads\\clip.mp4")
   })
 
