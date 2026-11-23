@@ -7,6 +7,7 @@ import {
   inputTypeScript,
   jsonSchemaToTypeScript,
   outputTypeScript,
+  stringParameter,
 } from "../src/codemode/tool-schema.js"
 
 // A raw JSON Schema tool in the shape an MCP adapter produces: render-only input schema
@@ -584,6 +585,93 @@ describe("JSON Schema definition scope", () => {
     expect(jsonSchemaToTypeScript(schema, true)).toBe(
       ["{", "  nested?: boolean,", "  inherited?: string,", "  sibling?: number,", "}"].join("\n"),
     )
+  })
+
+  test("resolves chained and property-level $ref schemas in inputProperties and stringParameter", () => {
+    const chain = Tool.make({
+      description: "Ref chain",
+      input: {
+        $ref: "#/definitions/Alias",
+        definitions: {
+          Alias: { $ref: "#/definitions/Target" },
+          Target: {
+            type: "object",
+            properties: {
+              a: { $ref: "#/definitions/Prop", description: "Field override" },
+              b: { $ref: "#/definitions/Prop" },
+            },
+            required: ["a"],
+          },
+          Prop: { type: "string", description: "Target desc" },
+        },
+      },
+      execute: () => Effect.void,
+    })
+    expect(inputProperties(chain)).toEqual([
+      { name: "a", description: "Field override", required: true },
+      { name: "b", description: "Target desc", required: false },
+    ])
+
+    const effectRef = Tool.make({
+      description: "Apply patch",
+      input: Schema.Struct({
+        patchText: Schema.String.annotate({ identifier: "PatchText", description: "Unified diff" }),
+      }),
+      freeform: true,
+      execute: () => Effect.void,
+    })
+    expect(stringParameter(effectRef)).toEqual({
+      name: "patchText",
+      signature: "(/** Unified diff */ patchText: string)",
+    })
+
+    const rawRef = Tool.make({
+      description: "Raw ref",
+      input: {
+        type: "object",
+        properties: { body: { $ref: "#/definitions/BodyText", description: "Override body" } },
+        required: ["body"],
+        definitions: { BodyText: { type: "string", description: "Base body" } },
+      },
+      freeform: true,
+      execute: () => Effect.void,
+    })
+    expect(stringParameter(rawRef)).toEqual({
+      name: "body",
+      signature: "(/** Override body */ body: string)",
+    })
+
+    const cyclic = Tool.make({
+      description: "Cyclic",
+      input: {
+        type: "object",
+        properties: { a: { $ref: "#/$defs/A" } },
+        required: ["a"],
+        $defs: { A: { $ref: "#/$defs/B" }, B: { $ref: "#/$defs/A" } },
+      },
+      freeform: true,
+      execute: () => Effect.void,
+    })
+    const nonString = Tool.make({
+      description: "Non string",
+      input: {
+        type: "object",
+        properties: { count: { $ref: "#/$defs/Count" } },
+        required: ["count"],
+        $defs: { Count: { type: "number" } },
+      },
+      freeform: true,
+      execute: () => Effect.void,
+    })
+    const missing = Tool.make({
+      description: "Missing",
+      input: { type: "object", properties: { a: { $ref: "#/$defs/Missing" } }, required: ["a"] },
+      freeform: true,
+      execute: () => Effect.void,
+    })
+    expect(stringParameter(cyclic)).toBeUndefined()
+    expect(stringParameter(nonString)).toBeUndefined()
+    expect(stringParameter(missing)).toBeUndefined()
   })
 })
 

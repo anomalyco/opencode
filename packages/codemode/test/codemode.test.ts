@@ -871,6 +871,63 @@ describe("CodeMode public contract", () => {
     expect(await Effect.runPromise(runtime.execute('return await tools.plain("a")'))).toMatchObject({ ok: false })
   })
 
+  test("a freeform tool resolves a single required string field referenced via $ref", async () => {
+    const patch = Tool.make({
+      description: "Apply a patch",
+      input: Schema.Struct({
+        patchText: Schema.String.annotate({ identifier: "PatchText", description: "Unified diff" }),
+      }),
+      freeform: true,
+      output: Schema.String,
+      execute: ({ patchText }) => Effect.succeed(patchText),
+    })
+    const rawRef = Tool.make({
+      description: "Write note",
+      input: {
+        $ref: "#/$defs/InputAlias",
+        $defs: {
+          InputAlias: { $ref: "#/$defs/WriteInput" },
+          WriteInput: {
+            type: "object",
+            properties: { note: { $ref: "#/$defs/NoteText" } },
+            required: ["note"],
+          },
+          NoteText: { type: "string", description: "Note body" },
+        },
+      },
+      freeform: true,
+      output: Schema.String,
+      execute: (input) =>
+        Effect.succeed(typeof input === "object" && input !== null && "note" in input ? String(input.note) : ""),
+    })
+    const nonStringRef = Tool.make({
+      description: "Count items",
+      input: Schema.Struct({
+        count: Schema.Number.annotate({ identifier: "Count" }),
+      }),
+      freeform: true,
+      output: Schema.Void,
+      execute: () => Effect.void,
+    })
+
+    const runtime = CodeMode.make({ tools: { nonStringRef, patch, rawRef } })
+    expect(runtime.catalog.map((tool) => tool.signature)).toEqual([
+      "tools.nonStringRef({\n  count: number,\n}): Promise<null>",
+      "tools.patch(/** Unified diff */ patchText: string): Promise<string>",
+      "tools.rawRef(/** Note body */ note: string): Promise<string>",
+    ])
+    expect(
+      await Effect.runPromise(
+        runtime.execute(
+          'return [await tools.patch("diff"), await tools.patch({ patchText: "obj" }), await tools.rawRef("hi")]',
+        ),
+      ),
+    ).toMatchObject({ ok: true, value: ["diff", "obj", "hi"] })
+    expect(await Effect.runPromise(runtime.execute('return await tools.nonStringRef("1")'))).toMatchObject({
+      ok: false,
+    })
+  })
+
   test("renders equivalent catalogs identically regardless of tool insertion order", () => {
     const alpha = Tool.make({
       description: "Alpha tool",
