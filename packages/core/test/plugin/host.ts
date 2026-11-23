@@ -81,6 +81,11 @@ export function host(overrides: Overrides = {}): Plugin.Context {
         transform: () => Effect.die("unused experimental.artifact.transform"),
         reload: () => Effect.die("unused experimental.artifact.reload"),
       },
+      automation: {
+        create: () => Effect.die("unused experimental.automation.create"),
+        list: () => Effect.die("unused experimental.automation.list"),
+        delete: () => Effect.die("unused experimental.automation.delete"),
+      },
     },
     generate: overrides.generate ?? {
       text: () => Effect.die("unused generate.text"),

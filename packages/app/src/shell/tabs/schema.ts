@@ -37,6 +37,8 @@ export const Tabs = Persistence.array(Schema.Union([SessionCodec, Draft]))
 
 export const Recent = Persistence.struct({
   key: Schema.optional(Schema.String),
+  // Survives closing the window's last tab.
+  target: Persistence.optional(Persistence.struct({ server: ServerKey, directory: Schema.optional(Schema.String) })),
 })
 
 export const Info = Persistence.struct({
@@ -60,6 +62,8 @@ export const Regions = Schema.Record(
     }).pipe(Schema.encodeKeys({ side: "review" })),
   ),
 )
+
+export const SharedSide = Persistence.struct({ opened: Schema.optional(Schema.Boolean) })
 
 export const ClosedTab = Persistence.struct({
   tab: SessionCodec,

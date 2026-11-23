@@ -21,7 +21,7 @@ import type {
   SessionReviewLineComment,
 } from "../../components/session-review"
 import type { SessionReviewExpandMode } from "./session-review-v2"
-import { createLineCommentControllerV2 } from "./line-comment-annotations-v2"
+import { createLineCommentControllerV2, type LineCommentSendAction } from "./line-comment-annotations-v2"
 import { createReviewFocusDriver } from "../../components/review-focus-driver"
 import { shouldVirtualizeReviewDiff } from "./session-review-file-preview-v2-virtualize"
 import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
@@ -40,6 +40,7 @@ export type SessionReviewFilePreviewV2Props = {
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
   lineCommentActions?: SessionReviewCommentActions
+  lineCommentSend?: LineCommentSendAction
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
@@ -124,23 +125,26 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
     label: i18n.t("ui.lineComment.submit"),
     draftKey: () => props.file,
     getSide: selectionSide,
-    onSubmit: ({ comment, selection }) => {
+    onSubmit: ({ comment, selection, send }) => {
       props.onLineComment?.({
         file: props.file,
         selection,
         comment,
         preview: selectionPreview(view(), selection),
+        send,
       })
     },
-    onUpdate: ({ id, comment, selection }) => {
+    onUpdate: ({ id, comment, selection, send }) => {
       props.onLineCommentUpdate?.({
         id,
         file: props.file,
         selection,
         comment,
         preview: selectionPreview(view(), selection),
+        send,
       })
     },
+    send: () => props.lineCommentSend,
     onDelete: (comment) => {
       props.onLineCommentDelete?.({
         id: comment.id,
@@ -204,6 +208,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       annotations={commentsUi.annotations()}
       renderAnnotation={commentsUi.renderAnnotation}
       renderGutterUtility={lineCommentsEnabled() ? commentsUi.renderGutterUtility : undefined}
+      onCommentSelection={lineCommentsEnabled() ? commentsUi.commentSelection() : undefined}
       selectedLines={commentsUi.selected()}
       commentedLines={commentedLines()}
       media={{

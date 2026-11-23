@@ -53,6 +53,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "正在留言於 ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "新增留言",
+  "ui.lineComment.add": "新增留言",
+  "ui.lineComment.actions": "選取操作",
   "ui.lineComment.contextPlaceholder": "新增此變更的相關資訊",
   "ui.lineComment.submit": "留言",
   "ui.lineComment.cancel": "取消",

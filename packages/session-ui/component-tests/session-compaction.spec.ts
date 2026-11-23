@@ -21,11 +21,21 @@ story("shows a running automatic compaction as one Compacting divider", async ({
   await expect(message.locator('[data-component="text-part"]')).toHaveCount(0)
 })
 
-story("opens a finished automatic compaction's summary from its divider", async ({ mount }) => {
+story("opens a finished automatic compaction's summary from its divider", async ({ mount, page }) => {
   const timeline = await mount(`${rows}--compaction-and-continuation`)
   const message = timeline.locator('[data-component="session-compaction-message"]')
   const divider = message.locator('[data-slot="session-compaction-divider"]')
   const summary = message.locator('[data-slot="session-compaction-summary"]')
+
+  // The stem Compacting and Compacted share, then the ending that differs.
+  const colors = () =>
+    message.locator('[data-slot="session-compaction-label"]').evaluate((label) =>
+      [label.firstElementChild, label.querySelector('[data-slot="session-compaction-done"]')].map((part) => {
+        if (!part) throw new Error("Expected the label's stem and ending")
+
+        return getComputedStyle(part).color
+      }),
+    )
 
   // Loaded with the history, so it is already there rather than fading in.
   await expect(message).not.toHaveAttribute("data-enter")
@@ -35,12 +45,22 @@ story("opens a finished automatic compaction's summary from its divider", async 
   await expect(divider).toHaveAttribute("aria-expanded", "false")
   await expect(divider).not.toHaveAttribute("aria-controls")
   await expect(summary).toHaveCount(0)
+  const [rest] = await colors()
+
+  // Hovering lights the whole word, not only the ending.
+  await divider.hover()
+  await expect.poll(async () => (await colors())[0]).not.toBe(rest)
+  await expect.poll(async () => new Set(await colors()).size).toBe(1)
 
   await divider.click()
   await expect(divider).toHaveAttribute("aria-expanded", "true")
   await expect(summary).toContainText("The Session timeline now consumes current nested assistant content.")
   await expect(summary).toContainText("11.9K in · 508 out")
   await expect(divider).toHaveAttribute("aria-controls", (await summary.getAttribute("id")) ?? "")
+  // An open divider keeps the whole word lit once the pointer leaves.
+  await page.mouse.move(0, 0)
+  await expect.poll(async () => (await colors())[0]).not.toBe(rest)
+  await expect.poll(async () => new Set(await colors()).size).toBe(1)
 
   await divider.click()
   await expect(divider).toHaveAttribute("aria-expanded", "false")
@@ -127,25 +147,44 @@ story("warms the label only once the gathering light reaches it", async ({ mount
   expect(cooled).toEqual([0, 0])
 })
 
-story("keeps the full record for a running automatic compaction with background compaction off", async ({ mount }) => {
-  const timeline = await mount(`${rows}--compaction-in-progress`, { args: { backgroundCompaction: false } })
+story("splits a translated label between whole characters", async ({ mount }) => {
+  // Bengali's two words part at a vowel sign, which draws a dotted circle when it is cut from its consonant.
+  const timeline = await mount(`${rows}--compaction-and-continuation`, { globals: { locale: "bn" } })
   const message = timeline.locator('[data-component="session-compaction-message"]')
 
-  await expect(message).not.toHaveAttribute("data-quiet")
-  await expect(message.locator('[data-slot="session-compaction-divider"]')).toHaveCount(0)
-  await expect(message).toContainText("Session compaction started")
-  await expect(message.getByRole("status")).toBeVisible()
+  await expect(message.locator('[data-slot="session-compaction-divider"]')).toHaveAccessibleName("সংকুচিত হয়েছে")
+  await expect(message.locator('[data-slot="session-compaction-done"]')).toHaveText(/^\P{M}/u)
 })
 
-story("keeps the full record for a finished automatic compaction with background compaction off", async ({ mount }) => {
-  const timeline = await mount(`${rows}--compaction-and-continuation`, { args: { backgroundCompaction: false } })
-  const message = timeline.locator('[data-component="session-compaction-message"]')
+story("keeps the space where a translated label splits", async ({ mount, page }) => {
+  // Hindi's two phrases part after a space, which a label split into boxes drops unless it keeps its white space.
+  const timeline = await mount(`${rows}--compaction-and-continuation`, { globals: { locale: "hi" } })
+  const label = timeline.locator('[data-slot="session-compaction-label"]')
+  await expect(timeline.locator('[data-slot="session-compaction-divider"]')).toHaveAccessibleName("संक्षिप्त किया गया")
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
-  await expect(message).not.toHaveAttribute("data-quiet")
-  await expect(message.locator('[data-slot="session-compaction-divider"]')).toHaveCount(0)
-  await expect(message).toContainText("Session compaction started")
-  await expect(message).toContainText("The Session timeline now consumes current nested assistant content.")
-  await expect(message).toContainText("Session compacted · 11.9K in · 508 out")
+  // The label's two parts against the same phrase set as one run of text beside it.
+  const [split, whole] = await label.evaluate((element) => {
+    const stem = element.firstElementChild
+    const ending = element.querySelector('[data-slot="session-compaction-done"]')
+    const copy = element.cloneNode(false)
+
+    if (!stem || !ending || !(copy instanceof HTMLElement)) throw new Error("Expected the label's stem and ending")
+    copy.textContent = element.closest("button")?.getAttribute("aria-label") ?? ""
+    element.after(copy)
+
+    const widths = [
+      stem.getBoundingClientRect().width + ending.getBoundingClientRect().width,
+      copy.getBoundingClientRect().width,
+    ]
+
+    copy.remove()
+
+    return widths
+  })
+
+  expect(whole).toBeGreaterThan(0)
+  expect(Math.abs(split - whole)).toBeLessThan(1)
 })
 
 story("keeps the full record for a manual compaction", async ({ mount }) => {

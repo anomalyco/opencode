@@ -7,6 +7,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
+import { Bus } from "../bus.js"
 import { State } from "../state.js"
 import { isAppExecutionAlias, which } from "../util/which.js"
 
@@ -51,6 +52,11 @@ export interface Interface extends State.Transformable<Editor> {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ShellSelect") {}
+
+export const Event = {
+  /** The configured shell changed, so whatever names the shell can refresh. */
+  Updated: Bus.ephemeral({ type: "shell-select.updated", schema: {} }),
+}
 
 function stat(file: string) {
   return statSync(file, { throwIfNoEntry: false }) ?? undefined
@@ -205,9 +211,14 @@ const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       const global = yield* Global.Service
+      const bus = yield* Bus.Service
       const state = State.create<Data, Editor>({
         name: "shell-select",
         initial: () => ({}),
+        notify: State.changes(
+          (data) => data.shell ?? null,
+          () => bus.publish(Event.Updated, {}).pipe(Effect.asVoid),
+        ),
         editor: (editor) => ({
           configure: (shell) => {
             editor.shell = shell
@@ -224,7 +235,7 @@ const layer = (options?: Options) =>
   )
 
 export function configured(options?: Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [Global.node] })
+  return makeLocationNode({ service: Service, layer: layer(options), deps: [Global.node, Bus.node] })
 }
 
 export const node = configured()

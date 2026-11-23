@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Viðmerkjandi ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Legg viðmerking til",
+  "ui.lineComment.add": "Legg viðmerking til",
+  "ui.lineComment.actions": "Gerðir fyri val",
   "ui.lineComment.contextPlaceholder": "Legg samanhang til hesa broyting",
   "ui.lineComment.submit": "Viðmerking",
   "ui.lineComment.cancel": "Avlýs",

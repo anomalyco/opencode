@@ -8,6 +8,7 @@ import {
 } from "../schema/index.js"
 import { encodeJson, flattenTools, isRecord } from "./shared.js"
 import { ToolStream } from "./utils/tool-stream.js"
+import { toolsUpdate } from "../tool-updates.js"
 
 // Freeform tools as OpenAI custom tools, shared by Responses and Chat Completions:
 // https://platform.openai.com/docs/guides/function-calling#custom-tools
@@ -26,14 +27,16 @@ export const resolve = (tool: ToolDefinition): Custom | undefined => {
   return { field, format: tool.freeform }
 }
 
-/** Custom tools in this request, by flattened tool name. */
-export const tools = (request: LLMRequest): ReadonlyMap<string, Custom> =>
-  new Map(
-    flattenTools(request.tools).flatMap((tool) => {
+/** Custom tools in this request, including ones added mid-conversation, by flattened tool name. */
+export const tools = (request: LLMRequest): ReadonlyMap<string, Custom> => {
+  const added = request.messages.flatMap((message) => toolsUpdate(message)?.add ?? [])
+  return new Map(
+    flattenTools([...request.tools, ...added]).flatMap((tool) => {
       const custom = resolve(tool)
       return custom ? [[tool.name, custom] as const] : []
     }),
   )
+}
 
 /** The format's grammar, or `undefined` for unconstrained text. */
 export const grammar = (format: Freeform) =>

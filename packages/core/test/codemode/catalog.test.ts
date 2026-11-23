@@ -100,11 +100,18 @@ describe("CodeModeCatalog.summarize", () => {
     expect(catalog.namespaces[0]?.entries[0]?.line).toEndWith("// Summary")
   })
 
-  test("limits inline descriptions to 120 characters", () => {
-    const catalog = CodeModeCatalog.summarize({ tools: [entry("alpha.one", "x".repeat(121))] })
-    const description = catalog.namespaces[0]?.entries[0]?.line.split(" // ")[1]
-    expect(description).toHaveLength(120)
+  test("limits inline descriptions to 2,000 characters", () => {
+    const listing = CodeModeCatalog.lookup({ tools: [entry("alpha.one", "x".repeat(2_001))] })
+    const description = listing("alpha.one")?.line.split(" // ")[1]
+    expect(description).toHaveLength(2_000)
     expect(description).toEndWith("...")
+  })
+
+  test("shows pinned tools' full descriptions", () => {
+    const tool = entry("alpha.one", `Summary  \n\n  indented ${"x".repeat(2_001)}\nLast\n`, undefined, true)
+    expect(CodeModeCatalog.summarize({ tools: [tool] }, { budget: 0 }).namespaces[0]?.entries[0]?.line).toBe(
+      `  - ${tool.signature} // Summary\n    //\n    //   indented ${"x".repeat(2_001)}\n    // Last`,
+    )
   })
 
   test("always retains namespace descriptions and charges them before tool listings", () => {
@@ -171,7 +178,7 @@ describe("CodeModeInstructions.render", () => {
     expect(partial).toContain(
       "The catalog is partial. Before calling a tool that is not listed below, find it with the global `search(...)` function. Do not guess tool names.",
     )
-    expect(partial).toContain("- search({")
+    expect(partial).toContain("- search(query: string | {")
     expect(partial).toContain("  /** @integer @exclusiveMinimum 0 */\n  limit?: number,")
     expect(partial).toContain("  /** @integer @minimum 0 */\n  offset?: number,")
     expect(partial).not.toContain("tools.orders.lookup(input:")
@@ -304,7 +311,7 @@ describe("CodeModeInstructions.update", () => {
     const text = update([echo], [echo, ...wide])
     expect(text).toStartWith("The Code Mode tool catalog has changed.\n\nNew tools are available:\n- bulk (200 tools")
     expect(text).toContain("You can also look up tools that aren't listed with the global `search(...)` function")
-    expect(text).toContain("- search({")
+    expect(text).toContain("- search(query: string | {")
     expect(update([echo, ...wide], [echo, ...wide, entry("bulk.more", "More")])).not.toContain("search(")
     expect(update([echo, ...wide], [echo])).not.toContain("search(")
   })

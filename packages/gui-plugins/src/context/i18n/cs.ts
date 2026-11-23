@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Využití",
   "usage.cost": "náklady",
   "usage.view": "Zobrazit kontextové použití",
-  "systemPrompt.title": "Systémový prompt",
   "rawMessages.title": "Syrové zprávy",
   "export.session": "Export relace",
   "stats.session": "Relace",

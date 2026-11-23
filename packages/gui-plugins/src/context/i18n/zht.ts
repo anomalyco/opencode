@@ -5,7 +5,6 @@ export default {
   "usage.usage": "使用量",
   "usage.cost": "成本",
   "usage.view": "檢視上下文用量",
-  "systemPrompt.title": "系統提示詞",
   "rawMessages.title": "原始訊息",
   "export.session": "匯出工作階段",
   "stats.session": "工作階段",

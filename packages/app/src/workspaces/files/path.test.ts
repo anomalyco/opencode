@@ -30,6 +30,26 @@ describe("file path helpers", () => {
     expect(windows.normalize("file:///C:/repo/src/app.ts")).toBe("src/app.ts")
   })
 
+  test("expands the server's home folder", () => {
+    const posix = createPathHelpers(
+      () => "/Users/me/repo",
+      () => "/Users/me",
+    )
+
+    expect(posix.normalize("~/Downloads/clip.mp4")).toBe("/Users/me/Downloads/clip.mp4")
+    expect(posix.normalize("~")).toBe("/Users/me")
+    expect(posix.normalize("~/repo/src/app.ts")).toBe("src/app.ts")
+    expect(posix.normalize("~other/file")).toBe("~other/file")
+    expect(createPathHelpers(() => "/repo").normalize("~/Downloads/clip.mp4")).toBe("~/Downloads/clip.mp4")
+
+    const windows = createPathHelpers(
+      () => "C:\\repo",
+      () => "C:\\Users\\me\\",
+    )
+
+    expect(windows.normalize("~\\Downloads\\clip.mp4")).toBe("C:\\Users\\me\\Downloads\\clip.mp4")
+  })
+
   test.each([
     ["/repo", "src/components///", "src/components"],
     ["C:\\repo", "frontend\\", "frontend"],

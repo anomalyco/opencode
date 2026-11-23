@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Ulanylyşy",
   "usage.cost": "Bahasy",
   "usage.view": "Kontekstiň ulanylyşyny görüň",
-  "systemPrompt.title": "Ulgam prompt-y",
   "rawMessages.title": "Çig habarlar",
   "export.session": "Eksport sessiýasy",
   "stats.session": "Sessiýa",

@@ -7,12 +7,12 @@ import {
   InvalidRequestError,
   ModelID,
   ProviderID,
-  type HttpOptions,
   type ProviderOptions,
+  type TransportOptions,
 } from "./schema/index.js"
 
 /**
- * What every media model carries: ids, the configured route, and deployment `http` overlays. Modality classes
+ * What every media model carries: ids, the configured route, and deployment transport overlays. Modality classes
  * (`ImageModel`, `VideoModel`, `SpeechModel`, `TranscriptionModel`) extend it with their route type and a nominal
  * marker so one cannot stand in for the other in requests.
  */
@@ -23,7 +23,8 @@ export class MediaModel<Route, Options> {
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: Route
-  readonly http?: HttpOptions
+  /** Deployment headers, timeouts and `http` overlays, below each request's own. */
+  readonly transport?: TransportOptions
   /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
   readonly providerOptions?: ProviderOptions
 
@@ -31,7 +32,7 @@ export class MediaModel<Route, Options> {
     this.id = ModelID.make(input.id)
     this.provider = ProviderID.make(input.provider)
     this.route = input.route
-    this.http = input.http
+    this.transport = input.transport
     this.providerOptions = input.providerOptions
   }
 }
@@ -43,7 +44,7 @@ export namespace MediaModel {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
     readonly route: Route
-    readonly http?: HttpOptions
+    readonly transport?: TransportOptions
     readonly providerOptions?: ProviderOptions
   }
 
@@ -101,8 +102,7 @@ const composition = <Request extends MediaRoute.MediaRequest, Protocol>(
   protocol: route.protocol,
   endpoint: Endpoint.path(route.path, { baseURL: input.baseURL ?? route.baseURL }),
   auth: input.auth,
-  headers:
-    route.headers === undefined && input.headers === undefined ? undefined : { ...route.headers, ...input.headers },
+  headers: route.headers,
 })
 
 const isStreamInput = <Request extends MediaRoute.MediaRequest, Event, Response, Frame, State, Token>(

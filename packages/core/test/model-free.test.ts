@@ -73,7 +73,9 @@ for (const flag of [undefined, "0", "1", "true"]) {
             time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
             location: ref,
           })
-          const failure = yield* runner.resolve(session, models.available, { kind: "primary", agent: Agent.ID.make("build") }).pipe(Effect.flip)
+          const failure = yield* runner
+            .resolve(session, models.available, { kind: "primary", agent: Agent.ID.make("build") })
+            .pipe(Effect.flip)
           expect(failure.message).toBe(`Model unavailable: ${providerID}/big-pickle`)
           expect(yield* resolver.resolve(Model.Ref.make({ providerID, id: free }))).toBeUndefined()
           // Later transforms cannot restore a free model, even when all paid models are removed.
@@ -89,3 +91,30 @@ for (const flag of [undefined, "0", "1", "true"]) {
       ),
     )
 }
+
+it.effect("a model's speeds are offered only while the model is", () =>
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service
+    const models = yield* Model.Service
+    const base = Model.ID.make("base")
+    const fast = Model.ID.make("base-fast")
+    const orphan = Model.ID.make("gone-fast")
+    yield* providers.transform((editor) => {
+      editor.update(other, () => {})
+      editor.models.update(other, base, () => {})
+      editor.models.update(other, fast, (model) => {
+        model.experimental = { speed: { base, id: "fast", faster: true } }
+      })
+      // Its model was removed, for example by a provider that does not offer it.
+      editor.models.update(other, orphan, (model) => {
+        model.experimental = { speed: { base: Model.ID.make("gone"), id: "fast", faster: true } }
+      })
+    })
+    const available = () => models.available().pipe(Effect.map((list) => list.map((model) => model.id).sort()))
+    expect(yield* available()).toEqual([base, fast])
+
+    // Disabling the model, as a workspace's settings do by its ID, takes its speeds with it.
+    yield* models.transform((editor) => editor.update(other, base, (model) => void (model.enabled = false)))
+    expect(yield* available()).toEqual([])
+  }).pipe(Effect.provide(layer)),
+)

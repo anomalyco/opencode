@@ -7,7 +7,7 @@ type Provider = {
   name: string
   canonical?: string
   integrationID?: string
-  models: Readonly<Record<string, { id: string; name: string }>>
+  models: Readonly<Record<string, { id: string; name: string; speed?: { base: string } }>>
 }
 
 export function composerModelLabelKey(providerID: string, modelID: string) {
@@ -51,13 +51,18 @@ export function composerModelLabels(
   connected?: readonly string[],
 ): ReadonlyMap<string, ComposerModelLabel> {
   const active = connected && new Set(connected)
+  const providers = [...catalog.values()].filter((provider) => !active || active.has(provider.id))
 
-  const rows = [...catalog.values()]
-    .filter((provider) => !active || active.has(provider.id))
-    .flatMap((provider) => {
-      const name = composerProviderName(provider.id, catalog, connected)
+  // A model's faster and slower speeds ("gpt-5.5-fast") show under its name: the speed has its own control.
+  const standard = (provider: Provider, model: { speed?: { base: string } }) =>
+    model.speed && provider.models[model.speed.base]
 
-      return Object.values(provider.models).map((model) => {
+  const rows = providers.flatMap((provider) => {
+    const name = composerProviderName(provider.id, catalog, connected)
+
+    return Object.values(provider.models)
+      .filter((model) => !standard(provider, model))
+      .map((model) => {
         const label = model.name.replace("(latest)", "").trim()
 
         return {
@@ -69,12 +74,12 @@ export function composerModelLabels(
           text: name ? `${name} / ${label}` : label,
         }
       })
-    })
+  })
 
   const groups = Map.groupBy(rows, (row) => row.text)
 
-  return new Map(
-    rows.map((row) => {
+  const labels = new Map(
+    rows.map((row): [string, ComposerModelLabel] => {
       const peers = groups.get(row.text) ?? []
       const provider = peers.some((other) => other.providerID !== row.providerID) ? row.providerID : row.provider
       const same = peers.filter((other) => other.providerID === row.providerID).map((other) => other.modelID)
@@ -83,6 +88,16 @@ export function composerModelLabels(
       return [row.key, { provider, model: suffix ? `${row.model} (${suffix})` : row.model }]
     }),
   )
+
+  for (const provider of providers)
+    for (const model of Object.values(provider.models)) {
+      const base = standard(provider, model)
+      const label = base && labels.get(composerModelLabelKey(provider.id, base.id))
+
+      if (label) labels.set(composerModelLabelKey(provider.id, model.id), label)
+    }
+
+  return labels
 }
 
 // The part of the IDs they all share, cut back to a separator so "v1" and "v2" share nothing

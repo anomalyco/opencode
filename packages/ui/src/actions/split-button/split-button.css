@@ -6,7 +6,6 @@
   border-radius: 6px;
   background-color: transparent;
   box-shadow: none;
-  overflow: hidden;
 }
 
 [data-component="split-button-v2"].session-review-v2-open-in-app,
@@ -29,9 +28,12 @@
   outline: none;
 }
 
+/* Each half rounds its own outer corners rather than the group clipping them, so the inset focus ring follows them. */
 [data-component="split-button-v2-action"] {
   width: 28px;
   flex-shrink: 0;
+  border-start-start-radius: 6px;
+  border-end-start-radius: 6px;
 }
 
 [data-component="split-button-v2-action"]:hover:not(:disabled) {
@@ -56,6 +58,8 @@
 [data-component="split-button-v2-menu-trigger"] {
   width: 20px;
   flex-shrink: 0;
+  border-start-end-radius: 6px;
+  border-end-end-radius: 6px;
 }
 
 [data-component="split-button-v2-menu-trigger"]:is(:hover, [data-expanded]):not(:disabled) {

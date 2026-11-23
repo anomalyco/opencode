@@ -5,18 +5,17 @@ import { Effect, Exit, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Formatter } from "@opencode/core/formatter"
 import { FileMutation } from "@opencode/core/file-mutation"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
-import { Model } from "@opencode/core/model"
 import { Permission } from "@opencode/core/permission"
-import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { PatchTool } from "@opencode/core/tool/plugin/patch"
-import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir, withTempDir } from "./fixture/tmpdir"
@@ -25,20 +24,9 @@ import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
-const sessionHooks = new Map<string, (event: SessionHooks["context"]) => Effect.Effect<void>>()
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
-  layer: Layer.effectDiscard(
-    registerToolPlugin(PatchTool.Plugin, {
-      session: {
-        hook: (name, callback) =>
-          Effect.sync(() => {
-            sessionHooks.set(name, callback as (event: SessionHooks["context"]) => Effect.Effect<void>)
-            return { dispose: Effect.void }
-          }),
-      },
-    }),
-  ),
+  layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
   deps: [
     Tool.node,
     FileAccess.node,
@@ -47,6 +35,8 @@ const patchToolNode = makeLocationNode({
     Formatter.node,
     Location.node,
     Permission.node,
+    Config.node,
+    Flag.node,
   ],
 })
 
@@ -83,7 +73,7 @@ const permission = permissionLayer({
 })
 
 const formatter = Layer.mock(Formatter.Service, {
-  file: (target) => formatFile(target),
+  file: (target) => formatFile(target.absolute),
 })
 
 const reset = () => {
@@ -137,6 +127,7 @@ const withTool = <A, E, R>(
         Location.node.replace(activeLocation),
         Formatter.node.replace(formatter),
         Permission.node.replace(permission),
+        Config.node.replace(Config.testLayer()),
       ]),
     ),
   )
@@ -155,7 +146,7 @@ const exists = (target: string) =>
       () => false,
     ),
   )
-const it = testEffect(Layer.empty)
+const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
 const withTempTool = <A, E, R>(body: (directory: string, registry: Tool.Interface) => Effect.Effect<A, E, R>) =>
   withTempDir((tmp) => {
     reset()
@@ -163,34 +154,6 @@ const withTempTool = <A, E, R>(body: (directory: string, registry: Tool.Interfac
   })
 
 describe("PatchTool", () => {
-  it.live("selects the same edit tools for compaction and generate requests as the agent loop", () =>
-    withTempTool(() =>
-      Effect.gen(function* () {
-        const event = (id: string): SessionHooks["context"] => ({
-          sessionID,
-          agent: toolIdentity.agent,
-          model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make(id) }),
-          system: [],
-          messages: [],
-          tools: Object.fromEntries(
-            ["patch", "edit", "write", "read"].map((name) => [name, { description: name, input: { type: "object" } }]),
-          ),
-          options: {},
-        })
-        for (const name of ["context", "compaction", "generate"]) {
-          const hook = sessionHooks.get(name)
-          expect(hook).toBeDefined()
-          const claude = event("claude-sonnet-4")
-          yield* hook!(claude)
-          expect(Object.keys(claude.tools)).toEqual(["edit", "write", "read"])
-          const gpt = event("gpt-5")
-          yield* hook!(gpt)
-          expect(Object.keys(gpt.tools)).toEqual(["patch", "read"])
-        }
-      }),
-    ),
-  )
-
   it.live("registers and sequentially applies add, update, and delete hunks", () =>
     withTempDir((tmp) => {
       reset()
@@ -453,6 +416,43 @@ describe("PatchTool", () => {
         })
         expect(yield* exists(source)).toBe(false)
         expect(yield* Effect.promise(() => fs.readFile(destination, "utf8"))).toBe("same\n")
+      }),
+    ),
+  )
+
+  it.live("refuses to rewrite a file that is not valid UTF-8 and applies none of the patch", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const utf8 = path.join(directory, "a.txt")
+        const latin1 = path.join(directory, "Invoice.java")
+        const doomed = path.join(directory, "Old.java")
+        // "// José" in Latin-1, far from the patched line.
+        const bytes = Buffer.concat([Buffer.from("// Jos\xe9\n", "latin1"), Buffer.from("int MAX = 10;\n")])
+        yield* Effect.promise(() =>
+          Promise.all([fs.writeFile(utf8, "before\n"), fs.writeFile(latin1, bytes), fs.writeFile(doomed, bytes)]),
+        )
+        expect(
+          yield* executeTool(
+            registry,
+            call(
+              "*** Begin Patch\n*** Update File: a.txt\n@@\n-before\n+after\n*** Update File: Invoice.java\n@@\n-int MAX = 10;\n+int MAX = 25;\n*** End Patch",
+            ),
+          ),
+        ).toMatchObject({
+          status: "error",
+          error: {
+            message: expect.stringContaining(
+              `patch verification failed: Failed to read file to update ${latin1}: file is not valid UTF-8.`,
+            ),
+          },
+        })
+        expect(yield* Effect.promise(() => fs.readFile(utf8, "utf8"))).toBe("before\n")
+        expect(yield* Effect.promise(() => fs.readFile(latin1))).toEqual(bytes)
+        // Deleting does not rewrite the bytes, so it stays allowed.
+        expect(
+          yield* executeTool(registry, call("*** Begin Patch\n*** Delete File: Old.java\n*** End Patch", "call-delete")),
+        ).toMatchObject({ status: "completed" })
+        expect(yield* exists(doomed)).toBe(false)
       }),
     ),
   )

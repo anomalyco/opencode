@@ -352,6 +352,8 @@ export function createTranscriptSearch(
       activeDisplay: () => view().activeDisplay,
       count: () => view().count,
       move: (delta: number) => dispatch({ type: "move", delta }),
+      previousLabel: () => language.t("ui.fileSearch.previousMatch"),
+      nextLabel: () => language.t("ui.fileSearch.nextMatch"),
     },
     element: {
       setInput: (element: HTMLInputElement) => (inputEl = element),

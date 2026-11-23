@@ -10,7 +10,7 @@ import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
+import { mergeTransport, ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 import { bearerRouteDefaults } from "./settings.js"
@@ -71,8 +71,7 @@ export const configure = (input: Config = {}) => {
     endpoint: options.endpoint,
     auth: options.auth,
     // DigitalOcean serves TypeSafe's Jev, which needs this header for images.
-    headers: { "TypeSafe-Danger-Zone-Images": "true", ...input.headers },
-    http: input.http,
+    ...mergeTransport({ headers: { "TypeSafe-Danger-Zone-Images": "true" } }, input),
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model({ id: modelID, providerOptions })
@@ -83,8 +82,7 @@ export const configure = (input: Config = {}) => {
     provider: id,
     endpoint: options.endpoint,
     auth: options.auth,
-    headers: input.headers,
-    http: input.http,
+    ...mergeTransport(input),
   })
   const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     embeddingRoute.model({ id: modelID, providerOptions })

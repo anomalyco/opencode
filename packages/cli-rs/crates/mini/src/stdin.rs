@@ -1,0 +1,58 @@
+//! Piped stdin supplies the initial prompt; subsequent keystrokes come from the terminal.
+
+use std::io::{IsTerminal, Read};
+
+pub const INTERACTIVE_INPUT_ERROR: &str = "opencode mini requires a controlling terminal for input";
+
+/// Reads piped stdin to its end, then puts the controlling terminal (`/dev/tty`, the console `CONIN$` on Windows)
+/// on standard input, where the renderer reads keys. Returns `None` when stdin is already a terminal.
+pub fn take_piped() -> Result<Option<String>, String> {
+    if std::io::stdin().is_terminal() {
+        return Ok(None);
+    }
+    let mut bytes = Vec::new();
+    std::io::stdin().read_to_end(&mut bytes).map_err(|error| format!("failed to read stdin: {error}"))?;
+    reopen_terminal()?;
+    Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
+}
+
+#[cfg(unix)]
+fn reopen_terminal() -> Result<(), String> {
+    let terminal =
+        std::fs::OpenOptions::new().read(true).open("/dev/tty").map_err(|_| INTERACTIVE_INPUT_ERROR.to_owned())?;
+    rustix::stdio::dup2_stdin(&terminal).map_err(|_| INTERACTIVE_INPUT_ERROR.to_owned())
+}
+
+/// `CONIN$` on Windows (`resolveInteractiveStdin`): the console becomes the standard input handle, which std and the
+/// renderer look up.
+#[cfg(windows)]
+fn reopen_terminal() -> Result<(), String> {
+    opencode_util::win::set_stdin_console().map_err(|_| INTERACTIVE_INPUT_ERROR.to_owned())
+}
+
+/// `mergeInput`: the piped text, then `--prompt` on its own line; either alone; `None` when both are empty.
+pub fn merge_input(piped: Option<&str>, prompt: Option<&str>) -> Option<String> {
+    let piped = piped.filter(|text| !text.is_empty());
+    let prompt = prompt.filter(|text| !text.is_empty());
+    match (piped, prompt) {
+        (None, None) => None,
+        (Some(text), None) | (None, Some(text)) => Some(text.to_owned()),
+        (Some(piped), Some(prompt)) => Some(format!("{piped}\n{prompt}")),
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_console_becomes_stdin() {
+        // Without a console (a detached runner) `CONIN$` cannot open, and mini fails as TS does.
+        if std::fs::OpenOptions::new().write(true).open("CONOUT$").is_err() {
+            assert_eq!(reopen_terminal(), Err(INTERACTIVE_INPUT_ERROR.to_owned()));
+            return;
+        }
+        reopen_terminal().unwrap();
+        assert!(std::io::stdin().is_terminal());
+    }
+}

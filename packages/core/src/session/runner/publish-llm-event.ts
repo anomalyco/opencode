@@ -15,6 +15,7 @@ import { SessionError } from "@opencode/schema/session-error"
 import { Money } from "@opencode/schema/money"
 import { contentFilterError } from "../to-session-error.js"
 import type { Tool } from "../../tool.js"
+import { LiveToolMetadata } from "./live-tool-metadata.js"
 import { stringify } from "../../tool/runtime.js"
 
 type Input = {
@@ -368,6 +369,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     const tool = tools.get(id)
     if (!tool || tool.settled) return false
     tool.settled = true
+    LiveToolMetadata.clear(assistantMessageID, id)
     yield* bus.publish(SessionEvent.Tool.Failed, {
       sessionID: input.sessionID,
       assistantMessageID,
@@ -520,6 +522,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           return yield* Effect.die(new Error(`Duplicate tool result: ${event.id}`))
         }
         tool.settled = true
+        LiveToolMetadata.clear(assistantMessageID, event.id)
         const executed = event.providerExecuted === true || tool.providerExecuted
         if (event.result.type === "error") {
           yield* bus.publish(SessionEvent.Tool.Failed, {
@@ -567,6 +570,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     const tool = tools.get(id)
     if (!tool?.called || tool.settled) return yield* Effect.die(new Error(`Tool progress outside running call: ${id}`))
     tool.progress = update
+    LiveToolMetadata.set(assistantMessageID, id, update)
     yield* bus.publish(SessionEvent.Tool.Progress, {
       sessionID: input.sessionID,
       assistantMessageID,
@@ -583,6 +587,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       return yield* Effect.die(new Error(`Tool execution name changed for ${id}: ${tool.name} -> ${name}`))
     if (tool.settled) return yield* Effect.die(new Error(`Duplicate tool execution: ${id}`))
     tool.settled = true
+    LiveToolMetadata.clear(assistantMessageID, id)
     const content = result.content
     if (!isReadonlyArrayNonEmpty(content)) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
     yield* bus.publish(SessionEvent.Tool.Success, {

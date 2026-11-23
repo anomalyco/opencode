@@ -24,7 +24,7 @@ import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { collectBoundedResponseBody } from "../http-body.js"
 
-export const name = "experimental_image_generate"
+export const name = "generate_image"
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024
 const DOWNLOAD_TIMEOUT = Duration.seconds(30)
 const GENERATE_TIMEOUT = Duration.minutes(30)
@@ -186,7 +186,7 @@ export const Plugin = {
           })
         : yield* Effect.gen(function* () {
             const target = yield* access.authorizeRead(source, context)
-            const info = yield* environment.files
+            const info = yield* target.environment.files
               .stat(target.absolute)
               .pipe(
                 Effect.catchTag(
@@ -196,7 +196,7 @@ export const Plugin = {
               )
             if (info.size > MAX_INPUT_BYTES)
               return yield* new ToolFailure({ message: `${source} is larger than 20 MiB.` })
-            return (yield* environment.files.read(target.absolute)).bytes
+            return (yield* target.environment.files.read(target.absolute)).bytes
           })
       const mime = Mime.detectMedia(bytes)
       if (!mime || !INPUT_TYPES.includes(mime))
@@ -271,6 +271,7 @@ export const Plugin = {
               const stem = target
                 ? target.absolute.slice(0, target.absolute.length - path.extname(target.absolute).length)
                 : path.join(global.tmp, "images", context.sessionID, `image_${Identifier.create(false)}`)
+              const files = target?.environment.files ?? environment.files
 
               yield* permission.assert({
                 action: name,
@@ -284,7 +285,7 @@ export const Plugin = {
                 yield* permission.assert({
                   action: "edit",
                   resources: [target.resource],
-                  save: ["*"],
+                  save: [FileAccess.always(target)],
                   ...Permission.invocation(context),
                 })
               }
@@ -320,7 +321,7 @@ export const Plugin = {
                 // approval; a new file only has to pass the deny rules.
                 if (target && file !== target.absolute) {
                   const actual = yield* access.resolve({ path: file, kind: "file" })
-                  const replaces = yield* environment.files.stat(file).pipe(
+                  const replaces = yield* files.stat(file).pipe(
                     Effect.as(true),
                     Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
                   )
@@ -329,9 +330,11 @@ export const Plugin = {
                     resources: [actual.resource],
                     ...Permission.invocation(context),
                   }
-                  yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
+                  yield* replaces
+                    ? permission.assert({ ...request, save: [FileAccess.always(actual)] })
+                    : permission.assertNotDenied(request)
                 }
-                yield* environment.files.write(file, bytes)
+                yield* files.write(file, bytes)
                 return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`
               }).pipe(
                 // The job keeps this text, so a restart can still deliver the outcome.

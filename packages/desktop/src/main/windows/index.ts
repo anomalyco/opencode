@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { app, BrowserWindow, screen } from "electron"
+import { app, BrowserWindow, nativeTheme, screen } from "electron"
 import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
@@ -32,6 +32,8 @@ import { windowRecovery } from "./recovery"
 import { createRevealDriver } from "./reveal-machine"
 import { restoreEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
+import { refreshTaskbarBadge, setTaskbarBadge } from "./taskbar-badge"
+import { setTaskbarProgress } from "./taskbar-progress"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
 const revealDrivers = new WeakMap<BrowserWindow, ReturnType<typeof createRevealDriver>>()
@@ -57,6 +59,8 @@ export {
   setBackgroundColor,
   setDockIcon,
   setPinchZoomEnabled,
+  setTaskbarBadge,
+  setTaskbarProgress,
   setTitlebar,
   setTrafficLightsPosition,
   setZoomLevel,
@@ -118,6 +122,13 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
   const storage = yield* DesktopStorage.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const wireWindowRecovery = yield* windowRecovery
+
+  // Turning a Windows contrast theme on or off changes the caption buttons' colour (`titlebarOverlay`).
+  if (process.platform === "win32") {
+    const contrastChanged = () => getMainWindows().forEach(updateTitlebar)
+    nativeTheme.on("updated", contrastChanged)
+    yield* Effect.addFinalizer(() => Effect.sync(() => nativeTheme.off("updated", contrastChanged)))
+  }
 
   // The entry module created and showed the first restored window on ready; it is adopted here,
   // before any renderer loads, so the user never waited for the layers to see a window.
@@ -197,6 +208,9 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
     win.once("ready-to-show", contentReady)
 
     if (process.platform === "linux") win.webContents.once("did-finish-load", contentReady)
+
+    // A window moved to a display with another scale draws its badge again at that scale.
+    if (process.platform === "win32") win.on("moved", () => refreshTaskbarBadge(win))
     win.once("closed", () => {
       reveal.dispatch({ type: "window.closed" })
       revealDrivers.delete(win)
@@ -208,6 +222,10 @@ export const mainWindows = Effect.fn("Window.make")(function* (input: {
   const register = (win: BrowserWindow, id: string) => {
     registry.register(id, win)
     win.on("focus", () => registry.focused(id))
+
+    // The first window is created and shown focused before it is registered, so its focus event has already passed.
+    if (win.isFocused()) registry.focused(id)
+
     // Windows emits session-end, but not before-quit, during shutdown and logoff.
     win.on("session-end", input.sessionEnding)
     win.on("closed", () => {

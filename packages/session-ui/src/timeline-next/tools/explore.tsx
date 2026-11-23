@@ -3,7 +3,7 @@ import { Icon } from "@opencode/ui/icon"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createMemo, Show } from "solid-js"
 import { BasicTool } from "../../components/basic-tool"
-import { displayDirectory, ExaOutput, toolInput, urls, type ToolProps } from "../../tools/tool-renderer"
+import { displayFolder, ExaOutput, toolInput, urls, type ToolProps } from "../../tools/tool-renderer"
 
 /**
  * The New timeline's exploring tools. A search shows what was searched, never the raw list it returned, so it has
@@ -18,7 +18,7 @@ export function ListTool(props: ToolProps) {
       {...props}
       icon="bullet-list"
       hasContent={false}
-      trigger={{ title: i18n.t("ui.tool.list"), subtitle: displayDirectory(toolInput(props.input).path ?? "/") }}
+      trigger={{ title: i18n.t("ui.tool.list"), subtitle: displayFolder(toolInput(props.input).path) }}
     />
   )
 }
@@ -34,7 +34,7 @@ export function GlobTool(props: ToolProps) {
       hasContent={false}
       trigger={{
         title: i18n.t("ui.tool.glob"),
-        subtitle: displayDirectory(input().path ?? "/"),
+        subtitle: displayFolder(input().path),
         args: input().pattern === undefined ? [] : ["pattern=" + input().pattern],
       }}
     />
@@ -52,7 +52,7 @@ export function GrepTool(props: ToolProps) {
       hasContent={false}
       trigger={{
         title: i18n.t("ui.tool.grep"),
-        subtitle: displayDirectory(input().path ?? "/"),
+        subtitle: displayFolder(input().path),
         args: [
           ...(input().pattern === undefined ? [] : ["pattern=" + input().pattern]),
           ...(input().include === undefined ? [] : ["include=" + input().include]),
@@ -71,7 +71,7 @@ export function WebFetchTool(props: ToolProps) {
     <BasicTool
       {...props}
       hideDetails
-      icon="window-cursor"
+      icon="select-element"
       trigger={
         <div data-slot="basic-tool-tool-info-structured">
           <div data-slot="basic-tool-tool-info-main">
@@ -105,7 +105,7 @@ export function WebSearchTool(props: ToolProps) {
   return (
     <BasicTool
       {...props}
-      icon="window-cursor"
+      icon="select-element"
       hasContent={urls(props.output).length > 0}
       trigger={{
         title: i18n.t("ui.tool.searchWeb"),

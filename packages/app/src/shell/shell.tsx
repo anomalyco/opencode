@@ -8,6 +8,7 @@ import { Titlebar } from "@/shell/titlebar/titlebar"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ToastRegion } from "@/shell/notifications/toast"
 import { createTipToasts } from "@/tips/model"
+import { useDeepLinks } from "@/shell/deep-links/deep-links"
 import { UploadToastHost } from "@/composer/attachments/uploads"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
@@ -46,6 +47,8 @@ export default function Layout(props: ParentProps) {
 
   createTipToasts()
 
+  useDeepLinks()
+
   const [state, setState] = createStore<{
     tabsWidth: number
     tabsMount: HTMLElement | undefined
@@ -72,7 +75,7 @@ export default function Layout(props: ParentProps) {
   }
 
   let peekSurface: HTMLDivElement | undefined
-  let peekHome: HTMLElement | null | undefined
+  let peekAction: HTMLElement | null | undefined
 
   // The docked sidebar and its peek are one sidebar, shown as far in as whichever has it further.
   const sidebarHidden = () => (sidebar.peek === undefined ? sidebar.closed : Math.min(sidebar.closed, 1 - sidebar.peek))
@@ -99,17 +102,16 @@ export default function Layout(props: ParentProps) {
       peekSurface.style.transform = shift
     }
 
-    // Without traffic lights, Home starts the sidebar's header right where the collapsed toggle floats over a peek, so
-    // it steps past the toggle until a dock carries the toggle to the header's end.
-    if (peeking && peekHome === undefined)
-      peekHome = mount.querySelector<HTMLElement>('[data-slot="sidebar-header"][data-home] > :first-child')
+    // Step the header action past the floating toggle until a dock carries the toggle to the header's end.
+    if (peeking && peekAction === undefined)
+      peekAction = mount.querySelector<HTMLElement>('[data-slot="sidebar-header"][data-has-action] > :first-child')
 
-    if (peekHome)
-      peekHome.style.transform = peeking
+    if (peekAction)
+      peekAction.style.transform = peeking
         ? `translateX(calc(${(rtl ? -1 : 1) * sidebar.closed} * (${collapsedSidebarToggleEnd}px - var(--sidebar-inset-start))))`
         : ""
 
-    if (!peeking) peekHome = undefined
+    if (!peeking) peekAction = undefined
   }
 
   const sidebarMotion = createPanelMotion({
@@ -247,6 +249,7 @@ export default function Layout(props: ParentProps) {
           <aside
             id="vertical-tabs-sidebar"
             data-slot="vertical-tabs-sidebar"
+            data-focus-scope
             data-state={preferences.appearance.sidebarOpen() ? "open" : "closed"}
             data-peek={peek.shown() ? "" : undefined}
             style={{
@@ -262,6 +265,7 @@ export default function Layout(props: ParentProps) {
             <div
               ref={(element) => setState("tabsPanel", element)}
               data-slot="vertical-tabs-panel"
+              data-floating-overlay={peek.shown() ? "" : undefined}
               class="absolute inset-0 overflow-clip [contain:layout_style_paint] [overflow-clip-margin:var(--sidebar-divider-bleed,0px)]"
               classList={{
                 "z-20": organizedSidebar(),
