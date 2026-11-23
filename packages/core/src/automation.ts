@@ -56,7 +56,7 @@ import { KVTable } from "./kv/sql.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { Permission } from "./permission.js"
-import { Plugin } from "./plugin.js"
+import { Plugin } from "./plugin/service.js"
 import { Project } from "./project.js"
 import { Session } from "./session.js"
 import { SessionExecution } from "./session/execution.js"
@@ -93,6 +93,8 @@ export class DisabledError extends Schema.TaggedError<DisabledError>()("Automati
 export interface ListInput {
   readonly sessionID?: SessionSchema.ID
   readonly projectID?: ProjectID
+  /** Only automations in the project that owns this absolute directory, or that ran in it. */
+  readonly directory?: string
 }
 
 export interface Interface {
@@ -100,11 +102,13 @@ export interface Interface {
     input: CreateInput,
     invocation?: Invocation,
   ) => Effect.Effect<Info, InvalidError | DisabledError | Session.NotFoundError | Permission.Error>
-  readonly list: (input?: ListInput) => Effect.Effect<Info[]>
-  readonly get: (id: ID) => Effect.Effect<Info, NotFoundError>
-  readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError>
-  readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError>
-  readonly remove: (id: ID) => Effect.Effect<void, NotFoundError>
+  /** Oldest first, leaving out automations whose directory has automations off. */
+  readonly list: (input?: ListInput) => Effect.Effect<Info[], InvalidError | DisabledError | Session.NotFoundError>
+  /** These fail with DisabledError when the automation's directory has automations off. */
+  readonly get: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
+  readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
+  readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
+  readonly remove: (id: ID) => Effect.Effect<void, NotFoundError | DisabledError>
   /** Whether automations are enabled in the config of `directory`. */
   readonly enabled: (directory: string) => Effect.Effect<boolean, FileSystem.DirectoryNotFoundError>
   /** Runs every automation that is due now, at most once each. */
@@ -304,6 +308,21 @@ const layer = Layer.effect(
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(inDirectory(directory))
+
+    // An automation whose folder is gone stays manageable, so it can be inspected and deleted.
+    const visible = (directory: string) =>
+      settings(directory).pipe(
+        Effect.map((value) => value.enabled),
+        Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(true)),
+      )
+
+    /** The row of an automation callers may manage: it exists and its directory has automations on. */
+    const findVisible = (id: ID) =>
+      Effect.gen(function* () {
+        const row = yield* find(id)
+        if (!(yield* visible(row.directory))) return yield* new DisabledError()
+        return row
+      })
 
     const find = (id: ID) =>
       db
@@ -1162,6 +1181,19 @@ const layer = Layer.effect(
         return toInfo(row)
       }),
       list: Effect.fn("Automation.list")(function* (input) {
+        if (input?.sessionID !== undefined) {
+          const session = yield* sessions.get(input.sessionID)
+          if (!(yield* visible(session.location.directory))) return yield* new DisabledError()
+        }
+        const directory = input?.directory
+        if (directory !== undefined && !path.isAbsolute(directory))
+          return yield* new InvalidError({ reason: `Directory must be an absolute path: ${directory}` })
+        if (directory !== undefined && !(yield* visible(directory))) return yield* new DisabledError()
+        // Reading ownership must not record a Project for a folder that was only asked about.
+        const owner =
+          directory === undefined
+            ? undefined
+            : (yield* projects.resolve(AbsolutePath.make(directory), { persist: false })).id
         const rows = yield* db
           .select()
           .from(AutomationTable)
@@ -1174,13 +1206,20 @@ const layer = Layer.effect(
           .orderBy(asc(AutomationTable.time_created), asc(AutomationTable.id))
           .all()
           .pipe(Effect.orDie)
-        return rows.map(toInfo)
+        // A deleted folder may no longer resolve to its Project, so also match automations that ran there.
+        const matching = rows.filter(
+          (row) => directory === undefined || row.project_id === owner || row.directory === directory,
+        )
+        const shown = new Set(
+          yield* Effect.filter(new Set(matching.map((row) => row.directory)), (item) => visible(item)),
+        )
+        return matching.filter((row) => shown.has(row.directory)).map(toInfo)
       }),
       get: Effect.fn("Automation.get")(function* (id) {
-        return toInfo(yield* find(id))
+        return toInfo(yield* findVisible(id))
       }),
       pause: Effect.fn("Automation.pause")(function* (id) {
-        const row = yield* find(id)
+        const row = yield* findVisible(id)
         if (row.status !== "active") return toInfo(row)
         yield* db
           .update(AutomationTable)
@@ -1192,7 +1231,7 @@ const layer = Layer.effect(
         return toInfo(yield* find(id))
       }),
       resume: Effect.fn("Automation.resume")(function* (id) {
-        const row = yield* find(id)
+        const row = yield* findVisible(id)
         if (row.status !== "paused") return toInfo(row)
         const now = yield* Clock.currentTimeMillis
         // An `at` that fell due while paused runs once, late, unless it has expired; a repeating automation resumes at
@@ -1216,7 +1255,7 @@ const layer = Layer.effect(
         return toInfo(yield* find(id))
       }),
       remove: Effect.fn("Automation.remove")(function* (id) {
-        yield* find(id)
+        yield* findVisible(id)
         yield* db.delete(AutomationTable).where(eq(AutomationTable.id, id)).run().pipe(Effect.orDie)
         yield* FiberMap.remove(watches, id)
       }),
