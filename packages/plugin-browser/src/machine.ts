@@ -577,17 +577,20 @@ export function isGrant(rule: Permission.Rule) {
 }
 
 /**
- * The rule that decides `browser` on `operation`, picked as core's `Permission.evaluate` picks it: the last rule whose
+ * The rule that decides `action` on `resource`, picked as core's `Permission.evaluate` picks it: the last rule whose
  * action and resource patterns both match. Undefined when none matches.
  */
-export function selectBrowserRule(rules: readonly Permission.Rule[], operation: string) {
+export function selectRule(rules: readonly Permission.Rule[], action: string, resource: string) {
   const ignoreCase = process.platform === "win32"
   return rules.findLast(
-    (rule) =>
-      Wildcard.match("browser", rule.action, ignoreCase) && Wildcard.match(operation, rule.resource, ignoreCase),
+    (rule) => Wildcard.match(action, rule.action, ignoreCase) && Wildcard.match(resource, rule.resource, ignoreCase),
   )
 }
 
+/** The rule that decides `browser` on `operation`. */
+export function selectBrowserRule(rules: readonly Permission.Rule[], operation: string) {
+  return selectRule(rules, "browser", operation)
+}
 
 export function isConnectionDisposed(state: ConnectionState) {
   return state.status === "disposed"

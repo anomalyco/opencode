@@ -44,7 +44,8 @@ performance and memory, and recovery after failures. It lists every operation
 from `Browser.Operations`. Like the tools, it is hidden until a desktop browser
 attaches to the session. An attached session lists both to every agent. An agent
 whose configured rules deny the browser, or some of its operations, has each
-such call refused; an `ask` makes each call prompt.
+such call refused, and one that denies `skill: browser` has the skill's load
+refused the same way; an `ask` makes each call prompt.
 
 The plugin entrypoint only composes its two owners: `connection.ts` manages
 desktop attachments and pending RPC requests; `tools.ts` runs the tool workflow.

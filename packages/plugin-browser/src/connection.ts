@@ -12,6 +12,7 @@ import { Tool } from "@opencode/schema/tool"
 import { Cause, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import { BrowserMachine } from "./machine.js"
 import { Browser } from "./rpc.js"
+import { BrowserSkill } from "./skill.js"
 import { BrowserTunnel } from "./tunnel.js"
 
 type Attachment = {
@@ -85,12 +86,15 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
   // allow, and lists the browser tools and their skill to every agent of an attached session, one whose own rules
   // deny the browser included. This hook alone refuses such an agent's calls, by the rules from config, the agent's
   // definition and the session itself: a deny refuses the call. An ask rule is not applied in an attached session, as
-  // on dev, and no matching rule leaves the call allowed.
+  // on dev, and no matching rule leaves the call allowed. A deny of `skill: browser` refuses that skill's load the same
+  // way, so the grant never makes a denied skill loadable.
   yield* ctx.permission.hook("evaluate", (event) => {
-    if (event.action !== "browser" || event.effect === "deny") return Effect.void
+    const skill = event.action === "skill" && event.resources.includes(BrowserSkill.id)
+    if ((event.action !== "browser" && !skill) || event.effect === "deny") return Effect.void
     return ctx.session.get({ sessionID: event.sessionID }).pipe(
       Effect.map((session) => {
-        const denied = denial(rulesFor(session, event.agent), event.resources)
+        const rules = rulesFor(session, event.agent)
+        const denied = skill ? skillDenial(rules) : denial(rules, event.resources)
         if (denied) {
           event.effect = "deny"
           event.message = denied
@@ -448,6 +452,13 @@ function denial(rules: readonly Permission.Rule[], operations: readonly string[]
       ? // No tool has this name any more: it is the permission that covers showing a workspace file.
         "[browser.denied] Showing a workspace file in the browser (permission browser.preview) is denied for this agent by configuration; no action ran. Do not retry it."
       : `[browser.denied] browser.${denied.operation} is denied for this agent by configuration; no action ran. Do not retry it.`
+}
+
+/** The refusal when the rules deny the browser skill, or undefined when they do not. */
+function skillDenial(rules: readonly Permission.Rule[]) {
+  return BrowserMachine.selectRule(rules, "skill", BrowserSkill.id)?.effect === "deny"
+    ? "[browser.denied] The browser skill is denied for this agent by configuration; it cannot be loaded. Do not retry it."
+    : undefined
 }
 
 function writePermissions(

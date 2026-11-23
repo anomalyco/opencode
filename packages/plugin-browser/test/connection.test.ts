@@ -201,6 +201,14 @@ describe("the evaluate hook", () => {
     { name: "an agent no config defines", agent: "ghost", effect: "deny" },
     { name: "the file route, preview denied", agents: { build: [rule("preview", "deny")] }, resources: ["tabs.open", "preview"], effect: "deny" },
     { name: "another action, the browser denied", agents: { build: [rule("*", "deny")] }, action: "read", effect: "allow" },
+    { name: "the browser skill denied", agents: { build: [rule("*", "deny", "skill")] }, action: "skill", resources: ["browser"], effect: "deny" },
+    { name: "the browser skill denied by its id", agents: { build: [rule("browser", "deny", "skill")] }, action: "skill", resources: ["browser"], effect: "deny" },
+    { name: "another skill denied, the browser skill loads", agents: { build: [rule("release", "deny", "skill")] }, action: "skill", resources: ["browser"], effect: "allow" },
+    { name: "the browser skill denied, another skill loads", agents: { build: [rule("browser", "deny", "skill")] }, action: "skill", resources: ["release"], effect: "allow" },
+    { name: "the browser skill denied, a browser call", agents: { build: [rule("browser", "deny", "skill")] }, effect: "allow" },
+    { name: "only the browser denied, the skill loads", agents: { build: [rule("*", "deny")] }, action: "skill", resources: ["browser"], effect: "allow" },
+    { name: "a session rule denying the browser skill", session: [rule("*", "deny", "skill")], action: "skill", resources: ["browser"], effect: "deny" },
+    { name: "an ask rule on every skill", agents: { build: [rule("*", "ask", "skill")] }, action: "skill", resources: ["browser"], effect: "allow" },
   ]
 
   test.each(cases)("$name: $effect", async (row) => {

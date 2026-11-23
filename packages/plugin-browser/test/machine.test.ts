@@ -309,6 +309,21 @@ describe("selectBrowserRule", () => {
   })
 })
 
+describe("selectRule", () => {
+  const rule = (action: string, effect: "allow" | "deny" | "ask", resource = "*") => ({ action, resource, effect })
+
+  test("matches the action as well as the resource", () => {
+    expect(BrowserMachine.selectRule([rule("skill", "deny", "browser")], "skill", "browser")?.effect).toBe("deny")
+    expect(BrowserMachine.selectRule([rule("skill", "deny", "browser")], "browser", "browser")).toBeUndefined()
+    expect(BrowserMachine.selectRule([rule("skill", "deny", "browser")], "skill", "release")).toBeUndefined()
+  })
+
+  test("the last matching rule decides", () => {
+    expect(BrowserMachine.selectRule([rule("*", "deny"), rule("skill", "allow", "browser")], "skill", "browser")?.effect).toBe("allow")
+    expect(BrowserMachine.selectRule([rule("skill", "allow", "browser"), rule("*", "deny")], "skill", "browser")?.effect).toBe("deny")
+  })
+})
+
 describe("requests", () => {
   const live = () => {
     const state = attached()
