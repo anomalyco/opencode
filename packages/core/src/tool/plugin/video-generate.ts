@@ -23,7 +23,7 @@ import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { VideoGeneration } from "../../video-generation.js"
 
-export const name = "experimental_video_generate"
+export const name = "generate_video"
 export const MAX_INPUT_BYTES = 100 * 1024 * 1024
 const CHUNK = 4 * 1024 * 1024
 const URL_TYPES: Record<string, string> = {

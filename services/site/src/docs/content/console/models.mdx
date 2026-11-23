@@ -242,7 +242,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
 
 `gpt-image-2.5-sunburst`, `gemini-nano-banana-2.1`, and `grok-imagine-image-2.0` generate and edit images. They aren't chat models, so they never appear in `/models` or the models endpoint,
 and `opencode/<model-id>` doesn't select them. Call them on their native API with a Console key, or let OpenCode's
-[`experimental_image_generate`](/tools#image-generate) tool use an image model by setting
+[`generate_image`](/tools#image-generate) tool use an image model by setting
 `experimental.image_generate.model`, for example `opencode/gpt-image-2.5-sunburst`.
 
 ```bash
