@@ -8,9 +8,11 @@ import { Effect } from "effect"
 import { AbsolutePath } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Config } from "../config.js"
+import { Flag } from "../flag.js"
 import os from "os"
 import opencodeContent from "./skill/opencode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }
+import { files as apiFiles } from "./skill/opencode/api.js"
 
 export const OpencodeContent = opencodeContent
 export const ReportContent = reportContent
@@ -24,7 +26,10 @@ export const Plugin = define({
   id: "opencode.skill",
   effect: Effect.fn(function* (ctx) {
     const reportContent = yield* reportContentWithDiagnostics(ctx.app)
-    yield* ctx.skill.transform((editor) => {
+    const api = yield* Flag.enabled("opencode_api")
+    const skills = yield* Skill.Service
+    // Skill.Service rather than ctx.skill, whose editor can't add a skill's files.
+    yield* skills.transform((editor) => {
       editor.add(
         Skill.Info.make({
           id: Skill.ID.make("opencode"),
@@ -33,6 +38,7 @@ export const Plugin = define({
           path: AbsolutePath.make("skill://opencode/SKILL.md"),
           content: OpencodeContent,
         }),
+        api ? apiFiles : undefined,
       )
       editor.add(
         Skill.Info.make({
