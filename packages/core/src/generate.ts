@@ -190,7 +190,7 @@ export const layer = Layer.effect(
 
     // A ref no model of this type has: another type's model (422) or no model at all (404).
     const missing = Effect.fnUntraced(function* (ref: Model.Ref, type: Model.Type) {
-      const other = (yield* models.available(["chat", "image", "video", "decision"])).find(
+      const other = (yield* models.available(["chat", "image", "video", "decision", "realtime"])).find(
         (model) => model.providerID === ref.providerID && model.id === ref.id,
       )
       if (other)

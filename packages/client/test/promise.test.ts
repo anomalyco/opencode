@@ -81,7 +81,7 @@ test("exposes every standard HTTP API group", () => {
     "instructions",
     "log",
   ])
-  expect(Object.keys(client.experimental.voice)).toEqual(["models", "session"])
+  expect(Object.keys(client.experimental.voice)).toEqual(["connect", "models", "session"])
   expect(Object.keys(client.experimental.usage)).toEqual(["limits"])
   expect(Object.keys(client.experimental.mcp)).toEqual(["add", "remove", "connect", "disconnect", "client"])
   expect(Object.keys(client.experimental.integration.wellknown)).toEqual(["add"])

@@ -2014,7 +2014,7 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.effect("keeps free models without credentials", () =>
+  it.effect("keeps free models without credentials, but not voice models billed per minute", () =>
     withEnv({ OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Provider.Service
@@ -2024,12 +2024,17 @@ describe("OpencodePlugin", () => {
           catalog.models.update(Provider.ID.opencode, Model.ID.make("free"), (draft) => {
             draft.cost = cost(0)
           })
+          catalog.models.update(Provider.ID.opencode, Model.ID.make("gpt-live-1"), (draft) => {
+            draft.type = "realtime"
+            draft.cost = cost(0)
+          })
         })
         yield* addPlugin()
         expect(required(yield* catalog.get(Provider.ID.opencode)).settings?.apiKey).toBe("public")
         expect(required(yield* catalog.get(Provider.ID.opencode)).activation).toBe("enabled")
         expect((yield* catalog.available()).map((provider) => provider.id)).toContain(Provider.ID.opencode)
         expect(required(yield* models.get(Provider.ID.opencode, Model.ID.make("free"))).enabled).toBe(true)
+        expect(yield* models.available(["realtime"])).toEqual([])
       }),
     ),
   )

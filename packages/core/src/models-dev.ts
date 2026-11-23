@@ -1,5 +1,6 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { Realtime } from "@opencode/ai/experimental"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
 import { ModelsDev } from "@opencode/schema/models-dev"
@@ -148,18 +149,9 @@ const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
 const knownFreeformFormat = Schema.is(FreeformFormat)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
-/** A realtime model that answers in speech and calls tools, by the API it speaks (`live`, `realtime`…). */
-export type VoiceModel = {
-  readonly id: string
-  readonly name: string
-  readonly api: string
-  readonly releaseDate: string
-}
-
 export type Snapshot = {
   readonly info: Provider.Info
   readonly models: readonly Model.Info[]
-  readonly voices?: readonly VoiceModel[]
   readonly environment: readonly string[]
   /** On `openai` only: the model IDs (modes included) each ChatGPT subscription sign-in can use; see `OPENAI_SUBSCRIPTIONS`. */
   readonly subscriptions?: Readonly<Record<string, readonly string[]>>
@@ -231,16 +223,16 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
     const providerID = Provider.ID.make(item.id)
     // Vertex needs separate handling for location and Express Mode.
     const prefer = recommended && providerID !== Provider.ID.googleVertex
-    const voices: VoiceModel[] = []
+    const voices: { model: SourceModel; realtime: Model.Realtime }[] = []
     const sources = Object.entries(item.models).flatMap(([key, value]) => {
       const decoded = decodeModel(value)
       if (Result.isFailure(decoded)) failed.push({ model: `${item.id}/${key}`, issue: decoded.failure })
       const model = Result.isSuccess(decoded) ? decoded.success : undefined
-      // Translation and streaming models are realtime too, but don't answer in speech or call tools.
-      const api = model?.type === "realtime" ? Object.keys(model.api)[0] : undefined
-      const speaks = model?.modalities.output.some((output) => output.startsWith("audio"))
-      if (model && api && speaks && model.capabilities.tools.supported && model.status !== "deprecated")
-        voices.push({ id: model.id, name: model.name, api, releaseDate: model.release_date })
+      const realtime = model && voice(providerID, model)
+      if (model && realtime) {
+        voices.push({ model, realtime })
+        return []
+      }
       // The fetch already asks for these types, but custom files and v1 catalogs may hold any type.
       const target = model && TYPES.includes(model.type) && route(providerID, model, unknown, prefer)
       return model && target ? [{ model, route: target }] : []
@@ -279,11 +271,17 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
         ),
       ]
     })
+    for (const entry of voices) {
+      const model = modelInfo(providerID, { packageName, baseURL }, Model.ID.make(entry.model.id), {
+        model: entry.model,
+        route: { package: packageName },
+      })
+      models.push({ ...model, realtime: entry.realtime })
+    }
     return [
       {
         info,
         models,
-        ...(voices.length > 0 ? { voices } : {}),
         environment: [...item.env],
         ...(providerID === Provider.ID.openai && Object.keys(subscriptions).length > 0 ? { subscriptions } : {}),
       },
@@ -306,6 +304,24 @@ function entries<A>(record: Record<string, unknown> | undefined, decode: (input:
   return Object.entries(record ?? {}).flatMap(([key, value]) =>
     Option.match(decode(value), { onNone: () => [], onSome: (entry) => [[key, entry] as const] }),
   )
+}
+
+/**
+ * A realtime model is kept when it answers in speech, calls tools and speaks the API of a voice protocol for its
+ * provider. OpenCode hosts GPT-Live too. Translation and streaming models are realtime as well, but don't answer in
+ * speech or call tools.
+ */
+function voice(providerID: Provider.ID, model: SourceModel): Model.Realtime | undefined {
+  if (model.type !== "realtime") return undefined
+  const api = Object.keys(model.api)[0]
+  const speaks = model.modalities.output.some((output) => output.startsWith("audio"))
+  if (!speaks || !model.capabilities.tools.supported || model.status === "deprecated") return undefined
+  const engine = Realtime.engines.find(
+    (engine) =>
+      engine.api === api &&
+      (engine.provider === providerID || (engine.id === "openai-live" && providerID === Provider.ID.opencode)),
+  )
+  return engine && { protocol: engine.id, transports: engine.transports }
 }
 
 function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>, recommended: boolean) {

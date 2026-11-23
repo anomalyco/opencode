@@ -2,12 +2,18 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Voice } from "@opencode/core/voice"
-import { InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import { VoiceLegacy } from "@opencode/core/voice-legacy"
+import {
+  InvalidRequestError,
+  ModelNotFoundError,
+  ServiceUnavailableError,
+  UnsupportedModelError,
+} from "@opencode/protocol/errors"
 import { Global } from "@opencode/util/global"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
-import { locationErrors } from "../location"
+import { locationErrors, response } from "../location"
 
 export const VoiceHandler = HttpApiBuilder.group(Api, "server.voice", (handlers) =>
   Effect.gen(function* () {
@@ -16,11 +22,17 @@ export const VoiceHandler = HttpApiBuilder.group(Api, "server.voice", (handlers)
     const services = locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))
     return handlers
       .handle(
+        "voice.connect",
+        Effect.fn("server.voice.connect")(function* (request) {
+          const voice = yield* Voice.Service
+          return yield* response(voice.connect(request.payload).pipe(Effect.mapError(voiceError)))
+        }),
+      )
+      .handle(
         "voice.models",
         Effect.fn("server.voice.models")(
           function* () {
-            const voice = yield* Voice.Service
-            return { data: yield* voice.models() }
+            return { data: yield* VoiceLegacy.models() }
           },
           Effect.provide(services),
           locationErrors,
@@ -30,16 +42,16 @@ export const VoiceHandler = HttpApiBuilder.group(Api, "server.voice", (handlers)
         "voice.session",
         Effect.fn("server.voice.session")(
           function* (request) {
-            const voice = yield* Voice.Service
-            const transport = yield* voice
-              .session(request.payload)
-              .pipe(
-                Effect.mapError((error) =>
-                  error._tag === "Voice.InvalidRequestError"
-                    ? new InvalidRequestError({ message: error.message })
-                    : new ServiceUnavailableError({ message: error.message, service: error.service }),
-                ),
-              )
+            const transport = yield* VoiceLegacy.session(request.payload).pipe(
+              Effect.mapError((error) =>
+                error._tag === "Voice.InvalidRequestError"
+                  ? new InvalidRequestError({ message: error.message })
+                  : new ServiceUnavailableError({
+                      message: error.message,
+                      ...(error.service === undefined ? {} : { service: error.service }),
+                    }),
+              ),
+            )
             return { data: { transport } }
           },
           Effect.provide(services),
@@ -48,3 +60,27 @@ export const VoiceHandler = HttpApiBuilder.group(Api, "server.voice", (handlers)
       )
   }),
 )
+
+function voiceError(error: Voice.Error) {
+  switch (error._tag) {
+    case "Voice.ModelNotFoundError":
+      return new ModelNotFoundError({ providerID: error.providerID, modelID: error.modelID, message: error.message })
+    case "Voice.UnsupportedModelError":
+      return new UnsupportedModelError({
+        providerID: error.providerID,
+        modelID: error.modelID,
+        capability: "realtime",
+        message: error.message,
+      })
+    case "Voice.InvalidRequestError":
+      return new InvalidRequestError({
+        message: error.message,
+        ...(error.field === undefined ? {} : { field: error.field }),
+      })
+    case "Voice.UnavailableError":
+      return new ServiceUnavailableError({
+        message: error.message,
+        ...(error.service === undefined ? {} : { service: error.service }),
+      })
+  }
+}

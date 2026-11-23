@@ -50,9 +50,11 @@ export class VoiceTransport {
   private closeTimer?: ReturnType<typeof setTimeout>
   private levelTimer?: ReturnType<typeof setInterval>
   private model = ""
+  private provider = ""
 
   constructor(
     private readonly inputOptions: {
+      model: Pick<OpenCodeClient["model"], "list">
       voice: OpenCodeClient["experimental"]["voice"]
       event: (event: VoiceEvent) => void
       levels: (input: number, output: number) => void
@@ -237,24 +239,23 @@ export class VoiceTransport {
 
   private async prepareOffer() {
     await this.context.resume()
-    const offered = await this.inputOptions.voice.models({ signal: this.abort.signal })
+    const offered = await this.inputOptions.model.list({ types: ["realtime"] }, { signal: this.abort.signal })
 
-    // The server lists models newest first.
-    const live = offered.models.find(
-      (model) => model.engine === "openai-live" && model.available && model.transports.includes("webrtc"),
-    )
+    // The server lists the voice models it can start, newest first.
+    const live = offered.data.find((model) => model.realtime?.protocol === "openai-live")
 
     if (!live) return this.dispatch({ type: "step.failed", step: "offer", reason: "unavailable" })
-    this.model = live.model
+    this.model = live.id
+    this.provider = live.providerID
 
     await this.peer.setLocalDescription(await this.peer.createOffer())
     this.dispatch({ type: "offer.ready", iceComplete: this.peer.iceGatheringState === "complete" })
   }
 
   private async negotiate(viewing: VoiceJoinTarget, tail: string) {
-    const response = await this.inputOptions.voice.session(
+    const response = await this.inputOptions.voice.connect(
       {
-        model: this.model,
+        model: { id: this.model, providerID: this.provider },
         session: {
           model: this.model,
           instructions: liveInstructions,
@@ -274,9 +275,9 @@ export class VoiceTransport {
       { signal: this.abort.signal },
     )
 
-    if (response.transport.type !== "webrtc")
+    if (response.data.type !== "webrtc")
       return this.dispatch({ type: "step.failed", step: "negotiating", reason: "connection" })
-    await this.peer.setRemoteDescription({ type: "answer", sdp: response.transport.sdp })
+    await this.peer.setRemoteDescription({ type: "answer", sdp: response.data.sdp })
     this.dispatch({ type: "answer.applied" })
   }
 

@@ -5741,6 +5741,142 @@
         }
       }
     },
+    "/api/experimental/voice/connect": {
+      "post": {
+        "tags": ["voice"],
+        "operationId": "experimental.voice.connect",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/VoiceTransport"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ModelNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ModelNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UnsupportedModelError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedModelErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Start a voice session with a realtime model from model.list, using the provider's credentials on the server, and return the WebRTC SDP answer or WebSocket ephemeral token. Experimental: may change without compatibility guarantees.",
+        "summary": "Connect a voice session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "$ref": "#/components/schemas/Model.Ref"
+                  },
+                  "session": {
+                    "type": "object"
+                  },
+                  "transport": {
+                    "$ref": "#/components/schemas/VoiceConnectTransportInput"
+                  }
+                },
+                "required": ["model", "transport"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/experimental/voice/models": {
       "get": {
         "tags": ["voice"],
@@ -5799,8 +5935,9 @@
             }
           }
         },
-        "description": "List supported voice models, their transports, and whether the server has a usable API key for each provider.",
-        "summary": "List voice models"
+        "description": "Deprecated: list realtime models with model.list instead.",
+        "summary": "List voice models (deprecated)",
+        "deprecated": true
       }
     },
     "/api/experimental/voice/session": {
@@ -5861,8 +5998,9 @@
             }
           }
         },
-        "description": "Create a server-brokered voice session using the server's configured provider credentials and return the WebRTC SDP answer or WebSocket ephemeral token.",
-        "summary": "Create voice session",
+        "description": "Deprecated: use POST /api/experimental/voice/connect instead.",
+        "summary": "Create voice session (deprecated)",
+        "deprecated": true,
         "requestBody": {
           "content": {
             "application/json": {
@@ -22079,6 +22217,9 @@
           "package": {
             "type": "string"
           },
+          "realtime": {
+            "$ref": "#/components/schemas/Model.Realtime"
+          },
           "settings": {
             "$ref": "#/components/schemas/Model.Settings"
           },
@@ -22169,6 +22310,23 @@
         "type": "string",
         "enum": ["assets", "state", "root"]
       },
+      "Model.Realtime": {
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "type": "string"
+          },
+          "transports": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["webrtc", "websocket"]
+            }
+          }
+        },
+        "required": ["protocol", "transports"],
+        "additionalProperties": false
+      },
       "Model.ReasoningField": {
         "anyOf": [
           {
@@ -22220,7 +22378,7 @@
         "anyOf": [
           {
             "type": "string",
-            "enum": ["chat", "decision", "image", "video"]
+            "enum": ["chat", "decision", "image", "video", "realtime"]
           },
           {
             "type": "string"
@@ -26830,16 +26988,39 @@
         "required": ["_tag", "videoID", "message"],
         "additionalProperties": false
       },
+      "VoiceConnectTransportInput": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/VoiceConnectWebRTCTransportInput"
+          },
+          {
+            "$ref": "#/components/schemas/VoiceWebSocketTransportInput"
+          }
+        ]
+      },
+      "VoiceConnectWebRTCTransportInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["webrtc"]
+          },
+          "sdp": {
+            "type": "string"
+          },
+          "dcid": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["type", "sdp"],
+        "additionalProperties": false
+      },
       "VoiceModel": {
         "type": "object",
         "properties": {
           "model": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "engine": {
             "type": "string"
           },
           "provider": {
@@ -26855,7 +27036,7 @@
             "type": "boolean"
           }
         },
-        "required": ["model", "name", "engine", "provider", "transports", "available"],
+        "required": ["model", "provider", "transports", "available"],
         "additionalProperties": false
       },
       "VoiceModelsResponse": {

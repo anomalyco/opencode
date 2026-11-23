@@ -24,6 +24,7 @@ const layer = AppNodeBuilder.build(
 const free = Model.ID.make("big-pickle")
 const paid = Model.ID.make("paid")
 const local = Model.ID.make("local")
+const voice = Model.ID.make("gpt-live-1")
 const other = Provider.ID.make("other")
 
 for (const flag of [undefined, "0", "1", "true"]) {
@@ -52,6 +53,10 @@ for (const flag of [undefined, "0", "1", "true"]) {
                 },
               ]
             })
+            // Billed per minute, so it has no token price but isn't free.
+            editor.models.update(providerID, voice, (model) => {
+              model.type = "realtime"
+            })
             editor.update(other, () => {})
             editor.models.update(other, local, () => {})
           })
@@ -62,6 +67,7 @@ for (const flag of [undefined, "0", "1", "true"]) {
           expect((yield* models.default())?.id).toBe(disabled ? paid : free)
           expect((yield* models.get(providerID, free))?.id).toBe(disabled ? undefined : free)
           expect((yield* models.small(providerID))?.id).toBe(disabled ? undefined : free)
+          expect((yield* models.available(["realtime"])).map((model) => model.id)).toEqual([voice])
           if (!disabled) return
           const session = Session.Info.make({
             id: Session.ID.make("ses_free_model"),

@@ -956,6 +956,9 @@ describe("ChatGPTPlugin", () => {
         })
         for (const id of ["gpt-5.5", "gpt-6-sol", "gpt-7"])
           catalog.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-live-1"), (model) => {
+          model.type = "realtime"
+        })
       })
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
@@ -968,7 +971,7 @@ describe("ChatGPTPlugin", () => {
         }),
       })
       yield* addPlugin().pipe(
-        Effect.provideService(ModelsDev.Service, subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } })),
+        Effect.provideService(ModelsDev.Service, subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7", "gpt-live-1"] } })),
       )
       expect(
         (yield* models.available())
@@ -976,6 +979,7 @@ describe("ChatGPTPlugin", () => {
           .map((model) => model.id)
           .sort(),
       ).toEqual([Model.ID.make("gpt-6-sol"), Model.ID.make("gpt-7")])
+      expect(yield* models.available(["realtime"])).toEqual([])
     }),
   )
 

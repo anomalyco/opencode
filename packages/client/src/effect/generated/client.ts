@@ -125,6 +125,8 @@ import type {
   ExperimentalGenerateVideoGetOutput,
   ExperimentalGenerateDecisionsInput,
   ExperimentalGenerateDecisionsOutput,
+  ExperimentalVoiceConnectInput,
+  ExperimentalVoiceConnectOutput,
   ExperimentalVoiceModelsOutput,
   ExperimentalVoiceSessionInput,
   ExperimentalVoiceSessionOutput,
@@ -1009,6 +1011,14 @@ const adaptGroupExperimentalGenerate = (raw: RawClient["server.generate"]) => ({
   decisions: EndpointExperimentalGenerateDecisions(raw),
 })
 
+const EndpointExperimentalVoiceConnect = (raw: RawClient["server.voice"]) => (input: ExperimentalVoiceConnectInput) =>
+  preserveEffect<ExperimentalVoiceConnectOutput>()(
+    raw["voice.connect"]({
+      query: { location: input["location"] },
+      payload: { model: input["model"], session: input["session"], transport: input["transport"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointExperimentalVoiceModels = (raw: RawClient["server.voice"]) => () =>
   preserveEffect<ExperimentalVoiceModelsOutput>()(
     raw["voice.models"]({}).pipe(
@@ -1028,6 +1038,7 @@ const EndpointExperimentalVoiceSession = (raw: RawClient["server.voice"]) => (in
   )
 
 const adaptGroupExperimentalVoice = (raw: RawClient["server.voice"]) => ({
+  connect: EndpointExperimentalVoiceConnect(raw),
   models: EndpointExperimentalVoiceModels(raw),
   session: EndpointExperimentalVoiceSession(raw),
 })

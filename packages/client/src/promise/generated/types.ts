@@ -178,7 +178,7 @@ export type SessionMessageToolStateRunning1 = {
   metadata: { [x: string]: JsonValue }
 }
 
-export type ModelType = "chat" | "decision" | "image" | "video" | (string & {})
+export type ModelType = "chat" | "decision" | "image" | "video" | "realtime" | (string & {})
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
@@ -187,6 +187,8 @@ export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
 export type ModelCacheFormat = "anthropic" | "alibaba"
 
 export type ModelMediaInput = "assets" | "state" | "root"
+
+export type ModelRealtime = { protocol: string; transports: Array<"webrtc" | "websocket"> }
 
 export type ToolFreeformFormat = "text" | "regex" | "lark"
 
@@ -218,11 +220,11 @@ export type GenerateScoreAnswer = {
 
 export type GenerateErrorAnswer = { type: "error"; name: string; reason: string; message?: string }
 
-export type VoiceTransportType = "webrtc" | "websocket"
-
 export type VoiceWebRTCTransport = { type: "webrtc"; sdp: string }
 
 export type VoiceWebSocketTransport = { type: "websocket"; url: string; token: string; expiresAt: number }
+
+export type VoiceTransportType = "webrtc" | "websocket"
 
 export type IntegrationID = string
 
@@ -768,16 +770,9 @@ export type GenerateChoiceAnswer = {
   confidence: number
 }
 
-export type VoiceModel = {
-  model: string
-  name: string
-  engine: string
-  provider: string
-  transports: Array<VoiceTransportType>
-  available: boolean
-}
-
 export type VoiceTransport = VoiceWebRTCTransport | VoiceWebSocketTransport
+
+export type VoiceModel = { model: string; provider: string; transports: Array<VoiceTransportType>; available: boolean }
 
 export type IntegrationCommandMethod = {
   id: IntegrationMethodID
@@ -2264,9 +2259,9 @@ export type GenerateDecisionAnswer =
   | GenerateScoreAnswer
   | GenerateErrorAnswer
 
-export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string | undefined } }
-
 export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
+
+export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string | undefined } }
 
 export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
 
@@ -2408,6 +2403,7 @@ export type ModelInfo = {
   name: string
   compatibility?: ModelCompatibility
   package?: string
+  realtime?: ModelRealtime
   settings?: ModelSettings
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
@@ -4081,7 +4077,7 @@ export type MessageListOutput = SessionMessagesResponse
 
 export type ModelListInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | "video" | (string & {})> | undefined
+  readonly types?: ReadonlyArray<"chat" | "decision" | "image" | "video" | "realtime" | (string & {})> | undefined
 }
 
 export type ModelListOutput = { location: LocationPublicRef; data: Array<ModelInfo> }
@@ -4158,6 +4154,17 @@ export type ExperimentalGenerateDecisionsInput = {
 }
 
 export type ExperimentalGenerateDecisionsOutput = GenerateDecisionsResponse["data"]
+
+export type ExperimentalVoiceConnectInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+  readonly session?: { readonly [x: string]: JsonValue } | undefined
+  readonly transport:
+    | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number }
+    | { readonly type: "websocket" }
+}
+
+export type ExperimentalVoiceConnectOutput = { location: LocationPublicRef; data: VoiceTransport }
 
 export type ExperimentalVoiceModelsOutput = VoiceModelsResponse["data"]
 

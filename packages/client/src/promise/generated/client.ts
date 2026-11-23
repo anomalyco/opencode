@@ -119,6 +119,8 @@ import type {
   ExperimentalGenerateVideoGetOutput,
   ExperimentalGenerateDecisionsInput,
   ExperimentalGenerateDecisionsOutput,
+  ExperimentalVoiceConnectInput,
+  ExperimentalVoiceConnectOutput,
   ExperimentalVoiceModelsOutput,
   ExperimentalVoiceSessionInput,
   ExperimentalVoiceSessionOutput,
@@ -1267,6 +1269,19 @@ export function make(options: ClientOptions) {
           ).then((value) => value.data),
       },
       voice: {
+        connect: (input: ExperimentalVoiceConnectInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalVoiceConnectOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/voice/connect`,
+              query: { location: input["location"] },
+              body: { model: input["model"], session: input["session"], transport: input["transport"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 422, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
         models: (requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalVoiceModelsOutput }>(
             {
