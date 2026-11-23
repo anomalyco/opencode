@@ -504,7 +504,7 @@ function createModelSelectorController(input: {
         .map(([category, items]) => ({ category, items }))
         .sort(sortModelGroups),
     current: () => {
-      const value = model.current()
+      const value = model.standard?.() ?? model.current()
 
       return value ? modelKey(value) : undefined
     },

@@ -26,6 +26,8 @@ export function DialogFreeModels(props: {
   const options = createMemo(() => {
     const all = (data.location.model.list(location.ref) ?? [])
       .filter((model) => model.status !== "deprecated" && isFreeModel(model))
+      // A model's faster and slower speeds are chosen with the speed selector.
+      .filter((model) => !local.model.isSpeed({ providerID: model.providerID, modelID: model.id }))
       .map((model) => {
         const value = { providerID: model.providerID, modelID: model.id }
         return {
@@ -71,7 +73,7 @@ export function DialogFreeModels(props: {
       onFilter={setQuery}
       flat={true}
       skipFilter={true}
-      current={local.model.current()}
+      current={local.model.standard()}
     />
   )
 }
