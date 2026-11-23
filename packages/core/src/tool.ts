@@ -387,7 +387,13 @@ const layer = Layer.effect(
               }
               const initialName = input.definitions?.get(input.call.name)?.name ?? input.call.name
               const initial = initialName === "execute" && codemode ? codemode.tool : direct.get(initialName)
-              const event = yield* beforeExecute(input.call.name, initial, input.call.input, context)
+              // Hooks and the job see execute's options line as its `timeout` and `background` fields.
+              const event = yield* beforeExecute(
+                input.call.name,
+                initial,
+                full && initialName === "execute" ? yield* CodeModeTool.splitOptions(input.call.input) : input.call.input,
+                context,
+              )
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
               if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
@@ -571,7 +577,7 @@ export const node = makeLocationNode({
   deps: [PluginHooks.node, Image.node, Permission.node, Flag.node],
 })
 
-// Only read once the input has the shape the full_codemode schema accepts; the tool still validates it when it runs.
+// Read after the `tool.execute.before` hook, which may have changed the fields `splitOptions` set.
 const executeOptions = (input: unknown): CodeModeJob.Options | undefined => {
   if (typeof input !== "object" || input === null) return undefined
   const { timeout, background } = input as Record<string, unknown>

@@ -107,6 +107,45 @@ describe("Code Mode path and Bun", () => {
   )
 })
 
+describe("execute options line", () => {
+  const run = (code: string) =>
+    Effect.gen(function* () {
+      const tools = yield* Tool.Service
+      const snapshot = yield* tools.snapshot(undefined, { services: codeModeServices("/session/dir") })
+      const execute = snapshot.definitions.find((definition) => definition.name === "execute")!
+      const handoffs: Array<CodeModeJob.Options | undefined> = []
+      const result = yield* snapshot
+        .execute({ ...call("execute"), call: { type: "tool-call", id: "call-options", name: "execute", input: { code } } })
+        .pipe(
+          Effect.provideService(CodeModeJob.Current, (context, run, options) =>
+            Effect.sync(() => handoffs.push(options)).pipe(Effect.andThen(run(context))),
+          ),
+        )
+      return { execute, handoffs, output: JSON.parse(result.output.output) }
+    })
+
+  codeModeIt.effect("with full_codemode, the first line's options reach the job and execute takes only code", () =>
+    Effect.gen(function* () {
+      const result = yield* run('// @exec: {"timeout": 5000}\nreturn 1')
+      expect(Object.keys(result.execute.inputSchema.properties ?? {})).toEqual(["code"])
+      expect(result.execute.freeform).toEqual({ type: "text" })
+      expect(result.handoffs).toEqual([{ timeout: 5000 }])
+      expect(result.output).toBe(1)
+      expect((yield* run('// @exec: {"timeout": "5s"}\nreturn 1').pipe(Effect.flip)).message).toContain(
+        "must be followed by a JSON object",
+      )
+    }),
+  )
+
+  it.effect("without full_codemode, the line is only a comment", () =>
+    Effect.gen(function* () {
+      const result = yield* run('// @exec: {"timeout": "5s"}\nreturn 1')
+      expect(result.handoffs).toEqual([undefined])
+      expect(result.output).toBe(1)
+    }),
+  )
+})
+
 describe("Tool", () => {
   it.effect("reads the current editor tools by effective name", () =>
     Effect.gen(function* () {
