@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { radarDots, radarFrames, radarOpacity, radarSpriteSvg, radarStylesheet } from "./spinner-radar"
+import { spinnerCss } from "../../script/generate-spinner"
+import { radarDots, radarOpacity } from "./spinner-radar"
 
 test("the radar's dots fit the viewBox and light within one loop", () => {
   const dots = radarDots()
@@ -52,13 +53,9 @@ test("the radar's brightest dot is never more than half a dot from its head", ()
   })
 })
 
-test("the sprite strip bakes every frame into one vertical SVG mask", () => {
-  const svg = radarSpriteSvg()
-  const css = radarStylesheet("radar")
+// The committed frames must be the radar's: run `bun run generate:spinner` after changing spinner-radar.ts.
+test("spinner-frames.css is what generate-spinner.ts writes", async () => {
+  const committed = await Bun.file(new URL("./spinner-frames.css", import.meta.url)).text()
 
-  expect(svg).toContain(`viewBox='0 0 16 ${radarFrames * 16}'`)
-  expect(svg).toContain("fill-opacity='1'")
-  expect((svg.match(/<rect /g) ?? []).length).toBe(radarFrames * 25)
-  expect(css).toContain("@keyframes radar{")
-  expect(css).toContain(`steps(${radarFrames},end)`)
+  expect(committed.replaceAll("\r\n", "\n")).toBe(spinnerCss())
 })
