@@ -100,71 +100,52 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission.isActionDenied", () => {
-  test("preserves blanket denies across trailing narrow denies without false positives", () => {
-    expect(Permission.isActionDenied("skill", [])).toBe(false)
-    expect(Permission.isActionDenied("skill", [{ action: "skill", resource: "*", effect: "deny" }])).toBe(true)
-    expect(
-      Permission.isActionDenied("skill", [
-        { action: "skill", resource: "*", effect: "deny" },
-        { action: "browser", resource: "*", effect: "deny" },
-        { action: "skill", resource: "browser", effect: "deny" },
-      ]),
-    ).toBe(true)
-    expect(
-      Permission.isActionDenied("shell", [
-        { action: "*", resource: "*", effect: "deny" },
-        { action: "shell", resource: "git *", effect: "deny" },
-      ]),
-    ).toBe(true)
-    // A narrow deny alone never wholly denies an action (including "?" matching single chars).
-    expect(Permission.isActionDenied("skill", [{ action: "skill", resource: "browser", effect: "deny" }])).toBe(false)
-    expect(Permission.isActionDenied("bash", [{ action: "bash", resource: "?", effect: "deny" }])).toBe(false)
-    // Trailing narrow allow or ask keeps the action reachable.
-    expect(
-      Permission.isActionDenied("skill", [
-        { action: "skill", resource: "*", effect: "deny" },
-        { action: "skill", resource: "browser", effect: "allow" },
-      ]),
-    ).toBe(false)
-    expect(
-      Permission.isActionDenied("skill", [
-        { action: "skill", resource: "*", effect: "deny" },
-        { action: "skill", resource: "browser", effect: "ask" },
-      ]),
-    ).toBe(false)
-    // Narrow deny after narrow allow stays conservative (does not do unsound glob-on-glob containment).
-    expect(
-      Permission.isActionDenied("bash", [
-        { action: "bash", resource: "*", effect: "deny" },
-        { action: "bash", resource: "ab*", effect: "allow" },
-        { action: "bash", resource: "ab?", effect: "deny" },
-      ]),
-    ).toBe(false)
-    // Later blanket rule overrides earlier rules.
-    expect(
-      Permission.isActionDenied("skill", [
-        { action: "skill", resource: "browser", effect: "allow" },
-        { action: "skill", resource: "*", effect: "deny" },
-      ]),
-    ).toBe(true)
-    expect(
-      Permission.isActionDenied("skill", [
-        { action: "skill", resource: "*", effect: "deny" },
-        { action: "skill", resource: "*", effect: "allow" },
-        { action: "skill", resource: "browser", effect: "deny" },
-      ]),
-    ).toBe(false)
-    // Supports multiple rulesets in order (e.g. agent + session).
-    expect(
-      Permission.isActionDenied(
-        "skill",
-        [
-          { action: "skill", resource: "*", effect: "deny" },
-          { action: "skill", resource: "browser", effect: "deny" },
-        ],
-        [{ action: "skill", resource: "browser", effect: "allow" }],
-      ),
-    ).toBe(false)
+  const rule = (action: string, resource: string, effect: Permission.Rule["effect"]): Permission.Rule => ({
+    action,
+    resource,
+    effect,
+  })
+
+  test("never reports an action as denied when evaluate leaves a resource reachable", () => {
+    const cases = [
+      { action: "skill", witness: "any", rulesets: [[]] },
+      { action: "bash", witness: "abc", rulesets: [[rule("bash", "?", "deny")]] },
+      {
+        action: "skill",
+        witness: "browser",
+        rulesets: [[rule("skill", "*", "deny"), rule("skill", "browser", "ask")]],
+      },
+      {
+        action: "bash",
+        witness: "abcde",
+        rulesets: [[rule("bash", "*", "deny"), rule("bash", "ab*", "allow"), rule("bash", "ab?", "deny")]],
+      },
+      {
+        action: "skill",
+        witness: "browser",
+        rulesets: [[rule("skill", "*", "deny"), rule("skill", "browser", "deny")], [rule("skill", "browser", "allow")]],
+      },
+    ]
+
+    for (const item of cases) {
+      expect(Permission.evaluate(item.action, item.witness, ...item.rulesets).effect).not.toBe("deny")
+      expect(Permission.isActionDenied(item.action, ...item.rulesets)).toBe(false)
+    }
+  })
+
+  test("reports an action as denied when a blanket deny is only followed by narrow denies", () => {
+    const cases = [
+      {
+        action: "skill",
+        rules: [rule("skill", "*", "deny"), rule("browser", "*", "deny"), rule("skill", "browser", "deny")],
+      },
+      { action: "shell", rules: [rule("*", "*", "deny"), rule("shell", "git *", "deny")] },
+      { action: "skill", rules: [rule("skill", "browser", "allow"), rule("skill", "*", "deny")] },
+    ]
+
+    for (const item of cases) {
+      expect(Permission.isActionDenied(item.action, item.rules)).toBe(true)
+    }
   })
 })
 

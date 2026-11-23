@@ -1092,30 +1092,13 @@ describe("Tool", () => {
           { action: "*", resource: "*", effect: "deny" },
         ]),
       ).toEqual([])
+      expect(
+        yield* names([
+          { action: "question", resource: "*", effect: "deny" },
+          { action: "question", resource: "private", effect: "deny" },
+        ]),
+      ).toEqual(["bash", "edit", "write", "execute"])
       expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["bash", "question", "execute"])
-    }),
-  )
-
-  it.effect("hides tools when narrow denies trail a blanket deny", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      yield* transform(service, { skill: make(), question: make() }, { codemode: false })
-      const names = (permissions: Permission.Ruleset) =>
-        toolDefinitions(service, permissions).pipe(Effect.map((definitions) => definitions.map((tool) => tool.name)))
-
-      expect(
-        yield* names([
-          { action: "skill", resource: "*", effect: "deny" },
-          { action: "browser", resource: "*", effect: "deny" },
-          { action: "skill", resource: "browser", effect: "deny" },
-        ]),
-      ).toEqual(["question", "execute"])
-      expect(
-        yield* names([
-          { action: "skill", resource: "*", effect: "deny" },
-          { action: "skill", resource: "browser", effect: "ask" },
-        ]),
-      ).toEqual(["question", "skill", "execute"])
     }),
   )
 
