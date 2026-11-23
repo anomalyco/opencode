@@ -38,14 +38,14 @@ describe("selectBreakout", () => {
     const breakout = selectBreakout([launch("fading", [0.05, 0.3, 0.2, 0.08, 0.01])])
 
     expect(breakout?.peak).toMatchObject({ date: "2026-11-17", share: 0.3, users: 2 })
-    expect(breakout?.peakDay).toBe("second")
+    expect(breakout?.peakDay).toBe(2)
     expect(breakout?.days.map((day) => day.share)).toEqual([0.05, 0.3, 0.2, 0.08])
   })
 
-  test("counts the ordinal from the release date", () => {
+  test("counts the peak day from the release date", () => {
     const breakout = selectBreakout([launch("late", [0.05, 0.3, 0.2], "2026-11-10")])
 
-    expect(breakout?.peakDay).toBe("eighth")
+    expect(breakout?.peakDay).toBe(8)
   })
 
   test("leaves models with no usage on the last complete day out of also new", () => {

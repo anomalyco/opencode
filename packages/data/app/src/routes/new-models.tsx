@@ -14,7 +14,11 @@ type NewModel = HomePageData["newModels"][number]
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-export function NewModelsSection(props: { data: NewModel[]; catalogLabs: readonly string[] }) {
+export function NewModelsSection(props: {
+  data: NewModel[]
+  catalogLabs: readonly string[]
+  colorFor: (model: string) => string
+}) {
   const language = useLanguage()
   const breakout = createMemo(() => selectBreakout(props.data))
 
@@ -35,7 +39,7 @@ export function NewModelsSection(props: { data: NewModel[]; catalogLabs: readonl
             <a
               data-slot="breakout-card"
               href={language.route(model().path)}
-              aria-label={`${model().name}: ${formatShare(peak().share)} of daily tokens on ${formatDay(peak().date)}`}
+              style={{ "--breakout-color": props.colorFor(model().model) }}
             >
               <span data-slot="breakout-summary">
                 <span data-slot="breakout-model">
@@ -45,42 +49,51 @@ export function NewModelsSection(props: { data: NewModel[]; catalogLabs: readonl
                     <em>
                       {known() ? `${model().author}, released` : "Released"} {formatDay(model().releaseDate)}
                     </em>
+                    <Show when={model().free}>
+                      <em>Free on OpenCode</em>
+                    </Show>
                   </span>
                 </span>
-                <Show when={model().free}>
-                  <span data-slot="breakout-label">Free on OpenCode</span>
-                </Show>
-                <span data-slot="breakout-share">{formatShare(peak().share)}</span>
-                <span data-slot="breakout-caption">of daily tokens on its {item().peakDay} day</span>
+                <span data-slot="breakout-share">{Math.round(peak().share * 100)}%</span>
+                <span data-slot="breakout-caption">
+                  of daily tokens on {formatDay(peak().date)}, day {item().peakDay}
+                </span>
                 <span data-slot="breakout-stats">
                   <span>
                     <b>#{peak().rank}</b>
-                    <small>model on {formatDay(peak().date)}</small>
+                    <small>model that day</small>
                   </span>
                   <span>
                     <b>{formatCount(peak().users)}</b>
-                    <small>users on {formatDay(peak().date)}</small>
+                    <small>users that day</small>
                   </span>
                 </span>
               </span>
               <span
                 data-slot="breakout-chart"
                 aria-hidden="true"
-                data-crowded={days().length > 7 ? "true" : undefined}
-                data-dense={days().length > 14 ? "true" : undefined}
-                style={{ "grid-template-columns": `repeat(${days().length}, minmax(0, 1fr))` }}
+                style={{ "grid-template-columns": `repeat(${Math.max(days().length, 7)}, minmax(0, 1fr))` }}
               >
                 <For each={days()}>
                   {(day, index) => (
                     <span data-slot="breakout-day" data-peak={day === peak() ? "true" : undefined}>
                       <span data-slot="breakout-plot">
                         <i style={{ height: `${(day.share / peak().share) * 100}%` }}>
-                          <b>{formatShare(day.share)}</b>
+                          <Show when={days().length <= 7 || day === peak()}>
+                            <b>{formatShare(day.share)}</b>
+                          </Show>
                         </i>
                       </span>
                       <small data-end={index() > 0 ? "true" : undefined}>
                         {index() === 0 || index() === days().length - 1 ? formatDay(day.date) : ""}
                       </small>
+                    </span>
+                  )}
+                </For>
+                <For each={Array.from({ length: Math.max(7 - days().length, 0) })}>
+                  {() => (
+                    <span data-slot="breakout-day">
+                      <span data-slot="breakout-plot" />
                     </span>
                   )}
                 </For>

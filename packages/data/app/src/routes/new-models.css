@@ -1,5 +1,4 @@
 [data-page="stats"] [data-section="new-models"] {
-  --breakout-color: #a684ff;
   position: relative;
   box-sizing: border-box;
   box-shadow:
@@ -11,41 +10,56 @@
 }
 
 [data-page="stats"] [data-slot="breakout-card"] {
+  --breakout-bg: var(--stats-layer);
+  --breakout-bar: color-mix(in srgb, var(--stats-faint) 75%, var(--breakout-bg));
+  --breakout-peak: var(--stats-muted);
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
   border: 1px solid var(--stats-line-strong);
-  background: var(--stats-layer);
+  background: var(--breakout-bg);
   color: var(--stats-text);
   text-decoration: none;
   transition: background-color 140ms ease;
 }
 
-[data-page="stats"] [data-slot="breakout-card"]:hover {
-  background: var(--stats-layer-2);
+[data-page="stats"] [data-slot="breakout-card"]:focus-visible {
+  --breakout-bar: color-mix(in srgb, var(--breakout-color) 45%, var(--breakout-bg));
+  --breakout-peak: var(--breakout-color);
+}
+
+@media (hover: hover) {
+  [data-page="stats"] [data-slot="breakout-card"]:hover {
+    --breakout-bg: var(--stats-layer-2);
+    --breakout-bar: color-mix(in srgb, var(--breakout-color) 45%, var(--breakout-bg));
+    --breakout-peak: var(--breakout-color);
+  }
 }
 
 [data-page="stats"] [data-slot="breakout-card"]:focus-visible,
 [data-page="stats"] [data-slot="breakout-also"] a:focus-visible {
-  outline: 1px solid var(--stats-accent);
+  outline: 2px solid var(--stats-accent);
   outline-offset: 2px;
 }
 
 [data-page="stats"] [data-slot="breakout-summary"] {
   display: flex;
   flex-direction: column;
-  padding: 32px 16px 32px 32px;
+  padding: 32px 16px 16px 32px;
 }
 
+/* Tall enough for the free line, so the number stays put with or without it. */
 [data-page="stats"] [data-slot="breakout-model"] {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
+  min-height: 62px;
 }
 
 [data-page="stats"] [data-slot="breakout-model"] svg {
   flex: none;
   width: 32px;
   height: 32px;
+  margin-top: 6px;
 }
 
 [data-page="stats"] [data-slot="breakout-model"] > span {
@@ -56,32 +70,23 @@
 [data-page="stats"] [data-slot="breakout-model"] strong {
   font-size: 20px;
   font-weight: 500;
-  line-height: 1.3;
+  line-height: 26px;
 }
 
 [data-page="stats"] [data-slot="breakout-model"] em {
   color: var(--stats-muted);
   font-size: 12px;
   font-style: normal;
-}
-
-[data-page="stats"] [data-slot="breakout-label"] {
-  margin-top: 28px;
-  color: color-mix(in srgb, var(--breakout-color) 65%, var(--stats-text));
-  font-size: 12px;
-  text-transform: uppercase;
+  line-height: 18px;
 }
 
 [data-page="stats"] [data-slot="breakout-share"] {
-  margin-top: 28px;
+  margin-top: 24px;
+  margin-left: -0.07em;
   font-size: 92px;
   font-weight: 500;
   line-height: 1.05;
   letter-spacing: -0.04em;
-}
-
-[data-page="stats"] [data-slot="breakout-label"] + [data-slot="breakout-share"] {
-  margin-top: 4px;
 }
 
 [data-page="stats"] [data-slot="breakout-caption"] {
@@ -112,6 +117,7 @@
 [data-page="stats"] [data-slot="breakout-stats"] small {
   color: var(--stats-faint);
   font-size: 11px;
+  line-height: 17px;
 }
 
 [data-page="stats"] [data-slot="breakout-chart"] {
@@ -122,10 +128,13 @@
   padding: 32px 32px 16px 16px;
 }
 
+/* Snaps each day to whole dot columns, so no dot is cut at its edge. Very narrow days keep their width. */
 [data-page="stats"] [data-slot="breakout-day"] {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) 24px;
+  justify-self: center;
+  width: max(calc(round(down, 100% - 2px, 6px) + 2px), min(100%, 8px));
   min-width: 0;
 }
 
@@ -138,7 +147,12 @@
 
 [data-page="stats"] [data-slot="breakout-plot"]::before {
   position: absolute;
-  inset: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(round(down, 100% - 2px, 6px) + 2px);
+  height: calc(round(down, 100% - 2px, 6px) + 2px);
+  margin-inline: auto;
   content: "";
   background: var(--stats-dot);
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
@@ -152,7 +166,12 @@
   display: block;
   width: 100%;
   min-height: 2px;
-  background: var(--breakout-color);
+  background: var(--breakout-bar);
+  transition: background-color 140ms ease;
+}
+
+[data-page="stats"] [data-peak="true"] [data-slot="breakout-plot"] i {
+  background: var(--breakout-peak);
 }
 
 [data-page="stats"] [data-slot="breakout-plot"] b {
@@ -161,25 +180,18 @@
   left: 50%;
   transform: translateX(-50%);
   padding: 0 2px;
-  background: var(--stats-layer);
+  background: var(--breakout-bg);
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
   transition: background-color 140ms ease;
 }
 
-[data-page="stats"] [data-slot="breakout-card"]:hover [data-slot="breakout-plot"] b {
-  background: var(--stats-layer-2);
-}
-
-[data-page="stats"] [data-dense="true"] [data-slot="breakout-day"]:not([data-peak="true"]) b {
-  display: none;
-}
-
 [data-page="stats"] [data-slot="breakout-day"] small {
   padding-top: 7px;
   color: var(--stats-faint);
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 17px;
   white-space: nowrap;
 }
 
@@ -222,16 +234,12 @@
   }
 
   [data-page="stats"] [data-slot="breakout-summary"] {
-    padding: 24px 12px 24px 24px;
+    padding: 24px 12px 12px 24px;
   }
 
   [data-page="stats"] [data-slot="breakout-chart"] {
     gap: 6px;
     padding: 24px 24px 12px 12px;
-  }
-
-  [data-page="stats"] [data-crowded="true"] [data-slot="breakout-day"]:not([data-peak="true"]) b {
-    display: none;
   }
 }
 
@@ -248,10 +256,6 @@
     padding: 22px 22px 0;
   }
 
-  [data-page="stats"] [data-slot="breakout-label"] {
-    margin-top: 20px;
-  }
-
   [data-page="stats"] [data-slot="breakout-share"] {
     font-size: 72px;
   }
@@ -262,7 +266,8 @@
     padding: 22px 22px 10px;
   }
 
-  [data-page="stats"] [data-slot="breakout-plot"] b {
+  [data-page="stats"] [data-slot="breakout-plot"] b,
+  [data-page="stats"] [data-slot="breakout-day"] small {
     font-size: 10px;
   }
 
