@@ -52,9 +52,7 @@ export function resolve(input: {
   return Record.map(ConfigFlag.registry, (_, key): State => {
     const optInOnly = ConfigFlag.optInOnly.has(key)
     const override = env.get(key) ?? (all && !optInOnly ? true : undefined)
-    const value = experimental?.[key]
-    // A flag that takes settings is on when given them.
-    const configured = typeof value === "object" ? true : (value ?? (allFlags && !optInOnly ? true : undefined))
+    const configured = experimental?.[key] ?? (allFlags && !optInOnly ? true : undefined)
     const [enabled, source]: [boolean, State["source"]] =
       override !== undefined
         ? [override, "env"]
