@@ -37,7 +37,7 @@ test("review toggle shows its tooltip with the side panel open or closed", async
   await expect(tooltip).toBeVisible()
 })
 
-test("review rings stay visible on the mode trigger, file tree, and diff", async ({ page }) => {
+test("review rings stay visible on the mode trigger and file tree, and none surrounds the diff", async ({ page }) => {
   await openSession(page, {
     name: "ReviewModeFocus",
     vcsDiff: [fileDiff("alpha.ts"), fileDiff("beta.ts")],
@@ -75,8 +75,10 @@ test("review rings stay visible on the mode trigger, file tree, and diff", async
 
   await diff.press("Shift+Tab")
   await page.keyboard.press("Tab")
+  // The diff takes focus so the keyboard can scroll and search it, without a ring around the whole viewer.
   await expect(diff).toBeFocused()
-  await expect.poll(() => diff.evaluate((element) => getComputedStyle(element, "::after").outlineOffset)).toBe("-2px")
+  await expect(diff).toHaveCSS("outline-style", "none")
+  await expect.poll(() => diff.evaluate((element) => getComputedStyle(element, "::after").outlineStyle)).toBe("none")
 })
 
 for (const view of ["desktop", "mobile"] as const) {
