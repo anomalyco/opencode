@@ -5,11 +5,13 @@ import type { IntegrationMethodRegistration } from "@opencode/plugin/effect/inte
 import { EventManifest } from "@opencode/schema/event-manifest"
 import type { Event } from "@opencode/schema/event"
 import { ServerConfig } from "@opencode/schema/mcp"
+import path from "node:path"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
 import { Artifact } from "../artifact.js"
 import { AISDK } from "../aisdk.js"
+import { Automation } from "../automation.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -19,6 +21,7 @@ import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { Model } from "../model.js"
+import { Project } from "../project.js"
 import { Mcp } from "../mcp/index.js"
 import { Session } from "../session.js"
 import { InstructionEntry } from "../session/instruction-entry.js"
@@ -54,6 +57,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const app = yield* App.Service
   const agents = yield* Agent.Service
   const artifacts = yield* Artifact.Service
+  const automations = yield* Automation.Service
+  const projects = yield* Project.Service
   const aisdk = yield* AISDK.Service
   const providers = yield* Provider.Service
   const models = yield* Model.Service
@@ -316,6 +321,26 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
               },
             })
           }),
+      },
+      automation: {
+        // A plugin has no UI listener to answer an interactive ask, so asks settle unattended, as they do over HTTP.
+        create: (input) => automations.create(input).pipe(Effect.provideService(Permission.Unattended, [])),
+        list: Effect.fn(function* (input) {
+          const directory = input?.directory
+          if (directory !== undefined && !path.isAbsolute(directory))
+            return yield* Effect.fail(new Error(`Directory must be an absolute path: ${directory}`))
+          // Listing must not record a Project for a folder that was only asked about.
+          const projectID =
+            directory === undefined
+              ? undefined
+              : (yield* projects.resolve(AbsolutePath.make(directory), { persist: false })).id
+          const rows = yield* automations.list({ sessionID: input?.sessionID })
+          // A deleted folder may no longer resolve to its Project, so also match automations that ran there.
+          return rows.filter(
+            (row) => directory === undefined || row.projectID === projectID || row.directory === directory,
+          )
+        }),
+        delete: (input) => automations.remove(input.automationID),
       },
     },
     generate: {
@@ -635,6 +660,7 @@ export const requirements = LayerNode.group([
   Agent.node,
   Artifact.node,
   AISDK.node,
+  Automation.node,
   Provider.node,
   Model.node,
   Command.node,
@@ -643,6 +669,7 @@ export const requirements = LayerNode.group([
   KV.node,
   Mcp.node,
   Location.node,
+  Project.node,
   Reference.node,
   Rpc.node,
   Skill.node,

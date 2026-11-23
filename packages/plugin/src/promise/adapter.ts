@@ -405,6 +405,11 @@ export function fromPromise(plugin: Plugin) {
                   }),
                 ),
             },
+            automation: {
+              create: adaptApiMethod(ExperimentalEndpoints["automation.create"], host.experimental.automation.create),
+              list: adaptApiMethod(ExperimentalEndpoints["automation.list"], host.experimental.automation.list),
+              delete: adaptApiMethod(ExperimentalEndpoints["automation.delete"], host.experimental.automation.delete),
+            },
           },
           generate: {
             text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),
