@@ -71,9 +71,9 @@
 /* The share editor (share.tsx): a top bar, the card on a stage, and an inspector beside it. On phones it fills the
    screen and the inspector sits under the card, one group at a time behind tabs. */
 
-[data-page="stats"] [data-component="share-editor"] {
-  --editor-bar: 56px;
-  --editor-inspector: 340px;
+[data-page="stats"] dialog[data-component="share-editor"] {
+  --editor-inspector: 320px;
+  --editor-inset: 12px;
   box-sizing: border-box;
   /* Smaller than the window, so the page stays in view around it. */
   width: min(1200px, calc(100vw - 160px));
@@ -134,6 +134,7 @@
     font: inherit;
     color: inherit;
     cursor: pointer;
+    border-radius: 0;
     -webkit-tap-highlight-color: transparent;
 
     &:focus-visible {
@@ -142,50 +143,10 @@
     }
   }
 
+  /* The canvas fills the editor; the panel floats on it, inset from the top, side and bottom. */
   [data-slot="editor"] {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--editor-inspector);
-    grid-template-rows: var(--editor-bar) minmax(0, 1fr);
-    grid-template-areas:
-      "bar bar"
-      "stage inspector";
+    position: relative;
     height: 100%;
-  }
-
-  /* The top bar: close, what you're sharing, then Copy link and Export. */
-  [data-slot="editor-bar"] {
-    grid-area: bar;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 12px 0 8px;
-    border-bottom: 1px solid var(--stats-line);
-  }
-
-  [data-slot="editor-title"] {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    min-width: 0;
-    font-size: 14px;
-
-    strong {
-      font-weight: 700;
-    }
-
-    span {
-      overflow: hidden;
-      color: var(--stats-faint);
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-  }
-
-  [data-slot="editor-actions"] {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-left: auto;
   }
 
   [data-slot="icon-button"] {
@@ -260,66 +221,17 @@
     }
   }
 
-  [data-slot="export"] {
-    position: relative;
-  }
-
-  [data-slot="export-menu"] {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    width: 260px;
-    padding: 4px;
-    background: var(--stats-popover);
-    border: 1px solid var(--stats-line-strong);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.2);
-    transform-origin: top right;
-    animation: share-menu-in 140ms cubic-bezier(0.23, 1, 0.32, 1);
-
-    button {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      padding: 10px 12px;
-      text-align: left;
-      background: transparent;
-      border: 0;
-
-      @media (hover: hover) and (pointer: fine) {
-        &:hover {
-          background: var(--stats-layer-2);
-        }
-      }
-
-      &:active {
-        background: var(--stats-layer-2);
-      }
-
-      strong {
-        font-size: 13px;
-        font-weight: 500;
-      }
-
-      span {
-        font-size: 12px;
-        color: var(--stats-faint);
-      }
-    }
-  }
-
   /* The stage: the card on the site's dot grid, with the format and play controls under it. */
   [data-slot="editor-stage"] {
-    grid-area: stage;
-    position: relative;
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 16px;
     min-height: 0;
-    padding: 24px 32px 20px;
+    /* Room on the right for the panel and its inset. */
+    padding: 56px calc(var(--editor-inspector) + var(--editor-inset) * 2 + 24px) 20px 48px;
     background-color: var(--stats-layer-2);
     background-image: radial-gradient(var(--stats-line-strong) 1px, transparent 1px);
     background-size: 16px 16px;
@@ -434,32 +346,96 @@
 
   /* The inspector: one group per option, like a design tool's properties panel. */
   [data-slot="editor-inspector"] {
-    grid-area: inspector;
+    position: absolute;
+    top: var(--editor-inset);
+    right: var(--editor-inset);
+    bottom: var(--editor-inset);
     display: flex;
     flex-direction: column;
+    width: var(--editor-inspector);
+    overflow: hidden;
+    background: var(--stats-bg);
+    border: 1px solid var(--stats-line-strong);
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.06),
+      0 4px 12px -4px rgb(0 0 0 / 0.1),
+      0 16px 32px -12px rgb(0 0 0 / 0.14);
+  }
+
+  [data-slot="inspector-scroll"] {
+    flex: 1;
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    border-left: 1px solid var(--stats-line);
   }
 
-  [data-slot="editor-format"] {
+  /* Export stays pinned to the panel's foot; the options scroll under it. */
+  [data-slot="inspector-footer"] {
     flex: none;
+    padding: 12px;
+    background: var(--stats-bg);
+    border-top: 1px solid var(--stats-line);
+
+    [data-slot="bar-button"] {
+      justify-content: center;
+      width: 100%;
+      height: 40px;
+      font-size: 14px;
+    }
+  }
+
+  /* Close, centred on the canvas's second dot from the side and the top: the dots sit at the middle of 16px cells,
+     so that dot is at 24px, and the 40px button starts 20px before it. */
+  [data-slot="icon-button"][data-variant="close"] {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    z-index: 1;
+  }
+
+  /* The option rows: each label on the left, its choices inline on the right, so the music sits high in the panel. */
+  [data-slot="rows"] {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 10px;
     padding: 16px 20px;
     border-bottom: 1px solid var(--stats-line);
   }
 
-  [data-slot="editor-tabs"] {
-    display: none;
+  [data-slot="row"] {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+  }
+
+  [data-slot="row-label"] {
+    font-size: 12px;
+    color: var(--stats-faint);
+  }
+
+  [data-slot="row-options"] {
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+
+    > * {
+      flex: 1;
+      min-width: 0;
+    }
+
+    > [data-slot="segmented"] button {
+      height: 32px;
+    }
   }
 
   [data-slot="group"] {
     display: flex;
     flex: none;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     padding: 16px 20px 20px;
-    border-bottom: 1px solid var(--stats-line);
   }
 
   [data-slot="group-title"] h3 {
@@ -471,23 +447,14 @@
     color: var(--stats-faint);
   }
 
-  [data-slot="option-grid"] {
-    display: grid;
-    grid-template-columns: repeat(var(--columns, 2), minmax(0, 1fr));
-    gap: 8px;
-
-    &[data-columns="3"] {
-      --columns: 3;
-    }
-  }
-
-  [data-slot="option"] {
+  [data-slot="chip"] {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    min-width: 0;
-    padding: 10px 8px;
+    justify-content: center;
+    gap: 6px;
+    height: 44px;
+    padding: 0 4px;
     font-size: 12px;
     color: var(--stats-muted);
     background: var(--stats-layer);
@@ -495,12 +462,17 @@
     border-radius: 0;
     transition:
       border-color 120ms ease,
-      box-shadow 120ms ease;
+      box-shadow 120ms ease,
+      transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {
         border-color: var(--stats-faint);
       }
+    }
+
+    &:active {
+      transform: scale(0.97);
     }
 
     &[aria-pressed="true"] {
@@ -509,55 +481,73 @@
       box-shadow: inset 0 0 0 1px var(--stats-accent);
     }
 
-    &[data-variant="row"] {
+    /* The swatch sits as far from the left edge as from the top and bottom: (36 - 16) / 2, less the border. */
+    &[data-variant="wide"] {
       flex-direction: row;
-      align-items: center;
-      gap: 10px;
-      padding: 10px;
-      text-align: left;
-    }
-
-    > span {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
-    }
-
-    strong {
+      justify-content: flex-start;
+      gap: 8px;
+      height: 36px;
+      padding: 0 9px;
       font-size: 13px;
-      font-weight: 500;
+    }
 
-      em {
-        font-style: normal;
-        color: var(--stats-faint);
+    /* A quick label above icon-only choices; the button's aria-label says the same. */
+    &[data-tip] {
+      position: relative;
+
+      &::after {
+        content: attr(data-tip);
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        z-index: 2;
+        padding: 4px 6px;
+        font-size: 11px;
+        line-height: 1;
+        white-space: nowrap;
+        color: var(--stats-bg);
+        background: var(--stats-text);
+        opacity: 0;
+        pointer-events: none;
+        translate: -50% 2px;
+        transition:
+          opacity 120ms ease-out,
+          translate 120ms ease-out;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover::after {
+          opacity: 1;
+          translate: -50% 0;
+        }
+      }
+
+      &:focus-visible::after {
+        opacity: 1;
+        translate: -50% 0;
       }
     }
 
     small {
-      overflow: hidden;
-      font-size: 11px;
+      font-size: 10px;
+      line-height: 1;
       color: var(--stats-faint);
-      white-space: nowrap;
-      text-overflow: ellipsis;
     }
   }
 
   [data-slot="glyph"] {
-    width: 40px;
-    height: 50px;
-    padding: 0;
+    width: 26px;
+    height: 32px;
     color: var(--stats-text);
-    background: var(--stats-layer-2);
   }
 
-  /* A 28px slot for every size, so the labels line up; the frame inside has the size's shape. */
+  /* An 18px slot for every size; the frame inside has the size's shape. */
   [data-slot="aspect"] {
     display: grid;
     flex: none;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: 18px;
+    height: 18px;
 
     b {
       box-sizing: border-box;
@@ -567,8 +557,8 @@
 
   [data-slot="swatch"] {
     flex: none;
-    width: 28px;
-    height: 28px;
+    width: 16px;
+    height: 16px;
     border: 1px solid var(--stats-line-strong);
     background: #161616;
 
@@ -577,10 +567,12 @@
     }
   }
 
+  /* Pulled out by each row's padding and border, so the track squares line up with the Music title. */
   [data-slot="track-list"] {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    margin-inline: -11px;
   }
 
   [data-slot="track"] {
@@ -591,16 +583,13 @@
     text-align: left;
     background: transparent;
     border: 1px solid transparent;
+    border-radius: 0;
 
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        background: var(--stats-layer);
-      }
-    }
-
+    /* The same 2px selected edge as the chips above. */
     &[aria-checked="true"] {
       background: var(--stats-layer);
       border-color: var(--stats-accent);
+      box-shadow: inset 0 0 0 1px var(--stats-accent);
     }
 
     > span {
@@ -616,6 +605,20 @@
       gap: 8px;
       font-size: 13px;
       font-weight: 500;
+    }
+
+    /* The explicit-lyrics mark, as music apps show it. */
+    em {
+      display: grid;
+      place-items: center;
+      width: 14px;
+      height: 14px;
+      font-size: 9px;
+      font-style: normal;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--stats-bg);
+      background: var(--stats-faint);
     }
 
     small {
@@ -664,7 +667,6 @@
   }
 
   @media (max-width: 760px) {
-    --editor-bar: 52px;
     width: 100vw;
     height: 100dvh;
     margin: 0;
@@ -682,123 +684,45 @@
         display 360ms allow-discrete;
     }
 
+    --editor-inset: 8px;
+
+    /* The canvas on top, the panel under it, still inset. */
     [data-slot="editor"] {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: var(--editor-bar) minmax(0, 1fr) auto;
-      grid-template-areas:
-        "bar"
-        "stage"
-        "inspector";
-    }
-
-    [data-slot="editor-bar"] {
-      padding: env(safe-area-inset-top, 0px) 8px 0 4px;
-    }
-
-    /* Copy link keeps its icon; Export keeps its label. */
-    [data-slot="bar-button"]:not([data-variant="primary"]) span {
-      display: none;
-    }
-
-    [data-slot="bar-button"]:not([data-variant="primary"]) {
-      width: 40px;
-      padding: 0;
-      justify-content: center;
-    }
-
-    [data-slot="bar-button"] {
-      height: 40px;
-    }
-
-    [data-slot="export-menu"] {
-      position: fixed;
-      top: auto;
-      right: 8px;
-      bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-      left: 8px;
-      width: auto;
-      padding: 8px;
-      transform-origin: bottom center;
-      animation-name: share-sheet-in;
-
-      button {
-        padding: 14px 12px;
-      }
+      display: flex;
+      flex-direction: column;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      background-color: var(--stats-layer-2);
     }
 
     [data-slot="editor-stage"] {
+      position: relative;
+      flex: 1;
       gap: 10px;
-      padding: 16px 16px 12px;
+      padding: calc(48px + env(safe-area-inset-top, 0px)) 16px 8px;
+    }
+
+    /* Below the notch, still on a dot. */
+    [data-slot="icon-button"][data-variant="close"] {
+      top: calc(4px + round(up, env(safe-area-inset-top, 0px), 16px));
     }
 
     [data-slot="editor-inspector"] {
-      max-height: 44dvh;
-      padding-bottom: env(safe-area-inset-bottom, 0px);
-      border-left: 0;
-      border-top: 1px solid var(--stats-line);
-    }
-
-    [data-slot="editor-tabs"] {
-      position: sticky;
+      position: relative;
+      inset: auto;
       flex: none;
-      top: 0;
-      z-index: 1;
-      display: flex;
-      overflow-x: auto;
-      background: var(--stats-bg);
-      border-bottom: 1px solid var(--stats-line);
-      scrollbar-width: none;
-
-      button {
-        flex: 1 0 auto;
-        height: 44px;
-        padding: 0 14px;
-        font-size: 13px;
-        color: var(--stats-faint);
-        background: transparent;
-        border: 0;
-        box-shadow: inset 0 -2px 0 transparent;
-
-        &[aria-selected="true"] {
-          color: var(--stats-text);
-          box-shadow: inset 0 -2px 0 var(--stats-accent);
-        }
-      }
+      width: auto;
+      max-height: 46dvh;
+      margin: 0 var(--editor-inset) var(--editor-inset);
     }
 
+    [data-slot="rows"],
     [data-slot="group"] {
-      display: none;
-      padding: 16px;
-      border-bottom: 0;
-
-      &[data-active="true"] {
-        display: flex;
-      }
+      padding-inline: 16px;
     }
 
-    /* The tab already names the group. */
-    [data-slot="group"] > [data-slot="group-title"]:first-child {
-      display: none;
-    }
-
-    [data-slot="option"],
     [data-slot="track"] {
       min-height: 44px;
     }
-  }
-}
-
-@keyframes share-menu-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-}
-
-@keyframes share-sheet-in {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
   }
 }
 
@@ -813,12 +737,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-page="stats"] [data-component="share-editor"] {
+  [data-page="stats"] dialog[data-component="share-editor"] {
     --editor-from: none;
-
-    [data-slot="export-menu"] {
-      animation: none;
-    }
 
     [data-slot="eq"] b {
       animation: none;

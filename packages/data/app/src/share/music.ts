@@ -1,5 +1,5 @@
-// Soundtracks for share videos: 20-second 90s East Coast boom-bap rap songs with our own lyrics, one for each kind of
-// data on the page. ElevenLabs Music v2.5, one take each with custom lyrics, on one grid: 96 BPM, a bar is 2.5 s, a
+// Soundtracks for share videos: 20-second 90s East Coast boom-bap rap songs with our own lyrics, for the kinds of data
+// on the page. ElevenLabs Music v2.5, one take each with custom lyrics, on one grid: 96 BPM, a bar is 2.5 s, a
 // spoken line over the filtered intro (bars 1 and 2), a 4-bar verse from 5 s, a 2-bar hook from 15 s, and the beat
 // stops on the last word at 20 s. Cut to 20.0 s and loudness-matched to -14 LUFS. public/share-music has the files.
 
@@ -9,6 +9,7 @@ export type ShareTrack = {
   name: string
   mood: string
   bpm: number
+  explicit: boolean
   bar: number
   verse: number
   length: number
@@ -16,7 +17,6 @@ export type ShareTrack = {
 }
 
 export const shareTracks: ShareTrack[] = [
-  { id: "tokens", name: "Count It Up", mood: "Rhodes and upright bass" },
   { id: "market", name: "Hold the Block", mood: "Piano stabs and baritone sax" },
   { id: "models", name: "Rank and File", mood: "Tremolo guitar and horns" },
   { id: "usage", name: "Come Back", mood: "Vibraphone and muted trumpet" },
@@ -24,6 +24,7 @@ export const shareTracks: ShareTrack[] = [
 ].map((track) => ({
   ...track,
   bpm: 96,
+  explicit: false,
   bar: 2.5,
   verse: 5,
   length: 20,

@@ -48,8 +48,6 @@ export function ShareButton(props: { card: () => ShareDraft | undefined; label: 
   )
 }
 
-type Tab = "layout" | "size" | "style" | "video"
-
 const sizes = [
   { value: "4:5", label: "Feed" },
   { value: "1:1", label: "Square" },
@@ -71,16 +69,13 @@ const layouts = [
 export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   let dialog: HTMLDialogElement | undefined
   let preview: HTMLCanvasElement | undefined
-  let exportButton: HTMLButtonElement | undefined
   let audio: HTMLAudioElement | undefined
-  const [format, setFormat] = createSignal<"image" | "video">("image")
+  const [format, setFormat] = createSignal<"image" | "video">("video")
   const [notice, setNotice] = createSignal<string>()
   const [rendering, setRendering] = createSignal<number>()
   const [ready, setReady] = createSignal(false)
   const [playing, setPlaying] = createSignal(true)
   const [track, setTrack] = createSignal("none")
-  const [menu, setMenu] = createSignal(false)
-  const [tab, setTab] = createSignal<Tab>("layout")
   const card = createMemo(() => {
     const value = request()
     if (!value) return undefined
@@ -95,9 +90,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     const sound = music()
     return sound ? barTiming(sound.bar, sound.verse, sound.length) : undefined
   })
-  const canShareFiles = () =>
-    typeof navigator !== "undefined" &&
-    !!navigator.canShare?.({ files: [new File([], "card.png", { type: "image/png" })] })
   let video: { key: string; file: Promise<File> } | undefined
   let closing: ReturnType<typeof setTimeout> | undefined
 
@@ -110,7 +102,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     clearTimeout(closing)
     setNotice(undefined)
     setTrack("none")
-    setTab("layout")
     dialog?.showModal()
     void loadShareFonts().then(() => setReady(true))
   })
@@ -186,7 +177,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   }
 
   const run = async (action: () => Promise<string | undefined>) => {
-    setMenu(false)
     try {
       const message = await action()
       if (message) setNotice(message)
@@ -196,53 +186,19 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     }
   }
 
-  const share = () =>
+  // Export saves the PNG or the video. On phones, where saving a file goes nowhere useful, it opens the share sheet.
+  const exportFile = () =>
     run(async () => {
       const value = card()
       const shared = await file(format())
       if (!value) return
       const data = { files: [shared], title: value.title, text: `${value.headline} ${link(value)}` }
-      if (navigator.canShare?.(data)) {
+      if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.(data)) {
         await navigator.share(data)
         return undefined
       }
       download(shared)
-      return "Saved. Attach it to your post."
-    })
-
-  const copyImage = () =>
-    run(async () => {
-      const value = card()
-      if (!value) return
-      // Safari needs the clipboard write to start in the click, with the image as a promise.
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": renderImage(value, options()) })])
-      return "Image copied"
-    })
-
-  const save = (kind: "image" | "video") =>
-    run(async () => {
-      download(await file(kind))
-      return kind === "image" ? "PNG saved" : "Video saved"
-    })
-
-  const copyLink = () =>
-    run(async () => {
-      const value = card()
-      if (!value) return
-      await navigator.clipboard.writeText(link(value))
-      return "Link copied"
-    })
-
-  const post = () =>
-    run(async () => {
-      const value = card()
-      if (!value) return
-      window.open(
-        `https://x.com/intent/post?text=${encodeURIComponent(value.headline)}&url=${encodeURIComponent(link(value))}`,
-        "_blank",
-        "noopener",
-      )
-      return undefined
+      return format() === "image" ? "PNG saved" : "Video saved"
     })
 
   // Pressing the chosen track again plays or pauses it, with the preview.
@@ -252,34 +208,16 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setPlaying(true)
   }
 
-  const tabs = createMemo(() =>
-    (
-      [
-        ["layout", "Layout"],
-        ["size", "Size"],
-        ["style", "Style"],
-        ["video", "Motion"],
-      ] as const
-    ).filter((item) => item[0] !== "video" || format() === "video"),
-  )
-
-  createEffect(() => {
-    if (format() === "image" && tab() === "video") setTab("layout")
-  })
-
   return (
     <dialog
       ref={dialog}
       data-component="share-editor"
       aria-label="Share"
-      onCancel={(event) => {
-        if (!menu()) return
-        event.preventDefault()
-        setMenu(false)
-        exportButton?.focus()
+      // Escape closes it natively; a click on the backdrop lands on the dialog itself, since the editor fills its box.
+      onClick={(event) => {
+        if (event.target === event.currentTarget) close()
       }}
       onClose={() => {
-        setMenu(false)
         setPlaying(false)
         audio?.pause()
         opener?.focus()
@@ -287,73 +225,19 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
         closing = setTimeout(() => {
           setRequest(undefined)
           setReady(false)
-          setFormat("image")
+          setFormat("video")
         }, 160)
-      }}
-      onClick={(event) => {
-        if (menu() && !(event.target as HTMLElement).closest('[data-slot="export"]')) setMenu(false)
       }}
     >
       <Show when={card()}>
         {(value) => (
           <div data-slot="editor">
-            <header data-slot="editor-bar">
-              <button type="button" data-slot="icon-button" aria-label="Close" onClick={close}>
+            <div data-slot="editor-stage">
+              <button type="button" data-slot="icon-button" data-variant="close" aria-label="Close" onClick={close}>
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                   <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" />
                 </svg>
               </button>
-              <div data-slot="editor-title">
-                <strong>Share</strong>
-                <span>{value().title}</span>
-              </div>
-              <div data-slot="editor-actions">
-                <div data-slot="export">
-                  <button
-                    ref={exportButton}
-                    type="button"
-                    data-slot="bar-button"
-                    data-variant="primary"
-                    aria-haspopup="menu"
-                    aria-expanded={menu() ? "true" : "false"}
-                    disabled={rendering() !== undefined}
-                    onClick={() => setMenu(!menu())}
-                  >
-                    <span>Export</span>
-                    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                      <path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" />
-                    </svg>
-                  </button>
-                  <Show when={menu()}>
-                    <div data-slot="export-menu" role="menu" aria-label="Export">
-                      <Show when={canShareFiles()}>
-                        <MenuItem label={`Share ${format()}`} hint="Send to an app" onClick={share} />
-                      </Show>
-                      <Show when={format() === "image"}>
-                        <MenuItem label="Copy image" hint="Paste into a post" onClick={copyImage} />
-                        <MenuItem
-                          label="Download PNG"
-                          hint={`${size()[0]} × ${size()[1]}`}
-                          onClick={() => save("image")}
-                        />
-                      </Show>
-                      <Show when={format() === "video"}>
-                        <MenuItem
-                          label="Download video"
-                          hint={`${Math.round(shareDuration(value(), options(), timing()))}s${music() ? `, ${music()?.name}` : ", no music"}`}
-                          onClick={() => save("video")}
-                        />
-                        <MenuItem label="Download still" hint="The last frame, as PNG" onClick={() => save("image")} />
-                      </Show>
-                      <MenuItem label="Copy link" hint="To this section of the page" onClick={copyLink} />
-                      <MenuItem label="Post on X" hint="Opens a draft with the link" onClick={post} />
-                    </div>
-                  </Show>
-                </div>
-              </div>
-            </header>
-
-            <div data-slot="editor-stage">
               <Show when={designMode()}>
                 <div data-component="share-design" aria-label="Design mode">
                   <For each={shareControls.filter((control) => designOnly.includes(control.key))}>
@@ -410,146 +294,118 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
               </div>
             </div>
 
-            <aside data-slot="editor-inspector" aria-label="Options">
-              <div data-slot="editor-format">
-                <div data-slot="segmented" data-variant="full" role="group" aria-label="Format">
-                  <For each={["image", "video"] as const}>
-                    {(item) => (
-                      <button
-                        type="button"
-                        aria-pressed={format() === item}
-                        onClick={() => {
-                          setFormat(item)
-                          setPlaying(true)
-                        }}
-                      >
-                        {item === "image" ? "Image" : "Video"}
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </div>
-              <div data-slot="editor-tabs" role="tablist" aria-label="Options">
-                <For each={tabs()}>
-                  {(item) => (
-                    <button type="button" role="tab" aria-selected={tab() === item[0]} onClick={() => setTab(item[0])}>
-                      {item[1]}
-                    </button>
-                  )}
-                </For>
-              </div>
-
-              <Group id="layout" title="Layout" active={tab()}>
-                <div data-slot="option-grid" data-columns="3">
-                  <For each={layouts}>
-                    {(item) => (
-                      <button
-                        type="button"
-                        data-slot="option"
-                        aria-pressed={options().layout === item.value}
-                        onClick={() => setShareOption("layout", item.value)}
-                      >
-                        <LayoutGlyph layout={item.value} />
-                        <span>{item.label}</span>
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </Group>
-
-              <Group id="size" title="Size" active={tab()}>
-                <div data-slot="option-grid" data-columns="2">
-                  <For each={sizes}>
-                    {(item) => (
-                      <button
-                        type="button"
-                        data-slot="option"
-                        data-variant="row"
-                        aria-pressed={options().size === item.value}
-                        onClick={() => setShareOption("size", item.value)}
-                      >
-                        <i data-slot="aspect" aria-hidden="true">
-                          <b
-                            style={{
-                              width: `${aspectSide(item.value, 0)}px`,
-                              height: `${aspectSide(item.value, 1)}px`,
+            <aside data-slot="editor-inspector" aria-label={`Share ${value().title}`}>
+              <div data-slot="inspector-scroll">
+                <div data-slot="rows">
+                  <Row label="Type">
+                    <div data-slot="segmented" role="group" aria-label="Type">
+                      <For each={["video", "image"] as const}>
+                        {(item) => (
+                          <button
+                            type="button"
+                            aria-pressed={format() === item}
+                            onClick={() => {
+                              setFormat(item)
+                              setPlaying(true)
                             }}
-                          />
-                        </i>
-                        <span>
-                          <strong>
-                            {item.label} <em>{item.value}</em>
-                          </strong>
-                        </span>
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </Group>
-
-              <Group id="style" title="Style" active={tab()}>
-                <div data-slot="option-grid" data-columns="2">
-                  <For each={["dark", "light"] as const}>
-                    {(item) => (
-                      <button
-                        type="button"
-                        data-slot="option"
-                        data-variant="row"
-                        aria-pressed={options().theme === item}
-                        onClick={() => setShareOption("theme", item)}
-                      >
-                        <i data-slot="swatch" data-theme={item} />
-                        <span>
-                          <strong>{item === "dark" ? "Dark" : "Light"}</strong>
-                        </span>
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </Group>
-
-              <Show when={format() === "video"}>
-                <Group id="video" title="Motion" active={tab()}>
-                  <div data-slot="segmented" data-variant="full" role="group" aria-label="Motion">
-                    <button
-                      type="button"
-                      aria-pressed={options().motion === "highlight"}
-                      onClick={() => setShareOption("motion", "highlight")}
-                    >
-                      Highlight each
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={options().motion === "build"}
-                      onClick={() => setShareOption("motion", "build")}
-                    >
-                      Build only
-                    </button>
-                  </div>
-                  <div data-slot="group-title">
-                    <h3>Music</h3>
-                  </div>
-                  <div data-slot="track-list" role="radiogroup" aria-label="Music">
-                    <TrackOption
-                      name="No music"
-                      detail="Silent, as feeds autoplay"
-                      selected={track() === "none"}
-                      onSelect={() => chooseTrack("none")}
-                    />
-                    <For each={shareTracks}>
+                          >
+                            {item === "image" ? "Image" : "Video"}
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  </Row>
+                  <Row label="Layout">
+                    <For each={layouts}>
                       {(item) => (
-                        <TrackOption
-                          name={item.name}
-                          detail={`${item.mood} · ${item.bpm} BPM`}
-                          selected={track() === item.id}
-                          playing={playing()}
-                          onSelect={() => chooseTrack(item.id)}
-                        />
+                        <button
+                          type="button"
+                          data-slot="chip"
+                          aria-label={item.label}
+                          data-tip={item.label}
+                          aria-pressed={options().layout === item.value}
+                          onClick={() => setShareOption("layout", item.value)}
+                        >
+                          <LayoutGlyph layout={item.value} />
+                        </button>
                       )}
                     </For>
-                  </div>
-                </Group>
-              </Show>
+                  </Row>
+                  <Row label="Size">
+                    <For each={sizes}>
+                      {(item) => (
+                        <button
+                          type="button"
+                          data-slot="chip"
+                          aria-label={`${item.label} ${item.value}`}
+                          data-tip={item.label}
+                          aria-pressed={options().size === item.value}
+                          onClick={() => setShareOption("size", item.value)}
+                        >
+                          <i data-slot="aspect" aria-hidden="true">
+                            <b
+                              style={{
+                                width: `${aspectSide(item.value, 0)}px`,
+                                height: `${aspectSide(item.value, 1)}px`,
+                              }}
+                            />
+                          </i>
+                          <small>{item.value}</small>
+                        </button>
+                      )}
+                    </For>
+                  </Row>
+                  <Row label="Style">
+                    <For each={["dark", "light"] as const}>
+                      {(item) => (
+                        <button
+                          type="button"
+                          data-slot="chip"
+                          data-variant="wide"
+                          aria-pressed={options().theme === item}
+                          onClick={() => setShareOption("theme", item)}
+                        >
+                          <i data-slot="swatch" data-theme={item} />
+                          <span>{item === "dark" ? "Dark" : "Light"}</span>
+                        </button>
+                      )}
+                    </For>
+                  </Row>
+                </div>
+
+                <Show when={format() === "video"}>
+                  <section data-slot="group">
+                    <div data-slot="group-title">
+                      <h3>Music</h3>
+                    </div>
+                    <div data-slot="track-list" role="radiogroup" aria-label="Music">
+                      <TrackOption name="No music" selected={track() === "none"} onSelect={() => chooseTrack("none")} />
+                      <For each={shareTracks}>
+                        {(item) => (
+                          <TrackOption
+                            name={item.name}
+                            explicit={item.explicit}
+                            selected={track() === item.id}
+                            playing={playing()}
+                            onSelect={() => chooseTrack(item.id)}
+                          />
+                        )}
+                      </For>
+                    </div>
+                  </section>
+                </Show>
+              </div>
+              <div data-slot="inspector-footer">
+                <button
+                  type="button"
+                  data-slot="bar-button"
+                  data-variant="primary"
+                  disabled={rendering() !== undefined}
+                  onClick={exportFile}
+                >
+                  {rendering() === undefined ? "Export" : "Rendering video…"}
+                </button>
+              </div>
             </aside>
           </div>
         )}
@@ -558,31 +414,21 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   )
 }
 
-function Group(props: { id: Tab; title: string; active: Tab; children: JSX.Element }) {
+// One option row: its label on the left, its choices inline on the right.
+function Row(props: { label: string; children: JSX.Element }) {
   return (
-    <section data-slot="group" data-active={props.active === props.id ? "true" : undefined} role="tabpanel">
-      <div data-slot="group-title">
-        <h3>{props.title}</h3>
-      </div>
-      {props.children}
-    </section>
-  )
-}
-
-function MenuItem(props: { label: string; hint: string; onClick: () => void }) {
-  return (
-    <button type="button" role="menuitem" onClick={props.onClick}>
-      <strong>{props.label}</strong>
-      <span>{props.hint}</span>
-    </button>
+    <div data-slot="row" role="group" aria-label={props.label}>
+      <span data-slot="row-label">{props.label}</span>
+      <div data-slot="row-options">{props.children}</div>
+    </div>
   )
 }
 
 function TrackOption(props: {
   name: string
-  detail: string
   selected: boolean
   playing?: boolean
+  explicit?: boolean
   onSelect: () => void
 }) {
   return (
@@ -624,8 +470,12 @@ function TrackOption(props: {
         </Show>
       </i>
       <span>
-        <strong>{props.name}</strong>
-        <small>{props.detail}</small>
+        <strong>
+          {props.name}
+          <Show when={props.explicit}>
+            <em title="Explicit lyrics">E</em>
+          </Show>
+        </strong>
       </span>
     </button>
   )
@@ -802,8 +652,8 @@ async function soundtrack(context: AudioContext, url: string, length: number) {
   }
 }
 
-// One side of a size's glyph: the longer side is 24px, the other in proportion, in a 28px square.
+// One side of a size's glyph: the longer side is 16px, the other in proportion, in an 18px square.
 function aspectSide(size: ShareOptions["size"], side: 0 | 1) {
   const [width, height] = shareSizes[size]
-  return Math.round((24 * (side === 0 ? width : height)) / Math.max(width, height))
+  return Math.round((16 * (side === 0 ? width : height)) / Math.max(width, height))
 }

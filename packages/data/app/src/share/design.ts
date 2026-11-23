@@ -67,7 +67,7 @@ export const shareControls = [
   options: readonly (readonly [string, string])[]
 }[]
 
-export const designOnly: readonly (keyof ShareOptions)[] = ["background", "logo"]
+export const designOnly: readonly (keyof ShareOptions)[] = ["background", "logo", "motion"]
 
 export const [designMode, setDesignModeState] = createSignal(false)
 export const [shareOptions, setShareOptions] = createStore<ShareOptions>({ ...defaultShareOptions })

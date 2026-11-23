@@ -62,7 +62,7 @@ const palettes = {
     muted: "#c4c4c4",
     faint: "#8f8f8f",
     line: "#ffffff1f",
-    dot: "#292929",
+    dot: "#2f2f2f",
     idle: "#2e2e2e",
     track: "#242424",
     accent: "#8190ff",
@@ -74,7 +74,7 @@ const palettes = {
     muted: "#3a3a3a",
     faint: "#6b6b6b",
     line: "#0000001a",
-    dot: "#eeeeee",
+    dot: "#e4e4e4",
     idle: "#e2e2e2",
     track: "#eeeeee",
     accent: "#3b5cf6",
@@ -126,11 +126,11 @@ export function drawShareCard(
   const rule = footer - 26 - 56
   const legend = card.chart.kind === "stacked" ? legendLayout(card.chart.series, width) : undefined
   const chartBottom = rule - 64 - (legend ? legend.height + 40 : 0)
-  drawBackground(ctx, options.background, colors, width, height, dotGrid(card.chart, width), rule)
+  drawBackground(ctx, options.background, colors, width, height, dotGrid(card.chart, width), chartBottom, rule)
   drawLogo(ctx, options.logo, colors, pad, pad)
 
   const focus = focusAt(card, options, time, timing)
-  const top = drawIntro(ctx, card, options, colors, width, pad + 136)
+  const top = drawIntro(ctx, card, options, colors, width, pad + 136, time)
   const progress = Math.min(1, time / timing.build)
 
   if (card.chart.kind === "stacked") {
@@ -142,7 +142,7 @@ export function drawShareCard(
       progress,
       focus,
     )
-    if (legend) drawLegend(ctx, card.chart.series, legend, colors, pad, chartBottom + 40, focus)
+    if (legend) drawLegend(ctx, card.chart.series, legend, colors, pad, chartBottom + 40, focus, time)
   }
   if (card.chart.kind === "ranked")
     drawRanked(
@@ -152,6 +152,7 @@ export function drawShareCard(
       { x: pad, y: top, width: width - pad * 2, height: chartBottom - top },
       progress,
       focus,
+      time,
     )
 
   drawFooter(ctx, card, colors, width, footer, rule)
@@ -188,11 +189,12 @@ function drawBackground(
   width: number,
   height: number,
   grid: { center: number; pitch: number },
+  fadeStart: number,
   fadeEnd: number,
 ) {
   if (kind === "plain") return
-  // The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells, fading out slowly down the
-  // card to the footer's rule. The first row sits as far from the top as the first column from the side.
+  // The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells, at full strength down
+  // to the chart's baseline, then fading out by the footer's rule. The first row sits as far from the top as the first column from the side.
   const dot = Math.min(8, Math.max(4, Math.round(grid.pitch * 0.36)))
   const first = grid.center - Math.floor(grid.center / grid.pitch) * grid.pitch
   const inset = Math.max(0, first - dot / 2)
@@ -203,7 +205,8 @@ function drawBackground(
   )
   ctx.fillStyle = colors.dot
   for (let y = inset; y < end; y += grid.pitch) {
-    ctx.globalAlpha = Math.max(0, 1 - (y / end) ** 2)
+    ctx.globalAlpha =
+      kind === "band" ? Math.max(0, 1 - y / end) : Math.min(1, Math.max(0, (end - y) / (end - fadeStart)))
     columns.forEach((x) => ctx.fillRect(x, y, dot, dot))
   }
   ctx.globalAlpha = 1
@@ -245,35 +248,46 @@ function drawIntro(
   colors: Palette,
   width: number,
   y: number,
+  time: number,
 ) {
   const max = width - pad * 2
   ctx.textBaseline = "alphabetic"
-  ctx.fillStyle = colors.faint
-  ctx.font = `400 32px ${font}`
   const eyebrow = options.layout === "chart" ? card.range.toUpperCase() : `${card.title} · ${card.range}`.toUpperCase()
-  spaced(ctx, eyebrow, pad, y + 32, 32 * 0.06)
+  rise(ctx, time, 0.05, y + 32, 32, () => {
+    ctx.fillStyle = colors.faint
+    ctx.font = `400 32px ${font}`
+    spaced(ctx, eyebrow, pad, y + 32, 32 * 0.06)
+  })
 
   if (options.layout === "number") {
-    ctx.fillStyle = colors.text
     const size = fit(ctx, card.stat.value, max, 200, 700)
-    ctx.font = `700 ${size}px ${font}`
-    ctx.fillText(card.stat.value, pad - size * 0.04, y + 64 + size * 0.8)
+    rise(ctx, time, 0.14, y + 64 + size * 0.8, size * 0.8, () => {
+      ctx.fillStyle = colors.text
+      ctx.font = `700 ${size}px ${font}`
+      ctx.fillText(card.stat.value, pad - size * 0.04, y + 64 + size * 0.8)
+    })
     ctx.font = `400 34px ${font}`
-    ctx.fillStyle = colors.muted
     const lines = balance(ctx, card.stat.label, max).slice(0, 2)
-    lines.forEach((line, index) => ctx.fillText(line, pad, y + 64 + size * 0.8 + 64 + index * 44))
+    lines.forEach((line, index) =>
+      rise(ctx, time, 0.3 + index * 0.07, y + 64 + size * 0.8 + 64 + index * 44, 34, () => {
+        ctx.fillStyle = colors.muted
+        ctx.font = `400 34px ${font}`
+        ctx.fillText(line, pad, y + 64 + size * 0.8 + 64 + index * 44)
+      }),
+    )
     return y + 64 + size * 0.8 + 64 + lines.length * 44 + 24
   }
 
   if (options.layout === "chart") {
-    ctx.fillStyle = colors.text
     const size = fit(ctx, card.title, max, 88, 400)
-    ctx.font = `400 ${size}px ${font}`
-    ctx.fillText(card.title, pad - 2, y + 64 + size * 0.8)
+    rise(ctx, time, 0.14, y + 64 + size * 0.8, size, () => {
+      ctx.fillStyle = colors.text
+      ctx.font = `400 ${size}px ${font}`
+      ctx.fillText(card.title, pad - 2, y + 64 + size * 0.8)
+    })
     return y + 64 + size + 32
   }
 
-  ctx.fillStyle = colors.text
   const size =
     [64, 56, 50, 44].find((value) => {
       ctx.font = `400 ${value}px ${font}`
@@ -282,8 +296,43 @@ function drawIntro(
   ctx.font = `400 ${size}px ${font}`
   const lines = balance(ctx, card.headline, max).slice(0, 4)
   const leading = size * 1.18
-  lines.forEach((line, index) => ctx.fillText(line, pad - 2, y + 56 + size * 0.8 + index * leading))
+  lines.forEach((line, index) =>
+    rise(ctx, time, 0.14 + index * 0.08, y + 56 + size * 0.8 + index * leading, size, () => {
+      ctx.fillStyle = colors.text
+      ctx.font = `400 ${size}px ${font}`
+      ctx.fillText(line, pad - 2, y + 56 + size * 0.8 + index * leading)
+    }),
+  )
   return y + 56 + lines.length * leading + 32
+}
+
+// A line of text rising into place from behind its own baseline, as in an editorial title reveal: it slides up
+// inside a mask one line tall and fades in, on a long ease-out. `baseline` and `size` place the mask.
+function rise(
+  ctx: CanvasRenderingContext2D,
+  time: number,
+  delay: number,
+  baseline: number,
+  size: number,
+  draw: () => void,
+) {
+  const amount = settle(time, delay, 0.75)
+  if (amount <= 0) return
+  if (amount >= 1) return draw()
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(0, baseline - size * 1.05, ctx.canvas.width, size * 1.4)
+  ctx.clip()
+  ctx.globalAlpha = Math.min(1, amount * 1.6)
+  ctx.translate(0, (1 - amount) * size * 1.1)
+  draw()
+  ctx.restore()
+}
+
+// 0 before `delay`, then a quint ease-out to 1 over `length` seconds. The still (time Infinity) is always 1.
+function settle(time: number, delay: number, length: number) {
+  const t = Math.max(0, Math.min(1, (time - delay) / length))
+  return 1 - (1 - t) ** 5
 }
 
 type Box = { x: number; y: number; width: number; height: number }
@@ -378,6 +427,7 @@ function drawLegend(
   x: number,
   y: number,
   focus: Focus,
+  time: number,
 ) {
   ctx.textBaseline = "middle"
   series.forEach((item, index) => {
@@ -386,6 +436,12 @@ function drawLegend(
     const left = x + column * layout.column
     const middle = y + row * layout.row + layout.row / 2
     const dim = index === focus.index ? 0 : focus.amount
+    // Each entry rises in after the headline, down each column in turn.
+    const amount = settle(time, 0.45 + index * 0.05, 0.6)
+    if (amount <= 0) return
+    ctx.save()
+    ctx.globalAlpha = amount
+    ctx.translate(0, (1 - amount) * 14)
     ctx.fillStyle = mix(item.color, colors.idle, dim)
     ctx.fillRect(left, middle - 9, 18, 18)
     ctx.font = `400 24px ${font}`
@@ -396,6 +452,7 @@ function drawLegend(
     ctx.font = `${index === focus.index && focus.amount > 0.5 ? 700 : 400} 24px ${font}`
     ctx.fillStyle = mix(colors.text, colors.faint, dim)
     ctx.fillText(truncate(ctx, item.label, right - measured - 24 - (left + 38)), left + 38, middle)
+    ctx.restore()
   })
 }
 
@@ -406,6 +463,7 @@ function drawRanked(
   box: Box,
   progress: number,
   focus: Focus,
+  time: number,
 ) {
   const rows = chart.rows.slice(0, Math.max(1, Math.floor(box.height / 72)))
   const row = Math.min(112, box.height / Math.max(1, rows.length))
@@ -415,6 +473,12 @@ function drawRanked(
     const delay = (index / Math.max(1, rows.length - 1)) * 0.45
     const grow = ease(Math.max(0, Math.min(1, (progress - delay) / 0.55)))
     const dim = index === focus.index ? 0 : focus.amount
+    // The row's words rise in as its bar starts to grow.
+    const amount = settle(time, 0.3 + index * 0.06, 0.6)
+    if (amount <= 0) return
+    ctx.save()
+    ctx.globalAlpha = amount
+    ctx.translate(0, (1 - amount) * 14)
     ctx.textBaseline = "alphabetic"
     ctx.font = `400 ${size}px ${font}`
     ctx.fillStyle = colors.faint
@@ -430,6 +494,7 @@ function drawRanked(
     ctx.fillRect(box.x + 72, bar, box.width - 72, 10)
     ctx.fillStyle = mix(colors.accent, colors.idle, dim)
     ctx.fillRect(box.x + 72, bar, (box.width - 72) * Math.max(0.01, Math.min(1, item.fill)) * grow, 10)
+    ctx.restore()
   })
 }
 
