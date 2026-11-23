@@ -130,140 +130,7 @@ test("scopes sessions to the active session location", async () => {
   }
 })
 
-test("finds sessions by ses_ ID prefix via server search and local fallback", async () => {
-  const events = createEventStream()
-  const queries: Array<string | null> = []
-  let failSearch = false
-  const target = {
-    id: "ses_alpha_12345",
-    projectID: "proj_a",
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: 1, updated: 10 },
-    title: "Deploy pipeline work",
-    location: { directory: process.cwd() },
-  }
-  const other = {
-    id: "ses_beta_99999",
-    projectID: "proj_a",
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: 1, updated: 5 },
-    title: "Refactor parser",
-    location: { directory: process.cwd() },
-  }
-  const calls = createFetch((url) => {
-    if (url.pathname === "/api/location") {
-      return json({
-        directory: process.cwd(),
-        project: { id: "proj_a", directory: process.cwd(), canonical: process.cwd() },
-      })
-    }
-    if (url.pathname !== "/api/session") return undefined
-    const search = url.searchParams.get("search")
-    queries.push(search)
-    if (failSearch) return new Response("error", { status: 500 })
-    const all = [target, other]
-    const filtered = !search
-      ? all
-      : all.filter(
-          (session) =>
-            session.title.toLowerCase().includes(search.toLowerCase()) ||
-            (search.startsWith("ses_") && session.id.startsWith(search)),
-        )
-    return json({ data: filtered, cursor: {} })
-  }, events)
-  const temporary = await tmpdir()
-  let storage!: ReturnType<typeof useStorage>
-  let route!: ReturnType<typeof useRoute>
-
-  function Probe() {
-    const data = useData()
-    const dialog = useDialog()
-    route = useRoute()
-    storage = useStorage()
-    onMount(() => {
-      data.session.remember(target)
-      data.session.remember(other)
-      dialog.replace(() => <DialogSessionList />)
-    })
-    return null
-  }
-
-  const app = await testRender(
-    () => (
-      <TestTuiContexts paths={{ state: temporary.path }}>
-        <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
-          <StorageProvider>
-            <ArgsProvider>
-              <ConfigProvider config={createTuiResolvedConfig()}>
-                <Keymap.Provider>
-                  <ToastProvider>
-                    <RouteProvider>
-                      <ClientProvider api={createApi(calls.fetch)}>
-                        <PermissionProvider>
-                          <DataProvider directory={process.cwd()}>
-                            <LocationProvider>
-                              <SessionTabsProvider>
-                                <ThemeProvider mode="dark" source={emptyThemeSource}>
-                                  <LocalProvider>
-                                    <DialogProvider>
-                                      <Probe />
-                                    </DialogProvider>
-                                  </LocalProvider>
-                                </ThemeProvider>
-                              </SessionTabsProvider>
-                            </LocationProvider>
-                          </DataProvider>
-                        </PermissionProvider>
-                      </ClientProvider>
-                    </RouteProvider>
-                  </ToastProvider>
-                </Keymap.Provider>
-              </ConfigProvider>
-            </ArgsProvider>
-          </StorageProvider>
-        </TuiAppProvider>
-      </TestTuiContexts>
-    ),
-    { width: 100, height: 30, kittyKeyboard: true },
-  )
-  app.renderer.start()
-
-  try {
-    await app.waitForFrame(
-      (frame) =>
-        frame.includes("Deploy pipeline work") &&
-        frame.includes("Refactor parser") &&
-        app.renderer.currentFocusedRenderable instanceof InputRenderable,
-    )
-    await app.mockInput.typeText("ses_alpha")
-    await app.waitForFrame(
-      (frame) =>
-        queries.includes("ses_alpha") && frame.includes("Deploy pipeline work") && !frame.includes("Refactor parser"),
-    )
-
-    // Verify local fallback also matches ses_ ID prefixes when server search fails.
-    failSearch = true
-    await app.mockInput.typeText("_123")
-    await app.waitForFrame(
-      (frame) =>
-        queries.includes("ses_alpha_123") &&
-        frame.includes("Deploy pipeline work") &&
-        !frame.includes("Refactor parser"),
-    )
-
-    app.mockInput.pressEnter()
-    await app.waitFor(() => route.data.type === "session" && route.data.sessionID === target.id)
-    expect(route.data).toEqual({ type: "session", sessionID: target.id })
-  } finally {
-    app.renderer.destroy()
-    await storage.flush()
-    await temporary[Symbol.asyncDispose]()
-  }
-})
-
-test("falls back to direct session.get when pasting an exact ses_ ID outside the scoped list", async () => {
+test("opens a pasted session ID that the scoped list omits", async () => {
   const events = createEventStream()
   const exactID = "ses_1234567890abcdefABCDEF1234"
   const foreign = {
@@ -351,6 +218,8 @@ test("falls back to direct session.get when pasting an exact ses_ ID outside the
     // The @session:<id> form copied from a transcript resolves to the same session.
     await app.mockInput.typeText(`@session:${exactID}`)
     await app.waitForFrame((frame) => fetched.includes(exactID) && frame.includes("Foreign project session"))
+    // Only the complete ID is looked up, not each partial ID typed on the way.
+    expect(fetched).toEqual([exactID])
 
     app.mockInput.pressEnter()
     await app.waitFor(() => route.data.type === "session" && route.data.sessionID === exactID)

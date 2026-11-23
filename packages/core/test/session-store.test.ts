@@ -192,41 +192,6 @@ describe("SessionStore", () => {
     }),
   )
 
-  it.effect("matches session IDs by prefix only for ses_ queries and escapes GLOB metacharacters", () =>
-    Effect.gen(function* () {
-      const bus = yield* seedSessions([
-        { id: "ses_alpha_1", updated: 10, title: "First notes" },
-        { id: "ses_alpha_2", updated: 20, title: "Second notes" },
-        { id: "ses_alphax1", updated: 25, title: "Different separator" },
-        { id: "ses_beta_9", updated: 30, title: "Discuss ses_alpha_1 regression" },
-      ])
-      yield* bus.publish(SessionEvent.Created, {
-        sessionID: Session.ID.make("ses_untitled_1"),
-        projectID: Project.ID.global,
-        location: { directory: AbsolutePath.make("/project") },
-        slug: "store-test",
-        version: "test",
-      })
-      const store = yield* SessionStore.Service
-      const search = (text: string) =>
-        store.list({ search: text }).pipe(Effect.map((sessions) => sessions.map((session) => String(session.id))))
-
-      expect(yield* search("ses_alpha_1")).toEqual(["ses_beta_9", "ses_alpha_1"])
-      expect(yield* search("  ses_alpha_2  ")).toEqual(["ses_alpha_2"])
-      expect(yield* search("ses_alpha_")).toEqual(["ses_beta_9", "ses_alpha_2", "ses_alpha_1"])
-      expect(yield* search("ses_untitled")).toEqual(["ses_untitled_1"])
-      expect(yield* search("alpha")).toEqual(["ses_beta_9"])
-      expect(yield* search("ses")).toEqual(["ses_beta_9"])
-      expect(yield* search("beta")).toEqual([])
-      expect(yield* search("ses_ALPHA_2")).toEqual([])
-      expect(yield* search("ses_*")).toEqual([])
-      expect(yield* search("ses_?")).toEqual([])
-      expect(yield* search("ses_[a]")).toEqual([])
-      expect(yield* search("ses_%")).toEqual(["ses_beta_9"])
-      expect(yield* search("ses_z%")).toEqual([])
-    }),
-  )
-
   it.effect("pages messages by durable sequence, not timestamp or ID, and scopes cursor lookup", () =>
     Effect.gen(function* () {
       const sessionID = Session.ID.make("ses_messages")

@@ -96,8 +96,7 @@ export function DialogSessionList() {
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const localSessions = createMemo(() => {
-    const raw = filter().trim()
-    const query = raw.toLowerCase()
+    const query = filter().trim().toLowerCase()
     const current = data.location.info(pickerLocation())
     const sessions = data.session
       .list()
@@ -107,12 +106,9 @@ export function DialogSessionList() {
           (allProjects() ||
             (session.projectID === current?.project.id && session.location.directory === current.directory)),
       )
-    if (!raw) return sessions
+    if (!query) return sessions
     return sessions.filter(
-      (session) =>
-        !session.parentID &&
-        (withTimestampedFallback(session).toLowerCase().includes(query) ||
-          (raw.startsWith("ses_") && session.id.startsWith(raw))),
+      (session) => !session.parentID && withTimestampedFallback(session).toLowerCase().includes(query),
     )
   })
   const sessions = createMemo(() => {
