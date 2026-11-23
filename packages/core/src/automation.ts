@@ -783,11 +783,6 @@ const layer = Layer.effect(
 
     // Re-check the original placement and the resource-specific grant before opening a stream or running an action.
     const checkWatch = Effect.fnUntraced(function* (row: Row, server: string) {
-      const config = yield* settings(row.directory)
-      if (!config.enabled)
-        return yield* new InvalidError({
-          reason: "Event automations are disabled",
-        })
       const owner = row.session_id === null ? undefined : yield* existing(row.session_id)
       if (
         !owner ||
@@ -819,6 +814,16 @@ const layer = Layer.effect(
       }).pipe(inDirectory(row.directory))
     })
 
+    // Like a timer, a watch where automations are off stays active and is checked again later. It starts from now
+    // when it reopens, so nothing that happened while it was off runs.
+    const disableWatch = (row: Row, now: number) =>
+      settle(row, {
+        last_outcome: "disabled",
+        retry_at: now + DISABLED_RETRY,
+        event_position: row.event_position && { ...row.event_position, cursor: null },
+        time_updated: now,
+      })
+
     const expireWatch = (row: Row, now: number) =>
       settle(row, {
         status: "done",
@@ -838,6 +843,7 @@ const layer = Layer.effect(
         if (row.status !== "active" || trigger.type !== "event") return Stream.empty
         const now = yield* Clock.currentTimeMillis
         if (row.expires_at !== null && now >= row.expires_at) return Stream.fromEffectDrain(expireWatch(row, now))
+        if (!(yield* settings(row.directory)).enabled) return Stream.fromEffectDrain(disableWatch(row, now))
         yield* checkWatch(row, trigger.server)
         const position = row.event_position
         if (!position)
@@ -856,6 +862,10 @@ const layer = Layer.effect(
               if (current.status !== "active" || !(yield* claimLeader(at))) return false
               if (current.expires_at !== null && at >= current.expires_at) {
                 yield* expireWatch(current, at)
+                return false
+              }
+              if (!(yield* settings(current.directory)).enabled) {
+                yield* disableWatch(current, at)
                 return false
               }
               yield* checkWatch(current, trigger.server)
@@ -901,17 +911,37 @@ const layer = Layer.effect(
     })
 
     // The lease/doorbell loop also sees changes from other processes. It never polls a producer for events.
-    const reconcileWatches = Effect.gen(function* () {
+    const reconcileWatches = Effect.fnUntraced(function* (now: number) {
       const active = yield* db
-        .select({ id: AutomationTable.id, expires: AutomationTable.expires_at })
+        .select()
         .from(AutomationTable)
-        .where(and(eq(AutomationTable.status, "active"), isNull(AutomationTable.next_due_at)))
+        .where(
+          and(
+            eq(AutomationTable.status, "active"),
+            isNull(AutomationTable.next_due_at),
+            or(isNull(AutomationTable.retry_at), lte(AutomationTable.retry_at, now)),
+          ),
+        )
         .all()
         .pipe(Effect.orDie)
       const ids = new Set(active.map((row) => row.id))
       for (const [id] of Array.from(watches)) if (!ids.has(id)) yield* FiberMap.remove(watches, id)
-      for (const row of active)
-        yield* FiberMap.run(watches, row.id, watch(row.id, row.expires), { onlyIfMissing: true })
+      for (const row of active) {
+        // An open watch whose directory turned automations off closes now, not on its next event. Its directory is
+        // already loaded, so reading its config is cheap.
+        if (yield* FiberMap.has(watches, row.id)) {
+          // A missing directory is left to the watch, which pauses on it.
+          const enabled = yield* settings(row.directory).pipe(
+            Effect.map((config) => config.enabled),
+            Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(true)),
+          )
+          if (enabled) continue
+          yield* FiberMap.remove(watches, row.id)
+          yield* disableWatch(row, now)
+          continue
+        }
+        yield* FiberMap.run(watches, row.id, watch(row.id, row.expires_at), { onlyIfMissing: true })
+      }
       return active.length
     })
 
@@ -940,7 +970,7 @@ const layer = Layer.effect(
         return yield* idle
       }
       // No timer tick or next-slot query for event-only databases; timer-only databases need no extra probe.
-      if ((yield* reconcileWatches) > 0 && !(yield* hasActiveRows(true))) return yield* idle
+      if ((yield* reconcileWatches(now)) > 0 && !(yield* hasActiveRows(true))) return yield* idle
       yield* Effect.scoped(
         Effect.forkScoped(heartbeat).pipe(
           Effect.andThen(
