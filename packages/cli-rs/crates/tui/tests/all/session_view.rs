@@ -28,6 +28,7 @@ fn location_at(directory: &str) -> Value {
 fn limits(spent: f64) -> Value {
     json!({
         "workspace": { "id": "wrk_1", "name": "Acme", "usageURL": "https://opencode.ai/console/wrk_1/usage" },
+        "allowances": [],
         "budgets": [{
             "id": "big", "limit": 10, "spent": 0, "scope": "each", "per": "model", "coverage": "models",
             "models": [{ "providerID": "opencode", "modelID": "big", "name": "Big Pickle", "spent": spent }],

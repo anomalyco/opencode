@@ -60,6 +60,11 @@ export const layer = Layer.effect(
       }
       return {
         ...(console ? { workspace: console.workspace } : {}),
+        ...(Result.isFailure(workspace)
+          ? { unavailable: [Provider.ID.opencode] }
+          : Result.isFailure(subscription)
+            ? { unavailable: [Provider.ID.openai] }
+            : {}),
         allowances: [...(console?.allowances ?? []), ...(openai ? [openai] : [])],
         budgets: console?.budgets ?? [],
       }

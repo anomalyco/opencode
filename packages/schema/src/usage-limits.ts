@@ -75,5 +75,7 @@ export const Info = Schema.Struct({
     usageURL: Schema.String,
   }).pipe(optional),
   allowances: Schema.Array(Allowance),
+  /** Sources that could not be read while another source returned data. */
+  unavailable: Schema.Array(Provider.ID).pipe(optional),
   budgets: Schema.Array(Budget),
 }).annotate({ identifier: "UsageLimits.Info" })

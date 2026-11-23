@@ -114,10 +114,9 @@ type LocationData = {
   provider?: ProviderInfo[]
   reference?: ReferenceInfo[]
   websearch?: WebSearchProvider[]
-  // Subscription allowances and Console budgets; null when no usage data is available.
+  // The Go allowance and Console budgets of the OpenCode Console workspace the location is signed in to; null when it
+  // isn't signed in.
   usageLimits?: UsageLimitsInfo | null
-  usageFailed?: boolean
-  usageAccountRevision?: number
   // Currently running shell commands for this location, keyed by shell id. Entries are removed
   // once the command exits or is deleted, so this only ever holds in-flight shells.
   shell?: Record<string, ShellWithLocation>
@@ -1429,10 +1428,7 @@ export function createData(config: CreateDataInput) {
       Object.keys(store.location).forEach((key) => {
         const ref = JSON.parse(key) as [string, string | null]
         const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
-        refreshUsageLimits(
-          location,
-          event.data.integrationID === "openai" || event.data.integrationID === "opencode",
-        )
+        refreshUsageLimits(location)
         if (event.type === "credential.updated") {
           refreshLocation("integration", result.location.integration, location)
           return
@@ -1567,18 +1563,11 @@ export function createData(config: CreateDataInput) {
   // effective location, and publishes under the server's canonical location; `alias`
   // also publishes under the requested key when the two differ.
   // Reloads usage limits only where something has read them, since each load asks OpenCode Console.
-  function refreshUsageLimits(location: LocationRef, clear = false) {
+  function refreshUsageLimits(location: LocationRef) {
     const loaded =
       store.location[locationKey(location)]?.usageLimits !== undefined ||
-      store.location[locationKey(location)]?.usageFailed ||
       sync.has(`location.usageLimits:${locationKey(location)}`)
     usageLimits.invalidate(location)
-    if (clear && loaded)
-      setStore("location", locationKey(location), (data) => ({
-        usageLimits: undefined,
-        usageFailed: false,
-        usageAccountRevision: (data.usageAccountRevision ?? 0) + 1,
-      }))
     if (loaded) refresh(() => usageLimits.sync(location))
   }
 
@@ -1605,33 +1594,7 @@ export function createData(config: CreateDataInput) {
   }
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
-  const usageLimits = {
-    list: (ref?: LocationRef) => store.location[locationKey(ref ?? defaultLocation())]?.usageLimits,
-    failed: (ref?: LocationRef) => store.location[locationKey(ref ?? defaultLocation())]?.usageFailed === true,
-    invalidate: (ref?: LocationRef) => sync.invalidate(`location.usageLimits:${locationKey(ref ?? defaultLocation())}`),
-    sync: (ref?: LocationRef) => {
-      const location = ref ?? defaultLocation()
-      const id = locationKey(location)
-      return sync.run(`location.usageLimits:${id}`, () => {
-        const revision = store.location[id]?.usageAccountRevision
-        const current = () => store.location[id]?.usageAccountRevision === revision
-        setStore("location", id, { usageFailed: false })
-        return api()
-          .experimental.usage.limits({ location: locationQuery(location) })
-          .then(
-            (response) => {
-              if (current())
-                setStore("location", locationKey(response.location), { usageLimits: response.data, usageFailed: false })
-            },
-            (error) => {
-              if (!current()) return
-              setStore("location", id, { usageLimits: undefined, usageFailed: true })
-              throw error
-            },
-          )
-      })
-    },
-  }
+  const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory }
@@ -2380,14 +2343,7 @@ export function createData(config: CreateDataInput) {
         result.session.form.invalidate("global", location)
       },
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
-      usage: {
-        accountRevision: (ref?: LocationRef) =>
-          store.location[locationKey(ref ?? defaultLocation())]?.usageAccountRevision ?? 0,
-        limits: usageLimits.list,
-        failed: usageLimits.failed,
-        sync: usageLimits.sync,
-        invalidate: usageLimits.invalidate,
-      },
+      usage: { limits: usageLimits.list, sync: usageLimits.sync, invalidate: usageLimits.invalidate },
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
       config: locationResource("config", async (location) => ({

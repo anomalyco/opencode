@@ -122,7 +122,9 @@ export function DialogUsage() {
       <Match when={limits.info() !== undefined}>
         <DialogLayout header={<DialogHeader title="Usage" />}>
           <text fg={theme.text.muted} wrapMode="word">
-            Sign in to OpenCode Console with /connect to see your workspace's usage limits.
+            {limits.info()?.unavailable?.includes("opencode")
+              ? "OpenCode Console usage could not be loaded. Reopen /usage to retry."
+              : "Sign in to OpenCode Console with /connect to see your workspace's usage limits."}
           </text>
         </DialogLayout>
       </Match>

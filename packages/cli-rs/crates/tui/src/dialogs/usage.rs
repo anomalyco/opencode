@@ -228,7 +228,10 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
     let error = cx.theme.text.feedback.error.base;
     let state = local.usage();
     // Reopen on a state change because signed-out, loading, and ready states use different layouts.
-    let shown = state.as_ref().map(Option::is_some);
+    let workspace_state = |info: &Option<Option<UsageLimitsInfo>>| {
+        info.as_ref().map(|value| value.as_ref().map(|v| (v.workspace.clone(), v.unavailable.clone())))
+    };
+    let shown = workspace_state(&state);
     let weak = Rc::downgrade(local);
     let reopened = Rc::new(Cell::new(false));
     let handle: Rc<RefCell<Option<Select<String>>>> = Rc::default();
@@ -239,7 +242,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
         if reopened.get() {
             return;
         }
-        if local.usage().as_ref().map(Option::is_some) != shown {
+        if workspace_state(&local.usage()) != shown {
             reopened.set(true);
             let again = local.clone();
             local.app.defer(move |_| show(&again));
@@ -258,10 +261,23 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
             true,
         );
     };
+    let Some(workspace) = info.workspace else {
+        let unavailable = info.unavailable.iter().flatten().any(|provider| provider.0 == "opencode");
+        return message(
+            cx,
+            "Usage",
+            if unavailable {
+                "OpenCode Console usage could not be loaded. Reopen /usage to retry."
+            } else {
+                "Sign in to OpenCode Console with /connect to see your workspace's usage limits."
+            },
+            true,
+        );
+    };
     let current = rows(local);
     let resets = current.iter().map(|row| row.usage.resets_at).fold(f64::INFINITY, f64::min);
     let description = [
-        info.workspace.name.as_ref().map(|name| format!("Workspace: {name}")),
+        workspace.name.as_ref().map(|name| format!("Workspace: {name}")),
         (!current.is_empty()).then(|| format!("Resets {}", format_reset(resets))),
     ]
     .into_iter()

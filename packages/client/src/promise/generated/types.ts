@@ -2718,6 +2718,7 @@ export type AutomationAction = AutomationActionPrompt | AutomationActionCode | A
 export type UsageLimitsInfo = {
   workspace?: { id: string; name?: string; usageURL: string }
   allowances: Array<UsageLimitsAllowance>
+  unavailable?: Array<ProviderID>
   budgets: Array<UsageLimitsBudget>
 }
 

@@ -26347,6 +26347,12 @@
               "$ref": "#/components/schemas/UsageLimits.Allowance"
             }
           },
+          "unavailable": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Provider.ID"
+            }
+          },
           "budgets": {
             "type": "array",
             "items": {

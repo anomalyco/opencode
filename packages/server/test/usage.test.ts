@@ -72,6 +72,7 @@ it.live("returns the usage limits of the OpenCode Console workspace a location i
 it.live("returns subscription windows without a Console workspace", () =>
   Effect.gen(function* () {
     const limits = {
+      unavailable: [Provider.ID.opencode],
       allowances: [
         {
           providerID: Provider.ID.openai,

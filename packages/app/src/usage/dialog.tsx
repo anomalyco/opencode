@@ -68,6 +68,10 @@ export function DialogUsage(props: {
   })
 
   let timer: ReturnType<typeof setTimeout> | undefined
+  const consoleUnavailable = () => {
+    const current = view()
+    return current.status === "ready" && current.info.unavailable?.includes("opencode")
+  }
 
   const dispatch = (event: UsageDialogEvent) => {
     const previous = untrack(usageState)
@@ -134,8 +138,8 @@ export function DialogUsage(props: {
               <div class="flex flex-col px-3 pb-3">
                 <Panel gap={8}>
                   <Message
-                    title={language.t("usage.signedOut.title")}
-                    body={language.t("usage.signedOut.body")}
+                    title={language.t(consoleUnavailable() ? "usage.error" : "usage.signedOut.title")}
+                    body={language.t(consoleUnavailable() ? "usage.consoleUnavailable.body" : "usage.signedOut.body")}
                   />
                 </Panel>
               </div>

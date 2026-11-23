@@ -366,6 +366,7 @@ it.effect("keeps the healthy source when either subscription endpoint fails", ()
       chatgpt,
     )
     expect(console?.workspace?.id).toBe("wrk_anomaly")
+    expect(console?.unavailable).toEqual([Provider.ID.openai])
     const codex = yield* read(
       signedIn,
       (url) =>
@@ -378,6 +379,7 @@ it.effect("keeps the healthy source when either subscription endpoint fails", ()
       { ...chatgpt, methodID: Integration.MethodID.make("chatgpt-headless") },
     )
     expect(codex?.allowances[0]?.windows[0]?.resetsAt).toBe(42000)
+    expect(codex?.unavailable).toEqual([Provider.ID.opencode])
   }),
 )
 
