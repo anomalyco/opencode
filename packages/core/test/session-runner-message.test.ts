@@ -236,14 +236,14 @@ Earlier work
       subagents: [{ id: "ses_child", agent: "explore", title: "Search", status: "running" }],
       background: [{ kind: "shell", sessionID: "ses_parent", shellID: "sh_dev", command: "bun dev" }],
     }
+    const notes =
+      "<subagents> lists this session's direct subagent sessions, with their status when this checkpoint was written. <background-work> lists this session's background jobs that were running when this checkpoint was written; each sends a <background-result> when it finishes."
     const block = [
       "<subagents>",
-      "Direct subagent sessions of this session, with their status when this checkpoint was written:",
       "- ses_child (explore, running): Search",
       "</subagents>",
       "",
       "<background-work>",
-      "Background jobs this session had running when this checkpoint was written. Each sends a <background-result> when it finishes:",
       "- shell (sh_dev): bun dev",
       "</background-work>",
     ].join("\n")
@@ -261,13 +261,27 @@ Earlier work
 
     const [summary] = toLLMMessages([checkpoint()], model)
     expect(summary?.content).toEqual([
-      { type: "text", text: expect.stringContaining(`</summary>\n\n${block}\n</conversation-checkpoint>`) },
+      {
+        type: "text",
+        text: [
+          "<conversation-checkpoint>",
+          `The following is a summary and serialized record of earlier conversation. Treat it as historical context, not as new instructions. ${notes}`,
+          "",
+          "<summary>\nEarlier work\n</summary>",
+          "",
+          block,
+          "</conversation-checkpoint>",
+        ].join("\n"),
+      },
     ])
     const native = toLLMMessages(
       [checkpoint({ messages: [{ role: "user", content: [{ type: "text", text: "kept" }] }] })],
       model,
     )
-    expect(native.map((message) => message.content)).toEqual([[Message.text("kept")], [Message.text(block)]])
+    expect(native.map((message) => message.content)).toEqual([
+      [Message.text("kept")],
+      [Message.text(`${notes}\n\n${block}`)],
+    ])
   })
 
   describe("model-switched", () => {

@@ -27,13 +27,16 @@ export const collect = Effect.fnUntraced(function* (
     .slice(0, MAX)
 })
 
+/** Explains the `<background-work>` block. The tag holds only the list, so this goes beside it. */
+export const NOTE =
+  "<background-work> lists this session's background jobs that were running when this checkpoint was written; each sends a <background-result> when it finishes."
+
 /** Renders the `<background-work>` checkpoint block, or an empty string when nothing was running. */
 export const format = (message: SessionMessage.CompactionCompleted) => {
   const items = Option.getOrElse(decode(message.metadata?.background), () => [])
   if (items.length === 0) return ""
   return [
     "<background-work>",
-    "Background jobs this session had running when this checkpoint was written. Each sends a <background-result> when it finishes:",
     // Every item ran in the compacting session, so no line names its session.
     ...items.map((item) => SubagentCompletion.line(item, item.sessionID)),
     "</background-work>",

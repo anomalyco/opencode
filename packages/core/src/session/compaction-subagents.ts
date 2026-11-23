@@ -58,16 +58,15 @@ export const collect = Effect.fnUntraced(function* (
   return [...running, ...idle].slice(0, MAX)
 })
 
+/** Explains the `<subagents>` block. The tag holds only the list, so this goes beside it. */
+export const NOTE =
+  "<subagents> lists this session's direct subagent sessions, with their status when this checkpoint was written."
+
 /** Renders the `<subagents>` checkpoint block, or an empty string when none exist. */
 export const format = (message: SessionMessage.CompactionCompleted) => {
   const entries = Option.getOrElse(decodeEntries(message.metadata?.subagents), () => [])
   if (entries.length === 0) return ""
-  return [
-    "<subagents>",
-    "Direct subagent sessions of this session, with their status when this checkpoint was written:",
-    ...entries.map(formatEntry),
-    "</subagents>",
-  ].join("\n")
+  return ["<subagents>", ...entries.map(formatEntry), "</subagents>"].join("\n")
 }
 
 const isBusy = (session: SessionSchema.Info) =>
