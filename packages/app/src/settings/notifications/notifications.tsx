@@ -87,9 +87,12 @@ export const SettingsNotifications: Component = () => {
             >
               <div data-action="settings-notifications-agent">
                 <Switch
+                  hideLabel
                   checked={settings.notifications.agent()}
                   onChange={(checked) => settings.notifications.setAgent(checked)}
-                />
+                >
+                  {language.t("settings.general.notifications.agent.title")}
+                </Switch>
               </div>
             </SettingsRow>
 
@@ -99,9 +102,12 @@ export const SettingsNotifications: Component = () => {
             >
               <div data-action="settings-notifications-permissions">
                 <Switch
+                  hideLabel
                   checked={settings.notifications.permissions()}
                   onChange={(checked) => settings.notifications.setPermissions(checked)}
-                />
+                >
+                  {language.t("settings.general.notifications.permissions.title")}
+                </Switch>
               </div>
             </SettingsRow>
 
@@ -126,9 +132,12 @@ export const SettingsNotifications: Component = () => {
             >
               <div data-action="settings-notifications-errors">
                 <Switch
+                  hideLabel
                   checked={settings.notifications.errors()}
                   onChange={(checked) => settings.notifications.setErrors(checked)}
-                />
+                >
+                  {language.t("settings.general.notifications.errors.title")}
+                </Switch>
               </div>
             </SettingsRow>
           </SettingsList>
@@ -147,9 +156,12 @@ export const SettingsNotifications: Component = () => {
             >
               <div data-action="settings-sounds-interface">
                 <Switch
+                  hideLabel
                   checked={settings.sounds.interfaceEnabled()}
                   onChange={(checked) => settings.sounds.setInterfaceEnabled(checked)}
-                />
+                >
+                  {language.t("settings.general.sounds.interface.title")}
+                </Switch>
               </div>
             </SettingsRow>
           </SettingsList>
