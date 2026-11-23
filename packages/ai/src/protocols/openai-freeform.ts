@@ -78,7 +78,8 @@ const optionsGrammar = (
     ...(body === undefined ? ["body: /[\\s\\S]+/", `plain: /${notStartingWith(prefix)}/`] : [body]),
   ].join("\n")
 
-// Only forms `JSON.stringify` writes back unchanged, so replay is exact; `number` would allow `1.0` or `1e2`.
+// Only forms `JSON.stringify` writes back unchanged, so replay is exact; `number` would allow `1.0` or `1e2`. Integers
+// stop at 15 digits, past which parsing can round them.
 const valueRule = (schema: JsonSchema): string | undefined => {
   if (Array.isArray(schema.enum)) return `(${schema.enum.map((item) => larkString(encodeJson(item))).join(" | ")})`
   if (schema.type === "boolean") return '("true" | "false")'
@@ -90,8 +91,8 @@ const valueRule = (schema: JsonSchema): string | undefined => {
       : typeof schema.exclusiveMinimum === "number"
         ? schema.exclusiveMinimum + 1
         : undefined
-  if (minimum === undefined || minimum < 0) return "/0|-?[1-9][0-9]*/"
-  return minimum >= 1 ? "/[1-9][0-9]*/" : "/0|[1-9][0-9]*/"
+  if (minimum === undefined || minimum < 0) return "/0|-?[1-9][0-9]{0,14}/"
+  return minimum >= 1 ? "/[1-9][0-9]{0,14}/" : "/0|[1-9][0-9]{0,14}/"
 }
 
 const larkString = (text: string) => JSON.stringify(text)

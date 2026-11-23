@@ -82,7 +82,7 @@ test("with full_codemode, raw-text models set execute's timeout and background o
   const [tool] = prepared.body.tools
   expect(tool).toMatchObject({ type: "custom", name: "execute", format: { type: "grammar", syntax: "lark" } })
   expect(tool.description).toContain("start the code with a `// @options:` line")
-  expect(tool.format.definition).toContain('pair_0: "\\"timeout\\":" /[1-9][0-9]*/')
+  expect(tool.format.definition).toContain('pair_0: "\\"timeout\\":" /[1-9][0-9]{0,14}/')
   expect(tool.format.definition).toContain('pair_1: "\\"background\\":" ("true" | "false")')
 })
 

@@ -101,7 +101,7 @@ describe("OpenAI freeform tools with an options line", () => {
         'options_line: "// @options: {" (option_0 | option_1) "}\\n"',
         'option_0: pair_0 ("," pair_1)?',
         "option_1: pair_1",
-        'pair_0: "\\"timeout\\":" /[1-9][0-9]*/',
+        'pair_0: "\\"timeout\\":" /[1-9][0-9]{0,14}/',
         'pair_1: "\\"background\\":" ("true" | "false")',
         "body: /[\\s\\S]+/",
         String.raw`plain: /(?:[^\/]|\/[^\/]|\/\/[^ ]|\/\/ [^@]|\/\/ @[^o]|\/\/ @o[^p]|\/\/ @op[^t]|\/\/ @opt[^i]|\/\/ @opti[^o]|\/\/ @optio[^n]|\/\/ @option[^s]|\/\/ @options[^:])[\s\S]*|\/|\/\/|\/\/ |\/\/ @|\/\/ @o|\/\/ @op|\/\/ @opt|\/\/ @opti|\/\/ @optio|\/\/ @option|\/\/ @options/`,
