@@ -145,7 +145,7 @@ const TOOL_CHOICE = { auto: undefined, none: "NONE", required: "REQUIRED", tool:
 
 const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMRequest) {
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
-  const definitions = ProviderShared.toolDefinitions(request.tools)
+  const definitions = ProviderShared.flattenTools(request.tools)
   const messages: (typeof Message.Type)[] = request.system.length
     ? [
         {

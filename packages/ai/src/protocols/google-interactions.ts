@@ -368,7 +368,7 @@ const lowerToolResult = Effect.fnUntraced(function* (part: ToolResultPart) {
 
 const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (request: LLMRequest) {
   const options = yield* decodeOptions(request.providerOptions ?? {})
-  const definitions = ProviderShared.toolDefinitions(request.tools)
+  const definitions = ProviderShared.flattenTools(request.tools)
   if (definitions.some((tool) => tool.native !== undefined))
     return yield* ProviderShared.invalidRequest("Google Interactions hosted tools are not supported")
   if (request.topK !== undefined || request.frequencyPenalty !== undefined || request.presencePenalty !== undefined)

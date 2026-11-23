@@ -388,7 +388,7 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
   return {
     model: request.model.id,
     messages: yield* lowerMessages(request),
-    tools: request.tools.length > 0 ? ProviderShared.toolDefinitions(request.tools).map(lowerTool) : undefined,
+    tools: request.tools.length > 0 ? ProviderShared.flattenTools(request.tools).map(lowerTool) : undefined,
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: request.maxTokens,

@@ -560,7 +560,7 @@ const applyThinkingBindingDefault = (request: LLMRequest, thinking: Readonly<Rec
 
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
-  const definitions = ProviderShared.toolDefinitions(request.tools)
+  const definitions = ProviderShared.flattenTools(request.tools)
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const maxTokens =
     isNova2(request.model) && (options.effort === "high" || isHighReasoningEffort(request.http?.body))

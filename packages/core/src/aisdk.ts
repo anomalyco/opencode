@@ -498,7 +498,7 @@ function callOptions(
     presencePenalty: request.presencePenalty,
     frequencyPenalty: request.frequencyPenalty,
     seed: request.seed,
-    tools: ProviderShared.toolDefinitions(request.tools).map(tool),
+    tools: ProviderShared.flattenTools(request.tools).map(tool),
     toolChoice: toolChoice(request.toolChoice),
     headers: request.headers,
     providerOptions: requestProviderOptions(request.providerOptions, packageName, modelID, optionKey),

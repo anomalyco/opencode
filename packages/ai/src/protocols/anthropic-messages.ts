@@ -812,7 +812,7 @@ const lowerToolsUpdate = Effect.fnUntraced(function* (
   return {
     role: "system" as const,
     content: [
-      ...ProviderShared.toolDefinitions(update.add).map((tool) => ({
+      ...ProviderShared.flattenTools(update.add).map((tool) => ({
         type: "tool_addition" as const,
         tool: { type: "tool_definition" as const, definition: lowerTool(breakpoints, tool) },
       })),
@@ -1022,7 +1022,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
-  const definitions = ProviderShared.toolDefinitions(updates.request.tools)
+  const definitions = ProviderShared.flattenTools(updates.request.tools)
   const tools = definitions.length === 0 ? undefined : definitions.map((tool) => lowerTool(breakpoints, tool))
   // Anthropic rejects tool_choice when no tool is declared; "none" is only meaningful with tools present.
   const declared = tools !== undefined || addsTools(request)

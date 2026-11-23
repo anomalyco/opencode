@@ -365,7 +365,8 @@ export const unsupportedOperation = (input: {
 /**
  * Lower namespaces to flat definitions for protocols without a native
  * namespace construct. Leaf names join their namespace path with `_` because
- * `.` is not broadly accepted in provider tool names.
+ * `.` is not broadly accepted in provider tool names. A no-op on tools `flattenRequest` already flattened, so adapters
+ * call it to type their tools and to keep `body.from` working when called directly.
  */
 export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string> = []) => {
   const flat = tools.flatMap((tool): ReadonlyArray<ToolDefinition> => {
@@ -412,17 +413,13 @@ export const flattenRequest = (request: LLMRequest): LLMRequest => {
   }
 }
 
-/** Flattened tools, typed as the definitions they are. */
-export const toolDefinitions = (tools: ReadonlyArray<ToolEntry>) =>
-  tools.filter((tool): tool is ToolDefinition => tool.type === "tool")
-
 /**
  * @deprecated Routes without native namespaces already receive flattened requests; use `flattenRequest`. Removed in
  * the next minor.
  */
 export const flattenToolRequest = (request: LLMRequest) => {
   const flat = flattenRequest(request)
-  return { tools: toolDefinitions(flat.tools), request: flat }
+  return { tools: flattenTools(flat.tools), request: flat }
 }
 
 // A forced choice names a namespaced tool by its path (`crm.lookup`); point it at the flattened definition.
