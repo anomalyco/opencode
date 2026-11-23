@@ -1,6 +1,6 @@
 // Soft Radar, the activity spinner: a 5×5 dot grid whose lit head sweeps clockwise around each square ring, leaving a
-// fading trail, with the centre dot steady. Animation is CSS only; every dot shares one loop, so pinning start times with
-// syncSpinPhase keeps every spinner on screen in phase.
+// fading trail, with the centre dot steady. All frames are baked once into a vertical SVG mask strip so each spinner is
+// one composited transform animation instead of 25 separate SVG elements.
 
 const span = 5
 
@@ -11,6 +11,12 @@ const pitch = 3
 
 /** Seconds per loop at 1×. */
 export const radarLoop = 1.8
+
+/** Discrete frames baked into the vertical sprite strip (20 fps at 1×). */
+export const radarFrames = 36
+
+/** Frame shown for reduced motion: the sweep frozen about a fifth of the way into its loop. */
+export const radarStillFrame = Math.round(0.22 * radarFrames)
 
 /** Resting opacity of an unlit dot. */
 const dim = 0.2
@@ -31,31 +37,63 @@ export type RadarDot = {
   steady: boolean
   /** Opacity for reduced motion: the sweep frozen a fifth of the way into its loop. */
   still: number
-  /** Which of the keyframes the dot runs: radarKeyframes names them `name-0`, `name-1`… */
-  shape: number
+  /** Which of the opacity curves the dot runs. */
+  curve: number
 }
 
 type Cell = { gx: number; gy: number }
 
+const cached = layout()
+
 /** The radar's dots, positioned in a 16-unit viewBox. */
 export function radarDots() {
-  return layout().dots
+  return cached.dots
 }
 
-/** The radar's keyframes, one per shape its dots run, named `name-0`, `name-1`… */
-export function radarKeyframes(name: string) {
-  return layout()
-    .shapes.map((stops, index) => {
-      const frames = stops
-        .map(
-          ([percent, level]) =>
-            `${round(percent)}%{opacity:${round(dim + (1 - dim) * level)};animation-timing-function:linear}`,
-        )
-        .join("")
+/** One dot's opacity (0.2–1) at loop phase 0–1. */
+export function radarOpacity(dot: RadarDot, phase: number) {
+  const level = dot.steady ? trail[0]![1] : levelAt(cached.curves[dot.curve]!, frac(phase - dot.at) * 100)
 
-      return `@keyframes ${name}-${index}{${frames}}`
-    })
-    .join("")
+  return round(dim + (1 - dim) * level)
+}
+
+/** One vertical SVG sprite strip containing every frame of the radar loop. */
+export function radarSpriteSvg() {
+  const rx = round(size * 0.24)
+
+  const frames = Array.from({ length: radarFrames }, (_, frame) => {
+    const phase = frame / radarFrames
+    const offset = frame * 16
+
+    return cached.dots
+      .map((dot) => {
+        const opacity = radarOpacity(dot, phase)
+        const fillOpacity = opacity === dim ? "" : ` fill-opacity='${opacity}'`
+
+        return `<rect x='${dot.x}' y='${dot.y + offset}' width='${dot.size}' height='${dot.size}' rx='${rx}'${fillOpacity}/>`
+      })
+      .join("")
+  }).join("")
+
+  return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 ${radarFrames * 16}' fill='black' fill-opacity='${dim}'>${frames}</svg>`
+}
+
+/** Shared stylesheet driving every Soft Radar spinner from one cached SVG mask and one transform animation. */
+export function radarStylesheet(name: string) {
+  const encoded = radarSpriteSvg().replace(/%/g, "%25").replace(/#/g, "%23").replace(/</g, "%3C").replace(/>/g, "%3E")
+  const stillOffset = round((radarStillFrame / radarFrames) * 100)
+
+  return [
+    `@keyframes ${name}{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-100%,0)}}`,
+    `:where([data-slot="spinner-dots"] > [data-slot="spinner-strip"]){`,
+    `height:${radarFrames * 100}%;`,
+    `--spinner-still:translate3d(0,-${stillOffset}%,0);`,
+    `--spinner-mask:url("data:image/svg+xml,${encoded}");`,
+    `-webkit-mask-image:var(--spinner-mask);`,
+    `mask-image:var(--spinner-mask);`,
+    `animation:${name} calc(${radarLoop}s * var(--spinner-time, 1)) steps(${radarFrames},end) infinite;`,
+    `}`,
+  ].join("")
 }
 
 function layout() {
@@ -73,18 +111,22 @@ function layout() {
     const others = placed.filter((other) => other !== dot && !other.steady && ringOf(other.cell) === ringOf(dot.cell))
     const behind = Math.min(...others.map((other) => frac(dot.at - other.at)))
     const ahead = Math.min(...others.map((other) => frac(other.at - dot.at)))
+
     return `${round(behind)} ${round(ahead)}`
   })
+
   const unique = [...new Set(keys.filter((key) => key !== ""))]
-  const shapes = unique.map((key) => {
+
+  const curves = unique.map((key) => {
     const [behind, ahead] = key.split(" ").map(Number)
+
     return headStops(behind! * 100, ahead! * 100)
   })
 
   const dots = placed.map((dot, index): RadarDot => {
-    const shape = Math.max(0, unique.indexOf(keys[index]!))
+    const curve = Math.max(0, unique.indexOf(keys[index]!))
     // The steady centre glows like the fresh trail, so the head stays the brightest dot.
-    const level = dot.steady ? trail[0]![1] : levelAt(shapes[shape]!, frac(0.22 - dot.at) * 100)
+    const level = dot.steady ? trail[0]![1] : levelAt(curves[curve]!, frac(0.22 - dot.at) * 100)
 
     return {
       x: round(8 + dot.cell.gx * pitch - size / 2),
@@ -93,11 +135,11 @@ function layout() {
       at: round(dot.at),
       steady: dot.steady,
       still: round(dim + (1 - dim) * level),
-      shape,
+      curve,
     }
   })
 
-  return { dots, shapes }
+  return { dots, curves }
 }
 
 // One dot's level through the loop, 0% being the moment the head passes it, with `behind` and `ahead` the percent of

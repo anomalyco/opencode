@@ -1,21 +1,25 @@
-import { For, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { splitProps, type ComponentProps, type JSX } from "solid-js"
 import { syncSpinPhase } from "../hooks/spin-phase"
-import { radarDots, radarKeyframes, radarLoop } from "./spinner-radar"
+import { radarStylesheet } from "./spinner-radar"
 
 // Every AI activity spinner (busy session tabs, the activity chip, subagents, tool cards) shows Soft Radar. Non-AI
 // loading uses Loader.
 
 const keyframes = "spinner-radar"
 
-const dots = radarDots()
-
-// The keyframes are added to the document once, the first time a spinner renders.
+// The sprite mask and keyframes are added to the document once, the first time a spinner renders.
 let added = false
 
 /**
- * Each dot is its own SVG over the whole box, drawn exactly where it sat in one SVG. The compositor runs the opacity
- * animation of an SVG element but not of a shape inside one, so a spinner no longer restyles and repaints on every
- * frame. `width` and `height` size it like an SVG's attributes, below any CSS size.
+ * Renders Soft Radar from one vertical SVG mask strip stepped with a single composited transform animation.
+ * `width` and `height` size it like an SVG's attributes, below any CSS size.
+ *
+ * Keep every spinner to one element and one animation, whatever the design. Lists show many at once (20 subagent rows,
+ * busy tabs, sidebar rows), and a per-dot spinner costs 24 animations and 25 nodes each: Blink restyles all of them on
+ * every main-thread frame, and remounting a row restarts 24 `animationstart` events. That took the background activity
+ * menu below 1 FPS with 20 subagents (#65634). The same cost was removed once before with a baked APNG (#42952) and
+ * came back when a new design shipped as per-dot CSS (#58010, #58578, #61562). To change the look, change the dots in
+ * `spinner-radar.ts`: the strip is generated from them, so the design and the mask can't drift apart.
  */
 export function Spinner(
   props: Omit<ComponentProps<"span">, "style"> & {
@@ -30,7 +34,7 @@ export function Spinner(
   if (!added) {
     added = true
     const style = document.createElement("style")
-    style.textContent = radarKeyframes(keyframes)
+    style.textContent = radarStylesheet(keyframes)
     document.head.append(style)
   }
 
@@ -47,22 +51,7 @@ export function Spinner(
         "--spinner-height": local.height === undefined ? undefined : `${local.height}px`,
       }}
     >
-      <For each={dots}>
-        {(dot) => (
-          <svg
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            style={{
-              "--still": dot.still,
-              animation: dot.steady
-                ? undefined
-                : `${keyframes}-${dot.shape} calc(${radarLoop}s * var(--spinner-time, 1)) linear calc(${-radarLoop * (1 - dot.at)}s * var(--spinner-time, 1)) infinite`,
-            }}
-          >
-            <rect x={dot.x} y={dot.y} width={dot.size} height={dot.size} rx={dot.size * 0.24} />
-          </svg>
-        )}
-      </For>
+      <span data-slot="spinner-strip" />
     </span>
   )
 }
