@@ -121,7 +121,7 @@ export const lineCommentStyles = `
   font-weight: var(--font-weight-regular);
   line-height: var(--line-height-x-large);
   letter-spacing: var(--letter-spacing-normal);
-  color: var(--text-strong);
+  color: var(--v2-text-text-base);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -141,7 +141,7 @@ export const lineCommentStyles = `
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
-  color: var(--text-weak);
+  color: var(--v2-text-text-faint);
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -162,16 +162,18 @@ export const lineCommentStyles = `
   padding: 8px;
   border-radius: var(--radius-md);
   background: var(--surface-base);
-  border: 1px solid var(--border-base);
-  color: var(--text-strong);
+  border: 1px solid var(--v2-border-border-base);
+  color: var(--v2-text-text-base);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   line-height: var(--line-height-large);
 }
 
+/* An outline, not a shadow: forced colours drop shadows, and the outline outside the border still marks focus there. */
 [data-component="line-comment"] [data-slot="line-comment-textarea"]:focus {
-  outline: none;
-  box-shadow: var(--shadow-xs-border-select);
+  border-color: var(--v2-border-border-focus);
+  outline: 1px solid var(--v2-border-border-focus);
+  outline-offset: 0;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-mention-list"] {
@@ -181,7 +183,7 @@ export const lineCommentStyles = `
   max-height: 180px;
   overflow: auto;
   padding: 4px;
-  border: 1px solid var(--border-base);
+  border: 1px solid var(--v2-border-border-base);
   border-radius: var(--radius-md);
   background: var(--surface-base);
 }
@@ -196,7 +198,7 @@ export const lineCommentStyles = `
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-strong);
+  color: var(--v2-text-text-base);
   text-align: left;
 }
 
@@ -215,14 +217,14 @@ export const lineCommentStyles = `
 
 [data-component="line-comment"] [data-slot="line-comment-mention-dir"] {
   min-width: 0;
-  color: var(--text-weak);
+  color: var(--v2-text-text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-mention-file"] {
-  color: var(--text-strong);
+  color: var(--v2-text-text-base);
   white-space: nowrap;
 }
 
@@ -241,9 +243,9 @@ export const lineCommentStyles = `
 }
 
 [data-component="line-comment"] [data-slot="line-comment-action"] {
-  border: 1px solid var(--border-base);
+  border: 1px solid var(--v2-border-border-base);
   background: var(--surface-base);
-  color: var(--text-strong);
+  color: var(--v2-text-text-base);
   border-radius: var(--radius-md);
   height: 28px;
   padding: 0 10px;
@@ -257,9 +259,9 @@ export const lineCommentStyles = `
 }
 
 [data-component="line-comment"] [data-slot="line-comment-action"][data-variant="primary"] {
-  background: var(--text-strong);
-  border-color: var(--text-strong);
-  color: var(--background-base);
+  background: var(--v2-background-bg-contrast);
+  border-color: var(--v2-background-bg-contrast);
+  color: var(--v2-text-text-contrast);
 }
 
 [data-component="line-comment"] [data-slot="line-comment-action"]:disabled {

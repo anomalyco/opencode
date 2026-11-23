@@ -314,6 +314,31 @@ describe("SessionRunCoordinator", () => {
     }),
   )
 
+  it.effect("tells why an execution is being stopped while it cleans up", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const seen: Array<string | undefined> = []
+      const coordinator: SessionRunCoordinator.Coordinator<string, never, "user"> = yield* SessionRunCoordinator.make<
+        string,
+        never,
+        "user"
+      >({
+        drain: (key) =>
+          Effect.sync(() => void seen.push(coordinator.interruption(key))).pipe(
+            Effect.andThen(Deferred.succeed(started, undefined)),
+            Effect.andThen(Effect.never),
+            Effect.ensuring(Effect.sync(() => void seen.push(coordinator.interruption(key)))),
+          ),
+      })
+      const run = yield* coordinator.run("session").pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      expect(yield* coordinator.interrupt("session", "user")).toBeTrue()
+      yield* Fiber.await(run)
+      expect(seen).toEqual([undefined, "user"])
+      expect(coordinator.interruption("session")).toBeUndefined()
+    }),
+  )
+
   it.effect("runs a wake registered during interruption cleanup", () =>
     Effect.gen(function* () {
       const firstStarted = yield* Deferred.make<void>()

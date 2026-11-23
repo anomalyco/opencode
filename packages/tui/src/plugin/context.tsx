@@ -61,7 +61,7 @@ type Value = {
     readonly register: (path: string) => () => void
     readonly resolved: () => ReturnType<typeof resolveSlots<SlotRender>>
   }
-  readonly markdown: () => MarkdownOptions["renderNode"]
+  readonly markdown: () => MarkdownOptions["renderBlock"]
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
 }
@@ -299,7 +299,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
           optional: true,
         })),
         ...serverTuiPlugins().map((plugin) => ({
-          entry: plugin.source.type === "package" ? plugin.source.target : path.dirname(plugin.source.path),
+          entry: plugin.source.type === "package" ? plugin.source.target : plugin.source.path,
           install: false,
           optional: true,
         })),

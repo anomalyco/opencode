@@ -12,7 +12,7 @@ import { modelPreferenceKey } from "../model-preference"
 import { useLocation } from "../context/location"
 import { useNewDesigns } from "../config"
 import { DialogFreeModels } from "./dialog-model-free"
-import { FavoriteMarker, ModelDetail, isFreeModel, prioritizeFavorites, sortModelOptions } from "./model-options"
+import { FavoriteMarker, isFreeModel, prioritizeFavorites, sortModelOptions } from "./model-options"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
@@ -105,7 +105,6 @@ function DialogConnectedModels(props: {
             description: provider?.name ?? model.providerID,
             category,
             footer: trailing(model, isFavorite(item)),
-            detail: newDesigns() ? () => <ModelDetail model={model} /> : undefined,
             onSelect: () => {
               props.onSelect(model.providerID, model.id)
             },
@@ -129,8 +128,7 @@ function DialogConnectedModels(props: {
         .map((model) => {
           const provider = providers().get(model.providerID)
           const value = { providerID: model.providerID, modelID: model.id }
-          // Users with nothing connected can only favorite models in the free picker (new designs); this picker keeps them unavailable.
-          const favorite = connected() && isFavorite(value)
+          const favorite = isFavorite(value)
           return {
             value,
             providerID: model.providerID,
@@ -141,7 +139,6 @@ function DialogConnectedModels(props: {
             category: connected() ? (freeGroup(model) ? "Free" : (provider?.name ?? model.providerID)) : undefined,
             footer: trailing(model, favorite),
             free: isFreeModel(model),
-            detail: newDesigns() ? () => <ModelDetail model={model} /> : undefined,
             onSelect() {
               props.onSelect(model.providerID, model.id)
             },
@@ -177,6 +174,8 @@ function DialogConnectedModels(props: {
       if (!newDesigns()) return results
       return results.map((option) => ({ ...option, description: option.providerName, category: undefined }))
     }
+
+    if (!connected()) return prioritizeFavorites(modelOptions, favoritePriority)
 
     return [
       ...favoriteOptions,
@@ -215,7 +214,6 @@ function DialogConnectedModels(props: {
         {
           command: "model.dialog.favorite",
           title: newDesigns() ? (option) => (isFavorite(option?.value) ? "unfavorite" : "favorite") : "Favorite",
-          hidden: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },

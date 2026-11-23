@@ -20,11 +20,12 @@ type ModelGroup<T> = { category: string; items: T[] }
 
 export const CONSOLE_GROUP_KEY = "console:opencode"
 
-export function CustomManagedProviderIcon(props: { class?: string }) {
+function CustomManagedProviderIcon(props: { class?: string }) {
   return <img data-component="custom-managed-provider-icon" src={customManagedProvider} alt="" class={props.class} />
 }
 
 export function ProviderModelIcon(props: { provider: ModelProvider; class?: string }) {
+  // SAFETY: the cast only lets `includes` look up any string; the type guard narrows on the result.
   const icon = () =>
     [
       props.provider.canonical,
@@ -62,6 +63,8 @@ export function ProviderModelSections<T extends ModelItem>(props: {
   rows: (items: T[]) => JSX.Element
   /** Trailing control in a direct provider's header. */
   action?: (group: ModelGroup<T>) => JSX.Element
+  /** Shows direct providers as cards like the Console's providers, instead of section headers. */
+  cards?: boolean
   onSetVisibility?: (providerID: string, visible: boolean) => void
   ref?: (providerID: string, element: HTMLElement) => void
 }) {
@@ -106,7 +109,7 @@ export function ProviderModelSections<T extends ModelItem>(props: {
           onClick={() => props.onExpandedChange(input.id, !props.expanded(input.id))}
         >
           <span class="settings-models-group-chevron">
-            <Icon name="chevron-down" size="small" classList={{ collapsed: !props.expanded(input.id) }} />
+            <Icon name="chevron-down" classList={{ collapsed: !props.expanded(input.id) }} />
           </span>
           <span class="settings-models-group-label">
             {input.icon}
@@ -127,20 +130,41 @@ export function ProviderModelSections<T extends ModelItem>(props: {
           fallback={
             <Show when={section.group}>
               {(group) => (
-                <section
-                  ref={(element) => props.ref?.(group().category, element)}
-                  class="settings-section"
-                  data-component="settings-models-provider"
-                  data-expanded={props.expanded(group().category) ? "" : undefined}
+                <Show
+                  when={props.cards}
+                  fallback={
+                    <section
+                      ref={(element) => props.ref?.(group().category, element)}
+                      class="settings-section"
+                      data-component="settings-models-provider"
+                      data-expanded={props.expanded(group().category) ? "" : undefined}
+                    >
+                      <Header
+                        id={group().category}
+                        icon={<ProviderModelIcon provider={group().items[0].provider} class="shrink-0" />}
+                        title={name(group())}
+                        action={props.action?.(group())}
+                      />
+                      <Show when={props.expanded(group().category)}>{props.rows(group().items)}</Show>
+                    </section>
+                  }
                 >
-                  <Header
-                    id={group().category}
-                    icon={<ProviderModelIcon provider={group().items[0].provider} class="shrink-0" />}
-                    title={name(group())}
-                    action={props.action?.(group())}
-                  />
-                  <Show when={props.expanded(group().category)}>{props.rows(group().items)}</Show>
-                </section>
+                  <ProviderModelGroup
+                    ref={(element) => props.ref?.(group().category, element)}
+                    provider={group().items[0].provider}
+                    name={name(group())}
+                    expanded={props.expanded(group().category)}
+                    disabled={props.disabled}
+                    onSetVisibility={
+                      props.onSetVisibility
+                        ? (visible) => props.onSetVisibility?.(group().category, visible)
+                        : undefined
+                    }
+                    onExpandedChange={(value) => props.onExpandedChange(group().category, value)}
+                  >
+                    {props.rows(group().items)}
+                  </ProviderModelGroup>
+                </Show>
               )}
             </Show>
           }
@@ -159,6 +183,16 @@ export function ProviderModelSections<T extends ModelItem>(props: {
               />
               <Show when={props.expanded(CONSOLE_GROUP_KEY)}>
                 <div class="provider-model-groups settings-models-console-groups">
+                  {/* The header button already collapses the Console for the keyboard and screen readers. */}
+                  <button
+                    type="button"
+                    class="settings-models-console-rail"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    disabled={props.disabled}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => props.onExpandedChange(CONSOLE_GROUP_KEY, false)}
+                  />
                   <For each={managed().providers}>
                     {(group) => (
                       <ProviderModelGroup
@@ -221,7 +255,6 @@ export function ProviderModelGroup(props: {
             <bdi class="provider-model-group-title">{props.name ?? props.provider.name}</bdi>
             <Icon
               name="chevron-down"
-              size="small"
               classList={{ "provider-model-group-chevron": true, collapsed: !props.expanded }}
             />
           </span>
@@ -239,7 +272,9 @@ export function ProviderModelGroup(props: {
                 />
                 <Menu.Portal>
                   <Menu.Content>
-                    <Menu.Item onSelect={() => setVisibility(true)}>{language.t("settings.models.enableAll")}</Menu.Item>
+                    <Menu.Item onSelect={() => setVisibility(true)}>
+                      {language.t("settings.models.enableAll")}
+                    </Menu.Item>
                     <Menu.Item onSelect={() => setVisibility(false)}>
                       {language.t("settings.models.disableAll")}
                     </Menu.Item>

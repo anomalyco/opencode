@@ -1,5 +1,6 @@
 import path from "path"
 import { describe, expect } from "bun:test"
+import { Document, Event, Info } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
 import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
@@ -7,6 +8,8 @@ import { Integration } from "@opencode/core/integration"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { ModelsDev } from "@opencode/core/models-dev"
@@ -18,6 +21,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
+import { drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 import { providerHost, host, integrationHost } from "./host"
 import { PluginTestLayer } from "./fixture"
@@ -29,7 +33,7 @@ const locationLayer = Layer.succeed(
 const layer = AppNodeBuilder.build(LayerNode.group([Provider.node, Model.node, Integration.node, Bus.node]), [
   Location.node.replace(locationLayer),
 ])
-const it = testEffect(layer)
+const it = testEffect(Layer.merge(layer, Flag.testLayer()))
 const real = testEffect(PluginTestLayer)
 const isolated = testEffect(Layer.empty)
 const models = (file: string) =>
@@ -53,7 +57,7 @@ function activate(providers: Provider.Interface) {
 // two Locations that share a single models.dev snapshot instance.
 const owner = Effect.gen(function* () {
   const context = yield* Layer.build(PluginTestLayer)
-  const host = yield* PluginHost.make(Context.get(context, Plugin.Service)).pipe(Effect.provideContext(context))
+  const host = yield* PluginHost.make(Context.get(context, Plugin.Service), "test").pipe(Effect.provideContext(context))
   return {
     context,
     host,
@@ -124,6 +128,44 @@ const richSnapshot = (name = "Acme") => {
 }
 
 describe("ModelsDevPlugin", () => {
+  for (const enabled of [true, false]) {
+    isolated.effect(`uses the ${enabled ? "recommended" : "first"} API and its variants`, () =>
+      Effect.gen(function* () {
+        const providerID = Provider.ID.make("acme")
+        const modelID = Model.ID.make("acme-1")
+        const source = yield* ModelsDev.Service
+        const location = yield* owner
+        const config = Context.get(location.context, Config.Test)
+        const configure = (recommended_api: boolean) =>
+          config.setEntries([
+            new Document({ type: "document", info: Info.make({ experimental: { recommended_api } }) }),
+          ])
+        yield* configure(false)
+        yield* ModelsDevPlugin.effect(location.host).pipe(
+          Effect.provideService(ModelsDev.Service, source),
+          Effect.provideContext(location.context),
+        )
+        yield* activate(location.providers)
+        if (enabled) {
+          yield* source.get(true)
+          yield* configure(true)
+          yield* location.bus.publish(Event.Updated, {}).pipe(Effect.provideContext(location.context))
+          yield* drain
+        }
+        const model = required(yield* location.models.get(providerID, modelID))
+        expect(model.package).toBe(
+          enabled ? "@opencode/ai/providers/google/interactions" : "@opencode/ai/providers/google",
+        )
+        expect(model.settings?.baseURL).toBe(`https://api.acme.test/${enabled ? "v1beta" : "v1"}`)
+        expect(model.variants.find((variant) => variant.id === "low")?.settings).toEqual(
+          enabled
+            ? { thinkingLevel: "low", thinkingSummaries: "auto" }
+            : { thinkingConfig: { includeThoughts: true, thinkingLevel: "low" } },
+        )
+      }).pipe(Effect.provide(models(path.join(import.meta.dir, "fixtures", "models-dev.json")))),
+    )
+  }
+
   isolated.effect("shares definitions between Locations while provider and model edits own their copies", () =>
     Effect.gen(function* () {
       const { providerID, modelID, snapshot } = richSnapshot()
@@ -358,7 +400,7 @@ describe("ModelsDevPlugin", () => {
           ] satisfies readonly ModelsDev.Snapshot[]),
         refresh: () => Effect.void,
       })
-      const pluginHost = yield* PluginHost.make(plugins)
+      const pluginHost = yield* PluginHost.make(plugins, "test")
       yield* ModelsDevPlugin.effect(pluginHost).pipe(Effect.provideService(ModelsDev.Service, modelsDev))
       yield* activate(providers)
 
@@ -706,15 +748,12 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
-  it.effect("omits realtime, embedding, and reranking models even when they list text input and output", () =>
+  it.effect("lists non-chat models only by type, so sessions never see them", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const providers = yield* Provider.Service
       const modelState = yield* Model.Service
       const providerID = Provider.ID.make("acme")
-      const ids = ["gpt-5.5", "gpt-audio", "jev-1.13", "gpt-realtime-2.1", "text-embedding-3-large", "rerank-v3.5"].map(
-        (id) => Model.ID.make(id),
-      )
       const model = {
         providerID,
         capabilities: { tools: true, input: ["text"], output: ["text"] },
@@ -725,6 +764,8 @@ describe("ModelsDevPlugin", () => {
         enabled: true,
         limit: { context: 128_000, output: 32_000 },
       } satisfies Omit<Model.Info, "id" | "modelID" | "name">
+      // An unset type means chat; image and decision models list text too, but only chat is offered.
+      const types = { "gpt-5.5": undefined, "gpt-audio": "chat", "jev-1.13": "decision", "gpt-image-2": "image" }
       const snapshot = {
         info: {
           id: providerID,
@@ -733,15 +774,13 @@ describe("ModelsDevPlugin", () => {
           package: "@opencode/ai/providers/openai-compatible",
         },
         environment: [],
-        models: ids.map((id) => ({ ...model, id, modelID: id, name: id })),
-        // gpt-5.5 has no type, which models.dev treats as chat.
-        types: new Map<Model.ID, ModelsDev.CatalogModelType>([
-          [Model.ID.make("gpt-audio"), "chat"],
-          [Model.ID.make("jev-1.13"), "decision"],
-          [Model.ID.make("gpt-realtime-2.1"), "realtime"],
-          [Model.ID.make("text-embedding-3-large"), "embedding"],
-          [Model.ID.make("rerank-v3.5"), "reranking"],
-        ]),
+        models: Object.entries(types).map(([id, type]) => ({
+          ...model,
+          id: Model.ID.make(id),
+          modelID: Model.ID.make(id),
+          name: id,
+          type,
+        })),
       } satisfies ModelsDev.Snapshot
 
       yield* ModelsDevPlugin.effect(
@@ -757,10 +796,16 @@ describe("ModelsDevPlugin", () => {
       )
 
       yield* activate(providers)
-      const listed = yield* Effect.forEach(ids, (id) => modelState.get(providerID, id))
-      expect(listed.flatMap((item) => item?.id ?? [])).toEqual(
-        ["gpt-5.5", "gpt-audio", "jev-1.13"].map((id) => Model.ID.make(id)),
+      const ids = (models: readonly Model.Info[]) => models.map((item) => item.id).sort()
+      expect(ids(yield* modelState.available())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      expect(ids(yield* modelState.all())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      expect(yield* modelState.get(providerID, Model.ID.make("jev-1.13"))).toBeUndefined()
+      expect(ids(yield* modelState.available(["decision"]))).toEqual([Model.ID.make("jev-1.13")])
+      expect(ids(yield* modelState.available(["image"]))).toEqual([Model.ID.make("gpt-image-2")])
+      expect(ids(yield* modelState.available(["chat", "image", "image"]))).toEqual(
+        ["gpt-5.5", "gpt-audio", "gpt-image-2"].map((id) => Model.ID.make(id)),
       )
+      expect(yield* modelState.available(["embedding"])).toEqual([])
     }),
   )
 

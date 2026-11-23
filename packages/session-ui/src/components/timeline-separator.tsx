@@ -23,7 +23,7 @@ export function TimelineSeparator(props: {
 
   return (
     <div class="flex h-8 w-full items-center gap-3 text-v2-text-text-faint">
-      <span class="h-px min-w-0 flex-1 bg-v2-border-border-strong" />
+      <span class="h-px min-w-0 flex-1 bg-v2-border-border-muted" />
       <span class="flex min-w-0 items-center gap-1 text-[13px] font-[440] leading-text-compact tracking-[-0.04px]">
         <Show when={props.providerID}>
           {(providerID) => <ProviderIcon id={providerID()} class="text-v2-icon-icon-faint" aria-hidden="true" />}
@@ -63,7 +63,7 @@ export function TimelineSeparator(props: {
           </Show>
         </span>
       </span>
-      <span class="h-px min-w-0 flex-1 bg-v2-border-border-strong" />
+      <span class="h-px min-w-0 flex-1 bg-v2-border-border-muted" />
     </div>
   )
 }

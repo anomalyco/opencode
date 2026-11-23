@@ -1,0 +1,618 @@
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import {
+  ai,
+  DecisionClient,
+  type DecisionModel,
+  EmbeddingClient,
+  type EmbeddingModel,
+  ImageClient,
+  type ImageModel,
+  VideoClient,
+  type VideoModel,
+} from "../../src/effect.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse, observe, type Call } from "../lib/http.js"
+
+const shared = { headers: { "x-test": "yes" }, body: { extra: true } }
+
+// Every request is answered with a 400, so each case only checks what the entrypoint sent.
+const record = (calls: Array<Call>) =>
+  dynamicResponse((input) => observe(calls, input).pipe(Effect.as(input.respond("{}", { status: 400 }))))
+
+const sentImage = (model: ImageModel) =>
+  Effect.gen(function* () {
+    const calls: Array<Call> = []
+    yield* ai.image
+      .generate({ model, prompt: "A red circle" })
+      .pipe(Effect.exit, Effect.provide(ImageClient.layer.pipe(Layer.provide(record(calls)))))
+    return calls
+  })
+
+const sentVideo = (model: VideoModel) =>
+  Effect.gen(function* () {
+    const calls: Array<Call> = []
+    yield* ai.video
+      .start({ model, prompt: "A red circle" })
+      .pipe(Effect.exit, Effect.provide(VideoClient.layer.pipe(Layer.provide(record(calls)))))
+    return calls
+  })
+
+const sentDecision = (model: DecisionModel) =>
+  Effect.gen(function* () {
+    const calls: Array<Call> = []
+    yield* ai.decision
+      .generate({
+        model,
+        input: [{ type: "text", text: "The sky is red." }],
+        questions: [{ name: "red", type: "predicate", instructions: "Is the sky red?" }],
+      })
+      .pipe(Effect.exit, Effect.provide(DecisionClient.layer.pipe(Layer.provide(record(calls)))))
+    return calls
+  })
+
+const sentEmbedding = (model: EmbeddingModel) =>
+  Effect.gen(function* () {
+    const calls: Array<Call> = []
+    yield* ai.embedding
+      .generate({ model, values: ["The sky is red."] })
+      .pipe(Effect.exit, Effect.provide(EmbeddingClient.layer.pipe(Layer.provide(record(calls)))))
+    return calls
+  })
+
+interface Case<Model> {
+  readonly name: string
+  readonly load: () => Promise<Model>
+  readonly url: string
+  readonly auth: readonly [string, string]
+  readonly headers?: Record<string, string | null>
+  readonly provider?: string
+  /** The model id is in the URL instead of the JSON body. */
+  readonly modelInURL?: boolean
+  /** Cloudflare's Run API nests the System One body, and so the `body` setting, under `input`. */
+  readonly bodyInInput?: boolean
+}
+
+const expectRequest = (
+  calls: ReadonlyArray<Call>,
+  model: ImageModel | VideoModel | DecisionModel | EmbeddingModel,
+  entry: Case<unknown>,
+) => {
+  expect(calls).toHaveLength(1)
+  const call = calls[0]
+  expect(call.url).toBe(entry.url)
+  expect(call.headers.get(entry.auth[0])).toBe(entry.auth[1])
+  expect(call.headers.get("x-test")).toBe("yes")
+  for (const [key, value] of Object.entries(entry.headers ?? {})) expect(call.headers.get(key)).toBe(value)
+  const body = JSON.parse(call.body)
+  expect((entry.bodyInInput ? body.input : body).extra).toBe(true)
+  if (!entry.modelInURL) expect(body.model).toBe(model.id)
+  if (entry.provider) expect<string>(model.provider).toBe(entry.provider)
+}
+
+const images: ReadonlyArray<Case<ImageModel>> = [
+  {
+    name: "openai-compatible",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openai-compatible/images")
+      return model("qwen-image", {
+        ...shared,
+        apiKey: "regolo-key",
+        baseURL: "https://api.regolo.test/v1",
+        provider: "regolo-ai",
+      })
+    },
+    url: "https://api.regolo.test/v1/images/generations",
+    auth: ["authorization", "Bearer regolo-key"],
+    provider: "regolo-ai",
+  },
+  {
+    name: "openai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openai/images")
+      return model("gpt-image-2", { ...shared, apiKey: "openai-key", organization: "org-1" })
+    },
+    url: "https://api.openai.com/v1/images/generations",
+    auth: ["authorization", "Bearer openai-key"],
+    headers: { "openai-organization": "org-1" },
+  },
+  {
+    name: "openrouter",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openrouter/images")
+      return model("openai/gpt-image-2", { ...shared, apiKey: "openrouter-key" })
+    },
+    url: "https://openrouter.ai/api/v1/images/generations",
+    auth: ["authorization", "Bearer openrouter-key"],
+    provider: "openrouter",
+  },
+  {
+    name: "vercel-ai-gateway",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/vercel-ai-gateway/images")
+      return model("openai/gpt-image-2", { ...shared, apiKey: "vercel-key" })
+    },
+    url: "https://ai-gateway.vercel.sh/v1/images/generations",
+    auth: ["authorization", "Bearer vercel-key"],
+    provider: "vercel-ai-gateway",
+  },
+  {
+    name: "digitalocean",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/digitalocean/images")
+      return model("openai-gpt-image-1", { ...shared, apiKey: "do-key" })
+    },
+    url: "https://inference.do-ai.run/v1/images/generations",
+    auth: ["authorization", "Bearer do-key"],
+    provider: "digitalocean",
+  },
+  {
+    name: "azure",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/azure/images")
+      return model("gpt-image-2", { ...shared, apiKey: "azure-key", resourceName: "fixture" })
+    },
+    url: "https://fixture.openai.azure.com/openai/v1/images/generations?api-version=v1",
+    auth: ["api-key", "azure-key"],
+    headers: { authorization: null },
+    provider: "azure",
+  },
+  {
+    name: "meta",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/meta/images")
+      return model("muse-image-1.0", { ...shared, apiKey: "meta-key" })
+    },
+    url: "https://api.meta.ai/v1/images/generations",
+    auth: ["authorization", "Bearer meta-key"],
+  },
+  {
+    name: "xai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/xai/images")
+      return model("grok-imagine-image", { ...shared, apiKey: "xai-key" })
+    },
+    url: "https://api.x.ai/v1/images/generations",
+    auth: ["authorization", "Bearer xai-key"],
+  },
+  {
+    name: "zai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/zai/images")
+      return model("glm-image", { ...shared, apiKey: "zai-key", baseURL: "https://open.bigmodel.test/api/paas/v4" })
+    },
+    url: "https://open.bigmodel.test/api/paas/v4/images/generations",
+    auth: ["authorization", "Bearer zai-key"],
+  },
+  {
+    name: "minimax",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/minimax/images")
+      return model("image-01", { ...shared, apiKey: "minimax-key", baseURL: "https://api.minimax.cn/v1" })
+    },
+    url: "https://api.minimax.cn/v1/image_generation",
+    auth: ["authorization", "Bearer minimax-key"],
+  },
+  {
+    name: "alibaba",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/alibaba/images")
+      return model("qwen-image-2.0", {
+        ...shared,
+        apiKey: "dashscope-key",
+        baseURL: "https://dashscope-intl.aliyuncs.com/api/v1",
+      })
+    },
+    url: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+    auth: ["authorization", "Bearer dashscope-key"],
+  },
+  {
+    name: "google",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google/images")
+      return model("gemini-2.5-flash-image", { ...shared, apiKey: "google-key" })
+    },
+    url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent",
+    auth: ["x-goog-api-key", "google-key"],
+    modelInURL: true,
+  },
+  {
+    name: "google-vertex",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google-vertex/images")
+      return model("gemini-2.5-flash-image", { ...shared, apiKey: "vertex-key" })
+    },
+    url: "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash-image:generateContent",
+    auth: ["x-goog-api-key", "vertex-key"],
+    modelInURL: true,
+  },
+  {
+    name: "cloudflare-workers-ai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/cloudflare-workers-ai/images")
+      return model("@cf/leonardo/lucid-origin", { ...shared, apiKey: "cloudflare-key", accountId: "account-1" })
+    },
+    url: "https://api.cloudflare.com/client/v4/accounts/account-1/ai/run/@cf/leonardo/lucid-origin",
+    auth: ["authorization", "Bearer cloudflare-key"],
+    modelInURL: true,
+  },
+]
+
+const decisions: ReadonlyArray<Case<DecisionModel>> = [
+  {
+    name: "typesafe-ai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/typesafe-ai/decisions")
+      return model("typesafe/jev", {
+        ...shared,
+        apiKey: "amd-key",
+        baseURL: "https://developer.amd.test/radeon/api/v1",
+      })
+    },
+    url: "https://developer.amd.test/radeon/api/v1/systemone",
+    auth: ["authorization", "Bearer amd-key"],
+    headers: { "typesafe-danger-zone-images": "true" },
+    provider: "typesafe-ai",
+  },
+  {
+    name: "opencode",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/opencode/decisions")
+      return model("jev", { ...shared, apiKey: "zen-key", baseURL: "https://opencode.ai/inference/systemone/v1" })
+    },
+    url: "https://opencode.ai/inference/systemone/v1/systemone",
+    auth: ["authorization", "Bearer zen-key"],
+    headers: { "typesafe-danger-zone-images": "true" },
+    provider: "opencode",
+  },
+  {
+    name: "openrouter",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openrouter/decisions")
+      return model("cloudflare/clef-omni", { ...shared, apiKey: "openrouter-key" })
+    },
+    url: "https://openrouter.ai/api/v1/systemone",
+    auth: ["authorization", "Bearer openrouter-key"],
+    provider: "openrouter",
+  },
+  {
+    name: "openai-compatible",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openai-compatible/decisions")
+      return model("clef-flash", {
+        ...shared,
+        apiKey: "local-key",
+        baseURL: "http://127.0.0.1:1234/v1",
+        provider: "lmstudio",
+      })
+    },
+    url: "http://127.0.0.1:1234/v1/systemone",
+    auth: ["authorization", "Bearer local-key"],
+    provider: "lmstudio",
+  },
+  {
+    name: "baseten",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/baseten/decisions")
+      return model("decision-models/baseten-elephant-9b-latest", { ...shared, apiKey: "baseten-key" })
+    },
+    url: "https://inference.baseten.co/v1/systemone",
+    auth: ["authorization", "Bearer baseten-key"],
+    provider: "baseten",
+  },
+  {
+    name: "digitalocean",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/digitalocean/decisions")
+      return model("typesafe-jev", { ...shared, apiKey: "do-key" })
+    },
+    url: "https://inference.do-ai.run/v1/systemone",
+    auth: ["authorization", "Bearer do-key"],
+    provider: "digitalocean",
+  },
+  {
+    name: "google",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google/decisions")
+      return model("gemini-decision-eap", { ...shared, apiKey: "google-key" })
+    },
+    url: "https://generativelanguage.googleapis.com/v1beta/decisions",
+    auth: ["x-goog-api-key", "google-key"],
+    provider: "google",
+  },
+  {
+    name: "vercel-ai-gateway",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/vercel-ai-gateway/decisions")
+      return model("typesafe/jev", { ...shared, apiKey: "vercel-key" })
+    },
+    url: "https://ai-gateway.vercel.sh/v1/decisions",
+    auth: ["authorization", "Bearer vercel-key"],
+    provider: "vercel-ai-gateway",
+  },
+  {
+    name: "cloudflare-workers-ai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/cloudflare-workers-ai/decisions")
+      return model("@cf/cloudflare/clef-omni", { ...shared, apiKey: "cloudflare-key", accountId: "account-1" })
+    },
+    url: "https://api.cloudflare.com/client/v4/accounts/account-1/ai/run",
+    auth: ["authorization", "Bearer cloudflare-key"],
+    bodyInInput: true,
+    provider: "cloudflare-workers-ai",
+  },
+  {
+    name: "cloudflare-ai-gateway",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/cloudflare-ai-gateway/decisions")
+      return model("@cf/cloudflare/clef-omni", {
+        ...shared,
+        apiKey: "gateway-key",
+        accountId: "account-1",
+        gatewayId: "gateway-1",
+      })
+    },
+    url: "https://api.cloudflare.com/client/v4/accounts/account-1/ai/run",
+    auth: ["authorization", "Bearer gateway-key"],
+    headers: { "cf-aig-gateway-id": "gateway-1" },
+    bodyInInput: true,
+    provider: "cloudflare-ai-gateway",
+  },
+]
+
+const embeddings: ReadonlyArray<Case<EmbeddingModel>> = [
+  {
+    name: "openai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openai/embeddings")
+      return model("text-embedding-3-small", { ...shared, apiKey: "openai-key", organization: "org-1" })
+    },
+    url: "https://api.openai.com/v1/embeddings",
+    auth: ["authorization", "Bearer openai-key"],
+    headers: { "openai-organization": "org-1" },
+    provider: "openai",
+  },
+  {
+    name: "openai-compatible",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openai-compatible/embeddings")
+      return model("nvidia/nemotron-3.5-embed-1b", {
+        ...shared,
+        apiKey: "nvidia-key",
+        baseURL: "https://integrate.api.nvidia.test/v1",
+        provider: "nvidia",
+      })
+    },
+    url: "https://integrate.api.nvidia.test/v1/embeddings",
+    auth: ["authorization", "Bearer nvidia-key"],
+    provider: "nvidia",
+  },
+  {
+    name: "openrouter",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openrouter/embeddings")
+      return model("openai/text-embedding-3-small", { ...shared, apiKey: "openrouter-key" })
+    },
+    url: "https://openrouter.ai/api/v1/embeddings",
+    auth: ["authorization", "Bearer openrouter-key"],
+    provider: "openrouter",
+  },
+  {
+    name: "vercel-ai-gateway",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/vercel-ai-gateway/embeddings")
+      return model("openai/text-embedding-3-small", { ...shared, apiKey: "vercel-key" })
+    },
+    url: "https://ai-gateway.vercel.sh/v1/embeddings",
+    auth: ["authorization", "Bearer vercel-key"],
+    provider: "vercel-ai-gateway",
+  },
+  {
+    name: "deepinfra",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/deepinfra/embeddings")
+      return model("BAAI/bge-m3", { ...shared, apiKey: "deepinfra-key" })
+    },
+    url: "https://api.deepinfra.com/v1/openai/embeddings",
+    auth: ["authorization", "Bearer deepinfra-key"],
+    provider: "deepinfra",
+  },
+  {
+    name: "fireworks",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/fireworks/embeddings")
+      return model("nomic-ai/nomic-embed-text-v1.5", { ...shared, apiKey: "fireworks-key" })
+    },
+    url: "https://api.fireworks.ai/inference/v1/embeddings",
+    auth: ["authorization", "Bearer fireworks-key"],
+    provider: "fireworks",
+  },
+  {
+    name: "cohere",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/cohere/embeddings")
+      return model("embed-v4.0", { ...shared, apiKey: "cohere-key" })
+    },
+    url: "https://api.cohere.ai/compatibility/v1/embeddings",
+    auth: ["authorization", "Bearer cohere-key"],
+    provider: "cohere",
+  },
+  {
+    name: "digitalocean",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/digitalocean/embeddings")
+      return model("bge-m3", { ...shared, apiKey: "do-key" })
+    },
+    url: "https://inference.do-ai.run/v1/embeddings",
+    auth: ["authorization", "Bearer do-key"],
+    provider: "digitalocean",
+  },
+  {
+    name: "alibaba",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/alibaba/embeddings")
+      return model("text-embedding-v4", { ...shared, apiKey: "dashscope-key", region: "ap-southeast-1" })
+    },
+    url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/embeddings",
+    auth: ["authorization", "Bearer dashscope-key"],
+    provider: "alibaba",
+  },
+  {
+    name: "azure",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/azure/embeddings")
+      return model("text-embedding-3-small", { ...shared, apiKey: "azure-key", resourceName: "fixture" })
+    },
+    url: "https://fixture.openai.azure.com/openai/v1/embeddings?api-version=v1",
+    auth: ["api-key", "azure-key"],
+    headers: { authorization: null },
+    provider: "azure",
+  },
+  {
+    name: "google",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google/embeddings")
+      return model("gemini-embedding-001", { ...shared, apiKey: "google-key" })
+    },
+    url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents",
+    modelInURL: true,
+    auth: ["x-goog-api-key", "google-key"],
+    provider: "google",
+  },
+  {
+    name: "google-vertex",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google-vertex/embeddings")
+      return model("text-embedding-005", { ...shared, apiKey: "vertex-key" })
+    },
+    url: "https://aiplatform.googleapis.com/v1/publishers/google/models/text-embedding-005:predict",
+    modelInURL: true,
+    auth: ["x-goog-api-key", "vertex-key"],
+    provider: "google-vertex",
+  },
+]
+
+describe("image entrypoints", () => {
+  for (const entry of images)
+    it.effect(`providers/${entry.name}/images sends a configured request`, () =>
+      Effect.gen(function* () {
+        const model = yield* Effect.promise(entry.load)
+        expectRequest(yield* sentImage(model), model, entry)
+      }),
+    )
+})
+
+const videos: ReadonlyArray<Case<VideoModel>> = [
+  {
+    name: "openrouter",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openrouter/videos")
+      return model("x-ai/grok-imagine-video-1.5-lite", { ...shared, apiKey: "openrouter-key" })
+    },
+    url: "https://openrouter.ai/api/v1/videos",
+    auth: ["authorization", "Bearer openrouter-key"],
+    provider: "openrouter",
+  },
+  {
+    name: "byteplus",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/byteplus/videos")
+      return model("dreamina-seedance-2-0-260128", { ...shared, apiKey: "byteplus-key" })
+    },
+    url: "https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks",
+    auth: ["authorization", "Bearer byteplus-key"],
+    provider: "byteplus",
+  },
+  {
+    name: "volcengine",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/volcengine/videos")
+      return model("doubao-seedance-2-0-260128", { ...shared, apiKey: "ark-key" })
+    },
+    url: "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+    auth: ["authorization", "Bearer ark-key"],
+    provider: "volcengine",
+  },
+  {
+    name: "minimax",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/minimax/videos")
+      return model("MiniMax-H3-Lite", { ...shared, apiKey: "minimax-key" })
+    },
+    url: "https://api.minimax.io/v2/video_generation",
+    auth: ["authorization", "Bearer minimax-key"],
+  },
+  {
+    name: "minimax (minimax-cn, Hailuo)",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/minimax/videos")
+      return model("MiniMax-Hailuo-2.3", { ...shared, apiKey: "minimax-key", baseURL: "https://api.minimax.cn" })
+    },
+    url: "https://api.minimax.cn/v1/video_generation",
+    auth: ["authorization", "Bearer minimax-key"],
+  },
+  {
+    name: "google",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google/videos")
+      return model("gemini-omni-1.2-flash", { ...shared, apiKey: "google-key" })
+    },
+    url: "https://generativelanguage.googleapis.com/v1beta/interactions",
+    auth: ["x-goog-api-key", "google-key"],
+    provider: "google",
+  },
+  {
+    name: "xai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/xai/videos")
+      return model("grok-imagine-video-1.5", { ...shared, apiKey: "xai-key" })
+    },
+    url: "https://api.x.ai/v1/videos/generations",
+    auth: ["authorization", "Bearer xai-key"],
+  },
+]
+
+describe("video entrypoints", () => {
+  for (const entry of videos)
+    it.effect(`providers/${entry.name}/videos sends a configured request`, () =>
+      Effect.gen(function* () {
+        const model = yield* Effect.promise(entry.load)
+        expectRequest(yield* sentVideo(model), model, entry)
+      }),
+    )
+})
+
+describe("video entrypoint model options", () => {
+  // Model-level options from settings (as models.dev or config set them) become defaults on every request.
+  for (const entry of [
+    { name: "xai", modelID: "grok-imagine-video-1.5", load: () => import("@opencode/ai/providers/xai/videos") },
+    { name: "google", modelID: "gemini-omni-1.2-flash", load: () => import("@opencode/ai/providers/google/videos") },
+  ])
+    it.effect(`providers/${entry.name}/videos keeps provider options from settings`, () =>
+      Effect.gen(function* () {
+        const { model } = yield* Effect.promise(entry.load)
+        const calls = yield* sentVideo(model(entry.modelID, { apiKey: "key", future_option: true }))
+        expect(JSON.parse(calls[0].body).future_option).toBe(true)
+      }),
+    )
+})
+
+describe("decision entrypoints", () => {
+  for (const entry of decisions)
+    it.effect(`providers/${entry.name}/decisions sends a configured request`, () =>
+      Effect.gen(function* () {
+        const model = yield* Effect.promise(entry.load)
+        expectRequest(yield* sentDecision(model), model, entry)
+      }),
+    )
+})
+
+describe("embedding entrypoints", () => {
+  for (const entry of embeddings)
+    it.effect(`providers/${entry.name}/embeddings sends a configured request`, () =>
+      Effect.gen(function* () {
+        const model = yield* Effect.promise(entry.load)
+        expectRequest(yield* sentEmbedding(model), model, entry)
+      }),
+    )
+})

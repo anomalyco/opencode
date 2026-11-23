@@ -1,20 +1,19 @@
 import { Tool } from "@opencode/schema/tool"
 import type { Rpc } from "@opencode/schema/rpc"
-import type { RpcCallOptions, RpcEventPayload } from "@opencode/client/promise/api"
+import type { OpenCodeEvent } from "@opencode/client"
+import type { RpcCallOptions, RpcEventPayload, SelectedEvent, SubscribeOptions } from "@opencode/client/promise/api"
 import { Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
-import type { ToolFailures, ToolHooks } from "../effect/tool.js"
 import { AssertInput } from "../permission.js"
 import type { Plugin } from "./plugin.js"
-import type { Info } from "./tool.js"
+import type { Info, ToolHooks } from "./tool.js"
 import type { RpcDomain, RpcHandlers } from "./rpc.js"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }
 type PromiseContext = Parameters<Plugin["setup"]>[0]
-type PromiseEvent = ReturnType<PromiseContext["event"]["subscribe"]> extends AsyncIterable<infer Event> ? Event : never
 type HostRpc = Parameters<Parameters<typeof define>[0]["effect"]>[0]["rpc"]
 type StreamAdapter = <A, E>(
   stream: Stream.Stream<A, E>,
@@ -263,6 +262,40 @@ export function fromPromise(plugin: Plugin) {
               { signal: context.signal },
             )
 
+        // Only execute.before may reject a call; a rejection fails that call alone, like an Effect hook.
+        const adaptToolHook: {
+          readonly [Name in keyof ToolHooks]: (
+            callback: (event: ToolHooks[Name]) => Promise<void> | void,
+          ) => Parameters<typeof host.tool.hook<Name>>[1]
+        } = {
+          "execute.before": (callback) => (event) => {
+            const adapted: ToolHooks["execute.before"] = {
+              ...event,
+              info: event.info && { ...event.info, execute: promiseExecutor(event.info.execute) },
+            }
+            return Effect.tryPromise({
+              try: () =>
+                Promise.resolve(callback(adapted)).then(() => {
+                  event.tool = adapted.tool
+                  event.input = adapted.input
+                }),
+              catch: toolError,
+            })
+          },
+          "execute.after": (callback) => (event) => {
+            const adapted: ToolHooks["execute.after"] = {
+              ...event,
+              info: event.info && { ...event.info, execute: promiseExecutor(event.info.execute) },
+            }
+            return Effect.promise(() =>
+              Promise.resolve(callback(adapted)).then(() => {
+                if (event.status === "completed" && adapted.status === "completed") event.result = adapted.result
+                if (event.status === "error" && adapted.status === "error") event.error = adapted.error
+              }),
+            )
+          },
+        }
+
         const adaptApiMethod = <PromiseMethod>(
           endpoint: HttpApiEndpoint.Top,
           method: (input: never) => Effect.Effect<unknown, unknown>,
@@ -329,11 +362,13 @@ export function fromPromise(plugin: Plugin) {
             activate: adaptApiMethod(CredentialEndpoints["credential.activate"], host.credential.activate),
           },
           event: {
-            subscribe: (options) =>
+            subscribe: <Type extends Exclude<OpenCodeEvent["type"], "server.connected">>(
+              options?: SubscribeOptions<Type>,
+            ) =>
               streams(
-                host.event.subscribe().pipe(
+                host.event.subscribe({ types: options?.types }).pipe(
                   Stream.mapEffect((event) => encodeOpenCodeEvent(event)),
-                  Stream.map((event) => event as PromiseEvent),
+                  Stream.map((event) => event as SelectedEvent<OpenCodeEvent, Type>),
                 ),
                 options,
               ),
@@ -341,6 +376,34 @@ export function fromPromise(plugin: Plugin) {
           experimental: {
             terminal: {
               read: adaptApiMethod(ExperimentalEndpoints["persistentPty.read"], host.experimental.terminal.read),
+            },
+            generate: {
+              text: adaptApiMethod(GenerateEndpoints["generate.text"], host.experimental.generate.text),
+              image: adaptApiMethod(GenerateEndpoints["generate.image"], host.experimental.generate.image),
+              decisions: adaptApiMethod(GenerateEndpoints["generate.decisions"], host.experimental.generate.decisions),
+            },
+            artifact: {
+              reload: () => run(host.experimental.artifact.reload()),
+              transform: (callback) =>
+                register(
+                  host.experimental.artifact.transform((editor) => {
+                    callback({
+                      add: (definition) =>
+                        editor.add({
+                          id: definition.id,
+                          name: definition.name,
+                          capabilities: definition.capabilities,
+                          prompt: definition.prompt,
+                          create: (input) => attempt((signal) => definition.create(input, { signal })),
+                          read: (id) => attempt((signal) => definition.read(id, { signal })),
+                          update: (id, input) => attempt((signal) => definition.update(id, input, { signal })),
+                          delete: (id) => attempt((signal) => definition.delete(id, { signal })),
+                        }),
+                      remove: editor.remove,
+                      default: editor.default,
+                    })
+                  }),
+                ),
             },
           },
           generate: {
@@ -407,26 +470,38 @@ export function fromPromise(plugin: Plugin) {
                       update: (input) => {
                         if (!("authorize" in input)) return editor.method.update(input)
                         const refresh = input.refresh
+                        const revoke = input.revoke
                         editor.method.update({
                           ...input,
                           authorize: (answer) =>
                             Effect.promise(() => input.authorize(answer)).pipe(
-                              Effect.map((authorization) =>
-                                authorization.mode === "auto"
-                                  ? {
-                                      ...authorization,
-                                      callback: Effect.promise(() => authorization.callback),
-                                    }
-                                  : {
-                                      ...authorization,
-                                      callback: (code) => Effect.promise(() => authorization.callback(code)),
-                                    },
-                              ),
+                              Effect.map((authorization) => {
+                                if (authorization.mode === "code")
+                                  return {
+                                    ...authorization,
+                                    callback: (code: string) => Effect.promise(() => authorization.callback(code)),
+                                  }
+                                const submit = authorization.submit
+                                return {
+                                  ...authorization,
+                                  callback: Effect.promise(() => authorization.callback),
+                                  // A rejected paste keeps its own error, which the dialog shows as is.
+                                  submit: submit
+                                    ? (redirect: string) =>
+                                        Effect.tryPromise({ try: () => submit(redirect), catch: (error) => error })
+                                    : undefined,
+                                }
+                              }),
                             ),
                           refresh:
                             refresh === undefined
                               ? undefined
                               : (credential) => Effect.promise(() => refresh(credential)),
+                          revoke:
+                            revoke === undefined
+                              ? undefined
+                              : (credential) =>
+                                  Effect.tryPromise({ try: () => revoke(credential), catch: (error) => error }),
                         })
                       },
                       remove: editor.method.remove,
@@ -505,6 +580,7 @@ export function fromPromise(plugin: Plugin) {
                         update(value)
                         Object.assign(tool, value, {
                           output: value.output,
+                          freeform: value.freeform,
                           options: value.options,
                           execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
                             executePromiseTool(value, input, context),
@@ -514,8 +590,7 @@ export function fromPromise(plugin: Plugin) {
                   }),
                 ),
               ),
-            hook: (name, callback) =>
-              register(host.tool.hook(name, (event) => toolHook[name](() => Promise.resolve(callback(event))))),
+            hook: (name, callback) => register(host.tool.hook(name, adaptToolHook[name](callback))),
           },
           vcs: {
             get: adaptApiMethod(VcsEndpoints["vcs.get"], host.vcs.get),
@@ -610,6 +685,22 @@ export function fromPromise(plugin: Plugin) {
             move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
             context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
+            instructions: {
+              entry: {
+                list: adaptApiMethod(
+                  SessionEndpoints["session.instructions.entry.list"],
+                  host.session.instructions.entry.list,
+                ),
+                put: adaptApiMethod(
+                  SessionEndpoints["session.instructions.entry.put"],
+                  host.session.instructions.entry.put,
+                ),
+                remove: adaptApiMethod(
+                  SessionEndpoints["session.instructions.entry.remove"],
+                  host.session.instructions.entry.remove,
+                ),
+              },
+            },
           },
           shell: {
             hook: (name, callback) =>
@@ -619,7 +710,8 @@ export function fromPromise(plugin: Plugin) {
 
         yield* Effect.acquireRelease(
           Effect.promise(() => Promise.resolve(plugin.setup(context2))),
-          (cleanup) => (cleanup ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
+          // JavaScript plugins may return anything, such as a v1-style hooks object; only a function is a cleanup.
+          (cleanup) => (typeof cleanup === "function" ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
         )
       }),
   })
@@ -636,21 +728,35 @@ const toolError = (error: unknown) =>
     ? error
     : new Tool.Error({ message: error instanceof Error ? error.message : String(error), error })
 
-// Only execute.before may reject a call; a rejection fails that call alone, like an Effect hook.
-const toolHook: {
-  readonly [Name in keyof ToolHooks]: (run: () => Promise<void>) => Effect.Effect<void, ToolFailures[Name]>
-} = {
-  "execute.before": (run) => Effect.tryPromise({ try: run, catch: toolError }),
-  "execute.after": (run) => Effect.promise(run),
-}
-
 const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
   Effect.tryPromise({
-    try: (signal) =>
-      tool.execute(input, {
-        ...context,
-        signal,
-        progress: (update) => Effect.runPromise(context.progress(update), { signal }),
-      }),
+    try: (interrupted) => {
+      // `signal` aborts when the call is interrupted, and also when the user stops the call once the tool has read
+      // it. Reading it awaits `cancel`, which tells the step this tool stops on its own instead of being interrupted.
+      const stopped = new AbortController()
+      const finished = new AbortController()
+      const signal = AbortSignal.any([interrupted, stopped.signal])
+      // `cancel` stays out of the promise context; promise tools stop through `signal`.
+      const { cancel, ...rest } = context
+      let listening = false
+      const listen = () => {
+        if (listening || !cancel) return
+        listening = true
+        Effect.runPromise(cancel, { signal: AbortSignal.any([interrupted, finished.signal]) }).then(
+          () => stopped.abort(),
+          () => {},
+        )
+      }
+      return Promise.resolve(
+        tool.execute(input, {
+          ...rest,
+          get signal() {
+            listen()
+            return signal
+          },
+          progress: (update) => Effect.runPromise(context.progress(update), { signal: interrupted }),
+        }),
+      ).finally(() => finished.abort())
+    },
     catch: toolError,
   })

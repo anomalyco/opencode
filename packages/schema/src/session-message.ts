@@ -6,7 +6,7 @@ import { Content } from "./tool.js"
 import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
-import { Prompt } from "./prompt.js"
+import { Attachment, Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
 import { ascending } from "./identifier.js"
 import { Shell as ShellSchema } from "./shell.js"
@@ -76,12 +76,20 @@ export const LocationSwitched = Schema.Struct({
 export interface User extends Schema.Schema.Type<typeof User> {}
 export const User = Schema.Struct({
   ...Base,
+  /** Read by the session search index's SQL (`packages/core/src/session/search-index.ts`); a rename needs its `Version` bumped. */
   text: Prompt.fields.text,
   files: Prompt.fields.files,
   agents: Prompt.fields.agents,
   skills: Prompt.fields.skills,
   type: Schema.tag("user"),
 }).annotate({ identifier: "Session.Message.User" })
+
+/** A {@link User} whose files may stay on the server, for clients that opt into `experimental-media-uri`. */
+export interface MediaUser extends Schema.Schema.Type<typeof MediaUser> {}
+export const MediaUser = Schema.Struct({
+  ...User.fields,
+  files: Schema.Array(Attachment).pipe(optional),
+}).annotate({ identifier: "Session.Message.MediaUser" })
 
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}
 export const Synthetic = Schema.Struct({
@@ -178,6 +186,7 @@ export const AssistantTool = Schema.Struct({
 export interface AssistantText extends Schema.Schema.Type<typeof AssistantText> {}
 export const AssistantText = Schema.Struct({
   type: Schema.tag("text"),
+  /** Read by the session search index's SQL (`packages/core/src/session/search-index.ts`); a rename needs its `Version` bumped. */
   text: Schema.String,
   native: Native.pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Text" })
@@ -216,6 +225,7 @@ export const Assistant = Schema.Struct({
   type: Schema.tag("assistant"),
   agent: Agent.ID,
   model: Model.Ref,
+  /** Read by the session search index's SQL (`packages/core/src/session/search-index.ts`); a rename needs its `Version` bumped. */
   content: AssistantContent.pipe(Schema.Array),
   snapshot: Schema.Struct({
     start: Snapshot.ID.pipe(optional),
@@ -227,15 +237,16 @@ export const Assistant = Schema.Struct({
   /** Step-level native data, such as a provider's reason for blocking a response. */
   native: Native.pipe(optional),
   cost: Money.USD.pipe(optional),
-  /** Subscription allowance the step used instead of money, such as OpenCode Go's. */
-  allowance: Money.USD.pipe(optional),
   tokens: TokenUsage.Info.pipe(optional),
   error: SessionError.Error.pipe(optional),
   retry: AssistantRetry.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
+    /** When the provider streamed the first output token, before the rest of the response. */
+    firstToken: DateTimeUtcFromMillis.pipe(optional),
     /** When the provider response body ended, before tool settlement. */
     streamed: DateTimeUtcFromMillis.pipe(optional),
+    /** The session search index waits for this before indexing the message (`search-index.ts`). */
     completed: DateTimeUtcFromMillis.pipe(optional),
   }),
 }).annotate({ identifier: "Session.Message.Assistant" })
@@ -264,6 +275,7 @@ export const CompactionCompleted = Schema.Struct({
   model: Model.Ref.pipe(optional),
   /** A provider compaction stores its replacement window in `native.messages`, replayed instead of `summary`. */
   native: Native.pipe(optional),
+  /** Read by the session search index's SQL (`packages/core/src/session/search-index.ts`); a rename needs its `Version` bumped. */
   summary: Schema.String,
   ...CompactionUsage,
 }).annotate({ identifier: "Session.Message.Compaction.Completed" })
@@ -322,3 +334,19 @@ export type Info =
   | Compaction
   | Idle
 export type Type = Info["type"]
+
+/** {@link Info} with {@link MediaUser} for clients that opt into `experimental-media-uri`. */
+export const MediaInfo = Schema.Union([
+  AgentSelected,
+  ModelSelected,
+  LocationSwitched,
+  MediaUser,
+  Synthetic,
+  System,
+  Skill,
+  Shell,
+  Assistant,
+  Compaction,
+  Idle,
+]).annotate({ identifier: "Session.Message.MediaInfo" })
+export type MediaInfo = Exclude<Info, User> | MediaUser

@@ -1,4 +1,4 @@
-import { Message } from "@opencode/ai"
+import { Message } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Agent } from "@opencode/core/agent"
 import { Credential } from "@opencode/core/credential"
@@ -53,7 +53,7 @@ const fixture = Effect.fn(function* () {
   const location = yield* Location.Service
   const hooks = yield* PluginHooks.Service
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* providers.transform((editor) => {
     editor.update(providerID, (provider) => {
       provider.package = "@opencode/ai/providers/openai-compatible"

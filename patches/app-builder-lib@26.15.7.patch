@@ -1,0 +1,70 @@
+diff --git a/templates/nsis/include/extractAppPackage.nsh b/templates/nsis/include/extractAppPackage.nsh
+index f5470bf52e923dc47266cea4684c76ef78ced451..6c4a4c193a2ca1dc2413482606b9be5c1c2aa1a9 100644
+--- a/templates/nsis/include/extractAppPackage.nsh
++++ b/templates/nsis/include/extractAppPackage.nsh
+@@ -1,4 +1,11 @@
+ !macro extractEmbeddedAppPackage
++  # OpenCode: the custom include can install an update the running app already unpacked, and sets
++  # $R0 to "installed" when it did.
++  !ifmacrodef customInstallStagedApp
++    !insertmacro customInstallStagedApp
++    StrCmp $R0 "installed" extractEmbeddedAppPackageDone
++  !endif
++
+   !ifdef COMPRESS
+     SetCompress off
+   !endif
+@@ -13,6 +20,10 @@
+   !endif
+ 
+   !insertmacro decompress
++
++  !ifmacrodef customInstallStagedApp
++    extractEmbeddedAppPackageDone:
++  !endif
+   !insertmacro custom_files_post_decompression
+ !macroend
+ 
+@@ -90,6 +101,15 @@
+ !macroend
+ 
+ !macro extractUsing7za FILE
++  # OpenCode: extract straight into an empty install directory. The copy through $PLUGINSDIR below
++  # only protects files that a running old version still holds, and an empty directory has none,
++  # so it would write the whole app a second time and delete it again on exit.
++  ${DirState} $OUTDIR $R0
++  ${if} $R0 != 1
++    Nsis7z::Extract "${FILE}"
++    Goto DoneExtract7za
++  ${endIf}
++
+   Push $OUTDIR
+   CreateDirectory "$PLUGINSDIR\7z-out"
+   ClearErrors
+diff --git a/templates/nsis/include/installer.nsh b/templates/nsis/include/installer.nsh
+index 300ef3dd699d0f5a081b1934fcc22dbe12025bdb..6bc1c7f368208024c52aff9ae53f299ce4b632f3 100644
+--- a/templates/nsis/include/installer.nsh
++++ b/templates/nsis/include/installer.nsh
+@@ -90,7 +90,21 @@
+       ${if} $installMode == "all"
+         SetShellVarContext current
+       ${endif}
+-      !insertmacro copyFile "$EXEPATH" "$LOCALAPPDATA\${APP_INSTALLER_STORE_FILE}"
++      # OpenCode: an update runs from the updater's pending download next to this cache file, so hard
++      # link it instead of copying a few hundred MB. The updater replaces that download rather than
++      # rewriting it, so the link never changes under the cache.
++      ${StdUtils.GetParentPath} $R5 "$LOCALAPPDATA\${APP_INSTALLER_STORE_FILE}"
++      StrLen $R6 "$R5\"
++      StrCpy $R6 $EXEPATH $R6
++      ${if} $R6 == "$R5\"
++        Delete "$LOCALAPPDATA\${APP_INSTALLER_STORE_FILE}"
++        System::Call 'kernel32::CreateHardLinkW(w "$LOCALAPPDATA\${APP_INSTALLER_STORE_FILE}", w "$EXEPATH", p 0) i .R6'
++      ${else}
++        StrCpy $R6 0
++      ${endIf}
++      ${if} $R6 == 0
++        !insertmacro copyFile "$EXEPATH" "$LOCALAPPDATA\${APP_INSTALLER_STORE_FILE}"
++      ${endIf}
+       ${if} $installMode == "all"
+         SetShellVarContext all
+       ${endif}

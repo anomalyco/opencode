@@ -17,16 +17,31 @@ type Entry<Tab> = {
 
 export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "general", label: "settings.tab.preferences" },
+  {
+    tab: "general",
+    label: "settings.helpFeedback",
+    target: "settings-help-feedback",
+    keywords: "support report issue",
+  },
   { tab: "appearance", label: "settings.general.section.appearance" },
   { tab: "notifications", label: "settings.tab.notifications" },
   { tab: "shortcuts", label: "settings.shortcuts.title", keywords: "keybind keyboard hotkey" },
   { tab: "about", label: "settings.tab.about", keywords: "version license credits" },
+  { tab: "experimental", label: "settings.tab.experimental", keywords: "experiments preview beta" },
   { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
   {
     tab: "general",
-    label: "settings.appearance.row.tabs.title",
+    label: "settings.general.row.interfaceMode.title",
     target: "settings-tab-layout",
-    keywords: "vertical horizontal tabs",
+    keywords: "top side tabs inbox sidebar mode layout vertical horizontal focus pro",
+  },
+  {
+    tab: "general",
+    label: "settings.general.row.sharedSidePanel.title",
+    description: "settings.general.row.sharedSidePanel.description",
+    target: "settings-shared-side-panel",
+    section: "settings.general.section.general",
+    keywords: "right side panel review sidebar persist keep open sessions switch",
   },
   {
     tab: "general",
@@ -44,12 +59,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
-    label: "settings.general.row.terminalPlacement.title",
-    target: "settings-terminal-placement",
-    keywords: "terminal side bottom position",
-  },
-  {
-    tab: "general",
     label: "settings.general.row.followUpBehavior.title",
     target: "settings-follow-up-behavior",
     keywords: "queue steer follow up",
@@ -58,6 +67,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     tab: "general",
     label: "settings.general.row.pinchZoom.title",
     target: "settings-pinch-zoom",
+    available: "desktop",
+  },
+  {
+    tab: "general",
+    label: "settings.general.row.spellcheck.title",
+    target: "settings-spellcheck",
+    keywords: "spelling spell check dictionary",
     available: "desktop",
   },
   {
@@ -75,9 +91,68 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.timeline.row.backgroundActivity.title",
+    description: "settings.timeline.row.backgroundActivity.description",
+    target: "settings-background-activity",
+    section: "settings.timeline.title",
+    keywords: "capsule panel subagent shell background activity position alignment hidden left center right",
+  },
+  {
+    tab: "general",
+    label: "settings.timeline.row.width.title",
+    description: "settings.timeline.row.width.description",
+    target: "settings-timeline-width",
+    section: "settings.timeline.title",
+    keywords: "column line length measure narrow focused comfortable wide readability",
+  },
+  {
+    tab: "general",
+    label: "settings.timeline.row.foldUserMessages.title",
+    description: "settings.timeline.row.foldUserMessages.description",
+    target: "settings-fold-user-messages",
+    section: "settings.timeline.title",
+    keywords: "fold collapse long messages prompts read more",
+  },
+  {
+    tab: "general",
+    label: "settings.timeline.row.turnDiffs.title",
+    description: "settings.timeline.row.turnDiffs.description",
+    target: "settings-show-turn-diffs",
+    section: "settings.timeline.title",
+  },
+  {
+    tab: "general",
     label: "settings.general.row.showCustomAgents.title",
     target: "settings-show-custom-agents",
     section: "settings.general.section.general",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.newTimeline.title",
+    target: "settings-new-timeline",
+    description: "settings.experimental.row.newTimeline.description",
+    keywords: "new timeline redesign activity explored edited ran grouping status",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.newQuestionUI.title",
+    target: "settings-new-question-ui",
+    description: "settings.experimental.row.newQuestionUI.description",
+    keywords: "question answers keyboard dock redesign",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.tabGroups.title",
+    target: "settings-tab-groups",
+    description: "settings.experimental.row.tabGroups.description",
+    keywords: "tab groups server project colors drag organize search sessions",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.sidebarOrganize.title",
+    target: "settings-sidebar-organize",
+    description: "settings.experimental.row.sidebarOrganize.description",
+    keywords: "vertical side tabs projects recents organize sidebar",
   },
   {
     tab: "appearance",
@@ -105,6 +180,19 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "terminal typeface",
   },
   {
+    tab: "appearance",
+    label: "settings.appearance.row.zoom.title",
+    target: "settings-zoom",
+    keywords: "scale size text font larger bigger accessibility",
+    available: "desktop",
+  },
+  {
+    tab: "appearance",
+    label: "settings.appearance.row.reduceMotion.title",
+    target: "settings-reduce-motion",
+    keywords: "animation accessibility",
+  },
+  {
     tab: "notifications",
     label: "settings.general.notifications.agent.title",
     target: "settings-notifications-agent",
@@ -119,6 +207,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.notifications",
     description: "settings.general.notifications.permissions.description",
     keywords: "desktop notifications permissions",
+  },
+  {
+    tab: "notifications",
+    label: "settings.general.notifications.questions.title",
+    target: "settings-notifications-questions",
+    section: "settings.general.section.notifications",
+    description: "settings.general.notifications.questions.description",
+    keywords: "desktop notifications questions mcp elicitation input",
   },
   {
     tab: "notifications",
@@ -146,15 +242,32 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "notifications",
+    label: "settings.general.sounds.questions.title",
+    target: "settings-sounds-questions",
+    section: "settings.general.section.sounds",
+    description: "settings.general.sounds.questions.description",
+    keywords: "sound audio questions mcp elicitation input",
+  },
+  {
+    tab: "notifications",
     label: "settings.general.sounds.errors.title",
     target: "settings-sounds-errors",
     section: "settings.general.section.sounds",
     description: "settings.general.sounds.errors.description",
     keywords: "sound audio errors",
   },
+  {
+    tab: "notifications",
+    label: "settings.general.sounds.interface.title",
+    target: "settings-sounds-interface",
+    section: "settings.general.section.sounds",
+    description: "settings.general.sounds.interface.description",
+    keywords: "sound audio interface effects wordmark logo",
+  },
 ]
 
-export const serverSettings: Entry<SettingsServerTab>[] = [
+// Pages showing the selected server, and rows of its card on the Servers page.
+export const serverSettings: Entry<SettingsServerTab | "servers">[] = [
   { tab: "projects", label: "settings.tab.projects" },
   { tab: "workspaces", label: "settings.tab.workspaces", keywords: "workspaces disk usage cleanup delete" },
   { tab: "providers", label: "settings.providers.title", keywords: "connect api key credentials" },
@@ -166,21 +279,19 @@ export const serverSettings: Entry<SettingsServerTab>[] = [
     label: "settings.extensions.tab.mcps",
     keywords: "model context protocol tools",
   },
-  { tab: "extensions", subtab: "plugins", label: "settings.extensions.tab.plugins" },
+  {
+    tab: "extensions",
+    subtab: "plugins",
+    label: "settings.extensions.tab.plugins",
+    keywords: "extension gui built-in",
+  },
   { tab: "extensions", subtab: "skills", label: "settings.extensions.tab.skills" },
   {
-    tab: "general",
+    tab: "servers",
     label: "settings.general.row.shell.title",
     target: "settings-shell",
     description: "settings.general.row.shell.description",
     keywords: "bash zsh powershell",
-  },
-  {
-    tab: "general",
-    label: "settings.server.preferences.websearch.title",
-    target: "settings-websearch",
-    description: "settings.server.preferences.websearch.description",
-    keywords: "web search provider",
   },
 ]
 

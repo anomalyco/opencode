@@ -12,11 +12,12 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Info } from "@opencode/schema/config"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FileAccess } from "../src/file-access"
 import { Formatter } from "../src/formatter"
 import { Location } from "../src/location"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
-import { tmpdir } from "./fixture/tmpdir"
+import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -28,11 +29,7 @@ const it = testEffect(
 type ConfigInput = typeof Info.Encoded
 
 function withTemp<A, E, R>(body: (directory: string) => Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => body(tmp.path),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  )
+  return withTempDir((tmp) => body(tmp.path))
 }
 
 function withFormatter<A, E, R>(
@@ -57,6 +54,14 @@ function withFormatter<A, E, R>(
       ),
     ),
   )
+}
+
+// Formats a file resolved the way a tool resolves it, in the environment of the Location under test.
+function format(formatter: Formatter.Interface, file: string) {
+  return Effect.gen(function* () {
+    const access = yield* FileAccess.Service
+    return yield* formatter.file(yield* access.resolve({ path: file }))
+  })
 }
 
 function append(expression: string) {
@@ -163,7 +168,7 @@ describe("Formatter", () => {
           Effect.gen(function* () {
             const file = path.join(directory, name)
             yield* Effect.promise(() => fs.writeFile(file, ""))
-            const formatted = yield* formatter.file(file)
+            const formatted = yield* format(formatter, file)
             expect(formatted && (yield* Effect.promise(() => fs.readFile(file, "utf8")))).toBe(expected)
           }),
         ),
@@ -192,7 +197,7 @@ describe("Formatter", () => {
         },
         (formatter, directory) =>
           Effect.gen(function* () {
-            expect(yield* formatter.file(path.join(directory, entry.file))).toBe(entry.matches)
+            expect(yield* format(formatter, path.join(directory, entry.file))).toBe(entry.matches)
           }),
       ),
     ),
@@ -210,7 +215,7 @@ describe("Formatter", () => {
       (formatter, directory) =>
         Effect.gen(function* () {
           const file = path.join(directory, "test.disabled")
-          expect(yield* formatter.file(file)).toBe(false)
+          expect(yield* format(formatter, file)).toBe(false)
         }),
     ),
   )
@@ -220,7 +225,7 @@ describe("Formatter", () => {
       Effect.gen(function* () {
         const file = path.join(directory, "test.txt")
         yield* Effect.promise(() => fs.writeFile(file, "x"))
-        expect(yield* formatter.file(file)).toBe(false)
+        expect(yield* format(formatter, file)).toBe(false)
       }),
     ),
   )
@@ -238,8 +243,8 @@ describe("Formatter", () => {
           Effect.gen(function* () {
             const offFile = path.join(off, "test.isolated")
             const onFile = path.join(on, "test.isolated")
-            const disabled = yield* disabledFormatter.file(offFile)
-            const enabled = yield* enabledFormatter.file(onFile)
+            const disabled = yield* format(disabledFormatter, offFile)
+            const enabled = yield* format(enabledFormatter, onFile)
             expect(disabled).toBe(false)
             expect(enabled).toBe(true)
           }),
@@ -273,7 +278,7 @@ describe("Formatter", () => {
         Effect.gen(function* () {
           const file = path.join(directory, "test.seq")
           yield* Effect.promise(() => fs.writeFile(file, "x"))
-          expect(yield* formatter.file(file)).toBe(true)
+          expect(yield* format(formatter, file)).toBe(true)
           expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("xA")
         }),
     ),
@@ -300,7 +305,7 @@ describe("Formatter", () => {
         Effect.gen(function* () {
           const file = path.join(directory, "test.fallback")
           yield* Effect.promise(() => fs.writeFile(file, "x"))
-          expect(yield* formatter.file(file)).toBe(true)
+          expect(yield* format(formatter, file)).toBe(true)
           expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("xB")
         }),
     ),
@@ -325,12 +330,12 @@ describe("Formatter", () => {
         })
         const file = path.join(directory, "test.reload")
         yield* Effect.promise(() => fs.writeFile(file, "x"))
-        expect(yield* formatter.file(file)).toBe(true)
+        expect(yield* format(formatter, file)).toBe(true)
 
         command.suffix = "B"
         yield* formatter.reload()
 
-        expect(yield* formatter.file(file)).toBe(true)
+        expect(yield* format(formatter, file)).toBe(true)
         expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("xAB")
       }),
     ),
@@ -364,7 +369,7 @@ describe("Formatter", () => {
         })
         const file = path.join(directory, "test.race")
         yield* Effect.promise(() => fs.writeFile(file, "x"))
-        const first = yield* formatter.file(file).pipe(Effect.forkChild({ startImmediately: true }))
+        const first = yield* format(formatter, file).pipe(Effect.forkChild({ startImmediately: true }))
         yield* Deferred.await(resolving)
 
         command.suffix = "B"
@@ -372,7 +377,7 @@ describe("Formatter", () => {
         yield* Deferred.succeed(release, undefined)
         expect(yield* Fiber.join(first)).toBe(true)
 
-        expect(yield* formatter.file(file)).toBe(true)
+        expect(yield* format(formatter, file)).toBe(true)
         expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("xAB")
       }),
     ),

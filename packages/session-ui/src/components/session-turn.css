@@ -54,7 +54,7 @@
     gap: 8px;
     width: 100%;
     min-width: 0;
-    color: var(--text-weak);
+    color: var(--v2-text-text-faint);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
@@ -70,7 +70,7 @@
   [data-component="text-reveal"].session-turn-thinking-heading {
     flex: 1 1 auto;
     min-width: 0;
-    color: var(--text-weaker);
+    color: var(--v2-text-text-faint);
     font-weight: var(--font-weight-regular);
   }
 
@@ -154,7 +154,7 @@
 
   [data-slot="session-turn-diffs-label"] {
     font-variant-numeric: tabular-nums;
-    color: var(--text-strong);
+    color: var(--v2-text-text-base);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
@@ -162,7 +162,7 @@
   }
 
   [data-slot="session-turn-diffs-toggle"] {
-    color: var(--text-interactive-base);
+    color: var(--v2-text-text-accent);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-regular);
@@ -185,7 +185,7 @@
   }
 
   [data-slot="session-turn-diffs-more"] {
-    color: var(--text-weak);
+    color: var(--v2-text-text-faint);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     line-height: var(--line-height-large);
@@ -195,7 +195,7 @@
     transition: color 0.15s ease;
 
     &:hover {
-      color: var(--text-link-base);
+      color: var(--v2-text-text-accent-hover);
     }
   }
 
@@ -227,7 +227,7 @@
   }
 
   [data-slot="session-turn-diff-directory"] {
-    color: var(--text-base);
+    color: var(--v2-text-text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -237,7 +237,7 @@
 
   [data-slot="session-turn-diff-filename"] {
     min-width: 0;
-    color: var(--text-strong);
+    color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
     overflow: hidden;
     text-overflow: ellipsis;

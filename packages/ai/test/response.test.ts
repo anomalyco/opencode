@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { LLMEvent, LLMResponse } from "../src/index.js"
+import { LLMEvent, LLMResponse } from "../src/effect.js"
+import { ResponseFold } from "../src/schema/index.js"
 
-const reduce = (events: ReadonlyArray<LLMEvent>) => events.reduce(LLMResponse.reduce, LLMResponse.empty())
+const reduce = (events: ReadonlyArray<LLMEvent>) => events.reduce(ResponseFold.reduce, ResponseFold.empty())
 const finishEvents = (events: ReadonlyArray<LLMEvent>) => events.filter(LLMEvent.is.finish)
 
 describe("LLMResponse reducer", () => {
@@ -45,7 +46,7 @@ describe("LLMResponse reducer", () => {
   test("preserves partial content without completing a failed stream", () => {
     const state = reduce([LLMEvent.textStart({ id: "t1" }), LLMEvent.textDelta({ id: "t1", text: "partial" })])
 
-    expect(LLMResponse.complete(state)).toBeUndefined()
+    expect(ResponseFold.complete(state)).toBeUndefined()
     expect(state.message.content).toEqual([{ type: "text", text: "partial" }])
   })
 
@@ -56,8 +57,35 @@ describe("LLMResponse reducer", () => {
       LLMEvent.textEnd({ id: "t1" }),
     ])
 
-    expect(LLMResponse.complete(state)).toBeUndefined()
+    expect(ResponseFold.complete(state)).toBeUndefined()
     expect(state.message.content).toEqual([{ type: "text", text: "partial" }])
+  })
+
+  test("assembles a long text stream", () => {
+    const deltas = Array.from({ length: 50_000 }, (_, index) => LLMEvent.textDelta({ id: "t1", text: `${index % 10}` }))
+    const response = LLMResponse.fromEvents([
+      LLMEvent.textStart({ id: "t1" }),
+      ...deltas,
+      LLMEvent.finish({ reason: { normalized: "stop" } }),
+    ])
+
+    expect(response?.events).toHaveLength(50_002)
+    expect(response?.text).toBe("0123456789".repeat(5_000))
+  })
+
+  test("keeps completed responses independent of later folding", () => {
+    const state = reduce([
+      LLMEvent.textStart({ id: "t1" }),
+      LLMEvent.textDelta({ id: "t1", text: "a" }),
+      LLMEvent.finish({ reason: { normalized: "stop" } }),
+    ])
+    const response = ResponseFold.complete(state)
+    const partial = ResponseFold.partial(state)
+    ResponseFold.reduce(state, LLMEvent.textDelta({ id: "t1", text: "b" }))
+
+    expect(response?.events).toHaveLength(3)
+    expect(partial?.events).toHaveLength(3)
+    expect(ResponseFold.empty().events).not.toBe(ResponseFold.empty().events)
   })
 
   test("uses terminal usage when present and keeps prior usage when finish omits it", () => {

@@ -14,11 +14,11 @@ const timeout = (error: unknown) =>
   error.cause.name === "TimeoutError"
 
 await Promise.all([
-  connection.sdk.session.wait({ sessionID: "ses_initial" }),
-  replacement.session.wait({ sessionID: "ses_reconnected" }),
-  assert.rejects(OpenCode.make({ baseUrl: endpoint.url }).session.wait({ sessionID: "ses_control" }), timeout),
+  connection.sdk.experimental.session.wait({ sessionID: "ses_initial" }),
+  replacement.experimental.session.wait({ sessionID: "ses_reconnected" }),
+  assert.rejects(OpenCode.make({ baseUrl: endpoint.url }).experimental.session.wait({ sessionID: "ses_control" }), timeout),
   assert.rejects(
-    connection.sdk.session.wait({ sessionID: "ses_cancelled" }, { signal: AbortSignal.timeout(100) }),
+    connection.sdk.experimental.session.wait({ sessionID: "ses_cancelled" }, { signal: AbortSignal.timeout(100) }),
     timeout,
   ),
 ])

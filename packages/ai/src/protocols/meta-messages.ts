@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import type { LLMRequest } from "../schema/index.js"
+import { CacheTTL, type LLMRequest } from "../schema/index.js"
 import { AnthropicMessages } from "./anthropic-messages.js"
 import { MetaResponses } from "./meta-responses.js"
 import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
@@ -12,7 +12,7 @@ const WebSearch = Schema.Struct({
 })
 const MetaCacheControl = Schema.Struct({
   type: Schema.tag("ephemeral"),
-  ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
+  ttl: Schema.optional(CacheTTL),
 })
 const FunctionTool = Schema.Struct({
   name: Schema.String,
@@ -26,16 +26,26 @@ const Body = Schema.Struct({
 })
 
 const fromRequest = Effect.fn("MetaMessages.fromRequest")(function* (request: LLMRequest) {
-  const projected = ProviderShared.flattenToolRequest(request)
-  const body = yield* AnthropicMessages.protocol.body.from(projected.request)
+  const body = yield* AnthropicMessages.protocol.body.from(request)
+  const definitions = ProviderShared.flattenTools(request.tools)
   return {
     ...body,
+    messages: body.messages.map((message) => {
+      if (message.role !== "user") return message
+      const videos: Array<(typeof message.content)[number]> = []
+      const content = message.content.map((block) => {
+        if (block.type !== "tool_result" || typeof block.content === "string") return block
+        videos.push(...block.content.filter((item) => item.type === "video"))
+        return { ...block, content: block.content.filter((item) => item.type !== "video") }
+      })
+      return videos.length === 0 ? message : { ...message, content: [...content, ...videos] }
+    }),
     tools:
       body.tools === undefined
         ? undefined
         : yield* Effect.forEach(body.tools, (tool, index) =>
             Effect.gen(function* () {
-              const native = projected.tools[index]?.native
+              const native = definitions[index]?.native
               if (native === undefined) return tool
               const search = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(MetaResponses.WebSearch))(
                 native.meta,

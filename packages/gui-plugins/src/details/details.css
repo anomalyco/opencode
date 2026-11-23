@@ -1,0 +1,555 @@
+/* Only the card scrolls, so neither its shadow nor the Extensions flyout beside it is clipped. */
+.session-summary-popover .session-summary-card {
+  max-height: calc(100dvh - 96px);
+  overflow-y: auto;
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-floating);
+}
+
+[data-component="session-summary-panel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 280px;
+  max-width: calc(100vw - 32px);
+
+  &[data-mobile] {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.session-summary-card {
+  position: relative;
+  z-index: 1;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-raised);
+}
+
+[data-color-scheme="dark"] .session-summary-card {
+  background: var(--v2-background-bg-layer-01);
+}
+
+.session-summary-card,
+.session-summary-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-summary-row,
+.session-service-row,
+.session-service-config,
+.session-mcp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  text-align: start;
+}
+
+.session-summary-card .session-summary-row {
+  /* Keep copy out of the trailing indicator column, including rows without an indicator. */
+  padding-inline-end: 36px;
+}
+
+.session-summary-card .session-summary-row:has(> .session-summary-menu-indicator) {
+  /* Align trailing 16px indicators with the move row's 20px dismiss button. */
+  padding-inline-end: 8px;
+}
+
+.session-summary-card .session-summary-menu-indicator {
+  margin-inline-start: 4px;
+}
+
+.session-summary-row:focus-visible,
+.session-service-config:focus-visible,
+button.session-service-row:focus-visible,
+:is(.session-service-row, .session-mcp-row):has(:focus-visible) {
+  outline: none;
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+/* A name that reveals its full text on focus shows that focus on its row, never as a ring of its own. */
+:is(.session-service-pane, .session-service-drawer) [data-component="tooltip-v2-trigger"]:focus-visible {
+  outline: none;
+}
+
+@media (hover: hover) {
+  button.session-summary-row:hover,
+  .session-service-config:not(:disabled):hover,
+  button.session-service-row:hover,
+  .session-summary-move:has(> .session-summary-dismiss:hover) > .session-summary-row,
+  .session-mcp-row:not([data-disabled]):hover {
+    background: var(--v2-overlay-simple-overlay-hover);
+  }
+}
+
+.session-summary-row[data-expanded] {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.session-summary-heading {
+  color: var(--v2-text-text-faint);
+  font-weight: 440;
+  user-select: none;
+}
+
+.session-summary-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+/* One flyout beside the Extensions card. It glides to the hovered row and clips to the list on show. */
+.session-service-flyout {
+  /* A .25s, bounce 0 spring, sampled over its .3s settle. */
+  --spring-snap: linear(
+    0,
+    0.04,
+    0.131,
+    0.243,
+    0.358,
+    0.466,
+    0.562,
+    0.645,
+    0.715,
+    0.774,
+    0.821,
+    0.859,
+    0.89,
+    0.914,
+    0.934,
+    0.949,
+    0.96,
+    0.97,
+    0.977,
+    0.982,
+    0.986,
+    0.99,
+    0.992,
+    0.994,
+    1
+  );
+  position: absolute;
+  z-index: 60;
+  top: 0;
+  inset-inline-end: 100%;
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+  visibility: hidden;
+
+  &[data-open] {
+    pointer-events: auto;
+    visibility: visible;
+  }
+}
+
+.session-service-flyout-body {
+  opacity: 0;
+  scale: 0.96;
+  translate: 4px 0;
+  transform-origin: right top;
+
+  &:dir(rtl) {
+    translate: -4px 0;
+    transform-origin: left top;
+  }
+
+  .session-service-flyout[data-open] & {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+  }
+}
+
+.session-service-flyout-surface {
+  display: grid;
+  height: var(--flyout-height);
+  overflow: hidden;
+  padding: 2px 0;
+  border-radius: 6px;
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: var(--v2-elevation-floating);
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+}
+
+/* Motion is off unless the "Extensions submenu motion" knob sets data-motion. */
+.session-service-flyout[data-motion] {
+  transition:
+    transform 0.3s var(--spring-snap),
+    visibility 0s linear 0.11s;
+
+  &[data-open] {
+    transition:
+      transform 0.3s var(--spring-snap),
+      visibility 0s;
+  }
+
+  .session-service-flyout-body {
+    transition:
+      opacity 0.11s cubic-bezier(0.4, 0, 1, 1),
+      scale 0.11s cubic-bezier(0.4, 0, 1, 1),
+      translate 0.11s cubic-bezier(0.4, 0, 1, 1);
+  }
+
+  &[data-open] .session-service-flyout-body {
+    transition:
+      opacity 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+      scale 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+      translate 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .session-service-flyout-surface {
+    transition: height 0.3s var(--spring-snap);
+  }
+}
+
+.session-service-pane {
+  grid-area: 1 / 1;
+  align-self: start;
+  /* The list scrolls above its actions, which stay in view. */
+  display: flex;
+  flex-direction: column;
+  max-height: min(480px, calc(100dvh - 36px));
+  /* Long names truncate inside the list instead of widening it. */
+  min-width: 0;
+  outline: none;
+
+  /* Lists swap at once; only the box glides and resizes, so two lists never show together. */
+  &:not([data-active]) {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+.session-service-scroll {
+  min-height: 0;
+  /* Only vertical: long names truncate rather than scroll sideways. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The list and its actions own the menu's inline inset, so a separator can run edge to edge. */
+.session-service-pane-content,
+.session-service-pane > .session-service-footer {
+  padding-inline: 2px;
+}
+
+.session-service-pane > .session-service-footer {
+  flex-shrink: 0;
+}
+
+/* A long list keeps the menu's 2px inset at both ends, and fades only at an edge with rows scrolled past it. */
+@property --session-service-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --session-service-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes session-service-fade-start {
+  from {
+    --session-service-fade-start: 0px;
+  }
+  to {
+    --session-service-fade-start: 16px;
+  }
+}
+
+@keyframes session-service-fade-end {
+  from {
+    --session-service-fade-end: 16px;
+  }
+  to {
+    --session-service-fade-end: 0px;
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  .session-service-pane[data-overflow] .session-service-scroll {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--session-service-fade-start),
+      #000 calc(100% - var(--session-service-fade-end)),
+      transparent
+    );
+    animation:
+      session-service-fade-start linear both,
+      session-service-fade-end linear both;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range:
+      0 16px,
+      calc(100% - 16px) 100%;
+  }
+}
+
+.session-service-trigger {
+  .session-service-dot {
+    width: 6px;
+  }
+}
+
+.session-service-count {
+  flex-shrink: 0;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-service-chevron:dir(rtl) {
+  scale: -1 1;
+}
+
+.session-service-error {
+  overflow-wrap: anywhere;
+}
+
+:is(.session-service-pane, .session-service-drawer) .session-summary-row,
+:is(.session-service-pane, .session-service-drawer) .session-service-row,
+:is(.session-service-pane, .session-service-drawer) .session-service-config,
+:is(.session-service-pane, .session-service-drawer) .session-mcp-row {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+:is(.session-service-pane-content, .session-service-drawer)
+  > :is(.session-service-row, .session-mcp-row)
+  + :is(.session-service-row, .session-mcp-row) {
+  margin-block-start: 2px;
+}
+
+.session-service-drawer {
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.session-service-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  color: var(--v2-text-text-faint);
+  font-size: inherit;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  overflow-wrap: anywhere;
+
+  strong {
+    padding: 8px 12px;
+    font-weight: 440;
+    user-select: none;
+  }
+}
+
+.session-service-message {
+  padding: 6px 12px;
+  color: var(--v2-text-text-faint);
+  overflow-wrap: anywhere;
+}
+:is(.session-service-pane, .session-service-drawer) > .session-service-footer {
+  padding-block-start: 6px;
+}
+.session-service-config-separator {
+  display: block;
+  height: 1px;
+  width: calc(100% + 4px);
+  margin: 2px -2px;
+  background: var(--v2-border-border-muted);
+}
+
+.session-service-config {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--v2-text-text-base);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+.session-service-dot {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-faint);
+
+  &::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+}
+.session-service-dot[data-status="connected"],
+.session-service-dot[data-status="active"] {
+  color: var(--icon-success-base);
+}
+.session-service-dot[data-status="failed"] {
+  color: var(--icon-critical-base);
+}
+.session-service-dot[data-status="needs_auth"] {
+  color: var(--icon-warning-base);
+}
+.session-service-dot[data-status="disabled"]::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+.session-service-dot[data-status="pending"]::before {
+  animation: session-service-pulse 1s ease-in-out infinite;
+}
+@keyframes session-service-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+button.session-service-dot {
+  position: relative;
+  border-radius: 4px;
+  cursor: pointer;
+
+  /* A 16px target around the dot, so a failed one is easy to hover. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
+  }
+}
+.session-service-dot-tip {
+  display: flex;
+  flex-shrink: 0;
+}
+:is(.session-mcp-row, .session-service-row)[data-status="disabled"] .session-summary-label {
+  color: var(--v2-text-text-muted);
+}
+
+.session-mcp-name {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-mcp-name .session-service-dot {
+  width: 6px;
+  height: 6px;
+}
+
+/* The 16px switch sits 6px from the row's top, bottom and end. */
+.session-mcp-row {
+  padding-inline-end: 6px;
+}
+
+.session-mcp-trailing {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-inline-start: 8px;
+  white-space: nowrap;
+}
+
+/* A quiet ghost action in the switch's place, as in the MCPs dialog. */
+.session-mcp-sign-in[data-component="button-v2"][data-size="small"] {
+  height: 20px;
+  margin-inline-end: -5px;
+  padding-inline: 5px;
+  font-size: 11px;
+  font-weight: 440;
+  line-height: 16px;
+  letter-spacing: 0.05px;
+}
+
+@media (max-width: 639px), (hover: none) {
+  .session-mcp-row {
+    min-height: 44px;
+    padding-block: 8px;
+  }
+}
+
+.session-mcp-error-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.session-mcp-row[aria-disabled="true"] [data-slot="switch-control"] {
+  opacity: 0.5;
+}
+.session-summary-move {
+  position: relative;
+  /* The first 6px sit behind the card, leaving 4px of visible space above the row. */
+  padding: 10px 2px 2px;
+  margin-top: -6px;
+  border-radius: 0 0 6px 6px;
+  background: var(--v2-background-bg-layer-02);
+}
+.session-summary-move > .session-summary-row {
+  padding-inline-end: 36px;
+}
+.session-summary-dismiss {
+  position: absolute;
+  inset-inline-end: 8px;
+  bottom: 6px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--v2-icon-icon-muted);
+  border-radius: 4px;
+}
+.session-summary-dismiss:hover,
+.session-summary-dismiss:focus-visible {
+  background: var(--v2-overlay-simple-overlay-hover);
+  outline: none;
+}
+
+@media (max-width: 767px) {
+  [data-component="session-summary-panel"] .session-summary-row,
+  .session-service-pane .session-service-row,
+  .session-service-pane .session-service-config,
+  .session-service-pane .session-mcp-row {
+    min-height: 44px;
+  }
+}
+
+:root[data-motion="reduce"] {
+  .session-service-dot::before {
+    animation: none;
+  }
+}

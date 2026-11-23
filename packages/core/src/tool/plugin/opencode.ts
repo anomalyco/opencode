@@ -1,12 +1,14 @@
 export * as OpenCodeTools from "./opencode.js"
 
-import { SystemPart, ToolFailure } from "@opencode/ai"
+import { SystemPart, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, Schema } from "effect"
+import { toolFailure } from "../runtime.js"
 import { FileAccess } from "../../file-access.js"
 import { Git } from "../../git.js"
 import { Permission } from "../../permission.js"
@@ -50,6 +52,14 @@ export const ModelsInput = Schema.Struct({
   provider: Schema.optionalKey(Schema.String).annotate({
     description: "Provider ID or name to filter by. Try your own provider first.",
   }),
+  type: Schema.optionalKey(Schema.Literals(["chat", "image", "video"])).annotate({
+    description: [
+      'Which kind of model to list. Defaults to "chat".',
+      '"chat": a language model (LLM). Powers sessions, agents and subagents, and can call tools.',
+      '"image": generates or edits images from a prompt. It can\'t chat or call tools.',
+      '"video": generates videos from a prompt. It can\'t chat or call tools.',
+    ].join("\n"),
+  }),
   all: Schema.optionalKey(Schema.Boolean).annotate({
     description: "Include older versions of each model family. By default only the newest version is listed.",
   }),
@@ -73,6 +83,8 @@ const ModelEntry = Schema.Struct({
 })
 
 const ModelsOutput = Schema.Struct({
+  total: Schema.Int.annotate({ description: "Number of matching models across all pages." }),
+  next: Schema.NullOr(Schema.Int).annotate({ description: "Offset of the next page, or null on the last page." }),
   providers: Schema.Array(
     Schema.Struct({
       id: Schema.String,
@@ -80,8 +92,6 @@ const ModelsOutput = Schema.Struct({
       models: Schema.Array(ModelEntry).annotate({ description: "Newest first." }),
     }),
   ).annotate({ description: "Matching models grouped by provider. Your own provider comes first." }),
-  total: Schema.Int.annotate({ description: "Number of matching models across all pages." }),
-  next: Schema.NullOr(Schema.Int).annotate({ description: "Offset of the next page, or null on the last page." }),
 })
 
 export const Plugin = {
@@ -91,11 +101,13 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const hook = (event: SessionHooks["context"]) =>
       Effect.sync(() => {
-        event.system.push(
-          SystemPart.make(
-            "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
-          ),
-        )
+        const text =
+          "execute" in event.tools
+            ? "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session.move` and make the worktree the session's working directory."
+            : "opencode_session_move" in event.tools
+              ? "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider calling `opencode_session_move` to make the worktree the session's working directory."
+              : undefined
+        if (text) event.system.push(SystemPart.make(text))
       })
     yield* ctx.session.hook("context", hook)
     yield* ctx.session.hook("compaction", hook)
@@ -108,12 +120,12 @@ export const Plugin = {
             "Tools for managing OpenCode itself, such as working with sessions and worktrees, searching the available models, and reading MCP resources.",
         })
         draft.add({
-          name: "session_rename",
+          name: "rename",
           description:
             "Rename a session, or omit sessionID to rename the current session. Use a short, specific title that summarizes the work being done.",
           input: RenameInput,
           output: RenameOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "opencode.session", codemode: true },
           execute: (input, context) => {
             const sessionID = input.sessionID ?? context.sessionID
             const title = input.title.trim()
@@ -128,23 +140,35 @@ export const Plugin = {
           },
         })
         draft.add({
-          name: "session_move",
+          name: "move",
           description:
             "Move a session to another directory, or omit sessionID to move the current session. The current session moves at the next safe boundary; do not run destination-dependent tools in the same execute call.",
           input: MoveInput,
           output: MoveOutput,
-          options: { namespace: "opencode", codemode: true, pinned: true },
+          options: { namespace: "opencode.session", codemode: { pinned: true } },
           execute: (input, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID
+              const session = yield* ctx.session.get({ sessionID })
+              const directory = AbsolutePath.make(
+                FileAccess.resolvePath(session.location.directory, input.directory.trim()),
+              )
+              // The destination becomes the session's internal directory, so leaving the project
+              // needs the same approval as reaching outside it. The project's own worktrees don't.
+              const target = yield* access.resolve({ path: directory, kind: "directory" })
+              const worktrees = target.externalDirectory
+                ? yield* ctx.worktree.list({ projectID: ctx.location.project.id })
+                : []
+              if (!worktrees.some((worktree) => FSUtil.contains(worktree.directory, directory)))
+                yield* access.authorizeExternal([target], context)
               yield* ctx.session.move({
                 sessionID,
-                directory: input.directory,
+                directory,
                 delivery: "steer",
               })
               return {
-                output: { sessionID, directory: input.directory },
-                content: `Moved session ${sessionID} to ${input.directory}.`,
+                output: { sessionID, directory },
+                content: `Moved session ${sessionID} to ${directory}.`,
               }
             }).pipe(
               Effect.mapError(
@@ -157,7 +181,7 @@ export const Plugin = {
           description: "Create a named worktree. Returns its directory.",
           input: WorktreeCreateInput,
           output: Worktree.Info,
-          options: { namespace: "opencode", codemode: true, pinned: true },
+          options: { namespace: "opencode", codemode: { pinned: true } },
           execute: (input) =>
             ctx.worktree.create({ projectID: ctx.location.project.id, name: input.name }).pipe(
               Effect.map((output) => ({ output, content: `Created worktree in ${output.directory}.` })),
@@ -171,7 +195,7 @@ export const Plugin = {
           description: "List a repository's worktrees.",
           input: Schema.Struct({}),
           output: Schema.Struct({ worktrees: Worktree.List }),
-          options: { namespace: "opencode", codemode: true, pinned: true },
+          options: { namespace: "opencode", codemode: { pinned: true } },
           execute: () =>
             ctx.worktree.list({ projectID: ctx.location.project.id }).pipe(
               Effect.map((worktrees) => ({ output: { worktrees } })),
@@ -184,7 +208,7 @@ export const Plugin = {
             "Remove a worktree. The repository location selects configuration; directory identifies the worktree to remove.",
           input: WorktreeRemoveInput,
           output: WorktreeRemoveOutput,
-          options: { namespace: "opencode", codemode: true, pinned: true, permission: "edit" },
+          options: { namespace: "opencode", codemode: { pinned: true }, permission: "edit" },
           execute: (input, context) =>
             Effect.gen(function* () {
               // Removing a worktree deletes files, so it requires the same approval as editing them.
@@ -192,10 +216,8 @@ export const Plugin = {
               yield* permission.assert({
                 action: "edit",
                 resources: [target.resource],
-                save: ["*"],
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                save: [FileAccess.always(target)],
+                ...Permission.invocation(context),
               })
               yield* ctx.worktree
                 .remove({
@@ -208,18 +230,12 @@ export const Plugin = {
                 output: { directory: target.absolute, removed: true },
                 content: `Removed worktree ${target.absolute}.`,
               }
-            }).pipe(
-              Effect.mapError((error) =>
-                error instanceof ToolFailure
-                  ? error
-                  : new ToolFailure({ message: `Unable to remove worktree ${input.directory}`, error }),
-              ),
-            ),
+            }).pipe(Effect.mapError(toolFailure(`Unable to remove worktree ${input.directory}`))),
         })
         draft.add({
           name: "models",
           description:
-            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference before running a subagent on it. Check your own provider first.",
+            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first. Prefer the standard offering unless the user explicitly requests another tier. Use the listed pricing to compare costs when available; missing pricing does not mean free.",
           input: ModelsInput,
           output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },
@@ -231,7 +247,7 @@ export const Plugin = {
               const terms = input.query?.toLowerCase().split(/\s+/).filter(Boolean) ?? []
               const names = new Map((yield* ctx.provider.list()).data.map((provider) => [provider.id, provider.name]))
               const provider = input.provider?.toLowerCase()
-              const matching = (yield* ctx.model.list()).data
+              const matching = (yield* ctx.model.list({ types: [input.type ?? "chat"] })).data
                 .filter(
                   (model) =>
                     provider === undefined ||
@@ -248,13 +264,14 @@ export const Plugin = {
                     left.providerID.localeCompare(right.providerID) ||
                     right.time.released - left.time.released,
                 )
-                .filter((model, index, sorted) => {
-                  if (input.all || model.family === undefined) return true
-                  return (
-                    sorted.findIndex(
-                      (other) => other.providerID === model.providerID && other.family === model.family,
-                    ) === index
+                // When browsing, hide older versions only: a family's same-day siblings, like free and paid offerings,
+                // stay listed. A search lists every match, so a version the user names is never hidden.
+                .filter((model, _, sorted) => {
+                  if (input.all || terms.length > 0 || model.family === undefined) return true
+                  const newest = sorted.find(
+                    (other) => other.providerID === model.providerID && other.family === model.family,
                   )
+                  return newest?.time.released === model.time.released
                 })
               const page = matching.slice(offset, offset + limit)
               const providers = Array.from(new Set(page.map((model) => model.providerID))).map((id) => ({

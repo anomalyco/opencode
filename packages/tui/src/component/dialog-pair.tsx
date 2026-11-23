@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
-import { renderUnicodeCompact } from "uqr"
+import { renderUnicodeCompact } from "@opencode/util/qr"
 import { useClient } from "../context/client"
 import { useTheme } from "../context/theme"
 import { DialogHeader, DialogLayout, useDialog } from "../ui/dialog"

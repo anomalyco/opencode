@@ -1,0 +1,63 @@
+name: check-bot-scope
+
+# Required on dev. bot-nix-hashes.yml pushes bot/nix-hashes and auto-merges its pull request without review, so this
+# fails that branch unless it changes nothing but a valid nix/hashes.json. Every other branch passes. The bot's own
+# pushes start no workflows, so bot-nix-hashes.yml dispatches this; pull_request covers anyone else pushing the branch.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bot-scope:
+    name: bot-scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check branch
+        id: branch
+        env:
+          HEAD_REF: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+        run: |
+          if [ "$HEAD_REF" = bot/nix-hashes ]; then
+            echo "bot=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$HEAD_REF is not a bot branch; nothing to check"
+          fi
+
+      - name: Checkout repository
+        if: steps.branch.outputs.bot == 'true'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Check changed files
+        if: steps.branch.outputs.bot == 'true'
+        env:
+          BASE: ${{ github.base_ref || 'dev' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --filter=blob:none origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+          changed=$(git diff --name-only "origin/$BASE...HEAD")
+          echo "Changed files:"
+          echo "$changed"
+          if [ "$changed" != nix/hashes.json ]; then
+            echo "::error::bot/nix-hashes may change only nix/hashes.json"
+            exit 1
+          fi
+
+      # Runs dev's validator: the step above proved this branch leaves .github/ unchanged.
+      - name: Validate nix/hashes.json
+        if: steps.branch.outputs.bot == 'true'
+        run: bash .github/nix-hashes/validate.sh nix/hashes.json

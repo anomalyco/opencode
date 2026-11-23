@@ -21,7 +21,7 @@ export class EncodingError extends Schema.TaggedError<EncodingError>()("EventFee
 export type Error = SubscriberOverflowError | EncodingError
 
 export interface Interface {
-  readonly subscribe: Effect.Effect<Stream.Stream<string, Error>, never, Scope.Scope>
+  readonly subscribe: (types?: ReadonlyArray<string>) => Effect.Effect<Stream.Stream<string, Error>, never, Scope.Scope>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/server/EventFeed") {}
@@ -36,32 +36,33 @@ export const make = Effect.fn("EventFeed.make")(function* (
 ) {
   const capacity = options?.capacity ?? SubscriberCapacity
   const render = options?.encode ?? frame
-  const subscribers = new Set<Queue.Queue<string, Error>>()
+  const subscribers = new Map<Queue.Queue<string, Error>, ReadonlySet<string> | undefined>()
 
   const fail = (error: Error) =>
     Effect.sync(() => {
-      const current = Array.from(subscribers)
+      const current = Array.from(subscribers.keys())
       subscribers.clear()
       for (const subscriber of current) Queue.failCauseUnsafe(subscriber, Cause.fail(error))
     })
 
   const publish = Effect.fnUntraced(function* (event: Event.Payload) {
     if (!isOpenCodeEvent(event)) return
-    if (subscribers.size === 0) return
-    const encoded = yield* Effect.try({
-      try: () => render(event),
-      catch: (cause) => new EncodingError({ eventID: event.id, eventType: event.type, cause }),
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.logError("Failed to encode public event", {
-          eventID: error.eventID,
-          eventType: error.eventType,
-          cause: error.cause,
-        }).pipe(Effect.andThen(fail(error)), Effect.as(undefined)),
-      ),
-    )
-    if (encoded === undefined) return
-    for (const subscriber of subscribers) {
+    let encoded: string | undefined
+    for (const [subscriber, types] of subscribers) {
+      if (types && !types.has(event.type)) continue
+      encoded ??= yield* Effect.try({
+        try: () => render(event),
+        catch: (cause) => new EncodingError({ eventID: event.id, eventType: event.type, cause }),
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.logError("Failed to encode public event", {
+            eventID: error.eventID,
+            eventType: error.eventType,
+            cause: error.cause,
+          }).pipe(Effect.andThen(fail(error)), Effect.as(undefined)),
+        ),
+      )
+      if (encoded === undefined) return
       if (Queue.offerUnsafe(subscriber, encoded)) continue
       subscribers.delete(subscriber)
       Queue.failCauseUnsafe(subscriber, Cause.fail(new SubscriberOverflowError({ capacity })))
@@ -72,11 +73,14 @@ export const make = Effect.fn("EventFeed.make")(function* (
   yield* Effect.addFinalizer(() => unsubscribe)
 
   return Service.of({
-    subscribe: Effect.acquireRelease(
-      Queue.dropping<string, Error>(capacity).pipe(Effect.tap((queue) => Effect.sync(() => subscribers.add(queue)))),
-      (queue) =>
-        Effect.sync(() => subscribers.delete(queue)).pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid),
-    ).pipe(Effect.map(Stream.fromQueue)),
+    subscribe: (types) =>
+      Effect.acquireRelease(
+        Queue.dropping<string, Error>(capacity).pipe(
+          Effect.tap((queue) => Effect.sync(() => subscribers.set(queue, types?.length ? new Set(types) : undefined))),
+        ),
+        (queue) =>
+          Effect.sync(() => subscribers.delete(queue)).pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid),
+      ).pipe(Effect.map(Stream.fromQueue)),
   })
 })
 

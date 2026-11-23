@@ -162,9 +162,8 @@ export const UsageRecorded = Event.durable({
   ...options,
   schema: {
     ...Base,
-    source: Schema.Literals(["title", "compaction"]),
+    source: Schema.Literals(["title", "compaction", "generate"]),
     cost: Money.USD,
-    allowance: Money.USD.pipe(optional),
     tokens: TokenUsage.Info,
   },
 })
@@ -175,7 +174,6 @@ export const UsageUpdated = Event.ephemeral({
   schema: {
     ...Base,
     cost: Money.USD,
-    allowance: Money.USD.pipe(optional),
     tokens: TokenUsage.Info,
   },
 })
@@ -348,6 +346,17 @@ export namespace Step {
   })
   export type Started = typeof Started.Type
 
+  /** Records when the provider streamed the first output token, before the rest of the response. */
+  export const FirstToken = Event.durable({
+    type: "session.step.first-token",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+    },
+  })
+  export type FirstToken = typeof FirstToken.Type
+
   /** Records the provider response-body boundary independently of tool settlement. */
   export const Streamed = Event.durable({
     type: "session.step.streamed",
@@ -369,7 +378,6 @@ export namespace Step {
       rawFinish: Schema.String.pipe(optional),
       native: SessionMessage.Native.pipe(optional),
       cost: Money.USD,
-      allowance: Money.USD.pipe(optional),
       tokens: TokenUsage.Info,
       snapshot: Snapshot.ID.pipe(optional),
       files: Schema.Array(RelativePath).pipe(optional),
@@ -388,7 +396,6 @@ export namespace Step {
       rawFinish: Schema.String.pipe(optional),
       native: SessionMessage.Native.pipe(optional),
       cost: Money.USD.pipe(optional),
-      allowance: Money.USD.pipe(optional),
       tokens: TokenUsage.Info.pipe(optional),
       snapshot: Snapshot.ID.pipe(optional),
       files: Schema.Array(RelativePath).pipe(optional),
@@ -683,6 +690,7 @@ export const Definitions = Event.inventory(
   Shell.Started,
   Shell.Ended,
   Step.Started,
+  Step.FirstToken,
   Step.Streamed,
   Step.Ended,
   Step.Failed,

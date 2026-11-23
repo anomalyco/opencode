@@ -3,6 +3,8 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useSettingsSurface } from "./surface"
 import type { SettingsRootTab } from "./surface"
 
+export const settingsOpenCommand = { id: "settings.open", keybind: "mod+comma" }
+
 export function useSettingsDialog(defaultValue?: SettingsRootTab) {
   const settings = useSettingsSurface()
 
@@ -16,10 +18,9 @@ export function useSettingsCommand() {
 
   command.register("settings", () => [
     {
-      id: "settings.open",
+      ...settingsOpenCommand,
       title: language.t("command.settings.open"),
       category: language.t("command.category.settings"),
-      keybind: "mod+comma",
       onSelect: show,
     },
   ])

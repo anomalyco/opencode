@@ -1,16 +1,36 @@
 import { CloseButton, Content, Description, Title } from "@kobalte/core/dialog"
-import { type ComponentProps, type JSXElement, type ParentProps, Show, children, createEffect, splitProps } from "solid-js"
+import {
+  type ComponentProps,
+  type JSXElement,
+  type ParentProps,
+  Show,
+  children,
+  createEffect,
+  onCleanup,
+  splitProps,
+} from "solid-js"
 import { useDialogLayer } from "../../context/dialog"
 import { useI18n } from "../../context/i18n"
 import "./dialog.css"
 
+const TEXT_FIELD = [
+  'input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="reset"], [type="range"], [type="file"], [type="color"], [type="image"]):not(:disabled, [readonly])',
+  "textarea:not(:disabled, [readonly])",
+  '[contenteditable="true"]',
+].join(", ")
+
 export interface DialogProps extends ParentProps {
+  /**
+   * normal: 480px wide, for confirmations and small forms. large: 680×600, for palettes, pickers and lists.
+   * x-large: 880×680, for long documents and settings-like panels. Each clamps to the window.
+   */
   size?: "normal" | "large" | "x-large"
+  /** Height follows the content, up to the size's height. Large sizes grow down from a fixed top edge. */
+  fit?: boolean
   variant?: "default" | "settings"
   class?: ComponentProps<"div">["class"]
   containerClass?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
-  fit?: boolean
   onCloseAutoFocus?: ComponentProps<typeof Content>["onCloseAutoFocus"]
   preventBackdropDismiss?: boolean
 }
@@ -99,7 +119,9 @@ export function Dialog(props: DialogProps) {
   ])
 
   const layer = useDialogLayer()
+  let focusTimer: ReturnType<typeof setTimeout> | undefined
   createEffect(() => layer?.setBackdropDismiss(!local.preventBackdropDismiss))
+  onCleanup(() => clearTimeout(focusTimer))
 
   return (
     <div
@@ -111,24 +133,54 @@ export function Dialog(props: DialogProps) {
       <div data-slot="dialog-container" class={local.containerClass}>
         <Content
           data-slot="dialog-content"
+          data-focus-scope
           onCloseAutoFocus={local.onCloseAutoFocus}
           onPointerDownOutside={(event) => {
             if (local.preventBackdropDismiss) event.preventDefault()
+          }}
+          onInteractOutside={(event) => {
+            const target = event.target
+
+            if (layer?.container && target instanceof Node && !layer.container.contains(target)) event.preventDefault()
           }}
           classList={{
             ...local.classList,
             [local.class ?? ""]: !!local.class,
           }}
           onOpenAutoFocus={(e) => {
-            const autofocusEl =
-              e.currentTarget instanceof HTMLElement ? e.currentTarget.querySelector<HTMLElement>("[autofocus]") : null
+            const content = e.currentTarget
 
-            if (autofocusEl) {
-              e.preventDefault()
-              // Kobalte attaches its focus trap after this event, so focusing now would leave the trap with no
-              // element to return to. Deferring, as Kobalte's own autofocus does, lets it pull stray focus back.
-              setTimeout(() => autofocusEl.focus({ preventScroll: true }))
-            }
+            if (!(content instanceof HTMLElement)) return
+            // Kobalte would focus the first tabbable element, usually the close button, which Escape already covers.
+            e.preventDefault()
+            // Kobalte attaches its focus trap after this event, so focusing now would leave the trap with no element
+            // to return to. Deferring, as Kobalte's own autofocus does, also lets children that focus themselves on
+            // mount keep that focus.
+            clearTimeout(focusTimer)
+            focusTimer = setTimeout(() => {
+              // A dialog that closed in the meantime must not pull focus back from where its close returned it.
+              if (layer?.closing() || !content.isConnected) return
+              const autofocus = content.querySelector<HTMLElement>("[autofocus]")
+              const active = document.activeElement
+
+              const kept =
+                active instanceof HTMLElement &&
+                active !== content &&
+                content.contains(active) &&
+                !active.closest('[data-slot="dialog-close-button"]')
+                  ? active
+                  : undefined
+
+              const target =
+                autofocus ??
+                kept ??
+                Array.from(content.querySelectorAll<HTMLElement>(TEXT_FIELD)).find(
+                  (element) => element.getClientRects().length > 0,
+                ) ??
+                content
+
+              target.focus({ preventScroll: true })
+            })
           }}
         >
           {local.children}

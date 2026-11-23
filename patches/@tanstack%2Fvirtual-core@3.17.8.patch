@@ -1,5 +1,5 @@
 diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
-index e470032a9572b3ced764ca02238a8c6be435a9d4..4c25e03b5db221a78793083d97970b2d90e28efa 100644
+index e470032a9572b3ced764ca02238a8c6be435a9d4..902c47808560403bae7d365b83b25c3dc2b9d580 100644
 --- a/dist/cjs/index.cjs
 +++ b/dist/cjs/index.cjs
 @@ -289,7 +289,7 @@ class Virtualizer {
@@ -162,6 +162,21 @@ index e470032a9572b3ced764ca02238a8c6be435a9d4..4c25e03b5db221a78793083d97970b2d
            snapshot.push({
              index: item.index,
              key: item.key,
+@@ -1174,10 +1195,12 @@ class Virtualizer {
+     const targetOffset = offsetInfo ? offsetInfo[0] : this.scrollState.lastTargetOffset;
+     const STABLE_FRAMES = 1;
+     const targetChanged = targetOffset !== this.scrollState.lastTargetOffset;
+-    if (!targetChanged && utils.approxEqual(targetOffset, this.getScrollOffset())) {
++    const reached = utils.approxEqual(targetOffset, this.getScrollOffset());
++    const restsAtEnd = targetOffset === this.getMaxScrollOffset() && targetOffset > this.getScrollOffset() && targetOffset - this.getScrollOffset() <= 4;
++    if (!targetChanged && (reached || restsAtEnd)) {
+       this.scrollState.stableFrames++;
+       if (this.scrollState.stableFrames >= STABLE_FRAMES) {
+-        if (this.getScrollOffset() !== targetOffset) {
++        if (reached && this.getScrollOffset() !== targetOffset) {
+           this._scrollToOffset(targetOffset, {
+             adjustments: void 0,
+             behavior: "auto"
 diff --git a/dist/cjs/index.d.cts b/dist/cjs/index.d.cts
 index cc1001b8a14d06aa73a3a9e8f59870557ee9e7d6..70b202ed436ce1f3283a8465a81faf2e6e2e7983 100644
 --- a/dist/cjs/index.d.cts
@@ -189,7 +204,7 @@ index 6b43c0aea7ed9eeef75cbfb1351fcbd243913bdd..7be2680967934ddfbc4583a210a3d11e
      getVirtualIndexes: {
          (): number[];
 diff --git a/dist/esm/index.js b/dist/esm/index.js
-index 2495b26cf2c3589213546b3958eaadf2eb6b751d..1398bc7dd33690a8fe3280343b6aabdeaea6435a 100644
+index 2495b26cf2c3589213546b3958eaadf2eb6b751d..5fb5162c2a6fae89ce004631dfe2d9ff28ba98a7 100644
 --- a/dist/esm/index.js
 +++ b/dist/esm/index.js
 @@ -287,7 +287,7 @@ class Virtualizer {
@@ -352,8 +367,23 @@ index 2495b26cf2c3589213546b3958eaadf2eb6b751d..1398bc7dd33690a8fe3280343b6aabde
            snapshot.push({
              index: item.index,
              key: item.key,
+@@ -1172,10 +1193,12 @@ class Virtualizer {
+     const targetOffset = offsetInfo ? offsetInfo[0] : this.scrollState.lastTargetOffset;
+     const STABLE_FRAMES = 1;
+     const targetChanged = targetOffset !== this.scrollState.lastTargetOffset;
+-    if (!targetChanged && approxEqual(targetOffset, this.getScrollOffset())) {
++    const reached = approxEqual(targetOffset, this.getScrollOffset());
++    const restsAtEnd = targetOffset === this.getMaxScrollOffset() && targetOffset > this.getScrollOffset() && targetOffset - this.getScrollOffset() <= 4;
++    if (!targetChanged && (reached || restsAtEnd)) {
+       this.scrollState.stableFrames++;
+       if (this.scrollState.stableFrames >= STABLE_FRAMES) {
+-        if (this.getScrollOffset() !== targetOffset) {
++        if (reached && this.getScrollOffset() !== targetOffset) {
+           this._scrollToOffset(targetOffset, {
+             adjustments: void 0,
+             behavior: "auto"
 diff --git a/src/index.ts b/src/index.ts
-index dc6f1010c4d4758de9c46fb8d69209e582e47171..9299287d72ce79d5a597cdc3440339ee148e6385 100644
+index dc6f1010c4d4758de9c46fb8d69209e582e47171..3c1fb0c56d1666c7c33d4f8303a345c87e6c23cf 100644
 --- a/src/index.ts
 +++ b/src/index.ts
 @@ -567,7 +567,7 @@ export class Virtualizer<
@@ -510,7 +540,36 @@ index dc6f1010c4d4758de9c46fb8d69209e582e47171..9299287d72ce79d5a597cdc3440339ee
            if (this._iosTouchEndTimerId !== null && this.targetWindow != null) {
              this.targetWindow.clearTimeout(this._iosTouchEndTimerId)
              this._iosTouchEndTimerId = null
-@@ -1410,16 +1428,25 @@ export class Virtualizer<
+@@ -1058,7 +1076,18 @@ export class Virtualizer<
+
+     const targetChanged = targetOffset !== this.scrollState.lastTargetOffset
+
+-    if (!targetChanged && approxEqual(targetOffset, this.getScrollOffset())) {
++    const reached = approxEqual(targetOffset, this.getScrollOffset())
++    // Under page zoom the browser rounds scrollHeight and clientHeight to whole
++    // pixels but scrolls in zoomed ones, so the furthest offset it reaches can
++    // rest up to 4px short of the max they give. No write moves the view past
++    // it: waiting there for the max only polls every frame until the safety
++    // valve, and a resize meanwhile pulls a reader who scrolled away back down.
++    const restsAtEnd =
++      targetOffset === this.getMaxScrollOffset() &&
++      targetOffset > this.getScrollOffset() &&
++      targetOffset - this.getScrollOffset() <= 4
++
++    if (!targetChanged && (reached || restsAtEnd)) {
+       this.scrollState.stableFrames++
+       if (this.scrollState.stableFrames >= STABLE_FRAMES) {
+         // Final-pass exact landing. The reconcile-stable check uses a 1.01px
+@@ -1067,7 +1096,7 @@ export class Virtualizer<
+         // commit the exact target so consumers calling scrollToIndex(N)
+         // end up at the EXACT computed position of item N — matching
+         // virtuoso's 0px landing accuracy rather than our prior 0.5-1px.
+-        if (this.getScrollOffset() !== targetOffset) {
++        if (reached && this.getScrollOffset() !== targetOffset) {
+           this._scrollToOffset(targetOffset, {
+             adjustments: undefined,
+             behavior: 'auto',
+@@ -1410,16 +1439,25 @@ export class Virtualizer<
        this.getSize(),
        this.getScrollOffset(),
        this.options.lanes,
@@ -538,7 +597,7 @@ index dc6f1010c4d4758de9c46fb8d69209e582e47171..9299287d72ce79d5a597cdc3440339ee
          lanes,
          // Pass the typed array so binary search + forward-walk can read
          // start/end directly from Float64Array, skipping the Proxy traps.
-@@ -1937,12 +1964,13 @@ export class Virtualizer<
+@@ -1937,12 +1975,13 @@ export class Virtualizer<
    takeSnapshot = (): Array<VirtualItem> => {
      const snapshot: Array<VirtualItem> = []
      if (this.itemSizeCache.size === 0) return snapshot

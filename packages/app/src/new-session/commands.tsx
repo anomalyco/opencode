@@ -2,9 +2,10 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useSettingsCommand } from "@/settings/command"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { projectSearchCommand } from "@/shell/titlebar/titlebar"
 
 export function useNewSessionCommands(input: {
-  restoreFocus: () => void
+  restoreFocus: (cursor?: number) => void
   project: {
     empty: () => boolean
     open: () => void
@@ -19,7 +20,7 @@ export function useNewSessionCommands(input: {
   const language = useLanguage()
 
   useSettingsCommand()
-  command.register("new-session", () => [
+  command.register("palette", () => [
     {
       id: "command.palette",
       title: language.t("command.palette"),
@@ -29,20 +30,14 @@ export function useNewSessionCommands(input: {
         void dialog.show(() => <DialogCommandPalette />)
       },
     },
+  ])
+  command.register("new-session", () => [
     {
       id: "input.focus",
       title: language.t("command.input.focus"),
       category: language.t("command.category.view"),
       keybind: "ctrl+l",
-      onSelect: input.restoreFocus,
-    },
-    {
-      id: "project.select",
-      title: language.t("session.new.project.search"),
-      category: language.t("command.category.project"),
-      keybind: "mod+shift+o",
-      disabled: input.project.empty(),
-      onSelect: input.project.open,
+      onSelect: () => input.restoreFocus(),
     },
     {
       id: "session.location.cycle",
@@ -51,6 +46,16 @@ export function useNewSessionCommands(input: {
       keybind: "mod+alt+l",
       disabled: !input.workspace.enabled(),
       onSelect: input.workspace.cycle,
+    },
+  ])
+  // Shadows the titlebar's command of the same key while the draft is mounted, so it searches projects in place.
+  command.register(projectSearchCommand.id, () => [
+    {
+      ...projectSearchCommand,
+      title: language.t("session.new.project.search"),
+      category: language.t("command.category.project"),
+      disabled: input.project.empty(),
+      onSelect: input.project.open,
     },
   ])
 }

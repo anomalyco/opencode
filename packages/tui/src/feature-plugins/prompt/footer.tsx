@@ -5,6 +5,8 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { useInteractivity } from "../../context/interactivity"
 import { stringWidth } from "../../util/string-width"
+import { createGoal, GoalStatus } from "./goal"
+import { busyCounts, busyTab } from "../../routes/session/composer/tabs"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -19,20 +21,14 @@ export function PromptFooter(props: {
 }) {
   const dimensions = useTerminalDimensions()
   const [liveHovered, setLiveHovered] = createSignal(false)
-  const subagents = createMemo(() => {
-    if (!props.sessionID) return 0
-    const count = props.context.data.session
-      .family(props.sessionID)
-      .filter((id) => id !== props.sessionID && props.context.data.session.status(id) === "running").length
-    return count ? `${count} subagent${count === 1 ? "" : "s"}` : undefined
-  })
-  const shells = createMemo(() => {
-    if (!props.sessionID) return 0
-    const count = props.context.data.shell
-      .list(props.context.location)
-      .filter((shell) => shell.metadata.sessionID === props.sessionID).length
-    return count ? `${count} shell${count === 1 ? "" : "s"}` : undefined
-  })
+  const counts = createMemo(() =>
+    props.sessionID
+      ? busyCounts({ data: props.context.data, sessionID: props.sessionID, location: props.context.location })
+      : { scripts: 0, subagents: 0, shells: 0 },
+  )
+  const scripts = createMemo(() => label(counts().scripts, "script"))
+  const subagents = createMemo(() => label(counts().subagents, "subagent"))
+  const shells = createMemo(() => label(counts().shells, "shell"))
   const status = createMemo(() => {
     if (!props.sessionID) return []
     const session = props.context.data.session.get(props.sessionID)
@@ -43,15 +39,13 @@ export function PromptFooter(props: {
       session.revert?.messageID,
     )
     const cost = props.context.data.session.cost(props.sessionID)
-    // A subscription such as OpenCode Go covers its requests from an allowance, so they cost nothing.
-    const allowance = props.context.data.session.allowance(props.sessionID)
     return [
       usage ? formatContextUsage(usage.tokens, usage.percent) : undefined,
       cost > 0 ? money.format(cost) : undefined,
-      allowance > 0 ? `${money.format(allowance)} allowance` : undefined,
     ].filter((item): item is string => Boolean(item))
   })
-  const live = createMemo(() => Boolean(subagents() || shells()))
+  const live = createMemo(() => [scripts(), subagents(), shells()].filter((item): item is string => Boolean(item)))
+  const goal = createGoal(props.context, () => props.sessionID)
   // Prompt hints read as disabled while the session does not own input, e.g. while a side panel is focused.
   const interactive = useInteractivity()
   const shortcut = (id: string) => props.context.keymap.shortcuts(id)[0]
@@ -69,14 +63,14 @@ export function PromptFooter(props: {
     <Switch>
       <Match when={props.mode === "normal"}>
         <Switch>
-          <Match when={live() || status().length > 0}>
+          <Match when={goal() || live().length > 0 || status().length > 0}>
             <box flexDirection="row" flexShrink={props.showDetails && layout().usage ? 0 : 1} minWidth={0}>
-              <Show when={live()}>
+              <Show when={live().length > 0}>
                 <box
                   flexShrink={0}
                   onMouseOver={() => setLiveHovered(true)}
                   onMouseOut={() => setLiveHovered(false)}
-                  onMouseUp={() => props.context.keymap.dispatch("session.child.first")}
+                  onMouseUp={() => props.context.keymap.dispatch("session.child.first", busyTab(counts()))}
                 >
                   <text
                     fg={liveHovered() ? props.context.theme.text.base : props.context.theme.text.muted}
@@ -85,15 +79,21 @@ export function PromptFooter(props: {
                     <Show when={shortcut("session.child.first")}>
                       {(value) => <span style={{ fg: props.context.theme.text.base }}>{value()} </span>}
                     </Show>
-                    <Show when={subagents()}>{(value) => <>{value()}</>}</Show>
-                    <Show when={subagents() && shells()}> · </Show>
-                    <Show when={shells()}>{(value) => <>{value()}</>}</Show>
+                    {live().join(" · ")}
                   </text>
                 </box>
               </Show>
+              <Show when={props.sessionID && goal()}>
+                <Show when={live().length > 0}>
+                  <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
+                    {" · "}
+                  </text>
+                </Show>
+                <GoalStatus context={props.context} sessionID={props.sessionID ?? ""} goal={goal} />
+              </Show>
               <Show when={props.showDetails && layout().usage && status().length > 0}>
                 <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
-                  <Show when={live()}> · </Show>
+                  <Show when={live().length > 0 || goal()}> · </Show>
                   {status().join(" · ")}
                 </text>
               </Show>
@@ -156,4 +156,8 @@ function promptFooterLayout(input: { width: number; usage: string[]; shortcuts: 
   if (usage && stringWidth(usage) <= available) return { usage: true, shortcuts: false }
   if (!usage && shortcuts && stringWidth(shortcuts) <= available) return { usage: false, shortcuts: true }
   return { usage: false, shortcuts: false }
+}
+
+function label(count: number, noun: string) {
+  return count ? `${count} ${noun}${count === 1 ? "" : "s"}` : undefined
 }

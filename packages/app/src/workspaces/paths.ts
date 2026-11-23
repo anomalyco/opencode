@@ -12,6 +12,17 @@ export function workspaceDirectories(project: WorkspaceProject) {
   return (project.sandboxes ?? []).filter((directory) => !sameDirectory(project.worktree, directory))
 }
 
+/** Every non-root directory a new session can run in, from the server inventory and the project's cached lists. */
+export function workspaceSelectionDirectories(project: WorkspaceProject, listed: readonly WorktreeDirectory[]) {
+  return [
+    ...listed.map((item) => item.directory),
+    ...(project.worktrees ?? []).map((item) => item.directory),
+    ...(project.sandboxes ?? []),
+  ]
+    .filter((directory) => !sameDirectory(project.worktree, directory))
+    .filter((directory, index, items) => items.findIndex((item) => sameDirectory(item, directory)) === index)
+}
+
 export function managedWorkspaceDirectories(project: WorkspaceProject) {
   return (project.worktrees ?? [])
     .filter((worktree) => worktree.strategy !== undefined)
@@ -50,10 +61,6 @@ export function mergeWorkspaceSessionInventory(server: readonly SessionInfo[], c
   })
 
   return [...sessions.values()]
-}
-
-export function removeWorkspacesSequentially<T>(workspaces: readonly T[], remove: (workspace: T) => Promise<void>) {
-  return workspaces.reduce((previous, workspace) => previous.then(() => remove(workspace)), Promise.resolve())
 }
 
 export type WorkspaceDeleteInspection = {

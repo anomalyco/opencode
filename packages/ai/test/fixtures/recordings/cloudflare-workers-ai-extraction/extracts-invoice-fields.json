@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "@cf/cloudflare/clairic",
+    "tags": [
+      "prefix:cloudflare-workers-ai-extraction",
+      "provider:cloudflare-workers-ai",
+      "protocol:cloudflare-run-extraction"
+    ],
+    "name": "cloudflare-workers-ai-extraction/extracts-invoice-fields",
+    "recordedAt": "2026-10-25T05:21:37.425Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/clairic",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"@cf/cloudflare/clairic\",\"state\":\"Invoice INV-2291 from Northwind Supply, issued 2026-09-02, net 30. 4 pallets at $250.00 each, shipping $80.00. Contact: Dana Ruiz, Priya Shah.\",\"fields\":{\"invoiceNumber\":{\"type\":\"text\"},\"dueDate\":{\"type\":\"date\",\"instructions\":\"Issue date plus the net payment days\"},\"total\":{\"type\":\"number\",\"instructions\":\"Amount due including shipping\",\"unit\":\"USD\",\"decimals\":2},\"contacts\":{\"type\":\"list\",\"items\":\"text\"},\"poNumber\":{\"type\":\"text\",\"instructions\":\"Purchase order number\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"result\":{\"model\":\"clairic\",\"answers\":{\"invoiceNumber\":{\"type\":\"text\",\"p_null\":0.000005373362000682391,\"span\":[8,16],\"guess\":\"INV-2291\",\"confidence\":0.9999842643737793,\"value\":\"INV-2291\"},\"dueDate\":{\"type\":\"date\",\"p_null\":0.0000010241710697300732,\"guess\":\"2026-10-02\",\"confidence\":0.9999879599643642,\"value\":\"2026-10-02\"},\"total\":{\"type\":\"number\",\"p_null\":5.380287575462717e-7,\"guess\":1080,\"confidence\":0.9999545827141966,\"value\":1080},\"contacts\":{\"type\":\"list\",\"value\":[\"Dana Ruiz\",\"Priya Shah\"],\"spans\":[[120,129],[131,141]],\"confidence\":0.999993443529213},\"poNumber\":{\"type\":\"text\",\"p_null\":0.9999990463256836,\"span\":[8,16],\"guess\":\"INV-2291\",\"confidence\":0.9991962313652039,\"value\":null}},\"truncated\":false,\"usage\":{\"state_tokens\":61,\"image_tokens\":0,\"schema_tokens\":408,\"input_tokens\":591,\"output_tokens\":0,\"passes\":3}},\"success\":true,\"errors\":[],\"messages\":[]}"
+      }
+    }
+  ]
+}

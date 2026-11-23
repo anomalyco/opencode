@@ -1,40 +1,41 @@
 import { expect, test } from "bun:test"
 import { statSync } from "node:fs"
-import { cp, mkdtemp, rm } from "node:fs/promises"
+import { cp, mkdtemp, realpath, rm } from "node:fs/promises"
 import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { Configuration } from "electron-builder"
 import { getConfig } from "./electron-builder.config"
-import { CLI_BINARIES, nodePtyPackage } from "./scripts/utils"
+import { CLI_BINARIES, nodePtyPackage } from "./script/utils"
+import { verifyPreviewBinding } from "./script/preview-binding"
 
 // Use electron-builder's matcher so the tests also cover its glob and directory traversal semantics.
 const { FileMatcher } = createRequire(import.meta.resolve("electron-builder"))("app-builder-lib/out/fileMatcher")
 
 const channels = [
-  { channel: "dev", appId: "ai.opencode.desktop.dev" },
-  { channel: "beta", appId: "ai.opencode.desktop.beta" },
-  { channel: "prod", appId: "ai.opencode.desktop" },
+  { channel: "dev", appId: "ai.opencode.desktop.dev", feed: "dev" },
+  { channel: "beta", appId: "ai.opencode.desktop.beta", feed: "beta" },
+  { channel: "prod", appId: "ai.opencode.desktop", feed: "latest" },
 ] as const
 
 function load(channel: string, target?: string): Configuration {
   const previous = process.env.OPENCODE_CHANNEL
-  const previousTarget = process.env.OPENCODE_CLI_TARGET
+  const previousTarget = process.env.OPENCODE_TARGET
   process.env.OPENCODE_CHANNEL = channel
 
-  if (target !== undefined) process.env.OPENCODE_CLI_TARGET = target
-  else delete process.env.OPENCODE_CLI_TARGET
+  if (target !== undefined) process.env.OPENCODE_TARGET = target
+  else delete process.env.OPENCODE_TARGET
 
   try {
     return getConfig()
   } finally {
     delete process.env.OPENCODE_CHANNEL
-    delete process.env.OPENCODE_CLI_TARGET
+    delete process.env.OPENCODE_TARGET
 
     if (previous !== undefined) process.env.OPENCODE_CHANNEL = previous
 
-    if (previousTarget !== undefined) process.env.OPENCODE_CLI_TARGET = previousTarget
+    if (previousTarget !== undefined) process.env.OPENCODE_TARGET = previousTarget
   }
 }
 
@@ -47,9 +48,15 @@ function trimFilter(dir: string, config: Configuration) {
   ]).createFilter()
 }
 
-test.each(channels)("channel identity for $channel", ({ channel, appId }) => {
+test.each(channels)("channel identity for $channel", ({ channel, appId, feed }) => {
   const config = load(channel)
   expect(config.appId).toBe(appId)
+  // Every published channel updates from its own feed on the update service.
+  expect(config.publish).toEqual({
+    provider: "generic",
+    url: `https://opencode.ai/update/api/${feed}/desktop/opencode/`,
+    channel: "latest",
+  })
   expect(config.extraMetadata?.desktopName).toBe(`${appId}.desktop`)
   // The executable must never end in `.desktop`: libappimage resolves the
   // AppImage's desktop entry by globbing `*.desktop`, and an ELF matching
@@ -74,6 +81,20 @@ test.each(channels)("channel identity for $channel", ({ channel, appId }) => {
   expect(config.deb?.fpm).not.toContain("--rpm-rpmbuild-define=_build_id_links none")
 })
 
+test.each([
+  { channel: "dev", inspect: false },
+  { channel: "beta", inspect: true },
+  { channel: "prod", inspect: false },
+])("Electron fuses for $channel", ({ channel, inspect }) => {
+  // Absent keys keep Electron's defaults: NODE_OPTIONS stays on, the asar and file: fuses stay as they are.
+  expect(load(channel).electronFuses).toEqual({
+    enableCookieEncryption: true,
+    runAsNode: false,
+    enableNodeCliInspectArguments: inspect,
+    resetAdHocDarwinSignature: true,
+  })
+})
+
 test("legacy Linux launcher stays hidden", async () => {
   const desktop = await Bun.file(path.join(import.meta.dirname, "resources/linux/opencode-desktop.desktop")).text()
   expect(desktop).toContain("Exec=/opt/OpenCode/ai.opencode %U")
@@ -82,9 +103,38 @@ test("legacy Linux launcher stays hidden", async () => {
   expect(desktop).toContain("NoDisplay=true")
 })
 
+test.each(channels)("macOS bundle for $channel", ({ channel }) => {
+  const config = load(channel)
+  expect(config.mac?.icon).toBe(channel === "prod" ? "resources/icons/icon.icon" : "resources/icons/icon.icns")
+  expect(config.dmg?.icon).toBe(channel === "prod" ? "resources/icons/icon.icns" : undefined)
+  // The prod override must keep the rest of the shared macOS settings.
+  expect(config.mac?.target).toEqual(["dmg", "zip"])
+
+  for (const key of [
+    "NSMicrophoneUsageDescription",
+    "NSCameraUsageDescription",
+    "NSDocumentsFolderUsageDescription",
+    "NSDesktopFolderUsageDescription",
+    "NSDownloadsFolderUsageDescription",
+    "NSNetworkVolumesUsageDescription",
+    "NSRemovableVolumesUsageDescription",
+  ])
+    expect(config.mac?.extendInfo?.[key], key).toMatch(/\S/)
+})
+
+test("the production Icon Composer package references its bundled artwork", async () => {
+  const icon = await Bun.file(path.join(import.meta.dirname, "icons/prod/icon.icon/icon.json")).json()
+  expect(icon["supported-platforms"]).toEqual({ squares: ["macOS"] })
+  const image = icon.groups[0].layers[0]["image-name"]
+  expect(await Bun.file(path.join(import.meta.dirname, "icons/prod/icon.icon/Assets", image)).exists()).toBe(true)
+})
+
 test("shared packaging defaults", async () => {
   const config = load("dev")
-  expect(config.mac?.sign).toBeFunction()
+  // Packaging runs in secretless build jobs; the release workflow signs and notarizes afterwards.
+  expect(config.mac?.sign).toBeUndefined()
+  expect(config.mac?.notarize).toBeUndefined()
+  expect(config.win?.signtoolOptions).toBeUndefined()
   expect(config.dmg?.sign).not.toBe(true)
   expect(config.mac?.extendInfo?.NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac).toBe(true)
   const include = path.join(import.meta.dirname, "resources/windows/installer.nsh")
@@ -160,6 +210,53 @@ test("trims external dependencies without excluding runtime files", () => {
       const included = targetFilter(path.join(import.meta.dirname, "node_modules", pkg, "lib/index.js"), fileStats)
       expect(included).toBe(pkg === active)
     }
+  }
+})
+
+// The loader finds its binding beside it or, as an isolated install may lay it out, nested under it.
+test.each([
+  ["darwin", "arm64", "darwin-arm64", "beside"], ["darwin", "x64", "darwin-x64", "beside"],
+  ["win32", "arm64", "win32-arm64-msvc", "beside"], ["win32", "x64", "win32-x64-msvc", "beside"],
+  ["win32", "x64", "win32-x64-msvc", "nested"], ["darwin", "arm64", "darwin-arm64", "nested"],
+] as const)("packaging %s/%s requires its unpacked preview addon, %s the loader", async (platform, arch, binding, layout) => {
+  const resources = await realpath(await mkdtemp(path.join(os.tmpdir(), "preview-pack-")))
+  const modules = path.join(resources, "app.asar.unpacked/node_modules")
+  const name = `@yuuang/ffi-rs-${binding}`
+  const pkg = path.join(layout === "nested" ? path.join(modules, "ffi-rs/node_modules") : modules, name)
+  const addon = `ffi-rs.${binding}.node`
+
+  try {
+    await Bun.write(path.join(modules, "ffi-rs/package.json"), JSON.stringify({ main: "index.js", optionalDependencies: { [name]: "1.3.7" } }))
+    await Bun.write(path.join(modules, "ffi-rs/index.js"), "module.exports = {}")
+    await Bun.write(path.join(pkg, "package.json"), JSON.stringify({ main: addon, version: "1.3.7" }))
+
+    if (platform === process.platform && arch === process.arch) {
+      const source = createRequire(import.meta.resolve("ffi-rs")).resolve(name)
+      await cp(source, path.join(pkg, addon))
+      await verifyPreviewBinding(resources, platform, arch)
+      // A binding of another version than the loader declares is not the one it was built against.
+      await Bun.write(path.join(pkg, "package.json"), JSON.stringify({ main: addon, version: "1.3.2" }))
+      await expect(verifyPreviewBinding(resources, platform, arch)).rejects.toThrow(addon)
+      await Bun.write(path.join(pkg, "package.json"), JSON.stringify({ main: addon, version: "1.3.7" }))
+      await rm(path.join(pkg, addon))
+    }
+
+    await expect(verifyPreviewBinding(resources, platform, arch)).rejects.toThrow(addon)
+    await Bun.write(path.join(pkg, addon), "not a native library")
+    await expect(verifyPreviewBinding(resources, platform, arch)).rejects.toThrow(addon)
+  } finally {
+    await rm(resources, { recursive: true, force: true })
+  }
+})
+
+// Linux names an open file through /proc, so a Linux package loads no binding and needs none.
+test.each(["arm64", "x64"] as const)("packaging linux/%s needs no preview addon", async (arch) => {
+  const resources = await realpath(await mkdtemp(path.join(os.tmpdir(), "preview-pack-")))
+
+  try {
+    await verifyPreviewBinding(resources, "linux", arch)
+  } finally {
+    await rm(resources, { recursive: true, force: true })
   }
 })
 

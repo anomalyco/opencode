@@ -3,14 +3,14 @@ import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import type { WindowSnapshot } from "../../shared/ipc-transport"
 import { migrateDatabase } from "./migration"
-import { readEnableState } from "../extension/enable-state"
+import { readEnableState } from "../plugin/enable-state"
 
 // Before the storage layer exists, nothing has been written in this process and every namespace is at revision 0.
-// Legacy electron-store files can make storage stale, but explicit extension settings still come from SQLite.
+// Legacy electron-store files can make storage stale, but explicit plugin settings still come from SQLite.
 export function readWindowSnapshot(userData: string, names: readonly string[]): WindowSnapshot {
   const file = path.join(userData, "drafts.sqlite")
 
-  if (!existsSync(file)) return { storage: {}, extensions: [] }
+  if (!existsSync(file)) return { storage: {}, plugins: [] }
 
   try {
     const legacy = readdirSync(userData).some((name) => name === "default.dat" || /^opencode\..+\.dat$/.test(name))
@@ -36,7 +36,7 @@ export function readWindowSnapshot(userData: string, names: readonly string[]): 
                 },
               ]),
             ),
-        extensions: readEnableState(db),
+        plugins: readEnableState(db),
       }
     } finally {
       db.close()

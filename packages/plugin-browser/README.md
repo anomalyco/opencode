@@ -13,7 +13,7 @@ return await tools.browser.snapshot({ tabID: tab.id })
 All page operations require a `tabID` returned by `browser.tabs.open/list`.
 Focus selects the visible Review tab, not an implicit command target. Discover
 current signatures with `search({ namespace: "browser" })`.
-Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
+Screenshots, clicks and hovers work while the tab is hidden; only a full-page screenshot needs the tab on screen in the Review pane.
 
 ## Tools
 
@@ -30,6 +30,22 @@ Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
 The source of truth for inputs, descriptions, and outputs is
 `Browser.Operations` in `@opencode/plugin-browser/rpc`.
 
+`tabs.open` and `navigate` take a web address in `url` or a workspace file in
+`path`, never both. The server checks that a path is a readable file inside the
+workspace, then sends the desktop a file action: `preview` for `tabs.open`
+(older desktops and servers already exchange it under that name) and
+`navigate.path` for `navigate`. No tool is named after either. The permission
+check for a path names the called operation and `preview`, so a rule, policy or
+hook that denies `browser: preview` still stops it.
+
+The built-in `browser` skill (`skill.ts`) teaches the workflow: explicit tab
+IDs, snapshots and refs, showing results to the user, recipes for debugging,
+performance and memory, and recovery after failures. It lists every operation
+from `Browser.Operations`. Like the tools, it is hidden until a desktop browser
+attaches to the session. An attached session lists both to every agent. An agent
+whose configured rules deny the browser, or some of its operations, has each
+such call refused; an `ask` makes each call prompt.
+
 The plugin entrypoint only composes its two owners: `connection.ts` manages
 desktop attachments and pending RPC requests; `tools.ts` runs the tool workflow.
 Server-local file IO stays in `files.ts`. The public `rpc.ts` entrypoint remains
@@ -38,8 +54,8 @@ pure and does not load any of these runtime modules.
 ## Tests
 
 Run `bun test` and `bun typecheck` from this package for its contract checks.
-The desktop implementation is the built-in `browser` GUI extension
-(`packages/gui-extensions/src/browser`); its URL policy tests live there, not in this package.
+The desktop implementation is the built-in `browser` GUI plugin
+(`packages/gui-plugins/src/browser`); its URL policy tests live there, not in this package.
 
 ## RPC
 

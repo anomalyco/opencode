@@ -13,7 +13,7 @@ import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
 import { newSessionLocation } from "../config/new-session-location"
-import { createSessionRetention } from "./session-retention"
+import { createSessionRetention } from "@opencode/client/solid"
 import { createProgramStatus, type PendingSession } from "./program-status"
 import { anchorKey, type AnchorTarget } from "../routes/session/anchors"
 import {
@@ -150,6 +150,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const sessionID = current()
       return sessionID !== undefined && !state().tabs.some((tab) => tab.sessionID === sessionID)
     }, false)
+    // Where the viewed session's tab last sat. Another TUI sharing the tab list can close it while
+    // this one keeps showing the session; closing it here then still moves to a neighbour.
+    const currentTab = createMemo<{ sessionID: string; index: number } | undefined>((previous) => {
+      const sessionID = current()
+      if (!sessionID) return
+      const index = state().tabs.findIndex((tab) => tab.sessionID === sessionID)
+      if (index !== -1) return { sessionID, index }
+      if (previous?.sessionID === sessionID) return previous
+    })
     const status = (sessionID: string) => {
       const session = root(sessionID)
       const members = family(session)
@@ -353,7 +362,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         scrollAnchors.delete(id)
         setExpandedGroups(id, undefined)
       })
-      const closed = closeSessionTab(state().tabs, target)
+      const known = currentTab()
+      const closed = closeSessionTab(state().tabs, target, known?.sessionID === target ? known.index : undefined)
       const selected = navigate && current() === target
       if (closed.tabs === state().tabs && !selected) return
       const previous = selected

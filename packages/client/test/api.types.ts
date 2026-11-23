@@ -18,30 +18,30 @@ const effectSession: Effect.Effect<Session.Info, unknown> = effectClient.session
   sessionID: "ses_test" as Session.ID,
 })
 
-declare const sessionID: Parameters<typeof effectApi.session.instructions.entry.list>[0]["sessionID"]
+declare const sessionID: Parameters<typeof effectApi.experimental.session.instructions.entry.list>[0]["sessionID"]
 
 const effectList: Effect.Effect<
   ReadonlyArray<{ readonly key: string; readonly value: unknown }>,
   unknown
-> = effectApi.session.instructions.entry.list({ sessionID })
-const effectPut: Effect.Effect<void, unknown> = effectApi.session.instructions.entry.put({
+> = effectApi.experimental.session.instructions.entry.list({ sessionID })
+const effectPut: Effect.Effect<void, unknown> = effectApi.experimental.session.instructions.entry.put({
   sessionID,
   key: "review-notes",
   value: { text: "Check the diff" },
 })
-const effectRemove: Effect.Effect<void, unknown> = effectApi.session.instructions.entry.remove({
+const effectRemove: Effect.Effect<void, unknown> = effectApi.experimental.session.instructions.entry.remove({
   sessionID,
   key: "review-notes",
 })
 
 const promiseList: Promise<ReadonlyArray<{ readonly key: string; readonly value: unknown }>> =
-  promiseClient.session.instructions.entry.list({ sessionID: "ses_test" })
-const promisePut: Promise<void> = promiseClient.session.instructions.entry.put({
+  promiseClient.experimental.session.instructions.entry.list({ sessionID: "ses_test" })
+const promisePut: Promise<void> = promiseClient.experimental.session.instructions.entry.put({
   sessionID: "ses_test",
   key: "review-notes",
   value: { text: "Check the diff" },
 })
-const promiseRemove: Promise<void> = promiseClient.session.instructions.entry.remove({
+const promiseRemove: Promise<void> = promiseClient.experimental.session.instructions.entry.remove({
   sessionID: "ses_test",
   key: "review-notes",
 })

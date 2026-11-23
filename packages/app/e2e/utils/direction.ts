@@ -6,8 +6,8 @@ export async function openWithDirection(page: Page, route: string, direction: "l
 }
 
 /**
- * Opens the app at a route as the desktop shell starts it: the window's extensions run at once, and the app interface
- * mounts over the preloaded route only when `start` runs, as it does once the desktop's server is up. One extension
+ * Opens the app at a route as the desktop shell starts it: the window's plugins run at once, and the app interface
+ * mounts over the preloaded route only when `start` runs, as it does once the desktop's server is up. One plugin
  * stays loading until `finish` runs; commands are published meanwhile, but the routes wait.
  */
 export async function openHeldStart(page: Page, route: string) {

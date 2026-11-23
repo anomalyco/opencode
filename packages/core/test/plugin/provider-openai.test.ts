@@ -8,6 +8,8 @@ import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
+import { ModelsDev } from "@opencode/core/models-dev"
+import { Bus } from "@opencode/core/bus"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -19,6 +21,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -26,13 +29,29 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* OpenAIPlugin.effect(host)
 })
 
+
+// A catalog whose OpenAI entry carries the given subscription model lists; `lists.current` can be swapped before a refresh.
+const subscriptionCatalog = (lists: { current: Record<string, readonly string[]> }) =>
+  ModelsDev.Service.of({
+    get: () =>
+      Effect.sync(() => [
+        {
+          info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
+          models: [],
+          environment: [],
+          subscriptions: lists.current,
+        },
+      ]),
+    refresh: () => Effect.void,
+  })
+
 const addGithubCopilotPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* GithubCopilotPlugin.effect(host)
 })
 
@@ -84,7 +103,7 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("filters the OpenAI catalog to codex-eligible models under a ChatGPT connection", () =>
+  it.effect("filters the OpenAI catalog to codex-eligible models under a ChatGPT connection when the catalog's Codex list is empty", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
       const models = yield* Model.Service
@@ -127,6 +146,19 @@ describe("OpenAIPlugin", () => {
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-4.99"), () => {})
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-image-1.5"), (model) => {
+          model.type = "image"
+        })
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-image-2"), (model) => {
+          model.type = "image"
+          model.cost = [
+            {
+              input: Money.USDPerMillionTokens.make(8),
+              output: Money.USDPerMillionTokens.make(30),
+              cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+            },
+          ]
+        })
       })
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
@@ -139,7 +171,7 @@ describe("OpenAIPlugin", () => {
           metadata: { accountID: "acct_123" },
         }),
       })
-      yield* addPlugin()
+      yield* addPlugin().pipe(Effect.provideService(ModelsDev.Service, subscriptionCatalog({ current: { "openai-codex": [] } })))
 
       const direct = yield* request(Provider.ID.openai, "https://api.openai.com/v1")
       const custom = yield* request(Provider.ID.make("custom-openai"), "https://custom.example/v1")
@@ -184,6 +216,61 @@ describe("OpenAIPlugin", () => {
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.99"))).enabled).toBe(false)
+      // Only the image model the Codex client uses is offered, covered by the subscription.
+      const images = (yield* models.available(["image"])).filter((model) => model.providerID === Provider.ID.openai)
+      expect(images.map((model) => model.id)).toEqual([Model.ID.make("gpt-image-2")])
+      expect(images[0]?.cost).toEqual([])
+    }),
+  )
+
+  it.effect("offers only the catalog's Codex list under a ChatGPT connection, and follows its refreshes", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      const bus = yield* Bus.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, (draft) => {
+          draft.package = "@opencode/ai/providers/openai"
+        })
+        for (const id of ["gpt-5.5", "gpt-6-sol", "gpt-6-sol-fast", "gpt-6-sol-pro", "gpt-7"])
+          catalog.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-image-2"), (model) => {
+          model.type = "image"
+        })
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-browser"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { accountID: "acct_123" },
+        }),
+      })
+      const lists = { current: { "openai-codex": ["gpt-5.5", "gpt-6-sol", "gpt-6-sol-fast", "gpt-image-2"] } }
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin, "test")
+      yield* OpenAIPlugin.effect(host).pipe(Effect.provideService(ModelsDev.Service, subscriptionCatalog(lists)))
+      const enabled = (id: string) =>
+        models.get(Provider.ID.openai, Model.ID.make(id)).pipe(Effect.map((model) => required(model).enabled))
+
+      // The list wins over the version rule: gpt-5.5 is listed and gpt-7 isn't.
+      expect(yield* enabled("gpt-5.5")).toBe(true)
+      expect(yield* enabled("gpt-6-sol-fast")).toBe(true)
+      expect(yield* enabled("gpt-6-sol-pro")).toBe(false)
+      expect(yield* enabled("gpt-7")).toBe(false)
+      const images = (yield* models.available(["image"])).filter((model) => model.providerID === Provider.ID.openai)
+      expect(images.map((model) => model.id)).toEqual([Model.ID.make("gpt-image-2")])
+      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-sol"))).cost).toEqual([])
+
+      lists.current = { "openai-codex": ["gpt-7"] }
+      yield* bus.publish(ModelsDev.Event.Refreshed, {})
+      yield* drain
+      expect(yield* enabled("gpt-7")).toBe(true)
+      expect(yield* enabled("gpt-5.5")).toBe(false)
     }),
   )
 
@@ -223,6 +310,51 @@ describe("OpenAIPlugin", () => {
       expect(direct.hasHttpHooks).toBe(false)
       expect(provider.headers).not.toHaveProperty("originator")
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(true)
+    }),
+  )
+
+  it.effect("reloads providers on a switch only when the ChatGPT login changes", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const credentials = yield* Credential.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, () => {})
+      })
+      const first = yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.Key.make({ type: "key", key: "sk-first" }),
+      })
+      yield* addPlugin()
+      const folds = { count: 0 }
+      yield* catalog.transform(() => {
+        folds.count++
+      })
+      const before = folds.count
+
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.Key.make({ type: "key", key: "sk-second" }),
+      })
+      yield* credentials.activate(first.id)
+      yield* drain
+      expect(folds.count).toBe(before)
+
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-browser"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+          metadata: { accountID: "acct_123" },
+        }),
+      })
+      yield* drain
+      expect(folds.count).toBeGreaterThan(before)
+      expect(required(yield* catalog.get(Provider.ID.openai)).headers).toMatchObject({
+        "chatgpt-account-id": "acct_123",
+      })
     }),
   )
 

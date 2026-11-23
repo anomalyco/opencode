@@ -34,8 +34,7 @@
     box-shadow: var(--v2-elevation-switch-off);
     transition:
       background 90ms ease-out,
-      opacity 90ms ease-out,
-      outline-color 90ms ease-out;
+      opacity 90ms ease-out;
   }
 
   [data-slot="switch-thumb"] {
@@ -100,7 +99,7 @@
 
   &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
 
   &[data-checked] [data-slot="switch-control"] {
@@ -167,7 +166,7 @@
     width: 28px;
     height: 16px;
     border-radius: 3px;
-    border: 1px solid var(--border-weak-base);
+    border: 1px solid var(--v2-border-border-base);
     background: var(--surface-base);
     box-shadow: none;
     transition:
@@ -180,7 +179,7 @@
     width: 14px;
     height: 14px;
     border-radius: 2px;
-    border: 1px solid var(--border-base);
+    border: 1px solid var(--v2-border-border-strong);
     background: var(--icon-invert-base);
     box-shadow:
       0 1px 2px -1px rgba(19, 16, 16, 0.04),
@@ -216,7 +215,7 @@
   }
 
   &:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
-    border-color: var(--border-hover);
+    border-color: var(--v2-border-border-strong);
     background: var(--surface-hover);
   }
 
@@ -226,9 +225,8 @@
   }
 
   &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
-    border-color: var(--border-focus);
-    outline: none;
-    box-shadow: var(--shadow-xs-border-focus);
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
   }
 
   &[data-checked] [data-slot="switch-control"] {
@@ -252,12 +250,12 @@
   }
 
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
-    border-color: var(--border-hover);
+    border-color: var(--v2-border-border-strong);
     background: var(--surface-hover);
   }
 
   &[data-disabled] [data-slot="switch-control"] {
-    border-color: var(--border-disabled);
+    border-color: var(--v2-border-border-muted);
     background: var(--surface-disabled);
     opacity: 1;
   }
@@ -267,6 +265,17 @@
   }
 
   &[data-invalid] [data-slot="switch-control"] {
-    border-color: var(--border-error);
+    border-color: var(--v2-state-border-danger);
+  }
+}
+
+@media (forced-colors: active) {
+  [data-component="switch"]:not([data-appearance="standard"]) [data-slot="switch-control"] {
+    border: 1px solid ButtonText;
+    padding: 1px;
+  }
+
+  [data-component="switch"]:not([data-appearance="standard"]) [data-slot="switch-thumb"] {
+    border: 1px solid ButtonText;
   }
 }

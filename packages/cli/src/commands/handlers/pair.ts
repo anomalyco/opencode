@@ -3,11 +3,12 @@ import { EOL } from "os"
 import { Effect, Option, Schedule } from "effect"
 import { Service } from "@opencode/client/effect/service"
 import { OpenCode } from "@opencode/client/promise"
-import { renderUnicodeCompact } from "uqr"
+import { renderUnicodeCompact } from "@opencode/util/qr"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { RemoteTunnel } from "../../services/remote-tunnel"
 import { ServiceConfig } from "../../services/service-config"
+import { isLoopback, serverURLs } from "../../services/service-urls"
 
 export default Runtime.handler(
   Commands.commands.pair,
@@ -40,7 +41,7 @@ export default Runtime.handler(
         ...(remote.length
           ? [
               "",
-              // uqr separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
+              // renderUnicodeCompact separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
               renderUnicodeCompact(JSON.stringify({ code: pairing.code, urls: remote }), {
                 border: 2,
               })
@@ -120,8 +121,7 @@ const pairingURLs = Effect.fnUntraced(function* (
   input: Runtime.Input<typeof Commands.commands.pair>,
 ) {
   if (input.remote) return [yield* remoteURL(client)]
-  if (Option.isSome(input.url)) return [input.url.value]
-  return (yield* Effect.tryPromise(() => client.server.info())).urls
+  return yield* serverURLs(client, input.url)
 })
 
 // The service attaches the tunnel in the background, so wait for its URL to appear in server info.
@@ -151,9 +151,3 @@ const remoteURL = Effect.fnUntraced(function* (client: ReturnType<typeof OpenCod
     }),
   )
 })
-
-function isLoopback(hostname: string) {
-  return (
-    hostname === "localhost" || hostname.endsWith(".localhost") || hostname.startsWith("127.") || hostname === "[::1]"
-  )
-}

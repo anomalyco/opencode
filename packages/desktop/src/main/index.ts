@@ -2,9 +2,10 @@
 import { marks } from "./lifecycle/marks"
 import { app } from "electron"
 import { acquireApplicationLock, configureApplication } from "./lifecycle/configure"
+import { captureLaunchLinks } from "./lifecycle/launch-links"
 import { startSidecarProbe } from "./service/sidecar-probe"
 import { registerStorageSnapshotHandler } from "./storage/snapshot"
-import { createEarlyWindow } from "./windows/early"
+import { createEarlyWindow, earlyWindowClosed } from "./windows/early"
 import { rendererAssetsServed } from "./windows/protocol"
 import { registerRendererScheme } from "./windows/scheme"
 
@@ -15,6 +16,7 @@ import { registerRendererScheme } from "./windows/scheme"
 configureApplication()
 
 if (acquireApplicationLock()) {
+  captureLaunchLinks()
   registerRendererScheme()
   // Window first, then the bundle: starting the import before ready delays ready itself, because the
   // module graph evaluates on the same thread Chromium needs to finish initialising.
@@ -29,6 +31,9 @@ if (acquireApplicationLock()) {
     // thread, so the bundle waits for that burst to be answered (or a cap) before it evaluates.
     if (!process.env.ELECTRON_RENDERER_URL) await rendererAssetsServed({ quietMs: 40, capMs: 400 })
     marks.served = Date.now()
+
+    // Closing the first window before now quit the app; loading the layers would only start work it interrupts.
+    if (earlyWindowClosed()) return
 
     return import("./desktop")
   })

@@ -4,6 +4,7 @@ import { $ } from "bun"
 import { rm } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { bundledModelsSnapshot, modelsSnapshotPlugin } from "./models-snapshot"
 
 process.chdir(fileURLToPath(new URL("..", import.meta.url)))
 
@@ -22,13 +23,14 @@ const result = await Bun.build({
   external: [
     "#sqlite",
     "#pty",
+    "#claude-agent-sdk",
     "#persistent-pty-binary",
     "#fff",
     "#photon-wasm",
-    "#shell-parser-wasm",
     "#v1-migration",
   ],
   splitting: true,
+  plugins: [modelsSnapshotPlugin(await bundledModelsSnapshot())],
   loader: {
     ".txt": "text",
     ".md": "text",

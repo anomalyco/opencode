@@ -13,10 +13,10 @@ type DesktopFileAPI = Pick<
   | "saveFile"
   | "openExternal"
   | "openBrowser"
-  | "openLocalFile"
   | "resolveAppPath"
   | "openPath"
   | "revealPath"
+  | "startFileDrag"
   | "readClipboardImage"
   | "writeClipboardText"
 >
@@ -54,15 +54,29 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
     }
   }
 
+  // Only the paths: the token that would let this window read the files is released at once.
+  const openFilePathPickerDialog: NonNullable<Platform["openFilePathPickerDialog"]> = async (options) => {
+    const result = await api.openFilePicker({
+      multiple: options.multiple ?? false,
+      title: options.title,
+      extensions: options.extensions,
+    })
+
+    if (!result) return null
+    await api.releasePickedFiles(result.token)
+
+    return result.files.map((file) => file.path)
+  }
+
   return {
     openDirectoryPickerDialog,
     openAttachmentPickerDialog,
+    openFilePathPickerDialog,
     getPathForFile: (file: File) => attachmentPaths.get(file) ?? api.getPathForFile(file),
     saveFile: (options: { title?: string; defaultPath?: string }, content: string) =>
       api.saveFile({ title: options.title, defaultPath: options.defaultPath }, content),
     openExternal: (url: string) => api.openExternal(url),
     openBrowser: (url: string) => api.openBrowser(url),
-    openLocalFile: (url: string) => api.openLocalFile(url),
     async openPath(path: string, app?: string) {
       if (os !== "windows") {
         await api.openPath(path, app)
@@ -76,6 +90,8 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
     async revealPath(path: string) {
       return api.revealPath(path)
     },
+    // Only Windows hands a file row's drag to the system, so macOS and Linux keep the page's own drag.
+    startFileDrag: os === "windows" ? (path: string) => api.startFileDrag(path) : undefined,
     async readClipboardImage() {
       const image = await api.readClipboardImage().catch(() => null)
 

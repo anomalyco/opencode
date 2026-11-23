@@ -17,7 +17,11 @@ export type PastedText = {
   }
 }
 
-export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "files" | "agents" | "skills">> & {
+// `path` is the local file a pasted attachment was read from. It stays in the TUI.
+export type PromptFile = Types.DeepMutable<PromptInput.FileAttachment> & { path?: string }
+
+export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "agents" | "skills">> & {
+  files?: PromptFile[]
   pasted: PastedText[]
   mode?: "normal" | "shell"
 }
@@ -25,6 +29,13 @@ export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "fi
 export type PromptPartRef = {
   type: "file" | "agent" | "skill" | "pasted"
   index: number
+}
+
+// A chip's extmark data. Undo restores it with the mark, so a restored chip keeps its part.
+export type ChipData = {
+  file?: PromptFile
+  agent?: NonNullable<PromptInfo["agents"]>[number]
+  skill?: NonNullable<PromptInfo["skills"]>[number]
 }
 
 export const emptyPrompt = (): PromptInfo => ({ text: "", files: [], agents: [], skills: [], pasted: [] })
@@ -86,7 +97,7 @@ export function parsePromptInfo(value: unknown): PromptInfo | undefined {
   return input as PromptInfo
 }
 
-export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
+const { use: useHistoryEntries, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
     const paths = useTuiPaths()
@@ -100,26 +111,15 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
     })
 
-    const [store, setStore] = createStore({ index: 0, history: [] as PromptInfo[] })
+    const [store, setStore] = createStore({ history: [] as PromptInfo[] })
 
     return {
-      move(direction: 1 | -1, input: string) {
-        if (!store.history.length) return undefined
-        const current = store.history.at(store.index)
-        if (!current) return undefined
-        if (current.text !== input && input.length) return
-        const next = store.index + direction
-        if (Math.abs(next) > store.history.length || next > 0) return
-        setStore("index", next)
-        if (next === 0) return emptyPrompt()
-        return store.history.at(next)
+      get entries() {
+        return store.history
       },
       append(item: PromptInfo) {
         const entry = structuredClone(unwrap(item))
-        if (isDuplicateEntry(store.history.at(-1), entry)) {
-          setStore("index", 0)
-          return
-        }
+        if (isDuplicateEntry(store.history.at(-1), entry)) return
         let trimmed = false
         setStore(
           produce((draft) => {
@@ -128,7 +128,6 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
               draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
               trimmed = true
             }
-            draft.index = 0
           }),
         )
 
@@ -141,3 +140,36 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
     }
   },
 })
+
+export { PromptHistoryProvider }
+
+export function usePromptHistory(currentDraft = emptyPrompt) {
+  const history = useHistoryEntries()
+  let index = 0
+  let draft: PromptInfo | undefined
+  function reset() {
+    index = 0
+    draft = undefined
+  }
+  return {
+    move(direction: 1 | -1, input: string) {
+      const next = index + direction
+      if (next < -history.entries.length || next > 0) return
+      if (index < 0 && input && history.entries.at(index)?.text !== input) return
+      if (index === 0) draft = structuredClone({ ...currentDraft(), text: input })
+      index = next
+      if (next !== 0) {
+        const entry = history.entries.at(next)
+        return entry ? { ...emptyPrompt(), ...structuredClone(unwrap(entry)) } : undefined
+      }
+      const restored = draft
+      draft = undefined
+      return restored
+    },
+    reset,
+    append(item: PromptInfo) {
+      reset()
+      history.append(item)
+    },
+  }
+}

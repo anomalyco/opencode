@@ -81,12 +81,19 @@ describe("Bash execution safety", () => {
     expect(ShellScan.scan(source).kind).toBe("opaque")
   })
 
-  test.each(["X=value > /dev/null", "X=x 2> output", "X=x < input", "> /dev/null", "2>> output", ">output 2>&1"])(
-    "scans redirects without inventing an executable command: %s",
-    (source) => {
-      expect(ShellScan.scan(source)).toEqual({ kind: "scanned", commands: [] })
-    },
-  )
+  test.each([
+    ["X=value > /dev/null", "X=value > /dev/null", "X=value >"],
+    ["X=x 2> output", "X=x 2> output", "X=x 2>"],
+    ["X=x < input", "X=x < input", "X=x <"],
+    ["> /dev/null", "> /dev/null", ">"],
+    ["2>> output", "2>> output", "2>>"],
+    [">output 2>&1", ">output 2>&1", ">output"],
+  ] as const)("retains commandless redirects as explicit permission resources: %s", (source, resource, head) => {
+    expect(ShellScan.scan(source)).toMatchObject({
+      kind: "scanned",
+      commands: [{ resource, words: [head], rawWords: [head] }],
+    })
+  })
 
   test.each([">", "X=x >", "X=x > # comment\nprintf ok", ">; printf ok", "(printf ok) >", "{ printf ok; } >"])(
     "still requires redirect targets: %s",
@@ -96,26 +103,40 @@ describe("Bash execution safety", () => {
   )
 
   test.each([
-    "{ printf ok; } > output",
-    "{ printf ok; } 2> output",
-    "{ printf ok; } &> output",
-    "(printf ok) > output",
-    "{ printf ok; }; X=x > output",
-  ])("scans leading groups and their redirects without synthetic commands: %s", (source) => {
-    expect(ShellScan.scan(source)).toEqual({
+    ["{ printf ok; } > output", "> output", ">"],
+    ["{ printf ok; } 2> output", "2> output", "2>"],
+    ["{ printf ok; } &> output", "&> output", "&>"],
+    ["(printf ok) > output", "> output", ">"],
+    ["{ printf ok; }; X=x > output", "X=x > output", "X=x >"],
+  ] as const)("retains file redirects on compound groups and trailing assignments: %s", (source, redirectResource, head) => {
+    expect(ShellScan.scan(source)).toMatchObject({
       kind: "scanned",
-      commands: [{ resource: "printf ok", words: ["printf", "ok"], rawWords: ["printf", "ok"] }],
+      commands: [
+        { resource: "printf ok", words: ["printf", "ok"], rawWords: ["printf", "ok"] },
+        { resource: redirectResource, words: [head], rawWords: [head] },
+      ],
     })
   })
 
+  test.each(["{ printf ok; } 2>&1", "(printf ok) 2>&1", "(printf ok) 2>&-"])(
+    "does not invent redirect commands for pure group descriptor duplications: %s",
+    (source) => {
+      expect(ShellScan.scan(source)).toEqual({
+        kind: "scanned",
+        commands: [{ resource: "printf ok", words: ["printf", "ok"], rawWords: ["printf", "ok"] }],
+      })
+    },
+  )
+
   test.each(["X=x >$(printf output)", ">$(printf output)", "{ :; } >$(printf output)", "(:) >$(printf output)"])(
-    "retains explicit substitutions in otherwise commandless redirects: %s",
+    "retains both redirect resources and explicit substitutions in commandless redirects: %s",
     (source) => {
       const result = ShellScan.scan(source)
       expect(result.kind).toBe("scanned")
       if (result.kind === "opaque") return
+      const redirectHead = source.startsWith("X=x") ? "X=x >$(printf output)" : ">$(printf output)"
       expect(result.commands.map((command) => command.words[0])).toEqual(
-        source.includes(":") ? [":", "printf"] : ["printf"],
+        source.includes(":") ? [":", redirectHead, "printf"] : [redirectHead, "printf"],
       )
       expect(result.commands.at(-1)).toEqual({
         resource: "printf output",
@@ -126,10 +147,11 @@ describe("Bash execution safety", () => {
   )
 
   test("scans a list following a group redirect suffix", () => {
-    expect(ShellScan.scan("(printf ok) >output && pwd")).toEqual({
+    expect(ShellScan.scan("(printf ok) >output && pwd")).toMatchObject({
       kind: "scanned",
       commands: [
         { resource: "printf ok", words: ["printf", "ok"], rawWords: ["printf", "ok"] },
+        { resource: ">output", words: [">output"], rawWords: [">output"] },
         { resource: "pwd", words: ["pwd"], rawWords: ["pwd"] },
       ],
     })
@@ -260,7 +282,10 @@ describe("Bash real-shell redirect-only statements", () => {
       const result = ShellScan.scan(source)
       expect(result.kind).toBe("scanned")
       if (result.kind === "opaque") return
-      expect(result.commands.map((command) => command.words[0]).sort()).toEqual(observed)
+      expect(
+        result.commands.filter((command) => command.redirectPrefixEnd === undefined).map((command) => command.words[0]).sort(),
+      ).toEqual(observed)
+      expect(result.commands.some((command) => command.redirectPrefixEnd !== undefined)).toBe(true)
     })
   }
 })

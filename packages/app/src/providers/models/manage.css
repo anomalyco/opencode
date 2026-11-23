@@ -1,0 +1,97 @@
+.manage-models-search {
+  flex-shrink: 0;
+  padding: 0 8px 8px;
+}
+
+/* Reaches the dialog edges past the 8px inset, as in the integrations dialog. */
+.manage-models-search.search-dialog-search::after {
+  margin-inline: -8px;
+}
+
+.settings-manage-models-dialog .settings-panel.settings-models {
+  height: 100%;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+.settings-manage-models-dialog .settings-models .settings-section {
+  gap: 8px;
+  padding-block: 0 8px;
+}
+
+.settings-manage-models-dialog .settings-models .settings-section[data-expanded] {
+  padding-bottom: 8px;
+}
+
+.settings-manage-models-dialog .provider-model-groups {
+  gap: 8px;
+}
+
+.settings-manage-models-dialog .provider-model-group {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.settings-manage-models-dialog .provider-model-group-header {
+  padding: 4px;
+  border-radius: 0;
+}
+
+.settings-manage-models-dialog .provider-model-group-header:has(:focus-visible) {
+  background: transparent;
+}
+
+.settings-manage-models-dialog .provider-model-group-trigger {
+  min-height: 36px;
+  padding-block: 0;
+  padding-inline: 12px 40px;
+  border-radius: 6px;
+}
+
+.settings-manage-models-dialog .provider-model-group-header:has(:focus-visible) .provider-model-group-trigger {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.settings-manage-models-dialog .provider-model-group-actions {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 16px;
+  padding: 0;
+  transform: translateY(-50%);
+}
+
+@media (hover: hover) {
+  .settings-manage-models-dialog .provider-model-group-header:hover {
+    background: transparent;
+  }
+
+  .settings-manage-models-dialog .provider-model-group-header:hover .provider-model-group-trigger:not(:disabled) {
+    background: var(--v2-overlay-simple-overlay-hover);
+  }
+}
+
+.settings-manage-models-dialog .provider-model-group-models {
+  padding: 0 8px 8px;
+}
+
+.settings-manage-models-dialog .provider-model-group-models > .manage-models-rows {
+  padding-top: 4px;
+  border-top: 0.5px solid var(--v2-border-border-base);
+}
+
+.manage-models-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.manage-models-rows .search-list-row {
+  height: 36px;
+  padding-inline: 8px;
+  border-radius: 6px;
+}
+
+@media (hover: hover) {
+  .manage-models-rows .search-list-row:hover {
+    background: var(--v2-overlay-simple-overlay-hover);
+  }
+}

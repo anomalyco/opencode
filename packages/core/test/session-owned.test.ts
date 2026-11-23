@@ -125,7 +125,7 @@ const setup = Effect.fnUntraced(function* (options?: {
   const services = Layer.mergeAll(
     Layer.succeed(PluginHooks.Service, hooks),
     Layer.mock(Image.Service, {}),
-    options?.shell ?? Layer.mock(Shell.Service, {}),
+    options?.shell ?? Layer.mock(Shell.Service, { handoffPrepared: () => false }),
   )
   const servicesFor = (ref: Location.Ref) => {
     locations.push(ref)
@@ -508,6 +508,7 @@ describe("Session-owned handles", () => {
       })
       const fixture = yield* setup({
         shell: Layer.mock(Shell.Service, {
+          handoffPrepared: () => false,
           create: (input) =>
             Effect.sync(() => {
               expect(input).toEqual({
@@ -751,8 +752,8 @@ describe("SessionPrompt preparation", () => {
         input,
       }
       const items = yield* Effect.forEach([0, 1], () => SessionPrompt.prepare(request)).pipe(
-        Effect.provideService(Instance.Service, fixture.instances),
-        Effect.satisfiesServicesType<FSUtil.Service>(),
+        fixture.instances.provide(request.session),
+        Effect.satisfiesServicesType<FSUtil.Service | Database.Service>(),
       )
 
       expect(items[0]).toEqual(items[1])

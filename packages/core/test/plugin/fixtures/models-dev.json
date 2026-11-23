@@ -3,7 +3,46 @@
     "id": "acme",
     "name": "Acme",
     "env": ["ACME_API_KEY"],
-    "models": {}
+    "models": {
+      "acme-1": {
+        "id": "acme-1",
+        "type": "chat",
+        "name": "Acme One",
+        "release_date": "2026-01-01",
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": ["low", "high"]
+          }
+        },
+        "limit": {
+          "context": 128000,
+          "output": 8192
+        },
+        "recommended_api": "interactions",
+        "api": {
+          "generate-content": {
+            "base_url": "https://api.acme.test/v1",
+            "sdk": {
+              "opencodeai": "@opencode/ai/providers/google"
+            }
+          },
+          "interactions": {
+            "base_url": "https://api.acme.test/v1beta",
+            "sdk": {
+              "opencodeai": "@opencode/ai/providers/google/interactions"
+            }
+          }
+        }
+      }
+    }
   },
   "local": {
     "id": "local",
@@ -15,19 +54,38 @@
     "id": "opencode",
     "name": "OpenCode",
     "env": [],
-    "npm": "@ai-sdk/openai-compatible",
     "models": {
       "gpt-5.5": {
         "id": "gpt-5.5",
+        "type": "chat",
         "name": "GPT-5.5",
         "release_date": "2026-04-23",
-        "attachment": true,
-        "reasoning": true,
-        "reasoning_options": [{ "type": "effort", "values": [null, "none", "low", "medium", "high", "xhigh"] }],
-        "temperature": false,
-        "tool_call": true,
-        "limit": { "context": 400000, "output": 128000 },
-        "provider": { "npm": "@ai-sdk/openai", "api": "https://console.opencode.ai/inference/openai/v1" }
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        },
+        "capabilities": {
+          "tools": {
+            "supported": true
+          },
+          "reasoning": {
+            "supported": true,
+            "effort": ["none", "low", "medium", "high", "xhigh"]
+          },
+          "temperature": false
+        },
+        "limit": {
+          "context": 400000,
+          "output": 128000
+        },
+        "api": {
+          "responses": {
+            "base_url": "https://console.opencode.ai/inference/openai/v1",
+            "sdk": {
+              "aisdk": "@ai-sdk/openai"
+            }
+          }
+        }
       }
     }
   }

@@ -51,6 +51,8 @@ export interface FlowchartSubgraphBounds extends DiagramBounds {
   labelSide: "top" | "bottom"
 }
 
+export type FlowchartEndpointBounds = FlowchartNodeBounds | FlowchartSubgraphBounds
+
 export type FlowchartPoint = DiagramPoint
 
 export interface FlowchartEdgeRoute {

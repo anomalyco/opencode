@@ -1,4 +1,4 @@
-import { Context, Duration, Effect, Exit, Layer, LayerMap, MutableHashMap, Option } from "effect"
+import { Context, Duration, Effect, Exit, Layer, LayerMap, MutableHashMap, Option, Scope } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Instance } from "./instance.js"
 import { Location } from "./location.js"
@@ -8,6 +8,8 @@ import { LocationServiceMap } from "./location-service-map.js"
 export { LocationServiceMap } from "./location-service-map.js"
 
 export type LocationServices = Instance.Services
+
+const HELD_WARNING_AFTER = "30 seconds"
 
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
@@ -55,6 +57,18 @@ export function buildLocationServiceMap(
         // decide whether a location (including workspace placement) can retry.
         { idleTimeToLive: Duration.infinity },
       )
+      // RcMap closes entries one at a time on shutdown. Close every Location
+      // (borrowed ones too) concurrently first; RcMap then finds them closed.
+      yield* Effect.addFinalizer(() =>
+        Effect.suspend(() =>
+          inner.rcMap.state._tag === "Closed"
+            ? Effect.void
+            : Effect.forEach(inner.rcMap.state.map, ([, entry]) => Effect.exit(Scope.close(entry.scope, Exit.void)), {
+                concurrency: "unbounded",
+                discard: true,
+              }),
+        ),
+      )
       const map = {
         ...inner,
         get: (ref: Location.Ref) => inner.get(LocationServiceMap.canonical(ref)),
@@ -65,10 +79,34 @@ export function buildLocationServiceMap(
             const key = LocationServiceMap.canonical(ref)
             const build = Option.getOrUndefined(MutableHashMap.get(builds, key))
             MutableHashMap.remove(builds, key)
+            const state = inner.rcMap.state
+            const held = state._tag === "Open" ? Option.getOrUndefined(MutableHashMap.get(state.map, key)) : undefined
             // Detach routing first, then cancel interactions and notify clients. Running
             // steps retain their borrowed graph until they can hand off at a boundary.
             // Do not await a boot here: failed/in-flight builds have their own cleanup path.
-            return inner.invalidate(key).pipe(Effect.andThen(build?.close ?? Effect.void))
+            return inner.invalidate(key).pipe(
+              Effect.andThen(build?.close ?? Effect.void),
+              Effect.andThen(
+                // Borrowers release on shutdown; one that does not keeps every service of this Location running.
+                // The timer lives in the Location's scope, so it stops as soon as the last borrower lets go
+                // (forking into an already closed scope never starts it).
+                held
+                  ? Effect.sleep(HELD_WARNING_AFTER).pipe(
+                      Effect.andThen(
+                        Effect.suspend(() =>
+                          Effect.logWarning("location still held after shutdown", {
+                            directory: key.directory,
+                            workspaceID: key.workspaceID,
+                            holders: held.refCount,
+                          }),
+                        ),
+                      ),
+                      Effect.forkIn(held.scope),
+                      Effect.asVoid,
+                    )
+                  : Effect.void,
+              ),
+            )
           }).pipe(Effect.uninterruptible),
       }
       // Cached instances borrow their owner instead of retaining its Layer scope.

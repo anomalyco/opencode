@@ -1,0 +1,20 @@
+{
+  "name": "opencode-data-og-production",
+  "compatibilityDate": "2026-07-01",
+  "observability": { "enabled": true },
+  "workersDev": false,
+  "previewUrls": false,
+  "manifest": {
+    "type": "partial",
+    "mainModule": "index.mjs",
+    "modules": {
+      "harfbuzz.wasm": { "type": "wasm" },
+      "satori-layout.wasm": { "type": "wasm" },
+      "resvg.wasm": { "type": "wasm" },
+      "opentui-mono-regular-rest.bin": { "type": "data" },
+      "opentui-mono-regular-latin.bin": { "type": "data" },
+      "opentui-mono-bold-rest.bin": { "type": "data" },
+      "opentui-mono-bold-latin.bin": { "type": "data" }
+    }
+  }
+}

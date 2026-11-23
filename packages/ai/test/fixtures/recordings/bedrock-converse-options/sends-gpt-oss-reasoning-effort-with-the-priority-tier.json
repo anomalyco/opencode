@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:bedrock-converse-options",
+      "provider:amazon-bedrock",
+      "protocol:bedrock-converse",
+      "reasoning"
+    ],
+    "name": "bedrock-converse-options/sends-gpt-oss-reasoning-effort-with-the-priority-tier",
+    "recordedAt": "2026-10-26T05:24:44.284Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/openai.gpt-oss-120b-1%3A0/converse-stream",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"modelId\":\"openai.gpt-oss-120b-1:0\",\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"What is 17*23? Reply with the number only.\"}]}],\"inferenceConfig\":{\"maxTokens\":1000},\"additionalModelRequestFields\":{\"reasoning_effort\":\"low\"},\"serviceTier\":{\"type\":\"priority\"},\"requestMetadata\":{\"suite\":\"opencode-ai\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/vnd.amazon.eventstream"
+        },
+        "body": "AAAAnQAAAFLJ0QwQCzpldmVudC10eXBlBwAMbWVzc2FnZVN0YXJ0DTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGIiwicm9sZSI6ImFzc2lzdGFudCJ9EQf77QAAAMkAAABXdCiRlAs6ZXZlbnQtdHlwZQcAEWNvbnRlbnRCbG9ja0RlbHRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiY29udGVudEJsb2NrSW5kZXgiOjAsImRlbHRhIjp7InRleHQiOiIifSwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVViJ9oXumJQAAAMAAAABWDj/Dcws6ZXZlbnQtdHlwZQcAEGNvbnRlbnRCbG9ja1N0b3ANOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2NyJ9EPTSwQAAAMkAAABXdCiRlAs6ZXZlbnQtdHlwZQcAEWNvbnRlbnRCbG9ja0RlbHRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiY29udGVudEJsb2NrSW5kZXgiOjEsImRlbHRhIjp7InJlYXNvbmluZ0NvbnRlbnQiOnsidGV4dCI6Ikp1c3QgY29tcHV0ZSAxNyoyMyA9IDM5MS4ifX0sInAiOiJhYiJ9u2fddQAAALcAAABWRc3/rAs6ZXZlbnQtdHlwZQcAEGNvbnRlbnRCbG9ja1N0b3ANOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MSwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWSJ9hmJaHgAAAKMAAABXp6r+eAs6ZXZlbnQtdHlwZQcAEWNvbnRlbnRCbG9ja0RlbHRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiY29udGVudEJsb2NrSW5kZXgiOjIsImRlbHRhIjp7InRleHQiOiIzOTEifSwicCI6ImFiY2RlZmcifT1TPPUAAADBAAAAVjNf6sMLOmV2ZW50LXR5cGUHABBjb250ZW50QmxvY2tTdG9wDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiY29udGVudEJsb2NrSW5kZXgiOjIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaMDEyMzQ1Njc4In0WfQjAAAAAnwAAAFEqGA7KCzpldmVudC10eXBlBwALbWVzc2FnZVN0b3ANOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNEIiwic3RvcFJlYXNvbiI6ImVuZF90dXJuIn2rNcIbAAABIQAAAE7Du2bvCzpldmVudC10eXBlBwAIbWV0YWRhdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJtZXRyaWNzIjp7ImxhdGVuY3lNcyI6MTU3NX0sInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFRkdISUpLTE1OIiwic2VydmljZVRpZXIiOnsidHlwZSI6InByaW9yaXR5In0sInVzYWdlIjp7ImlucHV0VG9rZW5zIjo4MCwib3V0cHV0VG9rZW5zIjoyMSwic2VydmVyVG9vbFVzYWdlIjp7fSwidG90YWxUb2tlbnMiOjEwMX19od/llw==",
+        "bodyEncoding": "base64"
+      }
+    }
+  ]
+}

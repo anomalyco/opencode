@@ -2,8 +2,8 @@ import { Effect, Schema, SchemaGetter } from "effect"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type MediaUsage } from "../schema/index.js"
-import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
+import { mergeJsonRecords, tokenUsage, type MediaUsage } from "../schema/index.js"
+import { SpeechModel, type SpeechEvent, type SpeechRequest } from "../speech.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
 const route = MediaProtocol.identity({ id: "openai-speech", name: "OpenAI Speech", provider: "openai" })
@@ -22,7 +22,7 @@ export type OpenAISpeechOptions = {
   readonly stream_format?: "sse" | "audio"
 } & Record<string, unknown>
 
-export type Request = SpeechRequestFor<OpenAISpeechOptions>
+export type Request = SpeechRequest<SpeechModel<OpenAISpeechOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema
@@ -117,13 +117,12 @@ const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
       usage:
         usage === undefined
           ? undefined
-          : {
-              type: "tokens" as const,
+          : tokenUsage({
               input: usage.input_tokens,
               output: usage.output_tokens,
               total: usage.total_tokens,
               details: { openai: usage },
-            },
+            }),
     },
     [],
   ] as const

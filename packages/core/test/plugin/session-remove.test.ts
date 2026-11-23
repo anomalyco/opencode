@@ -13,7 +13,7 @@ it.live("Effect plugins can remove sessions and their children", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
-    const context = yield* PluginHost.make(plugins)
+    const context = yield* PluginHost.make(plugins, "test")
     const parent = yield* context.session.create({ title: "Temporary worker" })
     const child = yield* sessions.create({ parentID: parent.id })
     const unrelated = yield* context.session.create({ title: "Unrelated session" })
@@ -40,7 +40,7 @@ it.live("Promise plugins can remove sessions and their children", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
-    const context = yield* PluginHost.make(plugins)
+    const context = yield* PluginHost.make(plugins, "test")
     const parent = yield* context.session.create({ title: "Temporary worker" })
     const child = yield* sessions.create({ parentID: parent.id })
     const unrelated = yield* context.session.create({ title: "Unrelated session" })

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Predicate } from "effect"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
+import { commentaryRuns } from "../storybook/current-session-fixtures"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
 import { timelinePresets } from "./detail"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
@@ -277,7 +278,7 @@ describe("current session timeline rows", () => {
     })
   })
 
-  test("omits a grouped reasoning-only row while busy until other content or completion", () => {
+  test("keeps a grouped reasoning-only row while busy", () => {
     const thought = { type: "reasoning", text: "Thinking", time: { created: 1, completed: 2 } } as const
 
     const rows = (content: SessionMessageAssistant["content"], busy: boolean) =>
@@ -288,9 +289,15 @@ describe("current session timeline rows", () => {
         timelineDetail: timelinePresets[2].value,
       }).rows
 
-    expect(rows([{ ...thought, time: { created: 1 } }], true).map((row) => row._tag)).toEqual(["UserMessage"])
-    expect(rows([thought], true).map((row) => row._tag)).toEqual(["UserMessage"])
-    expect(rows([thought, { type: "text", text: "" }], true).map((row) => row._tag)).toEqual(["UserMessage"])
+    expect(rows([{ ...thought, time: { created: 1 } }], true).map((row) => row._tag)).toEqual([
+      "UserMessage",
+      "AssistantPart",
+    ])
+    expect(rows([thought], true).map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
+    expect(rows([thought, { type: "text", text: "" }], true).map((row) => row._tag)).toEqual([
+      "UserMessage",
+      "AssistantPart",
+    ])
     expect(rows([thought, { type: "text", text: "Answer" }], true).map((row) => row._tag)).toEqual([
       "UserMessage",
       "AssistantPart",
@@ -551,6 +558,164 @@ describe("current session timeline rows", () => {
       "notice:msg_moved",
       "assistant-part:context:message:msg_skill",
     ])
+  })
+
+  test.each([
+    ["everything", ["msg_agent", "msg_shell"]],
+    ["detailed", ["msg_agent", "msg_shell"]],
+    ["compact", ["msg_agent", "msg_shell"]],
+    ["quiet", ["msg_agent"]],
+    ["text-only", []],
+  ] as const)("shows background outcomes as their own rows where they finished: %s", (id, notices) => {
+    const step = (messageID: string, created: number) =>
+      ({
+        id: messageID,
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [storyTool(`${messageID}_read`, "read", "completed", {})],
+        time: { created, completed: created },
+      }) satisfies SessionMessageInfo
+
+    const source: SessionMessageInfo[] = [
+      { id: "msg_user", type: "user", text: "work", time: { created: 1 } },
+      step("msg_before", 2),
+      {
+        id: "msg_agent",
+        type: "synthetic",
+        text: "done",
+        description: "Map the inbox",
+        metadata: { source: "subagent", childID: "ses_child", agent: "explore", state: "completed" },
+        time: { created: 3 },
+      },
+      {
+        id: "msg_shell",
+        type: "synthetic",
+        text: "done",
+        description: "bun test",
+        metadata: { source: "shell", shellID: "sh_1", state: "completed", exit: 0 },
+        time: { created: 4 },
+      },
+      step("msg_after", 5),
+    ]
+
+    const rows = Timeline.constructSessionMessageRows(
+      source,
+      false,
+      { type: "idle" },
+      undefined,
+      false,
+      false,
+      undefined,
+      timelinePresets.find((preset) => preset.id === id)!.value,
+    ).rows
+
+    const keys = rows.map(TimelineRow.key)
+    expect(keys.filter((key) => key.startsWith("notice:"))).toEqual(notices.map((notice) => `notice:${notice}`))
+
+    if (id === "compact")
+      expect(keys).toEqual([
+        "user-message:msg_user",
+        "assistant-part:context:context:msg_before:msg_before_read",
+        "notice:msg_agent",
+        "notice:msg_shell",
+        "assistant-part:context:context:msg_after:msg_after_read",
+      ])
+  })
+
+  test.each([
+    ["grouped", "assistant-part:context:context:msg_a1:msg_a1:text:0"],
+    ["hidden", "assistant-part:context:context:msg_a1:tool_read"],
+  ] as const)("%s commentary keeps the answer of each turn", (placement, group) => {
+    const step = (id: string, content: SessionMessageAssistant["content"]) =>
+      ({
+        id,
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content,
+        time: { created: 2, completed: 3 },
+      }) satisfies SessionMessageInfo
+
+    const source = [
+      { id: "msg_user", type: "user", text: "fix", time: { created: 1 } },
+      step("msg_a1", [{ type: "text", text: "Checking." }, storyTool("tool_read", "read", "completed", {})]),
+      step("msg_a2", [
+        { type: "text", text: "Checks pass.", native: { phase: "commentary" } },
+        { type: "text", text: "Fixed." },
+      ]),
+      { id: "msg_stop", type: "user", text: "stop", time: { created: 4 } },
+      step("msg_a3", [{ type: "text", text: "Looking." }, storyTool("tool_grep", "grep", "completed", {})]),
+    ] satisfies SessionMessageInfo[]
+
+    const rows = Timeline.constructSessionMessageRows(
+      source,
+      false,
+      { type: "idle" },
+      undefined,
+      false,
+      false,
+      undefined,
+      { ...timelinePresets[2].value, commentary: { placement } },
+    ).rows
+
+    // The interrupted second turn has no answer, so its last commentary stays visible.
+    expect(rows.map(TimelineRow.key)).toEqual([
+      "user-message:msg_user",
+      group,
+      "assistant-part:part:part:msg_a2:msg_a2:text:1",
+      "turn-gap:msg_stop",
+      "user-message:msg_stop",
+      "assistant-part:part:part:msg_a3:msg_a3:text:0",
+      "assistant-part:context:context:msg_a3:tool_grep",
+    ])
+  })
+
+  test.each(["grouped", "hidden"] as const)("%s commentary keeps the answer of each run", (placement) => {
+    const runs = commentaryRuns()
+    const detail = { ...timelinePresets[2].value, commentary: { placement } }
+
+    const rows = (sessionMessages: SessionMessageInfo[], type: "idle" | "busy") =>
+      createTimelineProjection({ sessionMessages, status: { type }, timelineDetail: detail, reasoningMode: "compact" })
+        .rows
+
+    const groups = (rows: TimelineRow.TimelineRow[]) =>
+      rows.flatMap((row) => {
+        if (!Predicate.isTagged(row, "AssistantPart")) return []
+
+        if (row.group.type === "part") return [`part:${row.group.ref.partID}`]
+
+        return [`${row.group.type}:${row.group.refs.map((ref) => ref.partID).join("+")}`]
+      })
+
+    const complete = [
+      "part:reply:text:0",
+      ...[1, 2, 3].flatMap((index) => [
+        placement === "grouped"
+          ? `context:notice-${index}+work-${index}:text:0+tool-${index}`
+          : `context:notice-${index}+tool-${index}`,
+        `part:reply-${index}:text:0`,
+      ]),
+    ]
+
+    expect(groups(rows(runs.complete, "idle"))).toEqual(complete)
+    expect(groups(rows(runs.toolOnly, "busy"))).toEqual([...complete, "context:tool-only-notice+tool-only-call"])
+
+    const live = [
+      "part:prior:text:0",
+      placement === "grouped" ? "context:wake+working:text:0+running" : "context:wake+running",
+    ]
+
+    expect(groups(rows(runs.busy, "busy"))).toEqual(live)
+    expect(groups(rows(runs.failed, "busy"))).toEqual(live)
+
+    expect({
+      justClosed: groups(rows(runs.busy.slice(0, -2), "busy")),
+      beforeStep: groups(rows(runs.busy.slice(0, -1), "busy")),
+    }).toEqual({
+      justClosed: ["part:prior:text:0"],
+      beforeStep: ["part:prior:text:0", "context:wake"],
+    })
   })
 
   test("keeps assistant errors and retries before later notices", () => {
@@ -1055,6 +1220,48 @@ describe("current session timeline rows", () => {
     ])
   })
 
+  test.each([
+    {
+      name: "default",
+      grouped: false,
+      groups: [["context", "read", "grep"], ["part", "agent_1"], ["part", "agent_2"], ["context", "glob", "read_2"]],
+    },
+    { name: "opted in", grouped: true, groups: [["context", "read", "grep", "agent_1", "agent_2", "glob", "read_2"]] },
+  ])("gives each subagent its own row unless subagent grouping is enabled ($name)", (input) => {
+    const compact = timelinePresets.find((preset) => preset.id === "compact")!.value
+
+    const rows = Timeline.constructSessionMessageRows(
+      storyDocument([
+        storyTool("read", "read", "completed", { path: "src/a.ts" }),
+        storyTool("grep", "grep", "completed", { pattern: "agent" }),
+        storyTool("agent_1", "subagent", "completed", { agent: "explore", description: "Map the code" }),
+        storyTool("agent_2", "subagent", "completed", { agent: "general", description: "Check the tests" }),
+        storyTool("glob", "glob", "completed", { pattern: "*.ts" }),
+        storyTool("read_2", "read", "completed", { path: "src/b.ts" }),
+      ]).messages,
+      true,
+      { type: "idle" },
+      undefined,
+      false,
+      false,
+      undefined,
+      input.grouped ? { ...compact, subagents: { placement: "grouped" } } : compact,
+    ).rows
+
+    expect(
+      rows.flatMap((row) =>
+        !Predicate.isTagged(row, "AssistantPart")
+          ? []
+          : [
+              [
+                row.group.type,
+                ...(row.group.type === "part" ? [row.group.ref] : row.group.refs).map((ref) => ref.partID),
+              ],
+            ],
+      ),
+    ).toEqual(input.groups.map((group) => [...group]))
+  })
+
   test("merges adjacent separate reads into one read row split by other parts", () => {
     const rows = Timeline.constructSessionMessageRows(
       storyDocument([
@@ -1451,7 +1658,7 @@ describe("current session timeline rows", () => {
     )
   })
 
-  test("marks the free usage limit and its reset time, whichever message records the failure", () => {
+  test("marks the free and Go usage limits and their reset times, whichever message records the failure", () => {
     const error = { type: "provider.free-limit", message: "Free usage limit reached.", retryAfterMs: 60_000 }
     const user = { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } } satisfies SessionMessageInfo
 
@@ -1475,7 +1682,15 @@ describe("current session timeline rows", () => {
 
     const quota = [
       user,
-      { ...assistant, error: { type: "provider.quota", message: "Go usage limit exceeded", retryAfterMs: 60_000 } },
+      { ...assistant, error: { type: "provider.quota", message: "Credit limit exceeded.", retryAfterMs: 60_000 } },
+    ] satisfies SessionMessageInfo[]
+
+    const go = [
+      user,
+      {
+        ...assistant,
+        error: { type: "provider.go-limit", message: "Go usage limit reached.", retryAfterMs: 25 * 86_400_000 },
+      },
     ] satisfies SessionMessageInfo[]
 
     expect(Timeline.constructSessionMessageRows(step, true, { type: "idle" }).rows.at(-1)).toEqual(
@@ -1503,8 +1718,66 @@ describe("current session timeline rows", () => {
         kind: "free-limit",
       }),
     )
+    expect(Timeline.constructSessionMessageRows(go, true, { type: "idle" }).rows.at(-1)).toEqual(
+      new TimelineRow.Error({
+        userMessageID: "msg_user",
+        text: "Go usage limit reached.",
+        kind: "go-limit",
+        resetAt: 1_000 + 25 * 86_400_000,
+      }),
+    )
     expect(Timeline.constructSessionMessageRows(quota, true, { type: "idle" }).rows.at(-1)).toEqual(
-      new TimelineRow.Error({ userMessageID: "msg_user", text: "Go usage limit exceeded" }),
+      new TimelineRow.Error({ userMessageID: "msg_user", text: "Credit limit exceeded." }),
+    )
+  })
+
+  test("marks a Console budget refusal with the reset its envelope names", () => {
+    const user = { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } } satisfies SessionMessageInfo
+
+    const refused = (type: string, body?: string) => {
+      const error = { type, message: "Budget reached.", status: 429 }
+
+      return Timeline.constructSessionMessageRows(
+        [
+          user,
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { id: "claude-opus-5", providerID: "opencode" },
+            content: [],
+            finish: "error",
+            error: body ? { ...error, response: { body } } : error,
+            time: { created: 2, completed: 3 },
+          },
+        ],
+        true,
+        { type: "idle" },
+      ).rows.at(-1)
+    }
+
+    // Anthropic and OpenAI clients get Console's own envelope; Google clients get the reset in ErrorInfo's metadata.
+    expect(
+      refused(
+        "provider.model-budget-limit",
+        '{"type":"error","error":{"type":"BudgetLimitError","message":"A budget policy for this model has been reached."},"metadata":{"coverage":"models","resetsAt":"2026-11-01T00:00:00.000Z"}}',
+      ),
+    ).toEqual(
+      new TimelineRow.Error({
+        userMessageID: "msg_user",
+        text: "Budget reached.",
+        kind: "model-budget-limit",
+        resetAt: Date.UTC(2026, 10, 1),
+      }),
+    )
+    expect(
+      refused(
+        "provider.budget-limit",
+        '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Budget reached.","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"BudgetLimitError","domain":"opencode.ai","metadata":{"coverage":"all","resetsAt":"2026-11-01T00:00:00.000Z"}}]}}',
+      ),
+    ).toMatchObject({ kind: "budget-limit", resetAt: Date.UTC(2026, 10, 1) })
+    expect(refused("provider.budget-limit")).toEqual(
+      new TimelineRow.Error({ userMessageID: "msg_user", text: "Budget reached.", kind: "budget-limit" }),
     )
   })
 

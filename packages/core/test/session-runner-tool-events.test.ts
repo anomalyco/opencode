@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { eq } from "drizzle-orm"
-import { LLMEvent } from "@opencode/ai"
+import { LLMEvent } from "@opencode/ai/effect"
 import { Money } from "@opencode/schema/money"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
@@ -14,6 +14,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { Session } from "@opencode/core/session"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionHistory } from "@opencode/core/session/history"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Model } from "@opencode/core/model"
@@ -209,11 +210,10 @@ testEffect(
       .all()
     expect(events.filter((event) => event.type === "session.tool.success.2")).toHaveLength(1)
     expect(events.some((event) => event.type === "session.tool.failed.2")).toBe(false)
-    const message = yield* database.db
-      .select()
-      .from(SessionMessageTable)
-      .where(eq(SessionMessageTable.id, assistantMessageID))
-      .get()
+    const [message] = yield* SessionHistory.withParts(
+      database.db,
+      yield* database.db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, assistantMessageID)).all(),
+    )
     expect(message?.data).toMatchObject({
       content: [{ type: "tool", id: call.id, executed: true, state: { status: "completed" } }],
     })
@@ -399,7 +399,7 @@ it.effect("publishes batched deltas before the next block starts", () =>
     const types = () =>
       published
         .map((event) => event.type)
-        .filter((type) => type !== "session.step.started.1" && type !== "session.step.streamed")
+        .filter((type) => type !== "session.step.started.1" && type !== "session.step.first-token.1")
     yield* Effect.forEach(
       [
         LLMEvent.reasoningStart({ id: "reasoning" }),
@@ -418,6 +418,8 @@ it.effect("publishes batched deltas before the next block starts", () =>
       "session.text.delta",
       "session.tool.input.started.1",
     ])
+    // The first generated token is recorded once, before any of the blocks it belongs to.
+    expect(published.filter((event) => event.type === "session.step.first-token.1")).toHaveLength(1)
 
     // Blocks stay open: later chunks still batch, and nothing is published twice.
     yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " more" }))

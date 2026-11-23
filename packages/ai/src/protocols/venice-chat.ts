@@ -1,6 +1,12 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import { AIError, LLMEvent, type LanguageModelCompatibility, type LLMRequest } from "../schema/index.js"
+import {
+  AIError,
+  LLMEvent,
+  type LanguageModelCompatibility,
+  type LLMRequest,
+  type Capabilities,
+} from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -60,7 +66,7 @@ const ToolCall = Schema.Struct({
 const Assistant = Schema.StructWithRest(
   Schema.Struct({
     ...OpenAIChat.OpenAIChatMessage.cases.assistant.schema.fields,
-    tool_calls: optionalArray(ToolCall),
+    tool_calls: optionalArray(Schema.Union([ToolCall, OpenAIChat.OpenAIChatAssistantCustomToolCall])),
     thought_signature: Schema.optional(Schema.String),
   }),
   [JsonObject],
@@ -188,7 +194,7 @@ const fromRequest = Effect.fn("VeniceChat.fromRequest")(function* (request: LLMR
   })
   return {
     ...body,
-    max_completion_tokens: options.maxCompletionTokens ?? options.maxTokens ?? request.generation?.maxTokens,
+    max_completion_tokens: options.maxCompletionTokens ?? options.maxTokens ?? request.maxTokens,
     reasoning_effort: undefined,
     reasoning:
       options.reasoningEffort === undefined
@@ -203,10 +209,10 @@ const fromRequest = Effect.fn("VeniceChat.fromRequest")(function* (request: LLMR
         .filter(([, value]) => value !== undefined)
         .map(([key, value]) => [key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), value]),
     ),
-    prompt_cache_retention: options.promptCacheRetention,
+    prompt_cache_retention: options.promptCacheRetention ?? body.prompt_cache_retention,
     parallel_tool_calls: options.parallelToolCalls,
     min_p: options.minP,
-    top_k: request.generation?.topK,
+    top_k: request.topK,
     repetition_penalty: options.repetitionPenalty,
     stop_token_ids: options.stopTokenIds,
     logprobs: options.logprobs,
@@ -325,8 +331,9 @@ const onHalt = Effect.fn("VeniceChat.onHalt")(function* (state: State) {
 
 export const compatibility = {
   maxTokensField: "max_completion_tokens",
-  supportsPromptCacheKey: true,
 } satisfies LanguageModelCompatibility
+
+export const capabilities = { promptCacheKey: true } satisfies Capabilities
 
 export const protocol = Protocol.make({
   id: "venice-chat",

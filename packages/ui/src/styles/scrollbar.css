@@ -1,0 +1,79 @@
+/*
+  Shared scrollbar for every native scroll container, so a plain `overflow: auto` matches ScrollView's thumb:
+  a 4px pill that shows while the container is hovered and darkens while it is hovered or dragged.
+  Only pointer devices get it; touch devices keep their platform overlay scrollbars.
+
+  Chromium ignores the ::-webkit-scrollbar parts on any element that sets `scrollbar-width` or
+  `scrollbar-color`, so set those only to hide a scrollbar (`scrollbar-width: none`), never to restyle one.
+*/
+
+@property --scrollbar-hover {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* The width a scrollbar takes from layout. Containers that reserve it with `scrollbar-gutter: stable` subtract it
+     from their padding, so content keeps its width; it stays 0 where scrollbars overlay the content. */
+  @supports selector(::-webkit-scrollbar) {
+    :root {
+      --scrollbar-size: 8px;
+    }
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background-color: transparent;
+  }
+
+  ::-webkit-scrollbar-track:vertical {
+    margin: 4px 0;
+  }
+
+  ::-webkit-scrollbar-track:horizontal {
+    margin: 0 4px;
+  }
+
+  /* Matches ScrollView's minimum thumb length, so a long document keeps a thumb you can grab. */
+  ::-webkit-scrollbar-thumb {
+    min-width: 32px;
+    min-height: 32px;
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background-color: transparent;
+    background-clip: padding-box;
+  }
+
+  /* Chromium re-resolves scrollbar parts only when the owning element's style changes, and a
+     `:hover::-webkit-scrollbar-thumb` rule alone does not change it. This non-inherited property
+     does, without restyling the subtree. */
+  :hover {
+    --scrollbar-hover: 1;
+  }
+
+  :hover::-webkit-scrollbar-thumb {
+    background-color: var(--v2-border-border-muted);
+  }
+
+  ::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--v2-border-border-strong);
+  }
+
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+
+    :hover {
+      scrollbar-color: var(--v2-border-border-muted) transparent;
+    }
+  }
+}

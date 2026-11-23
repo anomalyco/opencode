@@ -12,7 +12,7 @@
 }
 
 [data-component="progress-circle"][data-appearance="indicator"] [data-slot="progress-circle-background"] {
-  stroke: var(--progress-circle-background, var(--border-weak-base));
+  stroke: var(--progress-circle-background, var(--v2-background-bg-layer-04));
 }
 
 [data-component="progress-circle"][data-appearance="indicator"] [data-slot="progress-circle-background-overlay"] {
@@ -20,7 +20,7 @@
 }
 
 [data-component="progress-circle"][data-appearance="indicator"] [data-slot="progress-circle-progress"] {
-  stroke: var(--progress-circle-progress, var(--border-active));
+  stroke: var(--progress-circle-progress, var(--v2-icon-icon-base));
 }
 
 [data-component="progress-circle"] [data-slot="progress-circle-progress"] {

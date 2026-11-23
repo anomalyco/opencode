@@ -12,8 +12,8 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
   const [thumbTrack, setThumbTrack] = createSignal<HTMLDivElement>()
   const [hoverTarget, setHoverTarget] = createSignal<HTMLElement>()
 
-  const [state, setState] = createStore({
-    titleOpacity: {} as Partial<Record<HomeSessionGroup["id"], number>>,
+  const [state, setState] = createStore<{ titleOpacity: Partial<Record<HomeSessionGroup["id"], number>> }>({
+    titleOpacity: {},
   })
 
   const headerRefs = new Map<HomeSessionGroup["id"], HTMLDivElement>()
@@ -68,16 +68,30 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
       .map((group) => headerRefs.get(group.id))
       .find((element) => element !== undefined)
 
-    if (header && typeof getComputedStyle === "function") {
+    if (header) {
       const top = Number.parseFloat(getComputedStyle(header).top)
 
       if (Number.isFinite(top)) stickyTop = top
     }
 
+    // offsetTop counts from the headers' positioned list, below the sticky search; scrollTop counts from the top of
+    // the scroll content. The list never sticks, so measure it once to put both in the scroll content's frame.
+    const parent = header?.offsetParent
+
+    const listTop =
+      parent instanceof HTMLElement
+        ? parent.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop
+        : 0
+
+    // A stuck header's offsetTop includes its sticky shift, so it depends on the scroll position at measurement time.
+    // The group's rows right after it never stick: their top minus the header's height is the header's resting place.
     groups().forEach((group) => {
       const element = headerRefs.get(group.id)
 
-      if (element) headerOffsets.set(group.id, element.offsetTop)
+      if (!element) return
+      const rows = element.nextElementSibling
+      const top = rows instanceof HTMLElement ? rows.offsetTop - element.offsetHeight : element.offsetTop
+      headerOffsets.set(group.id, listTop + top)
     })
     update(viewport.scrollTop)
   }
@@ -143,12 +157,6 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
       },
       update,
       containWheel,
-      containOuterWheel: (event: WheelEvent) => {
-        if (!viewport) return
-
-        if (event.target instanceof Node && viewport.contains(event.target)) return
-        containWheel(event)
-      },
     },
     header: {
       setContent: (element: HTMLDivElement) => {
@@ -157,6 +165,10 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
         queuePositionUpdate()
       },
       setHeader: (id: HomeSessionGroup["id"], element: HTMLDivElement) => {
+        // Header elements are reused by position, so one can move to another group when the groups change.
+        headerRefs.forEach((registered, key) => {
+          if (registered === element && key !== id) headerRefs.delete(key)
+        })
         headerRefs.set(id, element)
         queuePositionUpdate()
       },

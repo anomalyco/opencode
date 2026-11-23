@@ -8,11 +8,8 @@ import { Failed, NotFound, WrongKind, type FileInfo, type FilesImpl, type FileTy
 /**
  * The host filesystem binding. Deliberately raw node:fs rather than effect's
  * FileSystem service or FSUtil: the contract needs lstat semantics (stat
- * reports "symlink") and typed directory entries, and effect's node
- * FileSystem provides neither — its stat always follows symlinks and
- * readDirectory returns names only. FSUtil hits the same gap and its
- * readDirectoryEntries already bypasses to raw node readdir internally.
- * Nothing above the environment seam touches node:fs.
+ * reports "symlink"), and effect's node FileSystem stat always follows
+ * symlinks. Nothing above the environment seam touches node:fs.
  */
 export const makeLocalDriver = (spawner: ChildProcessSpawner["Service"]): Driver => {
   const overrides: FilesImpl = {
@@ -67,6 +64,7 @@ export const makeLocalDriver = (spawner: ChildProcessSpawner["Service"]): Driver
         yield* attempt(from, () => fs.rename(from, destination))
       }),
     mkdir: (value) => attempt(value, () => fs.mkdir(value, { recursive: true }).then(() => undefined)),
+    append: (value, bytes) => attempt(value, () => fs.appendFile(value, bytes)),
   }
 
   return { spawner, overrides }

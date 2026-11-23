@@ -1,21 +1,14 @@
-import { execFile } from "node:child_process"
-import { readdir, stat } from "node:fs/promises"
+import { copyFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { promisify } from "node:util"
 
-import type { CustomMacSignOptions } from "app-builder-lib"
 import { Arch, type Configuration } from "electron-builder"
 import { NativeArch } from "../../script/native-arch"
-import { CLI_BINARIES, getCurrentCli, nodePtyPackage } from "./scripts/utils"
-
-const execFileAsync = promisify(execFile)
+import { DESKTOP_NATIVE_ENGLISH } from "@opencode/app/i18n/desktop-native"
+import { CLI_BINARIES, getCurrentCli, nodePtyPackage } from "./script/utils"
+import { previewBinding, verifyPreviewBinding } from "./script/preview-binding"
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
-
-const rootDir = path.resolve(packageDir, "../..")
-
-const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
 // The Electron 42 packaging update briefly installed Linux launchers/icons under
 // "opencode-desktop". Keep that hidden desktop entry around so existing GNOME/KDE
@@ -34,31 +27,9 @@ const rpmNoBuildIdLinksFpm = "--rpm-rpmbuild-define=_build_id_links none"
 const metainfoFpm = (appId: string) =>
   `${path.join(packageDir, "resources", `${appId}.metainfo.xml`)}=/usr/share/metainfo/${appId}.metainfo.xml`
 
-async function signWindows(configuration: { path: string }) {
-  if (process.platform !== "win32") return
-
-  if (process.env.GITHUB_ACTIONS !== "true") return
-
-  await execFileAsync(
-    "pwsh",
-    ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", signScript, configuration.path],
-    { cwd: rootDir, windowsHide: true },
-  )
-}
-
-function macSignOptions(options: CustomMacSignOptions): CustomMacSignOptions {
-  return {
-    ...options,
-    optionsForFile: (file) => {
-      const defaults = options.optionsForFile?.(file)
-
-      if (file !== path.join(options.app, "Contents/Resources/opencode-cli")) return defaults ?? {}
-
-      // The Bun CLI loads bun-pty's native library; Electron and its helpers do not need this exception.
-      return { ...defaults, entitlements: path.join(packageDir, "resources/entitlements.cli.plist") }
-    },
-  }
-}
+// Dev and beta package every commit, so they trade about 5% (deb) and 17% (rpm) larger files for xz -1, which
+// compresses the payload about 3x faster than the deb default (-3) and 5x faster than the rpm default (-9).
+const previewCompressionFpm = (target: "deb" | "rpm") => [`--${target}-compression-level`, "1"]
 
 function resolveChannel() {
   const raw = process.env.OPENCODE_CHANNEL
@@ -91,6 +62,8 @@ function linuxExecutableName(appId: string): string {
 
 const getBase = (appId: string): Configuration => {
   const target = getCurrentCli()
+  const binding = previewBinding(target.os, target.cpu)
+  const desktopName = `${appId}.desktop`
 
   return {
     artifactName: "opencode-desktop-${os}-${arch}.${ext}",
@@ -103,13 +76,15 @@ const getBase = (appId: string): Configuration => {
     // "ai.opencode.desktop.desktop".
     // https://developer.gnome.org/documentation/guidelines/maintainer/integrating.html
     // https://www.electron.build/docs/linux/
-    extraMetadata: {
-      desktopName: `${appId}.desktop`,
-    },
+    // Release builds take their version from OPENCODE_VERSION instead of rewriting package.json.
+    extraMetadata: process.env.OPENCODE_VERSION
+      ? { desktopName, version: process.env.OPENCODE_VERSION }
+      : { desktopName },
     files: [
       "out/**/*",
       "resources/**/*",
       "!resources/opencode-cli*",
+      `!**/node_modules/@yuuang/ffi-rs-!(${binding}){,/**/*}`,
       // Keep only the target platform's node-pty prebuild when cross-packaging with --cpu=*.
       ...CLI_BINARIES.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
         (item) => `!**/node_modules/@lydell/node-pty-${item.os}-${item.cpu}{,/**/*}`,
@@ -129,6 +104,7 @@ const getBase = (appId: string): Configuration => {
       "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
       "!**/node_modules/js-yaml/bin{,/**/*}",
     ],
+    asarUnpack: ["**/node_modules/ffi-rs/**/*", `**/node_modules/@yuuang/ffi-rs-${binding}/**/*`],
     extraResources: [
       {
         from: "resources/",
@@ -136,14 +112,32 @@ const getBase = (appId: string): Configuration => {
         filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
       },
     ],
+    // Electron stores cookies in plain text by default. The browser pane keeps sign-ins, so encrypt them with the OS
+    // key store (Keychain, DPAPI, libsecret or kwallet). This is one-way: turning it off again loses every cookie.
+    // https://www.electronjs.org/docs/latest/tutorial/fuses#cookieencryption
+    // Flipping a fuse breaks the macOS signature. A build without a signing identity is not signed again, so re-sign it
+    // ad hoc or Apple Silicon refuses to launch it. A signed build is signed again after the fuses anyway.
+    electronFuses: {
+      enableCookieEncryption: true,
+      // Started as plain Node (ELECTRON_RUN_AS_NODE) or with an inspector, the signed binary would run any code under
+      // the app's identity, which macOS lets read the app's Keychain key and so every cookie. Nothing runs the app as
+      // Node: the CLI is its own executable. Beta keeps --inspect, as it keeps its on-request debugging port, for the
+      // startup benchmark's Node timings (perf/startup.bench.ts).
+      runAsNode: false,
+      enableNodeCliInspectArguments: resolveChannel() === "beta",
+      // NODE_OPTIONS stays: a packaged app already ignores every option but --http-parser and --max-http-header-size,
+      // and turning the fuse off would also strip NODE_EXTRA_CA_CERTS from the environment the CLI and its terminals get.
+      resetAdHocDarwinSignature: true,
+    },
     afterPack: async (context) => {
       const arch = Arch[context.arch]
 
-      // The --arm64 flag picks Electron while OPENCODE_CLI_TARGET picks the CLI and node-pty, so they can disagree.
+      // The --arm64 flag picks Electron while OPENCODE_TARGET picks the CLI and node-pty, so they can disagree.
       if (arch !== "x64" && arch !== "arm64") throw new Error(`Unsupported desktop architecture: ${arch}`)
 
       if (arch !== target.cpu) throw new Error(`Packaging ${arch} Electron with the ${target.target} CLI`)
       const resources = context.packager.getResourcesDir(context.appOutDir)
+      await verifyPreviewBinding(resources, context.electronPlatformName, arch)
       const cli = path.join(resources, context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli")
 
       const file = await stat(cli)
@@ -153,6 +147,11 @@ const getBase = (appId: string): Configuration => {
       const version = path.join(path.dirname(cli), "opencode-cli.version")
 
       if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
+
+      // With an Icon Composer mac.icon, electron-builder bundles the ICNS that actool generates as the pre-macOS 26
+      // fallback. That one tops out at 256px and draws a light ring around the squircle, so ship ours instead.
+      if (context.electronPlatformName === "darwin")
+        await copyFile(path.join(packageDir, "resources/icons/icon.icns"), path.join(resources, "icon.icns"))
 
       if (context.electronPlatformName !== "win32") return
 
@@ -183,17 +182,18 @@ const getBase = (appId: string): Configuration => {
       category: "public.app-category.developer-tools",
       icon: `resources/icons/icon.icns`,
       extendInfo: {
+        NSMicrophoneUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.microphoneUsage"],
+        // Sites in the browser pane may ask for the camera; without this key macOS ends the app when it asks.
+        NSCameraUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.cameraUsage"],
+        // The CLI server and its terminals run as children of the app, so macOS asks for their access to
+        // these protected locations in the app's name. The prompt shows the description (#56479).
+        NSDocumentsFolderUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.documentsFolderUsage"],
+        NSDesktopFolderUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.desktopFolderUsage"],
+        NSDownloadsFolderUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.downloadsFolderUsage"],
+        NSNetworkVolumesUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.networkVolumesUsage"],
+        NSRemovableVolumesUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.removableVolumesUsage"],
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
       },
-      hardenedRuntime: true,
-      gatekeeperAssess: false,
-      entitlements: "resources/entitlements.plist",
-      entitlementsInherit: "resources/entitlements.plist",
-      sign: async (options) => {
-        const { sign } = await import("app-builder-lib/out/codeSign/macCodeSign")
-        await sign(macSignOptions(options))
-      },
-      notarize: true,
       target: ["dmg", "zip"],
     },
     protocols: {
@@ -202,9 +202,6 @@ const getBase = (appId: string): Configuration => {
     },
     win: {
       icon: `resources/icons/icon.ico`,
-      signtoolOptions: {
-        sign: signWindows,
-      },
       target: ["nsis"],
       verifyUpdateCodeSignature: false,
     },
@@ -246,8 +243,16 @@ export function getConfig() {
         ...base,
         appId,
         productName: "OpenCode Dev",
-        deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-dev", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
+        publish: {
+          provider: "generic",
+          url: "https://opencode.ai/update/api/dev/desktop/opencode/",
+          channel: "latest",
+        },
+        deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
+        rpm: {
+          packageName: "opencode-dev",
+          fpm: [rpmNoBuildIdLinksFpm, ...previewCompressionFpm("rpm"), metainfoFpm(appId)],
+        },
       }
     }
 
@@ -262,8 +267,11 @@ export function getConfig() {
           url: "https://opencode.ai/update/api/beta/desktop/opencode/",
           channel: "latest",
         },
-        deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-beta", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
+        deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
+        rpm: {
+          packageName: "opencode-beta",
+          fpm: [rpmNoBuildIdLinksFpm, ...previewCompressionFpm("rpm"), metainfoFpm(appId)],
+        },
       }
     }
 
@@ -273,6 +281,11 @@ export function getConfig() {
         appId,
         productName: "OpenCode",
         protocols: { name: "OpenCode", schemes: ["opencode"] },
+        // An Icon Composer package compiles to Assets.car, which macOS 26 and later draw the app icon from
+        // (Dock, Finder, system dialogs and the system icon styles). Older macOS keeps using the ICNS.
+        mac: { ...base.mac, icon: "resources/icons/icon.icon" },
+        // The DMG volume icon would otherwise use the same actool-generated ICNS.
+        dmg: { icon: "resources/icons/icon.icns" },
         publish: {
           provider: "generic",
           url: "https://opencode.ai/update/api/latest/desktop/opencode/",

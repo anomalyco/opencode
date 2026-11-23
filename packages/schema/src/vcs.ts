@@ -28,6 +28,10 @@ export interface Base extends Schema.Schema.Type<typeof Base> {}
 export const Mode = Schema.Literals(["working", "branch", "committed"]).annotate({ identifier: "Vcs.Mode" })
 export type Mode = typeof Mode.Type
 
+/** How a diff lists untracked files: one by one, or each untracked folder as one `dir/` entry. */
+export const Untracked = Schema.Literals(["files", "folders"]).annotate({ identifier: "Vcs.Untracked" })
+export type Untracked = typeof Untracked.Type
+
 export const FileStatus = Schema.Struct({
   file: Schema.String,
   additions: NonNegativeInt,

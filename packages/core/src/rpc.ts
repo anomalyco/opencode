@@ -59,7 +59,7 @@ const layer = Layer.effect(
       const events = new Map(
         Object.entries(definition.events).map(([name, event]) => [
           name,
-          { event, definition: eventDefinition(definition, name) },
+          { event, definition: eventDefinition(eventType(definition, name)) },
         ]),
       )
       definitions.set(definition, events)
@@ -192,8 +192,7 @@ function eventType<const D extends Rpc.Definition, const Name extends keyof D["e
   return `rpc.${definition.id}.${name}`
 }
 
-function eventDefinition(definition: Rpc.Definition, name: string): Event.Definition {
-  const type = eventType(definition, name)
+export function eventDefinition(type: `rpc.${string}`): Event.Definition {
   const data = EventData
   return Schema.Struct({ ...fields, type: Schema.Literal(type), data }).pipe(
     statics(() => ({ type, durability: "ephemeral" as const, durable: undefined, data })),

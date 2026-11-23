@@ -1,4 +1,5 @@
-import { createMemo, createResource, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount, untrack, type Accessor } from "solid-js"
+import type { ConfigShellOption } from "@opencode/client/promise"
 import type { ColorScheme } from "@opencode/ui/theme/context"
 import { useTheme } from "@opencode/ui/theme/context"
 import {
@@ -8,32 +9,104 @@ import {
   sansDefault,
   sansFontFamily,
   sansInput,
+  type ReduceMotion,
   terminalDefault,
   terminalFontFamily,
   terminalInput,
   useSettings,
 } from "@/settings/model"
+import { usePlatform } from "@/runtime/platform/platform"
+import { desktopZoomLevels, type DesktopZoomLevel } from "@/shell/commands/desktop-menu"
 import { playSoundById, SOUND_OPTIONS } from "@/shell/notifications/sound"
 import { createSoundPreviewController } from "./behavior"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
+import { errorMessage } from "@/shell/layout/helpers"
+import {
+  createOptimisticSettingState,
+  selectSettingMeta,
+  selectSettingValue,
+  transitionOptimisticSetting,
+  type OptimisticSettingEffect,
+  type OptimisticSettingEvent,
+  type SettingWriteFailure,
+} from "./machine"
 
-export { createShellOptions, createSoundPreviewController } from "./behavior"
+/**
+ * Drives one optimistically written setting. Writes outlive the owner on purpose: a queued choice still reaches the
+ * source after Settings closes, and a failure still reports.
+ */
+export function createOptimisticSetting<T, M, S>(options: {
+  /** `undefined` while no source can take the setting; another value reads it again. */
+  source: Accessor<S | undefined>
+  initial: T
+  initialMeta: M
+  load: (source: S) => Promise<{ value: T; meta: M }>
+  write: (value: T, source: S) => Promise<void> | void
+  onError?: (failure: SettingWriteFailure) => void
+}) {
+  const [state, setState] = createSignal(createOptimisticSettingState<T, M, S>(options.initial, options.initialMeta))
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
 
-export type { ShellOption, ShellSelectOption } from "./behavior"
+  const dispatch = (event: OptimisticSettingEvent<T, M, S>) =>
+    untrack(() => {
+      const previous = state()
+      const next = transitionOptimisticSetting(previous, event)
+
+      if (next.state !== previous) setState(next.state)
+      next.effects.forEach(run)
+    })
+
+  const settle = (attempt: number, event: OptimisticSettingEvent<T, M, S>) => {
+    clearTimeout(timers.get(attempt))
+    timers.delete(attempt)
+    dispatch(event)
+  }
+
+  function run(effect: OptimisticSettingEffect<T, S>) {
+    if (effect.type === "notify.error") return options.onError?.(effect.failure)
+
+    const attempt = effect.attempt
+
+    if (effect.type === "load") {
+      void Promise.try(() => options.load(effect.source)).then(
+        (result) => dispatch({ type: "load.succeeded", attempt, value: result.value, meta: result.meta }),
+        () => dispatch({ type: "load.failed", attempt }),
+      )
+
+      return
+    }
+
+    timers.set(
+      attempt,
+      setTimeout(() => settle(attempt, { type: "write.timed-out", attempt }), effect.timeoutMs),
+    )
+    void Promise.try(() => options.write(effect.value, effect.source)).then(
+      () => settle(attempt, { type: "write.succeeded", attempt }),
+      (cause) => settle(attempt, { type: "write.failed", attempt, message: errorMessage(cause, "") }),
+    )
+  }
+
+  createEffect(() => dispatch({ type: "source.synced", source: options.source() }))
+
+  return {
+    value: () => selectSettingValue(state()),
+    meta: () => selectSettingMeta(state()),
+    select: (value: T) => dispatch({ type: "write.requested", value }),
+  }
+}
 
 export function createServerShellController(server: Accessor<ServerConnection.Any>) {
   const language = useLanguage()
-  const serverCtx = useServerCtx(server)
-  const source = () => ServerConnection.key(server())
 
-  const [state, actions] = createResource(
-    source,
-    async () => {
-      const context = serverCtx()
-
+  // Reads again for the controller a server's new credentials start; a server without one keeps the last value.
+  const setting = createOptimisticSetting({
+    source: useServerCtx(server),
+    initial: "",
+    initialMeta: Array.of<ConfigShellOption>(),
+    load: async (context) => {
       const [entries, shells] = await Promise.all([
         context.sdk.api.config.get().catch(() => []),
         context.sdk.api.config.shells().catch(() => []),
@@ -43,38 +116,38 @@ export function createServerShellController(server: Accessor<ServerConnection.An
       const global = boundary === -1 ? entries : entries.slice(0, boundary)
 
       return {
-        shells,
-        shell: global
-          .flatMap((entry) => (entry.type === "document" && entry.info.shell !== undefined ? [entry.info.shell] : []))
-          .at(-1),
+        meta: shells,
+        value:
+          global
+            .flatMap((entry) => (entry.type === "document" && entry.info.shell !== undefined ? [entry.info.shell] : []))
+            .at(-1) ?? "",
       }
     },
-    { initialValue: { shells: [], shell: undefined } },
-  )
+    write: async (value, context) => {
+      await context.sdk.api.experimental.config.update({ shell: value || null })
+    },
+    onError: (failure) =>
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description:
+          failure.kind === "timeout"
+            ? language.t("home.sessions.load.timeout")
+            : failure.message || language.t("common.requestFailed"),
+      }),
+  })
 
   return {
-    shells: () => state.latest.shells,
-    current: () => state.latest.shell ?? "",
-    select: (value: string) => {
-      if (value === (state.latest.shell ?? "")) return
-      const previous = state.latest
-      actions.mutate({ ...previous, shell: value || undefined })
-      void serverCtx()
-        .sdk.api.config.update({ shell: value || null })
-        .catch((error: unknown) => {
-          actions.mutate(previous)
-          showToast({
-            variant: "error",
-            title: language.t("common.requestFailed"),
-            description: error instanceof Error ? error.message : language.t("common.requestFailed"),
-          })
-        })
-    },
+    shells: setting.meta,
+    current: setting.value,
+    select: setting.select,
   }
 }
 
 export function createAppearanceSettingsController() {
   const settings = useSettings()
+  const platform = usePlatform()
+  const language = useLanguage()
   const theme = useTheme()
   const themes = createMemo(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
@@ -89,6 +162,17 @@ export function createAppearanceSettingsController() {
       options: themes,
       current: createMemo(() => themes().find((option) => option.id === theme.themeId())),
       select: (option: { id: string } | null) => option && theme.setTheme(option.id),
+    },
+    zoom: {
+      available: () => platform.zoomLevel !== undefined,
+      options: [...desktopZoomLevels],
+      current: () => platform.zoomLevel?.() ?? 1,
+      label: (level: DesktopZoomLevel) => new Intl.NumberFormat(language.intl(), { style: "percent" }).format(level),
+      select: (level: DesktopZoomLevel) => void platform.setZoomLevel?.(level),
+    },
+    reduceMotion: {
+      current: settings.appearance.reduceMotion,
+      select: (value: ReduceMotion) => settings.appearance.setReduceMotion(value),
     },
     fonts: {
       ui: createMemo(() => ({
@@ -164,6 +248,12 @@ export function createSoundSettingsController() {
       settings.sounds.permissions,
       (value) => settings.sounds.setPermissionsEnabled(value),
       (id) => settings.sounds.setPermissions(id),
+    ),
+    questions: channel(
+      settings.sounds.questionsEnabled,
+      settings.sounds.questions,
+      (value) => settings.sounds.setQuestionsEnabled(value),
+      (id) => settings.sounds.setQuestions(id),
     ),
     errors: channel(
       settings.sounds.errorsEnabled,

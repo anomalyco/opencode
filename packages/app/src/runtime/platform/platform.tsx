@@ -1,9 +1,9 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
-import type { DesktopMenuAction } from "@/shell/commands/desktop-menu"
+import type { DesktopMenuAction, DesktopZoomLevel } from "@/shell/commands/desktop-menu"
 import type { DraftStore } from "@/runtime/persistence/drafts"
-import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
+import type { Bridge } from "@opencode/plugin/gui/host"
 
 type PickerPaths = string | string[] | null
 
@@ -16,6 +16,8 @@ type OpenAttachmentPickerOptions = {
   extensions?: string[]
   defaultPath?: string
 }
+
+type OpenFilePathPickerOptions = { title?: string; multiple?: boolean; extensions?: string[] }
 
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 
@@ -32,6 +34,8 @@ export type FatalRendererErrorLog = {
 }
 
 type PlatformBase = {
+  requestMicrophone?(): Promise<boolean>
+  setVoiceCallActive?(active: boolean): Promise<void>
   /** App version */
   version?: string
 
@@ -44,17 +48,28 @@ type PlatformBase = {
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
 
-  /** Open a local file URL in its default app (desktop only) */
-  openLocalFile?(url: string): void
-
   /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
   revealPath?(path: string): Promise<boolean>
 
   /** Restart the app  */
   restart(): Promise<void>
 
-  /** Send a system notification */
-  notify(title: string, description?: string, onClick?: () => void): Promise<void>
+  /**
+   * Send a system notification. `options.tag` names it so a later one with the same tag replaces it and
+   * `dismissNotification` can take it back; `options.detail` is a second line saying what it is about.
+   */
+  notify(
+    title: string,
+    description?: string,
+    onClick?: () => void,
+    options?: { tag?: string; detail?: string },
+  ): Promise<void>
+
+  /** Take back the system notification sent with this tag, when it is still shown (desktop only) */
+  dismissNotification?(tag: string): void
+
+  /** Draw the user to a window in the background, as a flashing taskbar button on Windows (desktop only) */
+  requestAttention?(): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?<Value>(
@@ -62,11 +77,29 @@ type PlatformBase = {
     onFile: (file: File) => Promise<Value>,
   ): Promise<void>
 
+  /** Open a native file picker and return the selected paths without reading the files (desktop only) */
+  openFilePathPickerDialog?(opts: OpenFilePathPickerOptions): Promise<string[] | null>
+
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
 
+  /**
+   * Start a system drag of a local file, so it drops into other apps as the file itself (Windows desktop only).
+   * Resolves once the drag ends; false when none started.
+   */
+  startFileDrag?(path: string): Promise<boolean>
+
+  /**
+   * Observe `opencode://` links opened with the app (desktop only). Links that arrived before the first listener
+   * are delivered to it at once.
+   */
+  onDeepLinks?(listener: (urls: string[]) => void): () => void
+
   /** Observe native drag cancellation that does not reach the renderer event loop. */
   onDragCancel?(callback: () => void): () => void
+
+  /** Observe the machine waking from sleep, when server event streams may be dead without knowing it (desktop only) */
+  onSystemResume?(callback: () => void): () => void
 
   /** Open a native save file dialog and write content to the selected path (desktop only) */
   saveFile?(opts: SaveFilePickerOptions, content: string): Promise<boolean>
@@ -83,14 +116,29 @@ type PlatformBase = {
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
 
+  /** Saved interface zoom level; a pinch can move `webviewZoom` off it (desktop only) */
+  zoomLevel?: Accessor<DesktopZoomLevel>
+
+  /** Save an interface zoom level and apply it to every window (desktop only) */
+  setZoomLevel?(level: DesktopZoomLevel): Promise<void>
+
   /** Whether the native desktop window is fullscreen */
   windowFullscreen?: Accessor<boolean>
+
+  /** Move the native macOS traffic lights' top-left corner, in window points (desktop only) */
+  setTrafficLightsPosition?(position: { x: number; y: number }): Promise<void>
 
   /** Get whether native pinch/Ctrl-scroll zoom gestures are enabled (desktop only) */
   getPinchZoomEnabled?(): Promise<boolean> | boolean
 
   /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
   setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
+
+  /** Get whether the native spellchecker underlines misspelled words (desktop only) */
+  getSpellcheckEnabled?(): Promise<boolean>
+
+  /** Turn the native spellchecker on or off (desktop only) */
+  setSpellcheckEnabled?(enabled: boolean): Promise<void>
 
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
@@ -113,8 +161,8 @@ type PlatformBase = {
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
 
-  /** GUI extension bridge to the main-process extension host (desktop only). */
-  extensions?: Bridge
+  /** GUI plugin bridge to the main-process plugin host (desktop only). */
+  plugins?: Bridge
 }
 
 export type Platform = PlatformBase &

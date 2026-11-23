@@ -29,6 +29,10 @@
     line-height: 1em;
     overflow: hidden;
     vertical-align: baseline;
+  }
+
+  /* The fade softens a roll; at rest it would dim the edges of the digit. */
+  [data-slot="animated-number-digit"][data-animating="true"] {
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0%,
@@ -88,7 +92,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-component="animated-number"] [data-slot="animated-number-value"][data-resizing] {
     transition-duration: 0ms;
   }

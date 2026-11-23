@@ -1,0 +1,7 @@
+[data-component="terminal-quote"] {
+  background-color: var(--v2-background-bg-base);
+}
+
+[data-color-scheme="dark"] [data-component="terminal-quote"] {
+  background-color: var(--v2-background-bg-layer-01);
+}

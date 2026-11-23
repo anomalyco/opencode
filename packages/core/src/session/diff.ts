@@ -1,6 +1,6 @@
 export * as SessionDiff from "./diff.js"
 
-import { and, asc, eq, gt, inArray, lt, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm"
 import { Context, Effect, Schema } from "effect"
 import { Location } from "@opencode/schema/location"
 import { Database } from "../database/database.js"
@@ -48,32 +48,43 @@ export const turn = Effect.fn("SessionDiff.turn")(function* (
   },
 ) {
   const sessionID = input.session.id
-  const rows = yield* db
-    .select({ id: SessionMessageTable.id, type: SessionMessageTable.type, seq: SessionMessageTable.seq })
-    .from(SessionMessageTable)
-    .where(
-      and(
-        eq(SessionMessageTable.session_id, sessionID),
-        or(
-          inArray(SessionMessageTable.type, ["user", "idle"]),
-          input.from ? eq(SessionMessageTable.id, input.from) : undefined,
-          input.to ? eq(SessionMessageTable.id, input.to) : undefined,
-        ),
-      ),
-    )
-    .orderBy(asc(SessionMessageTable.seq))
-    .all()
-    .pipe(Effect.orDie)
-  const users = rows.filter((row) => row.type === "user")
-  const markers = rows.filter((row) => row.type === "idle")
+  // Selecting only seq lets the (session_id, type, seq) index answer these without reading message rows,
+  // which can be megabytes each. Matching the requested IDs here with OR would scan the whole Session.
+  const boundaries = (type: "user" | "idle") =>
+    db
+      .select({ seq: SessionMessageTable.seq })
+      .from(SessionMessageTable)
+      .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, type)))
+      .orderBy(asc(SessionMessageTable.seq))
+      .all()
+      .pipe(
+        Effect.map((rows) => rows.map((row) => row.seq)),
+        Effect.orDie,
+      )
+  const users = yield* boundaries("user")
+  const markers = yield* boundaries("idle")
   const resolve = Effect.fn(function* (field: "from" | "to", id: SessionMessage.ID) {
-    const row = rows.find((row) => row.id === id)
+    const row = yield* db
+      .select({ id: SessionMessageTable.id, type: SessionMessageTable.type, seq: SessionMessageTable.seq })
+      .from(SessionMessageTable)
+      .where(and(eq(SessionMessageTable.id, id), eq(SessionMessageTable.session_id, sessionID)))
+      .get()
+      .pipe(Effect.orDie)
     if (!row) return yield* new MessageNotFoundError({ sessionID, messageID: id })
     if (row.type !== "user")
       return yield* new TurnRangeError({ sessionID, field, message: `Message ${id} is not a user message` })
     return row
   })
-  const anchor = input.from ? yield* resolve("from", input.from) : users[users.length - 1]
+  const anchor = input.from
+    ? yield* resolve("from", input.from)
+    : yield* db
+        .select({ id: SessionMessageTable.id, seq: SessionMessageTable.seq })
+        .from(SessionMessageTable)
+        .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "user")))
+        .orderBy(desc(SessionMessageTable.seq))
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
   if (!anchor) return []
   const last = input.to ? yield* resolve("to", input.to) : anchor
   if (last.seq < anchor.seq)
@@ -81,9 +92,9 @@ export const turn = Effect.fn("SessionDiff.turn")(function* (
   // Without any marker, history predates idle markers and a prompt's turn ends at the next prompt.
   const legacy = markers.length === 0
   // The turn opens with the first prompt after the previous idle marker; the anchor itself is the latest candidate.
-  const opened = markers.findLast((row) => row.seq < anchor.seq)?.seq ?? -1
-  const start = legacy ? anchor.seq : (users.find((row) => row.seq > opened)?.seq ?? anchor.seq)
-  const end = legacy ? users.find((row) => row.seq > last.seq)?.seq : markers.find((row) => row.seq > last.seq)?.seq
+  const opened = markers.findLast((seq) => seq < anchor.seq) ?? -1
+  const start = legacy ? anchor.seq : (users.find((seq) => seq > opened) ?? anchor.seq)
+  const end = legacy ? users.find((seq) => seq > last.seq) : markers.find((seq) => seq > last.seq)
   const steps = yield* db
     .select({
       seq: SessionMessageTable.seq,

@@ -119,6 +119,20 @@ test("multiple consumers share one source and receive live native and RPC events
   await events.connections[0].closed
 })
 
+test("a types filter delivers only the requested types plus server.connected", async () => {
+  const events = source()
+  const shared = SharedEvents.make(events.connect)
+  const filtered = shared.subscribe({ types: ["session.updated"] })[Symbol.asyncIterator]()
+  const connected = filtered.next()
+  for (const type of ["server.connected", "permission.asked", "rpc.example.updated", "session.updated"])
+    events.connections[0].push({ type })
+
+  expect(await connected).toEqual({ done: false, value: { type: "server.connected" } })
+  expect(await filtered.next()).toEqual({ done: false, value: { type: "session.updated" } })
+  await filtered.return!()
+  await events.connections[0].closed
+})
+
 test("a slow consumer does not stall other subscribers", async () => {
   const events = source()
   const shared = SharedEvents.make(events.connect)

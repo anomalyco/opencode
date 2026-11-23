@@ -6,6 +6,8 @@ const durable = {
   type: "note" as const,
   origin: "example",
   label: "button#save",
+  title: "button#save",
+  subtitle: "Browser annotation",
   icon: "select-element",
   subject: 'the "button#save" element',
   href: "tab_00000000-0000-4000-8000-000000000000",
@@ -14,9 +16,9 @@ const durable = {
 
 const note = { ...durable, live: { subject: 'the "button#save" element (browser ref @e42)' } }
 
-describe("extension notes", () => {
+describe("plugin notes", () => {
   test("read from message metadata beside file comments and skip malformed entries", () => {
-    // Metadata a build before extension notes sent for a browser element comment.
+    // Metadata a build before plugin notes sent for a browser element comment.
     const browser = {
       type: "browser",
       tabID: "tab_00000000-0000-4000-8000-000000000000",

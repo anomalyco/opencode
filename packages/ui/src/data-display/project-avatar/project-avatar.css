@@ -88,16 +88,73 @@
   text-shadow: none;
 }
 
-[data-slot="project-avatar-surface"][data-has-image] {
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-label"] {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  visibility: hidden;
+}
+
+[data-slot="project-avatar-surface"]:is([data-has-image], [data-generated]) [data-slot="project-avatar-label"] {
   background: var(--project-avatar-bg);
 }
 
-[data-slot="project-avatar-surface"] [data-slot="project-avatar-image"] {
+[data-slot="project-avatar-surface"][data-generated] {
+  background: none;
+  box-shadow: none;
+}
+
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-generated"] {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * The backing, the ring and the image composite as one group, and the surface's rounded clip cuts that group once.
+ * Clipped one by one, each gets its own antialiased corner and the backing shows through the image's corner pixels
+ * as a lighter fringe. The opaque mask is what makes the media a group.
+ */
+[data-slot="project-avatar-surface"][data-has-image] {
+  background: none;
+  box-shadow: none;
+}
+
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-media"] {
   position: relative;
   display: block;
   width: 100%;
   height: 100%;
   border-radius: inherit;
+  -webkit-mask-image: linear-gradient(#000, #000);
+  mask-image: linear-gradient(#000, #000);
+}
+
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-media"]::before,
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-media"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* Square: the group clip is the only rounded edge the backing gets. */
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-media"]::before {
+  background: var(--project-avatar-bg);
+}
+
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-media"]::after {
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 0.5px var(--project-avatar-border);
+}
+
+[data-slot="project-avatar-surface"] [data-slot="project-avatar-image"] {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   user-select: none;
   -webkit-user-select: none;

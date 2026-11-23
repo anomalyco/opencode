@@ -1,10 +1,17 @@
-import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai"
+import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai/effect"
 import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
+import { PlatformError } from "effect"
+import { AppProcess } from "@opencode/util/process"
+import { Environment } from "../environment/index.js"
+import { Machine } from "../machine/index.js"
+import { Machines } from "../machine/machines.js"
+import { MachinePath } from "../machine/path.js"
 import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
 import { ModelResolver } from "../model-resolver.js"
+import { ModelRetry } from "../model-retry.js"
 import { SessionRunnerModel } from "./runner/model.js"
 
 const tokenSharingMessages = {
@@ -12,6 +19,8 @@ const tokenSharingMessages = {
     "ChatGPT token sharing isn't available for this account. Connect with an API key or choose another provider.",
   subscription_sharing_usage_limit_exceeded:
     "ChatGPT usage limit reached. Check ChatGPT Settings → Usage for details.",
+  subscription_sharing_workplace_individual_usage_limit_exceeded:
+    "You've reached the usage limit your ChatGPT workspace admin set for you. Ask them to raise it in the OpenAI Admin Console.",
   subscription_sharing_usage_unavailable: "ChatGPT usage can't be checked right now. Try again later.",
   subscription_sharing_unsupported_capability:
     "This request uses a feature ChatGPT token sharing doesn't support. Remove the unsupported feature and try again.",
@@ -27,23 +36,31 @@ const tokenSharingMessages = {
 
 const FREE_USAGE_LIMIT_MESSAGE =
   "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models."
+const BUDGET_LIMIT_MESSAGE = "Workspace usage limit reached. Model use is paused until the limit resets."
+const MODEL_BUDGET_LIMIT_MESSAGE = "You've reached the spend limit for this model. Switch models to keep going."
 
 export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {
+    // ChatGPT's usage limit arrives in HTTP and stream errors alike, whatever their reason, so its code decides the type.
+    if (cause.reason.body?.includes("subscription_sharing_usage_limit_exceeded"))
+      return providerError("provider.chatgpt-limit", cause.reason)
+    if (cause.reason.body?.includes("subscription_sharing_workplace_individual_usage_limit_exceeded"))
+      return providerError("provider.chatgpt-workspace-limit", cause.reason)
     switch (cause.reason._tag) {
       case "RateLimit":
         return providerError("provider.rate-limit", cause.reason)
       case "Authentication":
         return providerError("provider.auth", cause.reason)
       case "QuotaExceeded":
-        if (!cause.reason.body?.includes("FreeUsageLimitError")) return providerError("provider.quota", cause.reason)
-        return {
-          ...providerError("provider.free-limit", cause.reason),
-          message: FREE_USAGE_LIMIT_MESSAGE,
-        }
+        if (cause.reason.body?.includes("FreeUsageLimitError"))
+          return { ...providerError("provider.free-limit", cause.reason), message: FREE_USAGE_LIMIT_MESSAGE }
+        if (cause.reason.body?.includes("BudgetLimitError")) return budgetLimit(cause.reason)
+        if (cause.reason.body?.includes("GoUsageLimitError")) return goLimit(cause.reason)
+        return providerError("provider.quota", cause.reason)
       case "ContentPolicy":
         return providerError("provider.content-filter", cause.reason)
       case "Transport":
+        if (ModelRetry.isUnreachable(cause)) return unreachable(cause.reason)
         return providerError("provider.transport", cause.reason)
       case "ProviderInternal":
         return providerError("provider.internal", cause.reason)
@@ -53,8 +70,6 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.invalid-request", cause.reason)
       case "UnsupportedOperation":
         return providerError("provider.unsupported-operation", cause.reason)
-      case "NoRoute":
-        return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
         return providerError("provider.unknown", cause.reason)
       case "Timeout":
@@ -69,6 +84,9 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof Permission.CorrectedError) return { type: "permission.rejected", message: cause.feedback }
   if (cause instanceof ToolFailure || cause instanceof Tool.Error) {
     if (cause.error === undefined) return { type: "tool.execution", message: cause.message }
+    // A machine failure says why, however the tool wrapped it; every other cause keeps the tool's curated message.
+    const machine = machineMessage(cause.error)
+    if (machine !== undefined) return { type: "tool.execution", message: machine }
     // The canonical error is the sole model-visible representation, so a cause
     // with no message must not erase the tool's curated failure message.
     const unwrapped = toSessionError(cause.error)
@@ -101,6 +119,31 @@ export function contentFilterError(summary: string, reason: FinishReasonDetails)
   }
 }
 
+// OpenCode Console names what a refusing budget covers, in its envelope's metadata or, for Google clients, ErrorInfo.
+function budgetLimit(reason: AIError["reason"]): SessionError.Error {
+  if (/"coverage"\s*:\s*"models"/.test(reason.body ?? ""))
+    return { ...providerError("provider.model-budget-limit", reason), message: MODEL_BUDGET_LIMIT_MESSAGE }
+  return { ...providerError("provider.budget-limit", reason), message: BUDGET_LIMIT_MESSAGE }
+}
+
+// OpenCode Console names the Go limit that refused the request (5 hour, weekly or monthly) in its envelope's metadata.
+function goLimit(reason: AIError["reason"]): SessionError.Error {
+  const name = /"limitName"\s*:\s*"([^"]+)"/.exec(reason.body ?? "")?.[1]
+  return {
+    ...providerError("provider.go-limit", reason),
+    message: `OpenCode Go ${name ? `${name} ` : ""}usage limit reached. Switch to a free model, or turn on Extra Usage on the Go page in OpenCode Console to keep going.`,
+  }
+}
+
+// Names the network as the problem, so a DNS outage doesn't read like a broken model or provider.
+function unreachable(reason: AIError["reason"]): SessionError.Error {
+  const host = "url" in reason && reason.url !== undefined ? URL.parse(reason.url)?.hostname : undefined
+  return {
+    ...providerError("provider.transport", reason),
+    message: `Can't reach ${host || "the provider"}. Check the network connection. (${reason.message})`,
+  }
+}
+
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
   const status = reason.http?.status
   const retryAfterMs = "retryAfterMs" in reason ? reason.retryAfterMs : undefined
@@ -111,4 +154,20 @@ function providerError(type: string, reason: AIError["reason"]): SessionError.Er
     ...(reason.body === undefined ? {} : { response: { body: reason.body } }),
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   }
+}
+
+/**
+ * The message of a machine failure, through the wrappers a tool may have put around it. A local failure has no
+ * machine error anywhere in its cause, so its text is untouched.
+ */
+const machineMessage = (error: unknown): string | undefined => {
+  if (error instanceof Machine.NotSent || error instanceof Machine.Unknown || error instanceof Machine.ProcessLost)
+    return error.message
+  if (error instanceof Machines.NotFound || error instanceof MachinePath.NotAbsolute) return error.message
+  if (
+    error instanceof Environment.Failed ||
+    error instanceof AppProcess.AppProcessError ||
+    error instanceof PlatformError.PlatformError
+  )
+    return machineMessage(error.cause)
 }

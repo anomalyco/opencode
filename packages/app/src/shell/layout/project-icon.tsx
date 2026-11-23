@@ -1,5 +1,6 @@
 import {
   displayName,
+  getProjectAvatarGenerated,
   getProjectAvatarSource,
   getProjectAvatarVariant,
   ProjectAvatar,
@@ -24,6 +25,7 @@ export function ProjectIcon(props: ProjectIconProps) {
       fallback={local.fallback ?? displayName(local.project)}
       src={getProjectAvatarSource(local.project.id, icon())}
       variant={getProjectAvatarVariant(icon()?.color)}
+      generated={getProjectAvatarGenerated({ ...local.project, icon: icon() })}
     />
   )
 }

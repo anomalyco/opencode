@@ -1,15 +1,43 @@
 import type { ElectronAPI } from "../api-types"
 
-const deepLinkEvent = "opencode:deep-link"
+type Listener = (urls: string[]) => void
 
-export function startDeepLinks(api: ElectronAPI) {
-  void api.consumeInitialDeepLinks().then(emitDeepLinks)
-  api.onDeepLink(emitDeepLinks)
+// Links that arrived before the app listened, and the app's listeners.
+const pending: string[] = []
+
+const listeners = new Set<Listener>()
+
+// Main sends each link to one renderer at a time and forgets it once acknowledged, so a reload or a new window
+// never handles it again.
+export function startDeepLinks(api: Pick<ElectronAPI, "onDeepLink" | "acknowledgeDeepLinks" | "readyDeepLinks">) {
+  api.onDeepLink((delivery) => {
+    deliver(delivery.urls)
+    api.acknowledgeDeepLinks(delivery.attempt)
+  })
+  api.readyDeepLinks()
 }
 
-function emitDeepLinks(urls: string[]) {
+/** Follows the links opened with the app; the ones that came before the first listener reach it at once. */
+export function onDeepLinks(listener: Listener) {
+  listeners.add(listener)
+
+  const queued = pending.splice(0)
+
+  if (queued.length) listener(queued)
+
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function deliver(urls: string[]) {
   if (urls.length === 0) return
-  window.__OPENCODE__ ??= {}
-  window.__OPENCODE__.deepLinks = [...(window.__OPENCODE__.deepLinks ?? []), ...urls]
-  window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
+
+  if (listeners.size === 0) {
+    pending.push(...urls)
+
+    return
+  }
+
+  listeners.forEach((listener) => listener(urls))
 }

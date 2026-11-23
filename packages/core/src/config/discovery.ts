@@ -6,6 +6,7 @@ import { Effect } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Location } from "../location.js"
+import { Project } from "../project.js"
 import { AbsolutePath } from "../schema.js"
 import type { Options } from "../config.js"
 
@@ -56,6 +57,16 @@ export function stripPreferenceMetadata(json: string) {
   return JSON.stringify(Object.fromEntries(Object.entries(parsed).filter(([key]) => !preferenceMetadata.has(key))))
 }
 
+/** The project's personal config dir under the global config dir, layered above the repo's own `.opencode` dirs. */
+export const overlay = Effect.fn("ConfigDiscovery.overlay")(function* (options?: Options) {
+  const fs = yield* FSUtil.Service
+  const global = yield* Global.Service
+  const location = yield* Location.Service
+  if (options?.global === false || options?.project === false || location.project.id === Project.ID.global) return
+  const directory = AbsolutePath.make(path.join(global.config, "project", location.project.id))
+  return { path: directory, present: yield* fs.isDir(directory) }
+})
+
 export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options?: Options) {
   const fs = yield* FSUtil.Service
   const global = yield* Global.Service
@@ -72,22 +83,41 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   const globalRoots = yield* Effect.forEach(
     [...configDirectories, globalClaudeDirectory, globalAgentsDirectory],
     (item) => fs.resolve(item),
+    { concurrency: "unbounded" },
   )
   const current = yield* fs.resolve(location.directory)
   const directories =
     globalRoots.slice(0, configDirectories.length).includes(current) || options?.project === false
       ? []
       : yield* fs.up({ targets: ["."], start: location.directory }).pipe(Effect.orDie)
-  const discovered = yield* Effect.forEach(directories, (directory) =>
-    Effect.gen(function* () {
-      // Resolve the parent too: missing children must honor symlinked global roots.
-      const parent = yield* fs.resolve(directory)
-      return yield* Effect.forEach([".claude", ".agents", ".opencode", ...names.toReversed()], (name) =>
-        fs
-          .resolve(path.join(parent, name))
-          .pipe(Effect.map((resolved) => ({ item: AbsolutePath.make(path.join(directory, name)), resolved }))),
-      )
-    }),
+  const candidates = [".claude", ".agents", ".opencode", ...names.toReversed()]
+  const discovered = yield* Effect.forEach(
+    directories,
+    (directory) =>
+      Effect.gen(function* () {
+        // Resolve the parent too: missing children must honor symlinked global roots.
+        const parent = directory === location.directory ? current : yield* fs.resolve(directory)
+        // One directory listing skips realpath and stat on absent candidates; sandboxes that deny
+        // listing an ancestor fall back to probing each candidate directly.
+        const entries = yield* fs.readDirectory(parent).pipe(
+          Effect.map((list) => new Set(list.map((entry) => entry.toLowerCase()))),
+          Effect.orElseSucceed(() => undefined),
+        )
+        return yield* Effect.forEach(
+          candidates,
+          (name) => {
+            const item = AbsolutePath.make(path.join(directory, name))
+            if (entries && !entries.has(name.toLowerCase())) {
+              return Effect.succeed({ item, resolved: path.resolve(parent, name), missing: true })
+            }
+            return fs
+              .resolve(path.join(parent, name))
+              .pipe(Effect.map((resolved) => ({ item, resolved, missing: false })))
+          },
+          { concurrency: "unbounded" },
+        )
+      }),
+    { concurrency: "unbounded" },
   ).pipe(
     Effect.map((items) => items.flat()),
     Effect.orDie,
@@ -97,15 +127,15 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   const globalFiles = yield* Effect.forEach(
     configDirectories.flatMap((directory) => names.map((name) => path.join(directory, name))),
     (file) => fs.resolve(file),
+    { concurrency: "unbounded" },
   )
   // Global sources must not re-enter through the project walk.
-  const visible = discovered
-    .filter(({ resolved }) =>
-      globalEnabled
-        ? !globalRoots.includes(resolved) && !globalFiles.includes(resolved)
-        : !globalRoots.some((root) => resolved === root || resolved.startsWith(root + path.sep)),
-    )
-    .map(({ item }) => item)
+  const visibleEntries = discovered.filter((entry) =>
+    globalEnabled
+      ? !globalRoots.includes(entry.resolved) && !globalFiles.includes(entry.resolved)
+      : !globalRoots.some((root) => entry.resolved === root || entry.resolved.startsWith(root + path.sep)),
+  )
+  const visible = visibleEntries.map((entry) => entry.item)
 
   // A custom system directory replaces platform discovery, so it also skips host MDM preferences.
   const preferences =
@@ -123,8 +153,12 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     explicit: options?.file ? AbsolutePath.make(path.resolve(options.file)) : undefined,
     direct: visible.filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item))).toReversed(),
     project: yield* Effect.forEach(
-      visible.filter((item) => path.basename(item) === ".opencode").toReversed(),
-      (directory) => fs.isDir(directory).pipe(Effect.map((present) => ({ path: directory, present }))),
+      visibleEntries.filter((entry) => path.basename(entry.item) === ".opencode").toReversed(),
+      (entry) =>
+        entry.missing
+          ? Effect.succeed({ path: entry.item, present: false })
+          : fs.isDir(entry.item).pipe(Effect.map((present) => ({ path: entry.item, present }))),
+      { concurrency: "unbounded" },
     ),
     claude:
       options?.claude === false

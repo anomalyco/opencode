@@ -4,12 +4,13 @@ import type {
   ComposerAgentPart,
   ComposerFilePart,
   ComposerSkillPart,
+  ComposerSessionPart,
   ComposerPersistedState,
   ComposerPrompt,
 } from "../types"
 import { isAttachment, promptLength } from "../prompt-parts"
 
-export type ComposerStateStore = [
+type ComposerStateStore = [
   Store<ComposerPersistedState> | Accessor<Store<ComposerPersistedState>>,
   SetStoreFunction<ComposerPersistedState>,
 ]
@@ -17,45 +18,39 @@ export type ComposerStateStore = [
 export type ComposerStateStoreInput = ComposerStateStore | Accessor<ComposerStateStore>
 
 export function createComposerEditorActions(input: ComposerStateStoreInput) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- this typed union explicitly accepts either a store tuple or an accessor
   const tuple = () => (typeof input === "function" ? input() : input)
 
   const store = () => {
     const value = tuple()[0]
 
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- resolve the accessor branch of the typed store union
     return typeof value === "function" ? value() : value
   }
 
   const setStore = () => tuple()[1]
-
-  const clearRetry = () => {
-    if (untrack(() => store().retry) !== undefined) setStore()("retry", undefined)
-  }
 
   return {
     get state() {
       return store()
     },
     setPrompt(prompt: ComposerPrompt, cursor?: number) {
-      // Persisted setters encode on every call, even inside a reactive batch.
-      batch(() => setStore()({ prompt, ...(cursor !== undefined ? { cursor } : {}), retry: undefined }))
+      // Persisted setters encode on every call, even inside a reactive batch, so prompt and cursor go in one write.
+      batch(() => setStore()(cursor === undefined ? { prompt } : { prompt, cursor }))
     },
     setCursor(cursor: number) {
       if (untrack(() => store().cursor) === cursor) return
       setStore()("cursor", cursor)
     },
     setMode(mode: "normal" | "shell") {
-      if (untrack(() => store().mode === mode && store().retry === undefined)) return
-      setStore()({ mode, retry: undefined })
+      if (untrack(() => (store().mode ?? "normal") === mode)) return
+      setStore()("mode", mode)
     },
     setText(content: string) {
       batch(() =>
         setStore()((state) => ({
-          prompt: [
-            { type: "text", content, start: 0, end: content.length },
-            ...state.prompt.filter(isAttachment),
-          ],
+          prompt: [{ type: "text", content, start: 0, end: content.length }, ...state.prompt.filter(isAttachment)],
           cursor: content.length,
-          retry: undefined,
         })),
       )
     },
@@ -65,31 +60,40 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
         setStore()((state) => ({
           prompt: insertText(state.prompt, cursor, content),
           cursor: cursor + content.length,
-          retry: undefined,
         })),
       )
     },
+    // Removes `content` from just before the cursor, when it is there, leaving every other part as it was.
+    removeTextBefore(content: string) {
+      const cursor = store().cursor ?? promptLength(store().prompt)
+      const prompt = removeTextBefore(store().prompt, cursor, content)
+
+      if (!prompt) return
+      batch(() => setStore()({ prompt, cursor: cursor - content.length }))
+    },
     removeContext(key: string) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
-      clearRetry()
     },
     addMention(
-      mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart,
+      mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart,
       range?: { start: number; end: number },
     ) {
-      const text = store()
-        .prompt.map((part) => ("content" in part ? part.content : ""))
-        .join("")
+      const prompt = withOffsets(store().prompt)
+      const length = promptLength(prompt)
+      const end = range?.end ?? Math.min(store().cursor ?? length, length)
 
-      const end = range?.end ?? store().cursor ?? text.length
-      const start = range?.start ?? text.slice(0, end).lastIndexOf("@")
-      setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
-      setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
-      clearRetry()
+      const part = prompt.find(
+        (item): item is Extract<ComposerPrompt[number], { type: "text" }> =>
+          item.type === "text" && end >= item.start && end <= item.end,
+      )
+
+      const index = part ? part.content.slice(0, end - part.start).lastIndexOf("@") : -1
+      const start = range?.start ?? (part && index >= 0 ? part.start + index : end)
+      setStore()("prompt", insertMention(prompt, start, end, mention))
+      setStore()("cursor", start + mention.content.length + 1)
     },
     removeAttachment(id: string) {
       setStore()("prompt", (parts) => parts.filter((part) => !isAttachment(part) || part.id !== id))
-      clearRetry()
     },
   }
 }
@@ -123,33 +127,53 @@ function insertText(prompt: ComposerPrompt, cursor: number, content: string): Co
   return withOffsets(parts)
 }
 
+function removeTextBefore(prompt: ComposerPrompt, cursor: number, content: string): ComposerPrompt | undefined {
+  const parts = withOffsets(prompt)
+  const index = parts.findIndex((item) => item.type === "text" && cursor > item.start && cursor <= item.end)
+  const part = parts[index]
+
+  if (!part || isAttachment(part) || !part.content.slice(0, cursor - part.start).endsWith(content)) return
+  const offset = cursor - part.start
+  const next = { ...part, content: part.content.slice(0, offset - content.length) + part.content.slice(offset) }
+
+  return withOffsets(parts.map((item, position) => (position === index ? next : item)))
+}
+
 function insertMention(
   prompt: ComposerPrompt,
   start: number,
   end: number,
-  mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart,
+  mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart,
 ): ComposerPrompt {
-  if (start === 0 && end === 0) {
-    return withOffsets([mention, { type: "text", content: " ", start: 0, end: 0 }, ...prompt])
-  }
-
   let position = 0
+  let inserted = false
 
   const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
     if (isAttachment(part)) return [part]
     const partStart = position
     position += part.content.length
 
-    if (part.type !== "text" || start < partStart || end > position) return [part]
-    const before = part.content.slice(0, start - partStart)
-    const after = part.content.slice(end - partStart)
+    if (inserted) return [part]
 
-    return [
-      ...(before ? [{ type: "text" as const, content: before, start: 0, end: 0 }] : []),
-      mention,
-      { type: "text" as const, content: ` ${after}`, start: 0, end: 0 },
-    ]
+    if (part.type === "text" && start >= partStart && end <= position) {
+      inserted = true
+      const before = part.content.slice(0, start - partStart)
+      const after = part.content.slice(end - partStart)
+
+      return [
+        ...(before ? [{ type: "text" as const, content: before, start: 0, end: 0 }] : []),
+        mention,
+        { type: "text" as const, content: ` ${after}`, start: 0, end: 0 },
+      ]
+    }
+
+    if (start !== end || start > partStart) return [part]
+    inserted = true
+
+    return [mention, { type: "text", content: " ", start: 0, end: 0 }, part]
   })
+
+  if (!inserted && start === end) parts.push(mention, { type: "text", content: " ", start: 0, end: 0 })
 
   return withOffsets(parts)
 }

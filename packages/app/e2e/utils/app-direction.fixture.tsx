@@ -6,14 +6,14 @@ import { useLanguage, type Direction } from "../../src/runtime/i18n/language"
 import { PlatformProvider } from "../../src/runtime/platform/platform"
 import { createWebPlatform } from "../../src/runtime/platform/web"
 import { ServerConnection } from "../../src/runtime/server/registry"
-import { Command } from "@opencode/gui-extensions/sdk"
-import { useExtensionHost } from "../../src/runtime/extension/host"
+import { Command } from "@opencode/plugin/gui"
+import { usePluginHost } from "../../src/runtime/plugin/host"
 import { useCommand } from "../../src/shell/commands/command"
 
 /**
- * Mounts the app at a route. With `held`, the window's providers and extensions start at once and the app interface
+ * Mounts the app at a route. With `held`, the window's providers and plugins start at once and the app interface
  * mounts only when "Start app" is pressed, over its preloaded route, as the desktop shell mounts it once its server is up.
- * One extension's load also waits for "Finish startup", so the attachment can mount before the routes render.
+ * One plugin's load also waits for "Finish startup", so the attachment can mount before the routes render.
  */
 export function mount(input: { server: string; route: string; direction: Direction; held?: boolean }) {
   const root = document.getElementById("root")
@@ -27,14 +27,14 @@ export function mount(input: { server: string; route: string; direction: Directi
   const held = Promise.withResolvers<void>()
 
   function StartupGate() {
-    const host = useExtensionHost()
+    const host = usePluginHost()
     const command = useCommand()
 
-    // ExtensionCommands publishes before ready, proving the attachment mounted even while the routes wait.
+    // PluginCommands publishes before ready, proving the attachment mounted even while the routes wait.
     const registered = () =>
       host
         .items(Command)
-        .some((item) => command.options.some((option) => option.id === `${item.extension}.${item.value.id}`))
+        .some((item) => command.options.some((option) => option.id === `${item.plugin}.${item.value.id}`))
 
     return (
       <button
@@ -67,15 +67,15 @@ export function mount(input: { server: string; route: string; direction: Directi
   }
 
   function Startup() {
-    const host = useExtensionHost()
-    const definition = host.definitions().find((item) => item.renderer)
-    const load = definition?.renderer
+    const host = usePluginHost()
+    const definition = host.definitions().find((item) => item.windowEntry)
+    const load = definition?.windowEntry
 
-    // Hold a real extension through the public reload API before the startup gate first settles.
+    // Hold a real plugin through the public reload API before the startup gate first settles.
     if (input.held && definition && load)
       host.reload(definition.id, {
         ...definition,
-        renderer: async () => {
+        windowEntry: async () => {
           await held.promise
 
           return load()

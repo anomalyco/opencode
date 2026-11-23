@@ -5,6 +5,7 @@ import type {
   FormInfo,
   SessionFormReplyInput,
   IntegrationInfo,
+  JobInfo,
   LocationRef,
   McpResource,
   McpServer,
@@ -72,8 +73,6 @@ export interface Data {
     root(sessionID: string): string
     family(sessionID: string): string[]
     cost(sessionID: string): number
-    /** Subscription allowance used instead of money, such as OpenCode Go's, in USD. */
-    allowance(sessionID: string): number
     status(sessionID: string): "idle" | "running"
     readonly pending: {
       list(sessionID: string): SessionInboxInfo[]
@@ -111,6 +110,10 @@ export interface Data {
       sync(projectID: string): Promise<void>
       invalidate(projectID: string): void
     }
+  }
+  readonly job: {
+    /** Running background jobs owned by the session or any session below it. Experimental. */
+    list(sessionID: string): JobInfo[]
   }
   readonly shell: {
     list(location?: LocationRef): ShellInfo[]

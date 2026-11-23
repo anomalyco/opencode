@@ -15,6 +15,27 @@ describe("icon emphasis", () => {
   })
 })
 
+describe("focus ring colour", () => {
+  test.each([
+    { mode: "light", expected: "var(--v2-blue-500)" },
+    { mode: "dark", expected: "var(--v2-blue-400)" },
+  ] as const)("$mode uses the same focus token for OpenCode and custom-theme fallbacks", ({ mode, expected }) => {
+    expect(resolveThemeV2(theme)[mode]["v2-border-border-focus"]).toBe(expected)
+    expect(
+      resolveThemeVariantV2({ ...theme[mode], v2Overrides: undefined }, mode === "dark")["v2-border-border-focus"],
+    ).toBe(expected)
+  })
+
+  test("a custom theme can override the focus ring colour", () => {
+    const tokens = resolveThemeVariantV2(
+      { ...theme.dark, v2Overrides: { "v2-border-border-focus": "var(--v2-green-500)" } },
+      true,
+    )
+
+    expect(tokens["v2-border-border-focus"]).toBe("var(--v2-green-500)")
+  })
+})
+
 describe("contrast icon-button tokens", () => {
   test("OC-2 dark mode uses a light background and an inverse icon matching the base surface", () => {
     const tokens = resolveThemeV2(theme).dark
@@ -57,7 +78,38 @@ describe("contrast icon-button tokens", () => {
   })
 })
 
+describe("input elevation", () => {
+  test.each([
+    {
+      mode: "light",
+      input:
+        "0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+      button:
+        "0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+    },
+    {
+      mode: "dark",
+      input:
+        "0px 1px 2px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
+      button:
+        "0px 1px 2px 0px var(--v2-alpha-dark-40), 0px 0px 0px 0.5px var(--v2-alpha-light-20), 0px -0.5px 0px 0px var(--v2-alpha-light-10)",
+    },
+  ] as const)(
+    "$mode matches Figma in OC-2 and custom-theme fallbacks without changing buttons",
+    ({ mode, input, button }) => {
+      for (const tokens of [
+        resolveThemeV2(theme)[mode],
+        resolveThemeVariantV2({ ...theme[mode], v2Overrides: undefined }, mode === "dark"),
+      ]) {
+        expect(tokens["v2-elevation-input"]).toBe(input)
+        expect(tokens["v2-elevation-button-neutral"]).toBe(button)
+      }
+    },
+  )
+})
+
 function expectIconEmphasis(tokens: ResolvedV2Theme) {
+  // SAFETY: these resolved background/icon color tokens are hex colors or references to other hex color tokens.
   const resolve = (value: string): HexColor =>
     value.startsWith("var(--") ? resolve(tokens[value.slice(6, -1)]) : (value as HexColor)
 

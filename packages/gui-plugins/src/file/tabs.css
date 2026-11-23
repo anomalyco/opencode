@@ -1,0 +1,15 @@
+/* The pill's padding sets the file icon's inset; the trigger clips anything pulled past its edge. */
+:root body #review-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-list"] [data-slot="tabs-trigger-wrapper"][data-value^="file://"]
+{
+  padding-inline-start: 8px;
+}
+
+/* The launcher reads as an action rather than a document, so its label stays muted while selected. */
+:root
+  body
+  #review-panel
+  [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"]
+  [data-slot="tabs-list"]
+  [data-slot="tabs-trigger"]:is([data-value="file:open"], [data-value^="file:open:"])[data-selected] {
+  color: var(--v2-text-text-muted);
+}

@@ -1,36 +1,33 @@
-// @ts-nocheck
-import * as mod from "./spinner"
-import { create } from "../storybook/scaffold"
+import { Spinner } from "./spinner"
 
 const docs = `### Overview
-Animated loading indicator for inline or page-level loading states.
-
-Use with \`Button\` or in empty states.
-
-### API
-- Accepts standard SVG props (class, style).
+Dot-matrix indicator for AI activity: a running session, turn, subagent or tool. Busy session tabs, \`ActivityRing\`
+and the session progress indicator render it. Other loading states use \`Loader\`.
 
 ### Variants and states
-- Single default animation style.
+- Soft Radar: a lit head sweeps each ring of a 5×5 grid, leaving a fading trail, around a steady centre.
 
 ### Behavior
-- Animation is CSS-driven via data attributes.
+- One element painted through a CSS mask whose frames are a pre-rendered 90 fps APNG, so it runs no CSS animation and
+  every spinner on screen shares one loop and stays in phase.
+- Reduced motion freezes it on a still pose.
 
 ### Accessibility
 - Use alongside text or aria-live regions to convey loading state.
-
-### Theming/tokens
-- Uses \`data-component="spinner"\` for styling hooks.
-
 `
 
-const story = create({ title: "UI/Spinner", mod })
+type Args = { size: number }
 
 export default {
   title: "UI/Spinner",
   id: "components-spinner",
-  component: story.meta.component,
+  component: Spinner,
   tags: ["autodocs"],
+  args: { size: 16 },
+  argTypes: {
+    size: { control: { type: "range", min: 12, max: 48, step: 1 } },
+  },
+  render: (args: Args) => <Spinner style={{ width: `${args.size}px`, height: `${args.size}px` }} />,
   parameters: {
     docs: {
       description: {
@@ -40,14 +37,4 @@ export default {
   },
 }
 
-export const Basic = story.Basic
-
-export const Sizes = {
-  render: () => (
-    <div style={{ display: "flex", gap: "16px", "align-items": "center" }}>
-      <mod.Spinner style={{ width: "12px", height: "12px" }} />
-      <mod.Spinner style={{ width: "20px", height: "20px" }} />
-      <mod.Spinner style={{ width: "28px", height: "28px" }} />
-    </div>
-  ),
-}
+export const SoftRadar = {}

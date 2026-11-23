@@ -2,10 +2,8 @@ export * as PluginSupervisor from "./supervisor.js"
 
 import { Event } from "@opencode/schema/config"
 import { Cause, Effect, Layer, Queue, Stream } from "effect"
-import path from "path"
 import { ConfigPluginSource } from "../config/plugin/source.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { ManagedPolicy } from "../managed-policy.js"
 import { Bus } from "../bus.js"
 import { Npm } from "@opencode/util/npm"
 import { Plugin } from "../plugin.js"
@@ -30,10 +28,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   const enabled = new Set(definitions.map((plugin) => plugin.id))
   const packages = new Map<string, Plugin.Generation>()
   const pending = new Set<string>()
-  const failures = new Map<
-    string,
-    Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
-  >()
+  const failures = new Map<string, Plugin.Failure>()
   const plugins = () => [...definitions, ...packages.values()]
 
   for (const operation of operations) {
@@ -78,7 +73,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     }
     if ("error" in plugin) {
       failures.set(operation.target, {
-        source: pluginSource(operation.target),
+        source: PluginModule.source(operation.target),
         state: { status: "failed", error: plugin.error, ref: plugin.ref },
         features: { server: true },
       })
@@ -114,7 +109,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         id: Plugin.ID.make(plugin.id),
         source: plugin.source ?? { type: "builtin" as const },
         state: { status: "failed" as const, error: `Duplicate plugin ID: ${plugin.id}` },
-        features: { server: true as const, ...plugin.features },
+        features: plugin.features ?? { server: true as const },
       })),
     ],
     pending: [...pending],
@@ -123,7 +118,6 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const managed = yield* ManagedPolicy.Service
     const registry = yield* Plugin.Service
     const sdk = yield* SdkPlugins.Service
     const instance = yield* InstancePlugins.Service
@@ -131,6 +125,7 @@ export const layer = Layer.effectDiscard(
     const modules = yield* PluginModule.make()
     const bus = yield* Bus.Service
     const updates = yield* PluginUpdate.Service
+    const npm = yield* Npm.Service
     const internal = yield* PluginInternal.list()
     let release: Effect.Effect<void> | undefined = yield* registry.hold()
     yield* Effect.addFinalizer(() => release ?? Effect.void)
@@ -141,6 +136,10 @@ export const layer = Layer.effectDiscard(
     let running = new Map<string, Plugin.Generation>()
     let outdated = new Set<string>()
     const updating = new Set<string>()
+    // The check interval in which each outdated plugin was last considered for updating on its own. Once per interval,
+    // so an update that doesn't take, or a new version that fails to load, isn't retried on every reload.
+    const attempted = new Map<string, number>()
+    let cycle = 0
     let generation = 0
     let observed = 0
 
@@ -149,16 +148,8 @@ export const layer = Layer.effectDiscard(
       // Combine internal plugins with host-contributed plugins in boot order.
       // Instance-bound plugins come last: later activation can override earlier
       // container writes, so the instance's explicit choices win over globals.
-      const pre = [
-        ...internal.pre.map((plugin) => ({ ...plugin, revision: "internal", source: { type: "builtin" as const } })),
-        ...sdk.all(),
-        ...instance.all(),
-      ]
-      const post = internal.post.map((plugin) => ({
-        ...plugin,
-        revision: "internal",
-        source: { type: "builtin" as const },
-      }))
+      const pre = [...internal.pre, ...sdk.all(), ...instance.all()]
+      const post = internal.post
       const operations = yield* sources.operations()
       // Activate everything available locally before waiting on missing package installs.
       const immediate = yield* resolve(modules, pre, post, operations, false, running)
@@ -181,6 +172,26 @@ export const layer = Layer.effectDiscard(
         : immediate
       if (resolved !== immediate) yield* apply(resolved)
       running = resolved.packages
+      // A newer version that fails to load leaves the running one in place. Stop using the newer one on disk too, so a
+      // restart loads the version that works.
+      yield* Effect.forEach(
+        resolved.failures,
+        (failure) =>
+          Effect.gen(function* () {
+            if (failure.source.type !== "package") return
+            const target = failure.source.target
+            const kept = resolved.packages.get(target)?.source
+            if (kept?.type !== "package" || !kept.version) return
+            const installed = (yield* npm.resolve(target)).version
+            if (!installed || installed === kept.version) return
+            if (!(yield* npm.reject(target, installed))) return
+            yield* Effect.logWarning("kept the running plugin version after the new one failed to load", {
+              target,
+              version: kept.version,
+            })
+          }).pipe(Effect.catchCause((cause) => Effect.logWarning("failed to reject plugin version", { cause }))),
+        { discard: true },
+      )
       const targets = new Set(
         [...resolved.plugins, ...resolved.failures].flatMap((plugin) =>
           plugin.source?.type === "package" ? [plugin.source.target] : [],
@@ -192,13 +203,28 @@ export const layer = Layer.effectDiscard(
         (target) => updates.check(target).pipe(Effect.map((available) => [target, available] as const)),
         { concurrency: "unbounded" },
       ).pipe(
-        Effect.flatMap((checked) => {
-          if (current !== generation) return Effect.void
-          const next = new Set(checked.flatMap(([target, available]) => (available ? [target] : [])))
-          if (next.size === outdated.size && [...next].every((target) => outdated.has(target))) return Effect.void
-          outdated = next
-          return apply(resolved)
-        }),
+        Effect.flatMap((checked) =>
+          Effect.gen(function* () {
+            if (current !== generation) return
+            // Only plugins that name what to follow (`@latest`, a range or a Git branch) update on their own; the
+            // update reloads them.
+            yield* Effect.forEach(
+              checked.filter(([target, available]) => available && attempted.get(target) !== cycle),
+              ([target]) =>
+                // Recorded first: the update itself triggers reloads, which check again while it runs.
+                Effect.sync(() => attempted.set(target, cycle)).pipe(
+                  Effect.andThen(npm.follows(target)),
+                  Effect.flatMap((follows) => (follows ? updates.update(target) : Effect.void)),
+                  Effect.catchCause((cause) => Effect.logWarning("failed to update plugin", { target, cause })),
+                ),
+              { concurrency: "unbounded", discard: true },
+            )
+            const next = new Set(checked.flatMap(([target, available]) => (available ? [target] : [])))
+            if (next.size === outdated.size && [...next].every((target) => outdated.has(target))) return
+            outdated = next
+            yield* apply(resolved)
+          }),
+        ),
         Effect.forkScoped({ startImmediately: true }),
       )
     })
@@ -218,8 +244,7 @@ export const layer = Layer.effectDiscard(
       )
     yield* watch(sources.changes())
     yield* watch(modules.changes())
-    yield* watch(managed.changes())
-    yield* watch(Stream.fromEffectRepeat(Effect.sleep("24 hours")))
+    yield* watch(updates.intervals().pipe(Stream.tap((next) => Effect.sync(() => (cycle = next)))))
     yield* watch(bus.subscribe([Event.Updated, SdkPlugins.Updated]))
     yield* watch(
       updates.changes().pipe(
@@ -259,10 +284,5 @@ const nodeDeps = [
   Watcher.node,
   PluginInternal.requirements,
 ] as const
-
-function pluginSource(target: string): Plugin.Source {
-  if (path.isAbsolute(target)) return { type: "local", path: target }
-  return { type: "package", target }
-}
 
 export const node = makeLocationNode({ name: "plugin-supervisor", layer, deps: nodeDeps })

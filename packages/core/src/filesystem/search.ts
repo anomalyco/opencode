@@ -6,6 +6,7 @@ import { Clock, Context, Deferred, Duration, Effect, Layer, Scope } from "effect
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "@opencode/schema/filesystem"
+import { Environment } from "../environment/index.js"
 import { Location } from "../location.js"
 import { Ripgrep } from "../ripgrep.js"
 import { RelativePath } from "../schema.js"
@@ -53,6 +54,7 @@ const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
+    const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const scope = yield* Scope.Scope
     const clock = yield* Clock.Clock
@@ -66,8 +68,10 @@ const ripgrepLayer = Layer.effect(
       const previous = index
       if (!initialized) index = next
       yield* ripgrep.find({
+        environment,
         cwd: location.directory,
         pattern: "*",
+        hidden: true,
         limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
         onEntry: (entry) =>
@@ -112,81 +116,122 @@ const ripgrepLayer = Layer.effect(
   }),
 )
 
-export const fffLayer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const location = yield* Location.Service
-    const result = yield* Effect.try({
-      try: () =>
-        Fff.create({
-          basePath: location.directory,
-          aiMode: true,
-          disableMmapCache: true,
-          disableContentIndexing: true,
-        }),
-      catch: (cause) => cause,
-    }).pipe(
-      Effect.catch((error) => Effect.logWarning("failed to initialize fff", { error }).pipe(Effect.as(undefined))),
-    )
-    if (!result?.ok) {
-      if (result) yield* Effect.logWarning("failed to initialize fff", { error: result.error })
-      return Service.of({
-        find: () => Effect.succeed([]),
-      })
-    }
-    yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()))
-    return Service.of({
-      find: (input) =>
-        Effect.sync(() => {
-          const options = { pageIndex: 0, pageSize: input.limit ?? 50 }
-          const items = (() => {
-            if (input.type === "file") {
-              const found = result.value.fileSearch(input.query.trim(), options)
-              if (!found.ok) throw found.error
-              return found.value.items.map((item, index) => ({
-                path: item.relativePath,
-                type: "file" as const,
-                score: found.value.scores[index]?.total ?? 0,
-              }))
-            }
-            if (input.type === "directory") {
-              const found = result.value.directorySearch(input.query.trim(), options)
-              if (!found.ok) throw found.error
-              return found.value.items.map((item, index) => ({
-                path: item.relativePath,
-                type: "directory" as const,
-                score: found.value.scores[index]?.total ?? 0,
-              }))
-            }
-            const found = result.value.mixedSearch(input.query.trim(), options)
-            if (!found.ok) throw found.error
-            return found.value.items.map((item, index) => ({
-              path: item.item.relativePath,
-              type: item.type,
-              score: found.value.scores[index]?.total ?? 0,
-            }))
-          })()
-          return items
-            .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
-            .map((item) => {
-              const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
-              return FileSystem.Entry.make({
-                path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
-                type: item.type,
-              })
-            })
-        }),
+const FFF_SCAN_WAIT = Duration.seconds(3)
+
+type CreatePicker = (options: Fff.Init) => Fff.Result<Fff.Picker>
+
+function createPicker(
+  create: CreatePicker,
+  directory: string,
+): { ok: true; value: Fff.Picker } | { ok: false; error: unknown } {
+  try {
+    return create({
+      basePath: directory,
+      aiMode: true,
+      disableMmapCache: true,
+      disableContentIndexing: true,
     })
-  }),
-)
+  } catch (error) {
+    return { ok: false, error }
+  }
+}
+
+// Each fff picker owns its own scanner, watcher and git threads, so it starts on the first search
+// instead of when the Location boots.
+export const makeFffLayer = (create: CreatePicker) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      let state: { readonly result: ReturnType<typeof createPicker>; scanned: boolean } | "closed" | undefined
+      // The layer owns the picker before it exists: creating and publishing it is one synchronous,
+      // uninterruptible step, so an interrupted search can't leave a native picker without this finalizer.
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          if (typeof state === "object" && state.result.ok) state.result.value.destroy()
+          state = "closed"
+        }),
+      )
+      const acquire = Effect.uninterruptible(
+        Effect.sync(() => {
+          if (state !== undefined) return { current: state, created: false }
+          state = { result: createPicker(create, location.directory), scanned: false }
+          return { current: state, created: true }
+        }),
+      )
+      const picker = Effect.gen(function* () {
+        const { current, created } = yield* acquire
+        if (current === "closed") return undefined
+        if (!current.result.ok) {
+          if (created) yield* Effect.logWarning("failed to initialize fff", { error: current.result.error })
+          return undefined
+        }
+        if (!current.scanned) {
+          const value = current.result.value
+          yield* Effect.gen(function* () {
+            while (value.isScanning()) yield* Effect.sleep("20 millis")
+          }).pipe(Effect.timeoutOption(FFF_SCAN_WAIT))
+          current.scanned = true
+        }
+        return current.result.value
+      })
+      return Service.of({
+        find: (input) =>
+          Effect.gen(function* () {
+            const finder = yield* picker
+            if (!finder) return []
+            const options = { pageIndex: 0, pageSize: input.limit ?? 50 }
+            const items = (() => {
+              if (input.type === "file") {
+                const found = finder.fileSearch(input.query.trim(), options)
+                if (!found.ok) throw found.error
+                return found.value.items.map((item, index) => ({
+                  path: item.relativePath,
+                  type: "file" as const,
+                  score: found.value.scores[index]?.total ?? 0,
+                }))
+              }
+              if (input.type === "directory") {
+                const found = finder.directorySearch(input.query.trim(), options)
+                if (!found.ok) throw found.error
+                return found.value.items.map((item, index) => ({
+                  path: item.relativePath,
+                  type: "directory" as const,
+                  score: found.value.scores[index]?.total ?? 0,
+                }))
+              }
+              const found = finder.mixedSearch(input.query.trim(), options)
+              if (!found.ok) throw found.error
+              return found.value.items.map((item, index) => ({
+                path: item.item.relativePath,
+                type: item.type,
+                score: found.value.scores[index]?.total ?? 0,
+              }))
+            })()
+            return items
+              .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
+              .map((item) => {
+                const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
+                return FileSystem.Entry.make({
+                  path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+                  type: item.type,
+                })
+              })
+          }),
+      })
+    }),
+  )
+
+export const fffLayer = makeFffLayer(Fff.create)
 
 const layer = (options?: Options) =>
   Layer.unwrap(
     Effect.gen(function* () {
       const location = yield* Location.Service
-      // Workspace-backed Locations resolve in a remote sandbox; fff would index the local server directory
-      // in-process and serve wrong results. Ripgrep routes through the Location environment spawner.
-      if (location.workspaceID) return ripgrepLayer
+      const environment = yield* Environment.Service
+      // fff indexes a directory on the server's own disk in-process, so only the server's own environment can use it.
+      // Ripgrep routes through the Location environment spawner.
+      if (!environment.hostsServer) return ripgrepLayer
       if (options?.fff === false || (options?.fff === undefined && process.platform === "win32") || !Fff.available())
         return ripgrepLayer
       // Non-VCS locations can contain many repositories, so avoid eagerly content-indexing the entire aggregate tree.
@@ -195,7 +240,11 @@ const layer = (options?: Options) =>
   )
 
 export function configured(options?: Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [Location.node, Ripgrep.node] })
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [Location.node, Environment.node, Ripgrep.node],
+  })
 }
 
 export const node = configured()

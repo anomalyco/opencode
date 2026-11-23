@@ -1,0 +1,1 @@
+DROP TABLE `extension_file`;

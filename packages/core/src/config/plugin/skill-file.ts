@@ -1,7 +1,7 @@
 export * as SkillFile from "./skill-file.js"
 
 import path from "path"
-import { isRecord } from "@opencode/ai/utils/record"
+import { isRecord } from "@opencode/util/record"
 import { Result, Schema, type SchemaIssue, SchemaParser } from "effect"
 import { ConfigMarkdown } from "../markdown.js"
 import { AbsolutePath } from "../../schema.js"

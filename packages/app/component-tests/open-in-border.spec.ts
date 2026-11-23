@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 for (const theme of ["light", "dark"]) {
   story(`keeps the Open in border visible without hovering (${theme})`, async ({ mount, page }, testInfo) => {

@@ -48,15 +48,15 @@
       padding-inline-end: 4px;
 
       border-radius: var(--radius-md);
-      border: 1px solid var(--border-weak-base);
+      border: 1px solid var(--v2-border-border-base);
       background: var(--input-base);
 
       &:focus-within:not(:has([data-readonly])) {
         border-color: transparent;
         /* border/shadow-xs/select */
         box-shadow:
-          0 0 0 3px var(--border-weak-selected),
-          0 0 0 1px var(--border-selected),
+          0 0 0 3px color-mix(in srgb, var(--v2-border-border-focus) 25%, transparent),
+          0 0 0 1px var(--v2-border-border-focus),
           0 1px 2px -1px rgba(19, 16, 16, 0.25),
           0 1px 2px 0 rgba(19, 16, 16, 0.08),
           0 1px 3px 0 rgba(19, 16, 16, 0.12);
@@ -64,7 +64,7 @@
 
       &:has([data-invalid]) {
         background: var(--surface-critical-weak);
-        border: 1px solid var(--border-critical-selected);
+        border: 1px solid var(--v2-state-border-danger);
       }
 
       &:not(:has([data-slot="input-copy-button"])) {

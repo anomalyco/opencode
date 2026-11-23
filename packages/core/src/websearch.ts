@@ -55,6 +55,7 @@ export class RequestError extends Schema.TaggedError<RequestError>()("WebSearch.
 export type Error = ProviderRequiredError | ProviderNotFoundError | DisabledError | RequestError
 
 export interface Interface extends State.Transformable<Editor> {
+  readonly available: () => Effect.Effect<boolean>
   readonly providers: () => Effect.Effect<readonly Provider[]>
   readonly default: () => Effect.Effect<Provider | undefined, DisabledError>
   readonly select: (selection: Selection) => Effect.Effect<void>
@@ -76,6 +77,8 @@ type Data = {
 
 export type Editor = {
   add: (provider: ProviderImplementation) => void
+  list: () => readonly ProviderImplementation[]
+  remove: (id: ID) => void
   default: {
     get: () => Selection | undefined
     set: (selection: Selection) => void
@@ -99,16 +102,24 @@ const layer = Layer.effect(
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
+    const providers = (data: Data) =>
+      Array.from(data.providers.values(), (provider) => ({
+        id: provider.id,
+        name: provider.name,
+      })).toSorted((a, b) => a.name.localeCompare(b.name))
+
     const state = State.create<Data, Editor>({
       initial: () => ({ providers: new Map() }),
       editor: (editor) => ({
         add: (provider) => editor.providers.set(provider.id, provider),
+        list: () => Array.from(editor.providers.values()),
+        remove: (id) => editor.providers.delete(id),
         default: {
           get: () => editor.selection,
           set: (selection) => (editor.selection = selection),
         },
       }),
-      notify: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: State.changes(providers, () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid)),
     })
 
     const requireProvider = (providers: Map<ID, ProviderImplementation>, providerID: ID) => {
@@ -161,11 +172,12 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
+      available: Effect.fn("WebSearch.available")(function* () {
+        if (state.get().providers.size === 0) return false
+        return (yield* selection()) !== false
+      }),
       providers: Effect.fn("WebSearch.providers")(function* () {
-        return Array.from(state.get().providers.values(), (provider) => ({
-          id: provider.id,
-          name: provider.name,
-        })).toSorted((a, b) => a.name.localeCompare(b.name))
+        return providers(state.get())
       }),
       default: Effect.fn("WebSearch.defaultInfo")(function* () {
         const provider = yield* defaultProvider(yield* selection())

@@ -1,6 +1,38 @@
+/* `width` and `height` props arrive as variables, so classes and other CSS still size the spinner over them, as they
+   did over an SVG's attributes. The masks come from spinner-frames.css, which is generated: see spinner.tsx. */
+[data-slot="spinner-dots"] {
+  position: relative;
+  display: block;
+  width: var(--spinner-width, 18px);
+  height: var(--spinner-height, auto);
+  aspect-ratio: 1;
+  /* The vector grid cuts each dot's rounded shape out of the frames below. */
+  mask-image: var(--spinner-grid);
+  mask-size: 100% 100%;
+  forced-color-adjust: none;
+}
+
+/*
+ * The APNG frames carry each dot's level over the 15 units the dots span. They sit on a pseudo-element rather than as a
+ * second mask layer: Chromium stops advancing an animated image in a `mask-composite: intersect` stack.
+ */
+[data-slot="spinner-dots"]::before {
+  position: absolute;
+  inset: 0;
+  background-color: currentColor;
+  content: "";
+  mask-image: var(--spinner-frames);
+  mask-size: 93.75% 93.75%;
+  mask-position: center;
+  mask-repeat: no-repeat;
+}
+
 [data-component="spinner"] {
   color: inherit;
   flex-shrink: 0;
-  width: 18px;
-  aspect-ratio: 1;
+}
+
+:root[data-motion="reduce"] [data-slot="spinner-dots"]::before {
+  mask-image: var(--spinner-still);
+  mask-size: 100% 100%;
 }

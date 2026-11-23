@@ -3,7 +3,7 @@ import { Location } from "@opencode/schema/location"
 import { PositiveInt } from "@opencode/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
-import { FileNotFoundError } from "../errors.js"
+import { FileNotFoundError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const ListQuery = Schema.Struct({
@@ -19,6 +19,10 @@ const WriteQuery = Schema.Struct({
     description:
       "An absolute path or a path relative to the requested location. Missing parent directories are created.",
   }),
+})
+
+const WatchPayload = Schema.Struct({
+  path: Schema.String.annotate({ description: "A file path relative to the requested location." }),
 })
 
 const FindQuery = Schema.Struct({
@@ -88,6 +92,39 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
           summary: "Write file",
           description:
             "Write the raw request body to an absolute path or a path relative to the requested location, creating parent directories, and return the resolved absolute path. Unlike read, the target is not confined to the location. Experimental: may change without compatibility guarantees.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("fs.watch", "/api/experimental/fs/watch", {
+      query: LocationQuery,
+      payload: WatchPayload,
+      success: HttpApiSchema.NoContent,
+      error: [FileNotFoundError, ServiceUnavailableError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.fs.watch",
+          summary: "Watch file",
+          description:
+            "Watch one file relative to the requested location for 24 hours, publishing filesystem.changed on that location when it changes. Watching an already watched file resets its expiry. Paths follow read confinement. Experimental: may change without compatibility guarantees.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.delete("fs.unwatch", "/api/experimental/fs/watch", {
+      query: LocationQuery,
+      payload: WatchPayload,
+      success: HttpApiSchema.NoContent,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.fs.unwatch",
+          summary: "Unwatch file",
+          description:
+            "Stop watching one file relative to the requested location. Experimental: may change without compatibility guarantees.",
         }),
       ),
   )

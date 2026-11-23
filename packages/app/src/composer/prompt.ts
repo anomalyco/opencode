@@ -1,13 +1,16 @@
 import type { FileAttachmentPart, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
 import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { PromptAttachment, SessionMessageUser } from "@opencode/client/promise"
 import { commentContextItem, readPromptPresentation } from "./comment-note"
 import { buildPromptRequest } from "./request"
 import { contextItemKey, type FileContextItem } from "./schema"
 import { createPathHelpers, decodeFilePath, stripFileProtocol, stripQueryAndHash } from "@/workspaces/files/path"
 import { Skill } from "@opencode/schema/skill"
+import { Session } from "@opencode/schema/session"
+import { sessionMentions } from "@opencode/util/session-mention"
 
 type Inline =
+  | { type: "session"; start: number; end: number; value: string; id: Session.ID; title?: string }
   | {
       type: "file"
       start: number
@@ -60,14 +63,19 @@ function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["s
 }
 
 // A user message or a pending inbox item: the materialized transcript row shares the inbox payload's shape.
-export type PromptSource = Pick<SessionMessageUser, "id" | "text" | "files" | "agents" | "skills" | "metadata">
+export type PromptSource = Omit<
+  Pick<SessionMessageUser, "id" | "text" | "files" | "agents" | "skills" | "metadata">,
+  "files"
+> & {
+  files?: ReadonlyArray<PromptAttachment>
+}
 
 // Restores the composer content that produced a prompt, losing nothing it carried. File references
 // without a mention return as context through extractPromptContext; unmentioned agents and skills
 // return as trailing mentions, and inline files as attachments.
 export function extractPromptFromMessage(
   message: PromptSource,
-  opts?: { directory?: string; attachmentName?: string },
+  opts?: { directory?: string; attachmentName?: string; sessionTitle?: (id: string) => string | undefined },
 ): Prompt {
   const presentation = readPromptPresentation(message.metadata)
   const text = presentation?.displayText ?? message.text
@@ -83,13 +91,34 @@ export function extractPromptFromMessage(
     return path
   }
 
-  const inline: Inline[] = []
+  const inline: Inline[] = sessionMentions(text)
+    .filter((mention) => mention.text.startsWith("@session:"))
+    .map((mention) => ({
+      type: "session",
+      start: mention.start,
+      end: mention.end,
+      value: mention.text,
+      id: Session.ID.make(mention.id),
+      title: opts?.sessionTitle?.(mention.id),
+    }))
+
   const trailing: Inline[] = []
   const attachments: (ImageAttachmentPart | PathAttachmentPart)[] = []
 
   for (const file of message.files ?? []) {
     const mention = file.mention
-    const uri = file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+    const source = file.source
+    const fileUri = "uri" in file ? file.uri : undefined
+    const fileData = "data" in file ? file.data : undefined
+
+    const uri =
+      source.type === "uri"
+        ? source.uri
+        : fileUri !== undefined
+          ? fileUri
+          : fileData !== undefined
+            ? `data:${file.mime};base64,${fileData}`
+            : ""
 
     if (mention) {
       inline.push({
@@ -108,18 +137,16 @@ export function extractPromptFromMessage(
     }
 
     // A file reference returns as a context chip through extractPromptContext.
-    if (file.source.type === "uri" && file.source.uri.startsWith("file:")) continue
+    if (source.type === "uri" && source.uri.startsWith("file:")) continue
 
-    // Stored files carry their bytes, and an empty file has empty data; only a local handoff row
+    // Stored files carry their bytes or a media ref, and an empty file has empty data; only a local handoff row
     // leaves data empty because its bytes live at a blob URL.
-    const stored = file.source.type === "inline" || !!file.data
+    const stored = source.type === "inline" || !!fileData
 
     const dataUrl =
-      file.source.type === "uri" && file.source.uri.startsWith("data:")
-        ? file.source.uri
-        : stored
-          ? `data:${file.mime};base64,${file.data}`
-          : undefined
+      source.type === "uri" && source.uri.startsWith("data:")
+        ? source.uri
+        : (fileUri ?? (stored ? `data:${file.mime};base64,${fileData ?? ""}` : undefined))
 
     if (!dataUrl) continue
     attachments.push({
@@ -183,21 +210,20 @@ export function extractPromptContext(message: PromptSource, opts?: { directory?:
   )
 
   const files = (message.files ?? []).flatMap((file): FileContextItem[] => {
-    if (file.mention || file.source.type !== "uri" || !file.source.uri.startsWith("file:")) return []
+    const source = file.source
 
-    if (regenerated.has(file.source.uri)) return []
+    if (file.mention || source.type !== "uri" || !source.uri.startsWith("file:")) return []
 
-    const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(file.source.uri))).replace(
-      /^\/([A-Za-z]:)/,
-      "$1",
-    )
+    if (regenerated.has(source.uri)) return []
+
+    const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(source.uri))).replace(/^\/([A-Za-z]:)/, "$1")
 
     return [
       {
         type: "file",
         // The workspace root itself has no relative path, so it keeps its absolute one.
-        path: (directory && createPathHelpers(() => directory).normalize(file.source.uri)) || absolute,
-        selection: selectionFromFileUrl(file.source.uri),
+        path: (directory && createPathHelpers(() => directory).normalize(source.uri)) || absolute,
+        selection: selectionFromFileUrl(source.uri),
         name: file.name,
         description: file.description,
       },
@@ -237,10 +263,16 @@ function buildPrompt(
   }
 
   const pushPart = (item: Inline) => {
-    const content = item.value
+    const content = item.type === "session" && item.title ? `@${item.title}` : item.value
     const span = { content, start: position, end: position + content.length }
     position += content.length
     tail = content
+
+    if (item.type === "session") {
+      result.push({ type: "session", id: item.id, ...span })
+
+      return
+    }
 
     if (item.type === "agent") {
       result.push({ type: "agent", name: item.name, ...span })

@@ -1,17 +1,18 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
-import { Option, Schema } from "effect"
+import { Option, Predicate, Schema } from "effect"
+import type { ToolProps } from "../tools/tool-renderer"
 
-const decodeInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))
+const decodeInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.JsonObject))
 
-const empty = {}
+const empty: Schema.JsonObject = {}
 
-export function currentToolInput(tool: SessionMessageAssistantTool): Record<string, unknown> {
+export function currentToolInput(tool: SessionMessageAssistantTool) {
   if (tool.state.status !== "streaming") return tool.state.input
 
   return Option.getOrElse(decodeInput(tool.state.input), () => empty)
 }
 
-export function currentToolMetadata(tool: SessionMessageAssistantTool): Record<string, unknown> {
+export function currentToolMetadata(tool: SessionMessageAssistantTool) {
   if (!("metadata" in tool.state)) return empty
 
   return tool.state.metadata ?? empty
@@ -21,7 +22,7 @@ export function currentToolOutput(tool: SessionMessageAssistantTool) {
   if (tool.state.status === "running") {
     const output = tool.state.metadata.output
 
-    return typeof output === "string" ? output : undefined
+    return Predicate.isString(output) ? output : undefined
   }
 
   if (!("content" in tool.state) || !tool.state.content) return undefined
@@ -44,38 +45,83 @@ export function currentToolFailed(tool: SessionMessageAssistantTool) {
   )
 }
 
-export function shellResultFailed(metadata: Record<string, unknown>) {
+export function shellResultFailed(metadata: Schema.JsonObject) {
   // Shell completion reports the process outcome in metadata, not the tool status.
-  return metadata.timeout === true || (typeof metadata.exit === "number" && metadata.exit !== 0)
+  return metadata.timeout === true || (Predicate.isNumber(metadata.exit) && metadata.exit !== 0)
 }
 
-export function executeToolFailed(metadata: Record<string, unknown>) {
-  // Code Mode can report failed nested calls in a completed tool result.
+function executeToolFailed(metadata: Schema.JsonObject) {
+  return metadata.error === true || executeToolErrorIndex(metadata) >= 0
+}
+
+const decodeExecuteCall = Schema.decodeUnknownOption(
+  Schema.Struct({
+    tool: Schema.String,
+    status: Schema.Literals(["running", "completed", "error"]),
+    input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+)
+
+export type ExecuteToolCall = Option.Option.Value<ReturnType<typeof decodeExecuteCall>>
+
+// Code Mode streams the tools a script calls through metadata rather than child tool parts. A script can make thousands
+// of calls, so readers count and search them as they are and decode only the calls they show.
+function executeToolCallList(metadata: ToolProps["metadata"]): readonly unknown[] {
   const calls = metadata.toolCalls
 
-  return (
-    metadata.error === true ||
-    (Array.isArray(calls) &&
-      calls.some(
-        (call) =>
-          call !== null &&
-          typeof call === "object" &&
-          !Array.isArray(call) &&
-          "status" in call &&
-          call.status === "error",
-      ))
-  )
+  return Array.isArray(calls) ? calls : []
+}
+
+export function executeToolCallCount(metadata: ToolProps["metadata"]) {
+  return executeToolCallList(metadata).length
+}
+
+/** The position of the last call that failed, or -1. */
+export function executeToolErrorIndex(metadata: ToolProps["metadata"]) {
+  return executeToolCallList(metadata).findLastIndex(callFailed)
+}
+
+/** The calls from `start` on, each with its position among all of them. */
+export function executeToolCalls(metadata: ToolProps["metadata"], start = 0) {
+  return executeToolCallList(metadata)
+    .slice(start)
+    .flatMap((call, offset) =>
+      Option.toArray(decodeExecuteCall(call)).map((value) => ({ index: start + offset, call: value })),
+    )
+}
+
+// Matches only calls the rows can decode, so a failure is never counted on a call that shows nowhere.
+const callFailed = Schema.is(Schema.Struct({ tool: Schema.String, status: Schema.Literal("error") }))
+
+const isCallArg = Schema.is(Schema.Union([Schema.String, Schema.Number, Schema.Boolean]))
+
+export function executeToolCallArgs(call: ExecuteToolCall) {
+  return Object.entries(call.input ?? {})
+    .filter(([, value]) => isCallArg(value))
+    .map(([key, value]) => `${key}=${String(value).replace(/\s+/g, " ")}`)
+}
+
+// Collapsed rows name the failed call, or else the latest one.
+export function executeToolSubtitle(metadata: ToolProps["metadata"]) {
+  const calls = executeToolCallList(metadata)
+  const failed = calls.findIndex(callFailed)
+  const call = Option.getOrUndefined(decodeExecuteCall(calls[failed >= 0 ? failed : calls.length - 1]))
+
+  if (!call) return undefined
+  const args = executeToolCallArgs(call)
+
+  return args.length ? `${call.tool} [${args.join(", ")}]` : call.tool
 }
 
 export function currentToolHasLoadedFiles(tool: SessionMessageAssistantTool) {
   if (tool.name !== "read" || tool.state.status !== "completed") return false
   const loaded = tool.state.metadata?.loaded
 
-  return Array.isArray(loaded) && loaded.some((path) => typeof path === "string")
+  return Array.isArray(loaded) && loaded.some(Predicate.isString)
 }
 
-export function readImagePath(input: Record<string, unknown>) {
-  if (typeof input.path !== "string" || !/\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i.test(input.path)) return
+export function readImagePath(input: ToolProps["input"]) {
+  if (!Predicate.isString(input.path) || !/\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i.test(input.path)) return
 
   return input.path.replaceAll("\\", "/")
 }
@@ -111,5 +157,5 @@ export function currentContentDefaultOpen(
 
   if (!Array.isArray(files) || files.length === 0) return true
 
-  return !files.every((file) => !!file && typeof file === "object" && "status" in file && file.status === "deleted")
+  return !files.every((file) => Predicate.hasProperty(file, "status") && file.status === "deleted")
 }
