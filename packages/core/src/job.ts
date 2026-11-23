@@ -90,6 +90,11 @@ type Active = {
   settling: boolean
   consumed: boolean
   reported: boolean
+  // A result reaches its session once: through `collect` or through its notification's `deliver`.
+  delivered: boolean
+  collectors: number
+  // Resolves when the last collector lets go.
+  released?: Deferred.Deferred<void>
   cancelledByCaller: boolean
   recovery?: Recovery
   cancel?: Effect.Effect<void>
@@ -114,6 +119,8 @@ type BackgroundResult = {
   info?: Info
   backgrounded?: Deferred.Deferred<Info>
 }
+
+type CollectResult = { infos: Array<Info | undefined>; released: Deferred.Deferred<void>[] }
 
 type StartResult = { info: Info } | { info: Info; job: Active }
 
@@ -178,6 +185,18 @@ export interface Interface {
   readonly runningBackground: Effect.Effect<readonly Recovery[]>
   readonly backgroundJobs: Effect.Effect<readonly JobList.Item[]>
   readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
+  /**
+   * Holds back the notifications of `ids` while `until` runs, then takes the results of those that finished, so their
+   * notifications are skipped. Returns each job's current info. An interrupted `until` takes nothing.
+   */
+  readonly collect: (
+    ids: ReadonlyArray<string>,
+    until: Effect.Effect<void>,
+  ) => Effect.Effect<ReadonlyArray<Info | undefined>>
+  /**
+   * Claims a finished job's notification, after any `collect` holding it lets go: false when `collect` took its result.
+   */
+  readonly deliver: (id: string) => Effect.Effect<boolean>
   /** Whether an explicit caller cancellation stopped this job (not shutdown teardown). */
   readonly isCancelled: (id: string) => Effect.Effect<boolean>
   readonly currentGeneration: (
@@ -405,6 +424,8 @@ export const make = Effect.gen(function* () {
               settling: false,
               consumed: false,
               reported: false,
+              delivered: false,
+              collectors: 0,
               cancelledByCaller: false,
               recovery: input.recovery,
               cancel: input.cancel,
@@ -658,6 +679,78 @@ export const make = Effect.gen(function* () {
     ),
   )
 
+  const collect: Interface["collect"] = Effect.fn("Job.collect")(function* (ids, until) {
+    return yield* Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const held = yield* SynchronizedRef.modifyEffect(
+          state.jobs,
+          Effect.fnUntraced(function* (jobs): Effect.fn.Return<
+            readonly [Map<string, Deferred.Deferred<void>>, Map<string, Active>]
+          > {
+            const held = new Map<string, Deferred.Deferred<void>>()
+            const next = new Map(jobs)
+            for (const id of new Set(ids)) {
+              const job = jobs.get(id)
+              if (!job) continue
+              const released = job.collectors > 0 && job.released ? job.released : yield* Deferred.make<void>()
+              held.set(id, released)
+              next.set(id, { ...job, collectors: job.collectors + 1, released })
+            }
+            return [held, next]
+          }),
+        )
+        const exit = yield* Effect.exit(restore(until))
+        const result = yield* SynchronizedRef.modify(
+          state.jobs,
+          (jobs): readonly [CollectResult, Map<string, Active>] => {
+            const next = new Map(jobs)
+            const released: Deferred.Deferred<void>[] = []
+            for (const [id, deferred] of held) {
+              const job = next.get(id)
+              // A newer generation or a removed job no longer counts this hold.
+              if (!job || job.released !== deferred) {
+                released.push(deferred)
+                continue
+              }
+              if (job.collectors === 1) released.push(deferred)
+              next.set(id, {
+                ...job,
+                collectors: job.collectors - 1,
+                delivered: job.delivered || (Exit.isSuccess(exit) && job.info.status !== "running"),
+              })
+            }
+            const infos = ids.map((id) => {
+              const job = next.get(id)
+              return job ? snapshot(job) : undefined
+            })
+            return [{ infos, released }, next]
+          },
+        )
+        yield* Effect.forEach(result.released, (released) => Deferred.succeed(released, undefined), { discard: true })
+        if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause)
+        return result.infos
+      }),
+    )
+  })
+
+  const deliver: Interface["deliver"] = Effect.fn("Job.deliver")(function* (id) {
+    while (true) {
+      const claim = yield* SynchronizedRef.modify(
+        state.jobs,
+        (jobs): readonly [boolean | Deferred.Deferred<void>, Map<string, Active>] => {
+          const job = jobs.get(id)
+          // A job no longer tracked was never collected.
+          if (!job) return [true, jobs]
+          if (job.delivered) return [false, jobs]
+          if (job.collectors > 0 && job.released) return [job.released, jobs]
+          return [true, new Map(jobs).set(id, { ...job, delivered: true })]
+        },
+      )
+      if (typeof claim === "boolean") return claim
+      yield* Deferred.await(claim)
+    }
+  })
+
   const currentGeneration: Interface["currentGeneration"] = Effect.fn("Job.currentGeneration")(function* (id) {
     const job = (yield* SynchronizedRef.get(state.jobs)).get(id)
     if (!job) return undefined
@@ -753,6 +846,8 @@ export const make = Effect.gen(function* () {
     runningBackground,
     backgroundJobs: JobList.read(db, state.jobs),
     completeBackground,
+    collect,
+    deliver,
     isCancelled,
     currentGeneration,
     prepareSubagentReport,

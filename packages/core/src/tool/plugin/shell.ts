@@ -176,6 +176,9 @@ const notify = Effect.fnUntraced(function* (
 ) {
   const info = (yield* jobs.wait({ id: input.id })).info
   if (!info || info.status === "running") return
+  // `tools.wait` already returned this result.
+  if (!(yield* jobs.deliver(input.id)))
+    return info.notificationID ? yield* jobs.completeBackground(info.notificationID) : undefined
   const output = info.status === "completed" ? yield* Deferred.await(input.settled) : undefined
   const text = output ? (info.output ?? "") : info.status === "error" ? (info.error ?? "Command failed") : "Cancelled"
   // A session deleted while its command ran has no one left to tell.

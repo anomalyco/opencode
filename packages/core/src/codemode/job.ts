@@ -1,7 +1,7 @@
 export * as CodeModeJob from "./job.js"
 
 import { Identifier } from "@opencode/schema/identifier"
-import { Cause, Context, Deferred, Duration, Effect, Exit, Option, type Scope, Semaphore } from "effect"
+import { Cause, Clock, Context, Deferred, Duration, Effect, Exit, Option, Ref, type Scope, Semaphore } from "effect"
 import { extension } from "mime-types"
 import { Flag } from "../flag.js"
 import { Job } from "../job.js"
@@ -20,7 +20,9 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
   }
 }
 
-const BLOCK_TIMEOUT = "2 minutes"
+const BLOCK_TIMEOUT_MS = 2 * 60 * 1_000
+/** The longest a nested call can keep its script blocking, counted from the script's start. */
+export const MAX_BLOCK_MS = 10 * 60 * 1_000
 
 type Execute = (context: Tool.Context) => Effect.Effect<Tool.NormalizedResult, Tool.Error>
 /** The execute call's own `timeout` and `background` inputs, which only exist with `full_codemode`. */
@@ -29,6 +31,11 @@ type Run = (context: Tool.Context, execute: Execute, options?: Options) => Retur
 
 /** Only a session drain can hand off work and report its result. */
 export const Current = Context.Reference<Run | undefined>("@opencode/CodeModeJob", { defaultValue: () => undefined })
+
+/** Lets a nested call, such as `wait`, keep its script blocking for up to `ms` more, within `MAX_BLOCK_MS`. */
+export const Extend = Context.Reference<(ms: number) => Effect.Effect<void>>("@opencode/CodeModeJob/Extend", {
+  defaultValue: () => () => Effect.void,
+})
 
 export const make = Effect.fnUntraced(function* (
   jobs: Job.Interface,
@@ -54,6 +61,19 @@ export const make = Effect.fnUntraced(function* (
     const result = yield* Deferred.make<Tool.NormalizedResult, Tool.Error>()
     const detached = yield* Deferred.make<void>()
     const progress = Semaphore.makeUnsafe(1)
+    const began = yield* Clock.currentTimeMillis
+    const deadline = yield* Ref.make(began + BLOCK_TIMEOUT_MS)
+    const extend = (ms: number) =>
+      Clock.currentTimeMillis.pipe(
+        Effect.flatMap((now) => Ref.update(deadline, (at) => Math.max(at, Math.min(now + ms, began + MAX_BLOCK_MS)))),
+      )
+    const untilDeadline = Effect.gen(function* () {
+      while (true) {
+        const left = (yield* Ref.get(deadline)) - (yield* Clock.currentTimeMillis)
+        if (left <= 0) return
+        yield* Effect.sleep(Duration.millis(left))
+      }
+    })
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         yield* context.progress({ background: true })
@@ -72,7 +92,12 @@ export const make = Effect.fnUntraced(function* (
                     Effect.flatMap((done) => (done ? Effect.void : context.progress({ ...update, background: true }))),
                   ),
                 ),
-            }).pipe(Effect.provideService(Job.BlockingParent, id), Effect.interruptible, Effect.exit)
+            }).pipe(
+              Effect.provideService(Job.BlockingParent, id),
+              Effect.provideService(Extend, extend),
+              Effect.interruptible,
+              Effect.exit,
+            )
             yield* Deferred.done(result, exit)
             if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
             const text = Exit.isFailure(exit)
@@ -86,13 +111,12 @@ export const make = Effect.fnUntraced(function* (
         const blocked = options?.background
           ? Option.none()
           : yield* restore(
-              jobs
-                .block({ id, sessionID })
-                .pipe(
-                  Effect.timeoutOption(
-                    options?.timeout === undefined ? BLOCK_TIMEOUT : Duration.millis(options.timeout),
-                  ),
-                ),
+              options?.timeout === undefined
+                ? Effect.raceFirst(
+                    jobs.block({ id, sessionID }).pipe(Effect.map(Option.some)),
+                    untilDeadline.pipe(Effect.as(Option.none())),
+                  )
+                : jobs.block({ id, sessionID }).pipe(Effect.timeoutOption(Duration.millis(options.timeout))),
             ).pipe(Effect.onInterrupt(() => jobs.cancel(id)))
         if (Option.isSome(blocked) && blocked.value?.type === "finished") return yield* Deferred.await(result)
         const job = yield* jobs.background(id)
@@ -104,6 +128,8 @@ export const make = Effect.fnUntraced(function* (
           const { info } = yield* jobs.wait({ id })
           // Session removal cancels the job and removes its outbox row.
           if (!info || info.status === "cancelled") return
+          // `tools.wait` already returned this result.
+          if (!(yield* jobs.deliver(id))) return yield* jobs.completeBackground(notificationID)
           // Synthetic messages carry text. Keep the script's file results accessible without putting base64 in its inbox.
           const exit = yield* Deferred.await(result).pipe(Effect.exit)
           const files = Exit.isSuccess(exit) ? exit.value.content.filter((part) => part.type === "file") : []
