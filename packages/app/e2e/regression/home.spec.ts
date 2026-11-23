@@ -73,10 +73,8 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
 
   const field = page.locator('[data-slot="home-session-search-field"]')
 
+  // A text field shows its caret and background, not a ring.
   await page.keyboard.press("Tab")
-  await expect(search).toBeFocused()
-  await expect(field).toHaveCSS("outline-style", "solid")
-  await search.click()
   await expect(search).toBeFocused()
   await expect(field).toHaveCSS("outline-style", "none")
 
@@ -95,8 +93,9 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
   await expect(viewport).toHaveAttribute("tabindex", "0")
   await viewport.press("Shift+Tab")
   await page.keyboard.press("Tab")
+  // The list takes focus so the keyboard can scroll it, without a ring around the whole area.
   await expect(viewport).toBeFocused()
-  await expect(viewport).toHaveCSS("outline-offset", "-2px")
+  await expect(viewport).toHaveCSS("outline-style", "none")
 })
 
 test("Home keeps the session list in every interface mode", async ({ page }) => {
@@ -333,7 +332,6 @@ test("tabbing out of session search closes its results, and tabbing back reopens
 
   await page.keyboard.press(`${modifier}+f`)
   await expect(search).toBeFocused()
-  await expect(page.locator('[data-slot="home-session-search-field"]')).toHaveCSS("outline-style", "solid")
   await expect(panel.getByRole("option")).toContainText(earlier.title)
 })
 

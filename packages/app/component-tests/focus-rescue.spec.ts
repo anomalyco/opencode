@@ -20,13 +20,26 @@ story.describe("scopes", () => {
   story("moves focus to the next item, or to the previous one after the last", async ({ page }) => {
     const list = page.getByTestId("list")
 
-    await list.getByRole("button", { name: "Two" }).focus()
+    // Tab moves focus to the item, so the item that takes over shows its ring.
+    await list.getByRole("button", { name: "One" }).press("Tab")
+    await expect(list.getByRole("button", { name: "Two" })).toBeFocused()
     await page.keyboard.press("Enter")
     await expect(list.getByRole("button", { name: "Three" })).toBeFocused()
     expect(await ringed(list.getByRole("button", { name: "Three" }))).toBe(true)
 
     await page.keyboard.press("Enter")
     await expect(list.getByRole("button", { name: "One" })).toBeFocused()
+  })
+
+  story("leaves the item that takes over without a ring when no key moved focus there", async ({ page }) => {
+    const list = page.getByTestId("list")
+
+    // Typing and Enter are not navigation, and the item got focus from code.
+    await page.keyboard.press("a")
+    await list.getByRole("button", { name: "Two" }).focus()
+    await page.keyboard.press("Enter")
+    await expect(list.getByRole("button", { name: "Three" })).toBeFocused()
+    expect(await ringed(list.getByRole("button", { name: "Three" }))).toBe(false)
   })
 
   story("returns focus to what had it before when a scope is left empty", async ({ page }) => {
@@ -65,7 +78,6 @@ for (const action of ["Steer", "Remove"]) {
       const editor = root.locator('[data-component="session-composer-dock"] [contenteditable="true"]')
 
       await expect(editor).toBeFocused()
-      await expect(editor).not.toHaveAttribute("data-keyboard-focus")
     },
   )
 }

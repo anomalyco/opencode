@@ -15,11 +15,6 @@
   outline: none;
 }
 
-.scroll-view__viewport:focus-visible {
-  outline: 2px solid var(--v2-border-border-focus);
-  outline-offset: -2px;
-}
-
 .scroll-view[data-orientation="horizontal"] .scroll-view__viewport {
   overflow-x: auto;
   overflow-y: hidden;
