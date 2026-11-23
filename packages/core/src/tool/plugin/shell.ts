@@ -345,10 +345,10 @@ export const Plugin = {
         command: invocation.command,
         program: invocation.shell,
         target,
-        rules: Effect.gen(function* () {
+        policy: Effect.gen(function* () {
           const session = yield* sessions.get(context.sessionID)
           const agent = yield* agents.resolve(context.agent)
-          return Permission.merge(agent?.permissions ?? [], session.permissions ?? [])
+          return Permission.Policy.fromRules(agent?.permissions ?? [], session.permissions ?? [])
         }),
       })
       yield* Effect.forEach(
