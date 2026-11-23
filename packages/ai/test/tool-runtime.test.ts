@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import { Content } from "@opencode/schema/tool"
 import { Effect, Schema, Stream } from "effect"
-import { ai, LLMEvent, LLMResponse, toDefinitions, ToolCallPart, ToolChoice, ToolOutput } from "../src/effect.js"
+import {
+  ai,
+  LLMEvent,
+  LLMResponse,
+  namespace,
+  toDefinitions,
+  ToolCallPart,
+  ToolChoice,
+  ToolOutput,
+} from "../src/effect.js"
 import { Auth, LLMClient } from "../src/route.js"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
@@ -27,10 +36,10 @@ const baseRequest = ai.request({
 })
 const weatherFailureCause = new Error("weather lookup denied")
 
-test("dispatches namespaced calls by qualified identity", async () => {
+test("dispatches namespaced calls by path", async () => {
   let context: ToolExecuteContext | undefined
   const lookup = tool({
-    name: "crm.lookup",
+    name: "lookup",
     description: "Look up a customer.",
     input: Schema.Struct({}),
     success: Schema.String,
@@ -42,7 +51,10 @@ test("dispatches namespaced calls by qualified identity", async () => {
   const call = ToolCallPart.make({ id: "call_1", namespace: "crm", name: "lookup", input: {} })
   const result = await Effect.runPromise(
     ToolRuntime.dispatch(
-      [lookup, tool({ name: "lookup", description: "Unqualified lookup.", input: Schema.Struct({}) })],
+      [
+        namespace("crm", {}, [lookup]),
+        tool({ name: "lookup", description: "Unqualified lookup.", input: Schema.Struct({}) }),
+      ],
       call,
     ),
   )

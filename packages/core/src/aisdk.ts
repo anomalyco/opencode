@@ -33,9 +33,17 @@ import {
   type ToolMessage,
   type UsageInput,
 } from "@opencode/ai/effect"
-import { Auth, Endpoint, ProviderShared, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
+import {
+  Auth,
+  Endpoint,
+  ProviderShared,
+  RequestExecutor,
+  ToolNames,
+  type AnyRoute,
+  type HttpMiddleware,
+} from "@opencode/ai/route"
 import { isRecord } from "@opencode/util/record"
-import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream, Struct } from "effect"
+import { Cause, Context, Effect, Layer, Option, Result, Schema, Scope, Stream, Struct } from "effect"
 import { makeParser } from "effect/encoding/Sse"
 import { FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AsyncLocalStorage } from "node:async_hooks"
@@ -488,7 +496,7 @@ function callOptions(
   modelID: ID,
   optionKey: string,
 ): LanguageModelV3CallOptions {
-  const flat = ProviderShared.flattenRequest(request)
+  const flat = Result.getOrThrow(ToolNames.lower(request)).request
   return {
     prompt: prompt(flat),
     maxOutputTokens: request.maxTokens,

@@ -10,6 +10,7 @@ import { applyCachePolicy } from "../cache-policy.js"
 import { applyEffortUpdates } from "../effort-updates.js"
 import { mapToolUpdates, planToolUpdates, type ToolUpdateEncoding } from "../tool-updates.js"
 import { normalizeToolHistory } from "../tool-history.js"
+import { ToolNames } from "../tool-names.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
 import { ToolSchemaProjection } from "../protocols/utils/tool-schema.js"
@@ -67,6 +68,8 @@ export interface Route<
   readonly body: RouteBody<Body>
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
   readonly toolUpdates?: ToolUpdateEncoding
+  /** Whether the protocol sends one level of tool namespaces natively; see `Protocol.namespaces`. */
+  readonly namespaces?: boolean
   readonly sanitizer?: LanguageModelSanitizerCompatibility
   readonly with: {
     <Next extends CompactionOperations | undefined>(
@@ -379,6 +382,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       body: protocol.body,
       supportsEffortUpdates: protocol.supportsEffortUpdates,
       toolUpdates: protocol.toolUpdates,
+      namespaces: protocol.namespaces,
       sanitizer: protocol.sanitizer,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { compact, id, provider, providerMetadataKey, auth, transport, endpoint, ...options } = patch
@@ -542,7 +546,10 @@ export function make<Body, Prepared, Frame, Event, State>(
   })
 }
 
-const prepareRequest = (request: LLMRequest): LLMRequest => {
+// Every operation sends the request as one translator lowered it: provider tool names in, canonical ones out.
+const prepareRequest = (request: LLMRequest) => Effect.fromResult(ToolNames.lower(resolveRequest(request)))
+
+const resolveRequest = (request: LLMRequest): LLMRequest => {
   const original = resolveRequestOptions(request)
   const sanitized = restoreClasses({ ...sanitizeSurrogates({ ...original, model: undefined }), model: original.model })
   // Deduplicate per sibling level; a tool and a namespace may share a name.
@@ -582,7 +589,8 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
     return yield* ProviderShared.invalidRequest(
       "Local file references must be read with Media.file(path) before sending",
     )
-  const resolved = prepareRequest(request)
+  const lowered = yield* prepareRequest(request)
+  const resolved = lowered.request
   const route = resolved.model.route
 
   const body = yield* route.body.from(resolved)
@@ -590,6 +598,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
 
   return {
     request: resolved,
+    names: lowered.names,
     route,
     body,
     prepared,
@@ -613,7 +622,9 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, o
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request, options)
-      return compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime, options)
+      return compiled.route
+        .streamPrepared(compiled.prepared, compiled.request, runtime, options)
+        .pipe(Stream.map(compiled.names.decodeEvent))
     }),
   )
 
@@ -675,10 +686,14 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
     ): Effect.Effect<CompactionResponse, AIError>
     function compact(request: LLMRequest, options?: EndpointCompactOptions | TriggerCompactOptions) {
       return Effect.suspend((): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> => {
-        if (options?.mechanism === "trigger" && canCompact(request, options))
-          return request.model.route.compact.trigger(prepareRequest(request), executor, options)
-        if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
-          return request.model.route.compact.endpoint(prepareRequest(request), executor, options)
+        if (options?.mechanism === "trigger" && canCompact(request, options)) {
+          const trigger = request.model.route.compact.trigger
+          return prepareRequest(request).pipe(Effect.flatMap((lowered) => trigger(lowered.request, executor, options)))
+        }
+        if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request)) {
+          const endpoint = request.model.route.compact.endpoint
+          return prepareRequest(request).pipe(Effect.flatMap((lowered) => endpoint(lowered.request, executor, options)))
+        }
         return unsupportedCompaction(request.model, options?.mechanism)
       })
     }

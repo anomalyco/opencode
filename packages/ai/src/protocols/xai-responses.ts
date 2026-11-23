@@ -94,13 +94,8 @@ export const protocol = Protocol.make({
   stream: ResponsesHostedTools.stream(adapter, HOSTED_TOOLS),
 })
 
-const compactFlat = ResponsesCompaction.make(adapter, (request) =>
+export const compact: CompactOperation = ResponsesCompaction.make(adapter, (request) =>
   OpenResponses.lowerTools(ProviderShared.flattenTools(request.tools), adapter, OpenAIFreeform.tools(request)),
 )
-
-// /compact lowers the history itself, so flatten the whole request as `Protocol.make` does before every step's body:
-// past calls to namespaced tools then carry the same names as on those steps, and /compact reads the prefix they cached.
-export const compact: CompactOperation = (request, executor, options) =>
-  compactFlat(ProviderShared.flattenRequest(request), executor, options)
 
 export * as XAIResponses from "./xai-responses.js"

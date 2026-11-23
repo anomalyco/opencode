@@ -186,9 +186,11 @@ export type {
   Snapshot as GenerationSnapshot,
   Status as GenerationStatus,
 } from "./generation.js"
+export { namespace } from "./tool.js"
 export type {
   ExecutableTool,
   Tool,
+  ToolGroup,
   ToolChangesInput,
   ToolExecute,
   ToolExecuteContext,
