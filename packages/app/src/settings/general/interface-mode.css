@@ -190,6 +190,10 @@
     box-shadow: none;
   }
 
+  &[data-mode="list"] [data-slot="sketch-row"]::before {
+    background-color: color-mix(in srgb, var(--v2-background-bg-accent) 60%, transparent);
+  }
+
   [data-slot="sketch-row"][data-status="approval"]::before {
     background-color: var(--v2-background-bg-accent);
   }
