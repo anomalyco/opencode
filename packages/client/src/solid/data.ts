@@ -387,6 +387,8 @@ export function createData(config: CreateDataInput) {
     typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
   const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
   const sync = createSync()
+  // A failed first read has no stored value. Keep it eligible for the next catalog update.
+  const failedCatalogs = new Set<string>()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   // Job events that arrive while a tree's list is in flight, applied over its response: the latest info, or undefined
   // once settled.
@@ -1462,6 +1464,8 @@ export function createData(config: CreateDataInput) {
     switch (event.type) {
       case "provider.updated":
         refreshLocation("provider", result.location.provider, location)
+        if (failedCatalogs.has(`location.model:${locationKey(location)}`))
+          refresh(() => result.location.model.sync(location))
         break
       case "model.updated":
         refreshLocation("model", result.location.model, location)
@@ -1546,7 +1550,8 @@ export function createData(config: CreateDataInput) {
 
   function hasLocation<Field extends keyof LocationData>(field: Field, ref?: LocationRef) {
     const id = locationKey(ref ?? defaultLocation())
-    return store.location[id]?.[field] !== undefined || sync.has(`location.${field}:${id}`)
+    const key = `location.${field}:${id}`
+    return store.location[id]?.[field] !== undefined || sync.has(key) || failedCatalogs.has(key)
   }
 
   function refreshLocation<Field extends keyof LocationData>(
@@ -1582,8 +1587,13 @@ export function createData(config: CreateDataInput) {
       sync: (ref?: LocationRef) => {
         const location = ref ?? defaultLocation()
         const id = locationKey(location)
-        return sync.run(`location.${field}:${id}`, async () => {
-          const response = await load(locationQuery(location))
+        const request = `location.${field}:${id}`
+        return sync.run(request, async () => {
+          const response = await load(locationQuery(location)).catch((error) => {
+            if (field === "provider" || field === "model") failedCatalogs.add(request)
+            throw error
+          })
+          failedCatalogs.delete(request)
           const key = locationKey(response.location)
           publish(key, response.data)
           if (options?.alias && key !== id) publish(id, response.data)

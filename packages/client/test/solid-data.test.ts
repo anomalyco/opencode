@@ -1072,7 +1072,7 @@ for (const resource of ["provider", "model"] as const) {
   })
 }
 
-test("ignores catalog updates for unloaded locations while refreshing loaded locations", async () => {
+test("refreshes loaded and initially failed catalogs while ignoring updates for unread catalogs", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const requests: Array<[string, string | null]> = []
   const current = { version: "v1" }
@@ -1084,6 +1084,8 @@ test("ignores catalog updates for unloaded locations while refreshing loaded loc
       const directory = url.searchParams.get("location[directory]") ?? "/project"
       requests.push([url.pathname, directory])
       const location = { directory, project: { id: directory, directory, canonical: directory } }
+      if (current.version === "v1" && (url.pathname === "/api/provider" || url.pathname === "/api/model"))
+        return new Response(null, { status: 503 })
       if (url.pathname === "/api/vcs")
         return Response.json({ location, data: { branch: { current: "main", default: "main" } } })
       if (url.pathname === "/api/provider")
@@ -1136,12 +1138,14 @@ test("ignores catalog updates for unloaded locations while refreshing loaded loc
 
   try {
     await Promise.all([
-      setup.data.location.provider.sync(loaded),
-      setup.data.location.model.sync(loaded),
+      expect(setup.data.location.provider.sync(loaded)).rejects.toThrow(),
+      expect(setup.data.location.model.sync(loaded)).rejects.toThrow(),
       setup.data.location.command.sync(loaded),
       setup.data.location.agent.sync(loaded),
       setup.data.location.vcs.sync(vcsOnly),
     ])
+    expect(setup.data.location.provider.list(loaded)).toBeUndefined()
+    expect(setup.data.location.model.list(loaded)).toBeUndefined()
     requests.length = 0
     current.version = "v2"
 
@@ -1153,7 +1157,8 @@ test("ignores catalog updates for unloaded locations while refreshing loaded loc
     await Bun.sleep(20)
     expect(requests).toEqual([])
 
-    for (const type of ["provider.updated", "model.updated", "command.updated", "agent.updated"] as const) {
+    // A provider update can be the first sign that the server is ready again.
+    for (const type of ["provider.updated", "command.updated", "agent.updated"] as const) {
       emit({ id: `evt_${type}_loaded`, created: 2, type, location: loaded, data: {} })
     }
     await wait(
