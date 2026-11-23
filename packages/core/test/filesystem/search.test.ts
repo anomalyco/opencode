@@ -17,6 +17,8 @@ import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { it } from "../lib/effect"
 
+const itWindows = process.platform === "win32" ? it.effect : it.effect.skip
+
 const ripgrepStub = (entry: string, onFind: (input: Ripgrep.FindInput) => void) =>
   Layer.succeed(
     Ripgrep.Service,
@@ -264,6 +266,41 @@ describe("FileSystemSearch", () => {
           RelativePath.make(`src${path.sep}`),
         )
       }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.live("bounds a folder scan inside a repository rooted at home", () =>
+    Effect.gen(function* () {
+      let observed: Ripgrep.FindInput | undefined
+      const home = AbsolutePath.make(os.homedir())
+      const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location(
+                { directory: AbsolutePath.make(path.join(home, "Documents")) },
+                { projectDirectory: home, vcs: { type: "git", store: AbsolutePath.make(path.join(home, ".git")) } },
+              ),
+            ),
+          ),
+        ),
+        Ripgrep.node.replace(ripgrepStub("notes.md", (input) => (observed = input))),
+      ])
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        yield* search.find({ query: "notes", type: "file" })
+        expect(observed?.limit).toBe(100_000)
+        expect(observed?.exclude).toBeUndefined()
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  itWindows("recognizes home in another letter case on Windows", () =>
+    Effect.sync(() => {
+      expect(Protected.isHome(os.homedir().toLowerCase())).toBe(true)
+      expect(Protected.isHome(os.homedir().toUpperCase() + path.sep)).toBe(true)
+      expect(Protected.isHome(path.join(os.homedir(), "Documents"))).toBe(false)
     }),
   )
 

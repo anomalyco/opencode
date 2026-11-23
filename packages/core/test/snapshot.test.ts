@@ -1,6 +1,7 @@
 import { $ } from "bun"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
+import os from "os"
 import path from "path"
 import { Deferred, Effect, Fiber, Layer, Logger } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -10,6 +11,7 @@ import { Location } from "@opencode/core/location"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Hash } from "@opencode/util/hash"
+import { location } from "./fixture/location"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -407,6 +409,51 @@ describe("Snapshot", () => {
             return yield* snapshot.capture()
           }).pipe(Effect.provide(snapshotLayer(tmp.path, tmp.path))),
         ).toBeUndefined()
+      }),
+    ),
+  )
+
+  testEffect(Layer.empty).live("skips capture when the Git repository is rooted at home", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const home = AbsolutePath.make(os.homedir())
+        const git = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
+        let discoveries = 0
+        const layer = AppNodeBuilder.build(Snapshot.node, [
+          Location.node.replace(
+            Layer.succeed(
+              Location.Service,
+              Location.Service.of(
+                location(
+                  { directory: AbsolutePath.make(path.join(home, "Documents")) },
+                  { projectDirectory: home, vcs: { type: "git", store: AbsolutePath.make(path.join(home, ".git")) } },
+                ),
+              ),
+            ),
+          ),
+          Global.node.replace(Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })),
+          Git.node.replace(
+            Layer.succeed(
+              Git.Service,
+              Git.Service.of({
+                ...git,
+                repo: {
+                  ...git.repo,
+                  discover: (input) => {
+                    discoveries++
+                    return git.repo.discover(input)
+                  },
+                },
+              }),
+            ),
+          ),
+        ])
+
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          expect(yield* snapshot.capture()).toBeUndefined()
+          expect(discoveries).toBe(0)
+        }).pipe(Effect.provide(layer))
       }),
     ),
   )

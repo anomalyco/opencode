@@ -9,6 +9,7 @@ import { Git } from "./git.js"
 import { Global } from "@opencode/util/global"
 import { Location } from "./location.js"
 import { AbsolutePath, RelativePath } from "./schema.js"
+import { Protected } from "./filesystem/protected.js"
 import { ID } from "@opencode/schema/snapshot"
 import { Hash } from "@opencode/util/hash"
 import { State } from "./state.js"
@@ -116,7 +117,14 @@ const layer = Layer.effect(
       return RelativePath.make(path.relative(worktree, directory).replaceAll("\\", "/") || ".")
     })
 
-    const enabled = () => location.vcs?.type === "git" && state.get().enabled
+    // A repository rooted at home (usually an accidental `git init ~`) would make every capture hash the whole
+    // home tree. Each step waits for its capture before streaming, so the prompt would hang for minutes.
+    const home = Protected.isHome(location.project.directory)
+    if (home && location.vcs?.type === "git")
+      yield* Effect.logWarning("snapshots disabled: the Git repository is rooted at the home directory", {
+        directory: location.project.directory,
+      })
+    const enabled = () => location.vcs?.type === "git" && !home && state.get().enabled
 
     // `objects.pack` takes a cross-process lock, so a run that outlasts the interval never overlaps the next.
     let lastPackCheck = Number.NEGATIVE_INFINITY
