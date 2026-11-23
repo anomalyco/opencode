@@ -289,7 +289,7 @@ export const make = Effect.fnUntraced(function* (input: {
                     sessionUpdate: "agent_message_chunk",
                     content: { type: "text", text: error.message },
                   },
-                })
+                }).pipe(Effect.mapError(() => new ACPError.ServerUnavailableError()))
               : ACPClient.classify(error),
           ),
         )
