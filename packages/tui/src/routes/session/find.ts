@@ -8,12 +8,21 @@ export type FindPart = { messageID: string; partID: string; text: string }
 export type FindMatch = { messageID: string; partID: string; occurrence: number }
 export type FindRange = { start: number; end: number }
 
-/** Searchable text in transcript order: prompts and assistant text, not reasoning or tool output. */
+/**
+ * Searchable text in transcript order: prompts, assistant text and compaction summaries, not reasoning or tool
+ * output.
+ */
 export function findParts(rows: readonly SessionRow[], message: (messageID: string) => SessionMessageInfo | undefined) {
   return rows.flatMap((row): FindPart[] => {
     if (row.type === "message") {
       const item = message(row.messageID)
-      return item?.type === "user" && item.text ? [{ messageID: item.id, partID: "message", text: item.text }] : []
+      if (item?.type === "user") return item.text ? [{ messageID: item.id, partID: "message", text: item.text }] : []
+      if (item?.type !== "compaction") return []
+      // CompactionMessage renders the trimmed summary, or the error of a compaction that failed but was not cancelled.
+      const text = (
+        item.status !== "failed" ? item.summary : item.error.type === "aborted" ? "" : item.error.message
+      ).trim()
+      return text ? [{ messageID: item.id, partID: "message", text }] : []
     }
     if (row.type !== "part") return []
     const item = message(row.ref.messageID)
@@ -42,9 +51,18 @@ export function sameFindMatch(a: FindMatch | undefined, b: FindMatch | undefined
   return !!a && !!b && a.messageID === b.messageID && a.partID === b.partID && a.occurrence === b.occurrence
 }
 
-export function findMatches(parts: readonly FindPart[], pattern: RegExp | undefined) {
+/**
+ * Each part's matches, as many as `shown` says it displays: markdown hides fence info strings, markers and link
+ * targets, and joins text the source splits. A part that has not rendered for the pattern counts its source.
+ */
+export function findMatches(
+  parts: readonly FindPart[],
+  pattern: RegExp | undefined,
+  shown: (part: FindPart) => number | undefined = () => undefined,
+) {
+  if (!pattern) return []
   return parts.flatMap((part) =>
-    findRanges(part.text, pattern).map((_, occurrence) => ({
+    Array.from({ length: shown(part) ?? findRanges(part.text, pattern).length }, (_, occurrence) => ({
       messageID: part.messageID,
       partID: part.partID,
       occurrence,
@@ -63,12 +81,17 @@ export function displayRanges<Range extends FindRange>(
   ranges: readonly Range[],
 ): Range[] {
   if (sources.length !== chunks.length) return []
-  const starts = chunks.reduce((result, chunk) => [...result, result.at(-1)! + chunk.text.length], [0])
+  let length = 0
+  const starts = chunks.map((chunk) => {
+    const start = length
+    length += chunk.text.length
+    return start
+  })
   // A chunk whose text differs in length from its source replaced concealed markup; it maps as a whole.
   const verbatim = (index: number) => chunks[index]!.text.length === sources[index]!.end - sources[index]!.start
   const startOf = (offset: number) => {
     const index = sources.findIndex((source) => source.end > offset)
-    if (index === -1) return starts.at(-1)!
+    if (index === -1) return length
     const source = sources[index]!
     return starts[index]! + (offset > source.start && verbatim(index) ? offset - source.start : 0)
   }

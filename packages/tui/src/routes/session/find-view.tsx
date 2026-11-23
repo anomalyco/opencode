@@ -9,16 +9,17 @@ import {
   type MarkdownRenderable,
   type Renderable,
   type RGBA,
+  type TextBufferRenderable,
   type TextChunk,
 } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { createEffect, createMemo, For, on, onCleanup, Show, untrack } from "solid-js"
+import { createEffect, createMemo, For, on, onCleanup, Show } from "solid-js"
 import { useCursorStyle } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { useTheme } from "../../context/theme"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useDialog } from "../../ui/dialog"
-import { displayRanges, findRanges, paintChunks, type FindPart, type FindRange } from "./find"
+import { displayRanges, findRanges, offsetRow, paintChunks, type FindPart, type FindRange } from "./find"
 import { use } from "./render-context"
 
 export const FIND_MODE = "find"
@@ -141,9 +142,8 @@ export function FindBar(props: {
 
 /**
  * Returns a `<markdown>` ref, applied after `useSessionLinks()`, that paints the part's Find
- * matches into its paragraphs, headings, table cells and code blocks. The part's Nth match is the
- * Nth one it shows: the inline hook gets a block's source but not where it sits, and a short block
- * such as a table cell can repeat text from earlier in the part.
+ * matches into its paragraphs, headings, table cells and code blocks. The part counts its matches
+ * in what it shows, not in its source, and reports the count: the Nth match is the Nth one shown.
  */
 export function useFindHighlight(part: () => FindPart) {
   const ctx = use()
@@ -151,12 +151,15 @@ export function useFindHighlight(part: () => FindPart) {
   let markdown: MarkdownRenderable | undefined
   let links: MarkdownInlineHook | undefined
   let filter: readonly string[] | undefined
-  let marking = false
+  // Whether every block goes through the hook, which the part needs while it shows a match.
+  let painting = false
+  let settling = false
+  // What the part shows for the pattern, until a block is written again.
+  let cache: { pattern: RegExp; items: ShownItem[] } | undefined
   const current = createMemo(() => {
     const match = ctx.find.current()
     return match?.messageID === part().messageID && match.partID === part().partID ? match.occurrence : -1
   })
-  const found = createMemo(() => findRanges(part().text, ctx.find.pattern()).length > 0)
   const paintMatch = <Chunk extends { bg?: RGBA }>(chunk: Chunk) => ({ ...chunk, bg: theme.find.background.match })
   const paintCurrent = <Chunk extends { fg?: RGBA; bg?: RGBA }>(chunk: Chunk) => ({
     ...chunk,
@@ -164,43 +167,44 @@ export function useFindHighlight(part: () => FindPart) {
     bg: theme.find.background.current,
   })
 
-  // Paragraphs, headings and table cells, after session links. The current match is marked once the
-  // blocks are written, when their order is known.
+  // Paragraphs, headings and table cells, after session links. Once the blocks are written, the
+  // part counts what it shows and marks the current match.
   const prose: MarkdownInlineHook = (spans, context) => {
     const linked = links ? links(spans, context) : spans
     const pattern = ctx.find.pattern()
-    if (!pattern || !found()) return linked
-    if (current() !== -1 && !marking) {
-      marking = true
-      queueMicrotask(markCurrent)
+    if (!pattern) return linked
+    cache = undefined
+    if (!settling) {
+      settling = true
+      queueMicrotask(settle)
     }
     return paintChunks(linked, findRanges(linked.map((span) => span.text).join(""), pattern), paintMatch)
   }
 
-  function markCurrent() {
-    marking = false
+  function settle() {
+    settling = false
     const pattern = ctx.find.pattern()
+    if (!pattern || !markdown || markdown.isDestroyed) return
+    const items = shown(pattern)
+    ctx.find.counted(part(), pattern, count(items))
     const occurrence = current()
-    if (!pattern || occurrence === -1 || !markdown || markdown.isDestroyed) return
-    const item = shown(pattern).find((item) => occurrence < item.first + item.ranges.length)
+    const item = items.find((item) => occurrence < item.first + item.ranges.length)
     const range = item?.ranges[occurrence - item.first]
-    if (!item?.paint || !range) return
-    item.paint(range)
-    // Table cells have no text node to scroll to; the reveal falls back to the part.
-    const node = item.node
-    if (node instanceof TextRenderable) ctx.find.located({ ...part(), occurrence }, () => node, range.start)
+    if (occurrence !== -1 && range) item?.mark?.(range, occurrence)
   }
 
   // Everything the part shows, in order, with the matches each piece shows and how many come before.
   function shown(pattern: RegExp) {
-    const items = (markdown?.blocks ?? []).flatMap(({ renderable: node }): ShownItem[] => {
+    if (cache?.pattern === pattern) return cache.items
+    const pieces = (markdown?.blocks ?? []).flatMap(({ renderable: node }): Omit<ShownItem, "first">[] => {
       if (node instanceof TextRenderable)
         return [
           {
             node,
             ranges: findRanges(node.plainText, pattern),
-            paint: (range) => {
+            mark: (range, occurrence) => {
               node.content = new StyledText(paintChunks(node.content.chunks, [range], paintCurrent))
+              ctx.find.located({ ...part(), occurrence }, textRow(node, range.start))
             },
           },
         ]
@@ -208,62 +212,82 @@ export function useFindHighlight(part: () => FindPart) {
       if (node instanceof CodeRenderable) return [{ node, ranges: findRanges(node.content, pattern) }]
       if (!(node instanceof TextTableRenderable)) return []
       return node.content.flatMap((row, r) =>
-        row.flatMap((cell, c): ShownItem[] => {
+        row.flatMap((cell, c): Omit<ShownItem, "first">[] => {
           if (!cell) return []
-          const paint = (range: FindRange) => {
+          const mark = (range: FindRange, occurrence: number) => {
             node.content = node.content.map((cells, i) =>
-              i === r ? cells.map((value, j) => (j === c && value ? paintChunks(value, [range], paintCurrent) : value)) : cells,
+              i === r
+                ? cells.map((value, j) => (j === c && value ? paintChunks(value, [range], paintCurrent) : value))
+                : cells,
+            )
+            // The table keeps its row layout to itself; rows are spread over its height evenly enough to reveal one.
+            ctx.find.located({ ...part(), occurrence }, () =>
+              node.isDestroyed ? undefined : node.y + Math.floor((node.height * r) / node.content.length),
             )
           }
-          return [{ node, ranges: findRanges(cell.map((chunk) => chunk.text).join(""), pattern), paint }]
+          return [{ node, ranges: findRanges(cell.map((chunk) => chunk.text).join(""), pattern), mark }]
         }),
       )
     })
-    const firsts = items.reduce((result, item) => [...result, result.at(-1)! + item.ranges.length], [0])
-    return items.map((item, index) => ({ ...item, first: firsts[index]! }))
+    let first = 0
+    const items = pieces.map((piece) => {
+      const item = { ...piece, first }
+      first += piece.ranges.length
+      return item
+    })
+    cache = { pattern, items }
+    return items
   }
 
   // Fenced code keeps OpenTUI's per-chunk source ranges, so it maps its matches onto its chunks exactly.
   function code(this: CodeRenderable, chunks: TextChunk[], context: ChunkRenderContext) {
     const pattern = ctx.find.pattern()
-    if (!pattern || !found()) return chunks
-    const first = shown(pattern).find((item) => item.node === this)?.first
-    if (first === undefined) return chunks
+    if (!pattern) return chunks
+    const item = shown(pattern).find((item) => item.node === this)
+    if (!item?.ranges.length) return chunks
+    const occurrence = current()
     const ranges = findRanges(context.content, pattern).map((range, index) => ({
       ...range,
-      current: first + index === current(),
+      current: item.first + index === occurrence,
     }))
     const display = displayRanges(chunks, context.sourceRanges ?? [], ranges)
     const target = display.find((range) => range.current)
-    if (target) ctx.find.located({ ...part(), occurrence: current() }, () => this, target.start)
+    if (target) ctx.find.located({ ...part(), occurrence }, textRow(this, target.start))
     return paintChunks(chunks, display, (chunk, range) => (range.current ? paintCurrent(chunk) : paintMatch(chunk)))
   }
 
-  // Code blocks have no chunk callback until a query reaches them.
-  function refresh(node: Renderable) {
+  // Code blocks have no chunk callback until a query reaches them. `rerun` repaints the ones that have it.
+  function attach(node: Renderable, rerun: boolean) {
     if (node instanceof CodeRenderable) {
       const callback = node.onChunks
-      if (callback === code) {
+      if (rerun && callback === code) {
         node.onChunks = undefined
         node.onChunks = callback
       }
       if (!callback) node.onChunks = code
     }
-    node.getChildren().forEach(refresh)
+    node.getChildren().forEach((child) => attach(child, rerun))
   }
 
-  // Not deferred: a part that mounts while Find is open paints its matches right away.
+  // Not deferred: a part that mounts while Find is open paints its matches right away. Streamed text
+  // and the markdown mode change what the part shows, so it counts again and picks up new blocks.
   createEffect(
-    on([ctx.find.pattern, current], ([pattern], previous) => {
-      const text = part().text
-      const has = findRanges(text, pattern).length > 0
-      if (!markdown || (!has && !findRanges(text, previous?.[0]).length)) return
-      untrack(() => {
-        // The hook filter matches exact text, so every block reaches the hook while the part has matches.
-        markdown!.inlineHookFilter = has ? undefined : filter
-        markdown!.rerunInlineHook(() => true)
-        refresh(markdown!)
-      })
+    on([ctx.find.pattern, current, () => part().text, ctx.markdownMode], ([pattern, occurrence], previous) => {
+      if (!markdown) return
+      cache = undefined
+      const matches = pattern ? count(shown(pattern)) : 0
+      if (pattern) ctx.find.counted(part(), pattern, matches)
+      const moved = !previous || previous[0] !== pattern || previous[1] !== occurrence
+      if (!moved && painting === matches > 0) {
+        if (painting) attach(markdown, false)
+        return
+      }
+      if (!painting && matches === 0) return
+      painting = matches > 0
+      // The hook filter matches exact text, so every block reaches the hook while the part shows a match.
+      markdown.inlineHookFilter = painting ? undefined : filter
+      markdown.rerunInlineHook(() => true)
+      attach(markdown, true)
     }),
   )
 
@@ -275,7 +299,19 @@ export function useFindHighlight(part: () => FindPart) {
   }
 }
 
-type ShownItem = { node: Renderable; ranges: FindRange[]; paint?: (range: FindRange) => void }
+type ShownItem = {
+  node: Renderable
+  ranges: FindRange[]
+  first: number
+  /** Paints the piece's current match and reports where it is. */
+  mark?: (range: FindRange, occurrence: number) => void
+}
+
+const count = (items: readonly ShownItem[]) => items.reduce((total, item) => total + item.ranges.length, 0)
+
+/** The screen row that shows a text offset of the renderable after wrapping. */
+const textRow = (node: TextBufferRenderable, offset: number) => () =>
+  node.isDestroyed ? undefined : node.y + offsetRow(node.lineInfo, node.plainText, offset)
 
 /** Plain transcript text with its Find matches painted. */
 export function FindText(props: { part: FindPart; fg: TextRenderable["fg"] }) {
@@ -299,7 +335,7 @@ export function FindText(props: { part: FindPart; fg: TextRenderable["fg"] }) {
   createEffect(() => {
     const occurrence = current()
     const range = ranges()[occurrence]
-    if (node && range) ctx.find.located({ ...props.part, occurrence }, () => node, range.start)
+    if (node && range) ctx.find.located({ ...props.part, occurrence }, textRow(node, range.start))
   })
 
   return (

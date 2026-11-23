@@ -96,7 +96,7 @@ function LinkClicksStory(props: { context: Plugin.Context }) {
           config: config.data,
           mutatePending: async () => false,
           pendingDelivery: () => undefined,
-          find: { pattern: () => undefined, current: () => undefined, located: () => {} },
+          find: { pattern: () => undefined, current: () => undefined, counted: () => {}, located: () => {} },
         }}
       >
         <scrollbox flexGrow={1} minHeight={0}>

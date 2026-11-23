@@ -1,11 +1,11 @@
 import { createContext, useContext } from "solid-js"
-import type { Renderable, TextBufferRenderable } from "@opentui/core"
+import type { Renderable } from "@opentui/core"
 import type { ModelInfo } from "@opencode/client"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { useConfig } from "../../config"
 import type { ThinkingMode } from "../../context/thinking"
 import type { createTimelineAnchors } from "./anchors"
-import type { FindMatch } from "./find"
+import type { FindMatch, FindPart } from "./find"
 import type { GroupKind } from "./grouping/session"
 
 export type PendingAction = "steer" | "queue" | "cancel"
@@ -40,8 +40,10 @@ export const context = createContext<{
     /** Set while Find is open with a query. */
     pattern: () => RegExp | undefined
     current: () => FindMatch | undefined
-    /** A part reports where it rendered the current match, so a pending seek can reach its row. */
-    located: (match: FindMatch, node: () => TextBufferRenderable | undefined, offset: number) => void
+    /** A rendered part reports how many matches it shows for the pattern. */
+    counted: (part: FindPart, pattern: RegExp, count: number) => void
+    /** A part reports the screen row of the current match, so a pending seek can reach it. */
+    located: (match: FindMatch, row: () => number | undefined) => void
   }
 }>()
 

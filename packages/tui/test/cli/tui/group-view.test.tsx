@@ -332,7 +332,7 @@ function mount(input: {
                 config: input.config,
                 mutatePending: async () => true,
                 pendingDelivery: () => undefined,
-                find: { pattern: () => undefined, current: () => undefined, located: () => {} },
+                find: { pattern: () => undefined, current: () => undefined, counted: () => {}, located: () => {} },
               }}
             >
               <box paddingTop={2}>

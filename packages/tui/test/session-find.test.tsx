@@ -35,9 +35,25 @@ describe("find", () => {
     expect(findPattern("Needle")?.source).toBe(findPattern("needle")?.source)
   })
 
-  test("searches prompts and assistant text in transcript order, not reasoning or tools", () => {
+  test("searches prompts, assistant text and compaction summaries in transcript order, not reasoning or tools", () => {
     const messages: Record<string, SessionMessageInfo> = {
       u1: { id: "u1", type: "user", text: "find the needle", time: { created: 1 } } as SessionMessageInfo,
+      c1: {
+        id: "c1",
+        type: "compaction",
+        status: "completed",
+        reason: "manual",
+        summary: " a needle summary ",
+        time: { created: 2 },
+      } as SessionMessageInfo,
+      c2: {
+        id: "c2",
+        type: "compaction",
+        status: "failed",
+        reason: "manual",
+        error: { type: "aborted", message: "needle cancelled" },
+        time: { created: 3 },
+      } as unknown as SessionMessageInfo,
       a1: {
         id: "a1",
         type: "assistant",
@@ -51,6 +67,8 @@ describe("find", () => {
     }
     const rows = [
       { type: "message", messageID: "u1" },
+      { type: "message", messageID: "c1" },
+      { type: "message", messageID: "c2" },
       { type: "part", ref: { messageID: "a1", partID: "reasoning:0" } },
       { type: "part", ref: { messageID: "a1", partID: "text:0" } },
       { type: "part", ref: { messageID: "a1", partID: "tool-1" } },
@@ -59,14 +77,31 @@ describe("find", () => {
     const parts = findParts(rows, (id) => messages[id])
     expect(parts).toEqual([
       { messageID: "u1", partID: "message", text: "find the needle" },
+      { messageID: "c1", partID: "message", text: "a needle summary" },
       { messageID: "a1", partID: "text:0", text: "first needle" },
       { messageID: "a1", partID: "text:1", text: "second needle" },
     ])
     expect(findMatches(parts, findPattern("needle")).map((match) => match.partID)).toEqual([
       "message",
+      "message",
       "text:0",
       "text:1",
     ])
+  })
+
+  test("counts what a rendered part shows over its source", () => {
+    const parts = [
+      { messageID: "a1", partID: "text:0", text: "```typescript\nconst x = 1\n```\n\nWe use typescript" },
+      { messageID: "a1", partID: "text:1", text: "more typescript" },
+    ]
+    // The fence's info string is not shown, so the first part shows one match, not two.
+    expect(findMatches(parts, findPattern("typescript"), (part) => (part.partID === "text:0" ? 1 : undefined))).toEqual(
+      [
+        { messageID: "a1", partID: "text:0", occurrence: 0 },
+        { messageID: "a1", partID: "text:1", occurrence: 0 },
+      ],
+    )
+    expect(findMatches(parts, undefined)).toEqual([])
   })
 
   test("maps source matches onto concealed markdown chunks", () => {
@@ -132,7 +167,29 @@ test("Find highlights prompts and markdown, moves between matches, and clears on
       model,
       finish: "stop",
       time: { created: 2, completed: 3 },
-      content: [{ type: "text", text: "The **Needle** is in the code:\n\n```ts\nconst needle = 1\n```\n\n| a | b |\n|---|---|\n| hay | needle |" }],
+      content: [
+        {
+          type: "text",
+          text: "The **Needle** is in the code:\n\n```ts\nconst needle = 1\n```\n\n| a | b |\n|---|---|\n| hay | needle |",
+        },
+      ],
+    },
+    {
+      id: "message-01a",
+      type: "assistant",
+      agent: "build",
+      model,
+      finish: "stop",
+      time: { created: 4, completed: 5 },
+      content: [{ type: "text", text: "```typescript\nconst x = 1\n```\n\nWe use typescript, **foo**bar." }],
+    },
+    {
+      id: "message-01b",
+      type: "compaction",
+      status: "completed",
+      reason: "manual",
+      summary: "The haystack was summarized.",
+      time: { created: 6 },
     },
     ...filler,
     { id: "message-99", type: "user", text: "Last needle here", time: { created: 99 } },
@@ -171,27 +228,35 @@ test("Find highlights prompts and markdown, moves between matches, and clears on
   await app.waitForFrame((frame) => frame.includes("Last needle here") && frame.includes("Demo Model"))
   expect(app.captureCharFrame()).not.toContain("Where is the needle?")
 
-  // Painted matches: spans that read "needle" on a background their line's preceding span lacks.
-  const painted = () =>
-    app.captureSpans().lines.flatMap((line) =>
-      line.spans.flatMap((span, index) => {
-        const before = line.spans[index - 1]
-        return span.text.toLowerCase() === "needle" && before && !before.bg.equals(span.bg) ? [span.text] : []
-      }),
+  // Each line's spans, with neighbours on the same background joined: bold splits a painted match.
+  const runs = () =>
+    app.captureSpans().lines.map((line) =>
+      line.spans.reduce<{ text: string; bg: RGBA }[]>((result, span) => {
+        const last = result.at(-1)
+        if (last?.bg.equals(span.bg)) return [...result.slice(0, -1), { ...last, text: last.text + span.text }]
+        return [...result, { text: span.text, bg: span.bg }]
+      }, []),
+    )
+  // Painted matches: runs that read the word on a background the run before them lacks.
+  const painted = (word = "needle") =>
+    runs().flatMap((line) =>
+      line.flatMap((run, index) => (run.text.toLowerCase() === word && index > 0 ? [run.text] : [])),
     )
   // Which visible match is current, by the line it is on: the one painted unlike the others.
-  const currentOn = () => {
-    const spans = app.captureSpans().lines.flatMap((line) => {
-      const text = line.spans
-        .map((span) => span.text)
+  const currentOn = (word = "needle") => {
+    const spans = runs().flatMap((line) => {
+      const text = line
+        .map((run) => run.text)
         .join("")
         .replace(/^[┃\s]+/, "")
         .trim()
-      const span = line.spans.find((item) => item.text.toLowerCase() === "needle")
+      const span = line.find((run) => run.text.toLowerCase() === word)
       // The Find field's own query is not a match.
-      return span && text !== "needle" ? [{ text, bg: span.bg }] : []
+      return span && text !== word ? [{ text, bg: span.bg }] : []
     })
-    return spans.filter((item) => spans.filter((other) => other.bg.equals(item.bg)).length === 1).map((item) => item.text)
+    return spans
+      .filter((item) => spans.filter((other) => other.bg.equals(item.bg)).length === 1)
+      .map((item) => item.text)
   }
 
   app.mockInput.pressKey("x", { ctrl: true })
@@ -236,4 +301,37 @@ test("Find highlights prompts and markdown, moves between matches, and clears on
     return focused instanceof TextareaRenderable && !(focused instanceof InputRenderable)
   })
   await app.waitFor(() => painted().length === 0)
+
+  // Matches count what markdown shows: not the fence's language, and across concealed markers.
+  const search = async (query: string) => {
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("f")
+    await app.waitForFrame(
+      (frame) =>
+        frame.includes("Find in session...") && app.renderer.currentFocusedRenderable instanceof InputRenderable,
+    )
+    await app.mockInput.typeText(query)
+  }
+  await search("typescript")
+  await app.waitForFrame((frame) => frame.includes("Find · 1 of 1"))
+  await app.waitFor(() => currentOn("typescript")[0] === "We use typescript, foobar.")
+  // A code block streamed in after the current match while Find is open is counted and painted.
+  app.events.emit({
+    id: "evt_find_stream",
+    created: 100,
+    type: "session.text.delta",
+    data: { sessionID, assistantMessageID: "message-01a", ordinal: 0, delta: "\n\n```sh\necho typescript\n```" },
+  })
+  await app.waitForFrame((frame) => frame.includes("Find · 1 of 2"))
+  await app.waitFor(() => painted("typescript").length === 2)
+  app.mockInput.pressEscape()
+  await app.waitForFrame((frame) => frame.includes("Demo Model"))
+  await search("foobar")
+  await app.waitForFrame((frame) => frame.includes("Find · 1 of 1"))
+  await app.waitFor(() => currentOn("foobar")[0] === "We use typescript, foobar.")
+  app.mockInput.pressEscape()
+  await app.waitForFrame((frame) => frame.includes("Demo Model"))
+  await search("haystack")
+  await app.waitForFrame((frame) => frame.includes("Find · 1 of 1"))
+  await app.waitFor(() => currentOn("haystack")[0] === "The haystack was summarized.")
 })
