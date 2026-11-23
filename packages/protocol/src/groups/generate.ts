@@ -94,7 +94,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
         identifier: "experimental.generate.video.get",
         summary: "Read a video generation",
         description:
-          "Read a video job: running, completed with its videos' blobs, or error with a reason. Jobs survive a server restart, which resumes polling running ones. A job is not found 24 hours after it finished, or once none of its blobs remain. Experimental: may change without compatibility guarantees.",
+          "Read a video job: running, completed with its videos' blobs, or error with a reason. Jobs survive a server restart, which resumes polling running ones. A job and its videos are deleted a week after it finished; a job is also not found once none of its blobs remain. Experimental: may change without compatibility guarantees.",
       }),
     ),
   )

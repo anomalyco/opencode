@@ -82,7 +82,7 @@ const settled = (id: VideoID) =>
 
 const records = KV.Service.pipe(Effect.flatMap((kv) => kv.scan({ prefix: "video:" })))
 
-it.effect("keeps video jobs across restarts and forgets them a day after they finish", () =>
+it.effect("keeps video jobs across restarts and deletes them and their videos a week after they finish", () =>
   Effect.gen(function* () {
     const dir = (yield* tmpdirScoped("opencode-generation-")).path
     const state = provider()
@@ -108,8 +108,8 @@ it.effect("keeps video jobs across restarts and forgets them a day after they fi
       state.status.set("remote_2", { status: "completed" })
       expect(yield* settled(first.slow)).toMatchObject({ status: "completed" })
 
-      yield* TestClock.adjust("25 hours")
-      // A poll already past its clock read when the day passes removes nothing, so keep advancing until one does.
+      yield* TestClock.adjust("8 days")
+      // A poll already past its clock read when the week passes removes nothing, so keep advancing until one does.
       yield* eventually(
         TestClock.adjust("5 seconds").pipe(Effect.andThen(records)),
         (page) => page.entries.length === 0,
@@ -117,6 +117,9 @@ it.effect("keeps video jobs across restarts and forgets them a day after they fi
       expect(yield* generations.get(first.job.id).pipe(Effect.flip)).toMatchObject({
         _tag: "VideoGeneration.NotFoundError",
       })
+      const blobs = yield* BlobStore.Service
+      for (const blob of first.job.blobs)
+        expect(yield* blobs.read(blob.id).pipe(Effect.flip)).toMatchObject({ _tag: "BlobStore.NotFoundError" })
     }).pipe(Effect.provide(app(dir, state)))
   }),
 )
