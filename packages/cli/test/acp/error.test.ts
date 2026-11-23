@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
+import { CommandNotFoundError } from "@opencode/protocol/errors"
+import { ACPClient } from "../../src/acp/client"
 import { ACPError } from "../../src/acp/error"
 import { delivered, rpcError, startSession, textDelta, type Wire } from "./wire-fixture"
 
@@ -48,4 +51,25 @@ describe("acp error boundary over the wire", () => {
       expect(acp.logs.map((log) => String(log.message)).toSorted()).toEqual(logs)
     },
   )
+})
+
+describe("acp client error classification", () => {
+  const failureOf = async (error: unknown) =>
+    Effect.runPromise(
+      ACPClient.classify(error).pipe(
+        Effect.match({
+          onFailure: (failure) => failure,
+          onSuccess: () => {
+            throw new Error("expected classify to fail, not succeed")
+          },
+        }),
+      ),
+    )
+
+  test("maps CommandNotFoundError to an invalid request", async () => {
+    const failure = await failureOf(new CommandNotFoundError({ command: "nope", message: "Unknown command: nope" }))
+    if (!(failure instanceof ACPError.InvalidRequestError)) throw new Error(`unexpected: ${failure._tag}`)
+    expect(failure.message).toBe("Unknown command: nope")
+    expect(failure.field).toBe("command")
+  })
 })
