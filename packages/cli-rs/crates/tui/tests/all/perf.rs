@@ -301,8 +301,13 @@ fn decode_responses() {
     assert_eq!(decoded, 2 * TURNS + SESSIONS + PROVIDERS * MODELS_PER_PROVIDER);
 }
 
+/// The config carries an `experimental` key, as users' configs do, so a per-frame copy of the config shows in the counts.
 fn mount(server: Server, route: Route, width: u16, height: u16) -> support::Harness {
-    let deps = Deps { config: support::config(support::still()), route, ..support::deps(Arc::new(server)) };
+    let info = opencode_local::cli_config::Info {
+        experimental: Some([("perf-probe".to_owned(), true)].into_iter().collect()),
+        ..support::still()
+    };
+    let deps = Deps { config: support::config(info), route, ..support::deps(Arc::new(server)) };
     let harness = support::mount(width, height, deps);
     harness.app.set_verify(false);
     harness
