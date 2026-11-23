@@ -1668,6 +1668,20 @@ describe("HttpApiCodegen.generate", () => {
     ).toThrow("Multiple success schemas: session.get")
   })
 
+  test("types endpoints with alternate success shapes by the first", () => {
+    const contract = compileContract(
+      api(
+        HttpApiEndpoint.get("get", "/session", {
+          success: [Schema.Struct({ data: Schema.String }), Schema.Struct({ data: Schema.Number })],
+        }),
+      ),
+      { alternateSuccesses: new Set(["get"]) },
+    )
+    const types = emitPromise(contract).files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('export type SessionGetOutput = ({ readonly "data": string })["data"]')
+  })
+
   test("models an SSE success as a direct stream", () => {
     const output = compile(
       api(
