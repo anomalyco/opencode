@@ -12,33 +12,52 @@
   margin-top: 0;
 }
 
+/* A neutral button, as tall as the Daily and Weekly toggle beside it. */
 [data-page="stats"] [data-component="share-button"] {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  color: var(--stats-faint);
-  background: transparent;
-  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--stats-text);
+  background: var(--stats-layer);
+  border: 1px solid color-mix(in srgb, var(--stats-text) 28%, transparent);
+  border-radius: 0;
   cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  -webkit-tap-highlight-color: transparent;
 
-  /* A 40px target around the 24px icon. */
+  /* A 40px target around the 28px button. */
   &::after {
     content: "";
     position: absolute;
-    inset: -8px;
+    inset: -6px 0;
+  }
+
+  svg {
+    color: var(--stats-faint);
   }
 
   @media (hover: hover) and (pointer: fine) {
     &:hover {
-      color: var(--stats-text);
+      background: var(--stats-layer-2);
+      border-color: color-mix(in srgb, var(--stats-text) 44%, transparent);
     }
   }
 
+  &:active {
+    transform: scale(0.97);
+  }
+
   &[aria-expanded="true"] {
-    color: var(--stats-text);
     background: var(--stats-layer-2);
   }
 
@@ -66,13 +85,47 @@
   overflow: hidden;
   box-shadow: 0 24px 80px rgb(0 0 0 / 0.35);
 
+  /* Opens with a short rise and settle from 97%, eased out; closes faster than it opens. Transitions rather than
+     keyframes, so closing mid-open reverses from where it is. Only opacity and transform animate. */
+  --editor-from: translateY(8px) scale(0.97);
+  opacity: 0;
+  transform: var(--editor-from);
+  transition:
+    opacity 140ms ease-out,
+    transform 140ms ease-out,
+    overlay 140ms allow-discrete,
+    display 140ms allow-discrete;
+
   &[open] {
-    animation: share-editor-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 220ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 280ms cubic-bezier(0.23, 1, 0.32, 1),
+      overlay 280ms allow-discrete,
+      display 280ms allow-discrete;
+
+    @starting-style {
+      opacity: 0;
+      transform: var(--editor-from);
+    }
   }
 
   &::backdrop {
+    background: rgb(12 12 12 / 0);
+    transition:
+      background-color 140ms ease-out,
+      overlay 140ms allow-discrete,
+      display 140ms allow-discrete;
+  }
+
+  &[open]::backdrop {
     background: rgb(12 12 12 / 0.6);
-    backdrop-filter: blur(2px);
+    transition-duration: 240ms;
+
+    @starting-style {
+      background: rgb(12 12 12 / 0);
+    }
   }
 
   button {
@@ -286,9 +339,13 @@
     height: auto;
     max-width: 100%;
     max-height: 100%;
+    /* Layered, tight shadows: a hairline, then contact, near and far shade. */
     box-shadow:
-      0 1px 2px rgb(0 0 0 / 0.12),
-      0 16px 48px rgb(0 0 0 / 0.28);
+      0 0 0 1px rgb(0 0 0 / 0.06),
+      0 1px 1px rgb(0 0 0 / 0.08),
+      0 2px 4px -1px rgb(0 0 0 / 0.08),
+      0 6px 12px -4px rgb(0 0 0 / 0.1),
+      0 14px 24px -10px rgb(0 0 0 / 0.14);
   }
 
   [data-slot="editor-rendering"] {
@@ -411,34 +468,6 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--stats-faint);
-  }
-
-  [data-slot="editor-headline"] {
-    box-sizing: border-box;
-    width: 100%;
-    padding: 10px 12px;
-    font: inherit;
-    font-size: 14px;
-    line-height: 20px;
-    color: var(--stats-text);
-    background: var(--stats-layer);
-    border: 1px solid var(--stats-line-strong);
-    border-radius: 0;
-    resize: vertical;
-
-    &:focus-visible {
-      outline: 2px solid var(--stats-accent);
-      outline-offset: -1px;
-    }
-  }
-
-  [data-slot="text-button"] {
-    align-self: flex-start;
-    padding: 0;
-    font-size: 12px;
-    color: var(--stats-accent-text);
-    background: transparent;
-    border: 0;
   }
 
   [data-slot="option-grid"] {
@@ -646,8 +675,15 @@
     border: 0;
     box-shadow: none;
 
+    /* A sheet: it rises from below on the iOS drawer curve, without the scale. */
+    --editor-from: translateY(32px);
+
     &[open] {
-      animation: share-editor-up 260ms cubic-bezier(0.32, 0.72, 0, 1);
+      transition:
+        opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+        transform 360ms cubic-bezier(0.32, 0.72, 0, 1),
+        overlay 360ms allow-discrete,
+        display 360ms allow-discrete;
     }
 
     [data-slot="editor"] {
@@ -766,25 +802,6 @@
     [data-slot="track"] {
       min-height: 44px;
     }
-
-    /* 16px, so iOS doesn't zoom the page when the field takes focus. */
-    [data-slot="editor-headline"] {
-      font-size: 16px;
-    }
-  }
-}
-
-@keyframes share-editor-in {
-  from {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-}
-
-@keyframes share-editor-up {
-  from {
-    transform: translateY(24px);
-    opacity: 0;
   }
 }
 
@@ -814,7 +831,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   [data-page="stats"] [data-component="share-editor"] {
-    &[open],
+    --editor-from: none;
+
     [data-slot="export-menu"] {
       animation: none;
     }

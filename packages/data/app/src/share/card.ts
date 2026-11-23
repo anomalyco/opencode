@@ -114,7 +114,7 @@ export function drawShareCard(ctx: CanvasRenderingContext2D, card: ShareCard, op
   const top = drawIntro(ctx, card, options, colors, width, pad + 136)
   const footer = height - pad - 28
   const legend = card.chart.kind === "stacked" ? legendLayout(card.chart.series, width) : undefined
-  const chartBottom = footer - 56 - (legend ? legend.height + 40 : 0)
+  const chartBottom = footer - 72 - (legend ? legend.height + 40 : 0)
   const progress = Math.min(1, time / build)
 
   if (card.chart.kind === "stacked") {
@@ -172,17 +172,19 @@ function drawBackground(
   height: number,
 ) {
   if (kind === "plain") return
-  // The banner's dot grid: 8px squares on a 24px pitch, fading out down the card (og/card.ts).
+  // The banner's dot grid: 8px squares on a 24px pitch, fading out down the card (og/card.ts). The grid is centred
+  // across the card, and its first row sits as far from the top as its first column from the side.
+  const inset = (width - (Math.floor((width - 8) / 24) * 24 + 8)) / 2
   const fade = kind === "band" ? 0.28 : 0.6
-  for (let y = 1; y < height * fade; y += 24) {
+  for (let y = inset; y < height * fade; y += 24) {
     ctx.globalAlpha = Math.max(0, 1 - y / (height * fade))
     ctx.fillStyle = colors.dot
-    for (let x = -4; x < width; x += 24) ctx.fillRect(x, y, 8, 8)
+    for (let x = inset; x < width - 8; x += 24) ctx.fillRect(x, y, 8, 8)
   }
   ctx.globalAlpha = 1
   if (kind !== "band") return
   ctx.fillStyle = colors.dot
-  for (let x = -4; x < width; x += 24) ctx.fillRect(x, height - 25, 8, 8)
+  for (let x = inset; x < width - 8; x += 24) ctx.fillRect(x, height - inset - 8, 8, 8)
 }
 
 // The header lockup: the OpenCode mark, then DATA (or OPENCODE DATA), set like the site's header.
@@ -215,9 +217,9 @@ function drawIntro(
   const max = width - pad * 2
   ctx.textBaseline = "alphabetic"
   ctx.fillStyle = colors.faint
-  ctx.font = `400 26px ${font}`
+  ctx.font = `400 32px ${font}`
   const eyebrow = options.layout === "chart" ? card.range.toUpperCase() : `${card.title} · ${card.range}`.toUpperCase()
-  spaced(ctx, eyebrow, pad, y + 26, 26 * 0.06)
+  spaced(ctx, eyebrow, pad, y + 32, 32 * 0.06)
 
   if (options.layout === "number") {
     ctx.fillStyle = colors.text
@@ -226,7 +228,7 @@ function drawIntro(
     ctx.fillText(card.stat.value, pad - size * 0.04, y + 64 + size * 0.8)
     ctx.font = `400 34px ${font}`
     ctx.fillStyle = colors.muted
-    const lines = wrap(ctx, card.stat.label, max).slice(0, 2)
+    const lines = balance(ctx, card.stat.label, max).slice(0, 2)
     lines.forEach((line, index) => ctx.fillText(line, pad, y + 64 + size * 0.8 + 64 + index * 44))
     return y + 64 + size * 0.8 + 64 + lines.length * 44 + 24
   }
@@ -246,7 +248,7 @@ function drawIntro(
       return wrap(ctx, card.headline, max).length <= 3
     }) ?? 44
   ctx.font = `400 ${size}px ${font}`
-  const lines = wrap(ctx, card.headline, max).slice(0, 4)
+  const lines = balance(ctx, card.headline, max).slice(0, 4)
   const leading = size * 1.18
   lines.forEach((line, index) => ctx.fillText(line, pad - 2, y + 56 + size * 0.8 + index * leading))
   return y + 56 + lines.length * leading + 32
@@ -401,13 +403,13 @@ function drawRanked(
 
 function drawFooter(ctx: CanvasRenderingContext2D, card: ShareCard, colors: Palette, width: number, y: number) {
   ctx.fillStyle = colors.line
-  ctx.fillRect(pad, y - 40, width - pad * 2, 1)
+  ctx.fillRect(pad, y - 48, width - pad * 2, 1)
   ctx.textBaseline = "middle"
-  ctx.font = `700 26px ${font}`
+  ctx.font = `700 34px ${font}`
   ctx.fillStyle = colors.text
   ctx.fillText(card.url, pad, y)
   if (!card.updatedAt) return
-  ctx.font = `400 24px ${font}`
+  ctx.font = `400 30px ${font}`
   ctx.fillStyle = colors.faint
   const label = `Updated ${formatUpdated(card.updatedAt)}`
   ctx.fillText(label, width - pad - ctx.measureText(label).width, y)
@@ -425,6 +427,19 @@ function spaced(ctx: CanvasRenderingContext2D, text: string, x: number, y: numbe
     ctx.fillText(char, left, y)
     return left + ctx.measureText(char).width + tracking
   }, x)
+}
+
+// Like CSS text-wrap: balance. The same number of lines as wrapping at `max`, at the narrowest width that keeps
+// them, so no line ends up with a lone word.
+function balance(ctx: CanvasRenderingContext2D, text: string, max: number) {
+  const count = wrap(ctx, text, max).length
+  if (count <= 1) return wrap(ctx, text, max)
+  const search = (low: number, high: number): number => {
+    if (high - low <= 4) return high
+    const middle = (low + high) / 2
+    return wrap(ctx, text, middle).length > count ? search(middle, high) : search(low, middle)
+  }
+  return wrap(ctx, text, search(max / count, max))
 }
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, max: number) {

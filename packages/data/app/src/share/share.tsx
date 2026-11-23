@@ -1,5 +1,5 @@
 import "./share.css"
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { drawShareCard, loadShareFonts, shareDuration, shareSizes, type ShareCard, type ShareOptions } from "./card"
 import { cycleShareOption, designMode, designOnly, setShareOption, shareControls, shareOptions } from "./design"
 import { shareTracks, suggestedTrack, type ShareTrack } from "./music"
@@ -27,14 +27,17 @@ export function ShareButton(props: { card: () => ShareDraft | undefined; label: 
       }}
     >
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <path d="M8 1.5 4.5 5h2.75v5.5h1.5V5h2.75L8 1.5Z" fill="currentColor" />
-        <path d="M3 8v6h10V8h-1.5v4.5h-7V8H3Z" fill="currentColor" />
+        <path
+          d="M11.5 5.5a2 2 0 1 0-1.94-2.5L5.9 5.1a2 2 0 1 0 0 2.8l3.66 2.1a2 2 0 1 0 .74-1.3L6.64 6.6a2 2 0 0 0 0-1.2L10.3 3.3c.33.13.76.2 1.2.2Z"
+          fill="currentColor"
+        />
       </svg>
+      <span>Share</span>
     </button>
   )
 }
 
-type Tab = "text" | "layout" | "size" | "style" | "video"
+type Tab = "layout" | "size" | "style" | "video"
 
 const sizes = [
   { value: "4:5", label: "Feed", hint: "X, LinkedIn, Instagram" },
@@ -49,12 +52,6 @@ const layouts = [
   { value: "chart", label: "Chart" },
 ] as const
 
-const backgrounds = [
-  { value: "dots", label: "Dots" },
-  { value: "band", label: "Band" },
-  { value: "plain", label: "Plain" },
-] as const
-
 /**
  * The share editor, mounted once on the page: the card in the middle, its options beside it (under it on phones, one
  * group at a time), and Copy link and Export in the top bar. Images and videos come from the same drawing code as
@@ -66,18 +63,17 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   let exportButton: HTMLButtonElement | undefined
   let audio: HTMLAudioElement | undefined
   const [format, setFormat] = createSignal<"image" | "video">("image")
-  const [headline, setHeadline] = createSignal("")
   const [notice, setNotice] = createSignal<string>()
   const [rendering, setRendering] = createSignal<number>()
   const [ready, setReady] = createSignal(false)
   const [playing, setPlaying] = createSignal(true)
   const [track, setTrack] = createSignal("none")
   const [menu, setMenu] = createSignal(false)
-  const [tab, setTab] = createSignal<Tab>("text")
+  const [tab, setTab] = createSignal<Tab>("layout")
   const card = createMemo(() => {
     const value = request()
     if (!value) return undefined
-    return { ...value, updatedAt: props.updatedAt, url: props.url, headline: headline().trim() || value.headline }
+    return { ...value, updatedAt: props.updatedAt, url: props.url }
   })
   // A copy of the options, so reading them tracks every field.
   const options = createMemo<ShareOptions>(() => ({ ...shareOptions }))
@@ -87,14 +83,18 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     typeof navigator !== "undefined" &&
     !!navigator.canShare?.({ files: [new File([], "card.png", { type: "image/png" })] })
   let video: { key: string; file: Promise<File> } | undefined
+  let closing: ReturnType<typeof setTimeout> | undefined
+
+  // Load the card's font with the page, so the preview is ready the moment the editor opens.
+  onMount(() => void loadShareFonts())
 
   createEffect(() => {
     const value = request()
     if (!value) return
-    setHeadline(value.headline)
+    clearTimeout(closing)
     setNotice(undefined)
     setTrack("none")
-    setTab("text")
+    setTab("layout")
     dialog?.showModal()
     void loadShareFonts().then(() => setReady(true))
   })
@@ -229,7 +229,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       return undefined
     })
 
+  // Pressing the chosen track again plays or pauses it, with the preview.
   const chooseTrack = (id: string) => {
+    if (id === track() && id !== "none") return setPlaying(!playing())
     setTrack(id)
     setPlaying(true)
   }
@@ -237,7 +239,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const tabs = createMemo(() =>
     (
       [
-        ["text", "Text"],
         ["layout", "Layout"],
         ["size", "Size"],
         ["style", "Style"],
@@ -247,7 +248,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   )
 
   createEffect(() => {
-    if (format() === "image" && tab() === "video") setTab("text")
+    if (format() === "image" && tab() === "video") setTab("layout")
   })
 
   return (
@@ -262,12 +263,16 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
         exportButton?.focus()
       }}
       onClose={() => {
-        setRequest(undefined)
-        setReady(false)
-        setFormat("image")
         setMenu(false)
+        setPlaying(false)
         audio?.pause()
         opener?.focus()
+        // Keep the editor drawn while it fades out.
+        closing = setTimeout(() => {
+          setRequest(undefined)
+          setReady(false)
+          setFormat("image")
+        }, 160)
       }}
       onClick={(event) => {
         if (menu() && !(event.target as HTMLElement).closest('[data-slot="export"]')) setMenu(false)
@@ -448,21 +453,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 </For>
               </div>
 
-              <Group id="text" title="Headline" active={tab()}>
-                <textarea
-                  data-slot="editor-headline"
-                  rows={3}
-                  aria-label="Headline"
-                  value={headline()}
-                  onInput={(event) => setHeadline(event.currentTarget.value)}
-                />
-                <Show when={headline() !== request()?.headline}>
-                  <button type="button" data-slot="text-button" onClick={() => setHeadline(request()?.headline ?? "")}>
-                    Reset to the finding
-                  </button>
-                </Show>
-              </Group>
-
               <Group id="layout" title="Layout" active={tab()}>
                 <div data-slot="option-grid" data-columns="3">
                   <For each={layouts}>
@@ -529,19 +519,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     )}
                   </For>
                 </div>
-                <div data-slot="segmented" data-variant="full" role="group" aria-label="Background">
-                  <For each={backgrounds}>
-                    {(item) => (
-                      <button
-                        type="button"
-                        aria-pressed={options().background === item.value}
-                        onClick={() => setShareOption("background", item.value)}
-                      >
-                        {item.label}
-                      </button>
-                    )}
-                  </For>
-                </div>
               </Group>
 
               <Show when={format() === "video"}>
@@ -579,6 +556,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                           detail={`${item.mood} · ${item.bpm} BPM`}
                           suggested={suggestedTrack[value().id] === item.id}
                           selected={track() === item.id}
+                          playing={playing()}
                           onSelect={() => chooseTrack(item.id)}
                         />
                       )}
@@ -618,25 +596,46 @@ function TrackOption(props: {
   name: string
   detail: string
   selected: boolean
+  playing?: boolean
   suggested?: boolean
   onSelect: () => void
 }) {
   return (
-    <button type="button" role="radio" aria-checked={props.selected} data-slot="track" onClick={props.onSelect}>
+    <button
+      type="button"
+      role="radio"
+      aria-checked={props.selected}
+      aria-label={
+        props.selected && props.playing !== undefined
+          ? `${props.name}, ${props.playing ? "playing. Press to pause" : "paused. Press to play"}`
+          : undefined
+      }
+      data-slot="track"
+      onClick={props.onSelect}
+    >
       <i data-slot="track-icon" aria-hidden="true">
         <Show
-          when={props.selected && props.name !== "No music"}
+          when={props.selected && props.playing !== undefined}
           fallback={
             <svg width="16" height="16" viewBox="0 0 16 16">
               <path d="M6 3.5v6.6a2 2 0 1 0 1.5 1.9V6h4V3.5H6Z" fill="currentColor" />
             </svg>
           }
         >
-          <span data-slot="eq">
-            <b />
-            <b />
-            <b />
-          </span>
+          <Show
+            when={props.playing}
+            fallback={
+              <svg width="16" height="16" viewBox="0 0 16 16">
+                <path d="M5 3.5v9l7-4.5-7-4.5Z" fill="currentColor" />
+              </svg>
+            }
+          >
+            <span data-slot="eq">
+              <b />
+              <b />
+              <b />
+            </span>
+          </Show>
         </Show>
       </i>
       <span>
