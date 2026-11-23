@@ -1,6 +1,4 @@
-import { Effect } from "effect"
-import type { Host } from "psychoscript"
-import { Host as EffectHost } from "psychoscript/effect"
+import { Host } from "psychoscript"
 
 // What the TypeScript widget host shares between steps and live runs.
 
@@ -26,15 +24,29 @@ export function protocol(program: string) {
   return declared ? Number(declared[1]) : 1
 }
 
+// The standard error classes `Host.error` makes; another name is an `Error`.
+type ErrorName = Parameters<typeof Host.error>[0]
+const ERROR_NAMES: ReadonlySet<string> = new Set<ErrorName>([
+  "Error",
+  "TypeError",
+  "RangeError",
+  "SyntaxError",
+  "ReferenceError",
+  "EvalError",
+  "URIError",
+  "AggregateError",
+])
+
 /**
- * A host function whose errors reach the program at the call's line and column, as the interpreter's own errors for
- * an argument do: what it throws becomes an Effect defect, which psychoscript gives the call's location.
+ * A host function whose errors reach the program at the call's line and column, as the interpreter's own errors for an
+ * argument do: what it throws becomes a `Host.error` of the same class and message.
  */
-export const located = (f: (args: ReadonlyArray<unknown>, call: Host.Call) => unknown, options?: EffectHost.Options) =>
-  EffectHost.fn((args, call) => {
+export const located = (f: (args: ReadonlyArray<unknown>, call: Host.Call) => unknown, options?: Host.Options) =>
+  Host.fn((args, call) => {
     try {
       return f(args, call)
     } catch (error) {
-      return Effect.die(error)
+      if (!(error instanceof Error)) throw error
+      throw Host.error(ERROR_NAMES.has(error.name) ? (error.name as ErrorName) : "Error", error.message)
     }
   }, options)
