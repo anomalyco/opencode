@@ -44,7 +44,7 @@ export async function buildRust(sides: Side[]) {
   if ((await proc.exited) !== 0) throw new Error("cargo build -p opencode-cli failed")
 }
 
-export type Sandbox = Awaited<ReturnType<typeof sandbox>>
+export type Sandbox = { root: string; cwd: string; env: Record<string, string> }
 
 // A temporary root with `home`, the XDG roots, `tmp`, and `work` (the working directory). The
 // environment starts empty, so no OPENCODE_* variable of the calling session leaks in.
@@ -58,7 +58,7 @@ export type Sandbox = Awaited<ReturnType<typeof sandbox>>
 // removal still walking it) deleted live clients' working directory mid-run (C.15/enum and
 // D131/plugins, 20261122-004827: the wizard's second instance failed `current_dir`, and TS died on
 // `process.cwd` while it loaded).
-export async function sandbox(env: Record<string, string> = {}) {
+export async function sandbox(env: Record<string, string> = {}): Promise<Sandbox> {
   const parent = process.env.PARITY_SANDBOX_DIR ?? "/tmp"
   await mkdir(parent, { recursive: true })
   const root = await mkdtemp(path.join(parent, "opencode-rs-sandbox-"))

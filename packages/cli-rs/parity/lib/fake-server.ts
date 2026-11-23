@@ -2,7 +2,6 @@
 // request, so both clients can run with `--server <url>` and never touch the user's service.
 
 import { createEventStream, createFetch } from "../../../tui/test/fixture/tui-client"
-import { freePort } from "./port"
 
 export type Route = {
   method?: string
@@ -74,37 +73,50 @@ export async function startFakeServer(options: Options = {}) {
       streams.forEach((controller) => controller.close())
       streams.clear()
     })
-  const server = listen(async (request) => {
-    const url = new URL(request.url)
-    const entry = await logEntry(request, url)
-    requests.push(entry)
-    const route = routes.find(
-      (route) =>
-        matches(route, request.method, url.pathname) &&
-        (route.query === undefined || Bun.deepEquals(route.query, entry.query)),
-    )
-    if (route) {
-      if (route.hold && !released.has(route.path))
-        await new Promise<void>((go) => waiting.push({ path: route.path, go }))
-      const delay = typeof route.delay === "function" ? route.delay(entry, requests) : route.delay
-      if (delay) await Bun.sleep(delay)
-      const response = respond(route, streams, entry, requests)
-      if (route.then) {
-        const events = route.then(entry, requests)
-        setTimeout(() => push(events), route.thenDelay ?? 0)
+  const password = crypto.randomUUID()
+  const authorization = "Basic " + Buffer.from(`opencode:${password}`).toString("base64")
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    idleTimeout: 0,
+    async fetch(request) {
+      // A request without this run's credential belongs to no side of the scenario: another run's client, or a
+      // live service client that reconnected to the port the kernel recycled for this server. Answer it, but
+      // keep it out of the log a scenario compares (M.2/shell: a drive client's goal read).
+      if (request.headers.get("authorization") !== authorization) return new Response(null, { status: 401 })
+      const url = new URL(request.url)
+      const entry = await logEntry(request, url)
+      requests.push(entry)
+      const route = routes.find(
+        (route) =>
+          matches(route, request.method, url.pathname) &&
+          (route.query === undefined || Bun.deepEquals(route.query, entry.query)),
+      )
+      if (route) {
+        if (route.hold && !released.has(route.path))
+          await new Promise<void>((go) => waiting.push({ path: route.path, go }))
+        const delay = typeof route.delay === "function" ? route.delay(entry, requests) : route.delay
+        if (delay) await Bun.sleep(delay)
+        const response = respond(route, streams, entry, requests)
+        if (route.then) {
+          const events = route.then(entry, requests)
+          setTimeout(() => push(events), route.thenDelay ?? 0)
+        }
+        return response
       }
-      return response
-    }
-    const fallen = await Promise.resolve(fallback?.(url, request)).catch(() => undefined)
-    if (fallen) return fallen
-    entry.unmatched = true
-    return Response.json(
-      { _tag: "NotFound", message: `fake server: no route for ${request.method} ${url.pathname}` },
-      { status: 404 },
-    )
+      const fallen = await Promise.resolve(fallback?.(url, request)).catch(() => undefined)
+      if (fallen) return fallen
+      entry.unmatched = true
+      return Response.json(
+        { _tag: "NotFound", message: `fake server: no route for ${request.method} ${url.pathname}` },
+        { status: 404 },
+      )
+    },
   })
   return {
     url: `http://127.0.0.1:${server.port}`,
+    // This run's server password: the runner puts it in its clients' environment, and no one else has it.
+    password,
     requests,
     // Pushes events to every open `events` stream, as a route's `then` does.
     push,
@@ -118,21 +130,6 @@ export async function startFakeServer(options: Options = {}) {
       for (const controller of streams) controller.close()
       await server.stop(true)
     },
-  }
-}
-
-// The fake server listens below the kernel's ephemeral range instead of on port 0. The kernel hands an
-// ephemeral port to every outgoing connection on the machine, so a live client that keeps reconnecting to a
-// port it remembers from an earlier run can find a port-0 fake server there and log a request that belongs to
-// neither side of the scenario (M.2/shell: a goal read for a drive session). A low port is never given to a
-// client, and a port another run took first is retried.
-function listen(fetch: (request: Request) => Promise<Response>) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return Bun.serve({ hostname: "127.0.0.1", port: freePort(), idleTimeout: 0, fetch })
-    } catch (error) {
-      if (attempt >= 20 || !(error instanceof Error) || !error.message.includes("in use")) throw error
-    }
   }
 }
 
