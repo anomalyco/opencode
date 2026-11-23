@@ -34,10 +34,16 @@ type Missing = { input: string; requested: FileAccess.Target; context: FileAcces
 const description = (codemode: boolean) =>
   [
     "Read the contents of a file or directory. Supports text files, images, and PDFs.",
-    codemode
-      ? "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference."
-      : "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
-    "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+    ...(codemode
+      ? [
+          "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference.",
+          `A call returns one page, at most ${ReadToolFileSystem.MAX_READ_LINES} lines or ${ReadToolFileSystem.MAX_READ_BYTES / 1024} KB of a file, and \`next\` is where the following page starts; read a whole large file with \`Bun.file\`.`,
+        ]
+      : [
+          "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
+          "Use offset and limit to read large files or directories in sections.",
+        ]),
+    "Prefer one larger read over many small slices, and use grep to find specific content in large files.",
   ].join(" ")
 
 export const Plugin = {

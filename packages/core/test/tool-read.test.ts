@@ -231,9 +231,13 @@ describe("ReadTool", () => {
         type: "tool",
         name: "read",
         pinned: true,
+        signature: expect.stringContaining("Lines in this page, not in the whole file."),
       })
       expect(inCodeMode.codeModeCatalog?.tools[0]?.description).toContain(
         "Reading an image or PDF automatically attaches it to the execute result",
+      )
+      expect(inCodeMode.codeModeCatalog?.tools[0]?.description).toContain(
+        "A call returns one page, at most 2000 lines or 50 KB of a file, and `next` is where the following page starts",
       )
       const demoted = yield* registry.snapshot(undefined, { tools: { direct: new Set(["read"]) } })
       expect(demoted.definitions.map((tool) => tool.name)).toEqual(["read", "execute"])

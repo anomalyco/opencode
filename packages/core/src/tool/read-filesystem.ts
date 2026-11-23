@@ -75,7 +75,7 @@ export type PageInput = typeof PageInput.Type
 export const TextContent = Schema.Struct({
   type: Schema.Literal("text"),
   offset: PositiveInt,
-  lineCount: NonNegativeInt,
+  lineCount: NonNegativeInt.annotate({ description: "Lines in this page, not in the whole file." }),
   next: Schema.optionalKey(PositiveInt).annotate({
     description: "The line to continue reading from. Absent when the content reaches the end of the file.",
   }),
