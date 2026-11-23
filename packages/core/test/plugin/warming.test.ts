@@ -46,21 +46,37 @@ const context: SessionContext = {
 const hit = { read: 1000, write: 10 }
 const miss = { read: 0, write: 1000 }
 const unreported = { read: 0, write: 0 }
+const cachedPricing: Model.Info["cost"] = [
+  {
+    input: Money.USDPerMillionTokens.make(3),
+    output: Money.USDPerMillionTokens.make(15),
+    cache: {
+      read: Money.USDPerMillionTokens.make(0.15),
+      write: Money.USDPerMillionTokens.zero,
+    },
+  },
+]
 
 type PingUsage = { readonly input?: number; readonly read: number; readonly write: number }
 
 /**
- * Runs the warming plugin with the given top-level `warming` and a catalog holding the test model's `cache`. Each ping
- * reports the next cache usage in `usage` and takes `ping` to respond.
+ * Runs the warming plugin with the given top-level `warming` and a catalog holding the test model's `cost` and cache
+ * settings. Each ping reports the next cache usage in `usage` and takes `ping` to respond. When set, `generateModel`
+ * handles generate requests.
  */
 const run = Effect.fnUntraced(function* (
   warming: unknown,
   cache?: Provider.Cache,
   usage: ReadonlyArray<PingUsage> = [],
-  ping = Duration.zero,
-  cost: Model.Info["cost"] = [],
-  generateModel?: Model.Info,
+  options?: {
+    readonly ping?: Duration.Input
+    readonly cost?: Model.Info["cost"]
+    readonly generateModel?: Model.Info
+  },
 ) {
+  const ping = options?.ping ?? Duration.zero
+  const cost = options?.cost ?? []
+  const generateModel = options?.generateModel
   const warms: number[] = []
   const events = yield* Queue.unbounded<
     SessionEvent.Step.Ended | SessionEvent.Execution.Succeeded | SessionEvent.Compaction.Failed | SessionEvent.Deleted
@@ -265,8 +281,7 @@ describe("WarmingPlugin cache miss", () => {
           { input: 1000, read: 0, write: 0 },
           { input: 1000, read: 0, write: 0 },
         ],
-        Duration.zero,
-        zeroCost,
+        { cost: zeroCost },
       )
       yield* warming.turn
       for (const minutes of [4, 8]) yield* warming.at(minutes)
@@ -276,16 +291,6 @@ describe("WarmingPlugin cache miss", () => {
 
   it.effect("stops warming an implicit-cache model on the first miss when catalog pricing includes cache reads", () =>
     Effect.gen(function* () {
-      const cost: Model.Info["cost"] = [
-        {
-          input: Money.USDPerMillionTokens.make(3),
-          output: Money.USDPerMillionTokens.make(15),
-          cache: {
-            read: Money.USDPerMillionTokens.make(0.15),
-            write: Money.USDPerMillionTokens.zero,
-          },
-        },
-      ]
       const warming = yield* run(
         true,
         undefined,
@@ -293,8 +298,7 @@ describe("WarmingPlugin cache miss", () => {
           { input: 1000, read: 0, write: 0 },
           { input: 10, read: 1000, write: 0 },
         ],
-        Duration.zero,
-        cost,
+        { cost: cachedPricing },
       )
       yield* warming.turn
       for (const minutes of [4, 8, 12]) yield* warming.at(minutes)
@@ -338,9 +342,7 @@ describe("WarmingPlugin cache miss", () => {
           { input: 1000, read: 0, write: 0 },
           { input: 10, read: 1000, write: 0 },
         ],
-        Duration.zero,
-        [],
-        model,
+        { generateModel: model },
       )
       yield* warming.send
       yield* warming.compactWith({
@@ -368,16 +370,6 @@ describe("WarmingPlugin cache miss", () => {
 
   it.effect("uses the generate request model rather than the scheduling model to judge cache misses", () =>
     Effect.gen(function* () {
-      const cost: Model.Info["cost"] = [
-        {
-          input: Money.USDPerMillionTokens.make(3),
-          output: Money.USDPerMillionTokens.make(15),
-          cache: {
-            read: Money.USDPerMillionTokens.make(0.15),
-            write: Money.USDPerMillionTokens.zero,
-          },
-        },
-      ]
       const nonReporting = Model.Info.default(Provider.ID.make("test"), Model.ID.make("local-generate"))
       const warming = yield* run(
         true,
@@ -386,9 +378,7 @@ describe("WarmingPlugin cache miss", () => {
           { input: 1000, read: 0, write: 0 },
           { input: 1000, read: 0, write: 0 },
         ],
-        Duration.zero,
-        cost,
-        nonReporting,
+        { cost: cachedPricing, generateModel: nonReporting },
       )
       yield* warming.turn
       for (const minutes of [4, 8]) yield* warming.at(minutes)
@@ -398,7 +388,7 @@ describe("WarmingPlugin cache miss", () => {
 
   it.effect("keeps warming when a request is sent while a missed ping responds", () =>
     Effect.gen(function* () {
-      const warming = yield* run(true, { ttl: "5m" }, [miss, hit], Duration.seconds(30))
+      const warming = yield* run(true, { ttl: "5m" }, [miss, hit], { ping: Duration.seconds(30) })
       yield* warming.turn
       yield* warming.at(4.5)
       yield* warming.at(4.75)
@@ -423,7 +413,7 @@ describe("WarmingPlugin timing", () => {
 
   it.effect("counts the next interval from when a ping was sent", () =>
     Effect.gen(function* () {
-      const warming = yield* run(true, { ttl: "5m" }, [], Duration.seconds(30))
+      const warming = yield* run(true, { ttl: "5m" }, [], { ping: Duration.seconds(30) })
       yield* warming.turn
       for (const minutes of [4.5, 9, 9.5]) yield* warming.at(minutes)
       expect(warming.warms).toEqual([4.5, 9])
@@ -462,7 +452,7 @@ describe("WarmingPlugin lifecycle", () => {
   it.effect("keeps one loop when warming is turned off and on again before the next ping", () =>
     Effect.gen(function* () {
       const cache: { warming: boolean } = { warming: true }
-      const warming = yield* run(false, cache, [], Duration.seconds(30))
+      const warming = yield* run(false, cache, [], { ping: Duration.seconds(30) })
       yield* warming.turn
       yield* warming.at(1)
       cache.warming = false
