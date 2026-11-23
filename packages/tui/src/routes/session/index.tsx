@@ -2446,7 +2446,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
-          <LinkedText text={props.message.text} fg={theme.text.base} linkFg={theme.markdown.link} />
+          <LinkedText text={props.message.text} fg={theme.text.base} linkFg={theme.markdown.linkText} />
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={skills()}>
