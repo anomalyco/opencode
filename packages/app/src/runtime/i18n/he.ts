@@ -913,7 +913,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "התחברות",
   "provider.connect.breadcrumb.label": "שלבי התחברות",
   "provider.connect.methods.description": "בחר כיצד לחבר את {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "נסה שוב",
   "provider.connect.console.serviceKeyDescription": "התחבר באמצעות מפתח API של חשבון שירות מ-OpenCode Console.",

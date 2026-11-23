@@ -3291,11 +3291,12 @@ describe("SessionRunnerLLM", () => {
   }
 
   scenario("stops after four smaller compaction inputs overflow", function* (s) {
-    // Large enough that the conversation, not the system prompt, is most of the request.
+    // Large enough that the conversation, not the system prompt, is most of the request. Twice what `keep` retains,
+    // so the history before the tail has exchanges left to drop.
     const filler = "context ".repeat(1_000)
-    yield* s.llm.push(...Array.from({ length: 8 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
+    yield* s.llm.push(...Array.from({ length: 16 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
     yield* Effect.forEach(
-      Array.from({ length: 8 }, (_, index) => index),
+      Array.from({ length: 16 }, (_, index) => index),
       (index) => s.runPrompt(`Request ${index}: ${filler}`),
     )
     s.currentModel = unknownContextModel
@@ -3309,7 +3310,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(5)
-    expect(userTexts(s.requests[2])[0].length).toBeLessThan(userTexts(s.requests[1])[0].length)
+    // The history before the tail goes out unchanged once, then only as ever shorter text.
+    expect(userTexts(s.requests[1])[0]).toBe(`Request 0: ${filler}`)
+    expect(userTexts(s.requests[2])[0]).not.toBe(`Request 0: ${filler}`)
     expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
     expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
@@ -5490,6 +5493,37 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push([])
     yield* s.resume
     expect(s.requests).toHaveLength(2)
+  })
+
+  scenario("runs a top-level call to a Code Mode tool and records it as the model sent it", function* (s) {
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      {
+        echo: {
+          name: "echo",
+          description: "Echo text",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.Struct({ text: Schema.String }),
+          execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
+        },
+      },
+      { namespace: "acme" },
+    )
+    yield* s.admit("Call echo directly")
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "acme.echo", { text: "hi" }), TestLLM.stop())
+    yield* s.resume
+
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Call echo directly"),
+      Expected.assistant({}, [
+        Expected.completedTool(
+          { id: "call-echo", name: "acme.echo" },
+          { input: { text: "hi" }, content: [Expected.text("hi")] },
+        ),
+      ]),
+      { type: "assistant", finish: "stop" },
+    ])
   })
 
   scenario("durably settles local tool failures before continuing", function* (s) {

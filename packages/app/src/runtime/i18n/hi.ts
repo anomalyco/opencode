@@ -922,7 +922,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "कनेक्ट करें",
   "provider.connect.breadcrumb.label": "कनेक्ट करने के चरण",
   "provider.connect.methods.description": "चुनें कि {{provider}} को कैसे कनेक्ट करना है।",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "पुनः प्रयास करें",
   "provider.connect.console.serviceKeyDescription": "OpenCode Console की सर्विस-अकाउंट API कुंजी से कनेक्ट करें।",

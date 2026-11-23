@@ -934,7 +934,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "མཐུད།",
   "provider.connect.breadcrumb.label": "མཐུད་ནིའི་རིམ་པ་ཚུ།",
   "provider.connect.methods.description": "{{provider}} ག་དེ་སྦེ་མཐུད་ནི་ཨིན་ན་ གདམ་ཁ་རྐྱབས།",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "ལོག་འབད་རྩོལ་བསྐྱེད།",
   "provider.connect.console.serviceKeyDescription":

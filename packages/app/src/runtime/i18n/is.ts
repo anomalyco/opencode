@@ -912,7 +912,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Tengja",
   "provider.connect.breadcrumb.label": "Tengingarskref",
   "provider.connect.methods.description": "Veldu hvernig á að tengja {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Reyna aftur",
   "provider.connect.console.serviceKeyDescription": "Tengjast með API-lykli þjónustureiknings frá OpenCode Console.",

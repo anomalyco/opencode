@@ -2,6 +2,7 @@ import "@pierre/trees/web-components"
 import { FileTree, type FileTreeDirectoryHandle, type FileTreeItemHandle } from "@pierre/trees"
 import { getIcon } from "@opencode/ui/icons/catalog"
 import { createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
+import { builtinContext } from "@opencode/plugin/gui/builtin"
 import type { ChangeKind } from "@opencode/plugin/gui/review"
 import { createKeyed, usePlugin, type FileNode, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
 import { startFileDrag } from "./drag"
@@ -488,7 +489,13 @@ export default function PierreFileTree(props: {
           if (!draggable()) return
           const button = findTreeItemButton(event)
 
-          if (button?.dataset.itemPath) startFileDrag(event, pierreTreeOriginalPath(machine(), button.dataset.itemPath))
+          if (!button?.dataset.itemPath) return
+          startFileDrag(event, pierreTreeOriginalPath(machine(), button.dataset.itemPath))
+
+          // A file of this computer drags out to other apps as the file itself.
+          if (!openIn?.canOpen()) return
+          const node = pierreTreeFileNode(machine(), button.dataset.itemPath)
+          builtinContext(ctx).desktop?.dragOut(event, resolveOpenInAppPath(file.root, node.absolute || node.path))
         }}
       />
     </OpenInAppContextMenuV2>

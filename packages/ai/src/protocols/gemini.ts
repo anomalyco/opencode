@@ -423,8 +423,8 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
 })
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
-  const flattened = ProviderShared.flattenToolRequest(request)
-  const hasTools = flattened.tools.length > 0
+  const definitions = ProviderShared.flattenTools(request.tools)
+  const hasTools = definitions.length > 0
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const generationConfig = {
     maxOutputTokens: request.maxTokens,
@@ -455,7 +455,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 
   return {
     cachedContent: options.cachedContent,
-    contents: yield* lowerMessages(flattened.request),
+    contents: yield* lowerMessages(request),
     safetySettings: options.safetySettings,
     serviceTier: options.serviceTier,
     systemInstruction:
@@ -463,7 +463,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     tools: hasTools
       ? [
           {
-            functionDeclarations: flattened.tools.map(lowerTool),
+            functionDeclarations: definitions.map(lowerTool),
           },
         ]
       : undefined,

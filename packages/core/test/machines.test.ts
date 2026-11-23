@@ -31,7 +31,7 @@ const connection = (os: string, arch: string) =>
   Effect.map(Queue.unbounded<Exclude<Machine.FromWorker, Machine.Hello>, Cause.Done>(), (queue) => ({
     hello: {
       type: "hello" as const,
-      protocol: 1 as const,
+      protocol: 2 as const,
       os,
       arch,
       home: "/home/worker",
@@ -127,6 +127,7 @@ const gatedIdentity = (key: Uint8Array, gate: Deferred.Deferred<void>, entered: 
         )
       }),
     sign: () => Effect.die("unused"),
+    seed: () => Effect.die("unused"),
   })
 }
 
@@ -217,7 +218,7 @@ service.effect("refuses a connection for a machine it does not know and serves n
       .connect(machineID("ghost"), {
         hello: {
           type: "hello",
-          protocol: 1,
+          protocol: 2,
           os: "linux",
           arch: "x64",
           home: "/home/ghost",

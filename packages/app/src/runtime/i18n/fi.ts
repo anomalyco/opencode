@@ -919,7 +919,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Yhdistä",
   "provider.connect.breadcrumb.label": "Yhdistämisen vaiheet",
   "provider.connect.methods.description": "Valitse, miten {{provider}} yhdistetään.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Yritä uudelleen",
   "provider.connect.console.serviceKeyDescription": "Yhdistä OpenCode Consolen palvelutilin API-avaimella.",

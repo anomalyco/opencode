@@ -368,8 +368,8 @@ const lowerToolResult = Effect.fnUntraced(function* (part: ToolResultPart) {
 
 const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (request: LLMRequest) {
   const options = yield* decodeOptions(request.providerOptions ?? {})
-  const flattened = ProviderShared.flattenToolRequest(request)
-  if (flattened.tools.some((tool) => tool.native !== undefined))
+  const definitions = ProviderShared.flattenTools(request.tools)
+  if (definitions.some((tool) => tool.native !== undefined))
     return yield* ProviderShared.invalidRequest("Google Interactions hosted tools are not supported")
   if (request.topK !== undefined || request.frequencyPenalty !== undefined || request.presencePenalty !== undefined)
     return yield* ProviderShared.invalidRequest(
@@ -386,7 +386,7 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
         })
   return {
     model: request.model.id,
-    input: yield* lowerMessages(flattened.request),
+    input: yield* lowerMessages(request),
     stream: true as const,
     // Full-history replay need not create retained provider resources. Continuation callers opt in to storage.
     store: options.store ?? false,
@@ -397,8 +397,8 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
       type: setting.category.replace(/^HARM_CATEGORY_/, "").toLowerCase(),
       threshold: setting.threshold.toLowerCase(),
     })),
-    tools: flattened.tools.length
-      ? flattened.tools.map((tool) => ({
+    tools: definitions.length
+      ? definitions.map((tool) => ({
           type: "function" as const,
           name: tool.name,
           description: tool.description,

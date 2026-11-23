@@ -19,19 +19,17 @@ import type { Tool } from "./tool.js"
 export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type
 
-/** Where a typed path points. */
-export const Place = Schema.Struct({
-  absolute: AbsolutePath,
-  environment: Schema.Struct({ id: Environment.ID }),
-})
-export type Place = typeof Place.Type
+/** @deprecated Use Environment.Place. Removed in the next minor. */
+export const Place = Environment.Place
+/** @deprecated Use Environment.Place. Removed in the next minor. */
+export type Place = Environment.Place
 
 export const ResolveInput = Schema.Struct({
   path: Schema.String,
   /** Selects the external approval boundary; it does not validate the target type. */
   kind: Kind.pipe(Schema.optional),
   /** The directory and machine the text was written in, for a path derived from an existing target. */
-  base: Place.pipe(Schema.optional),
+  base: Environment.Place.pipe(Schema.optional),
 })
 export type ResolveInput = typeof ResolveInput.Type
 
@@ -74,8 +72,8 @@ export function externalDirectoryRequest(targets: readonly Target[]) {
 export const key = (target: { readonly absolute: string; readonly environment: { readonly id: Environment.ID } }) =>
   `${target.environment.id.length}:${target.environment.id}:${target.absolute}`
 
-/** The rule "always" saves for a file action: every file on the target's machine, which only that machine's rules allow. */
-export const always = (target: Target) => (target.machine ? `${target.machine}:*` : "*")
+/** The rule "always" saves for a file action: every file on the target's machine. */
+export const always = (target: Target) => (target.machine ? MachinePath.format(target.machine, "*") : "*")
 
 export type Invocation = Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id">
 
@@ -90,7 +88,7 @@ export interface Interface {
    * a machine's home consults anything: the home in that machine's live hello, held in memory. It fails when the
    * machine is unknown or offline.
    */
-  readonly locate: (path: string, base?: Place) => Effect.Effect<Place, Environment.Failed>
+  readonly locate: (path: string, base?: Environment.Place) => Effect.Effect<Environment.Place, Environment.Failed>
   /** Resolve a lexical path and its permission resources, without requesting approval. */
   readonly resolve: (input: ResolveInput) => Effect.Effect<Target, Environment.Failed>
   /** Approve external directories in one batch, preserving first-seen resource order. */
@@ -130,28 +128,39 @@ const layer = Layer.effect(
     const environment = yield* Environment.Service
     const exists = (file: string) => Environment.exists(environment.files, file)
     const location = yield* Location.Service
+    const workingDirectory = yield* Environment.workingDirectory
     const permission = yield* Permission.Service
     const flags = yield* Flag.Service
     const machines = yield* Machines.Service
 
     // The flag is read once per operation by `locate` and `resolve`, which both call this.
-    const place = Effect.fnUntraced(function* (text: string, base: Place | undefined, enabled: boolean) {
+    const place = Effect.fnUntraced(function* (text: string, base: Environment.Place | undefined, enabled: boolean) {
       // Only text the model typed can name a machine: text derived from a target is a plain path on that target's
       // machine, and a shell there does not understand `gpu:`.
-      const machine = !base && enabled ? MachinePath.parse(text) : undefined
-      const id = machine?.machine ?? base?.environment.id ?? environment.id
+      const machine =
+        !base && enabled
+          ? yield* MachinePath.typed(text, machines).pipe(
+              Effect.mapError((cause) => new Environment.Failed({ path: text, cause })),
+            )
+          : undefined
+      const from = base ?? workingDirectory
+      const id = machine?.machine ?? from.environment.id
       if (!machine && id === environment.id)
         return {
-          absolute: AbsolutePath.make(resolvePath(base?.absolute ?? location.directory, text)),
+          absolute: AbsolutePath.make(resolvePath(from.absolute, text)),
           environment: { id },
-        } satisfies Place
-      // A machine's paths use POSIX rules rather than this server's, and `~` there is that machine's home, never this
-      // server's. Only `~` and `~/` are read: another user's home or a shell's `~+` is not known here. With the flag
-      // off no home is asked for, so a base on another machine refuses every `~`.
+        } satisfies Environment.Place
+      // Another environment's paths follow its own path rules (falling back to POSIX when unknown), and `~` there is
+      // that machine's home, never this server's. Only `~` and `~/` are read: another user's home or a shell's `~+` is
+      // not known here. With the flag off no home is asked for, so a base on another machine refuses every `~`.
+      const target = enabled
+        ? yield* machines.get(id).pipe(Effect.catchTag("Machines.NotFound", () => Effect.undefined))
+        : undefined
+      const rules = target ? (target.path ?? path) : path.posix
       const written = machine?.path ?? text
       const rooted =
         enabled && (written === "~" || written.startsWith("~/"))
-          ? path.posix.join(
+          ? rules.join(
               yield* machines.home(id).pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause }))),
               written.slice(1),
             )
@@ -159,12 +168,12 @@ const layer = Layer.effect(
       if (rooted.startsWith("~"))
         return yield* new Environment.Failed({ path: text, cause: new MachinePath.NotAbsolute({ machine: id }) })
       return {
-        absolute: AbsolutePath.make(base ? path.posix.resolve(base.absolute, rooted) : path.posix.normalize(rooted)),
+        absolute: AbsolutePath.make(base ? rules.resolve(base.absolute, rooted) : rules.normalize(rooted)),
         environment: { id },
-      } satisfies Place
+      } satisfies Environment.Place
     })
 
-    const locate = Effect.fn("FileAccess.locate")(function* (text: string, base?: Place) {
+    const locate = Effect.fn("FileAccess.locate")(function* (text: string, base?: Environment.Place) {
       const enabled = yield* flags.enabled("machines")
       return yield* place(text, base, enabled)
     })
@@ -177,14 +186,14 @@ const layer = Layer.effect(
       const absolute = located.absolute
       const worktree = path.resolve(location.project.directory)
       const internal =
-        FSUtil.contains(location.directory, absolute) ||
+        FSUtil.contains(workingDirectory.absolute, absolute) ||
         (worktree !== path.parse(worktree).root && FSUtil.contains(worktree, absolute))
       if (internal) {
-        const relative = slash(path.relative(location.directory, absolute) || ".")
+        const relative = slash(path.relative(workingDirectory.absolute, absolute) || ".")
         return {
           absolute,
-          // With machines on, a local folder can be named like a machine path; `./` keeps its permission name its own.
-          resource: enabled && MachinePath.parse(relative) ? `./${relative}` : relative,
+          // With machines on, a local folder can be named like a machine path, and its permission name stays its own.
+          resource: enabled ? MachinePath.local(relative) : relative,
           environment,
         } satisfies Target
       }
@@ -210,26 +219,22 @@ const layer = Layer.effect(
     // A machine path is always external, and its resources carry the machine name so its rules never settle a local
     // path's. Type detection runs over the machine's own files; a saved rule is the directory's own glob, which is
     // what was shown, rather than a search upward from this server's platform.
-    const machineTarget = Effect.fnUntraced(function* (place: Place, kind: Kind | undefined) {
+    const machineTarget = Effect.fnUntraced(function* (place: Environment.Place, kind: Kind | undefined) {
       const machineEnvironment = yield* machines
         .get(place.environment.id)
         .pipe(Effect.mapError((cause) => new Environment.Failed({ path: place.absolute, cause })))
+      const rules = machineEnvironment.path ?? path
       const type =
         kind ??
         (yield* Environment.typeFollowing(machineEnvironment.files, place.absolute).pipe(
           Effect.catchTag("Environment.NotFound", () => Effect.undefined),
         ))
-      const directory = AbsolutePath.make(type === "directory" ? place.absolute : path.posix.dirname(place.absolute))
-      const prefix = `${place.environment.id}:`
+      const directory = AbsolutePath.make(type === "directory" ? place.absolute : rules.dirname(place.absolute))
+      const contents = MachinePath.format(place.environment.id, rules.join(directory, "*"))
       return {
         absolute: place.absolute,
-        resource: `${prefix}${place.absolute}`,
-        externalDirectory: {
-          action: "external_directory",
-          directory,
-          resource: `${prefix}${path.posix.join(directory, "*")}`,
-          save: `${prefix}${path.posix.join(directory, "*")}`,
-        },
+        resource: MachinePath.format(place.environment.id, place.absolute),
+        externalDirectory: { action: "external_directory", directory, resource: contents, save: contents },
         environment: machineEnvironment,
         machine: place.environment.id,
       } satisfies Target
@@ -256,18 +261,19 @@ const layer = Layer.effect(
     ) {
       // A local sibling keeps the Location's resolution exactly as without recovery; a machine's candidate has no
       // Location to resolve against, so it takes the machine and the sibling's directory.
+      const siblingPath = options?.siblingOf.environment.path ?? path
       const base =
         options === undefined || options.siblingOf.environment.id === environment.id
           ? undefined
           : {
-              absolute: AbsolutePath.make(path.dirname(options.siblingOf.absolute)),
+              absolute: AbsolutePath.make(siblingPath.dirname(options.siblingOf.absolute)),
               environment: options.siblingOf.environment,
             }
       const target = yield* resolve({ path: file, base, kind: options ? "file" : undefined })
       const sibling =
         options !== undefined &&
         target.environment.id === options.siblingOf.environment.id &&
-        path.dirname(target.absolute) === path.dirname(options.siblingOf.absolute)
+        (target.environment.path ?? path).dirname(target.absolute) === siblingPath.dirname(options.siblingOf.absolute)
 
       // Filename recovery shares the directory approval, but checks the recovered file's own read rules.
       if (!sibling) yield* authorizeExternal([target], context)

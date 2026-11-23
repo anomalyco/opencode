@@ -141,7 +141,7 @@ describe("SubagentReport settlement", () => {
       })
       const image = yield* jobs.start({
         id: "image_bgreport",
-        type: "experimental_image_generate",
+        type: "generate_image",
         recovery: { kind: "image", sessionID: child, path: "/tmp/chart.png", model: "test/painter" },
         background: true,
         run: Effect.never,

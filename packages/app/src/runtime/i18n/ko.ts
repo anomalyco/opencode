@@ -923,7 +923,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "연결",
   "provider.connect.breadcrumb.label": "연결 단계",
   "provider.connect.methods.description": "{{provider}} 연결 방법을 선택하세요.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "다시 시도",
   "provider.connect.console.serviceKeyDescription": "OpenCode Console의 서비스 계정 API 키로 연결합니다.",

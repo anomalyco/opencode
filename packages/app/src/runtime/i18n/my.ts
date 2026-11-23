@@ -927,7 +927,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "ချိတ်ဆက်ရန်",
   "provider.connect.breadcrumb.label": "ချိတ်ဆက်မှု အဆင့်များ",
   "provider.connect.methods.description": "{{provider}} ကို ချိတ်ဆက်မည့်နည်းလမ်းကို ရွေးပါ။",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "ထပ်ကြိုးစားပါ",
   "provider.connect.console.serviceKeyDescription": "OpenCode Console မှ ဝန်ဆောင်မှုအကောင့် API သော့ဖြင့် ချိတ်ဆက်ပါ။",

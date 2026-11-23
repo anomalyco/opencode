@@ -934,7 +934,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "منسلک کریں",
   "provider.connect.breadcrumb.label": "منسلک کرنے کے مراحل",
   "provider.connect.methods.description": "منتخب کریں کہ ⁨{{provider}}⁩ کو کیسے منسلک کرنا ہے۔",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "دوبارہ کوشش کریں",
   "provider.connect.console.serviceKeyDescription": "OpenCode Console کی سروس اکاؤنٹ API کلید کے ذریعے منسلک کریں۔",
