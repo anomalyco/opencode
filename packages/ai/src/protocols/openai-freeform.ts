@@ -14,7 +14,7 @@ import { toolsUpdate } from "../tool-updates.js"
 // https://platform.openai.com/docs/guides/function-calling#custom-tools
 // Calls keep the normal `{ field: raw }` input everywhere else; only the wire carries raw text.
 // A `text` tool with `optionsPrefix` and optional fields beside its string carries them on an optional first line,
-// `<prefix> <JSON object>`, constrained by a Lark grammar, as Codex does for its `exec` tool.
+// `<prefix> <JSON object>`, constrained by a Lark grammar.
 
 export interface Custom {
   /** The tool's one required string parameter, which the raw text fills. */

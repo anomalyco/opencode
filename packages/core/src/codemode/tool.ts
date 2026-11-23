@@ -149,7 +149,7 @@ export const create = (
     name: "execute",
     description: description(services !== undefined),
     input: services ? FullInput : CodeMode.Input,
-    // On custom tools, `timeout` and `background` go on an optional first line, as Codex's `exec` takes its options.
+    // On custom tools, `timeout` and `background` go on an optional first line, so the code itself stays raw text.
     freeform: { type: "text", optionsPrefix: "// @exec:" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
