@@ -191,6 +191,14 @@ export type CapturedPointer =
   | { readonly kind: "move"; readonly dx: number; readonly dy: number }
   | { readonly kind: "down" | "up"; readonly button: number }
 
+/**
+ * A mouse wheel or trackpad scroll over a canvas with `pointer: true` (widgets-input.md, Wheel), summed over a frame, in
+ * logical pixels; under pointer capture without `x` and `y`.
+ */
+export type Wheel =
+  | { readonly kind: "wheel"; readonly x: number; readonly y: number; readonly dx: number; readonly dy: number }
+  | { readonly kind: "wheel"; readonly dx: number; readonly dy: number }
+
 /** A key while the widget has keyboard focus; `key` and `code` as in DOM `KeyboardEvent`. Esc is never delivered. */
 export interface Key {
   readonly kind: "down" | "up"
@@ -205,7 +213,7 @@ export interface Key {
 
 export type WidgetEvent =
   | { readonly id: string; readonly type: "press" | "change"; readonly value?: unknown }
-  | { readonly id: string; readonly type: "pointer"; readonly value: Pointer | CapturedPointer }
+  | { readonly id: string; readonly type: "pointer"; readonly value: Pointer | CapturedPointer | Wheel }
   | { readonly id: string; readonly type: "key"; readonly value: Key }
   /** Keyboard focus gained or lost. */
   | { readonly id: string; readonly type: "focus"; readonly value: boolean }

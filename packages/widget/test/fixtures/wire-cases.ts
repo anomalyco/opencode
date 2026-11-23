@@ -1,7 +1,8 @@
 // Edge cases of view tree building (ids, keys, flattening, stripping, depth) and of the rest of a step's output for
 // the wire conformance fixtures in `wire/`. Each is a widget template source; `data` is its init input (default null),
 // `input` another step input. `drops`: a function the native host fails on, which the prelude building the tree
-// leaves out (protocol 1).
+// leaves out (protocol 1). `newer`: an event protocol 1's prelude doesn't know; the outcome is the TypeScript host's,
+// with the handlers' events from the prelude building the tree on init (the view doesn't depend on the event).
 const view = (expression: string) => `function view(state, data) {\n  return ${expression}\n}`
 
 // `levels` of nodes, each a column with one child; `array` puts each child in an array of its own too. The innermost
@@ -17,6 +18,7 @@ export const cases: ReadonlyArray<{
   readonly data?: unknown
   readonly input?: unknown
   readonly drops?: boolean
+  readonly newer?: boolean
 }> = [
   {
     // Holes keep their index; nested arrays get index.index; deeper nesting index.index.index.
@@ -144,6 +146,30 @@ export const cases: ReadonlyArray<{
     name: "dismiss",
     source: view(`ui.button("go", { onPress: () => dismiss() })`),
     input: { phase: "event", data: null, state: { n: 1 }, event: { id: "0", type: "press" } },
+  },
+  // A wheel goes to `onPointer` as `{ kind, x, y, dx, dy }`, under capture `{ kind, dx, dy }`; other fields are left
+  // out, and a number that isn't one is 0.
+  {
+    name: "wheel",
+    source: view(`ui.canvas({ height: 10, onPointer: (state, p) => ({ ...state, p }) })`),
+    input: {
+      phase: "event",
+      data: null,
+      state: { n: 1 },
+      event: { id: "0", type: "pointer", value: { kind: "wheel", x: 4, y: 5, dx: 0, dy: -120, width: 9 } },
+    },
+    newer: true,
+  },
+  {
+    name: "wheel-captured",
+    source: view(`ui.canvas({ height: 10, onPointer: (state, p) => ({ ...state, p }) })`),
+    input: {
+      phase: "event",
+      data: null,
+      state: { n: 1 },
+      event: { id: "0", type: "pointer", value: { kind: "wheel", dx: 3.5, dy: "down" } },
+    },
+    newer: true,
   },
   // A typed array can't be data: the step fails as the run's result does.
   {

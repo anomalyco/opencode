@@ -172,10 +172,15 @@ function __widget_rect(value) {
 }
 
 // A pointer event's value: absolute `{ kind, x, y, width, height, close? }`, or `{ kind, dx, dy, button }` under
-// capture. `close` is the full-screen close button's area in the node's coordinates, when it overlaps the node.
+// capture; a wheel's `{ kind, x, y, dx, dy }`, or `{ kind, dx, dy }` under capture. `close` is the full-screen close
+// button's area in the node's coordinates, when it overlaps the node.
 function __widget_pointer(value) {
-  if (!value || typeof value !== "object" || !["down", "move", "up"].includes(value.kind)) return undefined
+  if (!value || typeof value !== "object" || !["down", "move", "up", "wheel"].includes(value.kind)) return undefined
   const number = (field) => (typeof field === "number" && Number.isFinite(field) ? field : 0)
+  if (value.kind === "wheel") {
+    const at = typeof value.x === "number" ? { x: number(value.x), y: number(value.y) } : {}
+    return { kind: "wheel", ...at, dx: number(value.dx), dy: number(value.dy) }
+  }
   if (typeof value.x !== "number" && (typeof value.dx === "number" || typeof value.button === "number"))
     return { kind: value.kind, dx: number(value.dx), dy: number(value.dy), button: number(value.button) }
   const close = __widget_rect(value.close)

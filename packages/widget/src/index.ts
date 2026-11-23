@@ -40,6 +40,7 @@ export {
   type TextStyle,
   type Tone,
   WGSL_BYTES,
+  type Wheel,
   type WidgetEvent,
 } from "./node.js"
 export {

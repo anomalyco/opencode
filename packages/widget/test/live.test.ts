@@ -149,6 +149,8 @@ test("system events go only to widget.on hooks, control events only to handlers"
   widget.event({ id: "", type: "capture", value: true })
   widget.event({ id: "", type: "fullscreen", value: true, close: { x: 300, y: 8, width: 44, height: 44 } })
   widget.event({ id: shader, type: "pointer", value: { kind: "move", dx: 3, dy: -2 } })
+  // A wheel reaches the handler but leaves `widget.pointer` as the last move.
+  widget.event({ id: shader, type: "pointer", value: { kind: "wheel", dx: 0, dy: 40 } })
   widget.event(key("KeyA"))
   widget.event(key("KeyB"))
   widget.event({ id: button, type: "key", value: key("KeyC").value })
@@ -165,6 +167,7 @@ test("system events go only to widget.on hooks, control events only to handlers"
         "capture:true",
         "fullscreen:true:44",
         'pointer:{"kind":"move","dx":3,"dy":-2,"button":0}',
+        'pointer:{"kind":"wheel","dx":0,"dy":40}',
         "key:KeyA:KeyA",
         "key:KeyB:KeyA+KeyB",
         "key:KeyC:KeyA+KeyB+KeyC",

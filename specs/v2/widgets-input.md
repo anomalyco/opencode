@@ -32,6 +32,20 @@ this. Clients only; the server knows nothing about it.
 - On touch, capture is never granted: touch hosts ignore the request (no `capture` event), and touches stay absolute
   `down`/`move`/`up` events (drags), so a widget template that looks around under capture needs drag steering too.
 
+## Wheel
+
+- A canvas with `pointer: true` gets the mouse wheel and trackpad scrolling over it as a pointer event to its
+  `onPointer`: `{ id, type: "pointer", value: { kind: "wheel", x, y, dx, dy } }` in the node's logical pixels, `x`, `y`
+  where the pointer is and `dx`, `dy` the scroll, with DOM `WheelEvent`'s signs as the platform reports them (positive
+  `dy` scrolls down, positive `dx` right). Hosts normalise lines and pages to pixels: a line is 40, a page the canvas's
+  logical height (its width for `dx`).
+- Wheel events that arrive in one frame are summed into one event before delivery (`x`, `y` from the last), so a
+  trackpad can't flood the program. Delivery follows `move`'s rules: the node that takes pointer input at the point gets
+  it (`widgets.md`, Stack), at most once per frame. A wheel over a canvas that takes it doesn't scroll what holds the
+  widget. Hosts without a wheel (touch) never send it.
+- Under pointer capture it goes where captured moves go, as `{ kind: "wheel", dx, dy }`.
+- In live mode `widget.pointer` doesn't change on a wheel: it keeps the last `down`, `move` or `up`.
+
 ## Esc always releases
 
 Esc is never delivered to a widget. It always releases pointer capture and keyboard focus at once (one press releases

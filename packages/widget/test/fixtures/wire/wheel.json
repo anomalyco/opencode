@@ -1,0 +1,50 @@
+{
+  "name": "wheel",
+  "source": "function view(state, data) {\n  return ui.canvas({ height: 10, onPointer: (state, p) => ({ ...state, p }) })\n}",
+  "input": {
+    "phase": "event",
+    "data": null,
+    "state": {
+      "n": 1
+    },
+    "event": {
+      "id": "0",
+      "type": "pointer",
+      "value": {
+        "kind": "wheel",
+        "x": 4,
+        "y": 5,
+        "dx": 0,
+        "dy": -120,
+        "width": 9
+      }
+    }
+  },
+  "built": {
+    "height": 10,
+    "onPointer": "$function",
+    "type": "canvas"
+  },
+  "view": {
+    "height": 10,
+    "type": "canvas",
+    "id": "0",
+    "pointer": true
+  },
+  "handlers": {
+    "0": "pointer"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "n": 1,
+      "p": {
+        "kind": "wheel",
+        "x": 4,
+        "y": 5,
+        "dx": 0,
+        "dy": -120
+      }
+    }
+  }
+}

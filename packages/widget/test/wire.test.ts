@@ -5,6 +5,7 @@ import path from "node:path"
 import { Host, Runtime } from "psychoscript"
 import { disagreement, FUNCTION, native, scripted, scriptedProgram } from "../script/conformance.js"
 import { program } from "../src/index.js"
+import { cases } from "./fixtures/wire-cases.js"
 import { marker, tree } from "../src/tree.js"
 
 // The wire conformance fixtures: every native host must turn each fixture's program and input into exactly its
@@ -89,6 +90,8 @@ const emitted = (value: unknown): unknown =>
           : value
 
 const drops = new Set(["function-in-a-prop", "function-as-a-child", "function-in-an-option", "function-as-an-id"])
+// Events protocol 1's prelude doesn't know: it can't agree on them.
+const newer = new Set(cases.flatMap((item) => (item.newer ? [item.name] : [])))
 
 for (const file of files) {
   test(`wire fixture ${file}`, async () => {
@@ -99,7 +102,8 @@ for (const file of files) {
     expect(Object.keys(host.handlers ?? {}).toSorted()).toEqual(Object.keys(fixture.handlers ?? {}).toSorted())
     // The prelude building the tree agrees, but for the functions it leaves out where the host fails.
     const name = file.replace(/\.json$/, "")
-    expect(disagreement(await scripted(fixture.source, fixture.input), host, drops.has(name))).toBeUndefined()
+    if (!newer.has(name))
+      expect(disagreement(await scripted(fixture.source, fixture.input), host, drops.has(name))).toBeUndefined()
   }, 60_000)
 
   test(`wire fixture ${file}, the walk alone`, async () => {

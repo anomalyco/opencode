@@ -152,8 +152,17 @@ export const disagreement = (scripted: Outcome, native: Outcome, drops: boolean)
   return undefined
 }
 
-/** What a fixture holds, from both runs; throws where they disagree. */
-export const expected = async (source: string, input: Input, drops = false): Promise<Outcome> => {
+/**
+ * What a fixture holds, from both runs; throws where they disagree. `newer`: an event the prelude building the tree
+ * doesn't know, so the host's outcome, with the handlers' events from that prelude's init.
+ */
+export const expected = async (source: string, input: Input, drops = false, newer = false): Promise<Outcome> => {
+  if (newer) {
+    const [init, host] = [await scripted(source, { phase: "init", data: input.data }), await native(source, input)]
+    const ids = (outcome: Outcome) => JSON.stringify(Object.keys(outcome.handlers ?? {}).toSorted())
+    if (init.error || host.error || ids(init) !== ids(host)) throw new Error("the handlers differ from init's")
+    return { ...host, handlers: init.handlers }
+  }
   const [left, right] = [await scripted(source, input), await native(source, input)]
   const problem = disagreement(left, right, drops)
   if (problem) throw new Error(problem)
@@ -169,6 +178,7 @@ export const fixtures = () => [
       source: template.source,
       input: { phase: "init" as const, data: data[template.name] } as Input,
       drops: false,
+      newer: false,
     })),
   ...cases.map((item) => ({
     name: item.name,
@@ -176,14 +186,17 @@ export const fixtures = () => [
     source: item.source,
     input: (item.input ?? { phase: "init", data: item.data ?? null }) as Input,
     drops: item.drops === true,
+    newer: item.newer === true,
   })),
 ]
 
 if (import.meta.main) {
   for (const fixture of fixtures()) {
-    const outcome = await expected(fixture.source, fixture.input, fixture.drops).catch((error: Error) => {
-      throw new Error(`${fixture.name}: ${error.message}`)
-    })
+    const outcome = await expected(fixture.source, fixture.input, fixture.drops, fixture.newer).catch(
+      (error: Error) => {
+        throw new Error(`${fixture.name}: ${error.message}`)
+      },
+    )
     const file = {
       name: fixture.name,
       ...(fixture.builtin ? { builtin: fixture.builtin } : {}),

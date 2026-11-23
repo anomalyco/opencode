@@ -658,7 +658,9 @@ const widget = (() => {
     }
     if (event.type === "fullscreen") return emit("fullscreen", event.value === true, __widget_rect(event.close))
     if (event.type === "capture") return emit("capture", event.value === true)
-    if (event.type === "pointer") api.pointer = __widget_pointer(event.value) ?? api.pointer
+    // A wheel isn't where the pointer is held: `widget.pointer` keeps the last down, move or up.
+    if (event.type === "pointer" && event.value?.kind !== "wheel")
+      api.pointer = __widget_pointer(event.value) ?? api.pointer
     const entry = __widget_find(live.root, event.id)
     if (!entry || entry.event !== event.type) return
     const value = __widget_value(entry, event.value)
