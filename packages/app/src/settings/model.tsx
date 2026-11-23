@@ -184,6 +184,7 @@ const notificationsSchema = Persistence.struct({
 })
 
 const soundsSchema = Persistence.struct({
+  enabled: Persistence.optional(Schema.Boolean),
   agentEnabled: Schema.Boolean,
   agent: Schema.String,
   permissionsEnabled: Schema.Boolean,
@@ -326,6 +327,7 @@ export const defaultSettings: Settings = {
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
   notifications: { agent: false, permissions: true, questions: true, errors: false },
   sounds: {
+    enabled: true,
     agentEnabled: true,
     agent: "staplebops-01",
     permissionsEnabled: true,
@@ -629,6 +631,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       sounds: {
+        enabled: withFallback(() => store.sounds?.enabled, defaultSettings.sounds.enabled ?? true),
+        setEnabled(value: boolean) {
+          setStore("sounds", "enabled", value)
+        },
         agentEnabled: withFallback(() => store.sounds?.agentEnabled, defaultSettings.sounds.agentEnabled),
         setAgentEnabled(value: boolean) {
           setStore("sounds", "agentEnabled", value)

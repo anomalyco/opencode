@@ -38,6 +38,7 @@ const soundSettings = {
 const SoundSetting: Component<{
   kind: "agent" | "permissions" | "questions" | "errors"
   channel: SoundSettingsController["agent"]
+  disabled?: boolean
 }> = (props) => {
   const language = useLanguage()
   const config = () => soundSettings[props.kind]
@@ -46,6 +47,7 @@ const SoundSetting: Component<{
     <SettingsRow title={language.t(config().title)} description={language.t(config().description)}>
       <Select
         data-action={config().action}
+        disabled={props.disabled}
         options={soundOptions}
         current={props.channel.current()}
         value={(option) => option.id}
@@ -137,16 +139,28 @@ export const SettingsNotifications: Component = () => {
         <div class="settings-section">
           <h3 class="settings-section-title">{language.t("settings.general.section.sounds")}</h3>
           <SettingsList>
-            <SoundSetting kind="agent" channel={sounds.agent} />
-            <SoundSetting kind="permissions" channel={sounds.permissions} />
-            <SoundSetting kind="questions" channel={sounds.questions} />
-            <SoundSetting kind="errors" channel={sounds.errors} />
+            <SettingsRow
+              title={language.t("settings.general.sounds.enabled.title")}
+              description={language.t("settings.general.sounds.enabled.description")}
+            >
+              <div data-action="settings-sounds-enabled">
+                <Switch
+                  checked={settings.sounds.enabled()}
+                  onChange={(checked) => settings.sounds.setEnabled(checked)}
+                />
+              </div>
+            </SettingsRow>
+            <SoundSetting kind="agent" channel={sounds.agent} disabled={!settings.sounds.enabled()} />
+            <SoundSetting kind="permissions" channel={sounds.permissions} disabled={!settings.sounds.enabled()} />
+            <SoundSetting kind="questions" channel={sounds.questions} disabled={!settings.sounds.enabled()} />
+            <SoundSetting kind="errors" channel={sounds.errors} disabled={!settings.sounds.enabled()} />
             <SettingsRow
               title={language.t("settings.general.sounds.interface.title")}
               description={language.t("settings.general.sounds.interface.description")}
             >
               <div data-action="settings-sounds-interface">
                 <Switch
+                  disabled={!settings.sounds.enabled()}
                   checked={settings.sounds.interfaceEnabled()}
                   onChange={(checked) => settings.sounds.setInterfaceEnabled(checked)}
                 />
