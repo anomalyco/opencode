@@ -2671,6 +2671,7 @@ export type ConfigEntry =
           machines?: boolean
           home_memory?: boolean
           project_overlay?: boolean
+          api_key_format?: boolean
           sqlite_fts?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
@@ -2849,7 +2850,12 @@ export type FormDetail = {
 
 export type IntegrationOAuthMethod = { id: IntegrationMethodID; type: "oauth"; label: string; form?: FormFields }
 
-export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
+export type IntegrationKeyMethod = {
+  type: "key"
+  label?: string
+  form?: FormFields
+  validation?: { prefixes: Array<string> }
+}
 
 export type IntegrationExternalMethod = { id: IntegrationMethodID; type: "external"; label: string; form?: FormFields }
 

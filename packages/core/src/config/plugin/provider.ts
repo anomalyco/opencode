@@ -32,6 +32,17 @@ export const Plugin = define({
             method: { type: "key", label: "Manually enter API Key" },
           })
         }
+        // Prefixes describe the provider's native API keys, not keys accepted by a custom gateway.
+        // Keep custom baseURL credentials unrestricted for providers such as Anthropic and OpenAI.
+        if (provider.settings?.baseURL !== undefined) {
+          const keyMethod = integrations.method.list(integrationID).find((method) => method.type === "key")
+          if (keyMethod?.type === "key" && keyMethod.validation) {
+            integrations.method.update({
+              integrationID,
+              method: { ...keyMethod, validation: { prefixes: [] } },
+            })
+          }
+        }
         integrations.update(integrationID, (integration) => {
           integration.name = provider.name || integration.name
         })

@@ -93,7 +93,9 @@ export const XAIPlugin = define({
         integration.name = "xAI"
       })
       editor.method.update(device(ctx.app))
-      editor.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
+      // Relabels the catalog's key method and keeps the key format it declares.
+      const key = editor.method.list("xai").find((method) => method.type === "key")
+      editor.method.update({ integrationID: "xai", method: { ...key, type: "key", label: "Manually enter API Key" } })
     })
     yield* ctx.provider.transform((providers) => {
       if (!providers.get(providerID)) return
