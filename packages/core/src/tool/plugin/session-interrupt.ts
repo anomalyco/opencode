@@ -41,11 +41,24 @@ export const Plugin = {
         ),
       )
 
-    // Cancelled jobs send no completion notice, so nothing wakes an interrupted session again.
+    const isSelfOrAncestor = (target: Session.ID, sessionID: Session.ID | undefined): Effect.Effect<boolean> =>
+      sessionID === undefined
+        ? Effect.succeed(false)
+        : sessionID === target
+          ? Effect.succeed(true)
+          : sessions.get(sessionID).pipe(
+              Effect.map((session) => session.parentID),
+              Effect.catch(() => Effect.succeed(undefined)),
+              Effect.flatMap((parentID) => isSelfOrAncestor(target, parentID)),
+            )
+
+    // Cancelled jobs send no completion notice, so nothing wakes an interrupted session again. Jobs are cancelled
+    // before the interrupt, so none finishes and wakes it meanwhile, and again after, for any its last step started.
     const stop = (sessionID: Session.ID): Effect.Effect<{ interrupted: number; jobs: number }> =>
       Effect.gen(function* () {
+        const before = yield* jobs.cancelSession(sessionID)
         const interrupted = yield* sessions.interrupt(sessionID)
-        const cancelled = yield* jobs.cancelSession(sessionID)
+        const cancelled = [...before, ...(yield* jobs.cancelSession(sessionID))]
         const below = yield* Effect.forEach(yield* children({ parentID: sessionID, limit: 100 }), (child) =>
           stop(child.id),
         )
@@ -69,9 +82,10 @@ export const Plugin = {
           options: { namespace: "opencode.session", codemode: true },
           execute: (input, context) =>
             Effect.gen(function* () {
-              if (input.sessionID === context.sessionID)
-                return yield* new ToolFailure({ message: "A session can't interrupt itself" })
               yield* sessions.get(input.sessionID)
+              // Interrupting the caller or a session above it would stop this call and the caller's own work.
+              if (yield* isSelfOrAncestor(input.sessionID, context.sessionID))
+                return yield* new ToolFailure({ message: "A session can't interrupt itself or a session above it" })
               const result = yield* stop(input.sessionID)
               return {
                 output: { sessionID: input.sessionID, ...result },
