@@ -12,8 +12,9 @@
 // Allocation counts and bytes are deterministic up to the timing of the fake server's answers, so they get a strict
 // threshold: by default a regression is a median more than 0.1% above the base's, or the spread of the base's runs if
 // that is larger. Instructions (the measured thread's, from a hardware counter) repeat within 0.1% for one binary but
-// move by up to 3% between two builds of the same code, as the code's layout changes, so they get 3%; peaks get 1%.
-// Wall and CPU time are printed for information only: the machine is shared.
+// move by up to 3% between two builds of the same code, as the code's layout changes, so they get 3%; peaks get 1%,
+// including the malloc peak of the scenarios that sample it (OpenTUI's native memory with Rust's). Wall and CPU time,
+// and the bytes still held at the end (`kept`, `malloc kept`), are printed for information only.
 import os from "node:os"
 
 const root = new URL("..", import.meta.url).pathname
@@ -29,6 +30,9 @@ type Record = {
   all_allocations: number
   all_bytes: number
   all_peak: number
+  /** Process-wide malloc, OpenTUI's native memory included; only the scenarios that sample it have it. */
+  malloc_peak?: number | null
+  malloc_kept?: number | null
   instructions: number | null
   wall_ms: number
   cpu_ms: number | null
@@ -49,6 +53,9 @@ const metrics = [
   ["all_allocations", "allocs (all)", "exact"],
   ["all_bytes", "bytes (all)", "bytes"],
   ["all_peak", "peak (all)", "bytes"],
+  ["kept", "kept", "bytes"],
+  ["malloc_peak", "malloc peak", "bytes"],
+  ["malloc_kept", "malloc kept", "bytes"],
   ["instructions", "instructions", "count"],
   ["wall_ms", "wall ms", "ms"],
   ["cpu_ms", "cpu ms", "ms"],
@@ -138,6 +145,7 @@ async function compare(args: string[]) {
     all_bytes: Number(option(args, "--allocations") ?? 0.1) / 100,
     peak: Number(option(args, "--peak") ?? 1) / 100,
     all_peak: Number(option(args, "--peak") ?? 1) / 100,
+    malloc_peak: Number(option(args, "--peak") ?? 1) / 100,
     instructions: Number(option(args, "--instructions") ?? 3) / 100,
   }
   console.log(`base ${base.commit} (${base.branch}), head ${head.commit} (${head.branch})\n`)
@@ -257,11 +265,12 @@ function build() {
   return targets.map(([pkg, ...target]) => {
     const command = ["bun", "run", "cargo", "test", "--profile", "perf", "-p", pkg, ...target]
     const output = run([...command, "--no-run", "--message-format=json"], {}, "inherit")
+    // The TUI's integration tests also build its binaries, which cargo may report first.
     const binary = output
       .split("\n")
       .filter((line) => line.startsWith("{"))
       .map((line) => JSON.parse(line))
-      .find((message) => message.reason === "compiler-artifact" && message.executable)
+      .find((message) => message.reason === "compiler-artifact" && message.executable && message.profile.test)
     if (!binary) throw new Error(`cargo built no test binary for ${pkg}`)
     return binary.executable as string
   })

@@ -1,13 +1,17 @@
 // P-TUI version of `E.6b/messages.app.ts`: message kinds built by real turns (V08, V10, V11). A session opens with
 // one finished turn; `/compact` runs a real compaction (its summary must use the template's headings); a prompt
-// whose step fails with a provider error, with its toast; another prompt, then `/undo` shows the revert banner. The
-// step waiting to retry is left out: a retry waits for its backoff in real time.
+// whose step fails with a provider error; another prompt, then `/undo` shows the revert banner. The step waiting to
+// retry is left out: a retry waits for its backoff in real time.
 import { defineSim } from "../../sim/scenario"
 
 const duration = { line: "· \\d.*", reason: "the turn duration depends on timing, also in length; the row ends there" }
 
 export default defineSim({
   height: 40,
+  // The failure toast lives 5 s of wall clock, so a checkpoint taken later (a capture retried under load) catches
+  // it on one side only. It is not one of this scenario's states: P-APP's `E.19a/failed-toast` compares it on a
+  // still clock.
+  config: { plugins: ["-opencode.notifications"] },
   sessions: [{ title: "Fix the parser", prompts: ["Why does the parser fail?"] }],
   args: ["--session", "$session:0"],
   model: [

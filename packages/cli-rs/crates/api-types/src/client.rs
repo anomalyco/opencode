@@ -720,7 +720,7 @@ pub fn experimental_generate_video_create(
         "/api/experimental/generate/video".to_owned(),
         Reply::Data,
         200,
-        &[400, 401, 403, 404, 422, 502, 503],
+        &[400, 401, 404, 422, 502, 503],
     );
     call.object();
     call.field("model", &input.model);
@@ -753,7 +753,7 @@ pub fn experimental_generate_video_create(
 pub fn experimental_generate_video_get(
     input: &ExperimentalGenerateVideoGetInput,
 ) -> Call<ExperimentalGenerateVideoGetOutput> {
-    let mut call = Call::new("GET", String::new(), Reply::Data, 200, &[400, 401, 403, 404]);
+    let mut call = Call::new("GET", String::new(), Reply::Data, 200, &[400, 401, 404]);
     call.path = format!("/api/experimental/generate/video/{}", call.param(&input.id));
     call
 }

@@ -276,8 +276,10 @@ impl LayoutReply {
     }
 }
 
-/// `Viewport::Transcript`: the session transcript's scroll, as the host publishes it. It covers the mounted window,
-/// the tail of the session the transcript has revealed; `above` counts the messages before it.
+/// `Viewport::Transcript`: the session transcript's scroll, as the host publishes it. It covers the mounted window: the
+/// rows near the view, a few screens on each side of it. The window reaches the session's newest row only while the
+/// view is near it, and moves as the view scrolls, dropping rows far from it. `offset` and `extent` are within the
+/// window, `rows` are its rows, and `above` counts the messages before it; nothing counts the messages after it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct TranscriptView {

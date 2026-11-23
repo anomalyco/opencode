@@ -36,6 +36,11 @@ impl Probe {
     /// Prints the counts of the region as one `PERF` line; `units` is the scenario's unit of work (events, keys,
     /// frames), for per-unit figures.
     pub fn finish(self, scenario: &str, units: u64) {
+        self.finish_with(scenario, units, json!({}));
+    }
+
+    /// [`Probe::finish`] with the scenario's own fields added to the line.
+    pub fn finish_with(self, scenario: &str, units: u64, extra: Value) {
         let wall = self.start.elapsed();
         let thread = self.heap.thread();
         let all = self.heap.all();
@@ -44,7 +49,7 @@ impl Probe {
         heap::sample_every(0);
         drop(self.heap);
         let samples = heap::samples();
-        let line = json!({
+        let mut line = json!({
             "scenario": scenario,
             "units": units,
             "allocations": thread.allocations,
@@ -58,6 +63,9 @@ impl Probe {
             "wall_ms": wall.as_secs_f64() * 1e3,
             "cpu_ms": cpu.map(|cpu| cpu.as_secs_f64() * 1e3),
         });
+        if let (Value::Object(line), Value::Object(extra)) = (&mut line, extra) {
+            line.extend(extra);
+        }
         println!("PERF {line}");
         print_sites(samples);
     }

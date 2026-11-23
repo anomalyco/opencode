@@ -1,6 +1,10 @@
 //! Window the transcript from the tail. A store update refreshes the rows owned by changed messages; scrolling toward
 //! the head loads older pages.
 //!
+//! The window is bounded on both sides: a move that mounts rows on one side of the view drops the rows more than
+//! [`MARGIN`] past the other side, so memory follows the rows near the view, not every row the reader passed.
+//! What the reader opened in a row stays in [`Toggles`], so a dropped row comes back as they left it.
+//!
 //! What the transcript remembers is one [`Model`]. A render plans over the model and the store, applies the plan to
 //! the widgets with the model not borrowed, so a widget callback that re-enters finds no borrow, then commits it.
 
@@ -31,6 +35,8 @@ use crate::routes::session::grouping;
 
 pub const TAIL_ROWS: usize = 40;
 pub const BACKFILL_CHUNK: usize = 60;
+/// The rows, by weight, the window keeps past the edge of the view it moves away from.
+pub const MARGIN: usize = BACKFILL_CHUNK;
 
 #[derive(Clone)]
 pub struct Transcript(Rc<Inner>);
@@ -84,6 +90,7 @@ struct Inner {
     renderers: CodeBlockRenderers,
     claims: ToolClaims,
     groups: Rc<grouping::Settings>,
+    toggles: Toggles,
     model: RefCell<Model>,
     look: RefCell<Look>,
     /// The mounted rows by key: a render's plan builds and drops them.
@@ -110,6 +117,7 @@ impl Drop for Inner {
             if let Some(id) = hooks.resize.take() {
                 tui.app.remove_handler(id);
             }
+            crate::features::release::dropped(&tui.app, self.rows.get_mut().len());
         }
     }
 }
@@ -140,11 +148,14 @@ struct Model {
     /// The rows of each message, by index in the specs.
     refs: HashMap<MessageKey, Vec<usize>>,
     start: Start,
-    /// Where the mounted window ends, by row index, when it stops before the newest row
-    /// (`visibleRowsEnd`): `session.first` mounts the head only.
-    end: Option<usize>,
+    /// Where the mounted window ends when it stops before the newest row (`visibleRowsEnd`): `session.first` mounts
+    /// the head only, and a move up drops the rows far below the view.
+    end: Option<End>,
     /// Set when rows mount above the window or the terminal resizes, so the reader's rows stay in place.
     pin: Option<Pin>,
+    /// The height of the rows dropped since the last layout, and the frame number then. The content's rect still
+    /// counts them, so a pin set before the next layout takes them off.
+    dropped: Option<(u64, f32)>,
     /// An older page is loading.
     loading: bool,
     /// Message navigation or its slack holds the view, so the bottom it reaches is not the tail.
@@ -201,6 +212,52 @@ impl Events {
     }
 }
 
+/// What the reader opened in the session's rows, by a key each widget takes from what it shows, so that a row the
+/// window drops and builds again opens as they left it. Groups keep theirs in [`grouping::Settings`].
+#[derive(Clone, Default)]
+pub struct Toggles(Rc<RefCell<HashSet<String>>>);
+
+impl Toggles {
+    /// A closed switch, until it has a key the reader opened.
+    pub fn switch(&self) -> Switch {
+        Switch { toggles: self.clone(), key: RefCell::default() }
+    }
+}
+
+/// One widget's open state in [`Toggles`].
+pub struct Switch {
+    toggles: Toggles,
+    key: RefCell<String>,
+}
+
+impl Switch {
+    /// Names what the widget shows, once it knows: a tool call's ID, a message's, with what it opens.
+    pub fn key(&self, key: String) {
+        if *self.key.borrow() != key {
+            *self.key.borrow_mut() = key;
+        }
+    }
+
+    pub fn get(&self) -> bool {
+        let key = self.key.borrow();
+        !key.is_empty() && self.toggles.0.borrow().contains(key.as_str())
+    }
+
+    /// Opens a closed switch or closes an open one, and returns whether it is open. A switch without a key stays shut.
+    pub fn flip(&self) -> bool {
+        let key = self.key.borrow();
+        if key.is_empty() {
+            return false;
+        }
+        let mut open = self.toggles.0.borrow_mut();
+        if open.remove(key.as_str()) {
+            return false;
+        }
+        open.insert(key.clone());
+        true
+    }
+}
+
 struct Paint {
     theme: Theme,
     syntax: SyntaxTheme,
@@ -237,6 +294,25 @@ impl Pin {
     /// Whether the frames that lay out the change are still to come or running.
     fn live(&self, frame: u64) -> bool {
         frame <= self.frame + if self.above.is_some() { 2 } else { 1 }
+    }
+}
+
+/// The end of a window that stops before the newest row. It follows its last row by key, since an older page or a
+/// regrouping moves the rows' indices.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum End {
+    /// Before the row at this index of the rows the next render plans.
+    Index(usize),
+    /// After this row; the index after it at the last render stands in while the row is gone.
+    After(RowKey, usize),
+}
+
+impl End {
+    fn index(self, specs: &[Spec]) -> usize {
+        match self {
+            Self::Index(index) => index,
+            Self::After(key, index) => specs.iter().position(|spec| spec.key() == key).map_or(index, |at| at + 1),
+        }
     }
 }
 
@@ -282,6 +358,7 @@ impl Transcript {
             renderers: crate::plugins::host::code_blocks(tui),
             claims: crate::plugins::host::tool_claims(tui),
             groups: grouping::Settings::new(&tui.settings.info()),
+            toggles: Toggles::default(),
             model: RefCell::new(Model { settings: RowSettings::read(&tui.config()), ..Model::default() }),
             look: RefCell::new(Look { paint: Rc::new(Paint::new(theme)), keys: (u64::MAX, Rc::default()) }),
             rows: RefCell::default(),
@@ -299,6 +376,7 @@ impl Transcript {
         if self.0.model.borrow().session.as_ref() != Some(session) {
             self.0.model.borrow_mut().session = Some(session.clone());
             *self.0.groups.expanded.borrow_mut() = tui.tabs.expanded_groups(&session.0);
+            self.0.toggles.0.borrow_mut().clear();
         }
         self.0.locate(tui, session);
         // The rows read the location's agents and models, what the local selection reads, and, a shell's rows, its
@@ -328,25 +406,15 @@ impl Transcript {
         self.0.render(tui, |message| force || changed.contains(&message));
     }
 
+    /// Near the top of the mounted rows, mounts older ones, or loads an older page, and drops the rows far below the
+    /// view.
     pub fn reveal_older(&self, tui: &Tui) -> bool {
         let inner = &self.0;
         let (_, top) = inner.scroll.scroll_position();
         if top > f64::from(inner.scroll.rect().height) {
             return false;
         }
-        let model = inner.model.borrow();
-        let start = model.window_start();
-        let start = (start > 0).then(|| match grouping::rows_before(&model.weights, start, BACKFILL_CHUNK) {
-            0 => Start::Top,
-            next => Start::Row(model.specs[next].key()),
-        });
-        let end = model.end;
-        drop(model);
-        let Some(start) = start else { return inner.load_older(tui) };
-        inner.scroll.sticky(false);
-        inner.show(tui, start, end);
-        inner.scroll.sticky(true);
-        true
+        inner.grow(tui, false) || inner.load_older(tui)
     }
 
     /// Publishes the transcript with `scroll` as its mover. Its moves, whatever moved it, and its resizes run the
@@ -422,21 +490,49 @@ impl Transcript {
         inner.show(tui, next, end);
     }
 
-    pub fn mount_all(&self, tui: &Tui) {
-        if self.0.model.borrow().start == Start::Top && self.0.model.borrow().end.is_none() {
-            return;
-        }
-        self.0.show(tui, Start::Top, None);
-    }
-
     /// Mounts the oldest [`BACKFILL_CHUNK`] rows only, after `session.first` loaded the history; newer
     /// rows mount as the reader scrolls down.
     pub fn mount_head(&self, tui: &Tui) {
-        self.0.show(tui, Start::Top, Some(BACKFILL_CHUNK));
-        let mut model = self.0.model.borrow_mut();
-        if model.specs.len() <= BACKFILL_CHUNK {
-            model.end = None;
+        self.0.show(tui, Start::Top, Some(End::Index(BACKFILL_CHUNK)));
+    }
+
+    /// Mounts [`BACKFILL_CHUNK`] rows on each side of the first row of message `id`, unless that row is mounted
+    /// already, for a jump to it. Returns whether the message has a row.
+    pub fn mount_message(&self, tui: &Tui, id: &str) -> bool {
+        let inner = &self.0;
+        // Use the store's rows even if the next sync has yet to paint them.
+        inner.render(tui, |_| false);
+        let Some(session) = self.session() else { return false };
+        let Some(key) = tui.data.read(|state| state.transcript(&session)?.key(id)) else { return false };
+        let window = {
+            let model = inner.model.borrow();
+            let index = model.specs.iter().position(|spec| {
+                let mut shows = false;
+                spec.messages(&mut |message| shows |= message == key);
+                shows
+            });
+            let Some(index) = index else { return false };
+            let start = model.window_start();
+            let mounted = start <= index && index < model.window_end();
+            (!mounted).then(|| {
+                let start = grouping::rows_before(&model.weights, index, BACKFILL_CHUNK);
+                let end = grouping::rows_after(&model.weights, index, BACKFILL_CHUNK);
+                let start = if start == 0 { Start::Top } else { Start::Row(model.specs[start].key()) };
+                (start, (end < model.specs.len()).then_some(End::Index(end)))
+            })
+        };
+        if let Some((start, end)) = window {
+            inner.scroll.sticky(false);
+            inner.show(tui, start, end);
         }
+        true
+    }
+
+    /// Mounts [`BACKFILL_CHUNK`] more rows below the window, or above it, dropping the rows far on the other side of
+    /// the view, for a message navigation that found nothing among the mounted rows. Returns whether there were rows
+    /// to mount.
+    pub fn extend(&self, tui: &Tui, down: bool) -> bool {
+        self.0.grow(tui, down)
     }
 
     pub fn to_tail(&self, tui: &Tui) {
@@ -445,25 +541,20 @@ impl Transcript {
         self.0.scroll.scroll_to_bottom();
     }
 
-    pub fn all_mounted(&self) -> bool {
-        let model = self.0.model.borrow();
-        model.window_start() == 0 && model.at_end()
-    }
-
     pub fn at_end(&self) -> bool {
         self.0.model.borrow().at_end()
     }
 
+    /// Near the bottom of the mounted rows, mounts newer ones and drops the rows far above the view.
     pub fn reveal_newer(&self, tui: &Tui) -> bool {
         let inner = &self.0;
         let (_, top) = inner.scroll.scroll_position();
         let viewport = f64::from(inner.scroll.rect().height);
         let content = f64::from(inner.scroll.content_view().rect().height);
-        let rows = inner.model.borrow().specs.len();
-        if inner.model.borrow().end.is_none_or(|end| end >= rows) || top + viewport < content - viewport {
+        if top + viewport < content - viewport {
             return false;
         }
-        self.mount_newer(tui)
+        inner.grow(tui, true)
     }
 
     /// Mounted rows with their message and content y, top to bottom (`anchors.messagePositions`
@@ -523,7 +614,7 @@ impl Transcript {
                 let start = grouping::rows_before(&model.weights, index, BACKFILL_CHUNK);
                 let end = grouping::rows_after(&model.weights, index, BACKFILL_CHUNK);
                 let start = if start == 0 { Start::Top } else { Start::Row(model.specs[start].key()) };
-                (start, (end < model.specs.len()).then_some(end))
+                (start, (end < model.specs.len()).then_some(End::Index(end)))
             })
         };
         let Some((start, end)) = window else { return false };
@@ -531,11 +622,15 @@ impl Transcript {
         true
     }
 
+    /// Mounts [`BACKFILL_CHUNK`] more rows below the window and keeps the rest, for a restore or an alignment whose
+    /// view must reach past the window's end before it can move. Returns whether there were rows to mount.
     pub fn mount_newer(&self, tui: &Tui) -> bool {
         let model = self.0.model.borrow();
-        let Some(end) = model.end else { return false };
-        let next = grouping::rows_after(&model.weights, end, BACKFILL_CHUNK);
-        let (start, end) = (model.start, (next < model.specs.len()).then_some(next));
+        if model.at_end() {
+            return false;
+        }
+        let next = grouping::rows_after(&model.weights, model.window_end(), BACKFILL_CHUNK);
+        let (start, end) = (model.start, (next < model.specs.len()).then_some(End::Index(next)));
         drop(model);
         self.0.show(tui, start, end);
         true
@@ -560,8 +655,13 @@ impl Model {
         window_start(&self.start, &self.specs, &self.weights)
     }
 
+    /// The row after the last mounted one.
+    fn window_end(&self) -> usize {
+        window_end(self.end.map(|end| end.index(&self.specs)), self.window_start(), self.specs.len())
+    }
+
     fn at_end(&self) -> bool {
-        self.end.is_none_or(|end| end >= self.specs.len())
+        self.window_end() >= self.specs.len()
     }
 
     fn content_width(&self, tui: &Tui) -> u16 {
@@ -605,14 +705,15 @@ impl Model {
         let weights: Vec<usize> =
             specs.iter().map(|spec| groups.weight(spec, self.settings.hide_thinking, &lookup)).collect();
         let start = window_start(&self.start, &specs, &weights);
-        let window = start..window_end(self.end, start, specs.len());
+        let window = start..window_end(self.end.map(|end| end.index(&specs)), start, specs.len());
         let wanted: HashSet<RowKey> = specs[window.clone()].iter().map(Spec::key).collect();
         // Rows mounting above the first mounted one would push the reader's rows down; the next layout scrolls by
         // what they add (`pinAbove`), in place of a resize's pin.
         let first = self.mounted.iter().find(|key| wanted.contains(key));
         let above = first.is_some_and(|first| specs[start].key() != *first);
+        let dropped = self.dropped.filter(|(frame, _)| *frame == layout.1).map_or(0.0, |(_, height)| height);
         let pin = (above && self.pin.as_ref().is_none_or(|pin| pin.above.is_some())).then(|| Pin {
-            height: layout.0,
+            height: layout.0 - dropped,
             frame: layout.1,
             above: None,
         });
@@ -637,6 +738,10 @@ impl Model {
         if plan.pin.is_some() {
             self.pin = plan.pin;
         }
+        // The end follows its last row from now on; a window that reaches the newest row follows new ones.
+        let end = plan.window.end;
+        self.end =
+            self.end.filter(|_| end > 0 && end < plan.specs.len()).map(|_| End::After(plan.specs[end - 1].key(), end));
         // The specs' box is reused unless a row update still holds it.
         match Rc::get_mut(&mut self.specs) {
             Some(specs) => *specs = plan.specs,
@@ -967,6 +1072,7 @@ impl Inner {
     /// messages `changed`, and orders them. `mounted` holds the children's keys before and after.
     fn apply(&self, cx: &Context<'_>, plan: &Plan, changed: impl Fn(MessageKey) -> bool, mounted: &mut Vec<RowKey>) {
         let mut rows = self.rows.borrow_mut();
+        let before = rows.len();
         rows.retain(|key, row| {
             let keep = plan.wanted.contains(key);
             if !keep {
@@ -974,6 +1080,7 @@ impl Inner {
             }
             keep
         });
+        crate::features::release::dropped(cx.app, before - rows.len());
         mounted.retain(|key| plan.wanted.contains(key));
         let window = &plan.specs[plan.window.clone()];
         for spec in window {
@@ -1043,8 +1150,7 @@ impl Inner {
     fn refit(&self, tui: &Tui) {
         let current = tui.synced() && {
             let model = self.model.borrow();
-            let start = model.window_start();
-            let window = &model.specs[start..window_end(model.end, start, model.specs.len())];
+            let window = &model.specs[model.window_start()..model.window_end()];
             model.mounted.iter().copied().eq(window.iter().map(Spec::key))
         };
         if !current {
@@ -1129,6 +1235,7 @@ impl Inner {
             conceal: view.conceal,
             hide_thinking: view.hide_thinking,
             groups: &self.groups,
+            toggles: &self.toggles,
             tps: view.tps,
             verbose_tokens: view.turn_tokens == Some(TurnTokens::Verbose),
             mode: tui.theme.borrow().mode(),
@@ -1180,11 +1287,136 @@ impl Inner {
     }
 
     /// Moves the window to start at `start` and end at `end`.
-    fn show(&self, tui: &Tui, start: Start, end: Option<usize>) {
+    fn show(&self, tui: &Tui, start: Start, end: Option<End>) {
         let mut model = self.model.borrow_mut();
         (model.start, model.end) = (start, end);
         drop(model);
         self.render(tui, |_| false);
+    }
+
+    /// Mounts [`BACKFILL_CHUNK`] more rows past the window's end (`down`) or before its start, and drops the rows more
+    /// than [`MARGIN`] past the view on the other side. Returns false when the window already reaches the last loaded
+    /// row that way.
+    fn grow(&self, tui: &Tui, down: bool) -> bool {
+        let model = self.model.borrow();
+        if if down { model.at_end() } else { model.window_start() == 0 } {
+            return false;
+        }
+        drop(model);
+        if down {
+            let above = self.drop_above(tui);
+            let model = self.model.borrow();
+            let next = grouping::rows_after(&model.weights, model.window_end(), BACKFILL_CHUNK);
+            let start = above.map_or(model.start, |(start, _)| start);
+            let end = (next < model.specs.len()).then_some(End::Index(next));
+            drop(model);
+            self.scroll.sticky(false);
+            self.show(tui, start, end);
+            self.scroll.sticky(true);
+            // The rows on screen move up by what dropped above them; the next frame's layout takes it with the move
+            // that asked for the rows.
+            if let Some((_, height)) = above {
+                self.scroll.scroll_by(0.0, -f64::from(height));
+                self.dropped(tui, height);
+            }
+            return true;
+        }
+        let model = self.model.borrow();
+        let start = match grouping::rows_before(&model.weights, model.window_start(), BACKFILL_CHUNK) {
+            0 => Start::Top,
+            next => Start::Row(model.specs[next].key()),
+        };
+        let end = model.end;
+        drop(model);
+        self.scroll.sticky(false);
+        self.show(tui, start, end);
+        self.scroll.sticky(true);
+        self.drop_below_later(tui);
+        true
+    }
+
+    /// Drops the rows far below the view once the rows mounted above are laid out. The rows mounted above hold the
+    /// view by how much the content grows (`Pin`); rows dropped below in the same frame would take from that, and
+    /// could cancel it out.
+    fn drop_below_later(&self, tui: &Tui) {
+        crate::routes::session::scroll::after_layout(
+            &tui.app,
+            bind!(self.this, |inner| {
+                let Some(tui) = inner.tui.upgrade() else { return };
+                let Some((end, height)) = inner.drop_below(&tui) else { return };
+                inner.model.borrow_mut().end = Some(end);
+                inner.render(&tui, |_| false);
+                inner.dropped(&tui, height);
+            }),
+        );
+    }
+
+    /// The window's start once the rows more than [`MARGIN`] above the view drop, and the height they take with them;
+    /// None when no row is that far, or while the rows must stay (see [`Self::visible`]).
+    fn drop_above(&self, tui: &Tui) -> Option<(Start, f32)> {
+        let visible = self.visible(tui)?;
+        let model = self.model.borrow();
+        let (start, keep) = (model.window_start(), grouping::rows_before(&model.weights, visible.start, MARGIN));
+        if keep <= start {
+            return None;
+        }
+        // Both rows were laid out in an earlier frame: only rows past the window's end are new. Either may be empty,
+        // with no height, and still has its place.
+        let top = |index: usize| {
+            let content = self.scroll.content_view().rect().screen_y;
+            Some(self.rows.borrow().get(&model.specs[index].key())?.wrapper.rect().screen_y - content)
+        };
+        let height = top(keep)? - top(start)?;
+        Some((Start::Row(model.specs[keep].key()), height as f32))
+    }
+
+    /// The window's end once the rows more than [`MARGIN`] below the view drop, and the height they take with them;
+    /// None when no row is that far, or while the rows must stay (see [`Self::visible`]).
+    fn drop_below(&self, tui: &Tui) -> Option<(End, f32)> {
+        let visible = self.visible(tui)?;
+        let model = self.model.borrow();
+        let (end, keep) = (model.window_end(), grouping::rows_after(&model.weights, visible.end, MARGIN));
+        if keep >= end {
+            return None;
+        }
+        let bottom = |index: usize| {
+            let rect = self.rows.borrow().get(&model.specs[index].key())?.wrapper.rect();
+            Some(rect.screen_y + f64::from(rect.height))
+        };
+        let height = bottom(end - 1)? - bottom(keep - 1)?;
+        Some((End::After(model.specs[keep - 1].key(), keep), height as f32))
+    }
+
+    /// Notes rows of `height` dropped before the next layout (see `Model::dropped`).
+    fn dropped(&self, tui: &Tui, height: f32) {
+        let frame = tui.app.frame_number();
+        let mut model = self.model.borrow_mut();
+        let before = model.dropped.filter(|(at, _)| *at == frame).map_or(0.0, |(_, before)| before);
+        model.dropped = Some((frame, before + height));
+    }
+
+    /// The mounted rows on screen, as a range of the rows, while rows may drop. They may not before the rows are laid
+    /// out, while a resize or rows mounted above hold the view, or while the reader selects text: the selection holds
+    /// its rows until it clears, which any key does.
+    fn visible(&self, tui: &Tui) -> Option<Range<usize>> {
+        if self.pinned(|_| true) || tui.app.is_selecting() || tui.app.selected_text().is_some() {
+            return None;
+        }
+        let (_, top) = self.scroll.scroll_position();
+        let bottom = top + f64::from(self.scroll.rect().height);
+        let model = self.model.borrow();
+        let start = model.window_start();
+        let rows = self.rows.borrow();
+        let mut visible: Option<Range<usize>> = None;
+        for (offset, key) in model.mounted.iter().enumerate() {
+            let Some(y) = self.row_y(key) else { continue };
+            let height = f64::from(rows.get(key).map_or(0.0, |row| row.wrapper.rect().height));
+            if y + height > top && y < bottom {
+                let index = start + offset;
+                visible = Some(visible.map_or(index, |visible| visible.start)..index + 1);
+            }
+        }
+        visible
     }
 
     fn load_older(&self, tui: &Tui) -> bool {
@@ -1203,7 +1435,10 @@ impl Inner {
                 inner.hint.visible(false);
                 let Some(tui) = inner.tui.upgrade() else { return };
                 match result {
-                    Ok(_) => inner.complete_group_boundary(&tui),
+                    Ok(_) => {
+                        inner.complete_group_boundary(&tui);
+                        inner.drop_below_later(&tui);
+                    }
                     Err(error) => tui.toasts.error(error.tui_message()),
                 }
             }),
@@ -1396,6 +1631,7 @@ pub struct Context<'a> {
     /// `session.thinking` is `hide`.
     pub hide_thinking: bool,
     pub groups: &'a Rc<grouping::Settings>,
+    pub toggles: &'a Toggles,
     pub tps: bool,
     /// `debug.turn_tokens` is `verbose`.
     pub verbose_tokens: bool,

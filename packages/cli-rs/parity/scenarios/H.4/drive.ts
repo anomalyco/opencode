@@ -12,7 +12,6 @@ import path from "node:path"
 import { Schema } from "effect"
 import { Frontend, Handshake } from "@opencode/protocol/simulation"
 import { buildRust, command, parityRoot, sandbox, type Side } from "../../cli/client"
-import { freePort } from "../../lib/port"
 import { connectDrive } from "../../sim/drive"
 
 const viewport = { cols: 100, rows: 30 }
@@ -69,12 +68,12 @@ await writeFile(
   JSON.stringify({ experimental: { "new-designs": true }, animations: false, debug: { devtools: false } }),
 )
 await buildRust(["rs"])
-const ports = Array.from({ length: 3 }, freePort)
-const server = `http://127.0.0.1:${ports[0]}`
-const serve = Bun.spawn(command("ts", ["serve", "--port", String(ports[0])]), {
+// The server asks the kernel for its port at bind time and prints the address it bound, so no other parity run can
+// take a checked-then-bound port in between (flakes-n).
+const serve = Bun.spawn(command("ts", ["serve", "--port", "0"]), {
   cwd: box.cwd,
   env: { ...box.env, OPENCODE_SIMULATE: "1" },
-  stdout: "ignore",
+  stdout: Bun.file(path.join(box.root, "server.stdout")),
   stderr: Bun.file(path.join(box.root, "server.log")),
 })
 const children: { kill(): void }[] = [serve]
@@ -82,9 +81,10 @@ process.on("exit", () => children.forEach((child) => child.kill()))
 
 const report: Record<string, unknown> = {}
 try {
+  const server = await waitForEndpoint(path.join(box.root, "server.stdout"), /server listening on (http:\/\/\S+)/)
   await waitForServer(server)
   const results = {} as Record<Side, Awaited<ReturnType<typeof drive>>>
-  for (const [index, side] of (["ts", "rs"] as const).entries()) results[side] = await drive(side, ports[index + 1])
+  for (const side of ["ts", "rs"] as const) results[side] = await drive(side, server)
   const out = path.join(parityRoot, "out", "H.4")
   await mkdir(out, { recursive: true })
   for (const side of ["ts", "rs"] as const)
@@ -106,13 +106,14 @@ try {
   children.forEach((child) => child.kill())
 }
 
-async function drive(side: Side, port: number) {
+async function drive(side: Side, server: string) {
   const registry = path.join(box.root, `drive-${side}`)
   await mkdir(registry, { recursive: true })
   await writeFile(
     path.join(registry, "parity.json"),
     JSON.stringify({
-      endpoints: { ui: `ws://127.0.0.1:${port}`, backend: `ws://127.0.0.1:${port + 1000}` },
+      // The client binds its own UI endpoint; it never uses the backend one (the TUI does not connect to it).
+      endpoints: { ui: "ws://127.0.0.1:0", backend: "ws://127.0.0.1:0" },
       viewport,
     }),
   )
@@ -130,8 +131,11 @@ async function drive(side: Side, port: number) {
     stderr: Bun.file(path.join(box.root, `${side}.stderr`)),
   })
   children.push(client)
-  await waitForLine(path.join(box.root, `${side}.stderr`), "opencode drive ui websocket:")
-  const drive = await connectDrive(`ws://127.0.0.1:${port}`, side)
+  const endpoint = await waitForEndpoint(
+    path.join(box.root, `${side}.stderr`),
+    /opencode drive ui websocket: (ws:\/\/\S+)/,
+  )
+  const drive = await connectDrive(endpoint, side)
   const call = drive.call
   const captures: Record<string, Frontend.CapturedFrame> = {}
   const outcomes: unknown[] = []
@@ -225,14 +229,17 @@ async function waitForServer(url: string) {
   throw new Error("the simulated server did not start")
 }
 
-async function waitForLine(file: string, prefix: string) {
+// The endpoint a process printed after binding: the only way to learn the port it asked the kernel for.
+async function waitForEndpoint(file: string, pattern: RegExp) {
   const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
-    const text = await Bun.file(file)
-      .text()
-      .catch(() => "")
-    if (text.includes(prefix)) return
+    const match = pattern.exec(
+      await Bun.file(file)
+        .text()
+        .catch(() => ""),
+    )
+    if (match?.[1]) return match[1]
     await Bun.sleep(100)
   }
-  throw new Error(`no ${prefix} line in ${file}`)
+  throw new Error(`no ${pattern} line in ${file}`)
 }
