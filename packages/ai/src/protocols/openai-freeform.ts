@@ -40,13 +40,15 @@ interface OptionField {
 export const PREFIX = "// @options:"
 
 /**
- * How a tool goes out: a custom tool when it declares `freeform` with its required string parameter. Other parameters
- * need a grammar for their values, and a raw text body when the model can't take Lark; otherwise the tool stays a
- * JSON tool.
+ * How a tool goes out: a custom tool when it declares `freeform` in a format the model accepts (`formats`, every
+ * format when unset), with its required string parameter. Other parameters need a grammar for their values, and a raw
+ * text body when the model can't take Lark; otherwise the tool stays a JSON tool.
  */
-export const resolve = (tool: ToolDefinition, lark = true): Custom | undefined => {
+export const resolve = (tool: ToolDefinition, formats?: ReadonlyArray<Freeform["type"]>): Custom | undefined => {
   const field = ToolDefinition.freeformField(tool.inputSchema, tool.freeform)
   if (tool.freeform === undefined || tool.native !== undefined || field === undefined) return undefined
+  if (formats !== undefined && !formats.includes(tool.freeform.type)) return undefined
+  const lark = formats === undefined || formats.includes("lark")
   const required = Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : []
   const fields = Object.entries(Schema.is(JsonSchema)(tool.inputSchema.properties) ? tool.inputSchema.properties : {})
     .filter(([name]) => name !== field)
@@ -148,11 +150,11 @@ const escapeClass = (char: string) => char.replace(/[\\\]^\-/]/g, "\\$&")
 
 /** Custom tools in this request, including ones added mid-conversation, by flattened tool name. */
 export const tools = (request: LLMRequest): ReadonlyMap<string, Custom> => {
-  const lark = request.model.capabilities?.tools?.freeform?.includes("lark") ?? true
+  const formats = request.model.capabilities?.tools?.freeform
   const added = request.messages.flatMap((message) => toolsUpdate(message)?.add ?? [])
   return new Map(
     flattenTools([...request.tools, ...added]).flatMap((tool) => {
-      const custom = resolve(tool, lark)
+      const custom = resolve(tool, formats)
       return custom ? [[tool.name, custom] as const] : []
     }),
   )
