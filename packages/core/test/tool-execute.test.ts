@@ -82,10 +82,10 @@ test("with full_codemode, raw-text models set execute's timeout and background o
   const [tool] = prepared.body.tools
   expect(tool).toMatchObject({ type: "custom", name: "execute", format: { type: "grammar", syntax: "lark" } })
   expect(tool.description).toContain(
-    "To set `timeout` or `background`, start with a `// @options:` line holding a JSON object of them",
+    "To set the parameters below, start with a `// @options:` line holding a JSON object of them",
   )
-  expect(tool.format.definition).toContain('ff_pair_0: "\\"timeout\\"" " "* ":" " "* /[1-9][0-9]*/')
-  expect(tool.format.definition).toContain('ff_pair_1: "\\"background\\"" " "* ":" " "* ("true" | "false")')
+  expect(tool.format.definition).toContain('ff_pair: "\\"timeout\\"" " "* ":" " "* /[1-9][0-9]*/')
+  expect(tool.format.definition).toContain('| "\\"background\\"" " "* ":" " "* ("true" | "false")')
   // Without `full_codemode` the code is the only parameter, and goes out as plain text.
   const plain = await Effect.runPromise(
     compileRequest(

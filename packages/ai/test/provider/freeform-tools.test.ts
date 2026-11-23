@@ -332,8 +332,8 @@ describe("freeform tools", () => {
     Effect.gen(function* () {
       const [sent] = (yield* body(responses, optionsTool)).tools
       expect(sent).toMatchObject({ type: "custom", name: "run", format: { type: "grammar", syntax: "lark" } })
-      expect(sent.description).toStartWith("Run code\n\nTo set `timeout` or `background`, start with a `// @options:`")
-      expect(sent.format.definition).toContain("ff_object: ff_pair_0 ff_rest_1 | ff_pair_1 ff_rest_2")
+      expect(sent.description).toStartWith("Run code\n\nTo set the parameters below, start with a `// @options:`")
+      expect(sent.format.definition).toContain('| "\\"background\\"" " "* ":" " "* ("true" | "false")')
       expect((yield* body(chat, optionsTool)).tools[0]).toMatchObject({
         type: "custom",
         custom: {
@@ -417,7 +417,7 @@ describe("freeform tools", () => {
     }),
   )
 
-  it.effect("fails a call with a bad line, saying what is wrong", () =>
+  it.effect("fails a call whose line isn't a JSON object as malformed input", () =>
     Effect.gen(function* () {
       const raw = "// @options: {background: true}\nawait build()"
       const response = yield* generate([
@@ -426,11 +426,7 @@ describe("freeform tools", () => {
       ])
       expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([])
       expect(response.events.filter(LLMEvent.is.toolInputError)).toEqual([
-        expect.objectContaining({
-          id: "call_1",
-          raw,
-          message: expect.stringContaining("Invalid `// @options:` line: it does not hold a JSON object."),
-        }),
+        expect.objectContaining({ id: "call_1", raw }),
       ])
     }),
   )

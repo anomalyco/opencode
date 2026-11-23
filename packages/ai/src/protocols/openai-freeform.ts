@@ -39,9 +39,6 @@ interface OptionField {
 // It is a JavaScript comment, so the line reads naturally before code.
 export const PREFIX = "// @options:"
 
-// The order-free grammar has a rule per subset of parameters; past this many, keys must follow the schema's order.
-const ORDER_FREE_LIMIT = 4
-
 /**
  * How a tool goes out: a custom tool when it declares `freeform` with its required string parameter. Other parameters
  * need a grammar for their values, and a raw text body when the model can't take Lark; otherwise the tool stays a
@@ -66,78 +63,28 @@ export const resolve = (tool: ToolDefinition, lark = true): Custom | undefined =
     format: tool.freeform,
     options: {
       fields,
-      description: describe(field, fields, lark && fields.length > ORDER_FREE_LIMIT),
+      description: describe(field, fields),
       grammar: lark ? lineGrammar(fields, rules, tool.freeform) : undefined,
     },
   }
 }
 
-// Spaces may follow `{`, `:` and `,` and precede `}`. Without required parameters a call may leave the line out, so
-// plain raw text can't start with the prefix.
+// Keys in any order, with spaces after `{`, `:` and `,` and before `}`. The tool's own schema checks the values it
+// gets, as it does for a JSON call. Without required parameters a call may leave the line out, so plain raw text
+// can't start with the prefix. A tool's own grammar becomes the body, its `start` renamed to `fb_start`.
 const lineGrammar = (fields: ReadonlyArray<OptionField>, rules: ReadonlyArray<string>, format: Freeform) => {
   const body = format.type === "text" ? "ff_body" : "fb_start"
   const plain = format.type === "text" ? "ff_plain" : body
   return [
     `start: ff_line ${body}${fields.some((item) => item.required) ? "" : ` | ${plain}`}`,
-    `ff_line: ${larkString(PREFIX)} " "* "{" " "* ff_object " "* "}" "\\n"`,
-    ...(fields.length > ORDER_FREE_LIMIT ? inOrder(fields) : anyOrder(fields)),
-    ...rules.map(
-      (rule, index) => `ff_pair_${index}: ${larkString(encodeJson(fields[index].name))} " "* ":" " "* ${rule}`,
-    ),
+    `ff_line: ${larkString(PREFIX)} " "* "{" " "* ff_pair (" "* "," " "* ff_pair)* " "* "}" "\\n"`,
+    `ff_pair: ${fields.map((item, index) => `${larkString(encodeJson(item.name))} " "* ":" " "* ${rules[index]}`).join(" | ")}`,
     ...(format.type === "text"
       ? ["ff_body: /[\\s\\S]+/", `ff_plain: /${notStartingWith(PREFIX)}/`]
       : format.type === "regex"
         ? [`fb_start: /${format.pattern.replace(/\\?\//g, "\\/")}/`]
-        : [renamed(format.grammar)]),
+        : [format.grammar.replace(/^([ \t]*)start([ \t]*:)/m, "$1fb_start$2")]),
   ].join("\n")
-}
-
-// Each key at most once, in any order: `ff_rest_N` follows the pairs in bitmask N, and may end once every required
-// one is in.
-const anyOrder = (fields: ReadonlyArray<OptionField>) => {
-  const all = (1 << fields.length) - 1
-  const needed = fields.reduce((mask, item, index) => (item.required ? mask | (1 << index) : mask), 0)
-  const choices = (used: number, separator: string) =>
-    fields
-      .flatMap((_, index) => {
-        const next = used | (1 << index)
-        return used & (1 << index) ? [] : [`${separator}ff_pair_${index}${next === all ? "" : ` ff_rest_${next}`}`]
-      })
-      .join(" | ")
-  return [
-    `ff_object: ${choices(0, "")}`,
-    ...Array.from({ length: all - 1 }, (_, index) => index + 1).map((used) => {
-      const next = choices(used, '"," " "* ')
-      return `ff_rest_${used}: ${(used & needed) === needed ? `(${next})?` : next}`
-    }),
-  ]
-}
-
-// Keys in schema order, each optional one skippable.
-const inOrder = (fields: ReadonlyArray<OptionField>) => {
-  const rest = (index: number) => (index === fields.length ? "" : ` ff_rest_${index}`)
-  return [
-    "ff_object: ff_first_0",
-    ...fields.map((item, index) => {
-      const pair = `ff_pair_${index}${rest(index + 1)}`
-      return `ff_first_${index}: ${item.required || index === fields.length - 1 ? pair : `${pair} | ff_first_${index + 1}`}`
-    }),
-    ...fields.slice(1).map((item, offset) => {
-      const pair = `"," " "* ff_pair_${offset + 1}`
-      return `ff_rest_${offset + 1}: ${item.required ? pair : `(${pair})?`}${rest(offset + 2)}`
-    }),
-  ]
-}
-
-// The tool's grammar becomes the body: every name it defines gets a prefix, so none collides with the line's rules,
-// and its `start` becomes `fb_start`. Strings, regexes and comments are left alone.
-const renamed = (grammar: string) => {
-  const defined = new Set([...grammar.matchAll(/^[ \t]*[?!]?(\w+)(?:\.-?\d+)?[ \t]*:/gm)].map((match) => match[1]))
-  return grammar.replace(/"(?:[^"\\\n]|\\.)*"i?|\/\/[^\n]*|\/(?:[^/\\\n]|\\.)+\/[imslux]*|\w+/g, (token) =>
-    defined.has(token)
-      ? token.replace(/^(_?)([A-Z]?)/, (_, under: string, upper: string) => `${under}${upper ? "FB_" : "fb_"}${upper}`)
-      : token,
-  )
 }
 
 const valueRule = (schema: JsonSchema) => {
@@ -160,27 +107,16 @@ const minimum = (schema: JsonSchema) =>
     typeof schema.exclusiveMinimum === "number" ? schema.exclusiveMinimum + 1 : -Infinity,
   )
 
-const typeName = (schema: JsonSchema) => {
-  if (Array.isArray(schema.enum)) return `one of ${schema.enum.map((item) => encodeJson(item)).join(", ")}`
-  if (schema.type === "integer" && minimum(schema) >= 1) return "positive integer"
-  return String(schema.type)
-}
-
-const signature = (item: OptionField) =>
-  `\`${item.name}\` (${typeName(item.schema)}${item.required ? ", required" : ""})`
-
-const describe = (field: string, fields: ReadonlyArray<OptionField>, ordered: boolean) => {
+const describe = (field: string, fields: ReadonlyArray<OptionField>) => {
   const required = fields.filter((item) => item.required)
   const example = required.length > 0 ? required : [fields.find((item) => item.schema.type === "boolean") ?? fields[0]]
-  const names = fields.map((item) => `\`${item.name}\``)
   return [
     required.length === 0
-      ? `To set ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`}, start with a \`${PREFIX}\` line holding a JSON object of them, then write \`${field}\` from the next line. Leave the line out to use the defaults.`
+      ? `To set the parameters below, start with a \`${PREFIX}\` line holding a JSON object of them, then write \`${field}\` from the next line. Leave the line out to use the defaults.`
       : `Start with a \`${PREFIX}\` line holding a JSON object of the parameters below, then write \`${field}\` from the next line.`,
-    ...(ordered ? ["Write the keys in the order listed."] : []),
     ...fields.map(
       (item) =>
-        `- ${signature(item)}${typeof item.schema.description === "string" ? `: ${item.schema.description}` : ""}`,
+        `- \`${item.name}\` (${Array.isArray(item.schema.enum) ? `one of ${item.schema.enum.map((value) => encodeJson(value)).join(", ")}` : String(item.schema.type)}${item.required ? ", required" : ""})${typeof item.schema.description === "string" ? `: ${item.schema.description}` : ""}`,
     ),
     "For example:",
     `${PREFIX} {${example.map((item) => `${encodeJson(item.name)}: ${encodeJson(sample(item.schema))}`).join(", ")}}`,
@@ -246,57 +182,30 @@ export const toRaw = (custom: Custom, input: unknown, header?: unknown) => {
   const value = isRecord(input) ? input[custom.field] : undefined
   if (typeof value !== "string" || !isRecord(input)) return encodeJson(input ?? {})
   const fields = custom.options?.fields ?? []
-  const options = pick(fields, input)
-  if (Object.keys(options).length === 0) return value
-  const canonical = encodeJson(options)
-  const saved = typeof header === "string" ? header : undefined
-  const read = saved === undefined || !custom.options ? undefined : readOptions(custom.options, saved)
-  const same = saved !== undefined && typeof read === "object" && encodeJson(pick(fields, read)) === canonical
-  return `${same ? saved : `${PREFIX} ${canonical}`}\n${value}`
+  const options = encodeJson(pick(fields, input))
+  if (options === "{}") return value
+  const saved = typeof header === "string" ? Option.getOrUndefined(decodeLine(header)) : undefined
+  const same = saved !== undefined && encodeJson(pick(fields, saved)) === options
+  return `${same ? header : `${PREFIX} ${options}`}\n${value}`
 }
 
 const pick = (fields: ReadonlyArray<OptionField>, input: Readonly<Record<string, unknown>>) =>
   Object.fromEntries(fields.flatMap((item) => (input[item.name] === undefined ? [] : [[item.name, input[item.name]]])))
 
 /**
- * JSON arguments for a raw call, with its line as `header`. A call to an undeclared custom tool fills `input`. A bad
- * line gives an `error` saying what is wrong instead.
+ * JSON arguments for a raw call, with its line as `header`. A call to an undeclared custom tool fills `input`. A line
+ * that isn't a JSON object stays raw text, which fails as malformed JSON; the tool's schema checks the rest.
  */
 export const parse = (custom: Custom | undefined, raw: string) => {
-  if (!custom?.options) return { input: encodeJson({ [field(custom)]: raw }) }
-  const options = custom.options
-  if (!raw.startsWith(PREFIX))
-    return options.fields.some((item) => item.required)
-      ? { error: invalid(custom, options, "the line is missing") }
-      : { input: encodeJson({ [custom.field]: raw }) }
   const end = raw.indexOf("\n")
-  const header = end === -1 ? raw : raw.slice(0, end)
-  const read = readOptions(options, header)
-  if (typeof read === "string") return { error: invalid(custom, options, read) }
-  if (end === -1) return { error: invalid(custom, options, `\`${custom.field}\` must start on the next line`) }
-  return { input: encodeJson({ ...read, [custom.field]: raw.slice(end + 1) }), header }
+  if (!custom?.options || !raw.startsWith(PREFIX) || end === -1) return { input: encodeJson({ [field(custom)]: raw }) }
+  const header = raw.slice(0, end)
+  const options = Option.getOrUndefined(decodeLine(header))
+  if (options === undefined) return { input: raw }
+  return { input: encodeJson({ ...options, [custom.field]: raw.slice(end + 1) }), header }
 }
 
-/** The line's parameters, or what is wrong with them. */
-const readOptions = (options: NonNullable<Custom["options"]>, header: string) => {
-  const value = Option.getOrUndefined(decodeArguments(header.slice(PREFIX.length)))
-  if (value === undefined) return "it does not hold a JSON object"
-  const unknown = Object.keys(value).find((name) => !options.fields.some((item) => item.name === name))
-  if (unknown !== undefined) return `\`${unknown}\` is not one of its parameters`
-  const missing = options.fields.find((item) => item.required && value[item.name] === undefined)
-  if (missing) return `\`${missing.name}\` is missing`
-  const wrong = options.fields.find((item) => value[item.name] !== undefined && !accepts(item.schema, value[item.name]))
-  if (wrong) return `\`${wrong.name}\` has the wrong type (${typeName(wrong.schema)})`
-  return value
-}
-
-const accepts = (schema: JsonSchema, value: unknown) => {
-  if (Array.isArray(schema.enum)) return schema.enum.some((item) => encodeJson(item) === encodeJson(value))
-  return schema.type === "integer" ? Number.isInteger(value) : typeof value === schema.type
-}
-
-const invalid = (custom: Custom, options: NonNullable<Custom["options"]>, problem: string) =>
-  `Invalid \`${PREFIX}\` line: ${problem}. Start the raw text with \`${PREFIX}\` and a JSON object of ${options.fields.map(signature).join(", ")}, then write \`${custom.field}\` from the next line.`
+const decodeLine = (header: string) => decodeArguments(header.slice(PREFIX.length))
 
 const field = (custom: Custom | undefined) => custom?.field ?? "input"
 
@@ -352,7 +261,6 @@ const settle = (
   raw: string,
 ): ToolStream.PendingTool => {
   const parsed = parse(custom, raw)
-  if ("error" in parsed) return { ...tool, input: raw, error: parsed.error }
   if (parsed.header === undefined) return { ...tool, input: parsed.input }
   return {
     ...tool,

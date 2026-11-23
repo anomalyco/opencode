@@ -113,8 +113,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     progress?: Tool.Metadata
     input?: InputExcerpt
     malformed?: boolean
-    /** The parser's reason the input is malformed, when it is not just invalid JSON. */
-    malformedMessage?: string
   }
   const tools = new Map<string, ToolState>()
   const failureSnapshot = (tool: { readonly progress?: Tool.Metadata }, metadata?: Tool.Metadata) => {
@@ -343,7 +341,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     readonly id: string
     readonly name: string
     readonly raw: string
-    readonly message?: string
   }) {
     const tool = tools.get(event.id) ?? (yield* startToolInput(event))
     if (tool.called || tool.settled)
@@ -354,14 +351,10 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     // The parser's final raw input may differ from streamed deltas; use it for the recovery excerpt.
     tool.input = inputExcerpt(event.raw)
     tool.malformed = true
-    tool.malformedMessage = event.message
   })
 
   const failToolInput = (id: string, tool: ToolState, reason: Exclude<InputFailureReason, "length">) =>
-    failTool(
-      id,
-      inputFailure(tool.input, stepSettlement?.finish === "length" ? "length" : reason, tool.malformedMessage),
-    )
+    failTool(id, inputFailure(tool.input, stepSettlement?.finish === "length" ? "length" : reason))
 
   const flush = Effect.fn("SessionRunner.flush")(function* () {
     yield* flushFragments()
@@ -638,9 +631,8 @@ function inputExcerpt(value: string): InputExcerpt {
   return { text: value.slice(0, INPUT_EXCERPT_LIMIT), length: value.length }
 }
 
-function inputFailure(input: InputExcerpt | undefined, reason: InputFailureReason, message?: string) {
-  const failure =
-    reason === "malformed" && message !== undefined ? { ...INPUT_FAILURES.malformed, message } : INPUT_FAILURES[reason]
+function inputFailure(input: InputExcerpt | undefined, reason: InputFailureReason) {
+  const failure = INPUT_FAILURES[reason]
   if (!input?.length) return failure
   const truncated = input.length > input.text.length ? "\n[truncated]" : ""
   return {

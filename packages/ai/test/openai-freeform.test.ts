@@ -97,19 +97,15 @@ describe("OpenAI freeform tools with other parameters", () => {
   const options = OpenAIFreeform.resolve(tool({ inputSchema: executeSchema, freeform: format }))!
   const parsed = (raw: string, definition = options) => {
     const result = OpenAIFreeform.parse(definition, raw)
-    return "input" in result ? { input: JSON.parse(result.input), header: result.header } : result
+    return { input: JSON.parse(result.input), header: result.header }
   }
 
   test("sends an order-free grammar and a description built from the schema", () => {
     expect(options.options?.grammar).toBe(
       [
         "start: ff_line ff_body | ff_plain",
-        'ff_line: "// @options:" " "* "{" " "* ff_object " "* "}" "\\n"',
-        "ff_object: ff_pair_0 ff_rest_1 | ff_pair_1 ff_rest_2",
-        'ff_rest_1: ("," " "* ff_pair_1)?',
-        'ff_rest_2: ("," " "* ff_pair_0)?',
-        'ff_pair_0: "\\"timeout\\"" " "* ":" " "* /[1-9][0-9]*/',
-        'ff_pair_1: "\\"background\\"" " "* ":" " "* ("true" | "false")',
+        'ff_line: "// @options:" " "* "{" " "* ff_pair (" "* "," " "* ff_pair)* " "* "}" "\\n"',
+        'ff_pair: "\\"timeout\\"" " "* ":" " "* /[1-9][0-9]*/ | "\\"background\\"" " "* ":" " "* ("true" | "false")',
         "ff_body: /[\\s\\S]+/",
         String.raw`ff_plain: /(?:[^\/]|\/[^\/]|\/\/[^ ]|\/\/ [^@]|\/\/ @[^o]|\/\/ @o[^p]|\/\/ @op[^t]|\/\/ @opt[^i]|\/\/ @opti[^o]|\/\/ @optio[^n]|\/\/ @option[^s]|\/\/ @options[^:])[\s\S]*|\/|\/\/|\/\/ |\/\/ @|\/\/ @o|\/\/ @op|\/\/ @opt|\/\/ @opti|\/\/ @optio|\/\/ @option|\/\/ @options/`,
       ].join("\n"),
@@ -118,8 +114,8 @@ describe("OpenAI freeform tools with other parameters", () => {
       [
         "Run code",
         "",
-        "To set `timeout` or `background`, start with a `// @options:` line holding a JSON object of them, then write `code` from the next line. Leave the line out to use the defaults.",
-        "- `timeout` (positive integer): How long to wait.",
+        "To set the parameters below, start with a `// @options:` line holding a JSON object of them, then write `code` from the next line. Leave the line out to use the defaults.",
+        "- `timeout` (integer): How long to wait.",
         "- `background` (boolean)",
         "For example:",
         '// @options: {"background": true}',
@@ -151,18 +147,17 @@ describe("OpenAI freeform tools with other parameters", () => {
     expect(OpenAIFreeform.toRaw(options, { code: "x" }, header)).toBe("x")
   })
 
-  test("says what is wrong with a bad line", () => {
-    const allowed =
-      "Start the raw text with `// @options:` and a JSON object of `timeout` (positive integer), `background` (boolean), then write `code` from the next line."
-    const cases = [
-      ["// @options: {timeout: 1}\nx", "it does not hold a JSON object"],
-      ['// @options: {"env":{}}\nx', "`env` is not one of its parameters"],
-      ['// @options: {"timeout":"5"}\nx', "`timeout` has the wrong type (positive integer)"],
-      // A line with nothing after it is not a call with empty code.
-      ['// @options: {"background":true}', "`code` must start on the next line"],
-    ]
-    for (const [raw, problem] of cases)
-      expect(parsed(raw)).toEqual({ error: `Invalid \`// @options:\` line: ${problem}. ${allowed}` })
+  test("leaves a line that isn't a JSON object as raw text, so it fails as malformed JSON", () => {
+    expect(OpenAIFreeform.parse(options, "// @options: {timeout: 1}\nx")).toEqual({
+      input: "// @options: {timeout: 1}\nx",
+    })
+    // The tool's own schema checks keys and values, as for a JSON call.
+    expect(parsed('// @options: {"timeout":"5"}\nx')).toEqual({
+      input: { code: "x", timeout: "5" },
+      header: '// @options: {"timeout":"5"}',
+    })
+    // A line with nothing after it is plain text, not a call with empty code.
+    expect(parsed('// @options: {"background":true}')).toEqual({ input: { code: '// @options: {"background":true}' } })
   })
 
   test("takes number, string and enum values", () => {
@@ -177,72 +172,33 @@ describe("OpenAI freeform tools with other parameters", () => {
       }),
     )!
     expect(definition.options?.grammar).toContain(
-      'ff_pair_0: "\\"ratio\\"" " "* ":" " "* /-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/',
+      '"\\"ratio\\"" " "* ":" " "* /-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/',
     )
     expect(definition.options?.grammar).toContain(
-      'ff_pair_1: "\\"cwd\\"" " "* ":" " "* /"(?:[^"\\\\\\x00-\\x1f]|\\\\["\\\\\\/bfnrt]|\\\\u[0-9a-fA-F]{4})*"/',
+      '"\\"cwd\\"" " "* ":" " "* /"(?:[^"\\\\\\x00-\\x1f]|\\\\["\\\\\\/bfnrt]|\\\\u[0-9a-fA-F]{4})*"/',
     )
-    expect(definition.options?.grammar).toContain('ff_pair_2: "\\"mode\\"" " "* ":" " "* ("\\"fast\\"" | "\\"safe\\"")')
-    // Three keys in any order: one rule per subset of them.
-    expect(definition.options?.grammar.split("\n").filter((line) => line.startsWith("ff_rest_"))).toHaveLength(6)
+    expect(definition.options?.grammar).toContain('"\\"mode\\"" " "* ":" " "* ("\\"fast\\"" | "\\"safe\\"")')
     const raw = '// @options: {"mode": "safe", "ratio": 1.5e2, "cwd": "C:\\\\src"}\nls'
     expect(parsed(raw, definition)).toMatchObject({ input: { code: "ls", mode: "safe", ratio: 150, cwd: "C:\\src" } })
-    expect(parsed('// @options: {"mode": "slow"}\nls', definition)).toMatchObject({
-      error: expect.stringContaining('`mode` has the wrong type (one of "fast", "safe")'),
-    })
   })
 
   test("requires the line when a parameter is required", () => {
     const definition = OpenAIFreeform.resolve(
       tool({ inputSchema: schema({ path: { type: "string" } }, ["code", "path"]), freeform: format }),
     )!
-    expect(definition.options?.grammar?.split("\n").slice(0, 3)).toEqual([
-      "start: ff_line ff_body",
-      'ff_line: "// @options:" " "* "{" " "* ff_object " "* "}" "\\n"',
-      "ff_object: ff_pair_0",
-    ])
-    expect(parsed("x", definition)).toMatchObject({ error: expect.stringContaining("the line is missing") })
-    expect(parsed("// @options: {}\nx", definition)).toMatchObject({
-      error: expect.stringContaining("`path` is missing"),
-    })
+    expect(definition.options?.grammar?.split("\n").at(0)).toBe("start: ff_line ff_body")
     expect(parsed('// @options: {"path": "a.ts"}\nx', definition)).toMatchObject({ input: { code: "x", path: "a.ts" } })
   })
 
-  test("follows schema order past four parameters", () => {
-    const definition = OpenAIFreeform.resolve(
-      tool({
-        inputSchema: schema(Object.fromEntries(["a", "b", "c", "d", "e"].map((name) => [name, { type: "boolean" }])), [
-          "code",
-          "c",
-        ]),
-        freeform: format,
-      }),
-    )!
-    expect(definition.options?.grammar?.split("\n").slice(2, 13)).toEqual([
-      "ff_object: ff_first_0",
-      "ff_first_0: ff_pair_0 ff_rest_1 | ff_first_1",
-      "ff_first_1: ff_pair_1 ff_rest_2 | ff_first_2",
-      "ff_first_2: ff_pair_2 ff_rest_3",
-      "ff_first_3: ff_pair_3 ff_rest_4 | ff_first_4",
-      "ff_first_4: ff_pair_4",
-      'ff_rest_1: ("," " "* ff_pair_1)? ff_rest_2',
-      'ff_rest_2: "," " "* ff_pair_2 ff_rest_3',
-      'ff_rest_3: ("," " "* ff_pair_3)? ff_rest_4',
-      'ff_rest_4: ("," " "* ff_pair_4)?',
-      'ff_pair_0: "\\"a\\"" " "* ":" " "* ("true" | "false")',
-    ])
-    expect(definition.options?.description).toContain("Write the keys in the order listed.")
-  })
-
-  test("composes a tool's own grammar as the body without name collisions", () => {
-    const grammar = ["start: ff_line LF", 'ff_line: "*** " /(.+)/ -> line', "%import common.LF"].join("\n")
+  test("composes a tool's own grammar as the body", () => {
+    const grammar = ["start: patch LF", 'patch: "*** " /(.+)/', "%import common.LF"].join("\n")
     const definition = OpenAIFreeform.resolve(
       tool({ inputSchema: executeSchema, freeform: { type: "lark", grammar, field: "code" } }),
     )!
     expect(definition.options?.grammar?.split("\n").at(0)).toBe("start: ff_line fb_start | fb_start")
     expect(definition.options?.grammar?.split("\n").slice(-3)).toEqual([
-      "fb_start: fb_ff_line LF",
-      'fb_ff_line: "*** " /(.+)/ -> line',
+      "fb_start: patch LF",
+      'patch: "*** " /(.+)/',
       "%import common.LF",
     ])
   })
