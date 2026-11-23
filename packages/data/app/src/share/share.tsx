@@ -1,6 +1,15 @@
 import "./share.css"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
-import { drawShareCard, loadShareFonts, shareDuration, shareSizes, type ShareCard, type ShareOptions } from "./card"
+import {
+  barTiming,
+  drawShareCard,
+  loadShareFonts,
+  shareDuration,
+  shareSizes,
+  type ShareCard,
+  type ShareOptions,
+  type ShareTiming,
+} from "./card"
 import { cycleShareOption, designMode, designOnly, setShareOption, shareControls, shareOptions } from "./design"
 import { shareTracks, type ShareTrack } from "./music"
 
@@ -81,6 +90,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const options = createMemo<ShareOptions>(() => ({ ...shareOptions }))
   const size = createMemo(() => shareSizes[options().size])
   const music = createMemo(() => shareTracks.find((item) => item.id === track()))
+  // With a soundtrack, the animation follows its bars and the video ends with it.
+  const timing = createMemo(() => {
+    const sound = music()
+    return sound ? barTiming(sound.bar, sound.verse, sound.length) : undefined
+  })
   const canShareFiles = () =>
     typeof navigator !== "undefined" &&
     !!navigator.canShare?.({ files: [new File([], "card.png", { type: "image/png" })] })
@@ -121,9 +135,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     const still = format() === "image" || matchMedia("(prefers-reduced-motion: reduce)").matches
     if (still || !playing()) {
       audio?.pause()
-      return drawShareCard(ctx, value, opts, Infinity)
+      return drawShareCard(ctx, value, opts, Infinity, timing())
     }
-    const length = shareDuration(value, opts) + 0.6
+    const length = shareDuration(value, opts, timing()) + 0.6
     const start = performance.now()
     let loop = -1
     const frame = () => {
@@ -133,7 +147,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
         loop = turn
         restartAudio(sound)
       }
-      drawShareCard(ctx, value, opts, elapsed - turn * length)
+      drawShareCard(ctx, value, opts, elapsed - turn * length, timing())
       handle = requestAnimationFrame(frame)
     }
     let handle = requestAnimationFrame(frame)
@@ -165,7 +179,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       setRendering(0)
       video = {
         key,
-        file: renderVideo(value, options(), music(), setRendering).finally(() => setRendering(undefined)),
+        file: renderVideo(value, options(), music(), timing(), setRendering).finally(() => setRendering(undefined)),
       }
     }
     return video.file
@@ -326,7 +340,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                       <Show when={format() === "video"}>
                         <MenuItem
                           label="Download video"
-                          hint={`${Math.round(shareDuration(value(), options()))}s${music() ? `, ${music()?.name}` : ", no music"}`}
+                          hint={`${Math.round(shareDuration(value(), options(), timing()))}s${music() ? `, ${music()?.name}` : ", no music"}`}
                           onClick={() => save("video")}
                         />
                         <MenuItem label="Download still" hint="The last frame, as PNG" onClick={() => save("image")} />
@@ -712,6 +726,7 @@ async function renderVideo(
   card: ShareCard,
   options: ShareOptions,
   track: ShareTrack | undefined,
+  timing: ShareTiming | undefined,
   progress: (value: number) => void,
 ) {
   // Created before the first await, while the click still counts, so the context starts running.
@@ -728,8 +743,8 @@ async function renderVideo(
   canvas.height = height
   const ctx = canvas.getContext("2d")
   if (!ctx) throw new Error("Canvas is not available")
-  drawShareCard(ctx, card, options, 0)
-  const length = shareDuration(card, options)
+  drawShareCard(ctx, card, options, 0, timing)
+  const length = shareDuration(card, options, timing)
   const sound = context && track ? await soundtrack(context, track.url, length) : undefined
   const stream = new MediaStream([
     ...canvas.captureStream(30).getVideoTracks(),
@@ -749,7 +764,7 @@ async function renderVideo(
   await new Promise<void>((resolve) => {
     const frame = () => {
       const time = (performance.now() - start) / 1000
-      drawShareCard(ctx, card, options, time)
+      drawShareCard(ctx, card, options, time, timing)
       progress(Math.min(1, time / length))
       if (time >= length) return resolve()
       requestAnimationFrame(frame)
@@ -778,7 +793,8 @@ async function soundtrack(context: AudioContext, url: string, length: number) {
       source.connect(gain)
       const now = context.currentTime
       gain.gain.setValueAtTime(1, now)
-      gain.gain.setValueAtTime(1, now + Math.max(0, length - 0.8))
+      // Tracks stop dead on their last word; the short ramp only keeps the cut from clicking.
+      gain.gain.setValueAtTime(1, now + Math.max(0, length - 0.15))
       gain.gain.linearRampToValueAtTime(0, now + length)
       source.start(now)
       source.stop(now + length + 0.1)

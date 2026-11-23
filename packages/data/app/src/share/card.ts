@@ -86,9 +86,17 @@ type Palette = (typeof palettes)["dark"]
 
 const font = '"OpenTUI Mono", ui-monospace, monospace'
 const pad = 80
-const build = 1.2
-const step = 1.1
 const hold = 1.6
+
+// When the chart builds, when the highlights start and how long each takes. Without music it runs at its own pace;
+// with a soundtrack it follows the track's bars (barTiming).
+export type ShareTiming = { build: number; start: number; step: number; length?: number }
+const freeTiming: ShareTiming = { build: 1.2, start: 1.2, step: 1.1 }
+
+/** The chart builds over the first bar, each highlight takes one bar from the verse, and the video ends with the track. */
+export function barTiming(bar: number, verse: number, length: number): ShareTiming {
+  return { build: bar, start: verse, step: bar, length }
+}
 
 /** Waits for the card's font, so the first frame isn't drawn in the fallback. */
 export async function loadShareFonts() {
@@ -96,11 +104,17 @@ export async function loadShareFonts() {
 }
 
 /** The video's length in seconds: the chart builds, each leading series takes a turn, then the still holds. */
-export function shareDuration(card: ShareCard, options: ShareOptions) {
-  return build + highlights(card, options).length * step + hold
+export function shareDuration(card: ShareCard, options: ShareOptions, timing = freeTiming) {
+  return timing.length ?? timing.start + highlights(card, options).length * timing.step + hold
 }
 
-export function drawShareCard(ctx: CanvasRenderingContext2D, card: ShareCard, options: ShareOptions, time: number) {
+export function drawShareCard(
+  ctx: CanvasRenderingContext2D,
+  card: ShareCard,
+  options: ShareOptions,
+  time: number,
+  timing = freeTiming,
+) {
   const [width, height] = shareSizes[options.size]
   const colors = palettes[options.theme]
   ctx.save()
@@ -115,9 +129,9 @@ export function drawShareCard(ctx: CanvasRenderingContext2D, card: ShareCard, op
   drawBackground(ctx, options.background, colors, width, height, dotGrid(card.chart, width), rule)
   drawLogo(ctx, options.logo, colors, pad, pad)
 
-  const focus = focusAt(card, options, time)
+  const focus = focusAt(card, options, time, timing)
   const top = drawIntro(ctx, card, options, colors, width, pad + 136)
-  const progress = Math.min(1, time / build)
+  const progress = Math.min(1, time / timing.build)
 
   if (card.chart.kind === "stacked") {
     drawStacked(
@@ -145,9 +159,10 @@ export function drawShareCard(ctx: CanvasRenderingContext2D, card: ShareCard, op
 }
 
 // The highlight's state at `time`: which series (or row) leads and how far the others have dimmed.
-function focusAt(card: ShareCard, options: ShareOptions, time: number) {
+function focusAt(card: ShareCard, options: ShareOptions, time: number, timing: ShareTiming) {
   const order = highlights(card, options)
-  const local = time - build
+  const step = timing.step
+  const local = time - timing.start
   if (local < 0 || local >= order.length * step) return { index: -1, amount: 0 }
   const turn = Math.floor(local / step)
   const within = local - turn * step
