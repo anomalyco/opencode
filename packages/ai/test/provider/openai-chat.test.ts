@@ -92,6 +92,46 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("truncates replayed names of undeclared tool calls to the provider limit", () =>
+    Effect.gen(function* () {
+      const madeUp = ToolCallPart.make({
+        id: "call_1",
+        name: 'tools["websearch-demo-agent"]["websearch-web-search-tool___WebSearch"]',
+        input: {},
+      })
+      const long = ToolCallPart.make({ id: "call_2", name: "a".repeat(65), input: {} })
+      const declared = ToolCallPart.make({ id: "call_3", name: "weather.get", input: {} })
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          tools: [
+            ToolDefinition.make({ name: "weather.get", description: "Weather", inputSchema: { type: "object" } }),
+          ],
+          messages: [
+            Message.assistant([madeUp, long, declared]),
+            Message.tool({ id: madeUp.id, name: madeUp.name, result: "unknown tool", resultType: "error" }),
+            Message.tool({ id: long.id, name: long.name, result: "unknown tool", resultType: "error" }),
+            Message.tool({ id: declared.id, name: declared.name, result: "sunny", resultType: "text" }),
+          ],
+        }),
+      )
+
+      // A made-up name is replayed sanitized and within the 64-character limit every provider enforces, or the
+      // next request is rejected and the session dies (#65822). A declared name stays as declared, and the
+      // recorded history is not mutated.
+      expect(prepared.body.messages[0]).toMatchObject({
+        role: "assistant",
+        tool_calls: [
+          { id: "call_1", function: { name: "tools__websearch-demo-agent____websearch-web-search-tool___WebSe" } },
+          { id: "call_2", function: { name: "a".repeat(64) } },
+          { id: "call_3", function: { name: "weather.get" } },
+        ],
+      })
+      expect(madeUp.name).toBe('tools["websearch-demo-agent"]["websearch-web-search-tool___WebSearch"]')
+      expect(long.name).toBe("a".repeat(65))
+    }),
+  )
+
   it.effect("omits stream usage options when compatibility disables them", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

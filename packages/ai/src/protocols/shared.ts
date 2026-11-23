@@ -449,12 +449,18 @@ const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(
   declared: ReadonlySet<string>,
 ): Part => {
   const flat = part.namespace === undefined ? part.name : `${part.namespace}_${part.name}`
-  // Models sometimes call names no tool declares, such as a Code Mode path like `a.b.c`. Several providers (OpenAI
-  // Chat Completions, Bedrock Converse) reject those characters when the call is replayed, so replace them. A
-  // declared name is kept as is, so a provider that accepts it sees calls under the tool's own name.
-  const name = declared.has(flat) ? flat : flat.replace(/[^a-zA-Z0-9_-]/g, "_") || "_"
+  const name = replayToolName(flat, declared)
   return name === part.name && part.namespace === undefined ? part : { ...part, name, namespace: undefined }
 }
+
+/**
+ * The name a provider sees for a replayed tool call. A declared name is kept as is, so a provider that accepts it
+ * sees calls under the tool's own name. Anything else is sanitized to the characters providers accept and truncated
+ * to the length they accept: OpenAI, Anthropic, Bedrock Converse and Gemini all cap tool names at 64 characters, so
+ * a made-up name replayed at full length is rejected on every later request and the session dies (#65822).
+ */
+export const replayToolName = (name: string, declared: ReadonlySet<string>) =>
+  declared.has(name) ? name : name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64) || "_"
 
 const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
   next.every((part, index) => part === previous[index])
