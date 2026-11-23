@@ -115,7 +115,7 @@ impl ThemeState {
             catalog,
             mode,
             lock,
-            active: options.name.unwrap_or_else(|| "opencode".to_owned()),
+            active: options.name.filter(|name| !name.is_empty()).unwrap_or_else(|| "opencode".to_owned()),
             terminal: options.terminal,
             palette,
             current,
@@ -243,10 +243,7 @@ impl ThemeState {
 
     /// `cli.json` changed `theme.name`.
     pub fn config_name(&mut self, name: &str) {
-        if name.is_empty() {
-            return;
-        }
-        self.active = name.to_owned();
+        self.active = if name.is_empty() { "opencode" } else { name }.to_owned();
         self.refresh_palette();
         self.reload();
     }
@@ -519,6 +516,22 @@ mod tests {
     fn without_a_palette_system_is_opencode() {
         let state = ThemeState::new(ThemeStateOptions { name: Some("system".to_owned()), ..options() });
         let opencode = ThemeState::new(options());
+        assert_eq!(**state.theme(), **opencode.theme());
+    }
+
+    #[test]
+    fn empty_config_name_falls_back_to_opencode() {
+        let opencode = ThemeState::new(options());
+        let mut state = ThemeState::new(ThemeStateOptions { name: Some(String::new()), ..options() });
+        assert_eq!(state.selected(), "opencode");
+        assert_eq!(**state.theme(), **opencode.theme());
+
+        state.config_name("gruvbox");
+        assert_eq!(state.selected(), "gruvbox");
+        assert_ne!(**state.theme(), **opencode.theme());
+
+        state.config_name("");
+        assert_eq!(state.selected(), "opencode");
         assert_eq!(**state.theme(), **opencode.theme());
     }
 }
