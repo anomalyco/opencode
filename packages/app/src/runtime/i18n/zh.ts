@@ -1215,7 +1215,7 @@ export const dict = {
   "sidebar.inbox.status.approval": "待批准",
   "sidebar.inbox.status.input": "问题",
   "sidebar.inbox.status.working": "工作中",
-  "sidebar.inbox.status.workingFor": "已运行 {{duration}}",
+  "sidebar.inbox.status.workingFor": "已工作 {{duration}}",
   "sidebar.inbox.status.failed": "失败",
   "sidebar.inbox.status.done": "已完成",
   "sidebar.inbox.elapsed.seconds.one": "{{count}}秒",
