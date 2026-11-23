@@ -1,3 +1,4 @@
+import { gunzipSync, zstdDecompressSync } from "node:zlib"
 import { NodeFileSystem } from "@effect/platform-node-shared"
 import { Deferred, Effect, Layer, Ref } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
@@ -93,7 +94,7 @@ export const recordingLayer = (
             method: web.method,
             url: web.url,
             headers: Object.fromEntries(web.headers.entries()),
-            body: yield* Effect.promise(() => web.text()),
+            body: yield* Effect.promise(() => requestText(web)),
           })
         })
       if (mode === "passthrough") return upstream
@@ -172,3 +173,12 @@ export const layer = (
   )
 export const layerFetch = (name: string, options: RecorderOptions = {}): Layer.Layer<HttpClient.HttpClient> =>
   layer(name, options).pipe(Layer.provide(FetchHttpClient.layer))
+
+/** A compressed request body is stored and matched as the text it carries, so cassettes don't depend on the encoding. */
+const requestText = async (request: Request) => {
+  const bytes = new Uint8Array(await request.arrayBuffer())
+  const encoding = request.headers.get("content-encoding")
+  if (encoding === "gzip") return gunzipSync(bytes).toString()
+  if (encoding === "zstd") return zstdDecompressSync(bytes).toString()
+  return new TextDecoder().decode(bytes)
+}

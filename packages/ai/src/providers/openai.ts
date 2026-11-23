@@ -99,8 +99,13 @@ const configuredRoute = <Body, Prepared, Compact extends CompactionOperations | 
     endpoint: { baseURL: input.baseURL, query: input.queryParams },
   })
 
+// OpenAI's API and the ChatGPT backend (ChatGPT sign-in) decode zstd request bodies and reject gzip. The ChatGPT
+// backend also rejects uncompressed bodies over ~1 MiB. A proxy or gateway at another URL may not decode zstd.
+const ZSTD_BASE_URLS = [OpenAIResponses.DEFAULT_BASE_URL, "https://chatgpt.com/backend-api/codex"]
+
 export const configure = (input: Config = {}) => {
-  const responsesRoute = configuredRoute(OpenAIResponses.route, input)
+  const zstd = ZSTD_BASE_URLS.includes((input.baseURL ?? OpenAIResponses.DEFAULT_BASE_URL).replace(/\/+$/, ""))
+  const responsesRoute = configuredRoute(OpenAIResponses.route, input).with(zstd ? { http: { encoding: "zstd" } } : {})
   const chatRoute = configuredRoute(OpenAIChat.route, input)
   const modelDefaults = defaults(input)
   const responses = (id: string | ModelID) =>
