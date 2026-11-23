@@ -19,13 +19,13 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { SessionCwd } from "@opencode/core/session/cwd"
 import { SessionCwdInstructions } from "@opencode/core/session/cwd-instructions"
 import { InstructionState } from "@opencode/core/session/instruction-state"
-import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionTable } from "@opencode/core/session/sql"
 import { toSessionError } from "@opencode/core/session/to-session-error"
-import { Tool } from "@opencode/schema/tool"
 import { Workspace } from "@opencode/core/workspace"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Tool } from "@opencode/schema/tool"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { location } from "./fixture/location"
@@ -152,23 +152,17 @@ const buildLayer = (options: {
 const it = testEffect(Layer.empty)
 
 describe("Environments", () => {
-  it.live("unifies local, workspace sandboxes, and removed machines under one entry point", () =>
+  it.live("resolves local to the server host and fails loudly for removed machines", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
-      const calls: string[] = []
-      const layer = buildLayer({ directory: AbsolutePath.make(tmp.path), driver: makeSandboxDriver(calls) })
+      const layer = buildLayer({ directory: AbsolutePath.make(tmp.path), driver: makeSandboxDriver([]) })
 
       yield* Effect.gen(function* () {
         const environments = yield* Environments.Service
-        const workspaces = yield* Workspace.Service
-        const access = yield* FileAccess.Service
-
-        // 1. Local resolves to server host immediately.
         const local = yield* environments.get(Environment.localID)
         expect(local.id).toBe(Environment.localID)
         expect(local.hostsServer).toBe(true)
 
-        // 2. Removed machine returns a total failing handle from get(), and NotFound from lookup().
         const removedID = Environment.ID.make("ghost")
         const removed = yield* environments.get(removedID)
         const removedRead = yield* removed.files.read("/x").pipe(Effect.flip)
@@ -179,10 +173,19 @@ describe("Environments", () => {
           type: "tool.execution",
           message: 'No machine named "ghost".',
         })
+      }).pipe(Effect.provide(layer))
+    }),
+  )
 
-        // 3. Missing workspace fails lookup() immediately without provisioning, and formats cleanly in toSessionError.
-        const missingWrk = Environment.ID.make("wrk_missing")
-        const missingErr = yield* environments.lookup(missingWrk).pipe(Effect.flip)
+  it.live("fails lookup immediately for missing workspaces without provisioning", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const calls: string[] = []
+      const layer = buildLayer({ directory: AbsolutePath.make(tmp.path), driver: makeSandboxDriver(calls) })
+
+      yield* Effect.gen(function* () {
+        const environments = yield* Environments.Service
+        const missingErr = yield* environments.lookup(Environment.ID.make("wrk_missing")).pipe(Effect.flip)
         expect(missingErr).toBeInstanceOf(Workspace.NotFound)
         expect(
           toSessionError(
@@ -196,31 +199,75 @@ describe("Environments", () => {
           message: 'No workspace named "wrk_missing".',
         })
         expect(calls).toEqual([])
+      }).pipe(Effect.provide(layer))
+    }),
+  )
 
-        // 4. Created lazy workspace stays cold on get()/ready() and wakes only on first file operation.
+  it.live("keeps a lazy workspace cold until first file operation and never widens cold approval rules", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const calls: string[] = []
+      const layer = buildLayer({ directory: AbsolutePath.make(tmp.path), driver: makeSandboxDriver(calls) })
+
+      yield* Effect.gen(function* () {
+        const environments = yield* Environments.Service
+        const workspaces = yield* Workspace.Service
+        const access = yield* FileAccess.Service
+
         const wrkID = yield* workspaces.create({ provider: "fake" })
         const wrkEnvID = Environment.ID.make(wrkID)
         expect(yield* environments.ready(wrkEnvID)).toBe(false)
         const sandbox = yield* environments.get(wrkEnvID)
         expect(calls).toEqual([])
 
-        // Resolving a wrk_...:/workspace path requests external_directory approval and routes through the sandbox driver.
-        const target = yield* access.resolve({ path: `${wrkID}:/workspace/hello.txt` })
+        // Unknown-kind cold resolution narrows to the exact path instead of widening to parent (e.g. wrk_...:/*).
+        const coldUnknown = yield* access.resolve({ path: `${wrkID}:/workspace` })
+        expect(coldUnknown.externalDirectory).toMatchObject({
+          action: "external_directory",
+          resource: `${wrkID}:/workspace`,
+          save: `${wrkID}:/workspace`,
+        })
+        expect(calls).toEqual([])
+
+        // Explicit file kind uses the file's directory glob without waking the sandbox.
+        const target = yield* access.resolve({ path: `${wrkID}:/workspace/hello.txt`, kind: "file" })
         expect(target.environment.id).toBe(wrkEnvID)
         expect(target.resource).toBe(`${wrkID}:/workspace/hello.txt`)
         expect(target.externalDirectory).toMatchObject({
           action: "external_directory",
           resource: `${wrkID}:/workspace/*`,
         })
-        expect(calls).toEqual([]) // Cold sandbox was not woken during resolve()!
+        expect(calls).toEqual([])
 
+        // First file write wakes and provisions the sandbox.
         yield* target.environment.files.mkdir("/workspace")
         yield* target.environment.files.write("/workspace/hello.txt", bytes("from sandbox"))
         expect(calls).toEqual(["create", "connect"])
         expect(yield* environments.ready(wrkEnvID)).toBe(true)
         expect(text((yield* sandbox.files.read("/workspace/hello.txt")).bytes)).toBe("from sandbox")
 
-        // 5. Explicit local:/ path overrides a foreign cwd and resolves back to the server host.
+        // Once warm, unknown-kind resolution detects directories cleanly.
+        const warmDir = yield* access.resolve({ path: `${wrkID}:/workspace` })
+        expect(warmDir.externalDirectory).toMatchObject({
+          action: "external_directory",
+          resource: `${wrkID}:/workspace/*`,
+        })
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.live("routes explicit local:/ paths back to the host from a foreign cwd and refuses non-rooted prefixes", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const layer = buildLayer({ directory: AbsolutePath.make(tmp.path), driver: makeSandboxDriver([]) })
+
+      yield* Effect.gen(function* () {
+        const environments = yield* Environments.Service
+        const workspaces = yield* Workspace.Service
+        const access = yield* FileAccess.Service
+        const wrkID = yield* workspaces.create({ provider: "fake" })
+        const sandbox = yield* environments.get(Environment.ID.make(wrkID))
+
         const localTarget = yield* access.resolve({ path: `local:${tmp.path}/spill.txt`, kind: "file" }).pipe(
           Effect.provideService(Environment.CurrentWorkingDirectory, {
             absolute: AbsolutePath.make("/workspace"),
@@ -230,7 +277,6 @@ describe("Environments", () => {
         expect(localTarget.environment.id).toBe(Environment.localID)
         expect(`${localTarget.absolute}`).toBe(`${tmp.path}/spill.txt`)
 
-        // 6. Non-rooted reserved prefixes and workspace ~ paths are refused cleanly.
         for (const bad of [`${wrkID}:~/notes`, `${wrkID}:relative`, "local:relative"]) {
           const err = yield* access.locate(bad).pipe(Effect.flip)
           expect(err.cause).toBeInstanceOf(MachinePath.NotAbsolute)

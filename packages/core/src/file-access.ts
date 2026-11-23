@@ -268,15 +268,24 @@ const layer = Layer.effect(
         .pipe(Effect.mapError((cause) => new Environment.Failed({ path: place.absolute, cause })))
       const rules = targetEnvironment.path ?? path
       // Never wake a cold/lazy sandbox just to stat the approval boundary before permission is granted.
+      const ready = yield* environments.ready(place.environment.id)
       const type =
         kind ??
-        ((yield* environments.ready(place.environment.id))
+        (ready
           ? yield* Environment.typeFollowing(targetEnvironment.files, place.absolute).pipe(
               Effect.catchTag("Environment.NotFound", () => Effect.undefined),
             )
           : undefined)
-      const directory = AbsolutePath.make(type === "directory" ? place.absolute : rules.dirname(place.absolute))
-      const contents = EnvironmentPath.format(place.environment.id, rules.join(directory, "*"))
+      // When a cold sandbox's target type is unknown, narrow the boundary to the path itself rather than widening
+      // to its parent directory (which would save a wider rule such as `wrk_...:*` on "always").
+      const narrowCold = !ready && type === undefined
+      const directory = AbsolutePath.make(
+        type === "directory" || narrowCold ? place.absolute : rules.dirname(place.absolute),
+      )
+      const contents = EnvironmentPath.format(
+        place.environment.id,
+        narrowCold ? place.absolute : rules.join(directory, "*"),
+      )
       return {
         absolute: place.absolute,
         resource: EnvironmentPath.format(place.environment.id, place.absolute),
