@@ -203,6 +203,27 @@ function PaletteRow(props: {
             <Keybind keys={formatKeybindParts(props.item.keybind ?? "", props.language.t)} variant="neutral" />
           </Show>
         </Match>
+        <Match when={props.item.type === "project" && props.item.directory}>
+          {(directory) => (
+            <div class="command-palette-row-main">
+              <div class="shrink-0">
+                <SessionTabAvatarView project={props.item.project} directory={directory()} unread={false} />
+              </div>
+              <div class="command-palette-row-text">
+                <span class="command-palette-title palette-menu-title" dir="auto">
+                  <SearchHighlight text={props.item.title} />
+                </span>
+                <Show when={props.item.description}>
+                  {(description) => (
+                    <span class="command-palette-description" dir="ltr">
+                      <SearchHighlight text={description()} />
+                    </span>
+                  )}
+                </Show>
+              </div>
+            </div>
+          )}
+        </Match>
         <Match when={props.item.type === "session" && session()}>
           {(session) => (
             <PaletteSessionRow

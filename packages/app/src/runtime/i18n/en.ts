@@ -73,6 +73,7 @@ export const dict = {
 
   "command.session.new": "New session",
   "command.session.search": "Search sessions",
+  "command.quickOpen": "Open project or session",
   "command.session.previous": "Previous session",
   "command.session.next": "Next session",
   "command.session.previous.unseen": "Previous unread session",
@@ -133,6 +134,7 @@ export const dict = {
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
+  "palette.group.projects": "Projects",
   "palette.group.recentSessions": "Recent sessions",
   "palette.group.settings": "Settings",
   "palette.session.location": "{{project}} · {{server}}",
@@ -614,6 +616,7 @@ export const dict = {
   "home.server.collapse": "Collapse server projects",
   "home.server.expand": "Expand server projects",
   "home.sessions.search.placeholder": "Search sessions",
+  "palette.quickOpen.placeholder": "Open a project or session",
   "home.sessions.search.placeholder.scoped": "Search sessions in {{scope}}",
   "home.sessions.search.sessions": "Sessions",
   "home.sessions.search.noResults": "No sessions found for {{query}}",

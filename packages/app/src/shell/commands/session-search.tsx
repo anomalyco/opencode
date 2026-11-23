@@ -1,4 +1,5 @@
 import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
+import { displayName } from "@opencode/ui/project-avatar"
 import { createSignal, onCleanup, startTransition, untrack } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -7,6 +8,7 @@ import { isServerFailed } from "@/runtime/server/health-machine"
 import { useTabs } from "@/shell/tabs/tabs"
 import { createKnownServerSessions, createServerSessionEntries, type CommandPaletteEntry } from "./palette"
 import { CommandPaletteView } from "./dialog"
+import { matchesCommandPaletteEntry } from "./search"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import {
@@ -19,7 +21,13 @@ import {
 
 const RECENT_LIMIT = 10
 
-export function DialogSessionSearch(props: { archived?: boolean }) {
+const RECENT_PROJECT_LIMIT = 5
+
+/**
+ * Searches root sessions across servers. With `projects`, it also lists projects ahead of the sessions, and choosing
+ * one starts a new session there: the quick open dialog.
+ */
+export function DialogSessionSearch(props: { archived?: boolean; projects?: boolean }) {
   const dialog = useDialog()
   const layer = useDialogLayer()
   const global = useGlobal()
@@ -70,12 +78,51 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
     ]
   })
 
+  // Without a query, the projects this client uses, most recent first; with one, every project the servers know.
+  const projectEntries = (query: string) => {
+    if (!props.projects) return []
+
+    const entries = servers.flatMap((conn) => {
+      const server = ServerConnection.key(conn)
+      const ctx = global.serverCtx(server)
+
+      if (!ctx) return []
+
+      const tag = servers.length < 2 ? undefined : registry.tag(conn)
+
+      return (query ? ctx.projects.unique() : ctx.projects.used()).map(
+        (project): CommandPaletteEntry => ({
+          id: `project:${server}\0${project.worktree}`,
+          type: "project",
+          title: displayName(project),
+          description: tag
+            ? language.t("palette.session.location", { project: project.worktree, server: tag })
+            : project.worktree,
+          category: language.t("palette.group.projects"),
+          server,
+          directory: project.worktree,
+          project,
+        }),
+      )
+    })
+
+    return query
+      ? entries.filter((entry) => matchesCommandPaletteEntry(entry, query))
+      : entries.slice(0, RECENT_PROJECT_LIMIT)
+  }
+
   const items = (query: string) => {
     const entries = loaders
       .flatMap((loader) => loader.items(query))
       .toSorted((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
 
-    return query ? entries : entries.slice(0, RECENT_LIMIT)
+    return [...projectEntries(query), ...(query ? entries : entries.slice(0, RECENT_LIMIT))]
+  }
+
+  const openProject = (server: ServerConnection.Key, directory: string) => {
+    dialog.close(layer?.id)
+    global.serverCtx(server)?.projects.touch(directory)
+    void tabs.newDraft({ server, directory })
   }
 
   const [searchState, setSearchState] = createSignal(INITIAL_SESSION_SEARCH_STATE)
@@ -140,6 +187,8 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
   onCleanup(() => dispatch({ type: "disposed" }))
 
   const select = (item: CommandPaletteEntry | undefined) => {
+    if (item?.type === "project" && item.server && item.directory) return openProject(item.server, item.directory)
+
     if (!item?.sessionID || !item.server) return
     dispatch({
       type: "entry.selected",
@@ -153,14 +202,14 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
   // Each server is its own source, so a slow or failing server never holds back or hides another's sessions.
   return (
     <CommandPaletteView
-      placeholder={language.t("home.sessions.search.placeholder")}
+      placeholder={language.t(props.projects ? "palette.quickOpen.placeholder" : "home.sessions.search.placeholder")}
       items={items}
       sources={loaders.map((loader) => loader.search)}
       highlight={() => {}}
       select={select}
       close={() => dialog.close(layer?.id)}
       busyEntryID={selectSessionRestoreEntryID(searchState())}
-      bare={!props.archived}
+      bare={!props.archived && !props.projects}
       unhide={(entry) => {
         const server = entry.server
         const id = entry.sessionID
