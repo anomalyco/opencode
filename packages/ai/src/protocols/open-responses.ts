@@ -653,10 +653,17 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
+// A call's output only follows the whole assistant turn, and Meta's Muse models, directly or through a gateway,
+// reject a commentary message replayed while a call is waiting for it. Text after a call keeps its place without
+// the phase there; other providers accept it and keep the phase.
+const rejectsPendingCommentary = (request: LLMRequest) =>
+  request.model.provider === "meta" || /(?:^|\/)muse-/i.test(request.model.id)
+
 export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
+  const pendingCommentaryRejected = rejectsPendingCommentary(request)
   const customTool = (part: ToolCallPart | ToolResultPart) =>
     part.namespace === undefined ? custom.get(part.name) : undefined
 
@@ -711,9 +718,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
           const id = itemID(part.providerMetadata, providerMetadataKey) ?? metadata?.itemId
           const partPhase = messagePhase(partMetadata?.phase)
           const declared = partPhase === undefined ? metadata?.phase : partPhase
-          // A call's output only follows the whole assistant turn, and Meta's Muse rejects a commentary message
-          // replayed while a call is waiting for it. Text after a call keeps its place without the phase.
-          const phase = calledTool && declared === "commentary" ? undefined : declared
+          const phase = calledTool && declared === "commentary" && pendingCommentaryRejected ? undefined : declared
           const group = groups.at(-1)
           if (group && group.id === id && group.phase === phase) group.parts.push(part)
           else groups.push({ id, phase, parts: [part] })
