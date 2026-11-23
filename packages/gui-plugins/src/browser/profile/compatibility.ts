@@ -123,9 +123,11 @@ const ContentScript = Schema.Struct({ matches: Schema.optional(Schema.Array(Sche
 
 /**
  * What an extension can do once added, from what its manifest requires, most far-reaching first, for the user to see
- * before adding it. Host permissions and content-script matches are the sites whose pages it reads and changes;
- * `cookies` reads and changes sign-ins there, `tabs` and `webNavigation` see every address the user visits, and
- * `clipboardRead` reads what the user copies.
+ * before adding it. Host permissions and content-script matches are the sites whose pages it reads and changes, and
+ * `proxy` reads and changes every site's traffic; `cookies` reads and changes sign-ins there, the
+ * `declarativeNetRequest` rules block or redirect what any page loads, `tabs`, `webNavigation` and the rules' feedback
+ * see every address the user visits, `management` turns the user's other extensions on and off, and `clipboardRead`
+ * reads what the user copies. Each says what Chrome's own warning for it says.
  */
 export function reviewHosts(manifest: Manifest) {
   const sites = [...new Set([
@@ -145,15 +147,20 @@ export function extensionAccess(manifest: Manifest): ExtensionAccess[] {
   const permissions = (manifest.permissions ?? []).filter(Schema.is(Schema.String))
   const sites = reviewHosts(manifest)
 
-  // A pattern whose host is `*` covers every site, whatever its scheme and path.
-  const all = sites.some((pattern) => pattern === "<all_urls>" || /^[^:]+:\/\/\*(?:\/|$)/.test(pattern))
+  // A proxy, or a pattern whose host is `*`, covers every site, whatever its scheme and path.
+  const all =
+    permissions.includes("proxy") || sites.some((pattern) => pattern === "<all_urls>" || /^[^:]+:\/\/\*(?:\/|$)/.test(pattern))
 
   const access: (ExtensionAccess | undefined)[] = [
     all ? "allSites" : sites.length > 0 ? "someSites" : undefined,
     permissions.includes("cookies") ? "cookies" : undefined,
-    permissions.includes("tabs") || permissions.includes("webNavigation") || permissions.includes("history")
+    permissions.includes("declarativeNetRequest") || permissions.includes("declarativeNetRequestWithHostAccess")
+      ? "requests"
+      : undefined,
+    ["tabs", "webNavigation", "history", "declarativeNetRequestFeedback"].some((name) => permissions.includes(name))
       ? "activity"
       : undefined,
+    permissions.includes("management") ? "extensions" : undefined,
     permissions.includes("clipboardRead") ? "clipboard" : undefined,
   ]
 

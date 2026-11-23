@@ -26,7 +26,9 @@ test.each([
   [["allSites", "cookies", "activity"], "Can read and change every website you visit."],
   [["someSites", "clipboard"], "Can read and change pages on some sites."],
   [["cookies", "activity"], "Can see and change your sign-ins."],
+  [["requests", "activity"], "Can block or redirect what pages load."],
   [["activity"], "Can see which pages you visit."],
+  [["extensions", "clipboard"], "Can turn your other extensions on or off."],
   [["clipboard"], "Can read what you copy."],
   [[], "Doesn't ask to read your pages."],
 ] as const)("what %j can do is said in one sentence", (access, sentence) => {
