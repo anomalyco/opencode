@@ -11,12 +11,13 @@ const key = Instructions.Key.make("core/agent")
 const codec = Schema.toCodecJson(Selected)
 
 // Both texts name the agent: models only reliably drop the right instructions on leaving when the instructions were
-// introduced under the agent's name, since the plugin's own text often doesn't mention it.
+// introduced under the agent's name, since the plugin's own text often doesn't mention it. The leave note says what
+// still applies, or models also drop constraints the user added while the agent was selected.
 const active = (current: Selected) =>
   `You are the ${current.name} agent. Follow these instructions while you are the ${current.name} agent:\n\n${current.text}`
 
 const inactive = (previous: Selected) =>
-  `You are no longer the ${previous.name} agent. The instructions you followed as the ${previous.name} agent no longer apply. Do not keep following them.`
+  `You are no longer the ${previous.name} agent. Stop following the instructions you were given as the ${previous.name} agent. Keep following anything the user asked for.`
 
 // One key for every agent: switching between two agents with instructions is one update.
 export const make = (agent: Agent.Info): Instructions.List =>

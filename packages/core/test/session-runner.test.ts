@@ -2103,7 +2103,8 @@ describe("SessionRunnerLLM", () => {
     const plan = Agent.ID.make("plan")
     const build = Agent.ID.make("build")
     const orchestrator = Agent.ID.make("orchestrator")
-    const leftPlan = "You are no longer the Plan agent."
+    const leftPlan =
+      "You are no longer the Plan agent. Stop following the instructions you were given as the Plan agent. Keep following anything the user asked for."
     const enteredPlan = "You are the Plan agent. Follow these instructions while you are the Plan agent:\n\nPlan rules"
 
     const defineAgents = Effect.fnUntraced(function* (rules = "Plan rules") {
