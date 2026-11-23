@@ -5,6 +5,7 @@ const fullCodeModeHidden = ["glob", "grep", "webfetch"] as const
 export interface ModelTools {
   readonly hidden: Set<string>
   readonly direct: Set<string>
+  readonly rawText: boolean
 }
 
 export function modelTools(input: {
@@ -22,7 +23,7 @@ export function modelTools(input: {
     for (const name of usesPatch(input.model) ? ["edit", "write"] : ["patch"]) hidden.add(name)
   }
 
-  return { hidden, direct: new Set<string>() }
+  return { hidden, direct: new Set<string>(), rawText: input.model?.capabilities.freeform?.includes("text") === true }
 }
 
 function usesPatch(model: Model.Info) {

@@ -26,12 +26,14 @@ const it = testEffect(
   ),
 )
 
-const tool = (full: boolean) =>
+const tool = (full: boolean, rawText = false) =>
   CodeModeTool.create(
     { tools: new Map(), namespaces: new Map() },
     () => Effect.die("unused"),
     {} as Permission.Interface,
     full ? (Context.empty() as never) : undefined,
+    undefined,
+    rawText,
   )
 
 const context = (sessionID: string): Tool.Context => ({
@@ -96,6 +98,44 @@ describe("execute timeout and background", () => {
       expect(() => Schema.decodeUnknownSync(CodeModeTool.FullInput)({ code: "1", timeout: 0 })).toThrow()
       expect(() => Schema.decodeUnknownSync(CodeModeTool.FullInput)({ code: "1", timeout: 1.5 })).toThrow()
       expect(tool(true).description).toContain("do not poll")
+    }),
+  )
+
+  it.effect("takes raw code with an optional options line when the model takes raw-text tools", () =>
+    Effect.sync(() => {
+      expect(tool(true, true).input).toBe(CodeMode.Input)
+      expect(tool(true, true).freeform).toEqual({ type: "text" })
+      expect(tool(true, true).description).toContain("start the code with one line `// @options: <JSON object>`")
+      expect(Object.keys(tool(true).input.fields)).toEqual(["code", "timeout", "background"])
+      expect(tool(true).description).not.toContain("// @options:")
+      // Without full_codemode there are no options, so the line isn't offered.
+      expect(tool(false, true).description).toBe(tool(false).description)
+    }),
+  )
+
+  it.effect("moves a leading options line into timeout and background, and reports one it can't apply", () =>
+    Effect.sync(() => {
+      const split = (code: string) => CodeModeTool.prepare({ code })
+      const ok = (input: unknown) => ({ input })
+      expect(split('// @options: {"timeout": 5000, "background": true}\nreturn 1')).toEqual(
+        ok({ code: "return 1", timeout: 5000, background: true }),
+      )
+      expect(split('  // @options: {"background":true}\r\nreturn 1')).toEqual(
+        ok({ code: "return 1", background: true }),
+      )
+      // Keys execute doesn't take are dropped, as they are from JSON input.
+      expect(split('// @options: {"yield_time_ms": 10000, "timeout": 5}\nx()')).toEqual(ok({ code: "x()", timeout: 5 }))
+      expect(split("x()")).toEqual(ok({ code: "x()" }))
+      expect(CodeModeTool.prepare("x()")).toEqual(ok("x()"))
+      // A line that can't be applied fails the call, as an invalid JSON field would.
+      for (const code of [
+        "// @options: {timeout}\nx()",
+        '// @options: {"timeout": -1}\nx()',
+        '// @options: ["x"]\nx()',
+      ])
+        expect(split(code)).toEqual({ error: expect.stringContaining("must be followed by a JSON object") })
+      for (const code of ['// @options: {"timeout": 5}', '// @options: {"timeout": 5}\n'])
+        expect(split(code)).toEqual({ error: expect.stringContaining("Put the program") })
     }),
   )
 

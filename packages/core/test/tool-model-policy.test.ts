@@ -47,6 +47,18 @@ const policy = (model: Model.Info | undefined, websearch = true, fullCodeMode = 
 }
 
 describe("modelTools", () => {
+  test("reports whether the model takes raw-text tools", () => {
+    const model = makeModel("openai", "gpt-6")
+    expect(modelTools({ model, websearch: true, fullCodeMode: true }).rawText).toBe(false)
+    expect(
+      modelTools({
+        model: { ...model, capabilities: { ...model.capabilities, freeform: ["text"] } },
+        websearch: true,
+        fullCodeMode: true,
+      }).rawText,
+    ).toBe(true)
+  })
+
   test("gives GPT-5+ patch and leaves file tools, shell, and websearch in Code Mode when fullCodeMode is on", () => {
     for (const model of [makeModel("openai", "gpt-5"), makeModel("azure", "dep", { modelID: Model.ID.make("gpt-6") })])
       expect(policy(model)).toEqual({

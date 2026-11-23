@@ -13,7 +13,7 @@ import type {
 } from "@opencode/schema/tool"
 import { Identifier } from "@opencode/schema/identifier"
 import { CallID } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
+import { Clock, Context, Effect, Option, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { FileAccess } from "../file-access.js"
@@ -143,6 +143,36 @@ export const FullInput = Schema.Struct({
   }),
 })
 
+// With `full_codemode`, a model that takes raw-text tools writes the options on a first line of its code, so the code
+// never needs JSON escaping. `prepare` turns that line back into fields before hooks run.
+const OPTIONS_PREFIX = "// @options:"
+
+const OPTIONS_DESCRIPTION = `To set options, start the code with one line \`${OPTIONS_PREFIX} <JSON object>\` and put the program on the next line, for example \`${OPTIONS_PREFIX} {"background": true}\`. Options: \`timeout\`, the milliseconds to wait before the script moves to the background (default ${2 * 60 * 1_000}); \`background\`, true to return its job ID immediately.`
+
+const decodeOptions = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ timeout: FullInput.fields.timeout, background: FullInput.fields.background })),
+)
+
+/**
+ * Moves a leading options line out of `code` into `timeout` and `background`. Runs for every model, so a line written
+ * before a model switch still applies. Unknown keys are dropped, as from JSON; a line that isn't valid options, or has no
+ * program after it, fails the call.
+ */
+export const prepare = (input: unknown): { readonly input: unknown } | { readonly error: string } => {
+  if (typeof input !== "object" || input === null || !("code" in input) || typeof input.code !== "string")
+    return { input }
+  if (!/^[ \t]*\/\/ @options:/.test(input.code)) return { input }
+  const line = /^[ \t]*\/\/ @options:([^\r\n]*)\r?\n/.exec(input.code)
+  if (!line || line[0].length === input.code.length)
+    return { error: `Put the program on the lines after \`${OPTIONS_PREFIX}\`.` }
+  const options = Option.getOrUndefined(decodeOptions(line[1]))
+  if (!options)
+    return {
+      error: `\`${OPTIONS_PREFIX}\` must be followed by a JSON object with \`timeout\` (a positive integer of milliseconds) and \`background\` (a boolean), for example \`${OPTIONS_PREFIX} {"background": true}\`.`,
+    }
+  return { input: { ...input, ...options, code: input.code.slice(line[0].length) } }
+}
+
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
@@ -151,11 +181,14 @@ export const create = (
   services?: Context.Context<Services>,
   /** What `opencode://` fetch sends requests through. Without it, `opencode://` fails as unavailable. */
   api?: Context.Context<Api>,
+  /** The model takes raw-text tools, so with `full_codemode` the options go on a first line of the code. */
+  rawText = false,
 ) => {
+  const optionsLine = services !== undefined && rawText
   return {
     name: "execute",
-    description: description(services !== undefined),
-    input: services ? FullInput : CodeMode.Input,
+    description: optionsLine ? `${description(true)}\n${OPTIONS_DESCRIPTION}` : description(services !== undefined),
+    input: services && !optionsLine ? FullInput : CodeMode.Input,
     freeform: { type: "text" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>

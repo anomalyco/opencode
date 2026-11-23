@@ -81,7 +81,8 @@ export function ownedJobs(jobs: readonly JobInfo[], sessionID: string, parentID:
   })
 }
 
-// A script moved to the background ends its execute call with the job's id; its first line of code names it.
+// A script moved to the background ends its execute call with the job's id; its first line of code names it, past a
+// `// @` directive such as execute's options line.
 export function scriptLabel(messages: readonly SessionMessageInfo[], job: JobInfo) {
   const code = messages
     .flatMap((message) => (message.type === "assistant" ? message.content : []))
@@ -98,6 +99,6 @@ export function scriptLabel(messages: readonly SessionMessageInfo[], job: JobInf
   const line = code
     ?.split("\n")
     .map((item) => item.trim())
-    .find((item) => item.length > 0)
+    .find((item) => item.length > 0 && !item.startsWith("// @"))
   return line ?? job.title ?? "Script"
 }

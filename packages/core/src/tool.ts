@@ -63,6 +63,8 @@ type Data = {
 export interface Policy {
   readonly hidden?: ReadonlySet<string>
   readonly direct?: ReadonlySet<string>
+  /** The model takes raw-text tools, which tools with one text field are sent as. */
+  readonly rawText?: boolean
 }
 
 export interface SnapshotOptions {
@@ -334,7 +336,8 @@ const layer = Layer.effect(
           const codemode = !codeModeEnabled
             ? undefined
             : (() => {
-                const key = `${full ? "1" : "0"}\0${codemodeEntries.map(([name]) => name).join("\0")}`
+                const rawText = full && options?.tools?.rawText === true
+                const key = `${full ? "1" : "0"}${rawText ? "1" : "0"}\0${codemodeEntries.map(([name]) => name).join("\0")}`
                 // Discovery is immutable for a registry revision and visible tool set. Keep executors
                 // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
                 // are cached by identity, and the execute tool's definition across steps.
@@ -353,6 +356,7 @@ const layer = Layer.effect(
                   permission,
                   full ? options.services : undefined,
                   options?.api,
+                  rawText,
                 )
                 const entry = cached ?? {
                   inventory,
@@ -387,7 +391,13 @@ const layer = Layer.effect(
               }
               const initialName = input.definitions?.get(input.call.name)?.name ?? input.call.name
               const initial = initialName === "execute" && codemode ? codemode.tool : direct.get(initialName)
-              const event = yield* beforeExecute(input.call.name, initial, input.call.input, context)
+              // Hooks and the job see an options line's options as fields, as they would from JSON.
+              const prepared =
+                full && initial !== undefined && initial === codemode?.tool
+                  ? CodeModeTool.prepare(input.call.input)
+                  : { input: input.call.input }
+              if ("error" in prepared) return yield* new Tool.Error({ message: prepared.error })
+              const event = yield* beforeExecute(input.call.name, initial, prepared.input, context)
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
               if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
