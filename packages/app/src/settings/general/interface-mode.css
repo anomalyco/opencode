@@ -367,8 +367,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background-color: var(--v2-icon-icon-muted);
-  color: var(--v2-background-bg-base);
+  background-color: var(--v2-background-bg-accent);
+  color: var(--v2-text-text-contrast);
   box-shadow: 0 0 0 2px var(--v2-background-bg-layer-01);
 }
 
