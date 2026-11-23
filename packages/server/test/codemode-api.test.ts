@@ -17,7 +17,7 @@ import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { createRoutes } from "../src/routes"
 
-it.live("sends Code Mode opencode:// requests to the server's own router without its password", () =>
+it.live("sends Code Mode opencode:// requests to the server's own router with the server's credential", () =>
   Effect.gen(function* () {
     const root = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-codemode-api-")))
     const directory = path.join(root.path, "project")

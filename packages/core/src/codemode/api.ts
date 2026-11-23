@@ -26,15 +26,15 @@ export const node = makeGlobalNode({
 
 /**
  * The API path and query an `opencode:///api/...` URL names, with `/api/session/current` naming the calling session.
- * A host is refused, which keeps `opencode://<host>/` free for reaching another server later.
+ * Only that form is accepted: no host (which keeps `opencode://<host>/` free for reaching another server later) and
+ * nothing outside `/api/`.
  */
 export function path(raw: string, sessionID: string) {
   const parsed = URL.parse(raw)
-  if (!parsed || parsed.protocol !== "opencode:") return Effect.fail(new TypeError(`Invalid opencode URI: ${raw}`))
-  if (parsed.host)
+  if (!parsed || !raw.startsWith("opencode:///") || !parsed.pathname.startsWith("/api/"))
     return Effect.fail(
-      new TypeError(`Invalid opencode URI "${raw}": omit the host, for example "opencode:///api/session".`),
+      new TypeError(`Invalid opencode URI "${raw}": use opencode:///api/..., for example "opencode:///api/session".`),
     )
-  const pathname = (parsed.pathname || "/").replace(/^\/api\/session\/current(?=\/|$)/, `/api/session/${sessionID}`)
+  const pathname = parsed.pathname.replace(/^\/api\/session\/current(?=\/|$)/, `/api/session/${sessionID}`)
   return Effect.succeed(`${pathname}${parsed.search}`)
 }

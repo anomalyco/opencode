@@ -100,7 +100,7 @@ const fetchOpencode = (url: string, init: Init) =>
     if (Option.isSome(location) && !headers.has("x-opencode-directory") && !path.includes("location[directory]="))
       headers.set("x-opencode-directory", encodeURIComponent(location.value.directory))
     const response = yield* api.fetch(
-      new Request(`http://opencode.local${path}`, {
+      new Request(new URL(path, "http://opencode.local").href, {
         method,
         headers,
         body: method === "GET" || method === "HEAD" ? undefined : init.body,

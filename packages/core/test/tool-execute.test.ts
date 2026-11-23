@@ -784,15 +784,16 @@ describe("Code Mode opencode:// fetch", () => {
     ])
   })
 
-  test("rejects a host, reports a disabled API, and fails without one", async () => {
+  test("accepts only opencode:///api/... URLs, reports a disabled API, and fails without one", async () => {
     const run = (code: string, api?: Context.Context<CodeModeTool.Api>) =>
       Effect.runPromise(createCodeMode(new Map(), allowAll, undefined, api).execute({ code }, context)).then(
         (result) => result.output.output,
       )
     const never = api(() => Effect.die("never sent"))
-    expect(await run(`try { await fetch("opencode://api/session") } catch (e) { return e.message }`, never)).toContain(
-      "omit the host",
-    )
+    for (const url of ["opencode://api/session", "opencode:x@evil.com/api/info", "opencode:///openapi.json"])
+      expect(await run(`try { await fetch(${JSON.stringify(url)}) } catch (e) { return e.message }`, never)).toContain(
+        "use opencode:///api/...",
+      )
     const disabled = Context.add(never, CodeModeApi.Service, CodeModeApi.disabled)
     expect(await run(`try { await fetch("opencode:///api/info") } catch (e) { return e.message }`, disabled)).toContain(
       "OPENCODE_FLAGS=opencode_api",
