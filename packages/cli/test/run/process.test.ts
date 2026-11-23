@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { closeSync, openSync } from "node:fs"
 import { symlink } from "node:fs/promises"
 import path from "node:path"
 import { isolatedEnv } from "../fixture/environment"
@@ -62,7 +63,12 @@ async function serve(directory: string) {
   return { server, requests, prompted: prompted.promise }
 }
 
-function spawnRun(url: string, directory: string, message: string[], stdin: "pipe" | "ignore") {
+function spawnRun(
+  url: string,
+  directory: string,
+  message: string[],
+  stdin: "pipe" | "ignore" | ReturnType<typeof Bun.file>,
+) {
   return Bun.spawn([process.execPath, "run", "src/index.ts", "run", "--server", url, ...message], {
     cwd: path.join(import.meta.dir, "../.."),
     env: isolatedEnv(directory, { PWD: directory }),
@@ -155,6 +161,63 @@ posix(
     } finally {
       child.kill("SIGKILL")
       await child.exited
+      await fake.server.stop(true)
+    }
+  },
+  30_000,
+)
+
+async function readUntil(stream: ReadableStream<Uint8Array>, marker: string) {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  let output = ""
+  while (!output.includes(marker)) {
+    const next = await reader.read()
+    if (next.done) break
+    output += decoder.decode(next.value, { stream: true })
+  }
+  const rest = async () => {
+    while (true) {
+      const next = await reader.read()
+      if (next.done) break
+      output += decoder.decode(next.value, { stream: true })
+    }
+    return output + decoder.decode()
+  }
+  return { rest }
+}
+
+// Windows has no SIGTERM/SIGINT signal delivery or POSIX FIFOs.
+posix(
+  "run cancels an open stdin read on SIGTERM and SIGINT without hitting the shutdown deadline",
+  async () => {
+    await using directory = await tmpdir()
+    const fifo = path.join(directory.path, "stdin.fifo")
+    expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0)
+    const writer = openSync(fifo, "r+")
+    const fake = await serve(directory.path)
+    const pipeChild = spawnRun(fake.server.url.toString(), directory.path, [], "pipe")
+    const fifoChild = spawnRun(fake.server.url.toString(), directory.path, ["hello"], Bun.file(fifo))
+    try {
+      const cancel = async (child: typeof pipeChild, signal: "SIGTERM" | "SIGINT") => {
+        const stderr = await readUntil(child.stderr, "Continuing anyway.")
+        child.kill(signal)
+        const [out, err, exitCode] = await Promise.all([new Response(child.stdout).text(), stderr.rest(), child.exited])
+        return { out, err, exitCode }
+      }
+      const [pipeResult, fifoResult] = await Promise.all([cancel(pipeChild, "SIGTERM"), cancel(fifoChild, "SIGINT")])
+      expect(pipeResult.err).not.toContain("shutdown did not finish")
+      expect(pipeResult.out).toBe("")
+      expect(pipeResult.exitCode).toBe(143)
+      expect(fifoResult.err).not.toContain("shutdown did not finish")
+      expect(fifoResult.out).toBe("")
+      expect(fifoResult.exitCode).toBe(130)
+      expect(fake.requests.some((item) => item.path === "/api/session")).toBe(false)
+    } finally {
+      pipeChild.kill("SIGKILL")
+      fifoChild.kill("SIGKILL")
+      await Promise.all([pipeChild.exited, fifoChild.exited])
+      closeSync(writer)
       await fake.server.stop(true)
     }
   },
