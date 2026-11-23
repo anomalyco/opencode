@@ -38,7 +38,7 @@ export interface Interface {
   readonly commit: (
     target: FileAccess.Target,
     content: string,
-    knownBom?: FileMutation.TextWriteInput["knownBom"],
+    existing?: FileMutation.ExistingText,
   ) => Effect.Effect<Written, Environment.NotFound | Environment.WrongKind | Environment.Failed>
   /** Resolve, approve, write and format a whole file. */
   readonly write: (
@@ -83,9 +83,9 @@ const layer = Layer.effect(
     const commit = Effect.fn("FileWrite.commit")(function* (
       target: FileAccess.Target,
       content: string,
-      knownBom?: FileMutation.TextWriteInput["knownBom"],
+      existing?: FileMutation.ExistingText,
     ) {
-      const written = yield* fileMutation.writeTextPreservingBom({ target, content, knownBom })
+      const written = yield* fileMutation.writeTextPreservingBom({ target, content, existing })
       if (!(yield* formatter.file(target))) return written
       return {
         ...written,
@@ -101,7 +101,7 @@ const layer = Layer.effect(
         context,
         fileDiff(resolved.resource, current?.text ?? "", Bom.split(input.content).text, current ? "modified" : "added"),
       )
-      return yield* commit(resolved, input.content, current?.bom ?? null)
+      return yield* commit(resolved, input.content, { existed: current !== undefined, bom: current?.bom ?? false })
     })
 
     return Service.of({ target, authorize, commit, write })

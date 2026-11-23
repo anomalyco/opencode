@@ -18,11 +18,16 @@ export interface WriteInput {
   readonly content: string | Uint8Array
 }
 
+export interface ExistingText {
+  readonly existed: boolean
+  readonly bom: boolean
+}
+
 export interface TextWriteInput {
   readonly target: Target
   readonly content: string
-  /** BOM from an earlier read; null means missing. Omit to read the header before writing. */
-  readonly knownBom?: boolean | null
+  /** Existing file state from an earlier read. Omit to inspect the file before writing. */
+  readonly existing?: ExistingText
 }
 
 export interface WriteResult {
@@ -154,19 +159,18 @@ const layer = Layer.effect(
       withTargetLock(input.target)(
         Effect.gen(function* () {
           const next = Bom.split(input.content)
-          const current =
-            input.knownBom !== undefined
-              ? input.knownBom
-              : yield* input.target.environment.files.read(input.target.absolute, { offset: 0, length: 3 }).pipe(
-                  Effect.map((result) => Bom.has(result.bytes)),
-                  Effect.catchTag("Environment.NotFound", () => Effect.succeed(null)),
-                )
-          const bom = Boolean(current) || next.bom
+          const existing =
+            input.existing ??
+            (yield* input.target.environment.files.read(input.target.absolute, { offset: 0, length: 3 }).pipe(
+              Effect.map((result) => ({ existed: true, bom: Bom.has(result.bytes) })),
+              Effect.catchTag("Environment.NotFound", () => Effect.succeed({ existed: false, bom: false })),
+            ))
+          const bom = existing.bom || next.bom
           yield* input.target.environment.files.write(
             input.target.absolute,
             new TextEncoder().encode(Bom.join(next.text, bom)),
           )
-          return { ...writeResult(input.target, current !== null), bom }
+          return { ...writeResult(input.target, existing.existed), bom }
         }),
       ),
     )

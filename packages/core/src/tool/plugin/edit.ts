@@ -356,7 +356,7 @@ export const Plugin = {
                     : `No changes to apply: the edit leaves ${input.path} unchanged. Line endings follow the file; to change them, write \\r explicitly in oldString or newString.`,
                 })
               }
-              const result = yield* fileWrite.commit(target, replaced, original.bom)
+              const result = yield* fileWrite.commit(target, replaced, { existed: true, bom: original.bom })
               // Remote files cannot run server formatters. Locally, even a failed formatter may change the file.
               const formatted =
                 result.formatted ??
