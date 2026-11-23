@@ -1,6 +1,6 @@
 import { Schema, type Effect } from "effect"
 import type { AIError, LanguageModelSanitizerCompatibility, LLMEvent, LLMRequest, ProtocolID } from "../schema/index.js"
-import * as ProviderShared from "../protocols/shared.js"
+import { flattenRequest } from "../protocols/shared.js"
 import type { ToolUpdateEncoding } from "../tool-updates.js"
 
 /**
@@ -90,7 +90,7 @@ export const make = <Body, Frame, Event, State>(
 ): Protocol<Body, Frame, Event, State> =>
   input.namespaces
     ? input
-    : { ...input, body: { ...input.body, from: (request) => input.body.from(ProviderShared.flattenRequest(request)) } }
+    : { ...input, body: { ...input.body, from: (request) => input.body.from(flattenRequest(request)) } }
 
 export const jsonEvent = <const S extends Schema.Top>(schema: S) => Schema.fromJsonString(schema)
 
