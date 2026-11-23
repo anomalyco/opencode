@@ -9,6 +9,7 @@ import { ClaudeInstructions } from "./instructions.js"
 import { ClaudeIntegration } from "./integration.js"
 import { ClaudeProvider } from "./provider.js"
 import { ClaudeSessionHooks } from "./session.js"
+import { ClaudeWebSearchProvider } from "./websearch.js"
 import { Environment } from "../../../environment/index.js"
 import { EnvironmentUnavailable } from "../../../environment/unavailable.js"
 import { Location } from "../../../location.js"
@@ -60,6 +61,7 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
       yield* ClaudeAISDK.register(ctx, sessions)
       yield* ClaudeSessionHooks.register(ctx)
       yield* ClaudeInstructions.register(ctx)
+      yield* ClaudeWebSearchProvider.register(ctx, io)
     }),
   } satisfies PluginInternal.InternalPlugin)
 
