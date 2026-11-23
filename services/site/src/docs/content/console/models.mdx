@@ -262,8 +262,8 @@ Google takes its native `contents` and `generationConfig`, and xAI its native op
 ### Embedding models
 
 `text-embedding-3-small`, `qwen3-embedding-8b`, and the other embedding models in the table above turn text into
-vectors. OpenCode doesn't use them for chat, so they never appear in `/models`, and Go and the free tier don't include
-them. Call them on OpenAI's Embeddings API with a Console key.
+vectors. OpenCode doesn't use them for chat, so they never appear in `/models`, and the free tier doesn't include them.
+[Go](/console/go#embedding-models) includes some of them. Call them on OpenAI's Embeddings API with a Console key.
 
 ```bash
 curl https://opencode.ai/inference/openai/v1/embeddings \
