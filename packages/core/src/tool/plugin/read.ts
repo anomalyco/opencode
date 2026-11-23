@@ -172,7 +172,7 @@ export const Plugin = {
                 const resolved = yield* fs.resolve(result.target.absolute)
                 // The Location itself may be a symlink (`run` takes its directory from $PWD), so the walk is
                 // lexical while the exclusion also checks the resolved root.
-                const resolvedRoot = yield* fs.resolve(location.directory)
+                const resolvedRoot = yield* fs.resolve(workingDirectory.absolute)
                 // Walk the path the reader asked for, not the link target: a symlinked file or directory inside
                 // the working directory must not discover instructions from the tree it points into.
                 const discovered = yield* fs.up({
