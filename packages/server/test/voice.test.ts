@@ -13,9 +13,15 @@ const voice = makeLocationNode({
   layer: Layer.succeed(
     Voice.Service,
     Voice.Service.of({
+      start: () => Effect.die("unused"),
       connect: (input) => {
-        if (input.model.id === "invalid")
-          return Effect.fail(new Voice.InvalidRequestError({ message: "Variant unavailable" }))
+        if (input.model.variant === "turbo")
+          return Effect.fail(
+            new Voice.InvalidRequestError({
+              message: "Variant unavailable for openai/gpt-live-1: turbo",
+              field: "model.variant",
+            }),
+          )
         if (input.model.id === "missing")
           return Effect.fail(
             new Voice.ModelNotFoundError({
@@ -70,14 +76,14 @@ it.live("routes the voice connect endpoint and the deprecated voice endpoints", 
     yield* server.pluginsLoaded(global)
     const post = (route: string, body: unknown) =>
       Effect.promise(() =>
-        server.fetch(`http://opencode.local/api/experimental/voice/${route}?location[directory]=${global}`, {
+        server.fetch(`http://opencode.local/api/experimental/voice/${route}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
         }),
       )
 
-    const rtcRes = yield* post("connect", {
+    const rtcRes = yield* post(`connect?location[directory]=${global}`, {
       model: { id: "gpt-live-1", providerID: "opencode" },
       session: { voice: "marin" },
       transport: { type: "webrtc", sdp: "v=0", dcid: 4 },
@@ -88,7 +94,7 @@ it.live("routes the voice connect endpoint and the deprecated voice endpoints", 
       data: { type: "webrtc", sdp: "answer:opencode/gpt-live-1:v=0" },
     })
 
-    const wsRes = yield* post("connect", {
+    const wsRes = yield* post(`connect?location[directory]=${global}`, {
       model: { id: "grok-voice-3.0", providerID: "xai" },
       transport: { type: "websocket" },
     })
@@ -102,12 +108,32 @@ it.live("routes the voice connect endpoint and the deprecated voice endpoints", 
       },
     })
 
-    const connect = (id: string) =>
-      post("connect", { model: { id, providerID: "openai" }, transport: { type: "websocket" } })
-    expect((yield* connect("invalid")).status).toBe(400)
-    expect((yield* connect("missing")).status).toBe(404)
-    expect((yield* connect("chat")).status).toBe(422)
-    expect((yield* connect("unavailable")).status).toBe(503)
+    const failures = [
+      [
+        { id: "gpt-live-1", variant: "turbo" },
+        400,
+        {
+          _tag: "InvalidRequestError",
+          field: "model.variant",
+          message: "Variant unavailable for openai/gpt-live-1: turbo",
+        },
+      ],
+      [{ id: "missing" }, 404, { _tag: "ModelNotFoundError", message: "Model not found: openai/missing" }],
+      [
+        { id: "chat" },
+        422,
+        { _tag: "UnsupportedModelError", message: "openai/chat is a chat model, not a realtime model" },
+      ],
+      [{ id: "unavailable" }, 503, { _tag: "ServiceUnavailableError", service: "openai" }],
+    ] as const
+    for (const [model, status, body] of failures) {
+      const res = yield* post(`connect?location[directory]=${global}`, {
+        model: { ...model, providerID: "openai" },
+        transport: { type: "websocket" },
+      })
+      expect(res.status).toBe(status)
+      expect(yield* Effect.promise(() => res.json())).toMatchObject(body)
+    }
 
     // The deprecated endpoints read the real catalog, where nothing is connected.
     const modelsRes = yield* Effect.promise(() => server.fetch("http://opencode.local/api/experimental/voice/models"))
@@ -122,5 +148,9 @@ it.live("routes the voice connect endpoint and the deprecated voice endpoints", 
     })
     const legacy = yield* post("session", { model: "gpt-live-1", transport: { type: "websocket" } })
     expect(legacy.status).toBe(503)
+    expect(yield* Effect.promise(() => legacy.json())).toMatchObject({
+      _tag: "ServiceUnavailableError",
+      service: "openai",
+    })
   }),
 )

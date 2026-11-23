@@ -271,12 +271,12 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
         ),
       ]
     })
-    for (const voice of voices) {
-      const model = modelInfo(providerID, { packageName, baseURL }, Model.ID.make(voice.model.id), {
-        model: voice.model,
+    for (const entry of voices) {
+      const model = modelInfo(providerID, { packageName, baseURL }, Model.ID.make(entry.model.id), {
+        model: entry.model,
         route: { package: packageName },
       })
-      models.push({ ...model, realtime: voice.realtime })
+      models.push({ ...model, realtime: entry.realtime })
     }
     return [
       {
@@ -316,12 +316,12 @@ function voice(providerID: Provider.ID, model: SourceModel): Model.Realtime | un
   const api = Object.keys(model.api)[0]
   const speaks = model.modalities.output.some((output) => output.startsWith("audio"))
   if (!speaks || !model.capabilities.tools.supported || model.status === "deprecated") return undefined
-  for (const engine of Realtime.engines) {
-    if (engine.api !== api) continue
-    if (engine.provider === providerID || (engine.id === "openai-live" && providerID === Provider.ID.opencode))
-      return { protocol: engine.id, transports: engine.transports }
-  }
-  return undefined
+  const engine = Realtime.engines.find(
+    (engine) =>
+      engine.api === api &&
+      (engine.provider === providerID || (engine.id === "openai-live" && providerID === Provider.ID.opencode)),
+  )
+  return engine && { protocol: engine.id, transports: engine.transports }
 }
 
 function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>, recommended: boolean) {

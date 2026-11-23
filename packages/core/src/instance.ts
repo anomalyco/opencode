@@ -18,6 +18,7 @@ import { FileSystem } from "./filesystem.js"
 import { FileSystemSearch } from "./filesystem/search.js"
 import { Generate } from "./generate.js"
 import { Voice } from "./voice.js"
+import { ModelsDev } from "./models-dev.js"
 import { UsageLimits } from "./usage-limits.js"
 import { Form } from "./form.js"
 import { Image } from "./image.js"
@@ -105,6 +106,8 @@ const nodes = [
   Form.node,
   Generate.node,
   Voice.node,
+  // Only for voice-legacy.ts. Delete with voice-legacy.ts.
+  ModelsDev.node,
   UsageLimits.node,
   McpTool.node,
   SessionInstructions.node,

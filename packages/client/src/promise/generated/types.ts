@@ -2261,7 +2261,7 @@ export type GenerateDecisionAnswer =
 
 export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
 
-export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string } }
+export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string | undefined } }
 
 export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
 
@@ -4170,9 +4170,9 @@ export type ExperimentalVoiceModelsOutput = VoiceModelsResponse["data"]
 
 export type ExperimentalVoiceSessionInput = {
   readonly model: string
-  readonly session?: { readonly [x: string]: JsonValue } | undefined
+  readonly session?: { readonly [x: string]: unknown } | undefined
   readonly transport:
-    | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number }
+    | { readonly type: "webrtc"; readonly sdp: string; readonly dcid?: number | undefined }
     | { readonly type: "websocket" }
 }
 

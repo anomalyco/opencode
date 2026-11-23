@@ -46,7 +46,10 @@ export const VoiceHandler = HttpApiBuilder.group(Api, "server.voice", (handlers)
               Effect.mapError((error) =>
                 error._tag === "Voice.InvalidRequestError"
                   ? new InvalidRequestError({ message: error.message })
-                  : new ServiceUnavailableError({ message: error.message, service: error.service }),
+                  : new ServiceUnavailableError({
+                      message: error.message,
+                      ...(error.service === undefined ? {} : { service: error.service }),
+                    }),
               ),
             )
             return { data: { transport } }
@@ -70,8 +73,14 @@ function voiceError(error: Voice.Error) {
         message: error.message,
       })
     case "Voice.InvalidRequestError":
-      return new InvalidRequestError({ message: error.message, field: error.field })
+      return new InvalidRequestError({
+        message: error.message,
+        ...(error.field === undefined ? {} : { field: error.field }),
+      })
     case "Voice.UnavailableError":
-      return new ServiceUnavailableError({ message: error.message, service: error.service })
+      return new ServiceUnavailableError({
+        message: error.message,
+        ...(error.service === undefined ? {} : { service: error.service }),
+      })
   }
 }

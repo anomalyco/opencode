@@ -5865,7 +5865,7 @@
                     "type": "object"
                   },
                   "transport": {
-                    "$ref": "#/components/schemas/VoiceTransportInput"
+                    "$ref": "#/components/schemas/VoiceConnectTransportInput"
                   }
                 },
                 "required": ["model", "transport"],
@@ -6011,7 +6011,14 @@
                     "type": "string"
                   },
                   "session": {
-                    "type": "object"
+                    "anyOf": [
+                      {
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "transport": {
                     "$ref": "#/components/schemas/VoiceTransportInput"
@@ -26981,6 +26988,35 @@
         "required": ["_tag", "videoID", "message"],
         "additionalProperties": false
       },
+      "VoiceConnectTransportInput": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/VoiceConnectWebRTCTransportInput"
+          },
+          {
+            "$ref": "#/components/schemas/VoiceWebSocketTransportInput"
+          }
+        ]
+      },
+      "VoiceConnectWebRTCTransportInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["webrtc"]
+          },
+          "sdp": {
+            "type": "string"
+          },
+          "dcid": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["type", "sdp"],
+        "additionalProperties": false
+      },
       "VoiceModel": {
         "type": "object",
         "properties": {
@@ -27016,7 +27052,14 @@
                 }
               },
               "default": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": ["models"],
@@ -27092,9 +27135,18 @@
             "type": "string"
           },
           "dcid": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["type", "sdp"],

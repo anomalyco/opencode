@@ -3,6 +3,7 @@ export * as Voice from "./voice.js"
 import { type AIError } from "@opencode/ai/effect"
 import {
   Realtime,
+  type RealtimeEngine,
   type RealtimeSession,
   type RealtimeTransport,
   type RealtimeTransportInput,
@@ -19,6 +20,15 @@ import { Provider } from "./provider.js"
 
 export interface ConnectInput {
   readonly model: Model.Ref
+  readonly session?: RealtimeSession
+  readonly transport: RealtimeTransportInput
+}
+
+export interface StartInput {
+  readonly engine: RealtimeEngine
+  readonly provider: string
+  readonly model: string
+  readonly access: NonNullable<ReturnType<typeof sessionAccess>>
   readonly session?: RealtimeSession
   readonly transport: RealtimeTransportInput
 }
@@ -49,6 +59,8 @@ export type Error = InvalidRequestError | UnavailableError | ModelNotFoundError 
 
 export interface Interface {
   readonly connect: (input: ConnectInput) => Effect.Effect<RealtimeTransport, Error>
+  /** Opens the session once the model and its credential are known; the deprecated endpoints use it too. */
+  readonly start: (input: StartInput) => Effect.Effect<RealtimeTransport, InvalidRequestError | UnavailableError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Voice") {}
@@ -65,8 +77,7 @@ export const layer = Layer.effect(
       const ref = input.model
       const listed = yield* catalog.available(["realtime"])
       const found = listed.find((item) => item.providerID === ref.providerID && item.id === ref.id)
-      const engine = found && engineOf(found)
-      if (!found || !engine) {
+      if (!found) {
         // A ref no voice model has: another type's model (422) or no model at all (404), as generate answers.
         const other = (yield* catalog.available(["chat", "image", "video", "decision"])).find(
           (item) => item.providerID === ref.providerID && item.id === ref.id,
@@ -83,6 +94,13 @@ export const layer = Layer.effect(
           message: `Model not found: ${ref.providerID}/${ref.id}`,
         })
       }
+      const engine = engineOf(found)
+      if (!engine)
+        return yield* new UnsupportedModelError({
+          providerID: ref.providerID,
+          modelID: ref.id,
+          message: `${ref.providerID}/${ref.id} has no voice protocol opencode can call`,
+        })
       const model = yield* ModelResolver.withVariant(found, ref.variant).pipe(
         Effect.mapError((error) => new InvalidRequestError({ message: error.message, field: "model.variant" })),
       )
@@ -96,7 +114,9 @@ export const layer = Layer.effect(
         ? yield* integrations.connection
             .resolve(connection)
             .pipe(
-              Effect.mapError((error) => new UnavailableError({ service: model.providerID, message: error.message })),
+              Effect.mapError(
+                () => new UnavailableError({ service: model.providerID, message: "Voice credentials are unavailable" }),
+              ),
             )
         : undefined
       const configured = provider?.settings?.apiKey
@@ -109,24 +129,33 @@ export const layer = Layer.effect(
       if (access === undefined)
         return yield* new UnavailableError({ service: model.providerID, message: missingKeyMessage })
 
-      return yield* Realtime.connect({
+      return yield* start({
         engine,
+        provider: model.providerID,
         model: model.modelID,
+        access,
         session: input.session,
         transport: input.transport,
-        ...access,
-      }).pipe(
-        Effect.provideService(RequestExecutor.Service, executor),
-        Effect.mapError(
-          (error: AIError): Error =>
-            error.reason._tag === "InvalidRequest" || error.reason._tag === "UnsupportedOperation"
-              ? new InvalidRequestError({ message: error.message })
-              : new UnavailableError({ message: error.message, service: model.providerID }),
-        ),
-      )
+      })
     })
 
-    return Service.of({ connect })
+    const start = (input: StartInput) =>
+      Realtime.connect({
+        engine: input.engine,
+        model: input.model,
+        session: input.session,
+        transport: input.transport,
+        ...input.access,
+      }).pipe(
+        Effect.provideService(RequestExecutor.Service, executor),
+        Effect.mapError((error: AIError) =>
+          error.reason._tag === "InvalidRequest" || error.reason._tag === "UnsupportedOperation"
+            ? new InvalidRequestError({ message: error.message })
+            : new UnavailableError({ message: error.message, service: input.provider }),
+        ),
+      )
+
+    return Service.of({ connect, start })
   }),
 )
 
@@ -146,7 +175,7 @@ const openCodeLive = { provider: "opencode", baseURL: "https://opencode.ai/infer
  * What a credential starts a session with: a provider's API key on its own API, or an OpenCode Console API key or
  * account sign-in on OpenCode's hosted GPT-Live, for the workspace the sign-in chose.
  */
-const sessionAccess = (provider: string, credential: Credential.Value) => {
+export const sessionAccess = (provider: string, credential: Credential.Value) => {
   if (provider !== openCodeLive.provider)
     return credential.type === "key" ? { apiKey: Redacted.make(credential.key) } : undefined
   if (credential.type === "external") return undefined
@@ -158,5 +187,5 @@ const sessionAccess = (provider: string, credential: Credential.Value) => {
   }
 }
 
-export const missingKeyMessage =
+const missingKeyMessage =
   "Voice needs an API key on the server for the model's provider (OpenAI, xAI or Google), or an OpenCode Console connection for GPT-Live. ChatGPT and SuperGrok sign-ins can't start voice sessions."

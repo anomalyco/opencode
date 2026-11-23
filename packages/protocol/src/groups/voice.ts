@@ -26,7 +26,7 @@ export const VoiceModel = Schema.Struct({
 export const VoiceWebRTCTransportInput = Schema.Struct({
   type: Schema.Literal("webrtc"),
   sdp: Schema.String,
-  dcid: NonNegativeInt.pipe(optional),
+  dcid: Schema.optional(Schema.Number),
 }).annotate({ identifier: "VoiceWebRTCTransportInput" })
 
 export const VoiceWebSocketTransportInput = Schema.Struct({
@@ -36,6 +36,17 @@ export const VoiceWebSocketTransportInput = Schema.Struct({
 export const VoiceTransportInput = Schema.Union([VoiceWebRTCTransportInput, VoiceWebSocketTransportInput]).annotate({
   identifier: "VoiceTransportInput",
 })
+
+export const VoiceConnectWebRTCTransportInput = Schema.Struct({
+  type: Schema.Literal("webrtc"),
+  sdp: Schema.String,
+  dcid: NonNegativeInt.pipe(optional),
+}).annotate({ identifier: "VoiceConnectWebRTCTransportInput" })
+
+export const VoiceConnectTransportInput = Schema.Union([
+  VoiceConnectWebRTCTransportInput,
+  VoiceWebSocketTransportInput,
+]).annotate({ identifier: "VoiceConnectTransportInput" })
 
 export const VoiceWebRTCTransport = Schema.Struct({
   type: Schema.Literal("webrtc"),
@@ -63,7 +74,7 @@ export const makeVoiceGroup = <LocationId extends HttpApiMiddleware.AnyId, Locat
         payload: Schema.Struct({
           model: Model.Ref,
           session: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
-          transport: VoiceTransportInput,
+          transport: VoiceConnectTransportInput,
         }),
         success: Location.response(VoiceTransport),
         error: [InvalidRequestError, ModelNotFoundError, UnsupportedModelError, ServiceUnavailableError],
@@ -85,7 +96,7 @@ export const makeVoiceGroup = <LocationId extends HttpApiMiddleware.AnyId, Locat
         success: Schema.Struct({
           data: Schema.Struct({
             models: Schema.Array(VoiceModel),
-            default: Schema.String.pipe(optional),
+            default: Schema.optional(Schema.String),
           }),
         }).annotate({ identifier: "VoiceModelsResponse" }),
         error: [ServiceUnavailableError, LocationNotFoundError],
@@ -102,7 +113,7 @@ export const makeVoiceGroup = <LocationId extends HttpApiMiddleware.AnyId, Locat
       HttpApiEndpoint.post("voice.session", "/api/experimental/voice/session", {
         payload: Schema.Struct({
           model: Schema.String,
-          session: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
+          session: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
           transport: VoiceTransportInput,
         }),
         success: Schema.Struct({
