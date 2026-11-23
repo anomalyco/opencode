@@ -151,6 +151,7 @@ const shellPluginSupervisor = makeLocationNode({
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,
+    Bus.node,
     Tool.node,
   ],
 })
@@ -1445,6 +1446,7 @@ describe("ShellTool", () => {
             Shell.node,
             Shell.daemonNode,
             ShellSelect.node,
+            Bus.node,
             Tool.node,
           ],
         })

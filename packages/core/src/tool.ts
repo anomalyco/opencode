@@ -71,6 +71,8 @@ export interface SnapshotOptions {
    * session's Location and file services.
    */
   readonly services?: Context.Context<CodeModeTool.Services>
+  /** What `opencode://` fetch sends requests through; see the `opencode_api` flag. */
+  readonly api?: Context.Context<CodeModeTool.Api>
   readonly tools?: Policy
 }
 
@@ -350,6 +352,7 @@ const layer = Layer.effect(
                   (name, item, input, context) => run(inventory.tools, item, name, input, context),
                   permission,
                   full ? options.services : undefined,
+                  options?.api,
                 )
                 const entry = cached ?? {
                   inventory,

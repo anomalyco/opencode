@@ -599,6 +599,12 @@
   container: settings-panel / inline-size;
 }
 
+/* The panel takes focus when a click lands on its text, and Chromium then rings it on the next key press. It's a scroll
+   area, so focus shows on the controls inside it instead. */
+.settings-panel:focus-visible {
+  outline: none;
+}
+
 .settings-panel :is(input, textarea, [contenteditable="true"]) {
   user-select: text;
 }

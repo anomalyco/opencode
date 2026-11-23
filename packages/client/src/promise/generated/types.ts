@@ -190,6 +190,8 @@ export type ModelMediaInput = "assets" | "state" | "root"
 
 export type ToolFreeformFormat = "text" | "regex" | "lark"
 
+export type ModelSpeed = { base: string; id: string; faster: boolean }
+
 export type MoneyUSDPerMillionTokens = number
 
 export type GenerateTextResponse = { data: { text: string } }
@@ -2413,6 +2415,7 @@ export type ModelInfo = {
   body?: { [x: string]: any }
   capabilities: ModelCapabilities
   variants: Array<ModelVariant>
+  experimental?: { speed?: ModelSpeed }
   time: { released: number }
   cost: Array<ModelCost>
   status: "alpha" | "beta" | "deprecated" | "active"
@@ -2666,10 +2669,12 @@ export type ConfigEntry =
           artifacts?: boolean
           console_watches?: boolean
           recommended_api?: boolean
+          model_speeds?: boolean
           full_codemode?: boolean
           machines?: boolean
           home_memory?: boolean
           project_overlay?: boolean
+          opencode_api?: boolean
           sqlite_fts?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
