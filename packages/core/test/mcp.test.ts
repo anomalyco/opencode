@@ -4044,8 +4044,10 @@ describe("MCP events", () => {
   )
 
   // Lists "job.finished" and holds each `events/stream` open so a test can send notifications on it or close it.
+  // The first `failedOpens` opens fail, each only once the test releases it with `failOpen`.
   const streamServer = Effect.fnUntraced(function* (input: { events?: boolean; failedOpens?: number } = {}) {
     const attempts: unknown[] = []
+    const failures = yield* Queue.unbounded<void>()
     const streams = yield* Queue.unbounded<{
       params: unknown
       aborted: Effect.Effect<void>
@@ -4071,8 +4073,10 @@ describe("MCP events", () => {
           })
         if (!isRecord(body) || body.method !== "events/stream") return undefined
         attempts.push(body.params)
-        if (attempts.length <= (input.failedOpens ?? 0))
+        if (attempts.length <= (input.failedOpens ?? 0)) {
+          await Effect.runPromise(Queue.take(failures))
           return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32603, message: "Temporary failure" } })
+        }
         const meta = { "io.modelcontextprotocol/subscriptionId": body.id }
         const controller = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>()
         const aborted = Deferred.makeUnsafe<void>()
@@ -4100,7 +4104,7 @@ describe("MCP events", () => {
         )
       },
     })
-    return { url: server.url, attempts, opened: Queue.take(streams) }
+    return { url: server.url, attempts, opened: Queue.take(streams), failOpen: Queue.offer(failures, undefined) }
   })
 
   // A bus whose published events reach its subscribers, recorded in order.
@@ -4239,18 +4243,22 @@ describe("MCP events", () => {
             return open(input).pipe(Stream.onError(() => Queue.offer(failed, undefined)))
           })
           // Each reopen waits its backoff delay after the stream ended, jittered to between 0.8 and 1.2 times it.
-          // The test clock only moves when adjusted, so reading it once the end is seen gives the exact time.
+          // The test clock only moves when adjusted, so reading it once the end is seen gives the exact time. A failed
+          // open is released only after the adjust that started it returns: an HTTP reply that landed mid-adjust would
+          // start the next delay at an earlier clock time than the one read here.
           const waited = (delay: number, since: number) => {
             const gap = openedAt[openedAt.length - 1] - since
             expect(gap).toBeGreaterThanOrEqual(delay * 0.8)
             expect(gap).toBeLessThanOrEqual(delay * 1.2)
           }
           yield* mcp.subscribe("resources", { name: "job.finished" })
+          yield* server.failOpen
           yield* Queue.take(failed)
           const firstFailure = clock.currentTimeMillisUnsafe()
           yield* TestClock.adjust("1200 millis")
           expect(openedAt).toHaveLength(2)
           waited(1000, firstFailure)
+          yield* server.failOpen
           yield* Queue.take(failed)
           const secondFailure = clock.currentTimeMillisUnsafe()
           yield* TestClock.adjust("2400 millis")
