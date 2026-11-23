@@ -71,8 +71,8 @@ export function MenuScroll(
     }
   }
 
-  const syncThumbStart = () => {
-    setGeometry("start", 4 + (cachedMax > 0 ? (viewport.scrollTop / cachedMax) * (cachedTrack - cachedSize) : 0))
+  const syncThumbStart = (scrollTop: number) => {
+    setGeometry("start", 4 + (cachedMax > 0 ? (scrollTop / cachedMax) * (cachedTrack - cachedSize) : 0))
   }
 
   const measure = () => {
@@ -88,7 +88,7 @@ export function MenuScroll(
     measured = true
 
     setGeometry("size", size)
-    syncThumbStart()
+    syncThumbStart(viewport.scrollTop)
     dispatch(overflowChanged(max > 0, false))
   }
 
@@ -134,12 +134,16 @@ export function MenuScroll(
         data-scrollable
         class={local.viewportClass}
         onScroll={(event) => {
-          if (measured) syncThumbStart()
+          // Read before the list's own handler runs: it may write styles, and reading scrollTop after that forces a
+          // layout. The thumb and the scrolling state are written last, so that handler reads a clean layout too.
+          const top = viewport.scrollTop
+          local.onScroll?.(event)
+
+          if (measured) syncThumbStart(top)
 
           if (!measured) measure()
           // Keyboard navigation scrolls without hovering, so the thumb also shows while the list scrolls.
           dispatch(SCROLLED)
-          local.onScroll?.(event)
         }}
         // Kobalte menus focus items without scrolling on keyboard navigation, and also focus on pointermove; only reveal
         // non-pointer focus so hovering a clipped row never fights the wheel.

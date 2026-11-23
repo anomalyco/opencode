@@ -80,6 +80,8 @@ export function SearchList<T>(props: {
   empty: JSX.Element
   /** A note beneath the rows, such as a hint that more results are hidden. */
   footer?: JSX.Element
+  /** Whether to draw the top edge fade beneath sticky headers. On by default. */
+  topFade?: boolean
   /** Where the results start scrolled each time they mount, such as a position kept from an earlier visit. */
   scrollTop?: number
   onScroll?: (scrollTop: number) => void
@@ -95,9 +97,11 @@ export function SearchList<T>(props: {
 }) {
   let viewport: HTMLDivElement | undefined
   let results: HTMLDivElement | undefined
+  let fade: HTMLDivElement | undefined
 
   const sectionOf = (item: T) => props.section?.(item) ?? ""
   const open = () => props.open ?? true
+  const topFade = () => props.topFade ?? true
 
   // Sections in the order their first row arrives; rows then list section by section, which is also the arrow order.
   const groups = createMemo(() => {
@@ -145,48 +149,79 @@ export function SearchList<T>(props: {
 
   // Rows fade out where they run under the top header or past the bottom edge. Each fade reaches full strength once
   // 15 px is hidden, so it eases in with the scroll. The top fade follows the header over the topmost section and
-  // measures what that section has hidden, so a header that pushes the last one away starts clear again. Sections are
-  // measured when the list lays out, so scrolling only does arithmetic.
+  // measures what that section has hidden, so a header that pushes the last one away starts clear again. Sections and
+  // scroll extent are measured when the list lays out, so scrolling only does arithmetic.
   let sections: { top: number; bottom: number; header: number }[] = []
+  let maxScroll = 0
+  const lastFade = { offset: "", top: "", bottom: "" }
 
-  const edges = () => {
+  const edges = (scroll: number) => {
     if (!viewport) return
-    const scroll = viewport.scrollTop
     const strength = (hidden: number) => String(Math.min(1, Math.max(0, hidden / 15)))
-    const current = sections.findLast((section) => section.top - scroll < section.header)
 
-    // A stuck header sits at the top until its section's end pushes it up.
-    const offset = current?.header
-      ? Math.min(Math.max(current.top - scroll, 0) + current.header, current.bottom - scroll)
-      : 0
+    if (topFade() && fade) {
+      const current = sections.findLast((section) => section.top - scroll < section.header)
 
-    viewport.style.setProperty("--search-list-fade-offset", `${Math.max(0, offset)}px`)
-    viewport.style.setProperty("--search-list-fade-top", strength(current ? scroll - current.top : 0))
-    viewport.style.setProperty(
-      "--search-list-fade-bottom",
-      strength(viewport.scrollHeight - viewport.clientHeight - scroll),
-    )
+      // A stuck header sits at the top until its section's end pushes it up.
+      const offset = current?.header
+        ? Math.min(Math.max(current.top - scroll, 0) + current.header, current.bottom - scroll)
+        : 0
+
+      const nextOffset = `${Math.max(0, offset)}px`
+      const nextTop = strength(current ? scroll - current.top : 0)
+
+      if (lastFade.offset !== nextOffset) {
+        lastFade.offset = nextOffset
+        fade.style.setProperty("--search-list-fade-offset", nextOffset)
+      }
+
+      if (lastFade.top !== nextTop) {
+        lastFade.top = nextTop
+        fade.style.setProperty("--search-list-fade-top", nextTop)
+      }
+    }
+
+    const nextBottom = strength(maxScroll - scroll)
+
+    if (lastFade.bottom !== nextBottom) {
+      lastFade.bottom = nextBottom
+      viewport.style.setProperty("--search-list-fade-bottom", nextBottom)
+    }
   }
 
   const measure = () => {
     if (!viewport) return
-    const origin = viewport.getBoundingClientRect().top - viewport.scrollTop
+    const scroll = viewport.scrollTop
+    maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
 
-    sections = [...viewport.querySelectorAll<HTMLElement>('[data-slot="search-list-section"]')].map((section) => {
-      const rect = section.getBoundingClientRect()
+    if (topFade()) {
+      const origin = viewport.getBoundingClientRect().top - scroll
 
-      // A sticky header stays inside its section's content box, so the section's bottom padding is out of its reach.
-      return {
-        top: rect.top - origin,
-        bottom: rect.bottom - origin - parseFloat(getComputedStyle(section).paddingBottom),
-        header: section.querySelector<HTMLElement>('[data-slot="search-list-header"]')?.offsetHeight ?? 0,
-      }
-    })
-    edges()
+      sections = [...viewport.querySelectorAll<HTMLElement>('[data-slot="search-list-section"]')].map((section) => {
+        const rect = section.getBoundingClientRect()
+
+        // A sticky header stays inside its section's content box, so the section's bottom padding is out of its reach.
+        return {
+          top: rect.top - origin,
+          bottom: rect.bottom - origin - parseFloat(getComputedStyle(section).paddingBottom),
+          header: section.querySelector<HTMLElement>('[data-slot="search-list-header"]')?.offsetHeight ?? 0,
+        }
+      })
+    }
+
+    edges(scroll)
   }
 
   createResizeObserver(() => [viewport, results], measure)
-  createEffect(on(rows, measure, { defer: true }))
+  createEffect(
+    on(
+      rows,
+      () => {
+        if (topFade()) measure()
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(() => props.onActive?.(typeahead.activeItem()))
 
@@ -327,11 +362,15 @@ export function SearchList<T>(props: {
             data-slot="search-list-scroll"
             viewportRef={(element) => (viewport = element)}
             onScroll={(event) => {
-              edges()
-              props.onScroll?.(event.currentTarget.scrollTop)
+              const top = event.currentTarget.scrollTop
+              // Callers read clean layout before edge-fade properties mutate the viewport.
+              props.onScroll?.(top)
+              edges(top)
             }}
           >
-            <div data-slot="search-list-fade" aria-hidden="true" />
+            <Show when={topFade()}>
+              <div ref={fade} data-slot="search-list-fade" aria-hidden="true" />
+            </Show>
             <div
               ref={results}
               id={typeahead.listID}
