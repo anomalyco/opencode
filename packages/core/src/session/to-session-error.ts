@@ -1,6 +1,12 @@
 import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai/effect"
 import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
+import { PlatformError } from "effect"
+import { AppProcess } from "@opencode/util/process"
+import { Environment } from "../environment/index.js"
+import { Machine } from "../machine/index.js"
+import { Machines } from "../machine/machines.js"
+import { MachinePath } from "../machine/path.js"
 import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
@@ -38,6 +44,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
     // ChatGPT's usage limit arrives in HTTP and stream errors alike, whatever their reason, so its code decides the type.
     if (cause.reason.body?.includes("subscription_sharing_usage_limit_exceeded"))
       return providerError("provider.chatgpt-limit", cause.reason)
+    if (cause.reason.body?.includes("subscription_sharing_workplace_individual_usage_limit_exceeded"))
+      return providerError("provider.chatgpt-workspace-limit", cause.reason)
     switch (cause.reason._tag) {
       case "RateLimit":
         return providerError("provider.rate-limit", cause.reason)
@@ -76,6 +84,9 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof Permission.CorrectedError) return { type: "permission.rejected", message: cause.feedback }
   if (cause instanceof ToolFailure || cause instanceof Tool.Error) {
     if (cause.error === undefined) return { type: "tool.execution", message: cause.message }
+    // A machine failure says why, however the tool wrapped it; every other cause keeps the tool's curated message.
+    const machine = machineMessage(cause.error)
+    if (machine !== undefined) return { type: "tool.execution", message: machine }
     // The canonical error is the sole model-visible representation, so a cause
     // with no message must not erase the tool's curated failure message.
     const unwrapped = toSessionError(cause.error)
@@ -143,4 +154,20 @@ function providerError(type: string, reason: AIError["reason"]): SessionError.Er
     ...(reason.body === undefined ? {} : { response: { body: reason.body } }),
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   }
+}
+
+/**
+ * The message of a machine failure, through the wrappers a tool may have put around it. A local failure has no
+ * machine error anywhere in its cause, so its text is untouched.
+ */
+const machineMessage = (error: unknown): string | undefined => {
+  if (error instanceof Machine.NotSent || error instanceof Machine.Unknown || error instanceof Machine.ProcessLost)
+    return error.message
+  if (error instanceof Machines.NotFound || error instanceof MachinePath.NotAbsolute) return error.message
+  if (
+    error instanceof Environment.Failed ||
+    error instanceof AppProcess.AppProcessError ||
+    error instanceof PlatformError.PlatformError
+  )
+    return machineMessage(error.cause)
 }

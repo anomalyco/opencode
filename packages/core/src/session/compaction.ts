@@ -674,8 +674,9 @@ export const layer = Layer.effect(
           const step = SHRINK_STEPS[rejections]
           if (step === undefined) return yield* Effect.fail<Failure>({ error })
           rejected ??= size ? total(size) : estimateRequest(request)
-          // The characters can still say the rejected request fits, so it only goes out again as text.
-          if (size) asText = true
+          // The characters can still say a rejected request fits, so the conversation or the history before the tail
+          // only goes out again as text.
+          if (size || request === shrink.history) asText = true
           target = Math.floor(rejected * step)
           fit = target
           rejections++
@@ -1024,15 +1025,11 @@ const recentStart = (
   keep: number,
   previous: SessionMessage.CompactionCompleted | undefined,
 ) => {
-  // Drop the oldest entries until the rest fit the allowance, but always keep the newest one.
-  const dropped = Math.min(
-    oldestToDrop(entries, (entry) => Token.estimate(entry.text), keep),
-    entries.length - 1,
-  )
-
-  // Start at a user message so an assistant's tool calls and results stay together.
-  const userBoundary = entries.findLastIndex((entry, index) => index <= dropped && entry.message.type === "user")
-  if (userBoundary > 0) return userBoundary
+  // The tail is sent as text and each message carries its own tool calls and results, so it can start at any
+  // message. One token more per message covers the separator between them and rounding, so the joined text stays
+  // within `keep`. A newest message larger than `keep` on its own is summarized with the rest.
+  const start = oldestToDrop(entries, (entry) => Token.estimate(entry.text) + 1, keep)
+  if (start > 0) return start
 
   // Everything fits. Keep only the latest exchange rather than duplicating the whole conversation beside the summary.
   const latestUser = entries.findLastIndex((entry) => entry.message.type === "user")

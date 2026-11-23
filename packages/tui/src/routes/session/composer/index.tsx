@@ -1,13 +1,14 @@
 import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
-import { createStore } from "solid-js/store"
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../../../context/theme"
 import { SplitBorder } from "../../../ui/border"
 import { Keymap } from "../../../context/keymap"
 import { SubagentsTab } from "./subagents-tab"
 import { ShellTab } from "./shell-tab"
+import { ScriptsTab } from "./scripts-tab"
 import { TerminalsTab } from "./terminals-tab"
-import { ComposerContext, type ComposerTab } from "./context"
+import { ComposerContext } from "./context"
+import { createComposerTabs } from "./tabs"
 
 export type ComposerProps = {
   sessionID: string
@@ -21,36 +22,19 @@ export type ComposerProps = {
 export function Composer(props: ComposerProps) {
   const theme = useTheme()
 
-  const [store, setStore] = createStore({
-    tabs: {} as Record<string, ComposerTab>,
-    active: "",
-  })
-
-  const tabList = createMemo(() => Object.values(store.tabs))
-  const activeTab = createMemo(() => tabList().find((t) => t.id === store.active))
+  const tabs = createComposerTabs({ open: () => props.open, defaultTab: () => props.defaultTab })
+  const tabList = tabs.list
+  const activeTab = createMemo(() => tabList().find((t) => t.id === tabs.active()))
   const footerHints = createMemo(() => activeTab()?.hints?.() ?? [])
-
-  // Set active tab when opened
-  createEffect(() => {
-    if (!props.open) return
-    const tabs = tabList()
-    if (tabs.length === 0) return
-    const match = props.defaultTab && tabs.find((t) => t.id === props.defaultTab)
-    setStore("active", match ? match.id : tabs[0].id)
-  })
 
   function close() {
     props.onClose?.()
   }
 
   const ctx = {
-    register(tab: ComposerTab) {
-      setStore("tabs", tab.id, tab)
-      if (!store.active) setStore("active", tab.id)
-      return () => setStore("tabs", tab.id, undefined!)
-    },
+    register: tabs.register,
     active(id: string) {
-      return props.open && store.active === id
+      return props.open && tabs.active() === id
     },
     close,
   }
@@ -63,10 +47,10 @@ export function Composer(props: ComposerProps) {
   })
 
   const switchTab = (dir: number) => {
-    const tabs = tabList()
-    if (tabs.length <= 1) return
-    const idx = tabs.findIndex((t) => t.id === store.active)
-    setStore("active", tabs[(idx + dir + tabs.length) % tabs.length].id)
+    const list = tabList()
+    if (list.length <= 1) return
+    const idx = list.findIndex((t) => t.id === tabs.active())
+    tabs.setActive(list[(idx + dir + list.length) % list.length].id)
   }
 
   Keymap.createLayer(() => ({
@@ -107,12 +91,12 @@ export function Composer(props: ComposerProps) {
                 <box flexDirection="row" gap={2}>
                   <For each={tabList()}>
                     {(t) => {
-                      const isActive = createMemo(() => store.active === t.id)
+                      const isActive = createMemo(() => tabs.active() === t.id)
                       return (
                         <text
                           fg={isActive() ? theme.text.base : theme.text.muted}
                           attributes={isActive() ? TextAttributes.BOLD : undefined}
-                          onMouseUp={() => setStore("active", t.id)}
+                          onMouseUp={() => tabs.setActive(t.id)}
                         >
                           {t.label}
                         </text>
@@ -127,6 +111,7 @@ export function Composer(props: ComposerProps) {
             </box>
             <SubagentsTab sessionID={props.sessionID} />
             <ShellTab sessionID={props.sessionID} />
+            <ScriptsTab sessionID={props.sessionID} />
             <Show when={props.terminals}>
               <TerminalsTab sessionID={props.sessionID} visibleTerminalID={props.visibleTerminalID} />
             </Show>

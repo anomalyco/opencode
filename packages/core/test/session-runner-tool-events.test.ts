@@ -14,6 +14,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { Session } from "@opencode/core/session"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionHistory } from "@opencode/core/session/history"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Model } from "@opencode/core/model"
@@ -209,11 +210,10 @@ testEffect(
       .all()
     expect(events.filter((event) => event.type === "session.tool.success.2")).toHaveLength(1)
     expect(events.some((event) => event.type === "session.tool.failed.2")).toBe(false)
-    const message = yield* database.db
-      .select()
-      .from(SessionMessageTable)
-      .where(eq(SessionMessageTable.id, assistantMessageID))
-      .get()
+    const [message] = yield* SessionHistory.withParts(
+      database.db,
+      yield* database.db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, assistantMessageID)).all(),
+    )
     expect(message?.data).toMatchObject({
       content: [{ type: "tool", id: call.id, executed: true, state: { status: "completed" } }],
     })

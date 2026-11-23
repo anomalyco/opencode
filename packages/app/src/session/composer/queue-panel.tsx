@@ -129,6 +129,7 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
           <div
             ref={listRef}
             data-slot="session-queue-list"
+            data-focus-scope
             class="flex flex-col"
             classList={{ "max-h-[148px] overflow-y-auto": count() > 4 }}
             style={{

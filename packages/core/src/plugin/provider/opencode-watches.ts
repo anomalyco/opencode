@@ -5,7 +5,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
-import { Clock, Duration, Effect, Exit, Fiber, Option, Predicate, Schema, Scope, Stream } from "effect"
+import { Clock, DateTime, Duration, Effect, Exit, Fiber, Option, Predicate, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Socket } from "effect/socket"
 import { WebSocketConstructor } from "../../effect/websocket-constructor.js"
@@ -30,6 +30,9 @@ const POLL_RETRY_WEBSOCKET = Duration.minutes(10)
 /** Wakes in 10 minutes, and since the user's last prompt, before updates wait for a person, so agents can't loop. */
 export const WINDOW_LIMIT = 5
 export const PROMPT_LIMIT = 20
+/** What the agent reads with the last update that wakes it before the limits, and with each one held. */
+const PAUSED =
+  "Further updates won't wake this session until the user's next prompt. If you're waiting on one, tell the user."
 // The stored wakes since the prompt and their times; a count stored before the window reads as none.
 const decodeWakes = Schema.decodeUnknownOption(
   Schema.Struct({ count: Schema.Number, at: Schema.Array(Schema.Number), last: Schema.optional(Schema.Number) }),
@@ -91,7 +94,7 @@ const decodeServerMessage = Schema.decodeUnknownOption(Schema.fromJsonString(Ser
 const Poll = Schema.Struct({ cursor: Schema.String, events: Schema.Array(WatchEvent) })
 const Problem = Schema.Struct({ message: Schema.optional(Schema.String), limit: Schema.optional(Schema.Number) })
 const ShellInput = Schema.Struct({ command: Schema.String })
-const ShellOutput = Schema.Struct({ exit: Schema.optional(Schema.Number), output: Schema.String })
+const ShellOutput = Schema.Struct({ exitCode: Schema.NullOr(Schema.Number), output: Schema.String })
 
 interface Member {
   console: Console
@@ -116,14 +119,15 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
   let current: { readonly member: Member; readonly lease: Scope.Closeable } | undefined
   const streakKey = (sessionID: string) => `watch-streak:${sessionID}`
   const deletedKey = (sessionID: string) => `watch-deleted:${sessionID}`
+  const unattendedKey = (watchID: string) => `watch-unattended:${watchID}`
 
   const wake = Effect.fnUntraced(function* (member: Member, sessionID: Session.ID, events: ReadonlyArray<WatchEvent>) {
     const ids = events.map((event) => event.id)
-    const exists = yield* ctx.session.get({ sessionID }).pipe(
-      Effect.as(true),
-      Effect.catchIf(Predicate.isTagged("Session.NotFoundError"), () => Effect.succeed(false)),
+    const session = yield* ctx.session.get({ sessionID }).pipe(
+      Effect.map(Option.some),
+      Effect.catchIf(Predicate.isTagged("Session.NotFoundError"), () => Effect.succeed(Option.none())),
     )
-    if (!exists) {
+    if (Option.isNone(session)) {
       // A session that never lived here belongs to the member's other machine, which acknowledges its events.
       if ((yield* ctx.storage.get(deletedKey(sessionID))) === undefined) return []
       yield* cancelSession(member, sessionID).pipe(Effect.ignore)
@@ -136,17 +140,26 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
     const kept = own || now - (stored?.last ?? now) >= Duration.toMillis(Duration.minutes(30)) ? undefined : stored
     const recent = (kept?.at ?? []).filter((at) => now - at < Duration.toMillis(Duration.minutes(10)))
     const count = kept?.count ?? 0
+    // Updates from watches made unattended, such as a router's, skip the 20 since the prompt but never the window.
+    const unattended = (yield* Effect.forEach(new Set(events.map((event) => event.watchID)), (id) =>
+      ctx.storage.get(unattendedKey(id)),
+    )).every((value) => value === true)
     // CI runs pace themselves, so their updates count toward 20 since the prompt but not the 10-minute window.
-    const ci = events.every((event) => event.kind === "workflow_run" || event.kind === "workflow_job")
-    const resume = (ci || recent.length < WINDOW_LIMIT) && count < PROMPT_LIMIT
-    const paused = !resume || (!ci && recent.length + 1 >= WINDOW_LIMIT) || count + 1 >= PROMPT_LIMIT
+    const ci = !unattended && events.every((event) => event.kind === "workflow_run" || event.kind === "workflow_job")
+    // An update that arrives mid-run steers that run and wakes nothing, so it neither counts nor waits.
+    const time = session.value.time
+    const running = time.busy !== undefined && (time.idle === undefined || DateTime.isGreaterThan(time.busy, time.idle))
+    const resume = running || ((ci || recent.length < WINDOW_LIMIT) && (unattended || count < PROMPT_LIMIT))
+    const paused =
+      !running && (!resume || (!ci && recent.length + 1 >= WINDOW_LIMIT) || (!unattended && count + 1 >= PROMPT_LIMIT))
     // The same events delivered again, after a lost acknowledgement, conflict with the message they already made:
     // they were delivered, so they're acknowledged without another wake.
     const delivered = yield* ctx.session
       .synthetic({
         sessionID,
         id: SessionMessage.ID.make(`msg_watch_${Hash.sha256(ids.join(",")).slice(0, 26)}`),
-        text: wakeText(events),
+        // The agent reads only the text, so it says so there too, and can tell the user what it was waiting on.
+        text: paused ? `${wakeText(events)}\n\n${PAUSED}` : wakeText(events),
         description:
           (events.length === 1 ? title(events[0]) : `${title(events[0])} and ${events.length - 1} more`) +
           (paused ? " (further updates wait for your next prompt)" : ""),
@@ -159,7 +172,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
         Effect.catchIf(Predicate.isTagged("Session.SyntheticConflictError"), () => Effect.succeed(false)),
       )
     // A held update counts toward the 30 minutes too; a replay conflicts above and counts toward nothing.
-    if (delivered)
+    if (delivered && !running)
       yield* ctx.storage.set(streakKey(sessionID), {
         count: resume ? count + 1 : count,
         at: ci || !resume ? recent : [...recent, now],
@@ -288,6 +301,12 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
               description: "How long to watch from now, in minutes; the event type's own default otherwise",
             }),
           ),
+          unattended: Schema.optional(
+            Schema.Boolean.annotate({
+              description:
+                "For a session whose job is to keep handling a stream unattended, such as a router: its updates keep waking the session past 20 since the user's last prompt, though never more than 5 in 10 minutes",
+            }),
+          ),
         }),
         output: Watch,
         options: { namespace, codemode: { pinned: true } },
@@ -308,6 +327,8 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
               ...body,
               ...(input.minutes === undefined ? {} : { minutes: input.minutes }),
             })
+            // Wake policy is the client's, so Console never hears of it; the mark goes quiet with the watch.
+            if (input.unattended) yield* ctx.storage.set(unattendedKey(watch.id), true)
             return {
               output: watch,
               content: `Watching ${label(watch)} until ${watch.expiresAt} (${watch.id}). This session wakes when it changes.`,
@@ -621,7 +642,7 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
  * `git push` updated on GitHub, whose Actions runs settle the watch. Anything less clear-cut is skipped.
  */
 export function shellTarget(command: string, shell: typeof ShellOutput.Type) {
-  if (shell.exit !== 0) return undefined
+  if (shell.exitCode !== 0) return undefined
   if (/(?:^|[\s;&|(])gh\s+pr\s+create\b/.test(command)) {
     const urls = new Set(
       Array.from(shell.output.matchAll(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g), (match) => match[0]),

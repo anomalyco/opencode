@@ -277,6 +277,13 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalJobCancelInput,
+  ExperimentalJobCancelOutput,
+  ExperimentalMachineListOutput,
+  ExperimentalMachineAddInput,
+  ExperimentalMachineAddOutput,
+  ExperimentalMachineRemoveInput,
+  ExperimentalMachineRemoveOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1772,6 +1779,34 @@ const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (
     ),
   )
 
+const EndpointExperimentalJobCancel = (raw: RawClient["server.experimental"]) => (input: ExperimentalJobCancelInput) =>
+  preserveEffect<ExperimentalJobCancelOutput>()(
+    raw["job.cancel"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalMachineList = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalMachineListOutput>()(
+    raw["machine.list"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalMachineAdd =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalMachineAddInput) =>
+    preserveEffect<ExperimentalMachineAddOutput>()(
+      raw["machine.add"]({ payload: { name: input["name"], reach: input["reach"], replace: input["replace"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalMachineRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalMachineRemoveInput) =>
+    preserveEffect<ExperimentalMachineRemoveOutput>()(
+      raw["machine.remove"]({ params: { name: input["name"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1801,7 +1836,12 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     update: EndpointExperimentalArtifactsUpdate(raw),
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
-  job: { list: EndpointExperimentalJobList(raw) },
+  job: { list: EndpointExperimentalJobList(raw), cancel: EndpointExperimentalJobCancel(raw) },
+  machine: {
+    list: EndpointExperimentalMachineList(raw),
+    add: EndpointExperimentalMachineAdd(raw),
+    remove: EndpointExperimentalMachineRemove(raw),
+  },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>

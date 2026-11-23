@@ -334,7 +334,13 @@ export function createRegion(input: {
 
   // Focus leaves before the close starts, back to where it was; otherwise the panel hands it to its toggle.
   const giveBackFocus = () => {
-    const inside = !!document.getElementById("review-panel")?.contains(document.activeElement)
+    const focused = document.activeElement
+
+    // The review toggle in the panel's strip belongs to the session, so the panel hands its focus to the header's copy.
+    const inside =
+      !!document.getElementById("review-panel")?.contains(focused) &&
+      !focused?.closest('[data-slot="session-review-panel-toggle"]')
+
     const back = returnFocus
     returnFocus = undefined
 
@@ -412,6 +418,15 @@ export function createRegion(input: {
         dispatchNewTabs({ type: "select.tab", pane: paneOfKey(key) })
         input.tabs().setActive(key)
       })
+    },
+    /**
+     * A tab is about to open. When its pane already selects it, the open changes no selection, so the New tab the pane
+     * shows over it is replaced here; any other open replaces it by becoming the selection.
+     */
+    opening(key: string) {
+      const pane = paneOfKey(key)
+
+      if (untrack(panes[pane].active) === key) dispatchNewTabs({ type: "open.selected", pane })
     },
     /** The new tab views of a pane, by id in strip order. */
     newTabs,

@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { advance, drain } from "../lib/clock"
 import { Directory, Document, Event, Info } from "@opencode/schema/config"
+import { Model } from "@opencode/schema/model"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { Job } from "@opencode/core/job"
@@ -30,7 +31,7 @@ import { Watcher } from "@opencode/core/filesystem/watcher"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { emptyConfigLayer, emptyMcpLayer, testLocationLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
-import { tmpdir } from "../fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "../fixture/tmpdir"
 import { tempGlobalLayer } from "../fixture/global"
 import { offlineModels } from "../fixture/models"
 import { testEffect } from "../lib/effect"
@@ -73,6 +74,25 @@ const it = testEffect(
 const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigCommandPlugin.Plugin", () => {
+  for (const item of [
+    {
+      name: "merges a separate legacy variant",
+      frontmatter: "model: example/chat\nvariant: high",
+      model: "example/chat#high",
+    },
+    {
+      name: "keeps an embedded variant over a separate one",
+      frontmatter: "model: example/chat#low\nvariant: high",
+      model: "example/chat#low",
+    },
+  ]) {
+    it.live(`Markdown command ${item.name}`, () =>
+      Effect.gen(function* () {
+        expect(yield* runMarkdownCommand(item.frontmatter)).toEqual([Model.Ref.parse(item.model)])
+      }),
+    )
+  }
+
   for (const item of [
     ...["$&", "$$", "$`", "$'"].flatMap((input) => [
       { template: "Explain $ARGUMENTS.", input, expected: `Explain ${input}.` },
@@ -516,6 +536,45 @@ function watchReady(config: Config.Interface, directory: string) {
       orElse: () => Effect.fail(new Error("timed out waiting for the config watch to become ready")),
     }),
   )
+}
+
+function runMarkdownCommand(frontmatter: string) {
+  return Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const fs = yield* FSUtil.Service
+    yield* fs.makeDirectory(path.join(tmp.path, "commands"))
+    yield* fs.writeFileString(path.join(tmp.path, "commands", "probe.md"), `---\n${frontmatter}\n---\nProbe.`)
+    const command = yield* Command.Service
+    const models: Model.Ref[] = []
+    yield* ConfigCommandPlugin.Plugin.effect(
+      host({
+        command: {
+          list: () => Effect.die("unused command.list"),
+          transform: command.transform,
+          reload: command.reload,
+        },
+        session: {
+          switchModel: (input) => Effect.sync(() => void models.push(input.model)),
+          prompt: (input) =>
+            Effect.succeed(
+              SessionInbox.User.make({
+                id: SessionMessage.ID.make("msg_test"),
+                sessionID: input.sessionID,
+                time: { created: DateTime.makeUnsafe(0) },
+                type: "user",
+                payload: { text: input.text },
+                delivery: "steer",
+              }),
+            ),
+        },
+      }),
+    ).pipe(Effect.provide(Config.testLayer([directoryEntry(tmp.path)])))
+    yield* command.execute({
+      name: "probe",
+      invocation: { sessionID: Session.ID.make("ses_test"), prompt: { text: "" }, delivery: "steer" },
+    })
+    return models
+  })
 }
 
 function directoryEntry(directory: string) {

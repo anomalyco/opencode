@@ -1,217 +1,23 @@
-[data-component="interface-mode"] {
+/* The tab layout cards and the navigation prototype's Tabs and List cards: a window that shows only its navigation,
+   fading into the name. */
+:is([data-component="interface-mode"], [data-component="navigation-mode"]) {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-[data-slot="interface-mode-option"] {
-  --preview-fill: var(--v2-background-bg-layer-02);
-  --preview-ink: var(--v2-background-bg-layer-03);
-  --preview-ink-strong: var(--v2-background-bg-layer-04);
+:is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]) {
   position: relative;
   display: flex;
-  overflow: hidden;
   /* A fixed size keeps the row from resizing when the chosen layout changes the panel width. */
   width: 120px;
   min-width: 0;
   flex-direction: column;
   box-sizing: border-box;
-  border: 1px solid var(--v2-border-border-base);
-  border-radius: 8px;
-  background-color: var(--v2-background-bg-layer-02);
-  cursor: pointer;
-  transition: border-color 120ms ease;
-
-  &:hover {
-    border-color: var(--v2-border-border-strong);
-  }
-
-  &[data-checked] {
-    --preview-ink-strong: color-mix(in srgb, var(--v2-background-bg-accent) 70%, transparent);
-    border-color: var(--v2-border-border-focus);
-
-    /* An inset shadow on the card paints under the opaque name row, so the inner ring sits on top instead. */
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: 7px;
-      box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
-      pointer-events: none;
-    }
-  }
-
-  &:has(input:focus-visible) {
-    outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 2px;
-  }
-
-  input {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  :where(span, i) {
-    display: block;
-    flex-shrink: 0;
-  }
-}
-
-[data-slot="interface-mode-sketch"] {
-  display: flex;
-  overflow: hidden;
-  height: 52px;
-  margin: 10px 10px 0;
-  border: 0.5px solid var(--v2-border-border-base);
-  border-bottom: 0;
-  border-radius: 4px 4px 0 0;
-  background-color: var(--v2-background-bg-base);
-
-  &[data-mode="top"] {
-    flex-direction: column;
-  }
-
-  [data-slot="preview-strip"] {
-    display: flex;
-    gap: 3px;
-    padding: 4px 5px;
-    border-bottom: 0.5px solid var(--v2-border-border-base);
-    background-color: var(--v2-overlay-simple-overlay-pressed);
-
-    [data-slot="preview-tab"] {
-      width: 18px;
-    }
-  }
-
-  [data-slot="preview-rail"] {
-    display: flex;
-    width: 28px;
-    flex-direction: column;
-    gap: 4px;
-    padding: 6px 5px;
-    border-inline-end: 0.5px solid var(--v2-border-border-base);
-    background-color: var(--v2-overlay-simple-overlay-pressed);
-  }
-
-  [data-slot="preview-tab"] {
-    height: 5px;
-    border-radius: 2px;
-    background-color: color-mix(in srgb, var(--preview-ink-strong) 45%, transparent);
-
-    &[data-active] {
-      background-color: var(--preview-ink-strong);
-    }
-  }
-
-  &[data-mode="inbox"] [data-slot="preview-tab"] {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    background-color: transparent;
-
-    &::after {
-      content: "";
-      height: 3px;
-      flex: 1;
-      border-radius: 1.5px;
-      background-color: color-mix(in srgb, var(--preview-ink-strong) 45%, transparent);
-    }
-
-    &[data-active]::after {
-      background-color: var(--preview-ink-strong);
-    }
-  }
-
-  i[data-status] {
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-
-    &[data-status="approval"] {
-      background-color: var(--v2-state-fg-warning);
-    }
-
-    &[data-status="done"] {
-      background-color: var(--v2-state-fg-success);
-    }
-
-    &[data-status="working"] {
-      background-color: var(--v2-state-fg-info);
-    }
-  }
-
-  [data-slot="preview-page"] {
-    display: flex;
-    min-width: 0;
-    min-height: 0;
-    flex: 1;
-    flex-direction: column;
-    gap: 4px;
-    padding: 6px;
-  }
-
-  [data-slot="preview-line"] {
-    width: 80%;
-    height: 3px;
-    border-radius: 1.5px;
-    background-color: var(--preview-ink);
-
-    & + [data-slot="preview-line"] {
-      width: 56%;
-    }
-  }
-
-  [data-slot="preview-composer"] {
-    height: 8px;
-    margin-top: auto;
-    border-radius: 3px;
-    background-color: var(--preview-fill);
-    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
-  }
-}
-
-[data-slot="interface-mode-name"] {
-  padding: 6px 10px;
-  border-top: 0.5px solid var(--v2-border-border-base);
-  font-size: 12px;
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-compact);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--v2-text-text-muted);
-  background-color: var(--v2-background-bg-base);
-  transition: color 120ms ease;
-
-  [data-slot="interface-mode-option"]:hover &,
-  [data-checked] & {
-    color: var(--v2-text-text-base);
-  }
-}
-
-/* The navigation prototype's Tabs and List cards: a window that shows only its navigation, fading into the name. */
-[data-component="navigation-mode"] {
-  display: flex;
-  gap: 12px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-[data-slot="navigation-mode-option"] {
-  position: relative;
-  display: flex;
-  width: 120px;
-  flex-direction: column;
-  box-sizing: border-box;
-  border: 1px solid var(--v2-border-border-base);
+  border: 1px solid var(--v2-border-border-muted);
   border-radius: 8px;
   background-color: var(--v2-background-bg-base);
   cursor: pointer;
@@ -221,9 +27,12 @@
     border-color: var(--v2-border-border-strong);
   }
 
+  &:not([data-checked]) :is([data-slot="interface-mode-sketch"], [data-slot="navigation-mode-sketch"]) {
+    opacity: 0.45;
+  }
+
   &[data-checked] {
-    border-color: var(--v2-border-border-focus);
-    box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
+    border-color: var(--v2-border-border-strong);
   }
 
   &:has(input:focus-visible) {
@@ -247,7 +56,7 @@
 
 /* Color gives the structure: the window on a lighter layer, its navigation lighter again, the chosen tab or row
    brightest. Hairlines only finish the edges. */
-[data-slot="navigation-mode-sketch"] {
+:is([data-slot="interface-mode-sketch"], [data-slot="navigation-mode-sketch"]) {
   position: relative;
   display: flex;
   overflow: hidden;
@@ -256,10 +65,16 @@
   border-radius: 5px 5px 0 0;
   background-color: var(--v2-background-bg-layer-01);
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
-  mask-image: linear-gradient(to bottom, #000 40%, transparent 95%);
+  /* Fully faded before the name's text starts. */
+  mask-image: linear-gradient(to bottom, #000 45%, transparent calc(100% - 12px));
 
-  &[data-mode="tabs"] {
+  &[data-mode="top"] {
     flex-direction: column;
+  }
+
+  &[data-mode="side"] [data-slot="sketch-row"][data-active] {
+    height: 6px;
+    margin-block: 1px;
   }
 
   [data-slot="sketch-tabs"] {
@@ -290,6 +105,23 @@
     padding: 5px 4px;
     background-color: var(--v2-background-bg-layer-02);
     box-shadow: inset -0.5px 0 0 var(--v2-border-border-muted);
+  }
+
+  [data-slot="sketch-heading"] {
+    width: 14px;
+    height: 2px;
+    margin: 2px 2px 0;
+    border-radius: 1px;
+    background-color: var(--v2-text-text-faint);
+    opacity: 0.5;
+
+    & + [data-slot="sketch-row"] {
+      margin-top: 1px;
+    }
+
+    &:not(:first-child) {
+      margin-top: 3px;
+    }
   }
 
   /* Even sizes keep the square and the line on the same center line. */
@@ -327,22 +159,103 @@
         display: none;
       }
     }
+
+    /* A title and a shorter detail line. */
+    &[data-detail] {
+      height: 10px;
+      align-items: flex-start;
+
+      &::before {
+        margin-top: 1px;
+      }
+
+      &[data-status]::before {
+        border-radius: 50%;
+      }
+
+      &::after {
+        height: 6px;
+        background:
+          linear-gradient(var(--v2-background-bg-layer-04) 0 0) top left / 100% 2px no-repeat,
+          linear-gradient(var(--v2-background-bg-layer-04) 0 0) bottom left / 60% 2px no-repeat;
+      }
+    }
   }
 }
 
-[data-slot="navigation-mode-name"] {
+/* Only the chosen card shows accent. */
+[data-checked] > [data-mode] {
+  &:is([data-mode="top"], [data-mode="side"]) :is([data-slot="sketch-tab"], [data-slot="sketch-row"])[data-active] {
+    background-color: color-mix(in srgb, var(--v2-background-bg-accent) 40%, transparent);
+    box-shadow: none;
+  }
+
+  &[data-mode="list"] [data-slot="sketch-row"]::before {
+    background-color: color-mix(in srgb, var(--v2-background-bg-accent) 60%, transparent);
+  }
+
+  [data-slot="sketch-row"][data-status="approval"]::before {
+    background-color: var(--v2-background-bg-accent);
+  }
+
+  [data-slot="sketch-row"][data-status="done"]::before {
+    background-color: color-mix(in srgb, var(--v2-background-bg-accent) 60%, transparent);
+  }
+
+  [data-slot="sketch-row"][data-status="working"]::before {
+    background-color: color-mix(in srgb, var(--v2-background-bg-accent) 30%, transparent);
+  }
+}
+
+:is([data-slot="interface-mode-name"], [data-slot="navigation-mode-name"]) {
   margin-top: -14px;
   padding: 0 10px 8px;
   position: relative;
+  overflow: hidden;
   text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 12px;
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-compact);
   color: var(--v2-text-text-muted);
   transition: color 120ms ease;
 
-  [data-slot="navigation-mode-option"]:hover &,
+  :is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]):hover &,
   [data-checked] & {
     color: var(--v2-text-text-base);
+  }
+}
+
+/* Selection is a 2px neutral border and a check outside the corner, so it never reads as the blue keyboard ring. The
+   second pixel is an overlay, because an inset shadow would sit under the name's background. */
+:is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"])[data-checked]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-strong);
+  pointer-events: none;
+}
+
+:is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]) > [data-slot="mode-option-check"] {
+  position: absolute;
+  z-index: 1;
+  top: -7px;
+  inset-inline-end: -7px;
+  display: flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--v2-background-bg-accent);
+  color: var(--v2-text-text-contrast);
+  box-shadow: 0 0 0 2px var(--v2-background-bg-layer-01);
+}
+
+@media (forced-colors: active) {
+  :is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]) > [data-slot="mode-option-check"] {
+    border: 1px solid CanvasText;
   }
 }

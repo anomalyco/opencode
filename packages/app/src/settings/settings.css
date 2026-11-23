@@ -329,9 +329,14 @@
   outline: none;
 }
 
-.settings-about-version:hover::before,
-.settings-about-version:focus-visible::before {
+.settings-about-version:hover::before {
   background: var(--v2-background-bg-layer-02);
+}
+
+/* The ring follows the hover background, which reaches past the label. */
+.settings-about-version:focus-visible::before {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
 }
 
 .settings-about-version:disabled {
@@ -594,6 +599,12 @@
   container: settings-panel / inline-size;
 }
 
+/* The panel takes focus when a click lands on its text, and Chromium then rings it on the next key press. It's a scroll
+   area, so focus shows on the controls inside it instead. */
+.settings-panel:focus-visible {
+  outline: none;
+}
+
 .settings-panel :is(input, textarea, [contenteditable="true"]) {
   user-select: text;
 }
@@ -608,6 +619,11 @@
   z-index: 10;
   padding: 40px 40px 0;
   background: var(--v2-background-bg-base);
+}
+
+/* Focus scrolled up stops below the sticky header and its 24px fade. tab-header.ts measures the header. */
+.settings-tab-body :is(a[href], button, input, select, textarea, [tabindex]) {
+  scroll-margin-block-start: calc(var(--settings-tab-header-height, 0px) + 24px);
 }
 
 .settings-tab-header::before {
@@ -1321,9 +1337,11 @@
 }
 
 .settings-providers-view-all {
+  align-self: flex-start;
   margin-top: 20px;
   padding: 0;
   border: 0;
+  border-radius: 4px;
   background: transparent;
   font-size: 13px;
   font-weight: 530;
@@ -1459,6 +1477,13 @@
 .settings-project-card:focus-within,
 .settings-project-card[data-menu="true"] {
   background: var(--v2-background-bg-layer-02);
+}
+
+/* The row's button opens the project, so the ring goes on the whole row, inset like the other full-width rows. The
+   options button keeps its own ring. */
+.settings-project-card:has(> button:first-child:focus-visible) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
 }
 .settings-models {
   gap: 12px;
@@ -1923,7 +1948,9 @@
   min-height: 0;
   flex-direction: column;
   gap: 12px;
-  overflow: hidden;
+  /* Clipped for the removal animation, with room for a focus ring on the row's edge controls. */
+  overflow: clip;
+  overflow-clip-margin: 5px;
   transition:
     padding-bottom 150ms ease-out,
     margin-bottom 150ms ease-out,
@@ -2256,8 +2283,16 @@
   padding-inline: 0 !important;
 }
 
+/* The panel scrolls, so its sides are padded by 5px and taken back by the margin: room for the focus ring of a control
+   at its edge, such as Check for updates and How to add skills. The tabs root's overflow-clip-margin covers the rest. */
 .settings-subtabs > [data-slot="tabs-v2-content"] {
   padding-top: 24px;
+  padding-inline: 5px;
+  margin-inline: -5px;
+}
+
+.settings-subtabs > [data-slot="tabs-v2-content"]:focus-visible {
+  outline-offset: -2px;
 }
 
 .settings-extension-row {

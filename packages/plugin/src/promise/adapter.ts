@@ -405,6 +405,11 @@ export function fromPromise(plugin: Plugin) {
                   }),
                 ),
             },
+            automation: {
+              create: adaptApiMethod(ExperimentalEndpoints["automation.create"], host.experimental.automation.create),
+              list: adaptApiMethod(ExperimentalEndpoints["automation.list"], host.experimental.automation.list),
+              delete: adaptApiMethod(ExperimentalEndpoints["automation.delete"], host.experimental.automation.delete),
+            },
           },
           generate: {
             text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),
@@ -470,6 +475,7 @@ export function fromPromise(plugin: Plugin) {
                       update: (input) => {
                         if (!("authorize" in input)) return editor.method.update(input)
                         const refresh = input.refresh
+                        const revoke = input.revoke
                         editor.method.update({
                           ...input,
                           authorize: (answer) =>
@@ -496,6 +502,11 @@ export function fromPromise(plugin: Plugin) {
                             refresh === undefined
                               ? undefined
                               : (credential) => Effect.promise(() => refresh(credential)),
+                          revoke:
+                            revoke === undefined
+                              ? undefined
+                              : (credential) =>
+                                  Effect.tryPromise({ try: () => revoke(credential), catch: (error) => error }),
                         })
                       },
                       remove: editor.method.remove,

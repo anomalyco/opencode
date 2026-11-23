@@ -53,7 +53,6 @@ import { InstructionDiscovery } from "./instruction-discovery.js"
 import { InstructionBuiltIns } from "./instructions/builtins.js"
 import { SessionInstructions } from "./session/instructions.js"
 import { McpTool } from "./tool/mcp.js"
-import { ReadToolFileSystem } from "./tool/read-filesystem.js"
 import { Tool } from "./tool.js"
 import { ToolOutput } from "./tool-output.js"
 import { Vcs } from "./vcs.js"
@@ -107,7 +106,6 @@ const nodes = [
   Generate.node,
   Voice.node,
   UsageLimits.node,
-  ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,
   SessionRunnerModel.node,

@@ -21,7 +21,7 @@ function SettingsStory(props: { tab: SettingsRootTab; subtab?: string; locked?: 
         <MemoryRouter
           history={history}
           root={(rootProps) => (
-            <LayoutProvider>
+            <LayoutProvider open={() => undefined}>
               <SettingsSurfaceProvider>{rootProps.children}</SettingsSurfaceProvider>
             </LayoutProvider>
           )}

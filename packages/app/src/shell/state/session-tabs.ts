@@ -130,6 +130,18 @@ export function moveSessionTab(current: SessionTabs, tab: string, pane: SessionP
   })
 }
 
+/**
+ * Adds `tab` to the strip without selecting it or touching the preview: directly after `after` when the strip stores
+ * that tab, else at the end. A tab the strip stores already stays where it is.
+ */
+export function appendSessionTab(current: SessionTabs, tab: string, after?: string): SessionTabs {
+  if (current.all.includes(tab)) return current
+  const index = after === undefined ? -1 : current.all.indexOf(after)
+  const position = index === -1 ? current.all.length : index + 1
+
+  return { ...current, all: [...current.all.slice(0, position), tab, ...current.all.slice(position)] }
+}
+
 /** The tab a pane shows: the active tab in its pane, else the pane's own selection. */
 export function sessionPaneTab(tabs: SessionTabs, pane: SessionPane) {
   if (tabs.active !== undefined && sessionTabPane(tabs, tabs.active) === pane) return tabs.active

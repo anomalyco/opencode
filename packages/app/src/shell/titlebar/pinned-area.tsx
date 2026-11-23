@@ -1,4 +1,5 @@
 import { createEffect, createMemo, For, Match, Show, startTransition, Switch, type JSX } from "solid-js"
+import { createOverlayFocus } from "@opencode/ui/context/overlay-focus"
 import { createStore } from "solid-js/store"
 import { Key } from "@solid-primitives/keyed"
 import type { SessionInfo } from "@opencode/client/promise"
@@ -325,6 +326,8 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
   const pins = usePins()
   const language = useLanguage()
   const [menu, setMenu] = createStore({ open: false })
+
+  const overlayFocus = createOverlayFocus()
   const open = () => !pins.state.collapsed[props.group.id]
 
   const trigger = (
@@ -334,7 +337,7 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
       data-group-color={props.group.color}
       aria-expanded={open()}
       aria-label={props.group.name}
-      class="flex shrink-0 items-center rounded-[6px] focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+      class="flex shrink-0 items-center rounded-[6px] focus-visible:-outline-offset-2"
       classList={{
         "size-7 justify-center hover:bg-v2-overlay-simple-overlay-hover": props.orientation === "horizontal",
         "h-7 w-full gap-2 ps-2 pe-8 text-start group-hover/row:bg-v2-overlay-simple-overlay-hover": props.orientation === "vertical",
@@ -342,6 +345,7 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
       onClick={() => pins.toggle(props.group.id)}
       onContextMenu={(event) => {
         event.preventDefault()
+        overlayFocus.openChanged(true)
         setMenu("open", true)
       }}
     >
@@ -384,7 +388,10 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
         gutter={4}
         placement={props.orientation === "vertical" ? "bottom-end" : "bottom-start"}
         open={menu.open}
-        onOpenChange={(value) => setMenu("open", value)}
+        onOpenChange={(value) => {
+          overlayFocus.openChanged(value)
+          setMenu("open", value)
+        }}
       >
         {/* Side tabs open the menu from a ⋯ at the row's end too; right-click opens it in both layouts. */}
         <Show
@@ -411,7 +418,7 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
           </Tooltip>
         </Show>
         <Menu.Portal>
-          <Menu.Content class="w-48">
+          <Menu.Content class="w-48" onCloseAutoFocus={(event) => overlayFocus.restore(event)}>
             <GroupEditor group={props.group} />
             <Menu.Separator />
             <Menu.Item onSelect={() => pins.ungroup(props.group.id)}>{language.t("tabs.groups.ungroup")}</Menu.Item>

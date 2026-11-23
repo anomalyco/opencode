@@ -109,6 +109,7 @@ export const promiseOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",
+  "machine.link",
   "generate.textLegacy",
 ])
 export const effectOmitEndpoints = new Set([
@@ -120,5 +121,6 @@ export const effectOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",
+  "machine.link",
   "generate.textLegacy",
 ])
