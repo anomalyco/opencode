@@ -901,7 +901,7 @@ function ViewerShell(props: {
         [props.class ?? ""]: !!props.class,
       }}
       ref={(el) => (props.viewer.wrapper = el)}
-      tabIndex={0}
+      tabIndex={-1}
       onPointerDown={props.viewer.find.onPointerDown}
       onFocus={props.viewer.find.onFocus}
     >

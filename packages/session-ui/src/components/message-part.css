@@ -723,6 +723,12 @@
   }
 }
 
+/* Tool output regions take focus so the keyboard can scroll them, and draw no ring. */
+[data-component="tool-output"]:focus-visible,
+[data-slot="bash-scroll"]:focus-visible {
+  outline: none;
+}
+
 [data-component="tool-output"] {
   white-space: pre;
   padding: 0;

@@ -1137,6 +1137,18 @@ test("single extension rows stay aligned when switching tabs", async ({ page }) 
   }
 })
 
+test("a settings page takes focus from a click on its text without a ring around the whole page", async ({ page }) => {
+  const { settings } = await open(page)
+
+  const panel = settings.getByRole("tabpanel").filter({ has: page.getByRole("heading", { name: "Preferences" }) })
+
+  await panel.getByRole("heading", { name: "Preferences", exact: true }).click()
+  // Chromium matches :focus-visible on the focused page once a key is pressed; the controls inside show focus instead.
+  await page.keyboard.press("ArrowDown")
+  await expect(panel).toBeFocused()
+  await expect(panel).toHaveCSS("outline-style", "none")
+})
+
 test.describe("pages open before slow data", () => {
   test("worktrees", async ({ page }) => {
     const { settings } = await open(page)

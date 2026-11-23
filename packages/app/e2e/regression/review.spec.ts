@@ -37,7 +37,7 @@ test("review toggle shows its tooltip with the side panel open or closed", async
   await expect(tooltip).toBeVisible()
 })
 
-test("review rings stay visible on the mode trigger, file tree, and diff", async ({ page }) => {
+test("review rings stay visible on the mode trigger and file tree, and none surrounds the diff", async ({ page }) => {
   await openSession(page, {
     name: "ReviewModeFocus",
     vcsDiff: [fileDiff("alpha.ts"), fileDiff("beta.ts")],
@@ -73,10 +73,21 @@ test("review rings stay visible on the mode trigger, file tree, and diff", async
 
   const diff = panel.locator('[data-component="file"][data-mode="diff"]')
 
-  await diff.press("Shift+Tab")
+  // The diff has no ring, so it is not a Tab stop: Tab passes over it in both directions.
+  await expect(diff).toHaveAttribute("tabindex", "-1")
+  await mode.focus()
   await page.keyboard.press("Tab")
+  await expect(diff).not.toBeFocused()
+  await page.keyboard.press("Shift+Tab")
+  await expect(mode).toBeFocused()
+
+  // It still takes focus so the keyboard can scroll and search it, without a ring around the whole viewer. A click on a diff line opens the comment editor, so focus it directly.
+  await diff.focus()
   await expect(diff).toBeFocused()
-  await expect.poll(() => diff.evaluate((element) => getComputedStyle(element, "::after").outlineOffset)).toBe("-2px")
+  await page.keyboard.press("ArrowDown")
+  await expect(diff).toBeFocused()
+  await expect(diff).toHaveCSS("outline-style", "none")
+  await expect.poll(() => diff.evaluate((element) => getComputedStyle(element, "::after").outlineStyle)).toBe("none")
 })
 
 for (const view of ["desktop", "mobile"] as const) {

@@ -588,6 +588,18 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         [data-file-tree-virtualized-scroll] {
           overscroll-behavior: contain;
         }
+        /* @pierre/trees reveals middle-truncation markers at height > 1lh, which trips on subpixel rounding at
+           fractional UI zoom; overflowing text wraps to >= 2lh, so 1.5lh sits cleanly between fitting and overflowing rows. */
+        [data-truncate-marker] {
+          opacity: 0;
+          transition: opacity var(--truncate-internal-marker-fade-out-duration) ease-in-out;
+        }
+        @container measure (height > 1.5lh) {
+          [data-truncate-marker] {
+            opacity: 1;
+            transition: opacity var(--truncate-internal-marker-fade-in-duration) ease-in-out;
+          }
+        }
       `,
       onExpansionChange(change) {
         if (change.expanded) dispatchTree({ type: "dir.expanded", dir: change.path })
