@@ -931,7 +931,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Poveži",
   "provider.connect.breadcrumb.label": "Koraci povezivanja",
   "provider.connect.methods.description": "Odaberite način povezivanja za {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Pokušaj ponovno",
   "provider.connect.console.serviceKeyDescription": "Povežite se API ključem servisnog računa iz OpenCode Consolea.",

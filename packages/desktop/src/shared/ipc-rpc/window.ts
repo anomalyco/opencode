@@ -59,6 +59,12 @@ export const WindowSetTaskbarProgress = Rpc.make("WindowSetTaskbarProgress", {
   payload: { mode: Schema.Literals(["none", "indeterminate", "paused", "error"]) },
 })
 
+export const WindowShowToast = Rpc.make("WindowShowToast", {
+  payload: { tag: Schema.String, title: Schema.String, body: Schema.String },
+})
+
+export const WindowDismissToast = Rpc.make("WindowDismissToast", { payload: { tag: Schema.String } })
+
 export const WindowRpcs = RpcGroup.make(
   WindowRequestAttention,
   WindowRequestMicrophone,
@@ -78,4 +84,6 @@ export const WindowRpcs = RpcGroup.make(
   WindowSetTrafficLightsPosition,
   WindowSetTaskbarBadge,
   WindowSetTaskbarProgress,
+  WindowShowToast,
+  WindowDismissToast,
 )

@@ -934,7 +934,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Savienot",
   "provider.connect.breadcrumb.label": "Savienošanas soļi",
   "provider.connect.methods.description": "Izvēlieties, kā savienot {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Mēģināt vēlreiz",
   "provider.connect.console.serviceKeyDescription":

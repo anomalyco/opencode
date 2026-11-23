@@ -40,7 +40,7 @@ export interface Interface {
    * names its machine when the text does.
    */
   readonly withLock: (
-    targets: ReadonlyArray<FileAccess.Place | string>,
+    targets: ReadonlyArray<Environment.Place | string>,
   ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E | Environment.Failed, R>
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
   /** Add bytes to the end of a file, creating it when missing. */

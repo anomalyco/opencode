@@ -929,7 +929,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Повезивање",
   "provider.connect.breadcrumb.label": "Кораци повезивања",
   "provider.connect.methods.description": "Изаберите начин повезивања за {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Покушај поново",
   "provider.connect.console.serviceKeyDescription":

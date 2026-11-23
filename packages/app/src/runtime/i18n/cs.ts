@@ -943,7 +943,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Připojit",
   "provider.connect.breadcrumb.label": "Kroky připojení",
   "provider.connect.methods.description": "Vyberte, jak připojit {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Zkusit znovu",
   "provider.connect.console.serviceKeyDescription": "Připojte se pomocí API klíče servisního účtu z OpenCode Console.",

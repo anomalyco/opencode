@@ -919,7 +919,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Lidhu",
   "provider.connect.breadcrumb.label": "Hapat e lidhjes",
   "provider.connect.methods.description": "Zgjidhni si të lidhni {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Provo sërish",
   "provider.connect.console.serviceKeyDescription":

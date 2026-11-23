@@ -942,7 +942,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Connecta",
   "provider.connect.breadcrumb.label": "Passos de connexió",
   "provider.connect.methods.description": "Trieu com voleu connectar {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Torna-ho a provar",
   "provider.connect.console.serviceKeyDescription":

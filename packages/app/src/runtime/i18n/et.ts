@@ -910,7 +910,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Ühenda",
   "provider.connect.breadcrumb.label": "Ühendamise sammud",
   "provider.connect.methods.description": "Vali, kuidas pakkuja {{provider}} ühendada.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Proovi uuesti",
   "provider.connect.console.serviceKeyDescription": "Ühenda OpenCode Console'i teenusekonto API-võtmega.",

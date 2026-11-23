@@ -1050,7 +1050,7 @@ describe("SessionRestart background recovery", () => {
       const recovery = (path: string) => ({ kind: "image" as const, sessionID, path, model: "test/painter" })
       yield* jobs.start({
         id: "image_done",
-        type: "experimental_image_generate",
+        type: "generate_image",
         recovery: recovery("/tmp/done.png"),
         run: Effect.succeed("Image request finished. Saved image: /tmp/done.png (test/painter)."),
       })
@@ -1058,7 +1058,7 @@ describe("SessionRestart background recovery", () => {
       yield* jobs.wait({ id: "image_done" })
       yield* jobs.start({
         id: "image_running",
-        type: "experimental_image_generate",
+        type: "generate_image",
         recovery: recovery("/tmp/running.png"),
         run: Effect.never,
       })
@@ -1088,7 +1088,7 @@ describe("SessionRestart background recovery", () => {
       const videoID = VideoID.create()
       yield* jobs.start({
         id: videoID,
-        type: "experimental_video_generate",
+        type: "generate_video",
         recovery: { kind: "video", sessionID, path: "/tmp/running.mp4", videoID },
         run: Effect.never,
       })

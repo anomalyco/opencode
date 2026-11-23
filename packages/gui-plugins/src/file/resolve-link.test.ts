@@ -111,4 +111,20 @@ describe("checkFileLinkExists", () => {
     expect(await check("\\\\host\\share\\x.ts")).toBe(false)
     expect(await check("console.log")).toBe(false)
   })
+
+  test("checks a home path once the files API expands it", async () => {
+    const check = (href: string) =>
+      checkFileLinkExists({
+        files: {
+          ...files,
+          exists: async (path: string) => path === "/Users/me/Downloads/clip.mp4",
+          resolve: (path: string) => path.replace(/^~/, "/Users/me"),
+        },
+        href,
+        signal: new AbortController().signal,
+      })
+
+    expect(await check("~/Downloads/clip.mp4")).toBe(true)
+    expect(await check("~/Downloads/missing.mp4")).toBe(false)
+  })
 })

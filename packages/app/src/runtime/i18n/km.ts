@@ -909,7 +909,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "ភ្ជាប់",
   "provider.connect.breadcrumb.label": "ជំហានភ្ជាប់",
   "provider.connect.methods.description": "ជ្រើសរបៀបភ្ជាប់ {{provider}}។",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "ព្យាយាមម្តងទៀត",
   "provider.connect.console.serviceKeyDescription": "ភ្ជាប់ដោយប្រើសោ API គណនីសេវាកម្មពី OpenCode Console។",

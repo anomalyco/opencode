@@ -912,7 +912,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Birikdir",
   "provider.connect.breadcrumb.label": "Birikdirme ädimleri",
   "provider.connect.methods.description": "{{provider}} üpjün edijisini nähili birikdirmelidigini saýlaň.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Täzeden synanyşyň",
   "provider.connect.console.serviceKeyDescription": "OpenCode Console-dan hyzmat hasabynyň API açary bilen birikdiriň.",

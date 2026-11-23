@@ -8,6 +8,9 @@ export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("Deep
   urls: Schema.Array(Schema.String),
 }) {}
 
+// A Windows toast this window posted was clicked.
+export class ToastActivated extends Schema.TaggedClass<ToastActivated>()("ToastActivated", { tag: Schema.String }) {}
+
 export class MenuCommandTriggered extends Schema.TaggedClass<MenuCommandTriggered>()("MenuCommandTriggered", {
   id: Schema.String,
   /** A key equivalent chose the item, rather than a click on the menu. */
@@ -83,6 +86,7 @@ export class SystemResumed extends Schema.TaggedClass<SystemResumed>()("SystemRe
 
 export const DesktopEvent = Schema.Union([
   DeepLinksOpened,
+  ToastActivated,
   SidecarChanged,
   SystemResumed,
   MenuCommandTriggered,

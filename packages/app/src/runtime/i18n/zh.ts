@@ -953,7 +953,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "连接",
   "provider.connect.breadcrumb.label": "连接步骤",
   "provider.connect.methods.description": "选择连接 {{provider}} 的方式。",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "重试",
   "provider.connect.console.serviceKeyDescription": "使用 OpenCode Console 中的服务账户 API 密钥进行连接。",

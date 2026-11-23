@@ -917,7 +917,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "დაკავშირება",
   "provider.connect.breadcrumb.label": "დაკავშირების ნაბიჯები",
   "provider.connect.methods.description": "აირჩიეთ, როგორ დააკავშიროთ {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "ხელახლა ცდა",
   "provider.connect.console.serviceKeyDescription":

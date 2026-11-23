@@ -923,7 +923,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Qoş",
   "provider.connect.breadcrumb.label": "Qoşulma addımları",
   "provider.connect.methods.description": "{{provider}} provayderini necə qoşacağınızı seçin.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Yenidən cəhd et",
   "provider.connect.console.serviceKeyDescription": "OpenCode Console-dan xidmət hesabı API açarı ilə qoşulun.",

@@ -16,7 +16,7 @@ import { AssistantReasoningContent } from "../../message/message-content"
 import {
   CurrentReadToolGroup,
   currentSkillName,
-  displayDirectory,
+  displayFolder,
   scrollParent,
   toolInput,
   toolMetadata,
@@ -555,7 +555,7 @@ function workEvents(parts: ActivityGroupPart[]) {
 function searchTrigger(tool: SessionMessageAssistantTool, i18n: UiI18n) {
   const input = toolInput(currentToolInput(tool))
   const metadata = toolMetadata(currentToolMetadata(tool))
-  const subtitle = displayDirectory(input.path ?? "/")
+  const subtitle = displayFolder(input.path)
   const name = toolRule(tool).name
 
   if (name === "list") return { title: i18n.t("ui.tool.list"), subtitle, args: [], count: undefined }

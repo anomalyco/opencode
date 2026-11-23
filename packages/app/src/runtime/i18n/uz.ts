@@ -923,7 +923,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Ulanish",
   "provider.connect.breadcrumb.label": "Ulanish bosqichlari",
   "provider.connect.methods.description": "{{provider}} qanday ulanishini tanlang.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Qayta urinish",
   "provider.connect.console.serviceKeyDescription": "OpenCode Console’dagi xizmat hisobi API kaliti orqali ulaning.",

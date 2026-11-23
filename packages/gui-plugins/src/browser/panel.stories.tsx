@@ -130,9 +130,9 @@ export const LoadFailed = { args: { scenario: "Failed" } }
 
 export const Suspended = { args: { scenario: "Suspended" } }
 
-// Comments: open Browser options › More tools › Comment on part of the page, pick Save changes, type, then hover the
-// check button. Enter attaches the comment; Mod+Enter attaches and sends it, labelled by how the session takes it now.
-// "Add page to session" in the same menu opens the page note editor, with the same two actions.
+// Comments: press Comment on part of the page in the bar, pick Save changes, type, then hover the check button. Enter
+// attaches the comment; Mod+Enter attaches and sends it, labelled by how the session takes it now. "Add page to
+// session" under Browser options opens the page note editor, with the same two actions.
 
 /** The session is idle: Mod+Enter reads "Send comment". */
 export const CommentSend = { args: { scenario: "Page", delivery: "Send" } }

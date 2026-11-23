@@ -6,7 +6,7 @@ import { Identity } from "./identity.js"
 import type { Machine } from "./index.js"
 import { Machines } from "./machines.js"
 import { Noise } from "./noise.js"
-import { FromWorker, ToWorker } from "./wire.js"
+import { FromWorker, Hello, ToWorker } from "./wire.js"
 
 // The handshake that opens a link between the home (the OpenCode server) and a machine that connects to it: a worker
 // today, any client later. The side that opens the connection calls `dial`; the home calls `accept`. Both end holding
@@ -30,6 +30,7 @@ import { FromWorker, ToWorker } from "./wire.js"
 // Bytes are copied on the way in and on the way out, as in noise.ts.
 
 const text = (value: string) => new TextEncoder().encode(value)
+const PROTOCOL = Hello.fields.protocol.literal
 const PROLOGUE = text("opencode-link-v1")
 const HOME = text("opencode-link-v1/home:")
 const MACHINE = text("opencode-link-v1/machine:")
@@ -122,9 +123,15 @@ export const accept = Effect.fn("Link.accept")(
 export const serve = Effect.fn("Link.serve")(function* (carrier: Carrier, fixed: Fixed = {}) {
   const link = yield* Effect.gen(function* () {
     const accepted = yield* handshake(carrier, fixed)
-    const hello = yield* Effect.flatMap(Frames.read(carrier, accepted.receive), fromWorker.decode)
-    if (hello.type !== "hello") return yield* new Refused()
-    return { ...accepted, hello }
+    const message = yield* Effect.flatMap(Frames.read(carrier, accepted.receive), helloMessage.decode)
+    const version = yield* Schema.decodeUnknownEffect(helloProtocol)(message)
+    if (version.protocol !== PROTOCOL) {
+      yield* Effect.logWarning(
+        `Machine ${accepted.machine} uses protocol ${version.protocol}; this home requires protocol ${PROTOCOL}. The worker and the home must be the same version.`,
+      )
+      return yield* new Refused()
+    }
+    return { ...accepted, hello: yield* Schema.decodeUnknownEffect(Hello)(message) }
   }).pipe(
     Effect.timeout(DEADLINE),
     Effect.catchCause(() => Effect.fail(new Refused())),
@@ -244,6 +251,8 @@ const json = <T>(schema: Schema.Codec<T, string>): Frames.Codec<T, T> => ({
     ),
   encode: (message) => Effect.map(Schema.encodeEffect(schema)(message), text),
 })
+const helloMessage = json(Schema.fromJsonString(Schema.Unknown))
+const helloProtocol = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Number })
 const fromWorker = json(Schema.fromJsonString(FromWorker))
 const toWorker = json(Schema.fromJsonString(ToWorker))
 

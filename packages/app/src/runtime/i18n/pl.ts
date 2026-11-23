@@ -957,7 +957,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Połącz",
   "provider.connect.breadcrumb.label": "Kroki połączenia",
   "provider.connect.methods.description": "Wybierz sposób połączenia z {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Spróbuj ponownie",
   "provider.connect.console.serviceKeyDescription": "Połącz za pomocą klucza API konta usługi z OpenCode Console.",

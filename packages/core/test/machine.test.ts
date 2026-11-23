@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Fiber, PlatformError, Queue, Scheduler, Schema, Scope, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, PlatformError, Queue, Scheduler, Schema, Scope, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { TestClock } from "effect/testing"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { Environment } from "../src/environment/index"
 import { Machine } from "../src/machine/index"
+import messages from "./fixture/machine-v2.json"
 import { makeWorker } from "./fixture/machine-worker"
 import { environmentConformance } from "./lib/environment-conformance"
 import { it } from "./lib/effect"
@@ -23,7 +24,7 @@ const text = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
 const cause = (error: PlatformError.PlatformError) => error.reason.cause
 const hello = (processes: Machine.Hello["processes"] = []): Machine.Hello => ({
   type: "hello",
-  protocol: 1,
+  protocol: 2,
   os: "linux",
   arch: "x64",
   home: "/home/worker",
@@ -55,7 +56,7 @@ describe("machine driver", () => {
       const { worker, environment } = yield* connected
       const handle = yield* environment.spawner.spawn(command)
       const chunks = Array.from({ length: 256 }, (_, index) => new Uint8Array(4096).fill(index))
-      yield* Effect.forEach(chunks, worker.runs[0].print)
+      yield* Effect.forEach(chunks, (chunk) => worker.runs[0].print(chunk))
       yield* worker.runs[0].exit(0)
       const received = Buffer.concat(yield* Stream.runCollect(handle.all))
       expect(received.equals(Buffer.concat(chunks))).toBe(true)
@@ -249,7 +250,13 @@ describe("machine driver", () => {
           // One chunk, long enough that the paused connection handles it in several steps.
           Queue.offerAllUnsafe(messages, [
             { type: "started", id, pid: 7 },
-            ...Array.from({ length: 30 }, (_, offset) => ({ type: "output" as const, id, offset, data: bytes("a") })),
+            ...Array.from({ length: 30 }, (_, offset) => ({
+              type: "output" as const,
+              stream: "stdout" as const,
+              id,
+              offset,
+              data: bytes("a"),
+            })),
             { type: "exit", id, bytes: 30, code: 0 },
           ])
           for (let index = 0; index < pauses; index++) yield* Effect.yieldNow
@@ -479,11 +486,11 @@ describe("machine driver", () => {
     }),
   )
 
-  it.effect("rejects stdin at spawn", () =>
+  it.effect("rejects inherited stdin at spawn", () =>
     Effect.gen(function* () {
       const { worker, environment } = yield* connected
       const error = yield* environment.spawner
-        .spawn(ChildProcess.make("cat", [], { cwd: "/work", stdin: Stream.make(bytes("input")) }))
+        .spawn(ChildProcess.make("cat", [], { cwd: "/work", stdin: "inherit" }))
         .pipe(Effect.flip)
       expect(error.message).toContain("stdin is not supported on gpu")
       expect(worker.runs).toHaveLength(0)
@@ -522,16 +529,237 @@ describe("machine driver", () => {
   )
 })
 
+describe("machine stdio", () => {
+  const ready = Effect.gen(function* () {
+    const machine = Machine.make(Environment.ID.make("worker"))
+    const worker = yield* makeWorker(machine)
+    yield* worker.restore
+    return { worker, environment: machine.environment }
+  })
+
+  it.effect("writes chunks with acknowledgments, splits large writes, and closes stdin", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* ready
+      const handle = yield* environment.spawner.spawn(ChildProcess.make("cat", { cwd: "/work", stdin: "pipe" }))
+      const large = new Uint8Array(65537).fill(65)
+      yield* Stream.run(Stream.make(bytes("one"), large), handle.stdin)
+      expect(worker.runs[0].input.map((data) => data.length)).toEqual([3, 65536, 1])
+      expect(Buffer.concat(worker.runs[0].input)).toEqual(Buffer.concat([bytes("one"), large]))
+      expect(worker.runs[0].inputClosed).toBe(true)
+      const error = yield* Stream.run(Stream.make(bytes("late")), handle.stdin).pipe(Effect.flip)
+      expect(error.message).toContain("Broken pipe")
+      yield* worker.runs[0].exit(0)
+      expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+    }),
+  )
+
+  it.effect("supports configured streams without closing on done", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* ready
+      const writer = yield* Deferred.make<Fiber.Fiber<unknown, unknown>>()
+      const handle = yield* environment.spawner.spawn(
+        ChildProcess.make("cat", {
+          cwd: "/work",
+          stdin: {
+            stream: Stream.make(bytes("stream")).pipe(
+              Stream.onStart(Effect.withFiber((fiber) => Deferred.succeed(writer, fiber))),
+            ),
+            endOnDone: false,
+          },
+        }),
+      )
+      yield* Fiber.join(yield* Deferred.await(writer))
+      expect(worker.runs[0].input).toEqual([bytes("stream")])
+      expect(worker.runs[0].inputClosed).toBe(false)
+      yield* worker.runs[0].exit(0)
+      expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+    }),
+  )
+
+  it.effect("fails offline and unacknowledged input without resending after reconnect", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* ready
+      const handle = yield* environment.spawner.spawn(ChildProcess.make("cat", { cwd: "/work", stdin: "pipe" }))
+      worker.drop("home", "stdin")
+      const writing = yield* Effect.forkChild(Stream.run(Stream.make(bytes("once"), bytes("never")), handle.stdin), {
+        startImmediately: true,
+      })
+      expect(worker.runs[0].input).toEqual([bytes("once")])
+      yield* worker.cut
+      const unknown = yield* Fiber.join(writing).pipe(Effect.flip)
+      expect(cause(unknown)).toBeInstanceOf(Machine.Unknown)
+      expect(unknown.message).toContain("stdin operation's outcome is unknown")
+      expect(cause(yield* Stream.run(Stream.make(bytes("offline")), handle.stdin).pipe(Effect.flip))).toBeInstanceOf(
+        Machine.NotSent,
+      )
+      yield* worker.restore
+      expect(count(worker.received, "stdin")).toBe(1)
+      expect(count(worker.received, "start")).toBe(1)
+      yield* worker.runs[0].exit(0)
+      expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+    }),
+  )
+
+  it.effect("stops a process when a source stream loses an unacknowledged write", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* ready
+      worker.drop("home", "stdin")
+      const handle = yield* environment.spawner.spawn(
+        ChildProcess.make("cat", { cwd: "/work", stdin: Stream.make(bytes("once"), bytes("never")) }),
+      )
+      yield* Deferred.await(worker.runs[0].inputReceived)
+      expect(worker.runs[0].input).toEqual([bytes("once")])
+      yield* worker.cut
+      yield* worker.restore
+      const killed = cause(yield* handle.exitCode.pipe(Effect.flip))
+      expect(killed).toBeInstanceOf(CrossSpawnSpawner.KilledBySignal)
+      expect(killed instanceof CrossSpawnSpawner.KilledBySignal && killed.signal).toBe("SIGTERM")
+      expect(yield* handle.isRunning).toBe(false)
+      expect(worker.received.filter((message) => message.type === "kill")).toEqual([
+        { type: "kill", id: worker.runs[0].id, signal: "SIGTERM" },
+      ])
+      expect(count(worker.received, "stdin")).toBe(1)
+    }),
+  )
+
+  for (const failure of ["closed input", "source failure"]) {
+    it.effect(`keeps a process running after ${failure}`, () =>
+      Effect.gen(function* () {
+        const { worker, environment } = yield* ready
+        const release = yield* Deferred.make<void>()
+        const writer = yield* Deferred.make<Fiber.Fiber<unknown, unknown>>()
+        const sourceError = PlatformError.systemError({
+          _tag: "Unknown",
+          module: "Test",
+          method: "source",
+          description: "source failed",
+        })
+        const handle = yield* environment.spawner.spawn(
+          ChildProcess.make("cat", {
+            cwd: "/work",
+            stdin: Stream.fromEffect(
+              Deferred.await(release).pipe(
+                Effect.andThen(
+                  failure === "source failure" ? Effect.fail(sourceError) : Effect.succeed(bytes("input")),
+                ),
+              ),
+            ).pipe(Stream.onStart(Effect.withFiber((fiber) => Deferred.succeed(writer, fiber)))),
+          }),
+        )
+        if (failure === "closed input") worker.runs[0].inputClosed = true
+        yield* Deferred.succeed(release, undefined)
+        const error = yield* Fiber.join(yield* Deferred.await(writer)).pipe(Effect.flip)
+        if (failure === "closed input") {
+          expect(error).toBeInstanceOf(PlatformError.PlatformError)
+          expect(String(error)).toContain("Broken pipe")
+          expect(count(worker.received, "stdin")).toBe(1)
+        }
+        if (failure === "source failure") expect(error).toBe(sourceError)
+        expect(count(worker.received, "kill")).toBe(0)
+        expect(yield* handle.isRunning).toBe(true)
+        yield* worker.runs[0].print("still running")
+        yield* worker.runs[0].exit(0)
+        expect(yield* text(handle.stdout)).toBe("still running")
+        expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(count(worker.received, "kill")).toBe(0)
+      }),
+    )
+  }
+
+  it.effect("the first output view allows its streams and rejects the other view", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* ready
+      for (const view of ["separate", "merged"]) {
+        const handle = yield* environment.spawner.spawn(command)
+        const run = worker.runs[worker.runs.length - 1]
+        yield* run.print("out")
+        yield* run.print("err", "stderr")
+        yield* run.exit(0)
+        if (view === "separate") {
+          expect(yield* text(handle.stdout)).toBe("out")
+          expect(yield* text(handle.stderr)).toBe("err")
+        }
+        if (view === "merged") expect(yield* text(handle.all)).toBe("outerr")
+        for (const rejected of view === "separate" ? [handle.all] : [handle.stdout, handle.stderr]) {
+          const error = yield* text(rejected).pipe(Effect.flip)
+          expect(error.reason._tag).toBe("BadArgument")
+          expect(error.reason.description).toBe("read either all, or stdout and stderr, not both")
+        }
+      }
+    }),
+  )
+
+  it.effect("keeps stream marks when replaying from a shared offset", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* ready
+      const handle = yield* environment.spawner.spawn(command)
+      const out = yield* Effect.forkChild(text(handle.stdout), { startImmediately: true })
+      const err = yield* Effect.forkChild(text(handle.stderr), { startImmediately: true })
+      yield* worker.runs[0].print("out")
+      yield* worker.runs[0].print("err", "stderr")
+      yield* worker.cut
+      yield* worker.runs[0].print("offline-error", "stderr")
+      yield* worker.runs[0].print("offline-out")
+      yield* worker.restore
+      yield* worker.runs[0].exit(0)
+      expect(yield* Fiber.join(out)).toBe("outoffline-out")
+      expect(yield* Fiber.join(err)).toBe("erroffline-error")
+      expect(worker.received.filter((message) => message.type === "attach")).toEqual([
+        { type: "attach", id: worker.runs[0].id, from: 6 },
+      ])
+    }),
+  )
+
+  it.effect("all keeps worker read order across reconnects", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* ready
+      const handle = yield* environment.spawner.spawn(command)
+      const all = yield* Effect.forkChild(text(handle.all), { startImmediately: true })
+      yield* worker.runs[0].print("one", "stderr")
+      yield* worker.runs[0].print("two")
+      yield* worker.cut
+      yield* worker.runs[0].print("three", "stderr")
+      yield* worker.restore
+      yield* worker.runs[0].exit(0)
+      expect(yield* Fiber.join(all)).toBe("onetwothree")
+    }),
+  )
+})
+
 describe("machine wire", () => {
+  it.effect("matches the shared v2 messages and requires explicit stdio fields", () =>
+    Effect.sync(() => {
+      for (const message of messages.to_worker)
+        expect(
+          Schema.encodeSync(Schema.fromJsonString(Machine.ToWorker))(
+            Schema.decodeUnknownSync(Machine.ToWorker)(message),
+          ),
+        ).toBe(JSON.stringify(message))
+      for (const message of messages.from_worker)
+        expect(
+          Schema.encodeSync(Schema.fromJsonString(Machine.FromWorker))(
+            Schema.decodeUnknownSync(Machine.FromWorker)(message),
+          ),
+        ).toBe(JSON.stringify(message))
+      expect(() =>
+        Schema.decodeUnknownSync(Machine.ToWorker)({ type: "start", id: "p", argv: ["cat"], cwd: "/", env: {} }),
+      ).toThrow()
+      expect(() =>
+        Schema.decodeUnknownSync(Machine.FromWorker)({ type: "output", id: "p", offset: 0, data: "" }),
+      ).toThrow()
+      expect(() => Schema.decodeUnknownSync(Machine.Hello)({ ...hello(), protocol: 1 })).toThrow()
+    }),
+  )
+
   it.effect("encodes bytes as base64 and decodes them back", () =>
     Effect.sync(() => {
       const id = Machine.ProcessID.make("p1")
-      const output: Machine.FromWorker = { type: "output", id, offset: 0, data: bytes("hi") }
+      const output: Machine.FromWorker = { type: "output", id, offset: 0, stream: "stdout", data: bytes("hi") }
       const write: Machine.ToWorker = { type: "fs", req: 7, call: "write", path: "/a", bytes: bytes("hi") }
       const failed: Machine.FromWorker = { type: "failed", id, request: "attach", message: "unknown process" }
       const release: Machine.ToWorker = { type: "release", id }
       const json = JSON.parse(JSON.stringify(Schema.encodeSync(Machine.FromWorker)(output)))
-      expect(json).toEqual({ type: "output", id: "p1", offset: 0, data: "aGk=" })
+      expect(json).toEqual({ type: "output", id: "p1", offset: 0, stream: "stdout", data: "aGk=" })
       expect(Schema.decodeUnknownSync(Machine.FromWorker)(json)).toEqual(output)
       expect(Schema.encodeSync(Machine.ToWorker)(write)).toEqual({ ...write, bytes: "aGk=" })
       expect(Schema.decodeUnknownSync(Machine.ToWorker)({ ...write, bytes: "aGk=" })).toEqual(write)

@@ -913,7 +913,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Samband",
   "provider.connect.breadcrumb.label": "Sambandsstig",
   "provider.connect.methods.description": "Vel hvussu {{provider}} skal knýtast saman.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Royn aftur",
   "provider.connect.console.serviceKeyDescription":

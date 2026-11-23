@@ -102,8 +102,8 @@ it.live("adds, invites, lists, protects paired machines, and removes machines", 
     const decoded = Option.getOrThrow(Join.decode(first.join))
     expect(first.name).toBe("gpu")
     expect(first.expires).toBe(decoded.expires)
-    // The home's Iroh endpoint is bound by the first join string, which then carries it after the URLs.
-    expect(decoded.reach).toEqual([...reach, { type: "iroh" }])
+    // The home's Iroh endpoint is bound by the first join string, which puts it ahead of the URLs.
+    expect(decoded.reach).toEqual([{ type: "iroh" }, ...reach])
     expect(first.reach).toEqual(decoded.reach)
     expect(yield* Effect.promise(() => server.api.experimental.machine.list())).toEqual([
       { id: "gpu", online: false, paired: false },
@@ -125,7 +125,7 @@ it.live("adds, invites, lists, protects paired machines, and removes machines", 
         })
         linked.send({
           type: "hello",
-          protocol: 1,
+          protocol: 2,
           os: "linux",
           arch: "x64",
           home: "/home/worker",

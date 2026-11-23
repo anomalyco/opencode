@@ -626,7 +626,7 @@ export const Terminal = (props: TerminalProps) => {
         }}
         classList={{
           "select-text": true,
-          "size-full px-6 py-3 relative overflow-hidden": true,
+          "size-full px-6 py-3 relative overflow-hidden outline-none": true,
           [props.class ?? ""]: !!props.class,
         }}
       />

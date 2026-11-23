@@ -57,6 +57,7 @@ export const api: ElectronAPI = {
   openBrowser: (url) => invoke("FilesOpenBrowser", { url }),
   openPath: (path, app) => invoke("FilesOpenPath", { path, application: app }).then((value) => value ?? undefined),
   revealPath: (path) => invoke("FilesRevealPath", { path }),
+  startFileDrag: (path) => invoke("FilesStartDrag", { path }),
   readClipboardImage: () =>
     invoke("FilesReadClipboardImage").then((image) =>
       image ? { ...image, buffer: toArrayBuffer(image.buffer) } : null,
@@ -70,6 +71,9 @@ export const api: ElectronAPI = {
   onWindowFullscreenChanged: (cb) => listen("WindowFullscreenChanged", (event) => cb(event.fullscreen)),
   setWindowFocus: () => invoke("WindowSetFocus"),
   showWindow: () => invoke("WindowShow"),
+  showToast: (toast) => invoke("WindowShowToast", toast),
+  dismissToast: (tag) => invoke("WindowDismissToast", { tag }),
+  onToastActivated: (cb) => listen("ToastActivated", (event) => cb(event.tag)),
   relaunch: () => send("AppRelaunch"),
   getZoomFactor: () => invoke("WindowGetZoomFactor"),
   setZoomFactor: (factor) => invoke("WindowSetZoomFactor", { factor }),

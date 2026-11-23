@@ -114,6 +114,7 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Mistral Large 4             | mistral-large-4             | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | GPT 6 Luna Decision         | gpt-6-luna-decision         | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | Gemini Decision 1           | gemini-decision-1           | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
+| Jev 1.14                    | jev-1.14                    | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | Jev 1.13                    | jev-1.13                    | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | Jev 1.13 Free               | jev-1.13-free               | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | GPT Image 2.5 Sunburst      | gpt-image-2.5-sunburst      | `https://opencode.ai/inference/openai/v1/images/generations`                                | `@ai-sdk/openai`            |
@@ -137,7 +138,6 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | DeepSeek V4.1 Flash Free    | deepseek-v4.1-flash-free    | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Beam Free                   | beam-free                   | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Flint 40B Free              | flint-40b-free              | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
-| LongCat 2.5 Free            | longcat-2.5-free            | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Hy4 flash Free              | hy4-flash-free              | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | MiMo-V2.6-Flash Free        | mimo-v2.6-flash-free        | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Nemotron 3.5 Lightning Free | nemotron-3.5-lightning-free | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
@@ -177,7 +177,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
   -H "Authorization: Bearer $OPENCODE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "jev-1.13",
+    "model": "jev-1.14",
     "state": "My payments have failed for three days and I am losing sales. Please help now.",
     "questions": {
       "is_urgent": {
@@ -195,7 +195,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
   -H "Authorization: Bearer $OPENCODE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "jev-1.13",
+    "model": "jev-1.14",
     "state": "My order arrived late and the item is damaged. I want a refund.",
     "questions": {
       "department": {
@@ -216,7 +216,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
   }'
 ```
 
-Use `jev-1.13-free` instead of `jev-1.13` to use the limited-time free model. See the [TypeSafe AI documentation](https://docs.typesafe.ai/) for details about question types and response fields.
+Use `jev-1.13-free` to use the limited-time free model, which runs Jev 1.13. See the [TypeSafe AI documentation](https://docs.typesafe.ai/) for details about question types and response fields.
 
 ### GPT 6 Luna Decision and Gemini Decision 1
 
@@ -242,7 +242,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
 
 `gpt-image-2.5-sunburst`, `gemini-nano-banana-2.1`, and `grok-imagine-image-2.0` generate and edit images. They aren't chat models, so they never appear in `/models` or the models endpoint,
 and `opencode/<model-id>` doesn't select them. Call them on their native API with a Console key, or let OpenCode's
-[`experimental_image_generate`](/tools#image-generate) tool use an image model by setting
+[`generate_image`](/tools#image-generate) tool use an image model by setting
 `experimental.image_generate.model`, for example `opencode/gpt-image-2.5-sunburst`.
 
 ```bash
@@ -291,115 +291,115 @@ noted.
 
 <div class="docs-table-scroll" role="region" aria-label="Console model pricing" tabIndex={0}>
 
-| Model                               | Input           | Output            | Cached Read      | Cached Write |
-| ----------------------------------- | --------------- | ----------------- | ---------------- | ------------ |
-| Big Pickle                          | Free            | Free              | Free             | -            |
-| Tidepool Alpha Free                 | Free            | Free              | Free             | -            |
-| Iceman Free                         | Free            | Free              | Free             | -            |
-| DeepSeek V4.1 Flash Free            | Free            | Free              | Free             | -            |
-| Beam Free                           | Free            | Free              | Free             | -            |
-| Flint 40B Free                      | Free            | Free              | Free             | -            |
-| LongCat 2.5 Free                    | Free            | Free              | Free             | -            |
-| Hy4 flash Free                      | Free            | Free              | Free             | -            |
-| MiMo-V2.6-Flash Free                | Free            | Free              | Free             | -            |
-| Nemotron 3.5 Lightning Free         | Free            | Free              | Free             | -            |
-| Nemotron 3.5 Super VL Free          | Free            | Free              | Free             | -            |
-| Jev 1.13 Free                       | Free            | Free              | -                | -            |
-| Jev 1.13                            | $0.042          | Free              | -                | -            |
-| Gemini Decision 1                   | $0.10           | Free              | -                | -            |
-| GPT 6 Luna Decision (≤ 272K tokens) | $0.10           | Free              | $0.01            | $0.125       |
-| GPT 6 Luna Decision (> 272K tokens) | $0.20           | Free              | $0.02            | $0.25        |
-| MiniMax M3                          | $0.30           | $1.20             | $0.06            | -            |
-| MiniMax M2.7                        | $0.30           | $1.20             | $0.06            | -            |
-| MiniMax M2.5                        | $0.30           | $1.20             | $0.06            | -            |
-| GLM 5.3 Flash                       | $0.15           | $0.50             | $0.03            | -            |
-| GLM 5.3                             | $1.40           | $4.40             | $0.26            | -            |
-| Kimi K2.7 Code                      | $0.95           | $4.00             | $0.19            | -            |
-| Kimi K3                             | $3.00           | $15.00            | $0.30            | $3.00        |
-| Kimi K2.6                           | $0.95           | $4.00             | $0.16            | -            |
-| Kimi K2.5                           | $0.60           | $3.00             | $0.10            | -            |
-| Mistral Large 4 (50% off)           | ~~$1.36~~ $0.68 | ~~$4.18~~ $2.09   | ~~$0.14~~ $0.07  | -            |
-| Qwen3.8 Max                         | $2.00           | $6.00             | $0.25            | $2.50        |
-| Qwen3.8 Flash                       | $0.15           | $0.47             | $0.016           | $0.20        |
-| Qwen3.6 Plus                        | $0.50           | $3.00             | $0.05            | $0.625       |
-| Qwen3.5 Plus                        | $0.20           | $1.20             | $0.02            | $0.25        |
-| DeepSeek V4.1 Flash                 | $0.30           | $1.20             | $0.006           | -            |
-| DeepSeek V4 Pro                     | $1.74           | $3.48             | $0.145           | -            |
-| Claude Fable 5.2                    | $8.00           | $40.00            | $0.20            | $10.00       |
-| Claude Fable 5.1                    | $10.00          | $50.00            | $0.25            | $12.50       |
-| Claude Fable 5                      | $10.00          | $50.00            | $1.00            | $12.50       |
-| Claude Opus 5.5                     | $4.00           | $20.00            | $0.20            | $5.00        |
-| Claude Opus 5                       | $5.00           | $25.00            | $0.50            | $6.25        |
-| Claude Opus 4.8                     | $5.00           | $25.00            | $0.50            | $6.25        |
-| Claude Opus 4.7                     | $5.00           | $25.00            | $0.50            | $6.25        |
-| Claude Opus 4.6                     | $5.00           | $25.00            | $0.50            | $6.25        |
-| Claude Opus 4.5                     | $5.00           | $25.00            | $0.50            | $6.25        |
-| Claude Sonnet 5.5                   | $2.00           | $10.00            | $0.10            | $2.50        |
-| Claude Sonnet 5                     | $2.00           | $10.00            | $0.20            | $2.50        |
-| Claude Sonnet 4.6                   | $3.00           | $15.00            | $0.30            | $3.75        |
-| Claude Sonnet 4.5 (≤ 200K tokens)   | $3.00           | $15.00            | $0.30            | $3.75        |
-| Claude Sonnet 4.5 (> 200K tokens)   | $6.00           | $22.50            | $0.60            | $7.50        |
-| Claude Haiku 5.5 (≤ 100K tokens)    | $0.10           | $0.50             | $0.01            | $0.125       |
-| Claude Haiku 5.5 (> 100K tokens)    | $0.50           | $2.50             | $0.05            | $0.625       |
-| Claude Haiku 4.5                    | $1.00           | $5.00             | $0.10            | $1.25        |
-| Gemini 4 Neon                       | $3.00           | $15.00            | $0.15            | -            |
-| Gemini 4 Carbon (50% off)           | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10  | -            |
-| Gemini 4 Argon (50% off)            | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10  | -            |
-| Gemini 4 Hydrogen                   | $1.50           | $7.50             | $0.075           | -            |
-| Gemini 3.8 Flash (50% off)          | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75   | ~~$0.15~~ $0.075 | -            |
-| Gemini 3.7 Flash (50% off)          | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75   | ~~$0.15~~ $0.075 | -            |
-| Gemini 3.6 Flash (50% off)          | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75   | ~~$0.15~~ $0.075 | -            |
-| Gemini 3.5 Flash                    | $1.50           | $9.00             | $0.15            | -            |
-| Gemini 3.5 Flash Lite               | $0.30           | $2.50             | $0.03            | -            |
-| Grok 4.7 (≤ 200K tokens)            | $2.00           | $6.00             | $0.50            | -            |
-| Grok 4.7 (> 200K tokens)            | $4.00           | $12.00            | $1.00            | -            |
-| Grok 4.6 (≤ 200K tokens)            | $2.00           | $6.00             | $0.50            | -            |
-| Grok 4.6 (> 200K tokens)            | $4.00           | $12.00            | $1.00            | -            |
-| Grok 4.5 (≤ 200K tokens)            | $2.00           | $6.00             | $0.30            | -            |
-| Grok 4.5 (> 200K tokens)            | $4.00           | $12.00            | $0.60            | -            |
-| Grok Build 0.1                      | $1.00           | $2.00             | $0.20            | -            |
-| Muse Ember 1.0 (≤ 200K tokens)      | $0.10           | $0.50             | $0.004           | -            |
-| Muse Ember 1.0 (> 200K tokens)      | $0.30           | $1.50             | $0.012           | -            |
-| Muse Wonder 1.0                     | $4.00           | $20.00            | $0.20            | -            |
-| Muse Spark 1.3                      | $1.25           | $4.25             | $0.15            | -            |
-| Muse Spark 1.2                      | $1.25           | $4.25             | $0.15            | -            |
-| GPT 6.2 Astra (≤ 272K tokens)       | $8.00           | $40.00            | $0.40            | $10.00       |
-| GPT 6.2 Astra (> 272K tokens)       | $16.00          | $60.00            | $0.80            | $20.00       |
-| GPT 6.2 Sol (≤ 272K tokens)         | $2.00           | $10.00            | $0.10            | $2.50        |
-| GPT 6.2 Sol (> 272K tokens)         | $4.00           | $15.00            | $0.20            | $5.00        |
-| GPT 6 Astra (≤ 272K tokens)         | $10.00          | $50.00            | $1.00            | $12.50       |
-| GPT 6 Astra (> 272K tokens)         | $20.00          | $75.00            | $2.00            | $25.00       |
-| GPT 6 Sol (≤ 272K tokens)           | $2.00           | $10.00            | $0.20            | $2.50        |
-| GPT 6 Sol (> 272K tokens)           | $4.00           | $15.00            | $0.40            | $5.00        |
-| GPT 6.1 Sol (≤ 272K tokens)         | $2.00           | $10.00            | $0.10            | $2.50        |
-| GPT 6.1 Sol (> 272K tokens)         | $4.00           | $15.00            | $0.20            | $5.00        |
-| GPT 6 Luna (≤ 272K tokens)          | $0.10           | $0.50             | $0.01            | $0.125       |
-| GPT 6 Luna (> 272K tokens)          | $0.20           | $0.75             | $0.02            | $0.25        |
-| GPT 5.6 Sol (≤ 272K tokens)         | $4.00           | $20.00            | $0.40            | $5.00        |
-| GPT 5.6 Sol (> 272K tokens)         | $8.00           | $30.00            | $0.80            | $10.00       |
-| GPT 5.6 Terra (≤ 272K tokens)       | $2.00           | $12.00            | $0.20            | $2.50        |
-| GPT 5.6 Terra (> 272K tokens)       | $4.00           | $18.00            | $0.40            | $5.00        |
-| GPT 5.6 Luna (≤ 272K tokens)        | $0.20           | $1.20             | $0.02            | $0.25        |
-| GPT 5.6 Luna (> 272K tokens)        | $0.40           | $1.80             | $0.04            | $0.50        |
-| GPT 5.5 (≤ 272K tokens)             | $5.00           | $30.00            | $0.50            | -            |
-| GPT 5.5 (> 272K tokens)             | $10.00          | $45.00            | $1.00            | -            |
-| GPT 5.5 Pro                         | $30.00          | $180.00           | $30.00           | -            |
-| GPT 5.4 (≤ 272K tokens)             | $2.50           | $15.00            | $0.25            | -            |
-| GPT 5.4 (> 272K tokens)             | $5.00           | $22.50            | $0.50            | -            |
-| GPT 5.4 Pro                         | $30.00          | $180.00           | $30.00           | -            |
-| GPT 5.4 Mini                        | $0.75           | $4.50             | $0.075           | -            |
-| GPT 5.4 Nano                        | $0.20           | $1.25             | $0.02            | -            |
-| GPT 5.3 Codex Spark                 | $1.75           | $14.00            | $0.175           | -            |
-| GPT 5.3 Codex                       | $1.75           | $14.00            | $0.175           | -            |
-| GPT 5.2                             | $1.75           | $14.00            | $0.175           | -            |
-| GPT 5.2 Codex                       | $1.75           | $14.00            | $0.175           | -            |
-| GPT 5.1                             | $1.07           | $8.50             | $0.107           | -            |
-| GPT 5.1 Codex                       | $1.07           | $8.50             | $0.107           | -            |
-| GPT 5.1 Codex Max                   | $1.25           | $10.00            | $0.125           | -            |
-| GPT 5.1 Codex Mini                  | $0.25           | $2.00             | $0.025           | -            |
-| GPT 5                               | $1.07           | $8.50             | $0.107           | -            |
-| GPT 5 Codex                         | $1.07           | $8.50             | $0.107           | -            |
-| GPT 5 Nano                          | $0.05           | $0.40             | $0.005           | -            |
+| Model                               | Input           | Output            | Cached Read        | Cached Write |
+| ----------------------------------- | --------------- | ----------------- | ------------------ | ------------ |
+| Big Pickle                          | Free            | Free              | Free               | -            |
+| Tidepool Alpha Free                 | Free            | Free              | Free               | -            |
+| Iceman Free                         | Free            | Free              | Free               | -            |
+| DeepSeek V4.1 Flash Free            | Free            | Free              | Free               | -            |
+| Beam Free                           | Free            | Free              | Free               | -            |
+| Flint 40B Free                      | Free            | Free              | Free               | -            |
+| Hy4 flash Free                      | Free            | Free              | Free               | -            |
+| MiMo-V2.6-Flash Free                | Free            | Free              | Free               | -            |
+| Nemotron 3.5 Lightning Free         | Free            | Free              | Free               | -            |
+| Nemotron 3.5 Super VL Free          | Free            | Free              | Free               | -            |
+| Jev 1.13 Free                       | Free            | Free              | -                  | -            |
+| Jev 1.14                            | $0.042          | Free              | -                  | -            |
+| Jev 1.13                            | $0.042          | Free              | -                  | -            |
+| Gemini Decision 1                   | $0.10           | Free              | -                  | -            |
+| GPT 6 Luna Decision (≤ 272K tokens) | $0.10           | Free              | $0.01              | $0.125       |
+| GPT 6 Luna Decision (> 272K tokens) | $0.20           | Free              | $0.02              | $0.25        |
+| MiniMax M3                          | $0.30           | $1.20             | $0.06              | -            |
+| MiniMax M2.7                        | $0.30           | $1.20             | $0.06              | -            |
+| MiniMax M2.5                        | $0.30           | $1.20             | $0.06              | -            |
+| GLM 5.3 Flash                       | $0.15           | $0.50             | $0.03              | -            |
+| GLM 5.3 (60% off)                   | ~~$1.40~~ $0.56 | ~~$4.40~~ $1.76   | ~~$0.26~~ $0.104   | -            |
+| Kimi K2.7 Code                      | $0.95           | $4.00             | $0.19              | -            |
+| Kimi K3                             | $3.00           | $15.00            | $0.30              | $3.00        |
+| Kimi K2.6                           | $0.95           | $4.00             | $0.16              | -            |
+| Kimi K2.5                           | $0.60           | $3.00             | $0.10              | -            |
+| Mistral Large 4 (50% off)           | ~~$1.36~~ $0.68 | ~~$4.18~~ $2.09   | ~~$0.14~~ $0.07    | -            |
+| Qwen3.8 Max                         | $2.00           | $6.00             | $0.25              | $2.50        |
+| Qwen3.8 Flash                       | $0.15           | $0.47             | $0.016             | $0.20        |
+| Qwen3.6 Plus                        | $0.50           | $3.00             | $0.05              | $0.625       |
+| Qwen3.5 Plus                        | $0.20           | $1.20             | $0.02              | $0.25        |
+| DeepSeek V4.1 Flash (60% off)       | ~~$0.30~~ $0.12 | ~~$1.20~~ $0.48   | ~~$0.006~~ $0.0024 | -            |
+| DeepSeek V4 Pro                     | $1.74           | $3.48             | $0.145             | -            |
+| Claude Fable 5.2                    | $8.00           | $40.00            | $0.20              | $10.00       |
+| Claude Fable 5.1                    | $10.00          | $50.00            | $0.25              | $12.50       |
+| Claude Fable 5                      | $10.00          | $50.00            | $1.00              | $12.50       |
+| Claude Opus 5.5                     | $4.00           | $20.00            | $0.20              | $5.00        |
+| Claude Opus 5                       | $5.00           | $25.00            | $0.50              | $6.25        |
+| Claude Opus 4.8                     | $5.00           | $25.00            | $0.50              | $6.25        |
+| Claude Opus 4.7                     | $5.00           | $25.00            | $0.50              | $6.25        |
+| Claude Opus 4.6                     | $5.00           | $25.00            | $0.50              | $6.25        |
+| Claude Opus 4.5                     | $5.00           | $25.00            | $0.50              | $6.25        |
+| Claude Sonnet 5.5                   | $2.00           | $10.00            | $0.10              | $2.50        |
+| Claude Sonnet 5                     | $2.00           | $10.00            | $0.20              | $2.50        |
+| Claude Sonnet 4.6                   | $3.00           | $15.00            | $0.30              | $3.75        |
+| Claude Sonnet 4.5 (≤ 200K tokens)   | $3.00           | $15.00            | $0.30              | $3.75        |
+| Claude Sonnet 4.5 (> 200K tokens)   | $6.00           | $22.50            | $0.60              | $7.50        |
+| Claude Haiku 5.5 (≤ 100K tokens)    | $0.10           | $0.50             | $0.01              | $0.125       |
+| Claude Haiku 5.5 (> 100K tokens)    | $0.50           | $2.50             | $0.05              | $0.625       |
+| Claude Haiku 4.5                    | $1.00           | $5.00             | $0.10              | $1.25        |
+| Gemini 4 Neon                       | $3.00           | $15.00            | $0.15              | -            |
+| Gemini 4 Carbon (50% off)           | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10    | -            |
+| Gemini 4 Argon (50% off)            | ~~$4.00~~ $2.00 | ~~$20.00~~ $10.00 | ~~$0.20~~ $0.10    | -            |
+| Gemini 4 Hydrogen                   | $1.50           | $7.50             | $0.075             | -            |
+| Gemini 3.8 Flash (50% off)          | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75   | ~~$0.15~~ $0.075   | -            |
+| Gemini 3.7 Flash (50% off)          | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75   | ~~$0.15~~ $0.075   | -            |
+| Gemini 3.6 Flash (50% off)          | ~~$1.50~~ $0.75 | ~~$7.50~~ $3.75   | ~~$0.15~~ $0.075   | -            |
+| Gemini 3.5 Flash                    | $1.50           | $9.00             | $0.15              | -            |
+| Gemini 3.5 Flash Lite               | $0.30           | $2.50             | $0.03              | -            |
+| Grok 4.7 (≤ 200K tokens)            | $2.00           | $6.00             | $0.50              | -            |
+| Grok 4.7 (> 200K tokens)            | $4.00           | $12.00            | $1.00              | -            |
+| Grok 4.6 (≤ 200K tokens)            | $2.00           | $6.00             | $0.50              | -            |
+| Grok 4.6 (> 200K tokens)            | $4.00           | $12.00            | $1.00              | -            |
+| Grok 4.5 (≤ 200K tokens)            | $2.00           | $6.00             | $0.30              | -            |
+| Grok 4.5 (> 200K tokens)            | $4.00           | $12.00            | $0.60              | -            |
+| Grok Build 0.1                      | $1.00           | $2.00             | $0.20              | -            |
+| Muse Ember 1.0 (≤ 200K tokens)      | $0.10           | $0.50             | $0.004             | -            |
+| Muse Ember 1.0 (> 200K tokens)      | $0.30           | $1.50             | $0.012             | -            |
+| Muse Wonder 1.0                     | $4.00           | $20.00            | $0.20              | -            |
+| Muse Spark 1.3                      | $1.25           | $4.25             | $0.15              | -            |
+| Muse Spark 1.2                      | $1.25           | $4.25             | $0.15              | -            |
+| GPT 6.2 Astra (≤ 272K tokens)       | $8.00           | $40.00            | $0.40              | $10.00       |
+| GPT 6.2 Astra (> 272K tokens)       | $16.00          | $60.00            | $0.80              | $20.00       |
+| GPT 6.2 Sol (≤ 272K tokens)         | $2.00           | $10.00            | $0.10              | $2.50        |
+| GPT 6.2 Sol (> 272K tokens)         | $4.00           | $15.00            | $0.20              | $5.00        |
+| GPT 6 Astra (≤ 272K tokens)         | $10.00          | $50.00            | $1.00              | $12.50       |
+| GPT 6 Astra (> 272K tokens)         | $20.00          | $75.00            | $2.00              | $25.00       |
+| GPT 6 Sol (≤ 272K tokens)           | $2.00           | $10.00            | $0.20              | $2.50        |
+| GPT 6 Sol (> 272K tokens)           | $4.00           | $15.00            | $0.40              | $5.00        |
+| GPT 6.1 Sol (≤ 272K tokens)         | $2.00           | $10.00            | $0.10              | $2.50        |
+| GPT 6.1 Sol (> 272K tokens)         | $4.00           | $15.00            | $0.20              | $5.00        |
+| GPT 6 Luna (≤ 272K tokens)          | $0.10           | $0.50             | $0.01              | $0.125       |
+| GPT 6 Luna (> 272K tokens)          | $0.20           | $0.75             | $0.02              | $0.25        |
+| GPT 5.6 Sol (≤ 272K tokens)         | $4.00           | $20.00            | $0.40              | $5.00        |
+| GPT 5.6 Sol (> 272K tokens)         | $8.00           | $30.00            | $0.80              | $10.00       |
+| GPT 5.6 Terra (≤ 272K tokens)       | $2.00           | $12.00            | $0.20              | $2.50        |
+| GPT 5.6 Terra (> 272K tokens)       | $4.00           | $18.00            | $0.40              | $5.00        |
+| GPT 5.6 Luna (≤ 272K tokens)        | $0.20           | $1.20             | $0.02              | $0.25        |
+| GPT 5.6 Luna (> 272K tokens)        | $0.40           | $1.80             | $0.04              | $0.50        |
+| GPT 5.5 (≤ 272K tokens)             | $5.00           | $30.00            | $0.50              | -            |
+| GPT 5.5 (> 272K tokens)             | $10.00          | $45.00            | $1.00              | -            |
+| GPT 5.5 Pro                         | $30.00          | $180.00           | $30.00             | -            |
+| GPT 5.4 (≤ 272K tokens)             | $2.50           | $15.00            | $0.25              | -            |
+| GPT 5.4 (> 272K tokens)             | $5.00           | $22.50            | $0.50              | -            |
+| GPT 5.4 Pro                         | $30.00          | $180.00           | $30.00             | -            |
+| GPT 5.4 Mini                        | $0.75           | $4.50             | $0.075             | -            |
+| GPT 5.4 Nano                        | $0.20           | $1.25             | $0.02              | -            |
+| GPT 5.3 Codex Spark                 | $1.75           | $14.00            | $0.175             | -            |
+| GPT 5.3 Codex                       | $1.75           | $14.00            | $0.175             | -            |
+| GPT 5.2                             | $1.75           | $14.00            | $0.175             | -            |
+| GPT 5.2 Codex                       | $1.75           | $14.00            | $0.175             | -            |
+| GPT 5.1                             | $1.07           | $8.50             | $0.107             | -            |
+| GPT 5.1 Codex                       | $1.07           | $8.50             | $0.107             | -            |
+| GPT 5.1 Codex Max                   | $1.25           | $10.00            | $0.125             | -            |
+| GPT 5.1 Codex Mini                  | $0.25           | $2.00             | $0.025             | -            |
+| GPT 5                               | $1.07           | $8.50             | $0.107             | -            |
+| GPT 5 Codex                         | $1.07           | $8.50             | $0.107             | -            |
+| GPT 5 Nano                          | $0.05           | $0.40             | $0.005             | -            |
 
 </div>
 
@@ -416,11 +416,11 @@ models to generate session titles.
 
 ### Image pricing
 
-| Model                  | Price                       | Notes                                                                              |
-| ---------------------- | --------------------------- | ---------------------------------------------------------------------------------- |
-| GPT Image 2.5 Sunburst | $1.00 / image               | Plus $8 / $30 per 1M input / output tokens, and $2 per 1M cached input tokens.      |
+| Model                  | Price                                | Notes                                                                                        |
+| ---------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------- |
+| GPT Image 2.5 Sunburst | $1.00 / image                        | Plus $8 / $30 per 1M input / output tokens, and $2 per 1M cached input tokens.               |
 | Nano Banana 2.1        | $1.50 / $7.50 / $30.00 per 1M tokens | Input / text output / image output. About $0.034 per 1K image, $0.050 per 2K, $0.113 per 4K. |
-| Grok Imagine Image 2.0 | $0.04 / image               | $0.01 per input image; quality and resolution can raise the output price to $0.05–$0.08. |
+| Grok Imagine Image 2.0 | $0.04 / image                        | $0.01 per input image; quality and resolution can raise the output price to $0.05–$0.08.     |
 
 ### Embedding pricing
 
@@ -452,7 +452,6 @@ Embedding models charge for input tokens only. Prices are **per 1M tokens**.
 - Iceman Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Beam Free is free on OpenCode for a limited time. Its provider does not use your data for model training and retains it for 30 days for safety reasons. It's not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
 - Flint 40B Free is free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
-- LongCat 2.5 Free is free on OpenCode for a limited time, with a limit of 100 requests per day. Its provider follows a zero-retention policy and does not use your data for model training. It's hosted in China.
 - Hy4 flash Free is free on OpenCode for a limited time. Its provider follows a zero-retention policy and does not use your data for model training.
 - Jev 1.13 Free is available on OpenCode for a limited time.
 
@@ -469,15 +468,11 @@ To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free
 
 | Model                   | Deprecation date  |
 | ----------------------- | ----------------- |
-| Inkling 2 Small Free    | November 19, 2026 |
+| LongCat-2.0             | November 22, 2026 |
 | GLM 5.2                 | November 19, 2026 |
 | GLM 5.1                 | November 19, 2026 |
-| GLM-5.3-Flash Free      | November 18, 2026 |
 | Gemini 3.1 Pro          | November 17, 2026 |
 | Gemini 3 Flash          | November 17, 2026 |
-| MiniMax M3.1 Flash Free | November 17, 2026 |
-| Crouton Alpha Free      | November 9, 2026  |
-| Pulse Alpha Free        | November 6, 2026  |
 | DeepSeek V4 Flash       | October 26, 2026  |
 | GPT 5.2 Codex           | July 23, 2026     |
 | GPT 5.1 Codex           | July 23, 2026     |
@@ -514,7 +509,6 @@ All our models are hosted in the US and EU. Our providers follow a zero-retentio
 - Google APIs: Requests are retained for up to 55 days for abuse monitoring in accordance with [Google's Gemini API Terms](https://ai.google.dev/gemini-api/terms).
 - xAI APIs: Requests are retained for 30 days in accordance with [xAI's Privacy Policy](https://x.ai/legal/privacy-policy).
 - Beam Free: Prompts and other inputs are not used for training. Data is retained for 30 days for safety reasons.
-- LongCat 2.5 Free: Hosted in China. Prompts and other inputs are not used for training or retained.
 
 For subscription models, see [Go privacy](/console/go#privacy).
 

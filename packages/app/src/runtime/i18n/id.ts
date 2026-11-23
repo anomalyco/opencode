@@ -980,7 +980,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Hubungkan",
   "provider.connect.breadcrumb.label": "Langkah koneksi",
   "provider.connect.methods.description": "Pilih cara menghubungkan {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Coba lagi",
   "provider.connect.console.serviceKeyDescription":

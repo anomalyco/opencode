@@ -921,7 +921,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Холбох",
   "provider.connect.breadcrumb.label": "Холбох алхмууд",
   "provider.connect.methods.description": "{{provider}}-ийг хэрхэн холбохоо сонгоно уу.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Дахин оролдох",
   "provider.connect.console.serviceKeyDescription":

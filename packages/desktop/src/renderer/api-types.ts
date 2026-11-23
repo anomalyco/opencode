@@ -53,6 +53,7 @@ export type ElectronAPI = {
   openBrowser(url: string): Promise<boolean>
   openPath(path: string, app?: string): Promise<string | undefined>
   revealPath(path: string): Promise<boolean>
+  startFileDrag(path: string): Promise<boolean>
   readClipboardImage(): Promise<ClipboardImage | null>
   writeClipboardText(text: string): Promise<void>
   getWindowFocused(): Promise<boolean>
@@ -63,6 +64,9 @@ export type ElectronAPI = {
   onWindowFullscreenChanged(cb: (fullscreen: boolean) => void): () => void
   setWindowFocus(): Promise<void>
   showWindow(): Promise<void>
+  showToast(toast: { tag: string; title: string; body: string }): Promise<void>
+  dismissToast(tag: string): Promise<void>
+  onToastActivated(cb: (tag: string) => void): () => void
   relaunch(): void
   getZoomFactor(): Promise<number>
   setZoomFactor(factor: number): Promise<void>

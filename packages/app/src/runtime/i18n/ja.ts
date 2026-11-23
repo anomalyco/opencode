@@ -926,7 +926,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "接続",
   "provider.connect.breadcrumb.label": "接続手順",
   "provider.connect.methods.description": "{{provider}}の接続方法を選択してください。",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "再試行",
   "provider.connect.console.serviceKeyDescription":

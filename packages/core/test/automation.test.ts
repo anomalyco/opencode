@@ -147,6 +147,14 @@ const configureAgent = Layer.effectDiscard(
             ),
       })
       editor.add({
+        name: "automation",
+        description: "The automation making the call, if any",
+        input: Schema.Struct({}),
+        output: Schema.NullOr(Schema.String),
+        options: { namespace: "probe" },
+        execute: (_input, context) => Effect.succeed({ output: context.automation?.id ?? null }),
+      })
+      editor.add({
         name: "post",
         description: "Post a message",
         input: Schema.Struct({ text: Schema.String, channel: Schema.optional(Schema.String) }),
@@ -401,7 +409,9 @@ describe("Automation", () => {
       expect((yield* automations.list({ projectID: (yield* creator).projectID })).map((item) => item.id)).toEqual([
         automation.id,
       ])
-      expect((yield* automations.list({ sessionID: otherID })).map((item) => item.id)).toEqual([])
+      expect(yield* Effect.flip(automations.list({ sessionID: otherID }))).toMatchObject({
+        _tag: "Session.NotFoundError",
+      })
 
       expect((yield* automations.pause(automation.id)).status).toBe("paused")
       yield* TestClock.adjust("150 seconds")
@@ -877,6 +887,36 @@ describe("Automation", () => {
     }),
   )
 
+  it.effect("hides and refuses automations while their location has automations off", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup(toggleDirectory)
+      toggle.on = true
+      const { id } = yield* automations.create({
+        sessionID,
+        name: "poll",
+        trigger: every("1 minute"),
+        action: prompt("poll"),
+      })
+      expect((yield* automations.list({ directory: toggleDirectory })).map((item) => item.id)).toEqual([id])
+      expect(yield* Effect.flip(automations.list({ directory: "relative" }))).toMatchObject({
+        _tag: "Automation.InvalidError",
+      })
+
+      toggle.on = false
+      expect(yield* automations.list()).toEqual([])
+      expect(yield* Effect.flip(automations.list({ directory: toggleDirectory }))).toMatchObject({
+        _tag: "Automation.DisabledError",
+      })
+      expect(yield* Effect.flip(automations.list({ sessionID }))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* Effect.flip(automations.pause(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* Effect.flip(automations.remove(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+
+      toggle.on = true
+      yield* automations.remove(id)
+      expect(yield* automations.list()).toEqual([])
+    }),
+  )
+
   it.effect("rechecks hourly while automations are disabled in its location, then catches up when enabled", () =>
     Effect.gen(function* () {
       const automations = yield* setup(toggleDirectory)
@@ -891,7 +931,13 @@ describe("Automation", () => {
       const before = toggle.reads
       yield* TestClock.adjust("1 minute")
       yield* automations.tick
-      expect(yield* automations.get(id)).toMatchObject({ status: "active", runCount: 0, lastOutcome: "disabled" })
+      // Callers can't read an automation while its location has automations off, so read the row.
+      const { db } = yield* Database.Service
+      expect(
+        yield* db.select().from(AutomationTable).where(eq(AutomationTable.id, id)).get().pipe(Effect.orDie),
+      ).toMatchObject({ status: "active", run_count: 0, last_outcome: "disabled" })
+      expect(yield* Effect.flip(automations.get(id))).toMatchObject({ _tag: "Automation.DisabledError" })
+      expect(yield* automations.list()).toEqual([])
       expect(yield* pendingIDs).toEqual([])
       const reads = toggle.reads
       expect(reads).toBeGreaterThan(before)
@@ -1234,6 +1280,23 @@ describe("Automation", () => {
           nextDueAt: undefined,
           state: { replies: 4, runs: 1 },
         })
+      }),
+    )
+
+    // Tools rely on this to know no model is waiting, e.g. the shell tool stops a timed-out command instead of
+    // moving it to the background.
+    it.effect("names the automation on each of its program's tool calls", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const automation = yield* automations.create({
+          sessionID,
+          name: "probe",
+          trigger: every("1 minute"),
+          action: code(`return { state: await tools.probe.automation({}) }`),
+        })
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(yield* automations.get(automation.id)).toMatchObject({ lastOutcome: "fired", state: automation.id })
       }),
     )
 

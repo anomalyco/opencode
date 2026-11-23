@@ -919,7 +919,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Kết nối",
   "provider.connect.breadcrumb.label": "Các bước kết nối",
   "provider.connect.methods.description": "Chọn cách kết nối {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Thử lại",
   "provider.connect.console.serviceKeyDescription": "Kết nối bằng khóa API của tài khoản dịch vụ từ OpenCode Console.",

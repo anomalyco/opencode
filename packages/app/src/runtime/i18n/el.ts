@@ -937,7 +937,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Σύνδεση",
   "provider.connect.breadcrumb.label": "Βήματα σύνδεσης",
   "provider.connect.methods.description": "Επιλέξτε πώς θα συνδέσετε το {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Δοκιμάστε ξανά",
   "provider.connect.console.serviceKeyDescription":

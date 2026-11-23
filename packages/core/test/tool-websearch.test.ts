@@ -53,6 +53,7 @@ class Fixture {
 }
 
 const it = testEffect(Layer.mergeAll(TestWebSearch.layer, Layer.succeed(Flag.Overrides, undefined)))
+const codeModeIt = testEffect(Layer.mergeAll(TestWebSearch.layer, Layer.succeed(Flag.Overrides, "full_codemode")))
 const setup = Effect.gen(function* () {
   const fixture = new Fixture()
   const websearch = yield* TestWebSearch.Service
@@ -138,6 +139,15 @@ describe("WebSearchTool registration", () => {
       ])
       expect(fixture.events).toEqual(["permission", "query"])
       expect(fixture.websearch.sessionIDs).toEqual([sessionID])
+    }),
+  )
+
+  codeModeIt.effect("pins websearch in the Code Mode catalog with full_codemode", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const snapshot = yield* fixture.registry.snapshot()
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(snapshot.codeModeCatalog?.tools).toMatchObject([{ type: "tool", name: "websearch", pinned: true }])
     }),
   )
 
