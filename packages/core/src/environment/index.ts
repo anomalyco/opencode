@@ -26,6 +26,8 @@ export {
   node,
   Place,
   Service,
+  unavailable,
   workingDirectory,
+  workspace,
   workingDirectoryResolver,
 } from "./environment.js"

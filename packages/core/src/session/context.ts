@@ -20,7 +20,7 @@ import { Instructions } from "../instructions/index.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
 import { MachineInstructions } from "../machine/instructions.js"
-import { Machines } from "../machine/machines.js"
+import { Environments } from "../environment/environments.js"
 import { McpInstructions } from "../mcp/instructions.js"
 import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
@@ -278,7 +278,7 @@ export const node = makeLocationNode({
     InstructionEntry.node,
     Location.node,
     MachineInstructions.node,
-    Machines.node,
+    Environments.node,
     McpInstructions.node,
     McpTool.node,
     ReferenceInstructions.node,

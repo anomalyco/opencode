@@ -12,13 +12,13 @@ import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
 import { ModelResolver } from "../model-resolver.js"
 import { ModelRetry } from "../model-retry.js"
+import { Workspace } from "../workspace.js"
 import { SessionRunnerModel } from "./runner/model.js"
 
 const tokenSharingMessages = {
   subscription_sharing_user_not_eligible:
     "ChatGPT token sharing isn't available for this account. Connect with an API key or choose another provider.",
-  subscription_sharing_usage_limit_exceeded:
-    "ChatGPT usage limit reached. Check ChatGPT Settings → Usage for details.",
+  subscription_sharing_usage_limit_exceeded: "ChatGPT usage limit reached. Check ChatGPT Settings → Usage for details.",
   subscription_sharing_workplace_individual_usage_limit_exceeded:
     "You've reached the usage limit your ChatGPT workspace admin set for you. Ask them to raise it in the OpenAI Admin Console.",
   subscription_sharing_usage_unavailable: "ChatGPT usage can't be checked right now. Try again later.",
@@ -163,7 +163,12 @@ function providerError(type: string, reason: AIError["reason"]): SessionError.Er
 const machineMessage = (error: unknown): string | undefined => {
   if (error instanceof Machine.NotSent || error instanceof Machine.Unknown || error instanceof Machine.ProcessLost)
     return error.message
-  if (error instanceof Machines.NotFound || error instanceof MachinePath.NotAbsolute) return error.message
+  if (
+    error instanceof Machines.NotFound ||
+    error instanceof Workspace.NotFound ||
+    error instanceof MachinePath.NotAbsolute
+  )
+    return error.message
   if (
     error instanceof Environment.Failed ||
     error instanceof AppProcess.AppProcessError ||

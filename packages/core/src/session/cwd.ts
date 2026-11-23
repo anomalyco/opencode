@@ -1,15 +1,13 @@
 export * as SessionCwd from "./cwd.js"
 
 import { eq } from "drizzle-orm"
-import { Effect, Option, PlatformError, Schema } from "effect"
-import { ChildProcessSpawner } from "effect/process"
-import { posix } from "node:path"
+import { Effect, Option, Schema } from "effect"
 import { Database } from "../database/database.js"
+import { Environments } from "../environment/environments.js"
 import { Environment } from "../environment/index.js"
+import { EnvironmentPath } from "../environment/path.js"
 import { FileAccess } from "../file-access.js"
 import { Flag } from "../flag.js"
-import { Machines } from "../machine/machines.js"
-import { MachinePath } from "../machine/path.js"
 import { AbsolutePath } from "../schema.js"
 import { CwdError } from "./error.js"
 import type { SessionSchema } from "./schema.js"
@@ -28,7 +26,7 @@ export interface Resolved {
 
 /** A path in a cwd's environment as the model writes it: plain on the Location's own environment, `machine:/path` elsewhere. */
 export const format = (cwd: Resolved, path: string, locationEnvironmentID: Environment.ID) =>
-  cwd.environment.id === locationEnvironmentID ? path : MachinePath.format(cwd.environment.id, path)
+  cwd.environment.id === locationEnvironmentID ? path : EnvironmentPath.format(cwd.environment.id, path)
 
 /** The cwd as the model writes it, naming the machine when the directory is on a paired machine. */
 export const describe = (cwd: Resolved, locationEnvironmentID: Environment.ID) => ({
@@ -113,7 +111,7 @@ export const make = Effect.gen(function* () {
   const database = Option.getOrUndefined(yield* Effect.serviceOption(Database.Service))
   const flags = Option.getOrUndefined(yield* Effect.serviceOption(Flag.Service))
   const environment = Option.getOrUndefined(yield* Effect.serviceOption(Environment.Service))
-  const machines = Option.getOrUndefined(yield* Effect.serviceOption(Machines.Service))
+  const environments = Option.getOrUndefined(yield* Effect.serviceOption(Environments.Service))
 
   const resolve = Effect.fn("SessionCwd.current")(function* (sessionID: SessionSchema.ID) {
     if (!database || !flags || !environment) return undefined
@@ -121,11 +119,8 @@ export const make = Effect.gen(function* () {
     const cwd = yield* read(database.db, sessionID)
     if (!cwd) return undefined
     if (cwd.environment.id === environment.id) return { absolute: cwd.absolute, environment }
-    if (!machines) return undefined
-    const machine = yield* machines
-      .get(cwd.environment.id)
-      .pipe(Effect.catchTag("Machines.NotFound", (error) => Effect.succeed(missingMachine(cwd.environment.id, error))))
-    return { absolute: cwd.absolute, environment: machine }
+    if (!environments) return undefined
+    return { absolute: cwd.absolute, environment: yield* environments.get(cwd.environment.id) }
   })
 
   return { current: resolve }
@@ -135,36 +130,3 @@ export const current = Effect.fn("SessionCwd.current")(function* (sessionID: Ses
   const resolver = yield* make
   return yield* resolver.current(sessionID)
 })
-
-// A session whose cwd names a removed machine must fail loudly rather than silently falling back to this server.
-const missingMachine = (id: Environment.ID, error: Machines.NotFound): Environment.Interface => {
-  const spawner = ChildProcessSpawner.make(() =>
-    Effect.fail(
-      PlatformError.systemError({
-        _tag: "Unknown",
-        module: "Machine",
-        method: "spawn",
-        description: error.message,
-        cause: error,
-      }),
-    ),
-  )
-  const fail = (path: string) => Effect.fail(new Environment.Failed({ path, cause: error }))
-  return Environment.make(
-    id,
-    {
-      spawner,
-      overrides: {
-        read: (path) => fail(path),
-        write: (path) => fail(path),
-        stat: (path) => fail(path),
-        list: (path) => fail(path),
-        remove: (path) => fail(path),
-        move: (from) => fail(from),
-        mkdir: (path) => fail(path),
-        append: (path) => fail(path),
-      },
-    },
-    { path: posix, shell: "sh" },
-  )
-}
