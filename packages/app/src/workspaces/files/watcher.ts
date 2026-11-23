@@ -5,6 +5,8 @@ type WatcherEvent = Extract<OpenCodeEvent, { type: "filesystem.changed" }>
 
 type WatcherOps = {
   normalize: (input: string) => string
+  /** The workspace root is a Windows path, whose events name files with `\`. */
+  windows?: boolean
   hasFile: (path: string) => boolean
   isOpen?: (path: string) => boolean
   loadFile: (path: string) => void
@@ -20,21 +22,24 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
 
   if (path.startsWith(".git/") || path.startsWith(".git\\")) return
 
-  if (ops.hasFile(path) || ops.isOpen?.(path)) {
-    ops.loadFile(path)
-  }
+  // Paths keep the native separator, so a Windows event names `src\sub\a.ts`, where the tree, the open tabs and the
+  // file cache name it `src/sub/a.ts`. A file cached under the event's own form reloads too.
+  const key = ops.windows ? path.replaceAll("\\", "/") : path
+
+  new Set([key, path]).forEach((file) => {
+    if (ops.hasFile(file) || ops.isOpen?.(file)) ops.loadFile(file)
+  })
 
   if (event.data.event === "change") {
-    if (ops.node(path)?.type !== "directory") return
+    if (ops.node(key)?.type !== "directory") return
 
-    if (!ops.isDirLoaded(path)) return
-    ops.refreshDir(path)
+    if (!ops.isDirLoaded(key)) return
+    ops.refreshDir(key)
 
     return
   }
 
-  // Paths keep the native separator, so a Windows event names `src\sub\a.ts`.
-  const parent = path.split(/[/\\]/).slice(0, -1).join("/")
+  const parent = key.split(/[/\\]/).slice(0, -1).join("/")
 
   if (!ops.isDirLoaded(parent)) return
 

@@ -88,6 +88,11 @@ export function decodeFilePath(input: string) {
   }
 }
 
+/** A drive or UNC root, whose paths compare case-insensitively and with either separator. */
+export function isWindowsRoot(root: string) {
+  return /^[A-Za-z]:/.test(root) || root.startsWith("\\\\")
+}
+
 export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
     const root = scope()
@@ -100,7 +105,7 @@ export function createPathHelpers(scope: () => string) {
 
     // Separator-agnostic prefix stripping for Cygwin/native Windows compatibility
     // Only case-insensitive on Windows (drive letter or UNC paths)
-    const windows = /^[A-Za-z]:/.test(root) || root.startsWith("\\\\")
+    const windows = isWindowsRoot(root)
     const canonRoot = windows ? root.replace(/\\/g, "/").toLowerCase() : root.replace(/\\/g, "/")
     const canonPath = windows ? path.replace(/\\/g, "/").toLowerCase() : path.replace(/\\/g, "/")
 
@@ -127,7 +132,7 @@ export function createPathHelpers(scope: () => string) {
   const normalizeDir = (input: string) => {
     const path = normalize(input)
     const root = scope()
-    const windows = /^[A-Za-z]:/.test(root) || root.startsWith("\\\\")
+    const windows = isWindowsRoot(root)
 
     return (windows ? path.replace(/\\/g, "/") : path).replace(/\/+$/, "")
   }

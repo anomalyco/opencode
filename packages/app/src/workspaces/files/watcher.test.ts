@@ -95,6 +95,56 @@ describe("file watcher invalidation", () => {
     expect(refresh).toEqual(["src/sub"])
   })
 
+  test("reloads a file open inside a folder when a Windows event names it with backslashes", () => {
+    const loads: string[] = []
+
+    invalidateFromWatcher(filesystemEvent("src\\util\\format.ts", "change"), {
+      normalize: (input) => input,
+      windows: true,
+      hasFile: (path) => path === "src/util/format.ts",
+      isOpen: (path) => path === "src/util/format.ts",
+      loadFile: (path) => loads.push(path),
+      node: () => undefined,
+      isDirLoaded: () => false,
+      refreshDir: () => {},
+    })
+
+    expect(loads).toEqual(["src/util/format.ts"])
+  })
+
+  test("refreshes a changed Windows folder the tree lists with slashes", () => {
+    const refresh: string[] = []
+
+    invalidateFromWatcher(filesystemEvent("src\\util", "change"), {
+      normalize: (input) => input,
+      windows: true,
+      hasFile: () => false,
+      loadFile: () => {},
+      node: (path) =>
+        path === "src/util"
+          ? { path, type: "directory", name: "util", absolute: "C:/repo/src/util", ignored: false }
+          : undefined,
+      isDirLoaded: (path) => path === "src/util",
+      refreshDir: (path) => refresh.push(path),
+    })
+
+    expect(refresh).toEqual(["src/util"])
+  })
+
+  test("keeps a backslash in a POSIX file name", () => {
+    const loads: string[] = []
+
+    invalidateFromWatcher(filesystemEvent("odd\\name.ts", "change"), {
+      normalize: (input) => input,
+      hasFile: (path) => path === "odd\\name.ts" || path === "odd/name.ts",
+      loadFile: (path) => loads.push(path),
+      node: () => undefined,
+      isDirLoaded: () => false,
+      refreshDir: () => {},
+    })
+
+    expect(loads).toEqual(["odd\\name.ts"])
+  })
   test.each([".git/index.lock", ".git\\index.lock"])("ignores git watcher update %p", (file) => {
     const refresh: string[] = []
 
