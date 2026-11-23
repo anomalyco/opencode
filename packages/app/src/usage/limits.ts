@@ -87,11 +87,13 @@ export function usageView(
   const anyReached = budgets.some((entry) => entry.reached)
   const reachedModels = budgets.find((entry) => entry.reached && entry.budget.coverage === "models")
   const resetsAt = Math.min(...info.budgets.map((budget) => budget.resetsAt))
-  const go = info.go
+  const go = info.allowances.find((allowance) => allowance.providerID === "opencode-go")
   return {
-    workspace: info.workspace.name,
+    workspace: info.workspace?.name,
     callout,
-    go: go && (["rolling", "weekly", "monthly"] as const).map((window) => ({ window, ...go[window] })),
+    go: go?.windows.flatMap((row): GoRow[] =>
+      row.id === "rolling" || row.id === "weekly" || row.id === "monthly" ? [{ ...row, window: row.id }] : [],
+    ),
     budgets: budgets.map((entry, index) => ({
       id: entry.budget.id,
       label: label(entry.budget),

@@ -18,7 +18,7 @@ export const UsageGroup = HttpApiGroup.make("server.usage")
           identifier: "experimental.usage.limits",
           summary: "Get usage limits",
           description:
-            "Return the OpenCode Go allowance and Console budgets of the OpenCode Console workspace the location is signed in to, or null when it isn't signed in.",
+            "Experimental: may change without compatibility guarantees. Return subscription allowances and Console budgets for this location, or null when no usage data is available.",
         }),
       ),
   )

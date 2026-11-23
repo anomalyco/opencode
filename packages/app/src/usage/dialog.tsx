@@ -64,7 +64,7 @@ export function DialogUsage(props: {
   const ready = createMemo(() => {
     const current = view()
 
-    return current.status === "ready" ? current.info : undefined
+    return current.status === "ready" && current.info.workspace ? current.info : undefined
   })
 
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -130,7 +130,7 @@ export function DialogUsage(props: {
       fallback={
         <UsageFrame>
           <Switch>
-            <Match when={view().status === "signed-out"}>
+            <Match when={view().status === "signed-out" || view().status === "ready"}>
               <div class="flex flex-col px-3 pb-3">
                 <Panel gap={8}>
                   <Message
@@ -336,7 +336,7 @@ export function UsageDialogContent(props: {
           <Button
             variant="ghost"
             class="text-v2-text-text-muted!"
-            onClick={() => platform.openExternal(props.info.workspace.usageURL)}
+            onClick={() => props.info.workspace && platform.openExternal(props.info.workspace.usageURL)}
           >
             {language.t("usage.footer.details")}
           </Button>

@@ -37,13 +37,34 @@ const pool = (spent: number) => budget({ id: "pool", scope: "combined", shared: 
 
 const info = (budgets: UsageLimitsBudget[], go?: "available" | "limited"): UsageLimitsInfo => ({
   workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/wrk_1/activity/overview" },
-  go: go
-    ? {
-        rolling: { percent: go === "limited" ? 100 : 42, limited: go === "limited", resetsAt: Date.now() + 3 * hour },
-        weekly: { percent: 18, limited: false, resetsAt: Date.now() + 100 * hour },
-        monthly: { percent: 7, limited: false, resetsAt: Date.now() + 500 * hour },
-      }
-    : undefined,
+  allowances: go
+    ? [
+        {
+          providerID: "opencode-go",
+          name: "OpenCode Go",
+          windows: [
+            {
+              id: "rolling",
+              percent: go === "limited" ? 100 : 42,
+              limited: go === "limited",
+              resetsAt: Date.now() + 3 * hour,
+            },
+            {
+              id: "weekly",
+              percent: 18,
+              limited: false,
+              resetsAt: Date.now() + 100 * hour,
+            },
+            {
+              id: "monthly",
+              percent: 7,
+              limited: false,
+              resetsAt: Date.now() + 500 * hour,
+            },
+          ],
+        },
+      ]
+    : [],
   budgets,
 })
 
