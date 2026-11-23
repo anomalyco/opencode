@@ -9,8 +9,12 @@ Sources:
   16, 2026").
 - **Google Play:** [Device and Network Abuse](https://support.google.com/googleplay/android-developer/answer/16273414)
   (the page names [answer 16559646](https://support.google.com/googleplay/android-developer/answer/16559646) as
-  canonical) and [Use of the REQUEST_INSTALL_PACKAGES
-  permission](https://support.google.com/googleplay/android-developer/answer/12085295).
+  canonical), [Use of the REQUEST_INSTALL_PACKAGES
+  permission](https://support.google.com/googleplay/android-developer/answer/12085295), [User Generated
+  Content](https://support.google.com/googleplay/android-developer/answer/9876937) and [AI-Generated
+  Content](https://support.google.com/googleplay/android-developer/answer/13985936). These pages show no date; the
+  [Developer Program Policy](https://support.google.com/googleplay/android-developer/answer/17190352) that holds them
+  says "(effective October 29, 2026, unless otherwise stated)".
 - **Android developer verification:** [Android developer
   verification](https://developer.android.com/developer-verification/guides) ("Last updated 2026-08-18 UTC").
 
@@ -91,13 +95,32 @@ Capabilities).
 > "Apps or third-party code, like SDKs, with interpreted languages (JavaScript, Python, Lua, etc.) loaded at run time
 > (for example, not packaged with the app) must not allow potential violations of Google Play policies." (checked
 > 2026-11-23)
+>
+> [Google Play, User Generated Content](https://support.google.com/googleplay/android-developer/answer/9876937): "Apps
+> that contain or feature UGC, including apps which are specialized browsers or clients to direct users to a UGC
+> platform, must implement robust, effective, and ongoing UGC moderation that:
+>
+> - Requires users accept the app's terms of use and/or user policy before users can create or upload UGC;
+> - Defines objectionable content and behaviors (in a way that complies with Google Play Developer Program Policies),
+>   and prohibits them in the app’s terms of use or user policies;
+> - Conducts UGC moderation, as is reasonable and consistent with the type of UGC hosted by the app. This includes
+>   providing an in-app system for reporting and blocking objectionable UGC and users, and taking action against UGC or
+>   users where appropriate. [...]" (checked 2026-11-23)
+>
+> [Google Play, AI-Generated Content](https://support.google.com/googleplay/android-developer/answer/13985936): "Apps
+> that generate content using AI must contain in-app user reporting or flagging features that allow users to report or
+> flag offensive content to developers without needing to exit the app. Developers should utilize user reports to inform
+> content filtering and moderation in their apps." (checked 2026-11-23)
 
 - **Missing:** a widget someone else shared (Console artifacts) can't be reported, its sharer can't be blocked, and
-  nothing screens it when it is shared.
-- **Feature:** on any widget not made in the user's own sessions, a Report action (reason, the widget template
+  nothing screens it when it is shared; sharing doesn't ask the sharer to accept terms of use that define objectionable
+  content. A widget the agent made in the user's own session is AI-generated content, and it can't be reported or
+  flagged in the app either.
+- **Feature:** a Report action on every widget, the user's own agent-made ones included (those go to us as AI-generated
+  content flags); on any widget not made in the user's own sessions, the Report action (reason, the widget template
   `name@version`, the sharer) to a moderated queue with a response, and Block, which hides that sharer's widgets for the
   user. Shared widget templates are screened when shared, and a takedown makes the server stop serving them. Contact
-  information in the app.
+  information in the app, and terms of use accepted before the first share.
 - **Hosts:** server (Console), Rune, iOS, Android, web host.
 
 ### (c) A widget index with universal links
