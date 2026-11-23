@@ -152,11 +152,23 @@
     --timeline-quote-background: var(--v2-state-bg-danger);
   }
 
-  [data-slot="tool-error-card-content"] :where(*)::selection,
-  [data-slot="tool-error-card-content"] :where(*)::highlight(timeline-quote-source),
-  [data-slot="tool-error-card-content"] :where(*)::highlight(timeline-quote-source-active) {
-    background: var(--v2-state-bg-danger);
-    color: var(--v2-text-text-base);
+  /* Matches the content, not each descendant, where highlights inherit; see quote-highlight.css. */
+  @supports selector(:host-context(*)) {
+    [data-slot="tool-error-card-content"]::selection,
+    [data-slot="tool-error-card-content"]::highlight(timeline-quote-source),
+    [data-slot="tool-error-card-content"]::highlight(timeline-quote-source-active) {
+      background: var(--v2-state-bg-danger);
+      color: var(--v2-text-text-base);
+    }
+  }
+
+  @supports not selector(:host-context(*)) {
+    [data-slot="tool-error-card-content"] :where(*)::selection,
+    [data-slot="tool-error-card-content"] :where(*)::highlight(timeline-quote-source),
+    [data-slot="tool-error-card-content"] :where(*)::highlight(timeline-quote-source-active) {
+      background: var(--v2-state-bg-danger);
+      color: var(--v2-text-text-base);
+    }
   }
 
   [data-slot="tool-error-card-content"] :where(*)::-moz-selection {

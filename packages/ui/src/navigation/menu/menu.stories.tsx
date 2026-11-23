@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createSignal } from "solid-js"
 import { Menu } from "./menu"
 import { Button } from "@opencode/ui/button"
@@ -13,6 +12,7 @@ Composable menu primitive built on Kobalte's \`DropdownMenu\` and \`ContextMenu\
 - \`Menu.Context\` namespace mirrors the same shape for right-click menus.
 - \`appearance\`: \`compact\` (default) or \`standard\`.
 - \`Menu.Item\` — supports a freeform \`children\` slot (avatar, icon, text — whatever) plus \`shortcut\` and \`badge\` props.
+- \`Menu.ItemRow\` - a row that is not an action itself: a \`label\` where an item's label is, and small \`Menu.Item\`s as children where a shortcut or chevron is. Up and Down walk them in order; Left and Right move between them.
 - \`Menu.CheckboxItem\` / \`Menu.RadioItem\` — same item shape; auto-render a check indicator when selected.
 - \`Menu.Sub\` / \`Menu.SubTrigger\` / \`Menu.SubContent\` — nested submenus; \`SubTrigger\` auto-renders the trailing chevron.
 
@@ -38,10 +38,12 @@ export default {
   },
 }
 
-export const Basic = {
-  render: () => (
+function FileMenu(props: { disabled?: boolean }) {
+  return (
     <Menu gutter={6}>
-      <Menu.Trigger as={Button}>Open menu</Menu.Trigger>
+      <Menu.Trigger as={Button} disabled={props.disabled}>
+        Open menu
+      </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content>
           <Menu.Item>New file</Menu.Item>
@@ -52,7 +54,45 @@ export const Basic = {
         </Menu.Content>
       </Menu.Portal>
     </Menu>
-  ),
+  )
+}
+
+export const Basic = { render: () => <FileMenu /> }
+
+export const DisabledTrigger = { render: () => <FileMenu disabled /> }
+
+export const ProgrammaticAndNonModal = {
+  render: () => {
+    const [open, setOpen] = createSignal(false)
+    const [restores, setRestores] = createSignal(0)
+
+    return (
+      <div style={{ display: "flex", gap: "16px", "align-items": "flex-start" }}>
+        {/* Opens a task after the click, like a shortcut handler or an async action. */}
+        <Button onClick={() => setTimeout(() => setOpen(true))}>Open from code</Button>
+        <Menu gutter={6} open={open()} onOpenChange={setOpen}>
+          <Menu.Trigger as={Button}>Controlled</Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content>
+              <Menu.Item>Rename</Menu.Item>
+              <Menu.Item>Duplicate</Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+        <Menu gutter={6} modal={false}>
+          <Menu.Trigger as={Button}>Non-modal</Menu.Trigger>
+          <Menu.Portal>
+            {/* Counts close focus restores, which run a task after the menu closes. */}
+            <Menu.Content onCloseAutoFocus={() => setRestores((count) => count + 1)}>
+              <Menu.Item>Pin</Menu.Item>
+              <Menu.Item>Archive</Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+        <output aria-label="Non-modal focus restores">{restores()}</output>
+      </div>
+    )
+  },
 }
 
 export const Appearances = {
@@ -110,32 +150,72 @@ export const Rich = {
   ),
 }
 
-export const WithCheckbox = {
+export const WithItemRow = {
   render: () => {
-    const [wrap, setWrap] = createSignal(true)
-    const [minimap, setMinimap] = createSignal(false)
-    const [ruler, setRuler] = createSignal(false)
+    const [zoom, setZoom] = createSignal(100)
 
     return (
       <Menu gutter={6}>
-        <Menu.Trigger as={Button}>View</Menu.Trigger>
+        <Menu.Trigger as={Button}>Open menu with a row</Menu.Trigger>
         <Menu.Portal>
-          <Menu.Content style={{ "min-width": "200px" }}>
-            <Menu.CheckboxItem checked={wrap()} onChange={setWrap} shortcut="⌥ Z">
-              Word wrap
-            </Menu.CheckboxItem>
-            <Menu.CheckboxItem checked={minimap()} onChange={setMinimap}>
-              Minimap
-            </Menu.CheckboxItem>
-            <Menu.CheckboxItem checked={ruler()} onChange={setRuler} disabled>
-              Ruler
-            </Menu.CheckboxItem>
+          <Menu.Content style={{ width: "220px" }}>
+            <Menu.Item shortcut="? F">Find in page</Menu.Item>
+            <Menu.ItemRow label="Zoom">
+              <Menu.Item aria-label="Zoom out" closeOnSelect={false} onSelect={() => setZoom((value) => value - 10)}>
+                <Icon name="minus" size="small" />
+              </Menu.Item>
+              <Menu.Item aria-label="Reset zoom" closeOnSelect={false} disabled={zoom() === 100} onSelect={() => setZoom(100)}>
+                {zoom()}%
+              </Menu.Item>
+              <Menu.Item aria-label="Zoom in" closeOnSelect={false} onSelect={() => setZoom((value) => value + 10)}>
+                <Icon name="plus" size="small" />
+              </Menu.Item>
+            </Menu.ItemRow>
+            <Menu.Item>Copy link</Menu.Item>
+            <Menu.Separator />
+            <Menu.Sub gutter={4} overflowPadding={16} overlap>
+              <Menu.SubTrigger>More tools</Menu.SubTrigger>
+              <Menu.Portal>
+                <Menu.SubContent>
+                  <Menu.Item>Clear history</Menu.Item>
+                </Menu.SubContent>
+              </Menu.Portal>
+            </Menu.Sub>
           </Menu.Content>
         </Menu.Portal>
       </Menu>
     )
   },
 }
+
+function ViewMenu(props: { initiallyOpen?: boolean }) {
+  const [wrap, setWrap] = createSignal(true)
+  const [minimap, setMinimap] = createSignal(false)
+  const [ruler, setRuler] = createSignal(false)
+
+  return (
+    <Menu gutter={6} defaultOpen={props.initiallyOpen} modal={!props.initiallyOpen}>
+      <Menu.Trigger as={Button}>View</Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content style={{ "min-width": "200px" }}>
+          <Menu.CheckboxItem checked={wrap()} onChange={setWrap} shortcut="⌥ Z">
+            Word wrap
+          </Menu.CheckboxItem>
+          <Menu.CheckboxItem checked={minimap()} onChange={setMinimap}>
+            Minimap
+          </Menu.CheckboxItem>
+          <Menu.CheckboxItem checked={ruler()} onChange={setRuler} disabled>
+            Ruler
+          </Menu.CheckboxItem>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
+  )
+}
+
+export const WithCheckbox = { render: () => <ViewMenu /> }
+
+export const OpenWithCheckbox = { render: () => <ViewMenu initiallyOpen /> }
 
 export const WithRadio = {
   render: () => {
@@ -163,15 +243,15 @@ export const WithRadio = {
   },
 }
 
-export const WithSubmenu = {
-  render: () => (
-    <Menu gutter={6}>
+function RecentFilesMenu(props: { initiallyOpen?: boolean }) {
+  return (
+    <Menu gutter={6} defaultOpen={props.initiallyOpen} modal={!props.initiallyOpen}>
       <Menu.Trigger as={Button}>File</Menu.Trigger>
       <Menu.Portal>
         <Menu.Content style={{ "min-width": "200px" }}>
           <Menu.Item shortcut="⌘ N">New file</Menu.Item>
           <Menu.Item shortcut="⌘ O">Open file</Menu.Item>
-          <Menu.Sub gutter={0}>
+          <Menu.Sub gutter={0} defaultOpen={props.initiallyOpen}>
             <Menu.SubTrigger>Open recent</Menu.SubTrigger>
             <Menu.Portal>
               <Menu.SubContent>
@@ -189,8 +269,12 @@ export const WithSubmenu = {
         </Menu.Content>
       </Menu.Portal>
     </Menu>
-  ),
+  )
 }
+
+export const WithSubmenu = { render: () => <RecentFilesMenu /> }
+
+export const OpenSubmenu = { render: () => <RecentFilesMenu initiallyOpen /> }
 
 export const Context = {
   render: () => (

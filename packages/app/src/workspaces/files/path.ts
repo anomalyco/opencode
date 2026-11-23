@@ -88,7 +88,7 @@ export function decodeFilePath(input: string) {
   }
 }
 
-export function createPathHelpers(scope: () => string) {
+export function createPathHelpers(scope: () => string, home: () => string = () => "") {
   const normalize = (input: string) => {
     const root = scope()
 
@@ -97,6 +97,9 @@ export function createPathHelpers(scope: () => string) {
       /^[/\\]([A-Za-z]:)/,
       "$1",
     )
+
+    // `~` names the server's home folder, as it does in the paths agents write.
+    if (home() && /^~(?:[/\\]|$)/.test(path)) path = home().replace(/[/\\]+$/, "") + path.slice(1)
 
     // Separator-agnostic prefix stripping for Cygwin/native Windows compatibility
     // Only case-insensitive on Windows (drive letter or UNC paths)
@@ -121,7 +124,8 @@ export function createPathHelpers(scope: () => string) {
   }
 
   /** Whether a normalized path points outside the workspace root. */
-  const absolute = (path: string) => /^[A-Za-z]:[/\\]/.test(path) || path.startsWith("/") || path.startsWith("\\\\")
+  const absolute = (path: string) =>
+    path.startsWith("skill://") || /^[A-Za-z]:[/\\]/.test(path) || path.startsWith("/") || path.startsWith("\\\\")
 
   const normalizeDir = (input: string) => {
     const path = normalize(input)

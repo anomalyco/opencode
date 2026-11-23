@@ -15,8 +15,10 @@ import { RequestExecutor } from "@opencode/ai/route"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { AISDK } from "@opencode/core/aisdk"
+import { Credential } from "@opencode/core/credential"
 import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
+import { IntegrationConnection } from "@opencode/core/integration/connection"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { ID, Info, Model, Ref, VariantID } from "@opencode/core/model"
@@ -281,6 +283,11 @@ describe("image and decision generation", () => {
       package: "@opencode/ai/providers/openai/images",
     }),
     Info.make({
+      ...Info.default(Provider.ID.opencode, ID.make("gpt-image-2.5-sunburst")),
+      type: "image",
+      package: "@opencode/ai/providers/openai/images",
+    }),
+    Info.make({
       ...Info.default(Provider.ID.make("zai"), ID.make("glm-image")),
       type: "image",
       package: "@opencode/ai/providers/zai/images",
@@ -293,6 +300,11 @@ describe("image and decision generation", () => {
       ...Info.default(Provider.ID.make("openrouter"), ID.make("typesafe/jev-1.13")),
       type: "decision",
       package: "@opencode/ai/providers/openrouter/decisions",
+    }),
+    Info.make({
+      ...Info.default(Provider.ID.make("lmstudio"), ID.make("openjev")),
+      type: "decision",
+      package: "@opencode/ai/providers/openai-compatible/decisions",
     }),
   ].concat(
     decisionCatalog(),
@@ -311,7 +323,11 @@ describe("image and decision generation", () => {
         Provider.Info.make({
           ...Provider.Info.empty(providerID),
           activation: "enabled",
-          settings: { apiKey: `${providerID}-key` },
+          settings: 
+            // A local host like LM Studio is enabled with no key.
+            providerID === "lmstudio"
+              ? { baseURL: "http://127.0.0.1:1234/v1", provider: "lmstudio", apiKey: "" }
+              : { apiKey: `${providerID}-key` },
         }),
       ),
   })
@@ -323,6 +339,51 @@ describe("image and decision generation", () => {
         ),
       ),
     available: (types) => Effect.succeed(catalog.filter((model) => (types ?? ["chat"]).includes(model.type ?? "chat"))),
+  })
+  // An OpenCode Console login keeps its server and organization as credential metadata.
+  const mediaIntegrations = Layer.mock(Integration.Service, {
+    revision: () => 0,
+    connection: {
+      active: (id) =>
+        Effect.succeed(
+          id === Integration.ID.make("opencode")
+            ? IntegrationConnection.CredentialInfo.make({
+                type: "credential",
+                id: Credential.ID.make("console"),
+                label: "Acme",
+                method: "oauth",
+              })
+            : undefined,
+        ),
+      resolve: () =>
+        Effect.succeed(
+          Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("device"),
+            access: "console-token",
+            refresh: "refresh",
+            expires: Number.MAX_SAFE_INTEGER,
+            metadata: { server: "https://console.example", orgID: "org_123", orgName: "Acme" },
+          }),
+        ),
+      key: () => Effect.die("unused"),
+      external: () => Effect.die("unused"),
+      activate: () => Effect.die("unused"),
+      update: () => Effect.die("unused"),
+      remove: () => Effect.die("unused"),
+      status: () => Effect.die("unused"),
+    },
+    oauth: {
+      connect: () => Effect.die("unused"),
+      status: () => Effect.die("unused"),
+      complete: () => Effect.die("unused"),
+      cancel: () => Effect.die("unused"),
+    },
+    command: {
+      connect: () => Effect.die("unused"),
+      status: () => Effect.die("unused"),
+      cancel: () => Effect.die("unused"),
+    },
   })
   const requests: { url: string; headers: Record<string, string>; body: unknown }[] = []
   const http = Layer.succeed(
@@ -346,10 +407,23 @@ describe("image and decision generation", () => {
               usage: { input_tokens: 9, output_tokens: 272 },
             }),
           )
+        if (request.url === "http://127.0.0.1:1234/v1/systemone")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({ model: "openjev", answers: { photo: { type: "noul", noul: 0.7 } } }),
+          )
         if (request.url === "https://api.typesafe.ai/v1/systemone")
           return HttpClientResponse.fromWeb(
             request,
             Response.json({ model: "clef", answers: { photo: { type: "noul", noul: 0.9 } } }),
+          )
+        if (request.url === "https://gemini.test/v1beta/decisions")
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              answers: { photo: { type: "noul", noul: 0.8, confidence: 0.8 } },
+              usage: { total_input_tokens: 12, total_output_tokens: 0, total_tokens: 12 },
+            }),
           )
         if (request.url === "https://openrouter.ai/api/v1/systemone")
           return HttpClientResponse.fromWeb(
@@ -365,7 +439,7 @@ describe("image and decision generation", () => {
   )
   const executor = RequestExecutor.layer.pipe(Layer.provide(http))
   const mediaResolver = ModelResolver.layer.pipe(
-    Layer.provide(Layer.mergeAll(mediaProviders, mediaModels, integrations, npm, aisdk)),
+    Layer.provide(Layer.mergeAll(mediaProviders, mediaModels, mediaIntegrations, npm, aisdk)),
   )
   const mediaIt = testEffect(
     Generate.layer.pipe(Layer.provide(Layer.mergeAll(mediaResolver, client, mediaModels, executor))),
@@ -396,11 +470,48 @@ describe("image and decision generation", () => {
     }),
   )
 
+  mediaIt.effect("keeps credential metadata out of image requests", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      yield* generate.image({ model: ref("opencode", "gpt-image-2.5-sunburst"), prompt: "A black circle" })
+      expect(requests[0]).toMatchObject({
+        url: "https://api.openai.com/v1/images/generations",
+        headers: { authorization: "Bearer console-token" },
+      })
+      expect(requests[0]?.body).toStrictEqual({ model: "gpt-image-2.5-sunburst", prompt: "A black circle" })
+    }),
+  )
+
   mediaIt.effect("downloads URL images and detects their type from the bytes", () =>
     Effect.gen(function* () {
       const generate = yield* Generate.Service
       const result = yield* generate.image({ model: ref("zai", "glm-image"), prompt: "A fox" })
       expect(result.images).toEqual([{ type: "image", data: Buffer.from(PNG).toString("base64"), mime: "image/png" }])
+    }),
+  )
+
+  mediaIt.effect("sends keyless local decisions without auth, with images at the body root", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      const result = yield* generate.decisions({
+        model: ref("lmstudio", "openjev"),
+        input: [
+          { type: "text", text: "A cat" },
+          { type: "file", data: Buffer.from(PNG).toString("base64"), mime: "image/png" },
+        ],
+        questions: [{ type: "predicate", name: "photo", instructions: "Is this a photo?" }],
+      })
+      expect(requests[0]?.url).toBe("http://127.0.0.1:1234/v1/systemone")
+      expect(requests[0]?.headers.authorization).toBeUndefined()
+      expect(requests[0]?.body).toStrictEqual({
+        model: "openjev",
+        state: "A cat",
+        images: [`data:image/png;base64,${Buffer.from(PNG).toString("base64")}`],
+        questions: { photo: { type: "noul", instructions: "Is this a photo?" } },
+      })
+      expect(result.answers).toEqual([{ type: "predicate", name: "photo", probability: 0.7 }])
     }),
   )
 
@@ -437,12 +548,26 @@ describe("image and decision generation", () => {
               { label: "Actively blocking revenue" },
             ],
           },
-          { type: "predicate", name: "refund", instructions: "Is the customer asking for a refund?" },
+          {
+            type: "predicate",
+            name: "refund",
+            instructions: "Is the customer asking for a refund?",
+            criteria: { true: "They want money back.", false: "Anything else." },
+          },
         ],
       })
       expect(requests[0]).toMatchObject({
         url: "https://openrouter.ai/api/v1/systemone",
         headers: { authorization: "Bearer openrouter-key" },
+        body: {
+          questions: {
+            refund: {
+              type: "noul",
+              instructions: "Is the customer asking for a refund?",
+              criteria: { true: "They want money back.", false: "Anything else." },
+            },
+          },
+        },
       })
       expect(result.answers.map((answer) => [answer.name, answer.type])).toEqual([
         ["department", "choice"],
@@ -486,6 +611,34 @@ describe("image and decision generation", () => {
           assets: { "<image-1>": { type: "image", format: "png", data_base64: "aW1hZ2U=" } },
         })
       expect(yield* sendImage("decide-override")).toMatchObject({ images: ["data:image/png;base64,aW1hZ2U="] })
+    }),
+  )
+
+  mediaIt.effect("routes a gemini-decisions catalog entry to the Google decisions entrypoint", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      const generate = yield* Generate.Service
+      const result = yield* generate.decisions({
+        model: ref("decide-host", "decide-gemini"),
+        input: [
+          { type: "text", text: "Is this a photo?" },
+          { type: "file", data: "aW1hZ2U=", mime: "image/png" },
+        ],
+        questions: [{ type: "predicate", name: "photo", instructions: "Is this a photo?" }],
+      })
+      expect(requests[0]).toMatchObject({
+        url: "https://gemini.test/v1beta/decisions",
+        body: {
+          model: "decide-gemini",
+          input: [
+            { type: "text", text: "Is this a photo?" },
+            { type: "image", mime_type: "image/png", data: "aW1hZ2U=" },
+          ],
+          questions: { photo: { type: "noul", instructions: "Is this a photo?" } },
+        },
+      })
+      expect(result.answers).toEqual([{ type: "predicate", name: "photo", probability: 0.8 }])
+      expect(result.tokens).toEqual({ input: 12, output: 0 })
     }),
   )
 
@@ -567,6 +720,15 @@ function decisionCatalog() {
             "decide-state": model("decide-state", { media_input: "state" }),
             "decide-unknown": model("decide-unknown", { media_input: "somewhere_new" }),
             "decide-override": model("decide-override", { media_input: "state" }),
+            "decide-gemini": {
+              ...model("decide-gemini"),
+              api: {
+                "gemini-decisions": {
+                  base_url: "https://gemini.test/v1beta",
+                  sdk: { opencodeai: "@opencode/ai/providers/google/decisions" },
+                },
+              },
+            },
           },
         },
       }),

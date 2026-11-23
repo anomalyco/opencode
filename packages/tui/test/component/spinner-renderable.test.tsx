@@ -34,7 +34,8 @@ async function mount(spinner: () => JSX.Element) {
 }
 
 test.each([
-  { name: "advances one frame per elapsed interval", autoplay: true, steps: [79, 1, 80, 160], frames: "abcb" },
+  // Ticks share a clock: due every 80 ms from time 0, and up to 40 ms early to share a frame.
+  { name: "advances one frame per elapsed interval", autoplay: true, steps: [39, 1, 80, 160], frames: "abcb" },
   { name: "holds the first frame without autoplay", autoplay: false, steps: [80, 160], frames: "aa" },
 ])("$name", async (item) => {
   await using spinner = await mount(() => <spinner frames={["a", "b", "c"]} interval={80} autoplay={item.autoplay} />)
@@ -42,7 +43,7 @@ test.each([
   for (const [index, ms] of item.steps.entries()) expect(await spinner.step(ms)).toBe(item.frames[index]!)
 })
 
-test("frames, autoplay, and visibility changes restart the frame clock", async () => {
+test("frames reset the glyph; autoplay and visibility stop and resume the ticks", async () => {
   const [frames, setFrames] = createSignal(["a", "b", "c"])
   const [autoplay, setAutoplay] = createSignal(true)
   const [visible, setVisible] = createSignal(true)
@@ -60,17 +61,17 @@ test("frames, autoplay, and visibility changes restart the frame clock", async (
   setAutoplay(false)
   expect(await spinner.step(200)).toBe("y")
   setAutoplay(true)
-  // Paused time does not count toward the next frame.
-  expect(await spinner.step(50)).toBe("y")
-  expect(await spinner.step(79)).toBe("y")
-  expect(await spinner.step(1)).toBe("x")
+  // Resumes on the shared clock at the first due time out of reach: 480 ms, so it ticks from 440 ms on.
+  expect(await spinner.step(40)).toBe("y")
+  expect(await spinner.step(40)).toBe("x")
 
+  // The first tick after a frame that skipped its onUpdate stops the clock.
   setVisible(false)
   await spinner.step(1000)
+  await spinner.step(80)
   expect(spinner.clock.pendingTimerCount).toBe(0)
   setVisible(true)
-  expect(await spinner.step(40)).toBe("x")
-  expect(await spinner.step(79)).toBe("x")
+  expect(await spinner.step(39)).toBe("x")
   expect(await spinner.step(1)).toBe("y")
 })
 

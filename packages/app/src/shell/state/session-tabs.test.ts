@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import {
+  appendSessionTab,
   closeSessionTab,
   moveSessionTab,
   openSessionTab,
@@ -131,8 +132,36 @@ test.each<{ name: string; run: () => SessionTabs; expected: SessionTabs }>([
   },
   {
     name: "a pane's target places a new tab of another plugin",
-    run: () => placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, "split"),
+    run: () => placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, { pane: "split" }),
     expected: { all: [A, T1], active: T1, panes: { [T1]: "split" }, selected: { side: A, split: T1 } },
+  },
+  {
+    name: "a terminal launcher's target leaves a file opened meanwhile in its own pane",
+    run: () =>
+      placeSessionTabs({ all: [A], active: A }, { all: [A, B], active: B }, { pane: "bottom", plugin: "terminal" }),
+    expected: { all: [A, B], active: B, selected: { side: B } },
+  },
+  {
+    name: "a plugin's target places that plugin's new tab",
+    run: () =>
+      placeSessionTabs({ all: [A], active: A }, { all: [A, T1], active: T1 }, { pane: "bottom", plugin: "terminal" }),
+    expected: { all: [A, T1], active: T1, panes: { [T1]: "bottom" }, selected: { side: A, bottom: T1 } },
+  },
+  {
+    name: "a reopened tab's target puts it back where it closed",
+    run: () =>
+      placeSessionTabs(
+        { all: [A, T1], active: A },
+        { all: [A, T1, B], active: B },
+        { pane: "side", plugin: "file", index: 1 },
+      ),
+    expected: { all: [A, B, T1], active: B, selected: { side: B } },
+  },
+  {
+    name: "a reopened tab past the strip's end lands last",
+    run: () =>
+      placeSessionTabs({ all: [A], active: A }, { all: [A, B], active: B }, { pane: "side", plugin: "file", index: 5 }),
+    expected: { all: [A, B], active: B, selected: { side: B } },
   },
 ])("$name", ({ run, expected }) => {
   expect(run()).toEqual(expected)
@@ -142,4 +171,18 @@ test("closing the selected tab of a pane selects its neighbour in the same pane"
   const tabs = { all: [A, T1, B, T2], active: T2, panes: { [T1]: "bottom" as const, [T2]: "bottom" as const } }
 
   expect(closeSessionTab({ tabs }, T2).tabs.active).toBe(T1)
+})
+
+test.each([
+  { name: "append adds a tab at the end without selecting it", after: undefined, expected: ["a", "b", "c", "new"] },
+  { name: "append places a tab directly after the tab it names", after: "a", expected: ["a", "new", "b", "c"] },
+  { name: "append after the last tab is the end", after: "c", expected: ["a", "b", "c", "new"] },
+  { name: "append after a tab the strip does not store is the end", after: "gone", expected: ["a", "b", "c", "new"] },
+])("$name", ({ after, expected }) => {
+  expect(appendSessionTab({ all: ["a", "b", "c"], active: "b" }, "new", after)).toEqual({ all: [...expected], active: "b" })
+})
+
+test("append leaves a tab the strip stores where it is", () => {
+  const tabs: SessionTabs = { all: ["a", "b", "c"], active: "b" }
+  expect(appendSessionTab(tabs, "c", "a")).toBe(tabs)
 })

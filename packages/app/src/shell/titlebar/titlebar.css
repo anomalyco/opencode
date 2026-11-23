@@ -10,11 +10,23 @@
 
 [data-slot="vertical-tabs-sidebar"] [data-slot="vertical-tabs-scroll"] {
   min-height: 0;
-  /* Leave enough space to scroll the final tab clear of the fade above Settings. */
   padding-block-end: 16px;
-  scroll-padding-block-end: 16px;
-  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent);
-  mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent);
+  /* Keyboard navigation scrolls a tab clear of the feathered edges, which TitlebarTabStrip sizes from the scroll. */
+  scroll-padding-block: 16px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--vertical-tabs-fade-top, 0px),
+    black calc(100% - var(--vertical-tabs-fade-bottom, 0px)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--vertical-tabs-fade-top, 0px),
+    black calc(100% - var(--vertical-tabs-fade-bottom, 0px)),
+    transparent
+  );
 }
 
 [data-slot="mobile-tabs-trigger"][aria-expanded="true"] {
@@ -98,22 +110,33 @@
   outline: none;
 }
 
+[data-slot="titlebar-tab-item"]:has(> [data-titlebar-tab-link]:focus-visible) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+}
+
 :is(
     [data-slot="titlebar-v2"],
     [data-slot="collapsed-sidebar-toggle"],
     [data-slot="session-review-toggle"],
+    [data-slot="session-review-panel-toggle"],
     [data-session-title]
   )
   [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:focus-visible, [data-state="focus"]):not(
     :disabled
   ) {
-  outline: none;
   background-color: var(--v2-overlay-simple-overlay-hover);
 }
 
 [data-slot="titlebar-tab-item"]
   [data-component="icon-button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
   opacity: 1;
+}
+
+/* The titlebar row clips its overflow for the tab strip, and its buttons are as tall as the row, so their ring is drawn
+   inside. */
+[data-slot="titlebar-v2"] [data-component="icon-button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
+  outline-offset: -2px;
 }
 
 [data-slot="titlebar-tab-item"]:has([data-component="icon-button-v2"]:focus-visible) [data-slot="titlebar-tab-close"] {

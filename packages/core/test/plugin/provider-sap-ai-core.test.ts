@@ -18,12 +18,14 @@ const npm = Npm.Service.of({
   resolve: (name) => Effect.succeed({ directory: "", name }),
   check: () => Effect.succeed(false),
   update: (name) => Effect.succeed({ directory: "", name }),
+  follows: () => Effect.succeed(false),
+  reject: () => Effect.succeed(false),
   which: () => Effect.undefined,
 })
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* SapAICorePlugin.effect(host).pipe(Effect.provideService(Npm.Service, npm))
 })
 

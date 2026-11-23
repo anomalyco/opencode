@@ -1,32 +1,42 @@
-import { LLM } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { ZAI, ZAICodingPlan } from "../../src/providers.js"
 
-LLM.request({
+ai.request({
   model: ZAI.chat("glm-5.3"),
+  prompt: "Hello",
   providerOptions: { thinking: { clear_thinking: false }, reasoningEffort: "max" },
 })
-LLM.request({
+ai.request({
   model: ZAI.chat("glm-5.2"),
+  prompt: "Hello",
   providerOptions: { thinking: { type: "disabled" }, toolStream: false, responseFormat: { type: "json_object" } },
 })
-LLM.request({
+ai.request({
   model: ZAICodingPlan.messages("glm-5.3"),
+  prompt: "Hello",
   providerOptions: { thinking: { type: "enabled" }, effort: "high" },
 })
-LLM.request({ model: ZAICodingPlan.responses("glm-5.3"), providerOptions: { reasoningEffort: "future-effort" } })
+ai.request({
+  model: ZAICodingPlan.responses("glm-5.3"),
+  prompt: "Hello",
+  providerOptions: { reasoningEffort: "future-effort" },
+})
 
-LLM.request({
+ai.request({
   model: ZAI.chat("glm-5.3"),
+  prompt: "Hello",
   // @ts-expect-error clear_thinking is a boolean.
   providerOptions: { thinking: { clear_thinking: "false" } },
 })
-LLM.request({
+ai.request({
   model: ZAICodingPlan.messages("glm-5.3"),
+  prompt: "Hello",
   // @ts-expect-error Messages uses effort.
   providerOptions: { reasoningEffort: "high" },
 })
-LLM.request({
+ai.request({
   model: ZAICodingPlan.responses("glm-5.3"),
+  prompt: "Hello",
   // @ts-expect-error Responses uses reasoning effort, not Chat thinking controls.
   providerOptions: { thinking: { type: "enabled" } },
 })

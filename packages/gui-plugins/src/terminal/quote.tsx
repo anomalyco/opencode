@@ -1,5 +1,4 @@
-import { onCleanup, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -7,174 +6,171 @@ import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import type { Terminal as Term } from "ghostty-web"
-import { usePlugin } from "@opencode/plugin/gui"
-
-const SETTLE_MS = 150
-
-const GAP = 8
-
-// Matches the timeline's limit, so a quote never carries more than one from the conversation could.
-const MAX_LENGTH = 20_000
+import { usePlugin, type ComposerQuoteAnchor } from "@opencode/plugin/gui"
+import {
+  createQuoteDispatch,
+  createQuoteState,
+  selectQuoteSourcePlace,
+  selectQuoteToolbar,
+  type QuoteEffect,
+  type QuoteEvent,
+  type QuoteSample,
+} from "./quote-machine"
 
 /** Where a terminal sends quoted output: the composer of the screen that shows it. */
 export type TerminalQuoteTarget = {
   available: () => boolean
-  add: (text: string, comment: boolean) => void
+  add: (text: string, anchor?: ComposerQuoteAnchor) => void
 }
 
-type Place = { top: number; left: number }
-
-type Anchor = { top: number; bottom: number; start: number; end: number; single: boolean }
+/** The toolbar element, for hit-testing presses, and the driver's timer and frame. */
+type QuoteHandles = {
+  element?: HTMLElement
+  settleTimer?: ReturnType<typeof setTimeout>
+  placeFrame?: number
+}
 
 /** Offers to quote text selected in a terminal into the composer, like the timeline's Quote button. */
-export function TerminalQuote(props: { term: Term; container: HTMLElement; target: TerminalQuoteTarget }) {
+export function TerminalQuote(props: {
+  term: Term
+  container: HTMLElement
+  target: TerminalQuoteTarget
+  written: number
+}) {
   const plugin = usePlugin()
   const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
+  const [quoteState, setQuoteState] = createSignal(createQuoteState())
+  const handles: QuoteHandles = {}
+  const released: QuoteEvent = { type: "pointer.released" }
+  const selected: QuoteEvent = { type: "selection.changed" }
+  const scrolled: QuoteEvent = { type: "layout.changed", resized: false }
+  const resized: QuoteEvent = { type: "layout.changed", resized: true }
 
-  const [state, setState] = createStore<{
-    text: string | undefined
-    truncated: boolean
-    anchor: Anchor | undefined
-    bounds: DOMRect | undefined
-    size: { width: number; height: number }
-  }>({ text: undefined, truncated: false, anchor: undefined, bounds: undefined, size: { width: 0, height: 0 } })
+  const geometry = () => ({
+    offset: props.term.getScrollbackLength() - props.term.getViewportY(),
+    written: props.written,
+    bounds: props.container.getBoundingClientRect(),
+    origin: props.term.renderer?.getCanvas().getBoundingClientRect(),
+    metrics: props.term.renderer?.getMetrics(),
+  })
 
-  let element: HTMLElement | undefined
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let frame: number | undefined
-  let pointer = false
+  const sample = (): QuoteSample | undefined => {
+    if (!props.term.hasSelection()) return
 
-  const close = () => {
-    clearTimeout(timer)
-    setState({ text: undefined, truncated: false, anchor: undefined, bounds: undefined })
+    return { ...geometry(), cells: props.term.getSelectionPosition() }
   }
 
-  // The selection is in cells, so its box comes from the canvas and the cell size.
-  const place = () => {
-    const canvas = props.term.renderer?.getCanvas()
-    const metrics = props.term.renderer?.getMetrics()
-    const position = props.term.getSelectionPosition()
-    const bounds = props.container.getBoundingClientRect()
+  const run = (effect: QuoteEffect) => {
+    if (effect.type === "schedule-settle") {
+      clearTimeout(handles.settleTimer)
+      handles.settleTimer = setTimeout(() => {
+        handles.settleTimer = undefined
+        const selection = sample()
 
-    // The selection scrolled out of view, or the terminal is hidden.
-    if (!canvas || !metrics || !position || bounds.height === 0) return setState({ anchor: undefined, bounds })
-    const origin = canvas.getBoundingClientRect()
+        dispatch({
+          type: "settle.sampled",
+          attempt: effect.attempt,
+          text: selection ? props.term.getSelection() : "",
+          sample: selection,
+        })
+      }, effect.delayMs)
 
-    setState({
-      bounds,
-      anchor: {
-        top: origin.top + position.start.y * metrics.height,
-        bottom: origin.top + (position.end.y + 1) * metrics.height,
-        start: origin.left + position.start.x * metrics.width,
-        end: origin.left + (position.end.x + 1) * metrics.width,
-        single: position.start.y === position.end.y,
-      },
-    })
+      return
+    }
+
+    if (effect.type === "cancel-settle") {
+      clearTimeout(handles.settleTimer)
+      handles.settleTimer = undefined
+
+      return
+    }
+
+    if (effect.type === "schedule-place") {
+      if (handles.placeFrame !== undefined) cancelAnimationFrame(handles.placeFrame)
+      handles.placeFrame = requestAnimationFrame(() => {
+        handles.placeFrame = undefined
+        dispatch({ type: "place.sampled", attempt: effect.attempt, sample: sample() })
+      })
+
+      return
+    }
+
+    if (effect.type === "cancel-place") {
+      if (handles.placeFrame !== undefined) cancelAnimationFrame(handles.placeFrame)
+      handles.placeFrame = undefined
+
+      return
+    }
+
+    if (effect.type === "clear-selection") return props.term.clearSelection()
+
+    const source = effect.source
+
+    if (!source) return props.target.add(effect.text, undefined)
+
+    // The composer can retain this anchor after the toolbar closes or unmounts; it follows scrolling and resizing.
+    const anchor: ComposerQuoteAnchor = (size) => {
+      // Read first, so the anchor follows scrolling, resizing and disposal even while it returns nothing.
+      const current = quoteState()
+
+      if (!props.target.available() || !props.container.isConnected) return
+
+      return selectQuoteSourcePlace(current, source, size, geometry)
+    }
+
+    props.target.add(effect.text, anchor)
   }
 
-  const read = () => {
-    if (pointer) return
+  const dispatch = createQuoteDispatch({ read: quoteState, write: setQuoteState, run })
 
-    // Output keeps trailing blank rows a drag past the last line picks up.
-    const text = props.term.hasSelection() ? props.term.getSelection().replace(/^\n+|\s+$/g, "") : ""
+  const toolbar = createMemo(() => selectQuoteToolbar(quoteState(), props.target.available()))
 
-    if (!text) return close()
-    setState({ text, truncated: text.length > MAX_LENGTH })
-    place()
-  }
+  // A cached tab can regain its DOM size after visibility changes without changing the terminal's grid.
+  createResizeObserver(
+    () => props.container,
+    () => dispatch(scrolled),
+  )
 
-  const schedule = () => {
-    clearTimeout(timer)
-    timer = setTimeout(read, SETTLE_MS)
-  }
+  const inside = (target: EventTarget | null) => target instanceof Node && !!handles.element?.contains(target)
 
-  const schedulePlace = () => {
-    if (frame !== undefined || state.text === undefined) return
-    frame = requestAnimationFrame(() => {
-      frame = undefined
-      place()
-    })
-  }
-
-  const inside = (target: EventTarget | null) => target instanceof Node && !!element?.contains(target)
-
-  // ghostty-web announces a finished selection but clears one without an event, on a press or while typing.
   const subscriptions = [
-    props.term.onSelectionChange(schedule),
-    props.term.onScroll(schedulePlace),
-    props.term.onResize(schedulePlace),
-    props.term.onRender(schedulePlace),
+    props.term.onSelectionChange(() => dispatch(selected)),
+    props.term.onScroll(() => dispatch(scrolled)),
+    // Both column reflow and row changes can move content without preserving its captured cell coordinates.
+    props.term.onResize(() => dispatch(resized)),
   ]
 
   makeEventListener(document, "pointerdown", (event) => {
     if (inside(event.target)) return
-    pointer = true
-    close()
+    dispatch({ type: "pointer.down", button: event.button })
   })
-  makeEventListener(document, "pointerup", () => {
-    if (!pointer) return
-    pointer = false
-    schedule()
-  })
-  makeEventListener(window, "blur", () => {
-    pointer = false
-  })
-  makeEventListener(props.container, "keydown", (event) => {
-    if (event.metaKey || event.ctrlKey || ["Shift", "Control", "Alt", "Meta"].includes(event.key)) return
-    close()
-  })
-  makeEventListener(window, "resize", schedulePlace)
+  // A cancelled touch, a long-press or Ctrl+click menu, or leaving the window can end a press without `pointerup`.
+  makeEventListener(document, "pointerup", () => dispatch(released))
+  makeEventListener(document, "pointercancel", () => dispatch(released))
+  makeEventListener(document, "contextmenu", () => dispatch(released))
+  makeEventListener(window, "blur", () => dispatch(released))
+  makeEventListener(props.container, "keydown", (event) =>
+    dispatch({ type: "key.pressed", key: event.key, modified: event.metaKey || event.ctrlKey }),
+  )
+  makeEventListener(window, "resize", () => dispatch(scrolled))
 
   onCleanup(() => {
     subscriptions.forEach((subscription) => subscription.dispose())
-    clearTimeout(timer)
-
-    if (frame !== undefined) cancelAnimationFrame(frame)
+    dispatch({ type: "disposed" })
   })
 
-  const add = (comment: boolean) => {
-    const text = state.text
-
-    if (!text || state.truncated) return
-    props.term.clearSelection()
-    close()
-    props.target.add(text, comment)
-  }
-
-  // A one-line selection gets it above; a taller one below its end, where the drag usually stops.
-  const position = (): Place | undefined => {
-    const bounds = state.bounds
-    const anchor = state.anchor
-
-    if (!bounds || !anchor) return
-
-    const size = state.size
-    const above = anchor.top - size.height - GAP
-    const below = anchor.bottom + GAP
-    const fitsAbove = above >= bounds.top + GAP
-    const fitsBelow = below + size.height <= bounds.bottom - GAP
-    const sides = anchor.single ? [fitsAbove && above, fitsBelow && below] : [fitsBelow && below, fitsAbove && above]
-    const top = sides.find((side) => side !== false)
-    const center = anchor.single ? (anchor.start + anchor.end - size.width) / 2 : anchor.end - size.width / 2
-
-    return {
-      top: top ?? bounds.bottom - size.height - GAP,
-      left: Math.min(Math.max(center, bounds.left + GAP), bounds.right - size.width - GAP),
-    }
-  }
-
   return (
-    <Show when={state.text !== undefined && props.target.available() && position()}>
-      {(place) => (
+    <Show when={toolbar()}>
+      {(view) => (
         <Portal>
           <div
             ref={(value) => {
-              element = value
+              handles.element = value
               createResizeObserver(value, () =>
-                setState("size", { width: value.offsetWidth, height: value.offsetHeight }),
+                dispatch({ type: "toolbar.measured", size: { width: value.offsetWidth, height: value.offsetHeight } }),
               )
               onCleanup(() => {
-                element = undefined
+                handles.element = undefined
               })
             }}
             data-component="terminal-quote"
@@ -183,13 +179,13 @@ export function TerminalQuote(props: { term: Term; container: HTMLElement; targe
             aria-label={plugin.t("quote.actions")}
             class="fixed z-50 flex items-center gap-0.5 rounded-[8px] p-0.5 shadow-[var(--v2-elevation-raised)]"
             style={{
-              top: `${place().top}px`,
-              left: `${place().left}px`,
-              visibility: state.size.height === 0 ? "hidden" : undefined,
+              top: `${view().place.top}px`,
+              left: `${view().place.left}px`,
+              visibility: view().measured ? undefined : "hidden",
             }}
             onMouseDown={(event) => event.preventDefault()}
           >
-            <Show when={state.truncated}>
+            <Show when={view().truncated}>
               <span class="px-2 text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-muted [font-weight:440]">
                 {plugin.t("quote.tooLong")}
               </span>
@@ -197,7 +193,7 @@ export function TerminalQuote(props: { term: Term; container: HTMLElement; targe
             <Tooltip
               value={
                 <>
-                  {plugin.t("quote.addWithComment")}
+                  {plugin.t("quote.addWithoutComment")}
                   <Keybind keys={[mac ? "⌥" : plugin.t("common.key.alt")]} variant="neutral" />
                 </>
               }
@@ -208,8 +204,8 @@ export function TerminalQuote(props: { term: Term; container: HTMLElement; targe
                 size="small"
                 variant="ghost"
                 icon="outline-quote"
-                disabled={state.truncated}
-                onClick={(event: MouseEvent) => add(event.altKey)}
+                disabled={view().truncated}
+                onClick={(event: MouseEvent) => dispatch({ type: "quote.added", skipComment: event.altKey })}
               >
                 {plugin.t("quote.add")}
               </Button>

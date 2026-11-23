@@ -10,10 +10,10 @@ import {
   type ResolvedTheme,
   type ThemeDefinition,
 } from "@opencode/theme/tui"
-import { getOpenCodeTheme, parseTheme, type ThemeDocumentSource } from "../../../src/theme"
+import { getOpenCodeTheme, getOpenCodeClassicTheme, parseTheme, type ThemeDocumentSource } from "../../../src/theme"
 
-const opencodeLight = selectTheme(getOpenCodeTheme(), "light")
-const opencodeDark = selectTheme(getOpenCodeTheme(), "dark")
+const opencodeLight = selectTheme(getOpenCodeClassicTheme(), "light")
+const opencodeDark = selectTheme(getOpenCodeClassicTheme(), "dark")
 const chromaticHues = ["gray", "red", "orange", "green", "cyan", "blue", "purple"] as const
 const light: ThemeDefinition = {
   ...opencodeLight,
@@ -95,10 +95,10 @@ test("resolves arbitrary hue names across aliases, categorical colors, and token
 })
 
 test("validates hue relationships in every provided mode while parsing", () => {
-  const source = structuredClone(getOpenCodeTheme()) as ThemeDocumentSource
+  const source = structuredClone(getOpenCodeClassicTheme()) as ThemeDocumentSource
   const darkMode = source.dark as Record<string, unknown>
   darkMode.hue = { ...(darkMode.hue as Record<string, unknown>), accent: "$hue.missing" }
-  const missingSemantic = structuredClone(getOpenCodeTheme()) as ThemeDocumentSource
+  const missingSemantic = structuredClone(getOpenCodeClassicTheme()) as ThemeDocumentSource
   const lightMode = missingSemantic.light as Record<string, unknown>
   const lightHues = lightMode.hue as Record<string, unknown>
   delete lightHues.neutral
@@ -117,6 +117,24 @@ test("generates syntax with one categorical hue", () => {
   } finally {
     syntax.destroy()
     owner.destroy()
+  }
+})
+
+test("draws paste chip text dark in dark mode and light in light mode", () => {
+  for (const mode of ["dark", "light"] as const) {
+    const theme = resolveThemeDocument(getOpenCodeTheme(), mode)
+    const owner = new ResourceContext({ objectCapacity: 1, renderCellsMax: 1 })
+    const syntax = generateSyntax(theme, owner)
+    try {
+      const style = syntax.getStyle("extmark.paste")!
+      expect(style.bg!.equals(theme.text.feedback.warning.base)).toBeTrue()
+      const luminance = (color: RGBA) => 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
+      if (mode === "dark") expect(luminance(style.fg!)).toBeLessThan(luminance(style.bg!))
+      else expect(luminance(style.fg!)).toBeGreaterThan(luminance(style.bg!))
+    } finally {
+      syntax.destroy()
+      owner.destroy()
+    }
   }
 })
 
@@ -335,6 +353,23 @@ test("surface overrides rewire references and reset action states from their bas
   expect(raised.text.base.toInts()).toEqual([51, 51, 51, 255])
   expect(raised.text.action.primary.pressed.toInts()).toEqual([68, 68, 68, 255])
   expect(raised.text.action.primary.focused.toInts()).toEqual([85, 85, 85, 255])
+})
+
+test("dialog footer overrides layer on the dialog surface", () => {
+  const theme = resolveTheme(
+    override(light, {
+      "@dialog": {
+        text: { base: "#333333" },
+        "@footer": { text: { muted: "#666666" } },
+      },
+    }),
+  )
+  const footer = theme.surface("dialog.footer")
+  expect(footer.text.muted.toInts()).toEqual([102, 102, 102, 255])
+  expect(footer.text.base.toInts()).toEqual([51, 51, 51, 255])
+  expect(theme.surface("dialog").text.muted.toInts()).not.toEqual([102, 102, 102, 255])
+  const plain = resolveTheme(light)
+  expect(plain.surface("dialog.footer")).toBe(plain.surface("dialog"))
 })
 
 test("rejects missing and circular references", () => {

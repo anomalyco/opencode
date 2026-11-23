@@ -38,7 +38,7 @@ export function createSettingsPaletteEntries() {
         }))
     },
     select(entry: CommandPaletteEntry) {
-      if (entry.setting) surface.search.open(entry.setting.view, entry.setting.id)
+      if (entry.setting) surface.search.reveal(entry.setting.view)
     },
   }
 }

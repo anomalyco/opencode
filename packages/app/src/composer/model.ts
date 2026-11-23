@@ -5,11 +5,12 @@ import type { Links, MountedSession } from "@opencode/plugin/gui"
 import { createComponent, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Predicate } from "effect"
 import type { ComposerSuggestion } from "./types"
-import { createComposerEditor, createComposerEditorState, type ComposerEditorModel } from "./editor/interaction"
+import { createComposerEditor, type ComposerEditorModel } from "./editor/interaction"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspaces/files/model"
 import { useComments } from "@/composer/comments"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { orderedSpeeds } from "@/providers/models/speed"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -24,13 +25,16 @@ import { Session } from "@opencode/schema/session"
 import { abort } from "@opencode/util/abort"
 import { parseSessionMention } from "@opencode/util/session-mention"
 import { createKnownServerSessions, createServerSessionEntries } from "@/shell/commands/palette"
-import { matchesSessionTitle } from "./session-match"
+import { rankSessionTitle } from "./session-match"
+import { useTabs } from "@/shell/tabs/tabs"
 import type { ComposerAdapter, ComposerControls, ComposerQueue } from "./adapter"
 import { isAttachment } from "./prompt-parts"
 import { isCommentItem } from "./state"
 import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
 import { createComposerSubmit } from "./submit"
+import { composerSubmitView } from "./machine"
+import { isComposerPopoverOpen } from "./suggestions/machine"
 import { useAttachmentDestination } from "./attachments/destination"
 import { parseClientSlashCommand } from "./client-slash-command"
 
@@ -61,6 +65,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const language = useLanguage()
   const platform = usePlatform()
   const serverSDK = useServerSDK()
+  const tabs = useTabs()
   const prompt = adapter.state
   // Editor actions write the captured store directly, rather than going through the context methods.
   createEffect(
@@ -70,6 +75,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     ),
   )
   let editor: HTMLDivElement | undefined
+  // The element `prompt.stop` binds its keys to.
+  const [editorElement, setEditorElement] = createSignal<HTMLDivElement>()
   // A path attachment's image is read through the server, which can see both local and uploaded paths.
   const pathImages = new Map<string, Promise<string | undefined>>()
   const pathImageReads = new AbortController()
@@ -78,18 +85,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     pathImages.forEach((url) => void url.then((value) => value && URL.revokeObjectURL(value)))
   })
 
-  const interaction = createComposerEditorState(prompt.mode.current())
-  createEffect(
-    on(
-      () => (adapter.ready() ? prompt.mode.current() : undefined),
-      (mode) => {
-        if (!mode) return
-        // Project external draft changes without another mode write clearing restored retry metadata.
-        interaction[1](mode === "shell" ? { mode, popover: { type: "closed" } } : { mode })
-      },
-    ),
-  )
-  const mode = () => interaction[0].mode
+  const mode = () => prompt.mode.current()
   const history = createComposerHistory()
 
   const recent = createMemo(() => {
@@ -209,12 +205,10 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   const skills = createMemo(() => data.location.skill.list({ directory: sdk().directory }) ?? [])
 
-  let sessionSearch: string | undefined
-  const [sessionSearched, setSessionSearched] = createSignal<string>()
-
   const sessions = createServerSessionEntries({
     server: server.key,
-    known: createKnownServerSessions(server.ctx),
+    known: createKnownServerSessions(() => server.ctx),
+    apply: server.ctx.data.session.apply,
     projects: server.ctx.projects.list,
     load: async (search, signal) => {
       const page = await serverSDK.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal })
@@ -231,7 +225,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
     recentCategory: () => language.t("palette.group.recentSessions"),
-    recentLimit: 50,
+    recentLimit: Number.POSITIVE_INFINITY,
   })
 
   const context = createMemo<ComposerSuggestion[]>(() => [
@@ -312,7 +306,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     addToHistory: (value, mode) => controller.addHistory(value, mode),
     removeFromHistory: (value, mode, comments) => history.remove(value, mode, mode === "shell" ? [] : comments),
     resetHistory: () => controller.resetHistory(),
-    setMode: (next) => controller.dispatch({ type: next === "shell" ? "mode.shell" : "mode.normal" }),
     closePopover: () => controller.dispatch({ type: "popover.close" }),
     delivery: (alternate) => {
       const queue = options?.queue
@@ -321,6 +314,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
       return (alternate ? queue.alternate() : queue.delivery()) ?? "steer"
     },
+    queueFirst: (inboxID) => options?.queue?.first(inboxID),
+    ready: (sessionID) => plugins.ready(server.key, sessionID),
     notify: {
       missingSelection: () =>
         showToast({
@@ -340,6 +335,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     comments: {
       capture: historyComments,
       clear: comments.clear,
+      remove: comments.remove,
       restore: restoreHistoryComments,
     },
     clientCommand: (text) => {
@@ -354,9 +350,13 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
   })
 
+  const submitView = createMemo(() => composerSubmitView(submission.state()))
+
+  const commentSendable = () =>
+    available() && !adapter.controls().model.loading && submitView().canSubmit && !options?.queue?.undoing()
+
   const controller = createComposerEditor({
     store: prompt.store,
-    state: interaction,
     history: {
       entries: (mode) => history.entries(mode).map((entry) => ({ prompt: entry.prompt, metadata: entry.comments })),
       add: (value, mode) => history.add(value, mode, mode === "shell" ? [] : historyComments()),
@@ -366,53 +366,56 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     commands,
     context,
+    // The server narrows by the first word; the title match then needs the whole query.
+    requestSessionSearch: (word, signal) => sessions.search(word, signal).then(() => undefined),
     searchSessions: (query) => {
-      if (interaction[0].popover.type !== "context") {
-        // Closing aborts the search, so reopening on the same query must fetch again.
-        sessionSearch = undefined
+      const project = sdk().current?.project.id
 
-        return []
-      }
-
-      // The server narrows by the first word; the title match then needs the whole query.
-      const search = firstWord(query)
-
-      if (search !== sessionSearch) {
-        sessionSearch = search
-        void sessions.search(search).then(
-          () => sessionSearch === search && setSessionSearched(search),
-          () => sessionSearch === search && setSessionSearched(search),
-        )
-      }
+      const open = new Set(
+        tabs.store.flatMap((tab) => (tab.type === "session" && tab.server === server.key ? [tab.sessionId] : [])),
+      )
 
       return sessions
-        .items(search)
-        .filter((entry) => !query || matchesSessionTitle(entry.title, query))
-        .flatMap((entry): ComposerSuggestion[] => {
+        .items("")
+        .flatMap((entry) => {
           if (adapter.kind === "active-session" && entry.sessionID === adapter.session().id) return []
           const mention = entry.sessionID && parseSessionMention(entry.sessionID)
 
           if (!mention) return []
+          const local = !project || entry.project?.id === project || entry.directory === sdk().directory
 
-          return [
-            {
-              id: `session:${mention.id}`,
-              kind: "session",
-              label: entry.title,
-              description: entry.description,
-              mention: {
-                type: "session",
-                id: Session.ID.make(mention.id),
-                content: `@${entry.title}`,
-                start: 0,
-                end: 0,
-              },
+          // A bare `@` offers this project's recent sessions; other projects appear once a title is typed.
+          if (!query && !local) return []
+          const rank = query ? rankSessionTitle(entry.title, query) : 0
+
+          if (rank === undefined) return []
+
+          const suggestion: ComposerSuggestion = {
+            id: `session:${mention.id}`,
+            kind: "session",
+            label: entry.title,
+            description: entry.description,
+            mention: {
+              type: "session",
+              id: Session.ID.make(mention.id),
+              content: `@${entry.title}`,
+              start: 0,
+              end: 0,
             },
-          ]
+          }
+
+          return [{ suggestion, local, rank, open: open.has(mention.id), updated: entry.updated ?? 0 }]
         })
-        .slice(0, query ? 8 : 5)
+        .toSorted(
+          (a, b) =>
+            Number(b.local) - Number(a.local) ||
+            a.rank - b.rank ||
+            Number(b.open) - Number(a.open) ||
+            b.updated - a.updated,
+        )
+        .slice(0, 5)
+        .map((item) => item.suggestion)
     },
-    sessionsPending: (query) => sessionSearched() !== firstWord(query),
     searchContextFiles: async (query, signal) =>
       (await files.searchFilesAndDirectories(query, { signal })).map((path) => ({
         id: `file:${path}`,
@@ -423,7 +426,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       })),
     onQuoteComment: (item, comment) => prompt.context.updateComment(item.commentID, { comment }),
     quoteComment: prompt.quoteComment,
-    quoteSource: prompt.quoteSource,
     onContextRemove(item) {
       if (item.type === "file" && item.commentID) comments.remove(item.path, item.commentID)
     },
@@ -459,11 +461,12 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         return
       }
 
-      if (item?.type === "file") openComment(item, links, plugins.current(), files, comments)
+      if (item?.type === "file") openComment(item, links, plugins.current(), comments)
     },
     onEditor(element) {
       // SAFETY: the editor's only `setEditor` call passes its editable root, a `<div>` (`editor/editor.tsx`).
       editor = element as HTMLDivElement
+      setEditorElement(editor)
 
       if (adapter.kind === "active-session") adapter.setEditor(editor)
     },
@@ -531,12 +534,44 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         },
         keybind: () => command.keybindParts("model.variant.cycle"),
       },
+      speed: {
+        options: () =>
+          orderedSpeeds(adapter.controls().model.selection.speed?.list() ?? []).map((id) =>
+            id === undefined ? { id: "standard", label: language.t("composer.speed.standard") } : { id, label: id },
+          ),
+        current: () => adapter.controls().model.selection.speed?.current() ?? "standard",
+        onSelect: (value) => {
+          if (adapter.controls().model.loading) return
+
+          adapter.controls().model.selection.speed?.set(value === "standard" ? undefined : value)
+        },
+        keybind: () => command.keybindParts("model.speed.cycle"),
+      },
       submit: {
         available,
         stopping,
-        held: submission.held,
+        held: () => submitView().held,
+        busy: () => submitView().busy,
+        canSubmit: () => submitView().canSubmit,
         working: adapter.working,
         queue: options?.queue,
+        quote:
+          adapter.kind === "active-session"
+            ? {
+                available: commentSendable,
+                delivery: () => (adapter.working() ? (options?.queue?.alternate() ?? "steer") : undefined),
+                onSubmit: submission.submitComment,
+              }
+            : undefined,
+        comment:
+          adapter.kind === "active-session"
+            ? {
+                available: commentSendable,
+                delivery: () => (adapter.working() ? (options?.queue?.delivery() ?? "steer") : undefined),
+                onSubmit: (key: string, comment: string) =>
+                  submission.submitComment(key, comment, { alternate: false }),
+              }
+            : undefined,
         onSubmit: (submitOptions) => {
           if (!available()) return
           const queue = options?.queue
@@ -548,6 +583,14 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
           // place; the alternate action sends it as a steer.
           if (queue?.editing()) {
             queue.confirmEdit(submitOptions?.alternate ? "steer" : "queue")
+
+            return
+          }
+
+          // With no draft to send, the explicit alternate shortcut acts on the next queued prompt.
+          // Plain Enter, touch's primary send and an empty shell composer still do nothing.
+          if (submitOptions?.alternate && mode() === "normal" && blank()) {
+            if (adapter.working() && submitView().canSubmit && prompt.context.items().length === 0) queue?.steerFirst()
 
             return
           }
@@ -568,24 +611,43 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       category: language.t("command.category.file"),
       keybind: "mod+u",
       editable: true,
-      disabled: controller.state.mode !== "normal",
+      disabled: mode() !== "normal",
       onSelect: () => controller.attach(),
+    },
+    {
+      id: "prompt.mode.toggle",
+      title: language.t("command.prompt.mode.toggle"),
+      category: language.t("command.category.session"),
+      keybind: "mod+shift+x",
+      onSelect: () => void controller.dispatch({ type: mode() === "normal" ? "mode.shell" : "mode.normal" }),
     },
     {
       id: "prompt.mode.shell",
       title: language.t("command.prompt.mode.shell"),
       category: language.t("command.category.session"),
-      keybind: "mod+shift+x",
-      disabled: controller.state.mode === "shell",
+      disabled: mode() === "shell",
       onSelect: () => void controller.dispatch({ type: "mode.shell" }),
     },
     {
       id: "prompt.mode.normal",
       title: language.t("command.prompt.mode.normal"),
       category: language.t("command.category.session"),
-      keybind: "mod+shift+e",
-      disabled: controller.state.mode === "normal",
+      disabled: mode() === "normal",
       onSelect: () => void controller.dispatch({ type: "mode.normal" }),
+    },
+    {
+      id: "prompt.stop",
+      title: language.t("command.prompt.stop"),
+      category: language.t("command.category.session"),
+      keybind: "escape,ctrl+g",
+      editable: true,
+      target: editorElement,
+      disabled: !adapter.working() && !submitView().held,
+      // An open list, a queued prompt being edited and shell mode each take the key first in the editor.
+      skip: (event) =>
+        isComposerPopoverOpen(controller.state) ||
+        (event.key === "Escape" && (!!options?.queue?.editing() || mode() === "shell")),
+      onSelect: () => void submission.stop(),
     },
   ])
 
@@ -611,33 +673,11 @@ function openComment(
   item: { path: string; commentID?: string; commentOrigin?: "review" | "file" },
   links: Links,
   session: MountedSession | undefined,
-  files: ReturnType<typeof useFile>,
   comments: ReturnType<typeof useComments>,
 ) {
   if (!item.commentID) return
-  const focus = { file: item.path, id: item.commentID }
-  comments.setActive(focus)
-
-  const queueFocus = (attempts = 6) => {
-    requestAnimationFrame(() => {
-      comments.setFocus({ ...focus })
-
-      if (attempts <= 0) return
-      requestAnimationFrame(() => {
-        const current = comments.focus()
-
-        if (current?.file === focus.file && current.id === focus.id) queueFocus(attempts - 1)
-      })
-    })
-  }
-
   // The plugin that owns the comment's origin reveals it (the review diff or a file tab), keeping the conversation.
+  // It opens first, so a preview it replaces unmounts before the request, which then waits for the view to answer.
   links.open({ href: item.path, origin: item.commentOrigin, exact: true, background: true, session })
-
-  if (item.commentOrigin === "review") return queueFocus()
-  void Promise.resolve(files.load(item.path)).finally(() => queueFocus())
-}
-
-function firstWord(query: string) {
-  return query.toLowerCase().split(" ")[0] ?? ""
+  comments.open({ file: item.path, id: item.commentID })
 }

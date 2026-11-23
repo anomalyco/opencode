@@ -3,7 +3,7 @@ import type { HttpClientResponse } from "effect/http"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequestFor } from "../transcription.js"
+import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequest } from "../transcription.js"
 import { mediaTypeExtension } from "../utils/media-type.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
@@ -37,7 +37,7 @@ export type ElevenLabsTranscriptionOptions = {
   readonly entity_redaction_mode?: OpenString<"redacted" | "entity_type" | "enumerated_entity_type">
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequestFor<ElevenLabsTranscriptionOptions>
+export type Request = TranscriptionRequest<TranscriptionModel<ElevenLabsTranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema

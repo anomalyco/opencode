@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises"
+import { copyFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -6,6 +6,7 @@ import { Arch, type Configuration } from "electron-builder"
 import { NativeArch } from "../../script/native-arch"
 import { DESKTOP_NATIVE_ENGLISH } from "@opencode/app/i18n/desktop-native"
 import { CLI_BINARIES, getCurrentCli, nodePtyPackage } from "./script/utils"
+import { previewBinding, verifyPreviewBinding } from "./script/preview-binding"
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -61,6 +62,7 @@ function linuxExecutableName(appId: string): string {
 
 const getBase = (appId: string): Configuration => {
   const target = getCurrentCli()
+  const binding = previewBinding(target.os, target.cpu)
   const desktopName = `${appId}.desktop`
 
   return {
@@ -82,6 +84,7 @@ const getBase = (appId: string): Configuration => {
       "out/**/*",
       "resources/**/*",
       "!resources/opencode-cli*",
+      `!**/node_modules/@yuuang/ffi-rs-!(${binding}){,/**/*}`,
       // Keep only the target platform's node-pty prebuild when cross-packaging with --cpu=*.
       ...CLI_BINARIES.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
         (item) => `!**/node_modules/@lydell/node-pty-${item.os}-${item.cpu}{,/**/*}`,
@@ -101,6 +104,7 @@ const getBase = (appId: string): Configuration => {
       "!**/node_modules/js-yaml/dist/{js-yaml.js,js-yaml.min.js,*.map}",
       "!**/node_modules/js-yaml/bin{,/**/*}",
     ],
+    asarUnpack: ["**/node_modules/ffi-rs/**/*", `**/node_modules/@yuuang/ffi-rs-${binding}/**/*`],
     extraResources: [
       {
         from: "resources/",
@@ -108,6 +112,23 @@ const getBase = (appId: string): Configuration => {
         filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
       },
     ],
+    // Electron stores cookies in plain text by default. The browser pane keeps sign-ins, so encrypt them with the OS
+    // key store (Keychain, DPAPI, libsecret or kwallet). This is one-way: turning it off again loses every cookie.
+    // https://www.electronjs.org/docs/latest/tutorial/fuses#cookieencryption
+    // Flipping a fuse breaks the macOS signature. A build without a signing identity is not signed again, so re-sign it
+    // ad hoc or Apple Silicon refuses to launch it. A signed build is signed again after the fuses anyway.
+    electronFuses: {
+      enableCookieEncryption: true,
+      // Started as plain Node (ELECTRON_RUN_AS_NODE) or with an inspector, the signed binary would run any code under
+      // the app's identity, which macOS lets read the app's Keychain key and so every cookie. Nothing runs the app as
+      // Node: the CLI is its own executable. Beta keeps --inspect, as it keeps its on-request debugging port, for the
+      // startup benchmark's Node timings (perf/startup.bench.ts).
+      runAsNode: false,
+      enableNodeCliInspectArguments: resolveChannel() === "beta",
+      // NODE_OPTIONS stays: a packaged app already ignores every option but --http-parser and --max-http-header-size,
+      // and turning the fuse off would also strip NODE_EXTRA_CA_CERTS from the environment the CLI and its terminals get.
+      resetAdHocDarwinSignature: true,
+    },
     afterPack: async (context) => {
       const arch = Arch[context.arch]
 
@@ -116,6 +137,7 @@ const getBase = (appId: string): Configuration => {
 
       if (arch !== target.cpu) throw new Error(`Packaging ${arch} Electron with the ${target.target} CLI`)
       const resources = context.packager.getResourcesDir(context.appOutDir)
+      await verifyPreviewBinding(resources, context.electronPlatformName, arch)
       const cli = path.join(resources, context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli")
 
       const file = await stat(cli)
@@ -125,6 +147,11 @@ const getBase = (appId: string): Configuration => {
       const version = path.join(path.dirname(cli), "opencode-cli.version")
 
       if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
+
+      // With an Icon Composer mac.icon, electron-builder bundles the ICNS that actool generates as the pre-macOS 26
+      // fallback. That one tops out at 256px and draws a light ring around the squircle, so ship ours instead.
+      if (context.electronPlatformName === "darwin")
+        await copyFile(path.join(packageDir, "resources/icons/icon.icns"), path.join(resources, "icon.icns"))
 
       if (context.electronPlatformName !== "win32") return
 
@@ -156,6 +183,15 @@ const getBase = (appId: string): Configuration => {
       icon: `resources/icons/icon.icns`,
       extendInfo: {
         NSMicrophoneUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.microphoneUsage"],
+        // Sites in the browser pane may ask for the camera; without this key macOS ends the app when it asks.
+        NSCameraUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.cameraUsage"],
+        // The CLI server and its terminals run as children of the app, so macOS asks for their access to
+        // these protected locations in the app's name. The prompt shows the description (#56479).
+        NSDocumentsFolderUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.documentsFolderUsage"],
+        NSDesktopFolderUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.desktopFolderUsage"],
+        NSDownloadsFolderUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.downloadsFolderUsage"],
+        NSNetworkVolumesUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.networkVolumesUsage"],
+        NSRemovableVolumesUsageDescription: DESKTOP_NATIVE_ENGLISH["desktop.removableVolumesUsage"],
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
       },
       target: ["dmg", "zip"],
@@ -245,6 +281,11 @@ export function getConfig() {
         appId,
         productName: "OpenCode",
         protocols: { name: "OpenCode", schemes: ["opencode"] },
+        // An Icon Composer package compiles to Assets.car, which macOS 26 and later draw the app icon from
+        // (Dock, Finder, system dialogs and the system icon styles). Older macOS keeps using the ICNS.
+        mac: { ...base.mac, icon: "resources/icons/icon.icon" },
+        // The DMG volume icon would otherwise use the same actool-generated ICNS.
+        dmg: { icon: "resources/icons/icon.icns" },
         publish: {
           provider: "generic",
           url: "https://opencode.ai/update/api/latest/desktop/opencode/",

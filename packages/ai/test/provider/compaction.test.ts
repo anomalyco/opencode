@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, LLMRequest, Message } from "../../src/effect.js"
+import { ai, Message, ToolCallPart, ToolDefinition, ToolNamespace } from "../../src/effect.js"
+import { compileRequest } from "../../src/route/client.js"
 import { LLMClient } from "../../src/route/client.js"
 import { OpenAI, Azure, XAI } from "../../src/providers/index.js"
 import { testEffect } from "../lib/effect.js"
@@ -32,7 +33,7 @@ for (const model of [
     ),
   ).effect(`${model.provider} compaction survives generation, serialization, and a second request`, () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model,
         prompt: "hello",
         providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
@@ -43,16 +44,13 @@ for (const model of [
       expect(first.text).toBe("")
       const codec = Schema.fromJsonString(Message)
       const message = Schema.decodeSync(codec)(Schema.encodeSync(codec)(first.message))
-      yield* LLMClient.generate(
-        LLMRequest.update(request, { messages: [...request.messages, message, Message.user("continue")] }),
-      )
-      const rejected = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
-          providerOptions: {},
-          messages: [message],
-        }),
-      ).pipe(Effect.flip)
+      yield* LLMClient.generate({ ...request, messages: [...request.messages, message, Message.user("continue")] })
+      const rejected = yield* LLMClient.generate({
+        ...request,
+        model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
+        providerOptions: {},
+        messages: [message],
+      }).pipe(Effect.flip)
       expect(rejected.reason._tag).toBe("InvalidRequest")
     }),
   )
@@ -63,7 +61,7 @@ testEffect(fixedResponse(sseEvents({ type: "response.completed", response: { out
   () =>
     Effect.gen(function* () {
       const result = yield* LLMClient.generate(
-        LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+        ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
       )
       expect(result.message.content).toHaveLength(1)
       expect(result.message.content[0]?.type).toBe("compaction")
@@ -75,7 +73,7 @@ testEffect(
 ).effect("rejects incomplete compaction payloads without publishing a checkpoint", () =>
   Effect.gen(function* () {
     const error = yield* LLMClient.generate(
-      LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+      ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
     ).pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(error.reason.body).toContain("cmp_bad")
@@ -103,7 +101,10 @@ for (const completed of [false, true]) {
     ),
   ).effect(completed ? "keeps streamed checkpoints before later text" : "rejects order-unsafe terminal recovery", () =>
     Effect.gen(function* () {
-      const request = LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" })
+      const request = ai.request({
+        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        prompt: "hello",
+      })
       if (completed) {
         const response = yield* LLMClient.generate(request)
         expect(response.message.content.map((part) => part.type)).toEqual(["compaction", "text"])
@@ -128,12 +129,50 @@ testEffect(
 ).effect("mints an id for terminal checkpoints that omit one", () =>
   Effect.gen(function* () {
     const response = yield* LLMClient.generate(
-      LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" }),
+      ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" }),
     )
     const part = response.message.content[0]
     expect(part?.type).toBe("compaction")
     if (part?.type !== "compaction") return
     expect(part.id).toMatch(/^cmp_[0-9a-f]{32}$/)
     expect(part.encrypted).toBe("opaque")
+  }),
+)
+
+// /compact must send the same history and tools as the steps before it, so it reads the prefix they cached.
+const flatRequest = ai.request({
+  model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
+  tools: [
+    ToolNamespace.make({
+      name: "crm",
+      description: "CRM tools",
+      tools: [ToolDefinition.make({ name: "lookup", description: "Look up", inputSchema: {} })],
+    }),
+  ],
+  messages: [
+    Message.user("Look up Ada"),
+    Message.assistant(ToolCallPart.make({ id: "call_1", name: "lookup", namespace: "crm", input: {} })),
+    Message.tool({ id: "call_1", name: "lookup", namespace: "crm", result: { output: "found" } }),
+  ],
+})
+const names = (body: { input: ReadonlyArray<Record<string, unknown>>; tools?: ReadonlyArray<Record<string, unknown>> }) => ({
+  calls: body.input.flatMap((item) => (item.type === "function_call" ? [item.name] : [])),
+  tools: (body.tools ?? []).map((tool) => tool.name),
+})
+const compactBodies: Array<{ input: ReadonlyArray<Record<string, unknown>> }> = []
+
+testEffect(
+  dynamicResponse(({ text, respond }) =>
+    Effect.sync(() => {
+      compactBodies.push(JSON.parse(text))
+      return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
+    }),
+  ),
+).effect("xAI compaction sends namespaced tools and past calls under the names every step uses", () =>
+  Effect.gen(function* () {
+    const step = names((yield* compileRequest(flatRequest)).body as Parameters<typeof names>[0])
+    expect(step).toEqual({ calls: ["crm_lookup"], tools: ["crm_lookup"] })
+    yield* ai.compact(flatRequest, { mechanism: "endpoint" })
+    expect(names(compactBodies[0] as Parameters<typeof names>[0])).toEqual(step)
   }),
 )

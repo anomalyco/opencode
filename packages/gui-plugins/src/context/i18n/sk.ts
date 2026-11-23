@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Použitie",
   "usage.cost": "Náklady",
   "usage.view": "Zobraziť využitie kontextu",
-  "systemPrompt.title": "Systémová výzva",
   "rawMessages.title": "Surové správy",
   "export.session": "Exportovať reláciu",
   "stats.session": "Relácia",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Relácia uložená do {{filename}}",
   "export.failed.title": "Export relácie zlyhal",
   "export.failed.description": "Pri exporte relácie došlo k chybe",
+  "usage.toggle": "Prepnúť kontext relácie",
 }

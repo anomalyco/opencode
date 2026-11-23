@@ -7,8 +7,9 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
+import { Bus } from "../bus.js"
 import { State } from "../state.js"
-import { which } from "../util/which.js"
+import { isAppExecutionAlias, which } from "../util/which.js"
 
 const META: Record<string, { deny?: boolean; login?: boolean; ps?: boolean }> = {
   bash: { login: true },
@@ -52,6 +53,11 @@ export interface Interface extends State.Transformable<Editor> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ShellSelect") {}
 
+export const Event = {
+  /** The configured shell changed, so whatever names the shell can refresh. */
+  Updated: Bus.ephemeral({ type: "shell-select.updated", schema: {} }),
+}
+
 function stat(file: string) {
   return statSync(file, { throwIfNoEntry: false }) ?? undefined
 }
@@ -86,7 +92,8 @@ function rooted(file: string) {
 function executable(file: string, options?: Options, bin?: string) {
   const shell = full(file, options, bin)
   if (rooted(shell)) {
-    if (stat(shell)?.isFile()) return shell
+    // Check the alias first: stat throws EACCES for it.
+    if (isAppExecutionAlias(shell) || stat(shell)?.isFile()) return shell
     return
   }
   return findExecutable(shell, bin) ?? undefined
@@ -165,12 +172,14 @@ export function args(file: string, command: string) {
   const n = name(file)
   if (n === "cmd") return ["/c", command]
   if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
+  // zsh aborts the whole line on an unmatched glob; pass it through literally as bash does.
+  if (n === "zsh") return ["+o", "nomatch", "-c", command]
   return ["-c", command]
 }
 
 // Resolve afresh so removing a shell does not leave terminals using a stale cached path.
 export function environment(bin?: string, filter?: { compatible?: boolean }) {
-  return select(process.env.SHELL, undefined, filter, bin) ?? fallback(bin)
+  return select(process.env.SHELL, undefined, filter, bin)
 }
 
 let defaultConfigured: { bin?: string; value: string } | undefined
@@ -202,9 +211,14 @@ const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       const global = yield* Global.Service
+      const bus = yield* Bus.Service
       const state = State.create<Data, Editor>({
         name: "shell-select",
         initial: () => ({}),
+        notify: State.changes(
+          (data) => data.shell ?? null,
+          () => bus.publish(Event.Updated, {}).pipe(Effect.asVoid),
+        ),
         editor: (editor) => ({
           configure: (shell) => {
             editor.shell = shell
@@ -221,7 +235,7 @@ const layer = (options?: Options) =>
   )
 
 export function configured(options?: Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [Global.node] })
+  return makeLocationNode({ service: Service, layer: layer(options), deps: [Global.node, Bus.node] })
 }
 
 export const node = configured()

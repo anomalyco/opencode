@@ -1,14 +1,13 @@
 export function parseFileLineRange(input: string) {
   const hash = input.lastIndexOf("#")
-  if (hash === -1) return { base: input }
+  if (hash <= 0) return { base: input }
 
-  const base = input.slice(0, hash)
   const match = input.slice(hash + 1).match(/^(\d+)(?:-(\d*))?$/)
-  if (!match) return { base }
+  if (!match) return { base: input }
 
   const startLine = Number(match[1])
   const endLine = match[2] && startLine < Number(match[2]) ? Number(match[2]) : undefined
-  return { base, lineRange: { startLine, endLine } }
+  return { base: input.slice(0, hash), lineRange: { startLine, endLine } }
 }
 
 export function stripFileLineRange(input: string) {

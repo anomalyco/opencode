@@ -178,6 +178,15 @@ export const environmentConformance = <E>(
       }),
     )
 
+    check("appends to a file, creating it when missing", (harness) =>
+      Effect.gen(function* () {
+        const target = `${harness.root}/bytes.txt`
+        yield* harness.files.append(target, bytes("abc"))
+        yield* harness.files.append(target, bytes("def"))
+        expect(text((yield* harness.files.read(target)).bytes)).toBe("abcdef")
+      }),
+    )
+
     check("moves files and removes trees idempotently", (harness) =>
       Effect.gen(function* () {
         const source = `${harness.root}/source/file`

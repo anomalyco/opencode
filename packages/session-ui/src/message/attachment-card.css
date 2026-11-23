@@ -57,13 +57,14 @@
     align-items: center;
     gap: 4px;
     min-width: 0;
+    min-height: 16px;
     overflow: hidden;
     white-space: nowrap;
     font-weight: 440;
     color: var(--v2-text-text-muted);
 
     [data-component="file-icon"],
-    [data-slot="attachment-card-icon"] {
+    [data-slot="icon-svg"] {
       width: 12px;
       height: 12px;
       flex: none;

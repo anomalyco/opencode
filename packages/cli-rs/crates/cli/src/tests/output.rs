@@ -1,0 +1,133 @@
+//! Compares output with color recordings and their plain-text equivalents.
+
+use std::path::Path;
+
+use serde_json::Value;
+
+use crate::args::{Shell, Spec};
+use crate::help;
+use crate::parse::{self, Outcome};
+use crate::prompt::wrap::strip;
+use crate::{completions, tests::lines_diff};
+
+const PROGRAM: &str = "opencode";
+
+fn fixtures() -> &'static Path {
+    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cli"))
+}
+
+fn every_command() -> Vec<Vec<&'static Spec>> {
+    fn visit(path: Vec<&'static Spec>, out: &mut Vec<Vec<&'static Spec>>) {
+        out.push(path.clone());
+        for sub in path[path.len() - 1].commands {
+            visit(path.iter().copied().chain([sub]).collect(), out);
+        }
+    }
+    let mut out = Vec::new();
+    visit(vec![&crate::args::ROOT], &mut out);
+    out
+}
+
+/// `help` without the lines of opencode-native's own flags (`Flag::own`), which the TypeScript CLI does not have
+/// (`D01-no-plugins`). An own flag is no wider than the flags beside it, so the other lines keep their columns.
+fn typescript_view(help: &str) -> String {
+    let own: Vec<String> = every_command()
+        .iter()
+        .flat_map(|path| path[path.len() - 1].flags().filter(|flag| flag.own).map(|flag| format!("  --{} ", flag.name)))
+        .collect();
+    help.split_inclusive('\n').filter(|line| !own.iter().any(|own| strip(line).starts_with(own.as_str()))).collect()
+}
+
+#[test]
+fn help_matches_the_typescript_cli() {
+    let paths = every_command();
+    assert_eq!(paths.len(), 53);
+    for path in paths {
+        let name = parse::command_path(&path, PROGRAM).join(" ");
+        // The writer joins the names below the root with "." (`auth.export.txt`); the root is `opencode.txt`.
+        let file = if path.len() == 1 {
+            PROGRAM.to_string()
+        } else {
+            path[1..].iter().map(|spec| spec.name).collect::<Vec<_>>().join(".")
+        };
+        let expected = std::fs::read_to_string(fixtures().join(format!("help/{file}.txt"))).unwrap();
+        let actual = typescript_view(&format!("{}\n", help::render(&path, PROGRAM, true)));
+        assert!(actual == expected, "{name} --help:\n{}", lines_diff(&expected, &actual));
+        let plain = typescript_view(&format!("{}\n", help::render(&path, PROGRAM, false)));
+        assert!(plain == strip(&expected), "{name} --help without colors:\n{}", lines_diff(&strip(&expected), &plain));
+    }
+}
+
+#[test]
+fn help_flag_selects_the_command() {
+    let help = |line: &[&str]| match parse::parse(&line.iter().map(|arg| arg.to_string()).collect::<Vec<_>>(), PROGRAM)
+    {
+        Outcome::Help(path) => parse::command_path(&path, PROGRAM).join(" "),
+        _ => panic!("{line:?} is not help"),
+    };
+    assert_eq!(help(&["session", "list", "--help"]), "opencode session list");
+    assert_eq!(help(&["-h", "update"]), "opencode upgrade");
+    assert_eq!(help(&["run", "--bogus", "-h", "false"]), "opencode run");
+    assert_eq!(help(&["--wizard", "--help"]), "opencode");
+}
+
+/// login-alias.test.ts: `login` stays out of the root's help and completions, and helps like `auth login`.
+#[test]
+fn login_is_hidden_but_helps_like_auth_login() {
+    let help = |names: &[&str]| help::render(&parse::find_path(names), PROGRAM, false);
+    let root = help(&[]);
+    assert!(root.contains("\n  auth "), "{root}");
+    assert!(!root.contains("\n  login "), "{root}");
+    let login = help(&["login"]);
+    assert!(login.contains("opencode login [flags] [<target>]"), "{login}");
+    let sections = |help: &str| help[help.find("ARGUMENTS").unwrap()..].to_string();
+    assert_eq!(sections(&login), sections(&help(&["auth", "login"])));
+    for shell in [Shell::Bash, Shell::Zsh, Shell::Fish, Shell::Powershell] {
+        let script = completions::generate(shell, PROGRAM);
+        assert!(script.contains("acp") && !script.contains("alias for auth login"), "{shell:?}");
+    }
+    assert!(!completions::generate(Shell::Bash, PROGRAM).contains("_opencode_login"));
+}
+
+#[test]
+fn completion_aliases_match_their_shells() {
+    assert_eq!(completions::generate(Shell::Sh, PROGRAM), completions::generate(Shell::Bash, PROGRAM));
+    assert_eq!(completions::generate(Shell::Pwsh, PROGRAM), completions::generate(Shell::Powershell, PROGRAM));
+}
+
+#[test]
+fn usage_errors_escape_c1_controls_too() {
+    let errors = ["Unrecognized flag: -\u{9b}2J\x1b]0;x\x07".to_string()];
+    assert_eq!(help::render_errors(&errors, false), "\nERROR\n  Unrecognized flag: -\\x9b2J\\x1b]0;x\\x07");
+}
+
+#[test]
+fn usage_errors_match_the_typescript_cli() {
+    let records: Vec<Value> =
+        serde_json::from_str(&std::fs::read_to_string(fixtures().join("errors.json")).unwrap()).unwrap();
+    assert!(records.len() > 50);
+    for record in records {
+        let args: Vec<String> =
+            record["args"].as_array().unwrap().iter().map(|arg| arg.as_str().unwrap().to_string()).collect();
+        assert_eq!(record["exit"], 1, "{args:?}");
+        let Outcome::Usage { path, errors } = parse::parse(&args, PROGRAM) else {
+            panic!("{args:?} is not a usage error");
+        };
+        // The recorded run had no terminal, so its environment alone decides the colors.
+        let env = |name: &str| record["env"][name].as_str().map(String::from);
+        let stdout = typescript_view(&format!("{}\n", help::render(&path, PROGRAM, help::can_color(env, false))));
+        let stderr = help::error_output(&errors, help::can_color(env, false), help::bun_colors(env, false));
+        assert!(
+            stdout == record["stdout"],
+            "{args:?} stdout:\n{}",
+            lines_diff(record["stdout"].as_str().unwrap(), &stdout)
+        );
+        assert!(
+            stderr == record["stderr"],
+            "{args:?} stderr:\n{}",
+            lines_diff(record["stderr"].as_str().unwrap(), &stderr)
+        );
+        let plain = help::error_output(&errors, false, false);
+        assert_eq!(plain, strip(record["stderr"].as_str().unwrap()), "{args:?} stderr without colors");
+    }
+}

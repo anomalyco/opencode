@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Forbrug",
   "usage.cost": "Omkostning",
   "usage.view": "Se kontekstforbrug",
-  "systemPrompt.title": "Systemprompt",
   "rawMessages.title": "Rå beskeder",
   "export.session": "Eksportér session",
   "stats.session": "Session",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sessionen blev gemt i {{filename}}",
   "export.failed.title": "Kunne ikke eksportere session",
   "export.failed.description": "Der opstod en fejl under eksport af sessionen",
+  "usage.toggle": "Vis eller skjul sessionskontekst",
 }

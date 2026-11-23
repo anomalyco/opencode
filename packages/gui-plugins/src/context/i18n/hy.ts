@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Օգտագործում",
   "usage.cost": "Արժեքը",
   "usage.view": "Դիտել համատեքստի օգտագործումը",
-  "systemPrompt.title": "Համակարգի հուշում",
   "rawMessages.title": "Հում հաղորդագրություններ",
   "export.session": "Արտահանման նիստ",
   "stats.session": "Նիստ",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Նիստը պահվել է {{filename}}-ում",
   "export.failed.title": "Չհաջողվեց արտահանել նիստը",
   "export.failed.description": "Սխալ է տեղի ունեցել նիստը արտահանելիս",
+  "usage.toggle": "Ցուցադրել/թաքցնել նիստի համատեքստը",
 }

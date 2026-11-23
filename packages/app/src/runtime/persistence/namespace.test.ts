@@ -1,7 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test"
 import { createNamespaceStorage, type NamespaceDriver, type NamespaceStorage } from "./namespace"
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 type Call = { kind: string; name: string; insert?: Record<string, string>; remove?: string[] }
 
@@ -14,6 +12,24 @@ function host(initial: Record<string, Record<string, string>> = {}) {
   let revision = 0
   let fail: (insert: Record<string, string>) => boolean = () => false
   let gate: Promise<void> | undefined
+  // Each update's reply, so a test can wait for one without waiting for a gated earlier one.
+  const replies: Promise<number>[] = []
+
+  const update = async (name: string, insert: Record<string, string>, remove: string[]) => {
+    calls.push({ kind: "update", name, insert, remove })
+    await gate
+
+    if (fail(insert)) throw new Error("disk full")
+    const items = data.get(name) ?? new Map()
+
+    for (const [key, value] of Object.entries(insert)) items.set(key, value)
+
+    for (const key of remove) items.delete(key)
+    data.set(name, items)
+    events.push({ name, insert, remove, revision: ++revision })
+
+    return revision
+  }
 
   const driver: NamespaceDriver = {
     items: async (name) => {
@@ -21,20 +37,11 @@ function host(initial: Record<string, Record<string, string>> = {}) {
 
       return { items: Object.fromEntries(data.get(name) ?? []), revision }
     },
-    update: async (name, insert, remove) => {
-      calls.push({ kind: "update", name, insert, remove })
-      await gate
+    update: (name, insert, remove) => {
+      const reply = update(name, insert, remove)
+      replies.push(reply)
 
-      if (fail(insert)) throw new Error("disk full")
-      const items = data.get(name) ?? new Map()
-
-      for (const [key, value] of Object.entries(insert)) items.set(key, value)
-
-      for (const key of remove) items.delete(key)
-      data.set(name, items)
-      events.push({ name, insert, remove, revision: ++revision })
-
-      return revision
+      return reply
     },
     clear: async (name) => {
       calls.push({ kind: "clear", name })
@@ -49,8 +56,9 @@ function host(initial: Record<string, Record<string, string>> = {}) {
     events,
     updates: () => calls.filter((call) => call.kind === "update"),
     setFail: (value: boolean | ((insert: Record<string, string>) => boolean)) =>
-      (fail = typeof value === "boolean" ? () => value : value),
+      (fail = value instanceof Function ? value : () => value),
     setGate: (value: Promise<void> | undefined) => (gate = value),
+    replied: (index: number) => Promise.allSettled([replies[index]]),
     deliver: (target: NamespaceStorage, index: number) => {
       const event = events[index]!
       target.accept(event.insert, event.remove, event.revision)
@@ -59,9 +67,17 @@ function host(initial: Record<string, Record<string, string>> = {}) {
 }
 
 describe("namespace storage", () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   test("loads the namespace once and serves reads from memory", async () => {
     const h = host({ w: { tabs: "[]", recent: "{}" } })
-    const storage = createNamespaceStorage(h.driver, "w", { delay: 10 })
+    const storage = createNamespaceStorage(h.driver, "w")
     expect(await storage.getItem("tabs")).toBe("[]")
     expect(await storage.getItem("recent")).toBe("{}")
     expect(await storage.getItem("missing")).toBeNull()
@@ -71,7 +87,7 @@ describe("namespace storage", () => {
 
   test("reads its own writes immediately and coalesces them into one update", async () => {
     const h = host()
-    const storage = createNamespaceStorage(h.driver, "w", { delay: 10 })
+    const storage = createNamespaceStorage(h.driver, "w")
     void storage.setItem("tabs", "[1]")
     void storage.setItem("recent", "{}")
     void storage.setItem("tabs", "[1,2]")
@@ -79,13 +95,13 @@ describe("namespace storage", () => {
     expect(await storage.getItem("tabs")).toBe("[1,2]")
     expect(await storage.getItem("recent")).toBeNull()
     expect(h.updates()).toHaveLength(0)
-    await wait(30)
+    vi.advanceTimersByTime(100)
     expect(h.updates()).toEqual([{ kind: "update", name: "w", insert: { tabs: "[1,2]" }, remove: ["recent"] }])
   })
 
   test("writes made while loading win over the loaded snapshot", async () => {
     const h = host({ w: { tabs: "old" } })
-    const storage = createNamespaceStorage(h.driver, "w", { delay: 10 })
+    const storage = createNamespaceStorage(h.driver, "w")
     const read = storage.getItem("tabs")
     void storage.setItem("tabs", "new")
     expect(await read).toBe("new")
@@ -93,7 +109,7 @@ describe("namespace storage", () => {
 
   test("flush writes now and resolves after the driver accepted the batch", async () => {
     const h = host()
-    const storage = createNamespaceStorage(h.driver, "w", { delay: 10_000 })
+    const storage = createNamespaceStorage(h.driver, "w")
     void storage.setItem("tabs", "[1]")
     await storage.flush()
     expect(h.data.get("w")?.get("tabs")).toBe("[1]")
@@ -103,7 +119,7 @@ describe("namespace storage", () => {
 
   test("a failed update keeps unsuperseded changes queued for the next flush", async () => {
     const h = host()
-    const storage = createNamespaceStorage(h.driver, "w", { delay: 10_000 })
+    const storage = createNamespaceStorage(h.driver, "w")
     h.setFail(true)
     void storage.setItem("tabs", "[1]")
     void storage.setItem("recent", "{}")
@@ -119,7 +135,7 @@ describe("namespace storage", () => {
     const h = host()
     const first = Promise.withResolvers<void>()
     h.setGate(first.promise)
-    const storage = createNamespaceStorage(h.driver, "w", { delay: 10_000 })
+    const storage = createNamespaceStorage(h.driver, "w")
     void storage.setItem("tabs", "[1]")
     void storage.flush()
     void storage.setItem("tabs", "[2]")
@@ -140,7 +156,7 @@ describe("namespace storage", () => {
       clear: async () => undefined,
     }
 
-    const storage = createNamespaceStorage(driver, "g", { delay: 10_000 })
+    const storage = createNamespaceStorage(driver, "g")
     const read = storage.getItem("model")
     void storage.setItem("model", "local")
     void storage.flush()
@@ -160,13 +176,13 @@ describe("namespace storage", () => {
     h.setGate(first.promise)
     // The first batch (old) is held at the host and will be rejected; the second (new) succeeds.
     h.setFail((insert) => insert.tabs === "old")
-    const storage = createNamespaceStorage(h.driver, "w", { delay: 10_000 })
+    const storage = createNamespaceStorage(h.driver, "w")
     void storage.setItem("tabs", "old")
     void storage.flush()
     h.setGate(undefined)
     void storage.setItem("tabs", "new")
     void storage.flush()
-    await wait(0)
+    await h.replied(1)
     expect(h.data.get("w")?.get("tabs")).toBe("new")
     first.resolve()
     await storage.flush()
@@ -178,8 +194,8 @@ describe("namespace storage", () => {
 
   test("an event that reaches a window after a newer ack for the same key is ignored", async () => {
     const h = host({ g: { model: "start" } })
-    const one = createNamespaceStorage(h.driver, "g", { delay: 10_000 })
-    const two = createNamespaceStorage(h.driver, "g", { delay: 10_000 })
+    const one = createNamespaceStorage(h.driver, "g")
+    const two = createNamespaceStorage(h.driver, "g")
     await one.getItem("model")
     await two.getItem("model")
     void one.setItem("model", "A")
@@ -199,7 +215,7 @@ describe("namespace storage", () => {
     const h = host()
     const gate = Promise.withResolvers<void>()
     h.setGate(gate.promise)
-    const storage = createNamespaceStorage(h.driver, "g", { delay: 10_000 })
+    const storage = createNamespaceStorage(h.driver, "g")
     void storage.setItem("model", "mine")
     void storage.flush()
     // Another window's write for the same key landed at the host after ours will.
@@ -213,7 +229,7 @@ describe("namespace storage", () => {
   test("the initial load removes a key an older event inserted while the load was in flight", async () => {
     const loaded = Promise.withResolvers<{ items: Record<string, string>; revision: number }>()
     const driver: NamespaceDriver = { items: () => loaded.promise, update: async () => 0, clear: async () => undefined }
-    const storage = createNamespaceStorage(driver, "g", { delay: 10_000 })
+    const storage = createNamespaceStorage(driver, "g")
     const read = storage.getItem("model")
     // Host history: insert at 41, delete at 42; the snapshot was taken at 42.
     storage.accept({ model: "inserted" }, [], 41)
@@ -224,7 +240,7 @@ describe("namespace storage", () => {
     expect(await storage.getItem("model")).toBeNull()
     // A key inserted by an event newer than the snapshot survives the load.
     const second = Promise.withResolvers<{ items: Record<string, string>; revision: number }>()
-    const other = createNamespaceStorage({ ...driver, items: () => second.promise }, "g", { delay: 10_000 })
+    const other = createNamespaceStorage({ ...driver, items: () => second.promise }, "g")
     const pending = other.getItem("model")
     other.accept({ model: "after-snapshot" }, [], 43)
     second.resolve({ items: {}, revision: 42 })
@@ -233,9 +249,8 @@ describe("namespace storage", () => {
 
   test("an event older than the initial load is ignored", async () => {
     const h = host({ g: { model: "loaded" } })
-    void h.driver.update("g", { model: "loaded" }, [])
-    await wait(0)
-    const storage = createNamespaceStorage(h.driver, "g", { delay: 10_000 })
+    await h.driver.update("g", { model: "loaded" }, [])
+    const storage = createNamespaceStorage(h.driver, "g")
     await storage.getItem("model")
     storage.accept({ model: "before-load" }, [], 1)
     expect(await storage.getItem("model")).toBe("loaded")
@@ -245,12 +260,45 @@ describe("namespace storage", () => {
 
   test("clear drops the cache and queued changes and clears the driver", async () => {
     const h = host({ w: { tabs: "[]" } })
-    const storage = createNamespaceStorage(h.driver, "w", { delay: 10_000 })
+    const storage = createNamespaceStorage(h.driver, "w")
     await storage.getItem("tabs")
     void storage.setItem("recent", "{}")
     await storage.clear()
     expect(await storage.getItem("tabs")).toBeNull()
     expect(await storage.getItem("recent")).toBeNull()
     expect(h.calls.map((call) => call.kind)).toEqual(["items", "clear"])
+  })
+
+  test("a failed update retries on its own, backing off, without another write or flush", async () => {
+    const h = host()
+    const storage = createNamespaceStorage(h.driver, "w")
+    h.setFail(true)
+    void storage.setItem("tabs", "[1]")
+    vi.advanceTimersByTime(100)
+    await h.replied(0)
+    h.setFail(false)
+    vi.advanceTimersByTime(199)
+    expect(h.updates()).toHaveLength(1)
+    vi.advanceTimersByTime(1)
+    await h.replied(1)
+    expect(h.updates()).toHaveLength(2)
+    expect(h.data.get("w")?.get("tabs")).toBe("[1]")
+  })
+
+  test("a failed load resolves the waiting reads from memory and the next read loads again", async () => {
+    const h = host({ w: { tabs: "[1]" } })
+    let attempt = 0
+
+    const storage = createNamespaceStorage(
+      {
+        ...h.driver,
+        items: (name) => (attempt++ === 0 ? Promise.reject(new Error("port closed")) : h.driver.items(name)),
+      },
+      "w",
+    )
+
+    void storage.setItem("recent", "{}")
+    expect(await storage.getItem("recent")).toBe("{}")
+    expect(await storage.getItem("tabs")).toBe("[1]")
   })
 })

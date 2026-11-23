@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "opencodeVersion": "2.2.5",
+  "capturedAt": "2026-11-05T16:18:52.884Z",
+  "generator": {
+    "script": "packages/console/app/script/capture-assets.ts",
+    "commit": "4617210822",
+    "vhs": "vhs version 0.12.1"
+  },
+  "window": {
+    "width": 1600,
+    "height": 1000,
+    "scale": 2,
+    "fontSize": 20
+  },
+  "assets": [
+    {
+      "surface": "terminal",
+      "id": "home",
+      "mode": "dark",
+      "file": "terminal/terminal-home-dark@2x.png",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 98582,
+      "sha256": "9475d25e0ae48e6adce223a57f4cfededea0b13bdc118d23e0260800df9ce467"
+    },
+    {
+      "surface": "terminal",
+      "id": "permission",
+      "mode": "dark",
+      "file": "terminal/terminal-permission-dark@2x.png",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 581794,
+      "sha256": "463dc153f879f74143a07b2371f2454fa3a47ff2b207af5ee6f943431d92d706"
+    },
+    {
+      "surface": "terminal",
+      "id": "done",
+      "mode": "dark",
+      "file": "terminal/terminal-done-dark@2x.png",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 603678,
+      "sha256": "43ffcaaf6d18b63eac8bdb1a92b070d9bf2a74bd573e094b8704b4e26e5da824"
+    },
+    {
+      "surface": "terminal",
+      "id": "home",
+      "mode": "light",
+      "file": "terminal/terminal-home-light@2x.png",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 96674,
+      "sha256": "5b36854f18476dc8cc072d3fe0d47c83abf0518147d7e73600768aaf223cf31b"
+    },
+    {
+      "surface": "terminal",
+      "id": "permission",
+      "mode": "light",
+      "file": "terminal/terminal-permission-light@2x.png",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 579396,
+      "sha256": "2dd8852c15cbbd5cf72910fdda06126b027a5d38b97c95b4e804dea4982d7cd9"
+    },
+    {
+      "surface": "terminal",
+      "id": "done",
+      "mode": "light",
+      "file": "terminal/terminal-done-light@2x.png",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 599948,
+      "sha256": "6bcf981e5e0760705c49052ac7f6d4fcfa705b2394a7e2aa4073734385149e09"
+    }
+  ]
+}

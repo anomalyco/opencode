@@ -1,0 +1,13 @@
+[data-site] [data-component="tooltip"] {
+  position: fixed;
+  z-index: 21;
+  padding: 0.375rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text-strong);
+  background: var(--popover-bg);
+  box-shadow: var(--popover-shadow);
+  pointer-events: none;
+}

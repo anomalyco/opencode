@@ -1,6 +1,6 @@
 import { Clock, Duration, Effect, Schema, type Stream } from "effect"
 import { HttpClientResponse } from "effect/http"
-import type { Snapshot, Status } from "../generation.js"
+import type { Reason, Snapshot } from "../generation.js"
 import { Media } from "../media.js"
 import type { AuthInput } from "./auth.js"
 import { RequestExecutor } from "./executor.js"
@@ -89,22 +89,27 @@ export interface Started<Token> {
   readonly snapshot: Snapshot
 }
 
-/**
- * A follow-up call's inputs: the decoded token and the auth headers the route sent, so a protocol can attach them
- * to output URLs that require the same credentials to download (Veo). `materialize` downloads an output through the
- * route's executor, for URLs that expire too soon to hand back (BFL).
- */
+/** A follow-up call's inputs: the decoded token. */
 export interface PollContext<Token> {
   readonly token: Token
-  readonly auth: Record<string, string>
-  readonly materialize: (asset: Media.Asset) => Effect.Effect<Media.Asset, AIError>
+  /**
+   * What an authenticated download of `url` needs, for result URLs that only download with the API key: the headers a
+   * GET would send (deployment headers plus auth) and the caller's scoped middleware. Spread it into `Media.url`. URLs
+   * on another origin than the route's base URL get neither, so credentials and hooks never leave the provider's host.
+   */
+  readonly credentials: (url: string) => Effect.Effect<Pick<Media.AssetOptions, "headers" | "middleware">, AIError>
+  /**
+   * A further GET with the same auth and headers, retried like the poll itself, for providers whose result needs a
+   * second lookup (MiniMax v1 answers with a file id that resolves to a download URL).
+   */
+  readonly get: (path: string) => Effect.Effect<HttpClientResponse.HttpClientResponse, AIError>
 }
 
 /**
  * Submit, then poll. `start` posts the body to the route endpoint; `status`, `result`, and `cancel` are follow-up
  * calls addressed by the token. Paths are relative to the route base URL unless the provider hands back absolute
- * URLs (fal `status_url`), in which case they are used verbatim. `result` is always its own GET: providers that
- * return the output inside the status body (Veo, xAI, Runway) point `result.path` at the status path and decode the
+ * URLs, in which case they are used verbatim. `result` is always its own GET: providers that
+ * return the output inside the status body (xAI) point `result.path` at the status path and decode the
  * same document, so `Generation.await` and `Video.resume(...).await()` behave identically everywhere.
  */
 export interface Queued<Request, Response, Token> {
@@ -140,11 +145,6 @@ export interface Queued<Request, Response, Token> {
   readonly cancel?: {
     readonly method: AuthInput["method"]
     readonly path: (token: Token) => string
-    /**
-     * Fetch a fresh status first and skip the call for terminal generations, for providers whose cancel endpoint
-     * destroys finished work (Runway's `DELETE /v1/tasks/{id}` deletes completed tasks and their outputs).
-     */
-    readonly activeOnly?: boolean
   }
 }
 
@@ -206,39 +206,26 @@ export const identity = (input: { readonly id: string; readonly name: string; re
   const provider = ProviderID.make(input.provider)
   const frameError = (message: string, body?: string, cause?: unknown) =>
     new AIError({ reason: new InvalidProviderOutputError({ route: input.id, message, body, cause }) })
-  const readError = (http: HttpContext) => (cause: unknown) =>
-    new AIError({
-      reason: new InvalidProviderOutputError({
-        route: input.id,
-        message: `Failed to read the ${input.name} response`,
-        http,
-        cause,
-      }),
-    })
 
   /**
    * Read a text body while retaining the original payload and HTTP context on every downstream error. `invalid` is a
-   * malformed provider document; `ended` is a generation that reached a terminal status without output (`failed`
+   * malformed provider document; `ended` is a generation that ended in `error` without output (reason `failed`
    * carries the provider's classification, defaulting to `ProviderInternal`; `cancelled`/`expired` mean the result
    * will never exist); `pending` is a `result()` read before the generation finished, which is caller misuse;
    * `contentPolicy` is a moderated result.
    */
   const text = Effect.fn("MediaProtocol.text")(function* (response: HttpClientResponse.HttpClientResponse) {
     const http = RequestExecutor.responseHttp(response)
-    const body = yield* response.text.pipe(Effect.mapError(readError(http)))
+    const body = yield* RequestExecutor.responseText(response)
     return {
       body,
       http,
       invalid: (message: string, cause?: unknown) =>
         new AIError({ reason: new InvalidProviderOutputError({ route: input.id, message, body, http, cause }) }),
-      ended: (
-        status: Exclude<Status, "queued" | "running" | "completed">,
-        message: string,
-        failure: Failure = "ProviderInternal",
-      ) =>
+      ended: (reason: Reason, message: string, failure: Failure = "ProviderInternal") =>
         new AIError({
           reason:
-            status === "failed"
+            reason === "failed"
               ? new FAILURES[failure]({ message, body, http })
               : new InvalidRequestError({ message, body, http }),
         }),
@@ -267,11 +254,7 @@ export const identity = (input: { readonly id: string; readonly name: string; re
   }
 
   /** Read a raw binary body, for providers that answer with the media bytes themselves. */
-  const bytes = (response: HttpClientResponse.HttpClientResponse) =>
-    response.arrayBuffer.pipe(
-      Effect.map((buffer) => new Uint8Array(buffer)),
-      Effect.mapError(readError(RequestExecutor.responseHttp(response))),
-    )
+  const bytes = RequestExecutor.responseBytes
 
   return {
     id: input.id,
@@ -311,16 +294,18 @@ export const identity = (input: { readonly id: string; readonly name: string; re
 
 export type Identity = ReturnType<typeof identity>
 
-export type Output = Effect.Success<ReturnType<Identity["text"]>>
+/** A provider status in package terms: still running, completed, or the reason it ended in `error`. */
+export type State = "running" | "completed" | Reason
 
-/** Map a provider status string through the protocol's table; unknown values are an invalid provider document. */
-export const status = <Table extends Record<string, Status>>(
-  table: Table,
-  raw: string,
-  output: Output,
-): Effect.Effect<Status, AIError> => {
-  if (!Object.hasOwn(table, raw)) return Effect.fail(output.invalid(`Unknown generation status "${raw}"`))
-  return Effect.succeed(table[raw])
+/** Map a provider status string through the protocol's table; unknown values keep the generation running. */
+export const state = (table: Readonly<Record<string, State>>, raw: string): State =>
+  Object.hasOwn(table, raw) ? table[raw] : "running"
+
+/** The snapshot `status` and `reason` for a provider status string. */
+export const status = (table: Readonly<Record<string, State>>, raw: string): Pick<Snapshot, "status" | "reason"> => {
+  const mapped = state(table, raw)
+  if (mapped === "running" || mapped === "completed") return { status: mapped }
+  return { status: "error", reason: mapped }
 }
 
 /** Map a provider error code through the protocol's table; missing or unmapped codes are `ProviderInternal`. */

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LanguageModel, LLM, Message, ToolCallPart } from "../../src/effect.js"
+import { ai, CacheHint, LanguageModel, Message, ToolCallPart } from "../../src/effect.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -34,7 +34,7 @@ describe("Bedrock Converse cache policy", () => {
           // Exercise both automatic placement and manual hints at every lowering site.
           const cache = policy === "none" ? new CacheHint({ type: "ephemeral", ttl: "1h" }) : undefined
           const prepared = yield* compileRequest(
-            LLM.request({
+            ai.request({
               model: bedrock.model(id),
               cache: policy,
               system: [{ type: "text", text: "System prefix", cache }],
@@ -61,7 +61,7 @@ describe("Bedrock Converse cache policy", () => {
               { role: "user", content: [{ text: "Question" }, { text: "<system-update>\nUpdate\n</system-update>" }] },
               {
                 role: "assistant",
-                content: [{ text: "Answer" }, { text: "Unsigned reasoning" }, { toolUse: { name: "lookup" } }],
+                content: [{ text: "Answer" }, { toolUse: { name: "lookup" } }],
               },
               { role: "user", content: [{ toolResult: { content: [{ json: "Result" }] } }] },
             ],
@@ -88,7 +88,7 @@ describe("Bedrock Converse cache policy", () => {
       it.effect(`preserves Claude checkpoints for ${id} (TTL: ${ttlRequest ?? "default"})`, () =>
         Effect.gen(function* () {
           const prepared = yield* compileRequest(
-            LLM.request({
+            ai.request({
               model: bedrock.model(id),
               system: [
                 { type: "text", text: "Agent" },
@@ -125,7 +125,7 @@ describe("Bedrock Converse cache policy", () => {
       () =>
         Effect.gen(function* () {
           const prepared = yield* compileRequest(
-            LLM.request({
+            ai.request({
               model: LanguageModel.update(bedrock.model(arn), { compatibility: { cacheFormat: "anthropic" } }),
               system: [
                 { type: "text", text: "Agent" },
@@ -154,7 +154,7 @@ describe("Bedrock Converse cache policy", () => {
     it.effect(`ignores the Alibaba cache format for ${id}`, () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
-          LLM.request({
+          ai.request({
             model: LanguageModel.update(bedrock.model(id), { compatibility: { cacheFormat: "alibaba" } }),
             system: "System prefix",
             prompt: "Question",

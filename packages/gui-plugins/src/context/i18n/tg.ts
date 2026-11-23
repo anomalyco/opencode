@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Истифода",
   "usage.cost": "Арзиш",
   "usage.view": "Истифодаи контекстро бинед",
-  "systemPrompt.title": "Промпти система",
   "rawMessages.title": "Паёмҳои хом",
   "export.session": "Сеанси содирот",
   "stats.session": "Сессия",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Сеанс ба {{filename}} захира карда шуд",
   "export.failed.title": "Сеанс содир карда нашуд",
   "export.failed.description": "Ҳангоми содироти сессия хатогӣ рӯй дод",
+  "usage.toggle": "Нишон додан/пинҳон кардани контексти сессия",
 }

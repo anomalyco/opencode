@@ -329,15 +329,9 @@ const layer = Layer.effect(
       directory: AbsolutePath,
       args: string[],
     ) {
-      const result = yield* execute(directory, proc, args).pipe(
-        Effect.mapError((cause) => new OperationError({ operation, directory, message: cause.message, cause })),
-      )
+      const result = yield* execute(directory, proc, args).pipe(Effect.mapError(spawnFailure(operation, directory)))
       if (result.exitCode === 0) return
-      return yield* new OperationError({
-        operation,
-        directory,
-        message: result.stderr.trim() || result.text.trim() || `Git ${operation} failed`,
-      })
+      return yield* commandFailure(operation, directory, result)
     })
 
     const clone = Effect.fn("Git.repo.clone")(function* (input: {
@@ -403,13 +397,13 @@ const layer = Layer.effect(
       ...args,
     ]
 
-    const repositoryOperation = Effect.fnUntraced(function* (
+    const repositoryRun = (
       operationName: OperationError["operation"],
       repository: Repository,
       args: string[],
-      options?: { stdin?: string | Uint8Array; env?: Record<string, string>; maxOutputBytes?: number; index?: string },
-    ) {
-      const result = yield* proc
+      options?: RepositoryOptions,
+    ) =>
+      proc
         .run(
           ChildProcess.make(gitExecutable(), repositoryArgs(repository, args), {
             cwd: repository.worktree,
@@ -418,25 +412,19 @@ const layer = Layer.effect(
           }),
           { stdin: options?.stdin, maxOutputBytes: options?.maxOutputBytes },
         )
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new OperationError({
-                operation: operationName,
-                directory: repository.worktree,
-                message: cause.message,
-                cause,
-              }),
-          ),
-        )
+        .pipe(Effect.mapError(spawnFailure(operationName, repository.worktree)))
+
+    const repositoryOperation = Effect.fnUntraced(function* (
+      operationName: OperationError["operation"],
+      repository: Repository,
+      args: string[],
+      options?: RepositoryOptions,
+    ) {
+      const result = yield* repositoryRun(operationName, repository, args, options)
       const text = result.stdout.toString("utf8")
-      if (result.exitCode === 0)
-        return { text, stderr: result.stderr.toString("utf8"), truncated: result.stdoutTruncated }
-      return yield* new OperationError({
-        operation: operationName,
-        directory: repository.worktree,
-        message: result.stderr.toString("utf8").trim() || text.trim() || `Git ${operationName} failed`,
-      })
+      const stderr = result.stderr.toString("utf8")
+      if (result.exitCode === 0) return { text, stderr, truncated: result.stdoutTruncated }
+      return yield* commandFailure(operationName, repository.worktree, { text, stderr })
     })
 
     /**
@@ -637,29 +625,13 @@ const layer = Layer.effect(
       paths: readonly RelativePath[]
     }) {
       if (!input.paths.length) return new Set<RelativePath>()
-      const result = yield* proc
-        .run(
-          ChildProcess.make(
-            gitExecutable(),
-            repositoryArgs(input.repository, ["check-ignore", "--no-index", "--stdin", "-z"]),
-            {
-              cwd: input.repository.worktree,
-              extendEnv: true,
-            },
-          ),
-          { stdin: input.paths.join("\0") + "\0" },
-        )
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new OperationError({
-                operation: "list_files",
-                directory: input.repository.worktree,
-                message: cause.message,
-                cause,
-              }),
-          ),
-        )
+      const result = yield* repositoryRun(
+        "list_files",
+        input.repository,
+        ["check-ignore", "--no-index", "--stdin", "-z"],
+        { stdin: input.paths.join("\0") + "\0" },
+      )
+      // Exit 1: none of the paths are ignored.
       if (result.exitCode !== 0 && result.exitCode !== 1)
         return yield* new OperationError({
           operation: "list_files",
@@ -1505,6 +1477,30 @@ interface Result {
   readonly exitCode: number
   readonly text: string
   readonly stderr: string
+}
+
+interface RepositoryOptions {
+  readonly stdin?: string | Uint8Array
+  readonly env?: Record<string, string>
+  readonly maxOutputBytes?: number
+  readonly index?: string
+}
+
+function spawnFailure(operation: OperationError["operation"], directory: AbsolutePath) {
+  return (cause: { readonly message: string }) =>
+    new OperationError({ operation, directory, message: cause.message, cause })
+}
+
+function commandFailure(
+  operation: OperationError["operation"],
+  directory: AbsolutePath,
+  result: { readonly text: string; readonly stderr: string },
+) {
+  return new OperationError({
+    operation,
+    directory,
+    message: result.stderr.trim() || result.text.trim() || `Git ${operation} failed`,
+  })
 }
 
 function run(cwd: string, proc: AppProcess.Interface, args: string[]) {

@@ -44,7 +44,28 @@ class FakeNotification extends EventTarget implements Notification {
   }
 }
 
+// The calls main gets, and the toast activation it would send back.
+const activations: Array<(tag: string) => void> = []
+
+const api = {
+  getWindowFocused: async () => false,
+  showWindow: async () => {},
+  setWindowFocus: async () => {},
+  showToast: async (toast: { tag: string; title: string; body: string }) => {
+    events.push(`api.showToast:${toast.tag}:${toast.title}:${toast.body}`)
+  },
+  dismissToast: async (tag: string) => {
+    events.push(`api.dismissToast:${tag}`)
+  },
+  onToastActivated: (cb: (tag: string) => void) => {
+    activations.push(cb)
+
+    return () => {}
+  },
+}
+
 afterEach(() => {
+  activations.length = 0
   created.length = 0
   events.length = 0
   globalThis.Notification = originalNotification
@@ -55,14 +76,14 @@ describe("desktop notifications", () => {
     globalThis.Notification = FakeNotification
 
     const notify = createDesktopNotify({
-      getWindowFocused: async () => false,
+      ...api,
       showWindow: async () => {
         events.push("api.showWindow")
       },
       setWindowFocus: async () => {
         events.push("api.setWindowFocus")
       },
-    })
+    }).notify
 
     await notify("Response ready", "Refactor auth flow", () => {
       events.push("session.select")
@@ -90,11 +111,7 @@ describe("desktop notifications", () => {
     async ({ event }) => {
       globalThis.Notification = FakeNotification
 
-      const notify = createDesktopNotify({
-        getWindowFocused: async () => false,
-        showWindow: async () => {},
-        setWindowFocus: async () => {},
-      })
+      const notify = createDesktopNotify(api).notify
 
       await notify("Session error")
 
@@ -116,14 +133,44 @@ describe("desktop notifications", () => {
   test("suppresses desktop notifications while the window is already focused", async () => {
     globalThis.Notification = FakeNotification
 
-    const notify = createDesktopNotify({
-      getWindowFocused: async () => true,
-      showWindow: async () => {},
-      setWindowFocus: async () => {},
-    })
+    const notify = createDesktopNotify({ ...api, getWindowFocused: async () => true }).notify
 
     await notify("Response ready", "Active session")
     expect(events).toEqual([])
     expect(created).toEqual([])
+  })
+
+  test("on windows a tagged notification is a toast main posts, with its detail line; a click runs the callback and an answer takes it back, also one another window posted", async () => {
+    const desktop = createDesktopNotify(api, "windows")
+    const tag = "server\0request:per_1"
+
+    await desktop.notify("Permission required", "Fix login", () => events.push("session.select"), {
+      tag,
+      detail: "bash:  git   push",
+    })
+    activations.forEach((activate) => activate(tag))
+    await desktop.notify("Permission required", "Fix login", undefined, { tag, detail: "bash: git status" })
+    desktop.dismissNotification?.(tag)
+    desktop.dismissNotification?.("server\0session:ses_9")
+
+    expect(events).toEqual([
+      "api.showToast:server\0request:per_1:Permission required:Fix login\nbash: git push",
+      "session.select",
+      "api.showToast:server\0request:per_1:Permission required:Fix login\nbash: git status",
+      "api.dismissToast:server\0request:per_1",
+      "api.dismissToast:server\0session:ses_9",
+    ])
+    expect(created).toEqual([])
+  })
+
+  test("on macos a tagged notification stays a page notification", async () => {
+    globalThis.Notification = FakeNotification
+
+    await createDesktopNotify(api, "macos").notify("Response ready", "Fix login", undefined, {
+      tag: "server\0session:ses_1",
+    })
+    createDesktopNotify(api, "macos").dismissNotification?.("server\0session:ses_1")
+
+    expect(events).toEqual(["created:Response ready:Fix login"])
   })
 })

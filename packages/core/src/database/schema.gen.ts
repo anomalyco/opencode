@@ -38,6 +38,32 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`automation\` (
+          \`id\` text PRIMARY KEY,
+          \`project_id\` text NOT NULL,
+          \`session_id\` text,
+          \`directory\` text NOT NULL,
+          \`name\` text NOT NULL,
+          \`trigger\` text NOT NULL,
+          \`tz\` text NOT NULL,
+          \`action\` text NOT NULL,
+          \`status\` text DEFAULT 'active' NOT NULL,
+          \`next_due_at\` integer,
+          \`expires_at\` integer,
+          \`run_count\` integer DEFAULT 0 NOT NULL,
+          \`failures\` integer DEFAULT 0 NOT NULL,
+          \`last_run_at\` integer,
+          \`last_message_id\` text,
+          \`last_outcome\` text,
+          \`last_output\` text,
+          \`retry_at\` integer,
+          \`state\` text,
+          \`event_position\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`credential\` (
           \`id\` text PRIMARY KEY,
           \`integration_id\` text,
@@ -69,11 +95,34 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`job\` (
+          \`notification_id\` text PRIMARY KEY,
+          \`id\` text NOT NULL,
+          \`session_id\` text NOT NULL,
+          \`child_session_id\` text,
+          \`kind\` text NOT NULL,
+          \`title\` text,
+          \`status\` text NOT NULL,
+          \`output\` text,
+          \`error\` text,
+          \`recovery\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`kv\` (
           \`key\` text PRIMARY KEY,
           \`value\` text NOT NULL,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`machine\` (
+          \`id\` text PRIMARY KEY,
+          \`key\` text,
+          \`time_created\` integer NOT NULL
         );
       `)
       yield* tx.run(`
@@ -191,6 +240,21 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`session_part\` (
+          \`message_id\` text NOT NULL,
+          \`session_id\` text NOT NULL,
+          \`ordinal\` integer NOT NULL,
+          \`type\` text NOT NULL,
+          \`call_id\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          \`data\` text NOT NULL,
+          CONSTRAINT \`session_part_pk\` PRIMARY KEY(\`message_id\`, \`ordinal\`),
+          CONSTRAINT \`fk_session_part_message_id_session_message_id_fk\` FOREIGN KEY (\`message_id\`) REFERENCES \`session_message\`(\`id\`) ON DELETE CASCADE,
+          CONSTRAINT \`fk_session_part_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`session_v2\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,
@@ -221,6 +285,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`model\` text,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
+          \`time_busy\` integer,
           \`time_idle\` integer,
           \`time_viewed\` integer,
           \`idle_outcome\` text,
@@ -250,8 +315,17 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           CONSTRAINT \`fk_worktree_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      yield* tx.run(`CREATE INDEX \`automation_project_idx\` ON \`automation\` (\`project_id\`);`)
+      yield* tx.run(`CREATE INDEX \`automation_session_idx\` ON \`automation\` (\`session_id\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`automation_active_idx\` ON \`automation\` (\`next_due_at\`) WHERE "automation"."status" = 'active';`,
+      )
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
+      yield* tx.run(`CREATE INDEX \`job_session_idx\` ON \`job\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`job_child_session_idx\` ON \`job\` (\`child_session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`job_id_idx\` ON \`job\` (\`id\`);`)
+      yield* tx.run(`CREATE UNIQUE INDEX \`machine_key_idx\` ON \`machine\` (\`key\`);`)
       yield* tx.run(
         `CREATE UNIQUE INDEX \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`,
       )
@@ -273,6 +347,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         `CREATE INDEX \`session_message_session_time_created_id_idx\` ON \`session_message\` (\`session_id\`,\`time_created\`,\`id\`);`,
       )
       yield* tx.run(`CREATE INDEX \`session_message_time_created_idx\` ON \`session_message\` (\`time_created\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`session_part_session_message_idx\` ON \`session_part\` (\`session_id\`,\`message_id\`,\`ordinal\`);`,
+      )
       yield* tx.run(`CREATE INDEX \`session_v2_project_idx\` ON \`session_v2\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_v2_parent_idx\` ON \`session_v2\` (\`parent_id\`);`)

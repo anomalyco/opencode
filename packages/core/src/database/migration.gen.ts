@@ -53,6 +53,16 @@ import m50 from "./migration/20261024002554_session_allowance.js"
 import m51 from "./migration/20261024175301_drop_session_allowance.js"
 import m52 from "./migration/20261025123711_blob.js"
 import m53 from "./migration/20261025154125_drop_session_pending.js"
+import m54 from "./migration/20261026223005_schedule.js"
+import m55 from "./migration/20261029002625_session_part.js"
+import m56 from "./migration/20261029073502_session_time_busy.js"
+import m57 from "./migration/20261029165540_schedule_checks.js"
+import m58 from "./migration/20261030054400_job.js"
+import m59 from "./migration/20261116043204_automation.js"
+import m60 from "./migration/20261116181958_automation_event_position.js"
+import m61 from "./migration/20261116213417_automation_active_index.js"
+import m62 from "./migration/20261119211416_machine.js"
+import m63 from "./migration/20261120004954_machine-key.js"
 
 export const migrations = [
   m00,
@@ -109,4 +119,14 @@ export const migrations = [
   m51,
   m52,
   m53,
+  m54,
+  m55,
+  m56,
+  m57,
+  m58,
+  m59,
+  m60,
+  m61,
+  m62,
+  m63,
 ] satisfies DatabaseMigration.Migration[]

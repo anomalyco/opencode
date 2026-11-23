@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { clampSessionPanelWidth } from "./session-panel-width"
+import { clampSessionPanelWidth, fitsSidePane } from "./session-panel-width"
+
+test("an automatic side pane needs room in the row, excluding the sidebar", () => {
+  expect(fitsSidePane(820 - 240)).toBe(false)
+  expect(fitsSidePane(777)).toBe(false)
+  expect(fitsSidePane(778)).toBe(true)
+})
 
 test.each([
   ["keeps widths already within the limit", 800, 1700, false, false, 800],
@@ -11,8 +17,9 @@ test.each([
   ["never drops below the chat panel minimum on small windows", 1600, 0, false, false, 450],
   ["skips clamping before the layout is measured", 1600, undefined, false, false, 1600],
   ["lets a dragged width leave the side pane its hard minimum, split diffs included", 1600, 1700, true, true, 1380],
-  ["keeps a dragged width below the default minimum", 320, 700, true, true, 320],
-  ["never drops a dragged width below the hard chat minimum", 1600, 0, false, true, 320],
+  ["keeps a dragged width below the default minimum", 420, 900, true, true, 420],
+  ["never drops a dragged width below the hard chat minimum", 1600, 0, false, true, 400],
+  ["raises a width dragged below the hard chat minimum before it rose", 320, 1700, false, true, 400],
 ])("%s", (_name, width, available, split, resized, expected) => {
   expect(clampSessionPanelWidth({ width, available, split, resized })).toBe(expected)
 })

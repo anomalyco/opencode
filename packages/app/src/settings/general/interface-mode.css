@@ -1,259 +1,261 @@
-[data-component="interface-mode"] {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+/* The tab layout cards and the navigation prototype's Tabs and List cards: a window that shows only its navigation,
+   fading into the name. */
+:is([data-component="interface-mode"], [data-component="navigation-mode"]) {
+  display: flex;
+  gap: 10px;
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
-
-  [data-slot="interface-mode-option"] {
-    position: relative;
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 12px;
-    padding: 12px;
-    border-radius: 8px;
-    background-color: var(--v2-background-bg-layer-01);
-    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
-    cursor: pointer;
-    transition: box-shadow 120ms ease;
-
-    &:hover {
-      box-shadow: inset 0 0 0 1px var(--v2-border-border-strong);
-    }
-
-    &[data-checked] {
-      box-shadow: inset 0 0 0 1.5px var(--v2-border-border-focus);
-    }
-
-    &:has(input:focus-visible) {
-      outline: 2px solid var(--v2-border-border-focus);
-      outline-offset: 2px;
-    }
-
-    input {
-      position: absolute;
-      inset: 0;
-      margin: 0;
-      opacity: 0;
-      pointer-events: none;
-    }
-  }
-
-  [data-slot="interface-mode-copy"] {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding-inline: 2px;
-  }
-
-  [data-slot="interface-mode-title"] {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    font-weight: 530;
-    line-height: var(--line-height-compact);
-    letter-spacing: -0.04px;
-    color: var(--v2-text-text-base);
-  }
-
-  [data-slot="interface-mode-radio"] {
-    flex-shrink: 0;
-    box-sizing: border-box;
-    width: 14px;
-    height: 14px;
-    border: 1px solid var(--v2-border-border-strong);
-    border-radius: 50%;
-    transition: border 120ms ease;
-  }
-
-  [data-checked] [data-slot="interface-mode-radio"] {
-    border: 4px solid var(--v2-background-bg-accent);
-  }
-
-  [data-slot="interface-mode-badge"] {
-    padding: 0 5px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 500;
-    line-height: var(--line-height-compact);
-    color: var(--v2-text-text-muted);
-    background-color: var(--v2-background-bg-layer-03);
-  }
-
-  [data-slot="interface-mode-description"] {
-    padding-inline-start: 22px;
-    font-size: 13px;
-    font-weight: 440;
-    line-height: var(--line-height-base);
-    color: var(--v2-text-text-muted);
-  }
 }
 
-[data-slot="interface-mode-preview"] {
-  --preview-fill: var(--v2-background-bg-layer-02);
-  --preview-ink: var(--v2-background-bg-layer-03);
-  --preview-ink-strong: var(--v2-background-bg-layer-04);
+:is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]) {
+  position: relative;
   display: flex;
+  /* A fixed size keeps the row from resizing when the chosen layout changes the panel width. */
+  width: 120px;
+  min-width: 0;
   flex-direction: column;
-  overflow: hidden;
-  aspect-ratio: 16 / 9;
-  border: 1px solid var(--v2-border-border-base);
-  border-radius: 6px;
+  box-sizing: border-box;
+  border: 1px solid var(--v2-border-border-muted);
+  border-radius: 8px;
   background-color: var(--v2-background-bg-base);
+  cursor: pointer;
+  transition: border-color 120ms ease;
 
-  span,
-  i {
+  &:hover {
+    border-color: var(--v2-border-border-strong);
+  }
+
+  &:not([data-checked]) :is([data-slot="interface-mode-sketch"], [data-slot="navigation-mode-sketch"]) {
+    opacity: 0.45;
+  }
+
+  &[data-checked] {
+    border-color: var(--v2-border-border-strong);
+  }
+
+  &:has(input:focus-visible) {
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
+  }
+
+  input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  span {
     display: block;
     flex-shrink: 0;
   }
+}
 
-  [data-slot="preview-body"] {
-    display: flex;
-    min-height: 0;
-    min-width: 0;
-    flex: 1;
+/* Color gives the structure: the window on a lighter layer, its navigation lighter again, the chosen tab or row
+   brightest. Hairlines only finish the edges. */
+:is([data-slot="interface-mode-sketch"], [data-slot="navigation-mode-sketch"]) {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  height: 56px;
+  margin: 10px 10px 0;
+  border-radius: 5px 5px 0 0;
+  background-color: var(--v2-background-bg-layer-01);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+  /* Fully faded before the name's text starts. */
+  mask-image: linear-gradient(to bottom, #000 45%, transparent calc(100% - 12px));
+
+  &[data-mode="top"] {
+    flex-direction: column;
   }
 
-  [data-slot="preview-line"] {
-    height: 3px;
-    border-radius: 1.5px;
-    background-color: var(--preview-ink);
+  &[data-mode="side"] [data-slot="sketch-row"][data-active] {
+    height: 6px;
+    margin-block: 1px;
   }
 
-  [data-slot="preview-tab"] {
+  [data-slot="sketch-tabs"] {
     display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px;
-    border-radius: 2px;
+    gap: 3px;
+    padding: 5px;
+    background-color: var(--v2-background-bg-layer-02);
+    box-shadow: inset 0 -0.5px 0 var(--v2-border-border-muted);
+  }
+
+  [data-slot="sketch-tab"] {
+    width: 24px;
+    height: 8px;
+    border-radius: 2.5px;
+    background-color: var(--v2-background-bg-layer-03);
 
     &[data-active] {
-      background-color: var(--preview-fill);
-    }
-
-    i {
-      width: 5px;
-      height: 5px;
-      border-radius: 1px;
-      background-color: var(--preview-ink-strong);
-    }
-
-    span {
-      height: 3px;
-      border-radius: 1.5px;
-      background-color: var(--preview-ink);
+      background-color: var(--v2-text-text-faint);
+      box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
     }
   }
 
-  [data-slot="preview-tabs"] {
+  [data-slot="sketch-list"] {
     display: flex;
-    gap: 3px;
-    padding: 4px 6px;
-    border-bottom: 0.5px solid var(--v2-border-border-base);
-    background-color: var(--v2-overlay-simple-overlay-pressed);
-
-    [data-slot="preview-tab"] {
-      width: 22%;
-    }
-  }
-
-  [data-slot="preview-rail"] {
-    display: flex;
-    width: 24%;
+    width: 44px;
     flex-direction: column;
     gap: 3px;
-    padding: 6px 4px;
-    border-inline-end: 0.5px solid var(--v2-border-border-base);
-    background-color: var(--v2-overlay-simple-overlay-pressed);
+    padding: 5px 4px;
+    background-color: var(--v2-background-bg-layer-02);
+    box-shadow: inset -0.5px 0 0 var(--v2-border-border-muted);
   }
 
-  [data-slot="preview-rail-heading"] {
-    width: 30%;
-    height: 3px;
-    margin: 4px 3px 1px;
-    border-radius: 1.5px;
-    background-color: var(--preview-ink-strong);
-    opacity: 0.6;
+  [data-slot="sketch-heading"] {
+    width: 14px;
+    height: 2px;
+    margin: 2px 2px 0;
+    border-radius: 1px;
+    background-color: var(--v2-text-text-faint);
+    opacity: 0.5;
 
-    &:first-child {
-      margin-top: 0;
-    }
-  }
-
-  [data-slot="preview-tab"] i[data-status] {
-    border-radius: 50%;
-
-    &[data-status="approval"] {
-      background-color: var(--v2-state-fg-warning);
+    & + [data-slot="sketch-row"] {
+      margin-top: 1px;
     }
 
-    &[data-status="done"] {
-      background-color: var(--v2-state-fg-success);
-    }
-
-    &[data-status="working"] {
-      background-color: var(--v2-state-fg-info);
+    &:not(:first-child) {
+      margin-top: 3px;
     }
   }
 
-  [data-slot="preview-main"] {
+  /* Even sizes keep the square and the line on the same center line. */
+  [data-slot="sketch-row"] {
     display: flex;
-    min-width: 0;
-    flex: 1;
-    flex-direction: column;
-    gap: 4px;
-    padding: 6px 8px;
-  }
-
-  [data-slot="preview-toolbar"] {
-    display: flex;
-    justify-content: flex-end;
-    gap: 3px;
-    margin-bottom: 3px;
-
-    i {
-      width: 6px;
-      height: 6px;
-      border-radius: 1.5px;
-      background-color: var(--preview-ink-strong);
-    }
-  }
-
-  [data-slot="preview-composer"] {
-    display: flex;
+    height: 8px;
     align-items: center;
-    justify-content: flex-end;
     gap: 3px;
-    height: 12px;
-    margin-top: auto;
-    padding-inline: 3px;
-    border-radius: 5px;
-    background-color: var(--preview-fill);
-    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+    padding-inline: 2px;
+    border-radius: 2px;
 
-    i {
-      width: 5px;
-      height: 5px;
+    &::before {
+      content: "";
+      width: 4px;
+      height: 4px;
+      flex-shrink: 0;
       border-radius: 1px;
-      background-color: var(--preview-ink-strong);
+      background-color: var(--v2-background-bg-layer-04);
     }
-  }
 
-  [data-slot="preview-panel"] {
-    display: flex;
-    width: 26%;
-    flex-direction: column;
-    gap: 4px;
-    padding: 8px 6px;
-    border-inline-start: 0.5px solid var(--v2-border-border-base);
-    background-color: var(--v2-overlay-simple-overlay-pressed);
+    &::after {
+      content: "";
+      height: 2px;
+      flex: 1;
+      border-radius: 1px;
+      background-color: var(--v2-background-bg-layer-04);
+    }
+
+    &[data-active] {
+      background-color: var(--v2-background-bg-layer-04);
+      box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+
+      &::before,
+      &::after {
+        display: none;
+      }
+    }
+
+    /* A title and a shorter detail line. */
+    &[data-detail] {
+      height: 10px;
+      align-items: flex-start;
+
+      &::before {
+        margin-top: 1px;
+      }
+
+      &[data-status]::before {
+        border-radius: 50%;
+      }
+
+      &::after {
+        height: 6px;
+        background:
+          linear-gradient(var(--v2-background-bg-layer-04) 0 0) top left / 100% 2px no-repeat,
+          linear-gradient(var(--v2-background-bg-layer-04) 0 0) bottom left / 60% 2px no-repeat;
+      }
+    }
   }
 }
 
-[data-checked] [data-slot="interface-mode-preview"] {
-  --preview-ink-strong: color-mix(in srgb, var(--v2-background-bg-accent) 70%, transparent);
+/* Only the chosen card shows accent. */
+[data-checked] > [data-mode] {
+  &:is([data-mode="top"], [data-mode="side"]) :is([data-slot="sketch-tab"], [data-slot="sketch-row"])[data-active] {
+    background-color: color-mix(in srgb, var(--v2-background-bg-accent) 40%, transparent);
+    box-shadow: none;
+  }
+
+  &[data-mode="list"] [data-slot="sketch-row"]::before {
+    background-color: color-mix(in srgb, var(--v2-background-bg-accent) 60%, transparent);
+  }
+
+  [data-slot="sketch-row"][data-status="approval"]::before {
+    background-color: var(--v2-background-bg-accent);
+  }
+
+  [data-slot="sketch-row"][data-status="done"]::before {
+    background-color: color-mix(in srgb, var(--v2-background-bg-accent) 60%, transparent);
+  }
+
+  [data-slot="sketch-row"][data-status="working"]::before {
+    background-color: color-mix(in srgb, var(--v2-background-bg-accent) 30%, transparent);
+  }
+}
+
+:is([data-slot="interface-mode-name"], [data-slot="navigation-mode-name"]) {
+  margin-top: -14px;
+  padding: 0 10px 8px;
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-compact);
+  color: var(--v2-text-text-muted);
+  transition: color 120ms ease;
+
+  :is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]):hover &,
+  [data-checked] & {
+    color: var(--v2-text-text-base);
+  }
+}
+
+/* Selection is a 2px neutral border and a check outside the corner, so it never reads as the blue keyboard ring. The
+   second pixel is an overlay, because an inset shadow would sit under the name's background. */
+:is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"])[data-checked]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-strong);
+  pointer-events: none;
+}
+
+:is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]) > [data-slot="mode-option-check"] {
+  position: absolute;
+  z-index: 1;
+  top: -7px;
+  inset-inline-end: -7px;
+  display: flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--v2-background-bg-accent);
+  color: var(--v2-text-text-contrast);
+  box-shadow: 0 0 0 2px var(--v2-background-bg-layer-01);
+}
+
+@media (forced-colors: active) {
+  :is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]) > [data-slot="mode-option-check"] {
+    border: 1px solid CanvasText;
+  }
 }
