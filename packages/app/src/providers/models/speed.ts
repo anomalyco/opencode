@@ -3,9 +3,9 @@ type Speed = { readonly id: string; readonly faster: boolean }
 /** A model's speeds in order: the slower ones, its standard speed (no name), then the faster ones. */
 export function orderedSpeeds(speeds: readonly Speed[]): (string | undefined)[] {
   return [
-    ...speeds.filter((speed) => !speed.faster).map((speed) => speed.id),
+    ...speeds.flatMap((speed) => (speed.faster ? [] : [speed.id])),
     undefined,
-    ...speeds.filter((speed) => speed.faster).map((speed) => speed.id),
+    ...speeds.flatMap((speed) => (speed.faster ? [speed.id] : [])),
   ]
 }
 

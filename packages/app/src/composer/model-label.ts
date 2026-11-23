@@ -52,6 +52,7 @@ export function composerModelLabels(
 ): ReadonlyMap<string, ComposerModelLabel> {
   const active = connected && new Set(connected)
   const providers = [...catalog.values()].filter((provider) => !active || active.has(provider.id))
+
   // A model's faster and slower speeds ("gpt-5.5-fast") show under its name: the speed has its own control.
   const standard = (provider: Provider, model: { speed?: { base: string } }) =>
     model.speed && provider.models[model.speed.base]

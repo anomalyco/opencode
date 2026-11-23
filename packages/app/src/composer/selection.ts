@@ -271,12 +271,14 @@ export function createComposerModelSelection(input: {
         // A model runs at the speed last used with it.
         const item = picked && models.speed.remembered(picked)
         const previous = currentKey()
+
         // Another speed of the same model keeps its variant.
         const same =
           item &&
           previous &&
           models.standard(previous).modelID === models.standard(item).modelID &&
           previous.providerID === item.providerID
+
         prompt.model.set(
           item ? { ...item, variant: same ? (selection.variant.current() ?? null) : undefined } : undefined,
         )

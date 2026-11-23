@@ -120,7 +120,7 @@ export function normalizeProviderList(
       headers: model.headers ?? {},
       release_date: model.time.released === 0 ? "" : new Date(model.time.released).toISOString().slice(0, 10),
       variants: Object.fromEntries(model.variants.map((variant) => [variant.id, variant.settings ?? {}])),
-      ...(model.experimental?.speed ? { speed: { ...model.experimental.speed } } : {}),
+      speed: model.experimental?.speed,
     }
   }
 

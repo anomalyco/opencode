@@ -168,6 +168,7 @@ test("a model's faster and slower speeds show under the model's own name", () =>
       ],
     ]),
   )
+
   const label = (id: string) => labels.get(composerModelLabelKey("openai", id))?.model
 
   expect(label("gpt-5.5")).toBe("GPT-5.5")
