@@ -380,7 +380,7 @@ export const Plugin = {
                     )
                     const request = { action: "edit", resources: [actual.resource], ...Permission.invocation(context) }
                     yield* replaces
-                      ? permission.assert({ ...request, save: ["*"] })
+                      ? permission.assert({ ...request, save: [FileAccess.always(actual)] })
                       : permission.assertNotDenied(request)
                   }),
                 title: input.prompt,
