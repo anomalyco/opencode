@@ -52,37 +52,53 @@ type Endpoint = {
   readonly operation: Operation
 }
 
-// Endpoints the reference leaves out, as `METHOD /path` with `*` matching anything.
-const HIDDEN = [
-  // Streams and terminal sockets, which a script's fetch can't use.
-  "GET /api/event",
-  "* /api/pty*",
-  "* /api/experimental/persistent-pty*",
-  // Code Mode has its own tools for files and shells.
-  "* /api/fs/*",
-  "* /api/experimental/fs/*",
-  "* /api/shell*",
-  // Mint access that works outside the script.
-  "POST /api/pair",
-  "POST /api/experimental/client-mcp/token",
-  "GET /api/experimental/machine/link",
-  "POST /api/experimental/machine",
-  "DELETE /api/experimental/machine/*",
-  // Let a session answer its own permission prompts, loosen its rules, or add, change or revoke credentials.
-  "POST /api/session/{sessionID}/permission/{requestID}/reply",
-  "PATCH /api/permission/saved/*",
-  "DELETE /api/permission/saved/*",
-  "PATCH /api/experimental/config",
-  "POST /api/credential*",
-  "PATCH /api/credential*",
-  "DELETE /api/credential*",
-  "* /api/integration/*/connect*",
-  "POST /api/experimental/integration/wellknown",
-  // Server maintenance.
-  "* /api/debug/*",
-  "* /api/experimental/migration/*",
-  "POST /api/plugin/check",
-  "POST /api/plugin/update",
+// Endpoints the reference documents, as `METHOD /path` with `*` matching anything. Anything not listed, including new
+// routes, stays out until it's added here.
+const SHOWN = [
+  // Sessions: hand work to other sessions, follow it and answer what they ask.
+  "GET /api/session",
+  "POST /api/session",
+  "GET /api/session/active",
+  "GET /api/session/{sessionID}",
+  "PATCH /api/session/{sessionID}",
+  "POST /api/session/{sessionID}/fork",
+  "POST /api/session/{sessionID}/agent",
+  "POST /api/session/{sessionID}/model",
+  "POST /api/session/{sessionID}/prompt",
+  "POST /api/session/{sessionID}/command",
+  "POST /api/session/{sessionID}/synthetic",
+  "POST /api/session/{sessionID}/compact",
+  "POST /api/session/{sessionID}/interrupt",
+  "POST /api/session/{sessionID}/generate",
+  "POST /api/experimental/session/{sessionID}/wait",
+  "GET /api/session/{sessionID}/context",
+  "GET /api/session/{sessionID}/diff",
+  "* /api/session/{sessionID}/inbox*",
+  "GET /api/session/{sessionID}/message*",
+  "GET /api/session/{sessionID}/form*",
+  "POST /api/session/{sessionID}/form/{formID}/reply",
+  "GET /api/session/{sessionID}/permission*",
+  "GET /api/form",
+  "GET /api/permission/request",
+  // Background work and scheduling.
+  "* /api/experimental/job*",
+  "* /api/experimental/automation*",
+  // Where the session is: location, projects, worktrees and version control.
+  "* /api/location*",
+  "* /api/project*",
+  "* /api/worktree*",
+  "* /api/vcs*",
+  // What's available.
+  "GET /api/info",
+  "GET /api/agent*",
+  "GET /api/command",
+  "GET /api/skill",
+  "GET /api/model*",
+  "GET /api/provider*",
+  // Generation, and the stored blobs and media it returns.
+  "* /api/experimental/generate*",
+  "GET /api/experimental/blob/*",
+  "GET /api/experimental/media/*",
 ]
 
 const INDEX_HEADER = [
@@ -111,7 +127,7 @@ export async function render(): Promise<Record<string, string>> {
       METHODS.flatMap((method) => {
         const operation = methods[method]
         const experimental = route.startsWith("/api/experimental/")
-        if (!operation || HIDDEN.some((pattern) => matches(pattern, `${method.toUpperCase()} ${route}`))) return []
+        if (!operation || !SHOWN.some((pattern) => matches(pattern, `${method.toUpperCase()} ${route}`))) return []
         return [
           {
             method: method.toUpperCase(),

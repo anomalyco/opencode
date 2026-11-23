@@ -33,39 +33,6 @@ Body:
 
 Returns: `{ data: Session.Info }`
 
-## GET /api/experimental/session/stats (experimental)
-
-Aggregate local session activity, usage, and tool reliability for a time range.
-
-Parameters:
-- `from?: string` Start of the range in Unix milliseconds, inclusive. Defaults to the earliest recorded message.
-- `to?: string` End of the range in Unix milliseconds, exclusive. Defaults to now.
-- `project?: string`
-- `timezone?: string` IANA time zone used to group activity by day. Defaults to UTC.
-- `tools?: "none" | "summary" | "detail"` How much tool usage to report: none, summary totals, or per-tool detail. Defaults to summary.
-
-Returns: `{ data: SessionStats.Info }`
-
-## POST /api/experimental/session/import (experimental)
-
-Import a projected session transcript at the requested location. Accepts transcripts exported by earlier releases. If parentID is supplied, the parent session must already exist; import parents before children.
-
-Body:
-- `info: Session.Info`
-- `messages: unknown[]`
-- `location?: Location.PublicRef`
-
-Returns: `{ data: Session.Info }`
-
-## GET /api/experimental/session/{sessionID}/export (experimental)
-
-Export a complete projected session transcript.
-
-Parameters:
-- `sanitize?: "true" | "false"` Set to true to redact titles, message text, file data, paths and metadata from the export.
-
-Returns: `{ data: SessionTransfer.Data }`
-
 ## GET /api/session/active
 
 List the sessions whose agent is running right now in this server process. Sessions missing from the result are idle.
@@ -87,12 +54,6 @@ Body:
 - `metadata?: Record<string, unknown>`
 - `permissions?: Permission.Ruleset`
 - `archived?: boolean` Archive the session with true or restore it with false. Repeating the current state is a no-op.
-
-Returns: nothing
-
-## DELETE /api/session/{sessionID}
-
-Delete a session and its child sessions.
 
 Returns: nothing
 
@@ -120,16 +81,6 @@ Change the model the session uses from its next model call on.
 
 Body:
 - `model: Model.Ref`
-
-Returns: nothing
-
-## POST /api/session/{sessionID}/move
-
-Move a session to another project directory at the requested delivery boundary.
-
-Body:
-- `directory: string`
-- `delivery?: "steer" | "queue"` steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer.
 
 Returns: nothing
 
@@ -163,16 +114,6 @@ Body:
 
 Returns: nothing
 
-## POST /api/experimental/session/{sessionID}/skill (experimental)
-
-Activate a skill for a session by appending a skill message and resuming execution.
-
-Body:
-- `id: string`
-- `resume?: boolean`
-
-Returns: nothing
-
 ## POST /api/session/{sessionID}/synthetic
 
 Add a message the model reads as user input but the user didn't type, such as a notification. Starts the agent unless resume is false or the session has a staged revert.
@@ -187,16 +128,6 @@ Body:
 
 Returns: `{ data: Session.Inbox.Synthetic }`
 
-## POST /api/session/{sessionID}/shell
-
-Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after.
-
-Body:
-- `id?: string`
-- `command: string`
-
-Returns: nothing
-
 ## POST /api/session/{sessionID}/compact
 
 Queue a summary of the session's history. Steers by default: it runs before the next model call, ahead of queued messages.
@@ -210,28 +141,6 @@ Returns: `{ data: Session.Inbox.Compaction }`
 ## POST /api/experimental/session/{sessionID}/wait (experimental)
 
 Wait until the session's agent stops running in this server process. Returns at once when idle.
-
-Returns: nothing
-
-## POST /api/session/{sessionID}/revert/stage
-
-Stage or move a reversible session boundary and optionally apply its file changes.
-
-Body:
-- `messageID: string`
-- `files?: boolean`
-
-Returns: `{ data: Session.Revert }`
-
-## DELETE /api/session/{sessionID}/revert
-
-Clear staged revert
-
-Returns: nothing
-
-## POST /api/session/{sessionID}/revert/commit
-
-Commit staged revert
 
 Returns: nothing
 
@@ -273,33 +182,6 @@ Cancel an inbox item that has not yet been delivered. Unavailable items are a no
 
 Returns: nothing
 
-## GET /api/experimental/session/{sessionID}/instructions/entries (experimental)
-
-List API-managed instruction entries attached to the session.
-
-Returns: `{ data: InstructionEntry.Info[] }`
-
-## PUT /api/experimental/session/{sessionID}/instructions/entries/{key} (experimental)
-
-Attach or replace one durable instruction entry. Changes announce as updates at the next step boundary.
-
-Parameters:
-- `key: string` Instruction entry key (lowercase alphanumerics plus . _ -)
-
-Body:
-- `value: unknown`
-
-Returns: nothing
-
-## DELETE /api/experimental/session/{sessionID}/instructions/entries/{key} (experimental)
-
-Remove one instruction entry; the removal is announced to the model at the next step boundary.
-
-Parameters:
-- `key: string` Instruction entry key (lowercase alphanumerics plus . _ -)
-
-Returns: nothing
-
 ## POST /api/session/{sessionID}/generate
 
 Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals.
@@ -309,16 +191,6 @@ Body:
 
 Returns: `SessionGenerateResponse`
 
-## GET /api/experimental/session/{sessionID}/log (experimental)
-
-Experimental durable session event log. Reads events after an exclusive aggregate sequence and continues with live events when follow=true.
-
-Parameters:
-- `after?: string` Only return events after this sequence number.
-- `follow?: "true" | "false"` Set to true to keep the stream open and send live events after the stored ones.
-
-Returns: an event stream
-
 ## POST /api/session/{sessionID}/interrupt
 
 Stop the session's agent if it is running in this server process; interrupted=false means nothing was running. With resume=true it continues with pending steer items, compaction and moves, while queued messages keep waiting.
@@ -327,12 +199,6 @@ Parameters:
 - `resume?: "true" | "false"` Set to true to resume pending steering input and next-in-line control items after interrupting.
 
 Returns: `SessionInterruptResponse`
-
-## POST /api/session/{sessionID}/background
-
-Move active foreground backgroundable tools for this session into background observation. Idle requests are a no-op.
-
-Returns: nothing
 
 ## GET /api/session/{sessionID}/message/{messageID}
 
@@ -346,32 +212,11 @@ Retrieve pending forms for a session.
 
 Returns: `{ data: Form.Info[] }`
 
-## POST /api/session/{sessionID}/form
-
-Create a form for a session.
-
-Body:
-- `id?: string`
-- `title: string`
-- `metadata?: Record<string, unknown>`
-- `fields: Form.Fields`
-
-Returns: `{ data: Form.Info }`
-
 ## GET /api/session/{sessionID}/form/{formID}
 
 Retrieve a form and its current state for a session.
 
 Returns: `{ data: Form.Detail }`
-
-## DELETE /api/session/{sessionID}/form/{formID}
-
-Cancel a pending form, optionally telling the asker why it was not answered.
-
-Parameters:
-- `message?: string` Why the form was not answered, passed on to the asker.
-
-Returns: nothing
 
 ## POST /api/session/{sessionID}/form/{formID}/reply
 
@@ -379,24 +224,6 @@ Submit an answer to a pending form.
 
 Body:
 - `answer: Record<string, Form.Value>`
-
-Returns: nothing
-
-## PUT /api/session/{sessionID}/environment
-
-Replace the process environment used by local shell commands for this session.
-
-Body:
-- `variables: Record<string, string>`
-
-Returns: nothing
-
-## POST /api/session/{sessionID}/view
-
-Mark the idle transition observed by the viewer as viewed.
-
-Body:
-- `idle: number`
 
 Returns: nothing
 
@@ -418,51 +245,11 @@ Retrieve pending permission requests owned by a session.
 
 Returns: `{ data: Permission.Request[] }`
 
-## POST /api/session/{sessionID}/permission
-
-Evaluate and, when approval is required, create a permission request for a session.
-
-Body:
-- `id?: string`
-- `action: string`
-- `resources: string[]`
-- `save?: string[]`
-- `metadata?: Record<string, unknown>`
-- `source?: Permission.Source`
-- `agent?: string`
-
-Returns: `{ data: { id: string; effect: "allow" | "deny" | "ask" } }`
-
 ## GET /api/session/{sessionID}/permission/{requestID}
 
 Retrieve a pending permission request owned by a session.
 
 Returns: `{ data: Permission.Request }`
-
-## GET /api/experimental/session/{sessionID}/terminal/read (experimental)
-
-Read the last physical rows without changing selection or taking control. Omitted lines uses the live terminal height; larger counts include retained history. Blank rows are preserved. Screen dimensions and cursor remain relative to the live screen. Returns null when no current terminal exists. Selection is server-local and resets on restart.
-
-Parameters:
-- `lines?: string` Number of trailing rows to read, up to 65535. Defaults to the live terminal height; larger counts include retained history.
-
-Returns: `{ data: PersistentPty.ReadResult }`
-
-## GET /api/experimental/session/{sessionID}/terminal (experimental)
-
-Returns: `{ data: PersistentPty.Info[] }`
-
-## POST /api/experimental/session/{sessionID}/terminal (experimental)
-
-Body:
-- `command?: string`
-- `args: string[]`
-- `cwd?: string`
-- `title: string`
-- `env: Record<string, string>`
-- `size?: { cols: number; rows: number }`
-
-Returns: `{ data: PersistentPty.Info }`
 
 ## Types
 
@@ -481,15 +268,12 @@ Returns: `{ data: PersistentPty.Info }`
 - `Form.StringField`: `{ key, title, description, required, hidden, when, type, format, minLength, maxLength, pattern, placeholder, default, options, custom }`
 - `Form.Value`: `string | number | boolean | string[]`
 - `Form.When`: `{ key: string; op: "eq" | "neq"; value: string | number | boolean }`
-- `InstructionEntry.Info`: `{ key: string; value: unknown }`
 - `Location.PublicRef`: `{ directory: string }`
 - `Model.Ref`: `{ id: string; providerID: string; variant?: string }`
 - `Permission.Request`: `{ id: string; sessionID: string; action: string; resources: string[]; save?: string[]; metadata?: Record<string, unknown>; source?: Permission.Source; message?: string }`
 - `Permission.Rule`: `{ action: string; resource: string; effect: "allow" | "deny" | "ask" }`
 - `Permission.Ruleset`: `Permission.Rule[]`
 - `Permission.Source`: `{ type: "tool"; messageID: string; id: string }`
-- `PersistentPty.Info`: `{ id, title, command, args, cwd, status, pid, exitCode, sessionID, userTitle, foregroundProcess, size, output }`
-- `PersistentPty.ReadResult`: `{ ptyID: string; title: string; cwd: string; foregroundProcess: string; screen: { text, cols, rows, cursor } }`
 - `Prompt.AgentAttachment`: `{ name: string; mention?: Prompt.Mention }` An agent @-mentioned in the prompt, such as @explore, to suggest the model use it. Only the @name in text reaches the model; this records which agent it names and doesn't change the session's own agent.
 - `Prompt.FileAttachment`: `{ data: string; mime: string; source: Prompt.FileSource; name?: string; description?: string; mention?: Prompt.Mention }`
 - `Prompt.FileSource`: `{ type: "inline" } | { type: "uri"; uri: string }`
@@ -521,12 +305,9 @@ Returns: `{ data: PersistentPty.Info }`
 - `Session.Message.Synthetic`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; text: string; description?: string; type: "synthetic" }`
 - `Session.Message.System`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; type: "system"; text: string; description?: string }`
 - `Session.Message.User`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; text: string; files?: Prompt.FileAttachment[]; agents?: Prompt.AgentAttachment[]; skills?: Prompt.SkillAttachment[]; type: "user" }`
-- `Session.Revert`: `{ messageID: string; partID?: string; snapshot?: string; files?: FileDiff.Info[] }`
 - `Session.StructuredError`: `{ type: string; message: string; status?: number; response?: { body }; retryAfterMs?: number }`
 - `SessionGenerateResponse`: `{ data: { text, tokens, cost } }`
 - `SessionInterruptResponse`: `{ interrupted: boolean }`
 - `SessionMessagesResponse`: `{ data: Session.Message.Info[]; cursor: { previous, next } }`
 - `SessionsResponse`: `{ data: Session.Info[]; cursor: { previous, next } }`
-- `SessionStats.Info`: `{ range, sessions, subagents, prompts, steps, tokens, cost, tools, activeDays, streak, activity, models }`
-- `SessionTransfer.Data`: `{ info: Session.Info; messages: Session.Message.Info[] }`
 - `TokenUsage.Info`: `{ input: number; output: number; reasoning: number; cache: { read, write } }`
