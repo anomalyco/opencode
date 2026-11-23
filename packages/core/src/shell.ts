@@ -938,11 +938,16 @@ const layer = () =>
               output: `${lines[0]}\n\n[showing the last ${formatSize(shownSize)} of ${line} (${lineSize}); ${suffix}${stoppedEarly}`,
               truncated: true,
               ...killed,
+              outputPath: info.file,
+              totalBytes: size,
+              shownBytes: shownSize,
+              ...(total === undefined ? {} : { totalLines: total, startLine: total, endLine: total }),
             }
           }
           if (start > 0 || lines.length > maxLines) {
             // A window that starts mid-line drops that partial line so the line numbers stay exact.
             const kept = lines.slice(-Math.min(maxLines, lines.length - (partial ? 1 : 0)))
+            const shownBytes = Buffer.byteLength(kept.join("\n")) + (endsWithNewline ? 1 : 0)
             return {
               output:
                 total === undefined
@@ -950,6 +955,12 @@ const layer = () =>
                   : `${kept.join("\n")}\n\n[showing lines ${total - kept.length + 1}-${total} of ${total}; ${suffix}${stoppedEarly}`,
               truncated: true,
               ...killed,
+              outputPath: info.file,
+              totalBytes: size,
+              shownBytes,
+              ...(total === undefined
+                ? {}
+                : { totalLines: total, startLine: total - kept.length + 1, endLine: total }),
             }
           }
           // One blank line before the notice, whether or not the output ended with a newline.

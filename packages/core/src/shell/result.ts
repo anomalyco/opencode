@@ -4,13 +4,40 @@ import os from "os"
 import type { Shell } from "@opencode/schema/shell"
 import { BackgroundResult } from "../session/background-result.js"
 
+// Truncation facts, set only when `truncated`: where the full output lives and which window was shown.
+type Truncation = {
+  outputPath?: string
+  totalBytes?: number
+  shownBytes?: number
+  totalLines?: number
+  startLine?: number
+  endLine?: number
+}
+
+// Pick only the truncation keys: callers pass wider outputs (status, wall time, shell ID, pid) that must not leak.
+const truncation = ({ outputPath, totalBytes, shownBytes, totalLines, startLine, endLine }: Truncation): Truncation => ({
+  ...(outputPath !== undefined ? { outputPath } : {}),
+  ...(totalBytes !== undefined ? { totalBytes } : {}),
+  ...(shownBytes !== undefined ? { shownBytes } : {}),
+  ...(totalLines !== undefined ? { totalLines } : {}),
+  ...(startLine !== undefined ? { startLine } : {}),
+  ...(endLine !== undefined ? { endLine } : {}),
+})
+
 export type Result = {
   info: Shell.Info
   // `killed` says why a command was killed when no exit code or signal of its own tells, e.g. the process daemon stopped.
-  capture: { output: string; truncated: boolean; killed?: string } | undefined
+  capture: ({ output: string; truncated: boolean; killed?: string } & Truncation) | undefined
 }
 
-type Output = { output: string; truncated: boolean; exit?: number; signal?: string; timeout?: boolean; killed?: string }
+type Output = {
+  output: string
+  truncated: boolean
+  exit?: number
+  signal?: string
+  timeout?: boolean
+  killed?: string
+} & Truncation
 
 const missing = "Shell command output is no longer available."
 export const unavailable: Shell.Output = {
@@ -21,13 +48,15 @@ export const unavailable: Shell.Output = {
 }
 
 export function output(result: Result): Output {
+  const capture = result.capture
   return {
-    output: result.capture?.output ?? unavailable.output,
-    truncated: result.capture?.truncated ?? false,
+    output: capture?.output ?? unavailable.output,
+    truncated: capture?.truncated ?? false,
     ...(result.info.exit !== undefined ? { exit: result.info.exit } : {}),
     ...(result.info.signal !== undefined ? { signal: result.info.signal } : {}),
     ...(result.info.status === "timeout" ? { timeout: true } : {}),
-    ...(result.capture?.killed !== undefined ? { killed: result.capture.killed } : {}),
+    ...(capture?.killed !== undefined ? { killed: capture.killed } : {}),
+    ...truncation(capture ?? {}),
   }
 }
 
@@ -70,6 +99,7 @@ export function metadata(output: Output) {
     ...(output.signal !== undefined ? { signal: output.signal } : {}),
     ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
     ...(output.killed !== undefined ? { killed: true } : {}),
+    ...truncation(output),
   }
 }
 

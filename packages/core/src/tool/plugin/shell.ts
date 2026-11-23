@@ -95,6 +95,26 @@ const StructuredOutput = Schema.Struct({
   outputPath: Schema.optionalKey(Schema.String).annotate({
     description: "File with the full output, when output was truncated or the command is running in the background",
   }),
+  truncated: Schema.optionalKey(Schema.Boolean).annotate({
+    description: "True only when the output was truncated and a window of the full output was shown",
+  }),
+  totalBytes: Schema.optionalKey(NonNegativeInt).annotate({
+    description: "Total bytes in the full output file, present only when output was truncated",
+  }),
+  shownBytes: Schema.optionalKey(NonNegativeInt).annotate({
+    description: "Bytes of the shown window, present only when output was truncated",
+  }),
+  totalLines: Schema.optionalKey(NonNegativeInt).annotate({
+    description: "Total lines in the full output, present only when output was truncated and the line count is known",
+  }),
+  startLine: Schema.optionalKey(NonNegativeInt).annotate({
+    description:
+      "First line of the shown window (1-based), present only when output was truncated and the line count is known",
+  }),
+  endLine: Schema.optionalKey(NonNegativeInt).annotate({
+    description:
+      "Last line of the shown window (1-based), present only when output was truncated and the line count is known",
+  }),
   pid: Schema.optionalKey(NonNegativeInt).annotate({
     description: "Process ID while the command is running in the background",
   }),
@@ -121,7 +141,7 @@ const resultMessages = (output: Output, timeout?: number) => {
 const toolResult = (output: Output, timeout?: number) => {
   return {
     output: {
-      ...Struct.omit(output, ["exit", "status", "truncated", "timeout"]),
+      ...Struct.omit(output, ["exit", "status", "timeout"]),
       exitCode: output.exit ?? null,
     },
     content: resultMessages(output, timeout).map((text) => ({
@@ -233,7 +253,6 @@ const startJob = Effect.fnUntraced(function* (
         ...ShellResult.output(result),
         status: "completed" as const,
         wallTimeSeconds: wallTimeSeconds(result.info.time, completed),
-        ...(result.capture.truncated ? { outputPath: result.info.file } : {}),
       }
     }).pipe(
       Effect.tap((output) => Deferred.succeed(settled, output)),
