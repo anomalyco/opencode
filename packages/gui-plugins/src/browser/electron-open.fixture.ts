@@ -1,5 +1,7 @@
 import { createServer, type ServerResponse } from "node:http"
 import electron from "electron"
+import { Schema } from "effect"
+import { RpcError } from "@opencode/protocol/errors"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds } from "@opencode/plugin/gui/main"
 import type { Browser } from "@opencode/plugin-browser/rpc"
@@ -49,14 +51,22 @@ type Outcome = { type: "success" } | { type: "failure"; code: string; message: s
 
 const frame = (event: Frame) => `data: ${JSON.stringify({ id: `evt_${Date.now()}`, ...event })}\n\n`
 
-// The session's server, as far as a pane's attachment asks: the session, the event stream, and the browser RPC. It
-// answers `attach` with the `attached` handshake on the stream and then holds the call open, and it hands the pane
-// the agent's commands as the server does: a control event names a request, the pane fetches it and posts its result.
+// The body of the 400 a server answers a call with while no plugin of the Location has registered the RPC.
+const unavailable = JSON.stringify(Schema.encodeSync(RpcError)(new RpcError({ type: "rpc.unavailable", message: "RPC is unavailable: experimental.browser" })))
+
+// The session's server, as far as a pane's attachment asks: the session, the event stream, the plugin list and the
+// browser RPC. It answers `attach` with the `attached` handshake on the stream and then holds the call open, and it
+// hands the pane the agent's commands as the server does: a control event names a request, the pane fetches it and
+// posts its result. It has only just started the session's project, as after the app updates or the project sat
+// idle: until its third answer to the plugin list it lists no plugin and has no browser RPC to call.
 function createApi(directory: string) {
   const streams = new Set<ServerResponse>()
   const commands = new Map<string, Browser.Action>()
   const results = new Map<string, (outcome: Outcome) => void>()
   const attached = { connectionID: "" }
+  // How often it refused `attach` for having no browser RPC yet, and how often it answered the plugin list.
+  const startup = { refused: 0, listed: 0 }
+  const loading = () => startup.listed < 3
 
   const session = {
     id: "ses_fixture",
@@ -89,6 +99,14 @@ function createApi(directory: string) {
       return void response.end(JSON.stringify({ data: session }))
     }
 
+    if (path === "/api/plugin") {
+      startup.listed += 1
+      response.writeHead(200, { "content-type": "application/json" })
+      const data = loading() ? [] : [{ id: "opencode.browser", source: { type: "builtin" }, features: { server: true }, state: { status: "active" } }]
+
+      return void response.end(JSON.stringify({ location: session.location, data }))
+    }
+
     if (!path.startsWith("/api/rpc/experimental.browser/")) return void response.writeHead(404).end()
     const chunks: Buffer[] = []
     request.on("data", (chunk: Buffer) => chunks.push(chunk))
@@ -96,6 +114,13 @@ function createApi(directory: string) {
       const input: { connectionID: string; requestID?: string; outcome?: Outcome } = JSON.parse(Buffer.concat(chunks).toString()).input
 
       if (path.endsWith("/attach")) {
+        if (loading()) {
+          startup.refused += 1
+          response.writeHead(400, { "content-type": "application/json" })
+
+          return void response.end(unavailable)
+        }
+
         attached.connectionID = input.connectionID
 
         return control({ type: "attached", connectionID: input.connectionID, version: 4 })
@@ -112,6 +137,7 @@ function createApi(directory: string) {
 
   return {
     server,
+    startup,
     /** Runs a command of the agent's on the attached pane, and resolves with what the pane answered. */
     agent(action: Browser.Action) {
       const requestID = `request-${commands.size}`
@@ -228,6 +254,8 @@ void electron.app.whenReady().then(async () => {
   })
 
   await pane.register(win.id, "binding", { server: "sidecar", session: "ses_fixture" })
+  // What the first attachment asked of the server, before the registration at the end asks again.
+  const startup = { ...api.startup }
   const last = () => reported.at(-1) ?? []
   const view = (tab: Browser.Tab) => ({ url: tab.url, loading: tab.loading, failed: tab.loadError !== undefined })
   const tab = (address: string) => last().find((item) => item.url.endsWith(address))
@@ -304,6 +332,7 @@ void electron.app.whenReady().then(async () => {
   process.stdout.write(
     `${JSON.stringify({
       origin,
+      startup,
       person,
       registered,
       // The still-loading page committed and showed: an inventory listed its tab at its address.
