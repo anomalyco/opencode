@@ -264,6 +264,11 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
   message, `the GPU work took over 1 s; the canvas is stopped`, and the placeholder shows. It applies first, whatever
   the shader's 50 ms rule has counted (`widgets.md`, GPU canvases). (On macOS a shader running for seconds trips the
   GPU watchdog, which may blame another queue, the app's own among them, and lose the device.)
+  At a device loss, the oldest unfinished submit on the widget's queue counts as a GPU hang if it had been running at
+  least 250 ms (counted from its submit or, if later, from when the submit before it finished): the canvases it draws
+  into stop the same way, with the same message, and the new device doesn't restart them. It needs no loss reason, so
+  it works the same on Metal, Vulkan and the web (the macOS watchdog kills hung work after about 0.5 s, before the 1 s
+  rule).
 - **Device loss.** When the client loses its device (a reset, the app backgrounded long enough, a live program
   restored from a snapshot), it sends `{ type: "gpu", lost: reason, message? }`; the prelude resolves `device.lost` with
   `{ reason, message }` (`message` `""` when absent) and every handle is gone. While the program has read a live
