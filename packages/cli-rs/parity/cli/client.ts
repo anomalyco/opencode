@@ -52,10 +52,16 @@ export type Sandbox = Awaited<ReturnType<typeof sandbox>>
 // The root must not lie under the user's home: the TS server discovers `.agents`, `.claude`, and
 // `.opencode` in every ancestor of the working directory and watches them, so a sandbox under
 // `~/.cache/tmp` watched `~/.agents/skills` and `~/.opencode`. PARITY_SANDBOX_DIR moves it.
+//
+// The root is private to its run, never inside the shared `/tmp/opencode-parity` tree: that tree holds
+// the runners' test reports and the leftovers of failed runs, and a cleanup of it (or a recursive
+// removal still walking it) deleted live clients' working directory mid-run (C.15/enum and
+// D131/plugins, 20261122-004827: the wizard's second instance failed `current_dir`, and TS died on
+// `process.cwd` while it loaded).
 export async function sandbox(env: Record<string, string> = {}) {
-  const parent = process.env.PARITY_SANDBOX_DIR ?? path.join("/tmp", "opencode-parity")
+  const parent = process.env.PARITY_SANDBOX_DIR ?? "/tmp"
   await mkdir(parent, { recursive: true })
-  const root = await mkdtemp(path.join(parent, "opencode-parity-"))
+  const root = await mkdtemp(path.join(parent, "opencode-rs-sandbox-"))
   const dirs = {
     home: "home",
     config: "home/.config",
