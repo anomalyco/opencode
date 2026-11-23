@@ -23,7 +23,7 @@ export interface Recorded {
 
 /**
  * Runs a case the way the fixtures' driver does: the canvas sizes before anything else, then while the program asks for
- * frames, each fixture input for frame `i` and frame `i`; it stops when the program ends, or settles without asking
+ * frames, each fixture input for frame `i`, frame `i`, and its inputs marked `after`; it stops when the program ends, or settles without asking
  * for a frame, or after `FRAMES` frames. Timers run on a clock that moves 1/60 s at a time while the program waits.
  */
 export async function run(item: GpuCase): Promise<Recorded> {
@@ -55,12 +55,17 @@ export async function run(item: GpuCase): Promise<Recorded> {
   for (let i = 0; i < FRAMES; i++) {
     await settle()
     if (widget.ended || !widget.frameRequested) break
-    for (const { input } of (item.inputs ?? []).filter((entry) => entry.frame === i)) {
-      const given = input as LiveInput
-      if (given.type === "event") widget.event(given.event)
-      if (given.type === "canvas") widget.canvas(given.key, given.width, given.height)
+    const send = (after: boolean) => {
+      for (const { input } of (item.inputs ?? []).filter((entry) => entry.frame === i && !!entry.after === after)) {
+        const given = input as LiveInput
+        if (given.type === "event") widget.event(given.event)
+        if (given.type === "canvas") widget.canvas(given.key, given.width, given.height)
+        if (given.type === "gpu" && given.lost !== undefined) widget.loseDevice(given.lost)
+      }
     }
+    send(false)
     widget.frame(frame(i))
+    send(true)
   }
   await settle()
   const end = widget.ended ?? (await widget.stop())

@@ -3,13 +3,14 @@ import path from "node:path"
 
 // The GPU conformance fixtures' programs (`gpu/*.json`): the example widget templates, run for a few frames, and
 // programs that break the subset's structure, handles or limits. `canvases`: sizes the host sends before the first
-// frame; `inputs`: what the client sends before frame `frame` (an `event`, or a `canvas` size).
+// frame (physical sizes, which it clamps); `inputs`: what the client sends before frame `frame` (an `event`, a
+// `canvas` size, or a device loss, `{ type: "gpu", lost }`), or right after it with `after`.
 export interface GpuCase {
   readonly name: string
   readonly source: string
   readonly data?: unknown
   readonly canvases: ReadonlyArray<{ readonly key: string; readonly width: number; readonly height: number }>
-  readonly inputs?: ReadonlyArray<{ readonly frame: number; readonly input: unknown }>
+  readonly inputs?: ReadonlyArray<{ readonly frame: number; readonly after?: boolean; readonly input: unknown }>
 }
 
 const template = (name: string) => readFileSync(path.resolve(import.meta.dir, `gpu/templates/${name}.js`), "utf8")
@@ -266,6 +267,107 @@ export const gpuCases: ReadonlyArray<GpuCase> = [
       { key: "b", width: 100, height: 100 },
     ],
   },
+  {
+    // A pass renders into a canvas through its resolve target too: "a"'s multisampled batch fails on frame 1 and stops
+    // only "a".
+    name: "error-isolated-through-a-resolve-target",
+    source: program(
+      `
+  const buffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.VERTEX })
+  const gone = device.createBuffer({ size: 16, usage: GPUBufferUsage.VERTEX })
+  gone.destroy()
+  const samples = device
+    .createTexture({ size: [100, 100], format, sampleCount: 4, usage: GPUTextureUsage.RENDER_ATTACHMENT })
+    .createView()
+  const draw = (key, vertices) => {
+    const encoder = device.createCommandEncoder()
+    const pass = encoder.beginRenderPass(
+      key === "a"
+        ? { colorAttachments: [{ view: samples, resolveTarget: view("a"), loadOp: "clear", storeOp: "discard" }] }
+        : clear(key),
+    )
+    pass.setVertexBuffer(0, vertices)
+    pass.end()
+    device.queue.submit([encoder.finish()])
+  }
+  for (let frame = 0; frame < 3; frame++) {
+    await widget.frame()
+    draw("a", frame === 1 ? gone : buffer)
+    await widget.sleep(1)
+    draw("b", buffer)
+  }
+  await widget.frame()`,
+      ["a", "b"],
+    ),
+    canvases: [
+      { key: "a", width: 100, height: 100 },
+      { key: "b", width: 100, height: 100 },
+    ],
+  },
+  {
+    // The device is lost right after frame 1, before the program learns of it: the batch it posts with that frame
+    // names handles from before the loss and is dropped quietly. Then it makes a new device and goes on.
+    name: "lost-device-drops-earlier-batches",
+    source: `async function main() {
+  widget.render(ui.canvas({ key: "scene", gpu: true, height: 100 }))
+  const context = widget.gpu.getContext("scene")
+  const format = widget.gpu.getPreferredCanvasFormat()
+  let device
+  let view
+  let lost = false
+  const setup = async () => {
+    device = await widget.gpu.requestDevice()
+    device.lost.then(() => (lost = true))
+    context.configure({ device, format })
+    view = context.getCurrentTexture().createView()
+  }
+  await setup()
+  for (let frame = 0; frame < 4; frame++) {
+    await widget.frame()
+    if (lost) {
+      lost = false
+      await setup()
+    }
+    const encoder = device.createCommandEncoder()
+    encoder.beginRenderPass({ colorAttachments: [{ view, loadOp: "clear", storeOp: "store" }] }).end()
+    device.queue.submit([encoder.finish()])
+  }
+  await widget.frame()
+}`,
+    canvases: scene,
+    inputs: [{ frame: 1, after: true, input: { type: "gpu", lost: "unknown" } }],
+  },
+  {
+    // A canvas over the texture limit gets its size clamped, aspect ratio kept: 5120 x 2880 is 4096 x 2304, and
+    // 9000 x 1000 is 4096 x 455; a texture of the canvas's size fits.
+    name: "canvas-clamped-to-4096",
+    source: program(`
+  for (let frame = 0; frame < 2; frame++) {
+    await widget.frame()
+    const { width, height } = contexts.scene
+    device.createTexture({ size: [width, height], format: "depth24plus", usage: GPUTextureUsage.RENDER_ATTACHMENT })
+  }
+  await widget.frame()`),
+    canvases: [{ key: "scene", width: 5120, height: 2880 }],
+    inputs: [{ frame: 1, input: { type: "canvas", key: "scene", width: 9000, height: 1000 } }],
+  },
+  {
+    // A frame request without a batch ends the frame too: 10 passes before a sleep, then 10 in the next frame.
+    name: "frame-counts-reset-at-a-bare-frame",
+    source: program(`
+  const passes = (count) => {
+    const encoder = device.createCommandEncoder()
+    for (let i = 0; i < count; i++) encoder.beginRenderPass(clear("scene")).end()
+    device.queue.submit([encoder.finish()])
+  }
+  await widget.frame()
+  passes(10)
+  await widget.sleep(1)
+  await widget.frame()
+  passes(10)
+  await widget.frame()`),
+    canvases: scene,
+  },
 ]
 
 // Batches a program posts itself, which the prelude never makes, one fixture each: a JavaScript expression for the
@@ -286,6 +388,7 @@ export const rawCases: ReadonlyArray<GpuCase> = (
     ["handle-reused", `[["buffer", 1, 16, 32], ["buffer", 1, 16, 32]]`],
     ["handles-out-of-order", `[["buffer", 2, 16, 32], ["buffer", 1, 16, 32]]`],
     ["no-such-handle", `[["destroy", 9]]`],
+    ["handle-0", `[["destroy", 0]]`],
     ["wrong-kind", `[["shader", 1, ""], ["destroy", 1]]`],
     ["bytes-out-of-range", `[["buffer", 1, 16, 8], ["writeBuffer", 1, 0, 4, 8]]`],
     ["not-a-whole-number", `[["buffer", 1, 16.5, 8]]`],

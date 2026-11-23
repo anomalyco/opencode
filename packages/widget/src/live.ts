@@ -18,7 +18,7 @@ import type { Capabilities } from "./widget-template.js"
 import { type Tree, tree, unmark, ViewError } from "./tree.js"
 import { compiled } from "./compiled.js"
 import { located, MAX_VALUE_DEPTH, NEWER, OLDER, protocol, PROTOCOL, TYPED_ARRAYS } from "./host.js"
-import { type GpuBatch, type GpuError, gpuChecks } from "./gpu.js"
+import { canvasSize, type GpuBatch, type GpuError, gpuChecks } from "./gpu.js"
 
 /** A display frame in live mode: like a canvas frame, without the canvas id. */
 export type LiveFrame = Omit<Frame, "id">
@@ -148,7 +148,7 @@ export interface LiveWidget {
   readonly event: (event: WidgetEvent) => void
   /** Delivers a frame if the program asked for one and isn't paused; returns whether it did. */
   readonly frame: (frame: LiveFrame) => boolean
-  /** Tells the program a GPU canvas's size, in physical pixels. */
+  /** Tells the program a GPU canvas's size, in physical pixels, clamped to the texture limit (`canvasSize`). */
   readonly canvas: (key: string, width: number, height: number) => void
   /** Loses the GPU device: every handle is gone, and the program's `device.lost` resolves. */
   readonly loseDevice: (reason: string) => void
@@ -189,9 +189,9 @@ export const LiveWidget = {
     const gpu = gpuChecks(
       () => new Set([...(current.tree?.canvases ?? new Map())].flatMap(([key, canvas]) => (canvas.gpu ? [key] : []))),
     )
-    // A GPU batch, checked; `frame`: it came with a frame request.
-    const replay = (batch: GpuBatch, frame: boolean) => {
-      const error = gpu.batch(batch, frame)
+    // A GPU batch, checked.
+    const replay = (batch: GpuBatch) => {
+      const error = gpu.batch(batch)
       if (error) gpuErrors.push(error)
     }
     const ending = Promise.withResolvers<LiveEnd>()
@@ -497,9 +497,12 @@ export const LiveWidget = {
     const apply = (accepted: LiveMessage) => {
       if (accepted.type === "render") current.view = accepted.node
       if (accepted.type === "draw") drawings.set(accepted.id, accepted.commands)
-      if (accepted.type === "frame") current.requested = true
-      if (accepted.type === "frame" && accepted.gpu) replay(accepted.gpu, true)
-      if (accepted.type === "gpu") replay(accepted, false)
+      if (accepted.type === "frame") {
+        current.requested = true
+        if (accepted.gpu) replay(accepted.gpu)
+        gpu.frame()
+      }
+      if (accepted.type === "gpu") replay(accepted)
       options?.onMessage?.(accepted)
       if (accepted.type === "submit") return end({ type: "submit", value: accepted.value })
       if (accepted.type === "dismiss") return end({ type: "dismiss" })
@@ -569,7 +572,10 @@ export const LiveWidget = {
         deliver({ type: "frame", frame })
         return true
       },
-      canvas: (key, width, height) => deliver({ type: "canvas", key, width, height }),
+      canvas: (key, ...size) => {
+        const [width, height] = canvasSize(...size)
+        deliver({ type: "canvas", key, width, height })
+      },
       loseDevice: (reason) => {
         gpu.lost()
         deliver({ type: "gpu", lost: reason })

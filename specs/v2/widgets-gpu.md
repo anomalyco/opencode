@@ -117,8 +117,15 @@ it. The pending batch goes out before the program next waits on the host: with `
 frame request itself, so a game posts once per frame (about 120 posts a second at 120 Hz); before `widget.sleep()`,
 `widget.fetch()`, each wait for client messages (handlers, hooks) and when `main` returns it is a post of its own (an
 intermediate batch, allowed; batches aren't counted toward the post rate, but never overtake a waiting `render` or
-`draw`: `widgets-live.md`, Post rate). A batch with no ops isn't posted. The client replays each batch in order on its device and presents every canvas whose texture a render pass in the batch wrote to.
-It may skip presents beyond one per display frame, never other ops.
+`draw`: `widgets-live.md`, Post rate). A batch with no ops isn't posted. The client replays each batch in order on its
+device and presents every canvas whose texture a render pass in the batch wrote to (as a color attachment's `view` or
+`resolveTarget`). It may skip presents beyond one per display frame, never other ops.
+
+**A canvas's contents in a frame.** A canvas is cleared to transparent once per frame, at the frame boundary (each
+`widget.frame()`), not once per batch. Batches posted before `sleep`/`fetch` within a frame see what earlier passes in
+that frame drew. A frame with no pass into a canvas leaves the last presented image showing. So the frame's first pass
+into a canvas sees transparent, `loadOp: "load"` included, as on the web (`getCurrentTexture`); a host that keeps a
+canvas's texture between frames clears it before the frame's first pass into it.
 
 ## Transport
 
@@ -204,19 +211,25 @@ exactly these shapes (`h` a handle; absent optional members are `null`):
 
 The client finds a context's canvas by its `key` among the `gpu: true` canvases of the last render posted (walked, as
 for `widget.draw`: `widgets.md`, Native hosts). Before each frame the client sends the program `{ type: "canvas", key,
-width, height }` (physical pixels) for every GPU canvas whose size changed; the prelude updates `context.width`/`height`
-(and the canvas texture's `width`/`height`; 0 until the first message).
+width, height }` for every GPU canvas whose size changed; the prelude updates `context.width`/`height` (and the canvas
+texture's `width`/`height`; 0 until the first message).
+
+**Canvas size.** A GPU canvas's backing size, its texture's, is its size in physical pixels clamped to the texture
+limit (4096, Limits) with its aspect ratio kept: when the larger side is over 4096, it becomes 4096 and the other
+⌊side × 4096 / larger side⌋ (integer division), at least 1. The `canvas` message gives the clamped size, so a texture
+of the canvas's size always fits: a 5K full-screen canvas, 5120 × 2880, is 4096 × 2304 and never errors. The client
+scales the texture to the canvas's box. `canvasSize` in `packages/widget/src/gpu.ts` is the rule in TypeScript.
 
 ## Limits
 
 The numbers below are verified on wgpu on mobile during implementation. A program over a limit has a program error (`widgets.md`, Failures); the client stops that canvas (below).
 
-- Device limits: WebGPU's default limits, except `maxTextureDimension2D` 4096 and `maxBufferSize` 64 MB; the prelude
-  reports them in `device.limits`.
+- Device limits: WebGPU's default limits, except `maxTextureDimension2D` 4096 (what Vulkan guarantees on Android;
+  canvases are clamped to it, Canvas size) and `maxBufferSize` 64 MB; the prelude reports them in `device.limits`.
 - Resources: at most 256 MB of buffers and textures per widget (sizes as allocated: width × height × bytes per texel ×
   samples, mip levels included), and 4,096 live handles.
 - Per batch: at most 4 MB of `bytes` and 20,000 ops; per frame (between two `widget.frame()`), at most 16 render passes
-  and 10,000 draws.
+  and 10,000 draws. The counts start again at each frame request, with a batch or without one.
 - Shaders: 256 KB of WGSL per module. Batches, in a frame request or on their own, aren't counted toward the post
   rate (`widgets-live.md`, Post rate).
 
@@ -225,20 +238,29 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
 - **Program errors** (phase `gpu` in `report`): a WGSL module that fails validation, any WebGPU validation error in a
   replayed op (wgpu's and the browser's validation implement WebGPU's rules), an `error` op, and what the host checks
   (Host checks). The first uncaptured GPU error is enough (no error scopes in v1). The program and the rest of the
-  widget keep running.
+  widget keep running. A validation error's message is the GPU implementation's own wording (wgpu's or the browser's),
+  so only the host checks' messages are the same on every host.
 - **Which canvases stop.** The device is the widget's, shared by its GPU canvases. An error in a batch stops the
-  canvases that batch renders into (a pass of the batch has a view of a canvas's texture as a color attachment, the
-  view made in that batch or before); if the batch renders into none (a bad pipeline, a write), every GPU canvas of
-  the widget stops. A stopped canvas shows its placeholder with the error, its error is reported once, and the host
-  ignores later batches for it (after an error that stopped every canvas, all later batches). An error that stops only
-  canvases already stopped isn't reported again.
+  canvases that batch renders into (a pass of the batch has a view of a canvas's texture as a color attachment's
+  `view` or `resolveTarget`, the view made in that batch or before); if the batch renders into none (a bad pipeline,
+  a write), every GPU canvas of the widget stops. A stopped canvas shows its placeholder with the error, its error is
+  reported once, and the host ignores later batches for it (after an error that stopped every canvas, all later
+  batches). An error that stops only canvases already stopped isn't reported again.
+- **Stopped stays stopped.** A canvas an error stopped stays stopped, its placeholder showing its error, for the rest
+  of the run: also when it leaves the view and comes back under the same key, and after a device loss. A program error
+  is a bug in the program, and a new device doesn't fix it.
 - **Client errors** (not reported, logged in dev mode): no WebGPU, device creation failure, a driver crash or reset,
   running out of GPU memory under the limits. The canvas shows its placeholder.
 - **Device loss.** When the client loses its device (a reset, the app backgrounded long enough, a live program
   restored from a snapshot), it sends `{ type: "gpu", lost: reason, message? }`; the prelude resolves `device.lost` with
   `{ reason, message }` (`message` `""` when absent) and every handle is gone. While the program has read a live
-  device's `lost`, the prelude keeps receiving the client's messages, so awaiting it works (and keeps the run open). The program may call `requestDevice()` again and recreate its
-  resources; until it does, the canvas shows its placeholder.
+  device's `lost`, the prelude keeps receiving the client's messages, so awaiting it works (and keeps the run open).
+  The program may call `requestDevice()` again and recreate its resources; until it does, the canvases the loss stopped
+  show their placeholder. The new device restarts only those, never a canvas an error stopped.
+- **A batch from before the program learned of the loss** names handles from before it: the host drops it quietly
+  (not replayed, not reported, no canvas stops). Exactly: a batch whose first failure (Host checks) is `no handle <h>`
+  with `h` from 1 to the greatest handle the host had made when it last lost the device. Before any loss no handle
+  is, and handle 0 never is: those stay program errors.
 
 ## The `wgsl` shorthand
 
@@ -252,12 +274,14 @@ where WebGPU is unavailable (a browser without it) the canvas shows its placehol
 
 Before it replays a batch (or instead, without a GPU), every host checks it without a GPU, with exactly these rules
 and messages, so all hosts fail the same programs the same way. The first failure is the batch's program error (phase
-`gpu`), and the rest of the batch isn't replayed. Errors from replaying (WebGPU validation) follow, in the host's
-wording.
+`gpu`), and the rest of the batch isn't replayed. Errors from replaying (WebGPU validation) follow, in the GPU
+implementation's wording (Errors and device loss).
 
 - **The batch:** an object (`a batch must be an object`) with `ops` a list (`a batch's ops must be a list`) of at most
   20,000 (`the number of ops in a batch is over the limit of 20000`) and `bytes` an `ArrayBuffer` (`a batch's bytes
-  must be an ArrayBuffer`) of at most 4 MB (`the size of a batch's bytes is over the limit of 4194304`).
+  must be an ArrayBuffer`) of at most 4 MB (`the size of a batch's bytes is over the limit of 4194304`). A native host
+  may make the first three as it converts the posted value to its own types, before the op checks and any replay;
+  that is allowed, with these messages.
 - **Each op** fails as `gpu op <i>: <reason>` (`<i>` from 0), checked in order: a list that starts with a string (`an op
   is a list that starts with its name`), a name in the `Op` type or `error` (`unknown op "<name>"`), exactly its
   arguments (`"<name>" takes <k> arguments`); an `error` op fails with its message; `pass` not inside a pass (`"pass"
@@ -290,7 +314,8 @@ wording.
   buffers and textures` (268435456: buffers' sizes, and textures' bytes per texel × width × height × layers × samples
   summed over mip levels, a texel 4 bytes but 1 for `r8unorm` and 8 for `rgba16float`; canvas textures don't count),
   `the number of render passes in a frame` (16) and `the number of draws in a frame` (10000), counted over a frame's
-  batches up to and including the one in its frame request.
+  batches up to and including the one in its frame request; the counts start again after every frame request, one
+  without a batch included (a frame request while one is pending changes nothing, `widgets-live.md`).
 
 ## Conformance
 
@@ -298,10 +323,11 @@ wording.
 (`test/fixtures/gpu/templates`: a lit rotating cube, a textured quad, render-to-texture with post-processing, a
 first-person maze), and what a host must do with them. Each is `{ name, source, data?, canvases, inputs?, gpu,
 batches?, errors, end }`. The driver: start the live program of `source` (`widgets.md`, Prelude and step ABI) with
-`{ data, gpu }` and no 50 ms slice; send each of `canvases` as a `canvas` message; then, while the program asks for a
-frame (at most 10), send the `inputs` for frame `i` (client `event`s and `canvas` messages) and frame `i` (`t` =
-`i` / 60, `dt` 1/60, 300 × 200 at scale 2, `pointer` `null`, `dark` `false`). Timers run on a clock that moves while the
-program waits. `batches` are the batches it posts, in order (`frame`: in a frame request; `bytes` base64); `raw-*`
-programs post their own and omit them. `errors` are the host checks' program errors, `{ message, canvases }`, with
-`canvases` the keys stopped or `"all"`. `end` is how the run ended (`return`, `stop` when it stays open, or
-`error: <message>`).
+`{ data, gpu }` and no 50 ms slice; send each of `canvases` as a `canvas` message (sizes in physical pixels, clamped
+as Canvas size says); then, while the program asks for a frame (at most 10), send the `inputs` for frame `i` (client
+`event`s, `canvas` messages, and device losses `{ type: "gpu", lost }`, the host's checks losing the device first),
+frame `i` (`t` = `i` / 60, `dt` 1/60, 300 × 200 at scale 2, `pointer` `null`, `dark` `false`), then frame `i`'s
+inputs marked `after: true`, before the program runs on. Timers run on a clock that moves while the program waits.
+`batches` are the batches it posts, in order (`frame`: in a frame request; `bytes` base64); `raw-*` programs post their
+own and omit them. `errors` are the host checks' program errors, `{ message, canvases }`, with `canvases` the keys
+stopped or `"all"`. `end` is how the run ended (`return`, `stop` when it stays open, or `error: <message>`).

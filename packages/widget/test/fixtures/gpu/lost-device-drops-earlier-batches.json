@@ -1,0 +1,75 @@
+{
+  "name": "lost-device-drops-earlier-batches",
+  "source": "async function main() {\n  widget.render(ui.canvas({ key: \"scene\", gpu: true, height: 100 }))\n  const context = widget.gpu.getContext(\"scene\")\n  const format = widget.gpu.getPreferredCanvasFormat()\n  let device\n  let view\n  let lost = false\n  const setup = async () => {\n    device = await widget.gpu.requestDevice()\n    device.lost.then(() => (lost = true))\n    context.configure({ device, format })\n    view = context.getCurrentTexture().createView()\n  }\n  await setup()\n  for (let frame = 0; frame < 4; frame++) {\n    await widget.frame()\n    if (lost) {\n      lost = false\n      await setup()\n    }\n    const encoder = device.createCommandEncoder()\n    encoder.beginRenderPass({ colorAttachments: [{ view, loadOp: \"clear\", storeOp: \"store\" }] }).end()\n    device.queue.submit([encoder.finish()])\n  }\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "inputs": [
+    {
+      "frame": 1,
+      "after": true,
+      "input": {
+        "type": "gpu",
+        "lost": "unknown"
+      }
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [],
+  "end": "stop",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"],
+        ["view",2,1,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",3,"scene","rgba8unorm","opaque"],
+        ["view",4,3,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["pass",{"colorAttachments":[{"view":4,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["pass",{"colorAttachments":[{"view":4,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["submit"]
+      ]
+    }
+  ]
+}

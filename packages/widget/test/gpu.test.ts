@@ -127,6 +127,51 @@ test("canvas sizes, a lost device, and batches before sleeps and at the end", as
   expect(widget.gpuErrors).toEqual([])
 })
 
+test("a canvas an error stopped stays stopped: out of the view and back, and on a new device", async () => {
+  const { widget } = start(`async function main() {
+  const both = () => widget.render(ui.column(["a", "b"].map((key) => ui.canvas({ key, gpu: true, height: 10 }))))
+  both()
+  let device = await widget.gpu.requestDevice()
+  const configure = () => ["a", "b"].forEach((key) => widget.gpu.getContext(key).configure({ device, format: "rgba8unorm" }))
+  const bad = (key) => {
+    const gone = device.createBuffer({ size: 16, usage: GPUBufferUsage.VERTEX })
+    gone.destroy()
+    const encoder = device.createCommandEncoder()
+    const view = widget.gpu.getContext(key).getCurrentTexture().createView()
+    const pass = encoder.beginRenderPass({ colorAttachments: [{ view, loadOp: "clear", storeOp: "store" }] })
+    pass.setVertexBuffer(0, gone)
+    pass.end()
+    device.queue.submit([encoder.finish()])
+  }
+  configure()
+  await widget.frame()
+  bad("a")
+  await widget.frame()
+  widget.render(ui.canvas({ key: "b", gpu: true, height: 10 }))
+  await widget.frame()
+  both()
+  await device.lost
+  device = await widget.gpu.requestDevice()
+  configure()
+  bad("a")
+  await widget.frame()
+  bad("b")
+  await widget.frame()
+}`)
+  for (let i = 0; i < 3; i++) {
+    await widget.when((current) => current.frameRequested)
+    widget.frame(size)
+  }
+  await widget.when((current) => current.view?.type === "column")
+  widget.loseDevice("unknown")
+  for (let i = 0; i < 2; i++) {
+    await widget.when((current) => current.frameRequested)
+    widget.frame(size)
+  }
+  expect(await widget.done).toEqual({ type: "return" })
+  expect(widget.gpuErrors.map((error) => error.canvases)).toEqual([["a"], ["b"]])
+})
+
 test("a GPU canvas takes no draw commands, and can't have wgsl too", async () => {
   const { widget } = start(`async function main() {
   widget.render(ui.canvas({ key: "c", gpu: true, height: 10 }))

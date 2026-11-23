@@ -89,9 +89,28 @@ const BUFFER_USAGE = { COPY_SRC: 4, COPY_DST: 8, INDEX: 16, VERTEX: 32, UNIFORM:
 const TEXTURE_USAGE = { COPY_SRC: 1, COPY_DST: 2, TEXTURE_BINDING: 4, RENDER_ATTACHMENT: 16 }
 const STAGES = { VERTEX: 1, FRAGMENT: 2 }
 
-class Invalid extends Error {}
+// `missing`: the handle a `no handle` failure names.
+class Invalid extends Error {
+  constructor(
+    message: string,
+    readonly missing?: number,
+  ) {
+    super(message)
+  }
+}
 const fail = (message: string): never => {
   throw new Invalid(message)
+}
+
+/**
+ * A GPU canvas's backing size for its physical size (widgets-gpu.md, Canvas size): within the texture dimension limit,
+ * its aspect ratio kept; over it, the larger side is the limit and the other ⌊side × limit / larger⌋, at least 1.
+ */
+export const canvasSize = (width: number, height: number): readonly [number, number] => {
+  const larger = Math.max(width, height)
+  if (larger <= GPU_LIMITS.dimension) return [width, height]
+  const fit = (side: number) => Math.max(1, Math.floor((side * GPU_LIMITS.dimension) / larger))
+  return [fit(width), fit(height)]
 }
 
 type Kind =
@@ -197,17 +216,20 @@ const IN_PASS = new Set([
 /**
  * The checks of a widget's batches, in order. `canvases` gives the keys of the GPU canvases in the last rendered view.
  * A batch gives its first error, or none, and the rest of it goes unchecked. The error stops the canvases the batch
- * renders into (a pass's color attachment is a view of their texture), or every GPU canvas of the widget when it renders
- * into none; then later batches go unchecked. An error stopping only canvases already stopped isn't given again.
+ * renders into (a pass's color attachment or its resolve target is a view of their texture), or every GPU canvas of the
+ * widget when it renders into none; then later batches go unchecked. An error stopping only canvases already stopped
+ * isn't given again. A batch whose first error names a handle from before a device loss is dropped without one.
  */
 export function gpuChecks(canvases: () => ReadonlySet<string>) {
   const handles = new Map<number, Handle>()
-  const state = { last: 0, live: 0, resources: 0, passes: 0, draws: 0, all: false }
+  // `stale`: handles up to this one are from before the last device loss.
+  const state = { last: 0, stale: 0, live: 0, resources: 0, passes: 0, draws: 0, all: false }
   const stopped = new Set<string>()
 
   const find = (value: unknown, path: string, ...kinds: ReadonlyArray<Kind>) => {
     const h = whole(value, path)
-    const found = handles.get(h) ?? fail(`no handle ${h}`)
+    const found = handles.get(h)
+    if (!found) throw new Invalid(`no handle ${h}`, h)
     if (!kinds.includes(found.kind)) fail(`handle ${h} is a ${found.kind}, not a ${kinds.join(" or ")}`)
     if (found.destroyed) fail(`handle ${h} was destroyed`)
     return found
@@ -505,12 +527,12 @@ export function gpuChecks(canvases: () => ReadonlySet<string>) {
     }
     for (const o of ops) {
       if (!Array.isArray(o) || o[0] !== "pass" || !o[1] || !Array.isArray(o[1].colorAttachments)) continue
-      for (const attachment of o[1].colorAttachments) {
-        const view = attachment?.view
-        if (typeof view !== "number") continue
-        const key = context(textures.get(view) ?? handles.get(view)?.texture)
-        if (key !== undefined) keys.add(key)
-      }
+      for (const attachment of o[1].colorAttachments)
+        for (const view of [attachment?.view, attachment?.resolveTarget]) {
+          if (typeof view !== "number") continue
+          const key = context(textures.get(view) ?? handles.get(view)?.texture)
+          if (key !== undefined) keys.add(key)
+        }
     }
     return [...keys]
   }
@@ -543,8 +565,8 @@ export function gpuChecks(canvases: () => ReadonlySet<string>) {
   }
 
   return {
-    /** Checks a batch; `frame`: it came with a frame request, which ends the frame its limits count. */
-    batch: (value: unknown, frame: boolean): GpuError | undefined => {
+    /** Checks a batch. */
+    batch: (value: unknown): GpuError | undefined => {
       if (state.all) return undefined
       const scoped = { keys: [] as string[], pass: false }
       const error = (message: string): GpuError | undefined => {
@@ -586,6 +608,8 @@ export function gpuChecks(canvases: () => ReadonlySet<string>) {
             else op(list, name, bytes)
           } catch (caught) {
             if (!(caught instanceof Invalid)) throw caught
+            // Posted before the program learned of the loss.
+            if (caught.missing !== undefined && caught.missing >= 1 && caught.missing <= state.stale) return undefined
             return error(`gpu op ${index}: ${caught.message}`)
           }
         }
@@ -594,15 +618,16 @@ export function gpuChecks(canvases: () => ReadonlySet<string>) {
       } catch (caught) {
         if (!(caught instanceof Invalid)) throw caught
         return error(caught.message)
-      } finally {
-        if (frame) {
-          state.passes = 0
-          state.draws = 0
-        }
       }
     },
-    /** The device is lost: every handle is gone. */
+    /** A frame request, with or without a batch: it ends the frame the per-frame limits count. */
+    frame: () => {
+      state.passes = 0
+      state.draws = 0
+    },
+    /** The device is lost: every handle is gone; new ones keep counting up. */
     lost: () => {
+      state.stale = state.last
       handles.clear()
       state.live = 0
       state.resources = 0
