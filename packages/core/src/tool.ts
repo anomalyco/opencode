@@ -497,9 +497,13 @@ function* codeModeTools(registered: Data["tools"], paths: ReadonlyArray<string>)
   }
 }
 
+// A wildcard deny hides the tool only while nothing after it allows a resource again. Narrower denies, such as the
+// browser plugin's `skill: browser` appended to every agent, must not cancel the wider rule they refine.
 const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
-  const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
-  return rule?.resource === "*" && rule.effect === "deny"
+  const matching = rules.filter((rule) => Wildcard.match(action, rule.action))
+  const all = matching.findLast((rule) => rule.resource === "*")
+  if (all?.effect !== "deny") return false
+  return !matching.slice(matching.lastIndexOf(all) + 1).some((rule) => rule.effect === "allow")
 }
 
 /** Whether the rules leave Code Mode's `execute` reachable, as `snapshot` decides it. */

@@ -1093,6 +1093,21 @@ describe("Tool", () => {
         ]),
       ).toEqual([])
       expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["bash", "question", "execute"])
+      // A narrower deny appended after a wildcard deny still denies every resource, so the tool stays hidden.
+      expect(
+        yield* names([
+          { action: "question", resource: "*", effect: "deny" },
+          { action: "question", resource: "private", effect: "deny" },
+        ]),
+      ).toEqual(["bash", "edit", "write", "execute"])
+      // Only a narrower allow after the wildcard deny leaves a resource the tool can be used on.
+      expect(
+        yield* names([
+          { action: "question", resource: "*", effect: "deny" },
+          { action: "question", resource: "private", effect: "deny" },
+          { action: "question", resource: "other", effect: "allow" },
+        ]),
+      ).toEqual(["bash", "edit", "question", "write", "execute"])
     }),
   )
 
