@@ -90,9 +90,7 @@ export function executeToolCalls(metadata: ToolProps["metadata"], start = 0) {
     )
 }
 
-function callFailed(call: unknown) {
-  return Predicate.hasProperty(call, "status") && call.status === "error"
-}
+const callFailed = Schema.is(Schema.Struct({ status: Schema.Literal("error") }))
 
 const isCallArg = Schema.is(Schema.Union([Schema.String, Schema.Number, Schema.Boolean]))
 

@@ -2199,7 +2199,8 @@ ToolRegistry.register({
           <Index each={visible()}>
             {(item) => <ExecuteCallRow call={item().call} error={item().index === owner() ? error() : undefined} />}
           </Index>
-          <Show when={owner() === -1 && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
+          {/* A failure with no call, or one that belongs to a call still hidden above, shows on its own. */}
+          <Show when={owner() < hidden() && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
           <Show when={output()}>{(value) => <ExecuteOutputRow output={value()} />}</Show>
         </div>
       </BasicTool>

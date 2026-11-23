@@ -1,5 +1,6 @@
 // One long session (120 turns of markdown, code fences, tool calls and diffs) at normal speed.
 import { bench, web } from "@hona/strobe"
+import { Match } from "effect"
 import { editTools, reviewDiffs } from "./fixtures/diffs"
 import { dragDivider, measureDivider, type Divider } from "./fixtures/drag"
 import { cached } from "./fixtures/mock"
@@ -55,7 +56,11 @@ export default bench({
           historyTurns: ctx.setupKey === "edits" || ctx.setupKey === "scripts" ? 0 : 120,
           collapsedEdits: ctx.setupKey === "edits",
           compact: ctx.setupKey === "scripts",
-          tools: ctx.setupKey === "edits" ? await editTools() : ctx.setupKey === "scripts" ? scriptTools() : undefined,
+          tools: await Match.value(ctx.setupKey).pipe(
+            Match.when("edits", () => editTools()),
+            Match.when("scripts", async () => scriptTools()),
+            Match.orElse(async () => undefined),
+          ),
           vcsDiff: ctx.setupKey === "review" ? reviewDiffs() : undefined,
         }),
       url: ({ prepared }) => prepared.path,
