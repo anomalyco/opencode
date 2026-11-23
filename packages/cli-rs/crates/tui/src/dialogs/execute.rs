@@ -1,5 +1,7 @@
 //! Code-mode execution details and nested tool calls.
 
+use std::sync::Arc;
+
 use opencode_api::generated::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
 use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer};
 use opencode_ui::tool_info::tool_display_metadata;
@@ -265,7 +267,7 @@ impl Shown {
     }
 }
 
-fn content(app: &App, theme: &Theme, syntax: &SyntaxTheme, shown: &Shown, width: usize) -> View {
+fn content(app: &App, theme: &Theme, syntax: &Arc<SyntaxTheme>, shown: &Shown, width: usize) -> View {
     let digits = shown.digits();
     let code_width = width.saturating_sub(digits + 1).max(1);
     let heading = |label: &str| Text::new(app, label).fg(theme.text.muted).bold();
@@ -304,7 +306,7 @@ fn content(app: &App, theme: &Theme, syntax: &SyntaxTheme, shown: &Shown, width:
 fn guttered(
     app: &App,
     theme: &Theme,
-    syntax: &SyntaxTheme,
+    syntax: &Arc<SyntaxTheme>,
     content: &str,
     filetype: &str,
     digits: usize,
