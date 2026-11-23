@@ -53,6 +53,7 @@ export class VoiceTransport {
 
   constructor(
     private readonly inputOptions: {
+      model: Pick<OpenCodeClient["model"], "list">
       voice: OpenCodeClient["experimental"]["voice"]
       event: (event: VoiceEvent) => void
       levels: (input: number, output: number) => void
@@ -237,15 +238,13 @@ export class VoiceTransport {
 
   private async prepareOffer() {
     await this.context.resume()
-    const offered = await this.inputOptions.voice.models({ signal: this.abort.signal })
+    const offered = await this.inputOptions.model.list({ types: ["realtime"] }, { signal: this.abort.signal })
 
-    // The server lists models newest first.
-    const live = offered.models.find(
-      (model) => model.engine === "openai-live" && model.available && model.transports.includes("webrtc"),
-    )
+    // The server lists the models it can start, newest first; GPT-Live models name their protocol as package.
+    const live = offered.data.find((model) => model.package === "openai-live")
 
     if (!live) return this.dispatch({ type: "step.failed", step: "offer", reason: "unavailable" })
-    this.model = live.model
+    this.model = live.id
 
     await this.peer.setLocalDescription(await this.peer.createOffer())
     this.dispatch({ type: "offer.ready", iceComplete: this.peer.iceGatheringState === "complete" })

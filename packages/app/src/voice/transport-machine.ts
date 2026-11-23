@@ -16,7 +16,7 @@ export type VoiceJoinFailure = "unavailable" | "microphone" | "connection"
 export type VoiceJoinTarget = { id: string; title?: string }
 
 type ConnectStep =
-  /** Resuming audio, checking `voice.models` and setting the local offer. */
+  /** Resuming audio, checking the voice models and setting the local offer. */
   | { type: "offer"; viewing: VoiceJoinTarget; tail: string }
   /** Waiting for ICE gathering to complete before the offer is sent. */
   | { type: "ice"; viewing: VoiceJoinTarget; tail: string }

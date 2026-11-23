@@ -70,6 +70,7 @@ export function createVoiceCall(input: {
     gates = transitionVoiceGate(gates, { type: "reset" })
 
     const transport = new VoiceTransport({
+      model: input.ctx.sdk.api.model,
       voice: input.ctx.sdk.api.experimental.voice,
       event: (event) => {
         if (connection?.transport === transport) eventReceived(attempt, event)

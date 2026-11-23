@@ -146,21 +146,26 @@ afterEach(() => {
 
 type Voice = OpenCodeClient["experimental"]["voice"]
 
-const live = {
-  model: "gpt-live-1",
-  name: "GPT-Live 1",
-  engine: "openai-live",
-  provider: "openai",
-  available: true,
-  transports: ["webrtc" as const],
+type ModelList = OpenCodeClient["model"]["list"]
+
+type Listed = Awaited<ReturnType<ModelList>>
+
+type ModelInfo = Listed["data"][number]
+
+// SAFETY: the transport reads only a listed model's id and package.
+const live = { id: "gpt-live-1", providerID: "openai", type: "realtime", package: "openai-live" } as ModelInfo
+
+function listed(data: ModelInfo[]) {
+  // SAFETY: the transport never reads the location, and the directory brand only marks server paths.
+  return Promise.resolve({ location: { directory: "/repo" }, data } as Listed)
 }
 
-function open(models: Voice["models"] = () => Promise.resolve({ models: [live] })) {
+function open(list: ModelList = () => listed([live])) {
   const session = jest.fn<Voice["session"]>(() => Promise.resolve({ transport: { type: "webrtc", sdp: "v=0 answer" } }))
-  const voice: Voice = { models, session }
+  const voice: Voice = { models: () => Promise.reject(new Error("unused")), session }
 
   const dropped = jest.fn()
-  const transport = new VoiceTransport({ voice, event: () => {}, levels: () => {}, dropped })
+  const transport = new VoiceTransport({ model: { list }, voice, event: () => {}, levels: () => {}, dropped })
 
   return { transport, dropped, session, peer: FakePeer.last }
 }
@@ -187,19 +192,18 @@ const failure = (promise: Promise<unknown>) =>
     (error: VoiceFailure) => error.reason,
   )
 
-test("a call starts the newest available GPT-Live model the server lists", async () => {
-  const realtime = { ...live, model: "gpt-realtime-9", engine: "openai-realtime" }
-  const newest = { ...live, model: "gpt-live-3", available: false }
-  const result = open(() => Promise.resolve({ models: [realtime, newest, { ...live, model: "gpt-live-2" }, live] }))
+test("a call starts the newest GPT-Live model the server lists", async () => {
+  const realtime = { ...live, id: "gpt-realtime-9", package: "openai-realtime" }
+  const result = open(() => listed([realtime, { ...live, id: "gpt-live-2" }, live]))
   void result.transport.join({ id: "ses_1" }, "")
   await settle()
 
   expect(result.session.mock.calls[0][0]).toMatchObject({ model: "gpt-live-2", session: { model: "gpt-live-2" } })
 })
 
-test("a server without an available GPT-Live model fails the join as unavailable", async () => {
-  const realtime = { ...live, model: "gpt-realtime-9", engine: "openai-realtime" }
-  const result = open(() => Promise.resolve({ models: [realtime, { ...live, available: false }] }))
+test("a server without a GPT-Live model fails the join as unavailable", async () => {
+  const realtime = { ...live, id: "gpt-realtime-9", package: "openai-realtime" }
+  const result = open(() => listed([realtime]))
 
   expect(await failure(result.transport.join({ id: "ses_1" }, ""))).toBe("unavailable")
   expect(result.session).not.toHaveBeenCalled()
