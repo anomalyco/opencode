@@ -11,7 +11,7 @@ Returns: `{ location: Location.PublicRef; data: Permission.Request[] }`
 Retrieve saved permissions, optionally filtered by project.
 
 Parameters:
-- `projectID?: string`
+- `projectID?: string` Project whose saved permissions to list. Defaults to the project of the requested location.
 
 Returns: `{ data: PermissionSaved.Info[] }`
 

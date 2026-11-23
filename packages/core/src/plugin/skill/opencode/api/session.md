@@ -7,13 +7,13 @@ Retrieve sessions in the requested order. Items keep that order across pages; us
 Parameters:
 - `limit?: string` Maximum number of sessions to return. Defaults to the newest 50 sessions.
 - `order?: "asc" | "desc"` Session order for the first page. Use desc for newest first or asc for oldest first.
-- `search?: string`
+- `search?: string` Only sessions whose title contains this text, ignoring case. % and _ act as wildcards.
 - `parentID?: string | "null"` Filter by parent session. Use null to return only root sessions.
-- `archived?: "true" | "false"`
-- `directory?: string`
+- `archived?: "true" | "false"` Filter by archive state. Use true to return only archived sessions or false to exclude them. Omit to include both.
+- `directory?: string` Only sessions whose directory is exactly this absolute path.
 - `project?: string`
-- `subpath?: string`
-- `cursor?: string` Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.
+- `subpath?: string` With project, only sessions at this path relative to the project directory.
+- `cursor?: string` Opaque cursor from a previous page's cursor.next or cursor.previous. It carries that page's filters and order, so other filters are ignored.
 
 Returns: `SessionsResponse`
 
@@ -38,11 +38,11 @@ Returns: `{ data: Session.Info }`
 Aggregate local session activity, usage, and tool reliability for a time range.
 
 Parameters:
-- `from?: string`
-- `to?: string`
+- `from?: string` Start of the range in Unix milliseconds, inclusive. Defaults to the earliest recorded message.
+- `to?: string` End of the range in Unix milliseconds, exclusive. Defaults to now.
 - `project?: string`
-- `timezone?: string`
-- `tools?: "none" | "summary" | "detail"`
+- `timezone?: string` IANA time zone used to group activity by day. Defaults to UTC.
+- `tools?: "none" | "summary" | "detail"` How much tool usage to report: none, summary totals, or per-tool detail. Defaults to summary.
 
 Returns: `{ data: SessionStats.Info }`
 
@@ -62,7 +62,7 @@ Returns: `{ data: Session.Info }`
 Export a complete projected session transcript.
 
 Parameters:
-- `sanitize?: "true" | "false"`
+- `sanitize?: "true" | "false"` Set to true to redact titles, message text, file data, paths and metadata from the export.
 
 Returns: `{ data: SessionTransfer.Data }`
 
@@ -314,8 +314,8 @@ Returns: `SessionGenerateResponse`
 Experimental durable session event log. Reads events after an exclusive aggregate sequence and continues with live events when follow=true.
 
 Parameters:
-- `after?: string`
-- `follow?: "true" | "false"`
+- `after?: string` Only return events after this sequence number.
+- `follow?: "true" | "false"` Set to true to keep the stream open and send live events after the stored ones.
 
 Returns: an event stream
 
@@ -324,7 +324,7 @@ Returns: an event stream
 Stop the session's agent if it is running in this server process; interrupted=false means nothing was running. With resume=true it continues with pending steer items, compaction and moves, while queued messages keep waiting.
 
 Parameters:
-- `resume?: "true" | "false"`
+- `resume?: "true" | "false"` Set to true to resume pending steering input and next-in-line control items after interrupting.
 
 Returns: `SessionInterruptResponse`
 
@@ -369,7 +369,7 @@ Returns: `{ data: Form.Detail }`
 Cancel a pending form, optionally telling the asker why it was not answered.
 
 Parameters:
-- `message?: string`
+- `message?: string` Why the form was not answered, passed on to the asker.
 
 Returns: nothing
 
@@ -444,7 +444,7 @@ Returns: `{ data: Permission.Request }`
 Read the last physical rows without changing selection or taking control. Omitted lines uses the live terminal height; larger counts include retained history. Blank rows are preserved. Screen dimensions and cursor remain relative to the live screen. Returns null when no current terminal exists. Selection is server-local and resets on restart.
 
 Parameters:
-- `lines?: string`
+- `lines?: string` Number of trailing rows to read, up to 65535. Defaults to the live terminal height; larger counts include retained history.
 
 Returns: `{ data: PersistentPty.ReadResult }`
 

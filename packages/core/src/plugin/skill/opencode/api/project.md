@@ -5,7 +5,7 @@
 List known projects. Archived projects are excluded unless archived=true.
 
 Parameters:
-- `archived?: "true" | "false"`
+- `archived?: "true" | "false"` Set to true to include archived projects.
 
 Returns: `Project[]`
 

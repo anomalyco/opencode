@@ -5,7 +5,7 @@
 Initialize a repository using the selected VCS provider in a markerless project's directory and refresh its location services. Omitting provider defaults to git; built-in git and hg providers support initialization. An unknown provider returns 400; a registered provider without init returns 501.
 
 Parameters:
-- `provider?: string`
+- `provider?: string` VCS provider to initialize. Defaults to git.
 
 Returns: nothing
 
