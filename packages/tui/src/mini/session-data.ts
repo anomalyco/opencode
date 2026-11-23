@@ -41,6 +41,7 @@ export function footerActivityStatus(
   const blocked = blockerStatus(view)
   if (blocked) return { phase: "running", status: blocked }
   const child = descendantActivityStatus(descendant)
-  if (child) return { phase: "running", status: child }
+  // Parent is idle; child activity shows in status text but must not arm the parent interrupt (#65343).
+  if (child) return { phase: "idle", status: child }
   return { phase: "idle", status: "" }
 }

@@ -101,7 +101,7 @@ describe("descendantActivityModel", () => {
 })
 
 describe("footerActivityStatus", () => {
-  it("keeps running phase when child active", () => {
+  it("stays idle when only child is active (parent must not arm two-press interrupt)", () => {
     const empty = { tabs: [], details: {}, permissions: [], forms: [] }
     const out = footerActivityStatus({ type: "prompt" }, empty, false)
     expect(out.phase).toBe("idle")
@@ -115,7 +115,8 @@ describe("footerActivityStatus", () => {
       },
       false,
     )
-    expect(child.phase).toBe("running")
+    // Phase must stay idle so the footer renders task: status without enabling the parent interrupt.
+    expect(child.phase).toBe("idle")
     expect(child.status).toContain("task:")
   })
 })
