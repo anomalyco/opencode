@@ -12317,7 +12317,7 @@
             }
           }
         },
-        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Blobs are kept until removed. Experimental: may change without compatibility guarantees.",
+        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. A blob is deleted a week after it was stored. Experimental: may change without compatibility guarantees.",
         "summary": "Read a blob"
       }
     },
