@@ -29,6 +29,7 @@ const budget = (input: Partial<UsageLimitsBudget> & Pick<UsageLimitsBudget, "id"
 
 const info = (...budgets: UsageLimitsBudget[]): UsageLimitsInfo => ({
   workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/wrk_1/activity/overview" },
+  allowances: [],
   budgets,
 })
 

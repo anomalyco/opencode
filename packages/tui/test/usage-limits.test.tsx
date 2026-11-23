@@ -5,6 +5,33 @@ import { directory, json } from "./fixture/tui-client"
 
 const location = { directory, project: { id: "proj_test", directory, canonical: directory } }
 
+test("shows subscription usage without a Console workspace", async () => {
+  await using state = await tmpdir()
+  await using setup = await createAppFixture({
+    width: 80,
+    height: 24,
+    state: state.path,
+    config: { animations: false },
+    fetch: (url) =>
+      url.pathname === "/api/experimental/usage/limits"
+        ? json({
+            location,
+            data: {
+              budgets: [],
+              allowances: [
+                { providerID: "openai", name: "ChatGPT", usageURL: "https://chatgpt.com/settings/usage", windows: [] },
+              ],
+            },
+          })
+        : undefined,
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("Ask anything") && !!setup.renderer.currentFocusedRenderable)
+  await setup.mockInput.typeText("/usage")
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("View ChatGPT usage"))
+})
+
 const model = (id: string, name: string, input: number) => ({
   id,
   modelID: id,
@@ -35,6 +62,13 @@ test("shows what the workspace's limits leave and why a refused turn stopped", a
   const resetsAt = "2026-11-01T00:00:00.000Z"
   // One request that fills Sol's context costs $4, so the $6 left won't cover three.
   const limits = {
+    allowances: [
+      {
+        providerID: "openai",
+        name: "OpenAI",
+        windows: [{ id: "primary", windowSeconds: 18000, percent: 37, limited: false, resetsAt: Date.parse(resetsAt) }],
+      },
+    ],
     workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/wrk_1/activity/overview" },
     budgets: [
       {
@@ -137,6 +171,8 @@ test("shows what the workspace's limits leave and why a refused turn stopped", a
   await setup.waitForFrame(
     (frame) =>
       frame.includes("Workspace: Acme") &&
+      frame.includes("OpenAI · 5h") &&
+      frame.includes("37% used") &&
       /Claude Opus 5 +\$6 left/.test(frame) &&
       !/GPT 5\.6 Sol +\$6 left/.test(frame),
   )

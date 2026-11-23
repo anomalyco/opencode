@@ -42,6 +42,8 @@ const fallbackData = {
       },
     },
     usage: {
+      accountRevision: () => 0,
+      failed: () => false,
       limits: () => undefined,
       sync: async () => {},
       invalidate: () => {},

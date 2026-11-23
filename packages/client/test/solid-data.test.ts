@@ -14,6 +14,58 @@ const session = (viewed: number): SessionInfo => ({
   location: { directory: "/project" },
 })
 
+test("an account switch clears usage and discards the old account's pending response", async () => {
+  const location = { directory: "/project", project: { id: "project", directory: "/project", canonical: "/project" } }
+  const usage = () =>
+    Response.json({
+      location,
+      data: { budgets: [], allowances: [{ providerID: "openai", name: "First account", windows: [] }] },
+    })
+  const old = Promise.withResolvers<Response>()
+  const next = Promise.withResolvers<Response>()
+  const pending = [Promise.resolve(usage()), old.promise, next.promise]
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({ baseUrl: "http://opencode.local", fetch: () => pending.shift()! })
+  const setup = createRoot((dispose) => ({
+    dispose,
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      onError: () => {},
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+  }))
+  try {
+    const cache = setup.data.location.usage
+    await cache.sync()
+    expect(cache.limits()?.allowances[0]?.name).toBe("First account")
+    cache.invalidate()
+    const reading = cache.sync()
+    const switched: OpenCodeEvent = {
+      id: "evt_switch",
+      created: 2,
+      type: "credential.switched",
+      data: { integrationID: "openai", credentialID: "second" },
+    }
+    listeners.forEach((listener) => listener({ name: switched.type, details: switched }))
+    expect(cache.limits()).toBeUndefined()
+    old.resolve(usage())
+    await reading
+    expect(cache.limits()).toBeUndefined()
+    next.resolve(Response.json({ message: "unavailable", service: "opencode" }, { status: 503 }))
+    await wait(() => cache.failed())
+    expect(cache.limits()).toBeUndefined()
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("uses the configured initial window and retains normal cursor page sizes", async () => {
   const requests: { limit: string | null; cursor: string | null }[] = []
   const api = OpenCode.make({
@@ -488,7 +540,13 @@ test("restores dropped tool files from the server once they are shown again", as
 test("restoring dropped tool files keeps live progress made while the server read was in flight", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
-  const tool = (id: string, state: object) => ({ type: "tool", id, name: "execute", time: { created: 1, ran: 1 }, state })
+  const tool = (id: string, state: object) => ({
+    type: "tool",
+    id,
+    name: "execute",
+    time: { created: 1, ran: 1 },
+    state,
+  })
   const running = { status: "running", input: {}, metadata: {} }
   const assistant = (content: object[]) => ({
     id: "msg_assistant",
@@ -547,7 +605,11 @@ test("restoring dropped tool files keeps live progress made while the server rea
     read.resolve(
       Response.json({
         data: assistant([
-          tool("call_shot", { status: "completed", input: {}, content: [{ type: "file", uri: screenshot, mime: "image/png" }] }),
+          tool("call_shot", {
+            status: "completed",
+            input: {},
+            content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+          }),
           tool("call_work", running),
         ]),
       }),

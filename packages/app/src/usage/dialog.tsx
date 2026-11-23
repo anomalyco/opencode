@@ -27,7 +27,7 @@ import {
   type BudgetRow,
   type Callout,
   type CurrentModel,
-  type GoRow,
+  type AllowanceRow,
   type LimitAction,
   usageView,
 } from "./limits"
@@ -40,7 +40,7 @@ import {
 } from "./machine"
 import "./dialog.css"
 
-/** The Usage dialog: the location's OpenCode Go allowance and Console budgets, refreshed when it opens. */
+/** The Usage dialog: connected providers' allowances and Console budgets, refreshed when it opens. */
 export function DialogUsage(props: {
   location: LocationRef
   /** The model in use, so a per-model budget shows this model's counter. */
@@ -51,7 +51,8 @@ export function DialogUsage(props: {
 }) {
   const data = useData()
   const language = useLanguage()
-  const key = (location: LocationRef) => JSON.stringify([location.directory, location.workspaceID ?? null])
+  const key = (location: LocationRef) =>
+    JSON.stringify([location.directory, location.workspaceID ?? null, data.location.usage.accountRevision(location)])
 
   const start = startUsageDialog({
     key: key(props.location),
@@ -83,6 +84,7 @@ export function DialogUsage(props: {
     const attempt = effect.attempt
 
     if (effect.type === "timer.start") {
+      clearTimeout(timer)
       timer = setTimeout(() => dispatch({ type: "load.timed-out", attempt }), effect.timeoutMs)
 
       return
@@ -95,8 +97,8 @@ export function DialogUsage(props: {
       .then(() => {
         const limits = data.location.usage.limits(location)
 
-        // The server answers null when signed out; a load that leaves nothing cached found nothing to show.
-        if (limits === undefined) return dispatch({ type: "load.failed", attempt })
+        // An invalidated load can finish before its replacement publishes.
+        if (limits === undefined) return
         dispatch({
           type: "load.succeeded",
           attempt,
@@ -109,16 +111,15 @@ export function DialogUsage(props: {
   onMount(() => start.effects.forEach(run))
   createEffect(
     on(
-      () => props.location,
-      (location) =>
-        dispatch({ type: "location.changed", key: key(location), cached: data.location.usage.limits(location) }),
+      () => key(props.location),
+      (key) => dispatch({ type: "location.changed", key, cached: data.location.usage.limits(props.location) }),
       { defer: true },
     ),
   )
   createEffect(
     on(
-      () => data.location.usage.limits(props.location),
-      (limits) => dispatch({ type: "cache.synced", key: key(untrack(() => props.location)), limits }),
+      () => [data.location.usage.limits(props.location), data.location.usage.failed(props.location)] as const,
+      ([limits, failed]) => dispatch({ type: "cache.synced", key: key(untrack(() => props.location)), limits, failed }),
       { defer: true },
     ),
   )
@@ -133,10 +134,7 @@ export function DialogUsage(props: {
             <Match when={view().status === "signed-out"}>
               <div class="flex flex-col px-3 pb-3">
                 <Panel gap={8}>
-                  <Message
-                    title={language.t("usage.signedOut.title")}
-                    body={language.t("usage.signedOut.body")}
-                  />
+                  <Message title={language.t("usage.noData.title")} body={language.t("usage.noData.body")} />
                 </Panel>
               </div>
             </Match>
@@ -268,6 +266,7 @@ export function UsageDialogContent(props: {
   const footer = () => {
     const value = view().footer
 
+    if (!value) return undefined
     if (value.kind === "credits-only") return language.t("usage.footer.creditsOnly", { workspace: workspace() })
 
     return language.t(value.kind === "budgets-reset" ? "usage.footer.budgetsReset" : "usage.footer.resets", {
@@ -329,18 +328,22 @@ export function UsageDialogContent(props: {
   return (
     <UsageFrame
       footer={
-        <>
-          <span class="flex h-7 min-w-0 flex-1 items-center">
-            <Line class="text-v2-text-text-faint">{footer()}</Line>
-          </span>
-          <Button
-            variant="ghost"
-            class="text-v2-text-text-muted!"
-            onClick={() => platform.openExternal(props.info.workspace.usageURL)}
-          >
-            {language.t("usage.footer.details")}
-          </Button>
-        </>
+        <Show when={props.info.workspace}>
+          {(workspace) => (
+            <>
+              <span class="flex h-7 min-w-0 flex-1 items-center">
+                <Line class="text-v2-text-text-faint">{footer()}</Line>
+              </span>
+              <Button
+                variant="ghost"
+                class="text-v2-text-text-muted!"
+                onClick={() => platform.openExternal(workspace().usageURL)}
+              >
+                {language.t("usage.footer.details")}
+              </Button>
+            </>
+          )}
+        </Show>
       }
     >
       <Show when={view().callout}>
@@ -356,92 +359,107 @@ export function UsageDialogContent(props: {
           </div>
         )}
       </Show>
-      <Show when={view().go}>
-        {(rows) => (
-          <Section label={language.t("usage.section.go")}>
+      <For each={view().allowances}>
+        {(allowance) => (
+          <Section label={allowance.name} badge={allowance.plan}>
             <Panel>
-              <For each={rows()}>
+              <For each={allowance.windows}>
                 {(row, index) => (
                   <>
                     <Show when={index() > 0}>
                       <Divider />
                     </Show>
-                    <GoItem row={row} used={language.t("usage.go.used", { percent: Math.round(row.percent) })}>
+                    <AllowanceItem
+                      row={row}
+                      name={language.usageWindow(allowance.providerID, row)}
+                      used={language.t("usage.go.used", { percent: Math.round(row.percent) })}
+                    >
                       {language.t("usage.go.resetsIn", { duration: duration(row.resetsAt) })}
-                    </GoItem>
+                    </AllowanceItem>
                   </>
                 )}
               </For>
+              <Show when={allowance.usageURL}>
+                {(url) => (
+                  <Item>
+                    <Button variant="ghost" onClick={() => platform.openExternal(url())}>
+                      {language.t("usage.footer.details")}
+                    </Button>
+                  </Item>
+                )}
+              </Show>
             </Panel>
           </Section>
         )}
-      </Show>
-      <Section label={language.t("usage.section.console")} badge={view().workspace} dimmed={view().dimmed}>
-        <Show
-          when={view().budgets.length > 0}
-          fallback={
-            <Panel gap={8}>
-              <Message
-                title={language.t("usage.empty.title")}
-                body={language.t("usage.empty.body", { workspace: workspace() })}
-              />
-            </Panel>
-          }
-        >
-          <Panel>
-            <For each={view().budgets}>
-              {(row, index) => (
-                <>
-                  <Show when={index() > 0}>
-                    <Divider />
-                  </Show>
-                  <Item>
-                    <div class="flex items-start justify-between self-stretch">
-                      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <Line class="font-[530] text-v2-text-text-base">{label(row.label)}</Line>
-                        <p class="m-0 text-[13px] leading-text-compact font-[440] tracking-[-0.04px] text-v2-text-text-muted">
-                          {scope(row)}
-                        </p>
+      </For>
+      <Show when={props.info.workspace}>
+        <Section label={language.t("usage.section.console")} badge={view().workspace} dimmed={view().dimmed}>
+          <Show
+            when={view().budgets.length > 0}
+            fallback={
+              <Panel gap={8}>
+                <Message
+                  title={language.t("usage.empty.title")}
+                  body={language.t("usage.empty.body", { workspace: workspace() })}
+                />
+              </Panel>
+            }
+          >
+            <Panel>
+              <For each={view().budgets}>
+                {(row, index) => (
+                  <>
+                    <Show when={index() > 0}>
+                      <Divider />
+                    </Show>
+                    <Item>
+                      <div class="flex items-start justify-between self-stretch">
+                        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <Line class="font-[530] text-v2-text-text-base">{label(row.label)}</Line>
+                          <p class="m-0 text-[13px] leading-text-compact font-[440] tracking-[-0.04px] text-v2-text-text-muted">
+                            {scope(row)}
+                          </p>
+                        </div>
+                        <Spend
+                          status={
+                            row.reached
+                              ? language.t("usage.budget.reached")
+                              : language.t("usage.budget.left", { amount: format.money(row.left) })
+                          }
+                          reached={row.reached}
+                        >
+                          {row.reached
+                            ? language.t("usage.budget.spentOf", {
+                                spent: format.money(row.spent),
+                                limit: format.money(row.limit, "auto"),
+                              })
+                            : language.t("usage.budget.of", { limit: format.money(row.limit, "auto") })}
+                        </Spend>
                       </div>
-                      <Spend
-                        status={
-                          row.reached
-                            ? language.t("usage.budget.reached")
-                            : language.t("usage.budget.left", { amount: format.money(row.left) })
-                        }
-                        reached={row.reached}
-                      >
-                        {row.reached
-                          ? language.t("usage.budget.spentOf", {
-                              spent: format.money(row.spent),
-                              limit: format.money(row.limit, "auto"),
-                            })
-                          : language.t("usage.budget.of", { limit: format.money(row.limit, "auto") })}
-                      </Spend>
+                      <Track fill={row.fill} reached={row.reached} />
+                    </Item>
+                  </>
+                )}
+              </For>
+              <Show when={view().action}>
+                {(value) => (
+                  <div class="flex items-center gap-4 self-stretch px-4">
+                    <div class="flex min-w-0 flex-1 flex-col gap-1">
+                      <Line class="font-[530] text-v2-text-text-base">{action(value()).title}</Line>
+                      <p class="m-0 text-[13px] leading-text-base font-[440] tracking-[-0.04px] text-v2-text-text-muted">
+                        {action(value()).body}
+                      </p>
                     </div>
-                    <Track fill={row.fill} reached={row.reached} />
-                  </Item>
-                </>
-              )}
-            </For>
-            <Show when={view().action}>
-              {(value) => (
-                <div class="flex items-center gap-4 self-stretch px-4">
-                  <div class="flex min-w-0 flex-1 flex-col gap-1">
-                    <Line class="font-[530] text-v2-text-text-base">{action(value()).title}</Line>
-                    <p class="m-0 text-[13px] leading-text-base font-[440] tracking-[-0.04px] text-v2-text-text-muted">
-                      {action(value()).body}
-                    </p>
+                    <Button variant="neutral" onClick={switchModel}>
+                      {language.t("usage.action.switch")}
+                    </Button>
                   </div>
-                  <Button variant="neutral" onClick={switchModel}>
-                    {language.t("usage.action.switch")}
-                  </Button>
-                </div>
-              )}
-            </Show>
-          </Panel>
-        </Show>
-      </Section>
+                )}
+              </Show>
+            </Panel>
+          </Show>
+        </Section>
+      </Show>
     </UsageFrame>
   )
 }
@@ -525,13 +543,16 @@ function Line(props: { class?: string; children: JSX.Element }) {
   )
 }
 
-function GoItem(props: { row: GoRow; used: string; children: JSX.Element }) {
-  const language = useLanguage()
-
+function AllowanceItem(props: {
+  row: AllowanceRow["windows"][number]
+  name: string
+  used: string
+  children: JSX.Element
+}) {
   return (
     <Item>
       <div class="flex items-center justify-between self-stretch">
-        <Line class="font-[530] text-v2-text-text-base">{language.t(`usage.go.${props.row.window}`)}</Line>
+        <Line class="font-[530] text-v2-text-text-base">{props.name}</Line>
         <Spend status={props.used} reached={props.row.limited}>
           {props.children}
         </Spend>

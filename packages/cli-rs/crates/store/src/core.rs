@@ -153,6 +153,7 @@ pub(crate) struct Jobs {
 }
 
 pub(crate) struct CatalogRead {
+    pub(crate) usage_account_revision: u64,
     pub(crate) ticket: Ticket,
     pub(crate) catalog: Catalog,
     pub(crate) location: Location,
@@ -352,7 +353,18 @@ impl State {
             Completion::Forms(read, result) => self.complete_forms(read, result, effects),
             Completion::FormReplied { owner, id, location } => self.complete_form_reply(owner, &id, location, effects),
             Completion::Jobs(read, result) => self.complete_jobs(read, result, effects),
-            Completion::Catalog(read, Ok((at, loaded))) => self.complete_catalog(read, at, loaded),
+            Completion::Catalog(read, Ok((at, loaded)))
+                if read.catalog != Catalog::UsageLimits || self.usage_answer_current(&read) =>
+            {
+                self.complete_catalog(read, at, loaded)
+            }
+            Completion::Catalog(read, Err(_))
+                if read.catalog == Catalog::UsageLimits && self.usage_answer_current(&read) =>
+            {
+                let data = self.location_mut(&read.location, crate::changes::Parts::catalogs(&[Catalog::UsageLimits]));
+                data.usage_limits = None;
+                data.usage_failed = true;
+            }
             Completion::Shells(read, Ok(response)) => self.complete_shells(read, response, effects),
             Completion::Location(read, Ok(info)) => self.complete_location(read.adopt, info),
             Completion::Websearch(Ok(providers)) => {

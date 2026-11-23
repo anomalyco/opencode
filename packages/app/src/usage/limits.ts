@@ -1,4 +1,4 @@
-import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promise"
+import type { UsageLimitsAllowance, UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promise"
 
 /** The model the member is using, so a per-model budget shows this model's own counter. */
 export type CurrentModel = { readonly providerID: string; readonly modelID: string; readonly name: string }
@@ -51,22 +51,17 @@ export type Footer =
   | { readonly kind: "resets" | "budgets-reset"; readonly resetsAt: number }
   | { readonly kind: "credits-only" }
 
-export type GoRow = {
-  readonly window: "rolling" | "weekly" | "monthly"
-  readonly percent: number
-  readonly limited: boolean
-  readonly resetsAt: number
-}
+export type AllowanceRow = UsageLimitsAllowance
 
 export type UsageView = {
-  readonly workspace: string | undefined
+  readonly workspace?: string
   readonly callout?: Callout
-  readonly go?: readonly GoRow[]
+  readonly allowances: readonly AllowanceRow[]
   readonly budgets: readonly BudgetRow[]
   /** A callout explains why paid models are paused, so the budgets are shown as context. */
   readonly dimmed: boolean
   readonly action?: LimitAction
-  readonly footer: Footer
+  readonly footer?: Footer
 }
 
 /**
@@ -81,17 +76,17 @@ export function usageView(
     .map((budget) => ({ budget, ...spend(budget, context.model) }))
     .toSorted((a, b) => a.left - b.left)
   const blocking = budgets.find((entry) => entry.reached && entry.budget.coverage === "all")
-  const callout: Callout | undefined = context.credits
-    ? { kind: "credits" }
-    : blocking && { kind: blocking.budget.shared ? "workspace" : "personal", resetsAt: blocking.budget.resetsAt }
+  const callout: Callout | undefined =
+    info.workspace && context.credits
+      ? { kind: "credits" }
+      : blocking && { kind: blocking.budget.shared ? "workspace" : "personal", resetsAt: blocking.budget.resetsAt }
   const anyReached = budgets.some((entry) => entry.reached)
   const reachedModels = budgets.find((entry) => entry.reached && entry.budget.coverage === "models")
   const resetsAt = Math.min(...info.budgets.map((budget) => budget.resetsAt))
-  const go = info.go
   return {
-    workspace: info.workspace.name,
+    workspace: info.workspace?.name,
     callout,
-    go: go && (["rolling", "weekly", "monthly"] as const).map((window) => ({ window, ...go[window] })),
+    allowances: info.allowances,
     budgets: budgets.map((entry, index) => ({
       id: entry.budget.id,
       label: label(entry.budget),
@@ -115,10 +110,11 @@ export function usageView(
     })),
     dimmed: callout !== undefined,
     action: callout || !reachedModels ? undefined : action(reachedModels.budget),
-    footer:
-      info.budgets.length === 0
+    footer: info.workspace
+      ? info.budgets.length === 0
         ? { kind: "credits-only" }
-        : { kind: context.credits ? "budgets-reset" : "resets", resetsAt },
+        : { kind: context.credits ? "budgets-reset" : "resets", resetsAt }
+      : undefined,
   }
 }
 

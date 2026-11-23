@@ -411,6 +411,10 @@ impl Local {
         self.catalog(|data| data?.usage_limits.clone())
     }
 
+    pub fn usage_failed(&self) -> bool {
+        self.catalog(|data| data.is_some_and(|data| data.usage_failed))
+    }
+
     /// The selected model and what the usage limits leave it, when some limit applies (`limits.usage(model)`).
     pub(crate) fn current_usage(&self) -> Option<(ModelInfo, crate::dialogs::usage::ModelUsage)> {
         // The limits first: without them there is no selection to work out.
@@ -438,7 +442,7 @@ impl Local {
         let served = self
             .current()
             .is_some_and(|model| crate::dialogs::usage::served_by_console(self.provider(&model.provider_id).as_ref()));
-        if served && self.usage().is_none() {
+        if served && self.usage().is_none() && !self.usage_failed() {
             self.load_usage(false);
         }
     }

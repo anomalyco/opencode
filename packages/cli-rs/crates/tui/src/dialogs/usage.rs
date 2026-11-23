@@ -189,6 +189,10 @@ impl Local {
 
 pub fn show(local: &Rc<Local>) {
     local.load_usage(true);
+    present(local);
+}
+
+fn present(local: &Rc<Local>) {
     local.dialogs.replace(
         bind!(local, |local, cx| {
             build(cx, &local)
@@ -228,7 +232,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
     let error = cx.theme.text.feedback.error.base;
     let state = local.usage();
     // Reopen on a state change because signed-out, loading, and ready states use different layouts.
-    let shown = state.as_ref().map(Option::is_some);
+    let shown = (state.as_ref().map(Option::is_some), local.usage_failed());
     let weak = Rc::downgrade(local);
     let reopened = Rc::new(Cell::new(false));
     let handle: Rc<RefCell<Option<Select<String>>>> = Rc::default();
@@ -239,29 +243,31 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
         if reopened.get() {
             return;
         }
-        if local.usage().as_ref().map(Option::is_some) != shown {
+        if (local.usage().as_ref().map(Option::is_some), local.usage_failed()) != shown {
             reopened.set(true);
             let again = local.clone();
-            local.app.defer(move |_| show(&again));
+            local.app.defer(move |_| present(&again));
             return;
         }
         if let Some(handle) = refresh.borrow().as_ref() {
             handle.set_options(options(&local, &selected.borrow(), error));
         }
     })));
-    let Some(info) = state else { return message(cx, "Usage", "Loading…", false) };
-    let Some(info) = info else {
+    let Some(info) = state else {
         return message(
             cx,
             "Usage",
-            "Sign in to OpenCode Console with /connect to see your workspace's usage limits.",
+            if local.usage_failed() { "Usage could not be loaded. Reopen /usage to retry." } else { "Loading…" },
             true,
         );
+    };
+    let Some(info) = info else {
+        return message(cx, "Usage", "No usage limits available. Connect a supported account with /connect.", true);
     };
     let current = rows(local);
     let resets = current.iter().map(|row| row.usage.resets_at).fold(f64::INFINITY, f64::min);
     let description = [
-        info.workspace.name.as_ref().map(|name| format!("Workspace: {name}")),
+        info.workspace.as_ref().and_then(|w| w.name.as_ref()).map(|name| format!("Workspace: {name}")),
         (!current.is_empty()).then(|| format!("Resets {}", format_reset(resets))),
     ]
     .into_iter()
@@ -270,7 +276,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
     .join(" · ");
     let mut props = SelectProps::new("Usage", options(local, &None, error));
     props.description = Some(description);
-    props.placeholder = Some("Search models".into());
+    props.placeholder = Some("Search usage".into());
     let (app, muted) = (cx.app.clone(), cx.theme.text.muted);
     props.empty_view = Some(Rc::new(move || {
         View::new(&app)
@@ -313,7 +319,8 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
 fn options(local: &Local, active: &Option<String>, error: Color) -> Vec<SelectOption<String>> {
     let rows = rows(local);
     let selected = active.clone().or_else(|| rows.first().map(|row| key(&row.model)));
-    rows.into_iter()
+    let mut options: Vec<_> = rows
+        .into_iter()
         .map(|row| {
             let value = key(&row.model);
             let mut option = SelectOption::new(row.model.name.clone(), value.clone());
@@ -325,7 +332,40 @@ fn options(local: &Local, active: &Option<String>, error: Color) -> Vec<SelectOp
             }
             option
         })
-        .collect()
+        .collect();
+    if let Some(info) = local.usage().flatten() {
+        for allowance in info.allowances {
+            for window in allowance.windows {
+                let duration = match window.window_seconds {
+                    Some(s) if s % 86400.0 == 0.0 => format!("{}d", s / 86400.0),
+                    Some(s) if s % 3600.0 == 0.0 => format!("{}h", s / 3600.0),
+                    Some(s) => format!("{}m", (s / 60.0).round()),
+                    None => window.id.clone(),
+                };
+                let title = [Some(allowance.name.as_str()), window.name.as_deref(), Some(&duration)]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                let mut option = SelectOption::new(title, format!("quota:{}:{}", allowance.provider_id.0, window.id));
+                option.footer = Some(format!("{}% used", window.percent.round()));
+                option.footer_color = window.limited.then_some(error);
+                option.details = vec![format!("Resets {}", format_reset(window.resets_at))];
+                options.push(option);
+            }
+            if let Some(url) = allowance.usage_url {
+                let mut option = SelectOption::new(
+                    format!("View {} usage", allowance.name),
+                    format!("usage:{}", allowance.provider_id.0),
+                );
+                option.on_select = Some(Rc::new(move |_| {
+                    let _ = crate::features::links::open_url(&url);
+                }));
+                options.push(option);
+            }
+        }
+    }
+    options
 }
 
 pub(crate) fn message(cx: &DialogCx, title: &str, text: &str, wrap: bool) -> View {

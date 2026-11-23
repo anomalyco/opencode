@@ -94,6 +94,8 @@ pub struct LocationData {
     /// The Go allowance and Console budgets of the signed-in OpenCode Console workspace; the
     /// inner `None` means not signed in.
     pub usage_limits: Option<Option<UsageLimitsInfo>>,
+    pub usage_failed: bool,
+    pub(crate) usage_account_revision: u64,
     /// Running shells by ID. Exited and deleted shells are removed.
     pub shell: Option<IndexMap<ShellID, Shell>>,
     pub skill: Option<Arc<[SkillInfo]>>,
@@ -104,7 +106,7 @@ impl LocationData {
     fn has(&self, catalog: Catalog) -> bool {
         match catalog {
             Catalog::Vcs => self.vcs.is_some(),
-            Catalog::UsageLimits => self.usage_limits.is_some(),
+            Catalog::UsageLimits => self.usage_limits.is_some() || self.usage_failed,
             Catalog::Agent => self.agent.is_some(),
             Catalog::Command => self.command.is_some(),
             Catalog::Config => self.config.is_some(),
@@ -141,7 +143,10 @@ impl Loaded {
     fn publish(self, data: &mut LocationData) {
         match self {
             Loaded::Vcs(value) => data.vcs = Some(value),
-            Loaded::UsageLimits(value) => data.usage_limits = Some(value),
+            Loaded::UsageLimits(value) => {
+                data.usage_limits = Some(value);
+                data.usage_failed = false;
+            }
             Loaded::Agent(value) => data.agent = Some(value),
             Loaded::Command(value) => data.command = Some(value),
             Loaded::Config(value) => data.config = Some(value),
@@ -214,10 +219,13 @@ impl State {
     /// The catalog arms of `handleEvent`: credentials, then the events that name a location.
     pub(crate) fn on_catalog_event(&mut self, event: &V2Event, effects: &mut Vec<Effect>) {
         match event {
-            V2Event::CredentialUpdated(_) => {
+            V2Event::CredentialUpdated(event) => {
                 let locations: Vec<Location> = self.locations.keys().cloned().collect();
                 for location in &locations {
                     self.refresh_catalog(Catalog::UsageLimits, location, effects);
+                    if matches!(event.data.integration_id.0.as_str(), "openai" | "opencode") {
+                        self.clear_usage(location);
+                    }
                     self.refresh_catalog(Catalog::Integration, location, effects);
                 }
                 return;
@@ -226,6 +234,9 @@ impl State {
                 let locations: Vec<Location> = self.locations.keys().cloned().collect();
                 for location in &locations {
                     self.refresh_catalog(Catalog::UsageLimits, location, effects);
+                    if matches!(event.data.integration_id.0.as_str(), "openai" | "opencode") {
+                        self.clear_usage(location);
+                    }
                     self.promote_credential(location, &event.data);
                     let watched = [Catalog::Integration, Catalog::Model, Catalog::Provider];
                     self.refresh_together(&watched, vec![Catalog::Model, Catalog::Provider], location, effects);
@@ -282,7 +293,30 @@ impl State {
     /// Begins a read of `catalog` at the location `at`.
     pub(crate) fn begin_catalog(&mut self, ticket: Ticket) -> CatalogRead {
         let ReadKey::Catalog(catalog, at) = ticket.key else { unreachable!("a catalog read") };
-        CatalogRead { ticket, catalog, location: self.read_location(at) }
+        let location = self.read_location(at);
+        if catalog == Catalog::UsageLimits && self.locations.get(&location).is_some_and(|data| data.usage_failed) {
+            self.location_mut(&location, Parts::catalogs(&[catalog])).usage_failed = false;
+        }
+        let usage_account_revision = if catalog == Catalog::UsageLimits {
+            // Include even the first pending read in a credential event's location walk.
+            self.locations.entry(location.clone()).or_default().usage_account_revision
+        } else {
+            0
+        };
+        CatalogRead { ticket, catalog, location, usage_account_revision }
+    }
+
+    fn clear_usage(&mut self, location: &Location) {
+        let Some(data) = self.locations.get_mut(location) else { return };
+        data.usage_account_revision += 1;
+        if data.usage_limits.take().is_some() || data.usage_failed {
+            data.usage_failed = false;
+            self.touch_location(location, Parts::catalogs(&[Catalog::UsageLimits]));
+        }
+    }
+
+    pub(crate) fn usage_answer_current(&self, read: &CatalogRead) -> bool {
+        self.locations.get(&read.location).map_or(0, |data| data.usage_account_revision) == read.usage_account_revision
     }
 
     /// Publishes a catalog under the location the server answered with; model and provider reads also under the

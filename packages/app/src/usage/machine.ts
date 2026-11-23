@@ -34,7 +34,12 @@ export type UsageDialogEvent =
   | { readonly type: "load.failed"; readonly attempt: number }
   | { readonly type: "load.timed-out"; readonly attempt: number }
   /** The shared cache changed, for example from a session's usage event. `undefined` means not known. */
-  | { readonly type: "cache.synced"; readonly key: string; readonly limits: UsageLimitsInfo | null | undefined }
+  | {
+      readonly type: "cache.synced"
+      readonly key: string
+      readonly limits: UsageLimitsInfo | null | undefined
+      readonly failed?: boolean
+    }
   | { readonly type: "retry" }
   | { readonly type: "disposed" }
 
@@ -141,8 +146,21 @@ function synced(
   state: Exclude<UsageDialogState, { status: "disposed" }>,
   event: Extract<UsageDialogEvent, { type: "cache.synced" }>,
 ): UsageDialogTransition {
-  if (event.key !== state.key || event.limits === undefined) return { state, effects: NONE }
+  if (event.key !== state.key) return { state, effects: NONE }
+  if (event.failed)
+    return { state: { status: "failed", key: state.key, issued: state.issued }, effects: [{ type: "timer.stop" }] }
+  if (event.limits === undefined) {
+    return { state, effects: NONE }
+  }
   const limits = event.limits
+  if (state.status === "loading")
+    return {
+      state:
+        limits === null
+          ? { status: "signed-out", key: state.key, issued: state.issued }
+          : { status: "ready", key: state.key, issued: state.issued, info: limits },
+      effects: [{ type: "timer.stop" }],
+    }
 
   if (state.status === "ready" && limits === null)
     return { state: { status: "signed-out", issued: state.issued, key: state.key }, effects: NONE }

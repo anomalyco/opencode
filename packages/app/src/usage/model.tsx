@@ -1,4 +1,4 @@
-import { onMount } from "solid-js"
+import { createEffect, on } from "solid-js"
 import { isFreeModel } from "@/providers/models/models"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
@@ -24,10 +24,19 @@ export function createModelUsage(options: { refresh?: boolean } = {}) {
   const location = useWorkspaceLocation()
   const language = useLanguage()
   const format = useUsageFormat()
-  onMount(() => {
-    if (options.refresh) data.location.usage.invalidate(location().ref)
-    void data.location.usage.sync(location().ref).catch(() => undefined)
-  })
+  createEffect(
+    on(
+      () =>
+        data.location.integration
+          .list(location().ref)
+          ?.some((item) => item.id === "opencode" && item.connections.length > 0),
+      (connected) => {
+        if (!connected) return
+        if (options.refresh) data.location.usage.invalidate(location().ref)
+        void data.location.usage.sync(location().ref).catch(() => undefined)
+      },
+    ),
+  )
   return (model: Parameters<typeof modelUsage>[1] & Parameters<typeof isFreeModel>[0]): ModelUsageLabel | undefined => {
     const info = data.location.usage.limits(location().ref)
     const usage = info && !isFreeModel(model) ? modelUsage(info, model) : undefined

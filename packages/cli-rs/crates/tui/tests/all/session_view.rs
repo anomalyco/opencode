@@ -28,6 +28,7 @@ fn location_at(directory: &str) -> Value {
 fn limits(spent: f64) -> Value {
     json!({
         "workspace": { "id": "wrk_1", "name": "Acme", "usageURL": "https://opencode.ai/console/wrk_1/usage" },
+        "allowances": [],
         "budgets": [{
             "id": "big", "limit": 10, "spent": 0, "scope": "each", "per": "model", "coverage": "models",
             "models": [{ "providerID": "opencode", "modelID": "big", "name": "Big Pickle", "spent": spent }],
@@ -153,7 +154,9 @@ fn mount_with(width: u16, id: &str, config: Value, routes: Vec<MemoryRoute>) -> 
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
         route: support::session_route(id),
-        events: true,
+        // These tests deliver events through data.apply. A real server.connected can
+        // invalidate the first in-flight catalog read and add an unrelated request.
+        events: false,
         ..support::deps(Arc::new(memory.clone()))
     };
     let support::Harness { app, tui } = support::mount(width, 30, deps);
@@ -387,7 +390,7 @@ fn the_sidebar_limit_shows_once_the_limits_load() {
     let deps = Deps {
         config: support::config(support::decode(r#"{ "animations": false }"#)),
         route: support::session_route("ses_a"),
-        events: true,
+        events: false,
         ..support::deps(gated.clone())
     };
     let support::Harness { app, tui } = support::mount(170, 30, deps);

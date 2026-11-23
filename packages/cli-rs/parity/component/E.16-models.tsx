@@ -124,6 +124,13 @@ export const server = {
   ],
   "/api/experimental/usage/limits": {
     workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/console/wrk_1/usage" },
+    allowances: [
+      {
+        providerID: "openai",
+        name: "OpenAI",
+        windows: [{ id: "codex-primary", percent: 37, windowSeconds: 18000, limited: false, resetsAt: 1894708800000 }],
+      },
+    ],
     budgets: [
       budget("all", {}),
       budget("sonnet", {

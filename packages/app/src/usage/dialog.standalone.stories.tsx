@@ -37,13 +37,34 @@ const pool = (spent: number) => budget({ id: "pool", scope: "combined", shared: 
 
 const info = (budgets: UsageLimitsBudget[], go?: "available" | "limited"): UsageLimitsInfo => ({
   workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/wrk_1/activity/overview" },
-  go: go
-    ? {
-        rolling: { percent: go === "limited" ? 100 : 42, limited: go === "limited", resetsAt: Date.now() + 3 * hour },
-        weekly: { percent: 18, limited: false, resetsAt: Date.now() + 100 * hour },
-        monthly: { percent: 7, limited: false, resetsAt: Date.now() + 500 * hour },
-      }
-    : undefined,
+  allowances: go
+    ? [
+        {
+          providerID: "opencode-go",
+          name: "OpenCode Go",
+          windows: [
+            {
+              id: "rolling",
+              percent: go === "limited" ? 100 : 42,
+              limited: go === "limited",
+              resetsAt: Date.now() + 3 * hour,
+            },
+            {
+              id: "weekly",
+              percent: 18,
+              limited: false,
+              resetsAt: Date.now() + 100 * hour,
+            },
+            {
+              id: "monthly",
+              percent: 7,
+              limited: false,
+              resetsAt: Date.now() + 500 * hour,
+            },
+          ],
+        },
+      ]
+    : [],
   budgets,
 })
 
@@ -85,6 +106,41 @@ export default {
 }
 
 export const Default = { render: () => <UsageStory info={info([anthropic(123.14), pool(394.57)], "available")} /> }
+
+export const Codex = {
+  render: () => (
+    <UsageStory
+      info={{
+        budgets: [],
+        allowances: [
+          {
+            providerID: "openai",
+            name: "OpenAI",
+            plan: "plus",
+            windows: [
+              {
+                id: "reviews-primary",
+                name: "Reviews",
+                windowSeconds: 18000,
+                percent: 37,
+                limited: false,
+                resetsAt: Date.now() + hour,
+              },
+              {
+                id: "reviews-secondary",
+                name: "Reviews",
+                windowSeconds: 604800,
+                percent: 100,
+                limited: true,
+                resetsAt: Date.now() + 24 * hour,
+              },
+            ],
+          },
+        ],
+      }}
+    />
+  ),
+}
 
 export const SignedOut = {
   render: () => (

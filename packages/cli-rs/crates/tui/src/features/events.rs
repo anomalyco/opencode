@@ -210,7 +210,7 @@ fn handle(tui: &Tui, event: &Handled) {
         }
         Handled::SessionExecutionSucceeded(event)
             if *tui.route() == (Route::Session { id: event.data.session_id.clone() })
-                && matches!(tui.local.usage(), Some(Some(_))) =>
+                && tui.local.usage().flatten().is_some_and(|info| info.workspace.is_some()) =>
         {
             tui.local.load_usage(true);
         }

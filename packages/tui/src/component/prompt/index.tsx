@@ -1580,7 +1580,7 @@ export function Prompt(props: PromptProps) {
   const limits = useUsageLimits()
   createEffect(() => {
     const selected = local.model.current()
-    if (selected && limits.served(selected.providerID) && limits.info() === undefined) limits.load()
+    if (selected && limits.served(selected.providerID) && limits.info() === undefined && !limits.failed()) limits.load()
   })
   const limit = createMemo(() => {
     const selected = local.model.current()

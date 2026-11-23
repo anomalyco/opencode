@@ -347,6 +347,24 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) =>
       pluralForm(key, pluralCategory(intl(), count), { ...params, count })
 
+    const usageWindow = (provider: string, row: { id: string; name?: string; windowSeconds?: number }) => {
+      if (row.id === "rolling" || row.id === "weekly" || row.id === "monthly") return t(`usage.go.${row.id}`)
+      const seconds = row.windowSeconds
+      const duration = !seconds
+        ? row.id
+        : seconds % 86_400 === 0
+          ? plural("usage.window.days", seconds / 86_400)
+          : seconds % 3_600 === 0
+            ? plural("usage.window.hours", seconds / 3_600)
+            : plural("usage.window.minutes", Math.round(seconds / 60))
+      if (!row.name) return duration
+      const name =
+        provider === "openai" && (row.id === "code-review-primary" || row.id === "code-review-secondary")
+          ? t("usage.window.codeReview")
+          : row.name
+      return t("usage.window.named", { name, duration })
+    }
+
     // "2 subagents · 1 script · 1 shell", or one group alone, as the iOS app's background-work capsule reads.
     const activityGroups = (counts: { subagents: number; scripts?: number; shells: number }) =>
       [
@@ -433,6 +451,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       tDynamic,
       plural,
       pluralForm,
+      usageWindow,
       activitySummary,
       activitySummaryRich,
       rich,

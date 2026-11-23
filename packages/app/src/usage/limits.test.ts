@@ -20,6 +20,7 @@ const budget = (input: Partial<UsageLimitsBudget> & Pick<UsageLimitsBudget, "id"
 
 const info = (...budgets: UsageLimitsBudget[]): UsageLimitsInfo => ({
   workspace: { id: "wrk_1", name: "Acme", usageURL: "https://opencode.ai/wrk_1/activity/overview" },
+  allowances: [],
   budgets,
 })
 
@@ -137,5 +138,20 @@ describe("usageView", () => {
     expect(view.callout).toEqual({ kind: "credits" })
     expect(view.footer).toEqual({ kind: "budgets-reset", resetsAt: RESET })
     expect(usageView(info(), { credits: true }).footer).toEqual({ kind: "credits-only" })
+  })
+
+  test("shows provider allowances without workspace budget controls", () => {
+    const allowance = {
+      providerID: "openai",
+      name: "OpenAI",
+      plan: "plus",
+      windows: [{ id: "codex-primary", windowSeconds: 18_000, percent: 37, limited: false, resetsAt: RESET }],
+    } satisfies UsageLimitsInfo["allowances"][number]
+    const view = usageView({ allowances: [allowance], budgets: [] })
+
+    expect(view.allowances).toEqual([allowance])
+    expect(view.workspace).toBeUndefined()
+    expect(view.budgets).toEqual([])
+    expect(view.footer).toBeUndefined()
   })
 })
