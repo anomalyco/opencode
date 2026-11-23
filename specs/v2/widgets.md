@@ -8,6 +8,7 @@ renders the JSON view tree it returns with native components. A submission goes 
 as the tool's result.
 
 This document is the contract between the server, the shared TypeScript runtime and every client. Change it here first.
+The app-store rules widgets must meet, and what's still to do for them, are in `widgets-store-policy.md`.
 
 ## Pieces
 
