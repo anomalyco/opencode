@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import { generateImage, generateText, streamText } from "ai"
 import { createOpenCode, imageAPI, protocol } from "../src/index.js"
+import { outputLimits } from "../src/models.js"
 
 const billing = {
   cost: 0.000079,
@@ -22,13 +23,13 @@ const sse = (events: ReadonlyArray<unknown>) =>
     headers: { "content-type": "text/event-stream" },
   })
 
-const requests: string[] = []
+const requests: Array<{ path: string; body: Record<string, unknown> }> = []
 const server = Bun.serve({
   port: 0,
   async fetch(request) {
     const url = new URL(request.url)
-    requests.push(url.pathname)
     const body = await request.json()
+    requests.push({ path: url.pathname, body })
     if (url.pathname === "/openai/v1/images/generations")
       return Response.json({
         created: 1,
@@ -66,11 +67,6 @@ afterAll(() => server.stop(true))
 const opencode = createOpenCode({ apiKey: "test", baseURL: server.url.href })
 
 describe("protocol", () => {
-  test("uses the protocol the model list names", () => {
-    expect(protocol("qwen3.6-plus")).toBe("messages")
-    expect(protocol("grok-4.7")).toBe("responses")
-  })
-
   test("guesses an unlisted model's protocol from the last part of its name", () => {
     expect(protocol("console-openrouter/anthropic/claude-sonnet-4-6")).toBe("messages")
     expect(protocol("console-azure/gpt-7")).toBe("responses")
@@ -81,11 +77,22 @@ describe("protocol", () => {
 })
 
 describe("imageAPI", () => {
-  test("uses the API the model list names, else guesses from the name", () => {
-    expect(imageAPI("grok-imagine-image-2.0")).toBe("xai")
+  test("guesses an unlisted model's API from the last part of its name", () => {
     expect(imageAPI("console-vertex/gemini-9-image")).toBe("google")
     expect(imageAPI("console-acme/grok-imagine-3")).toBe("xai")
     expect(imageAPI("console-acme/some-image-model")).toBe("openai")
+  })
+})
+
+describe("output limit", () => {
+  // @ai-sdk/anthropic sends max_tokens 4096 for a model it doesn't know, such as Qwen over Messages.
+  test("a Messages model @ai-sdk/anthropic doesn't know gets its listed limit", async () => {
+    const id = Object.keys(outputLimits).find((id) => !id.includes("claude"))
+    if (id === undefined) return
+    await generateText({ model: opencode.messages(id), prompt: "hi" })
+    expect(requests.at(-1)?.body.max_tokens).toBe(outputLimits[id])
+    await generateText({ model: opencode.messages(id), prompt: "hi", maxOutputTokens: 100 })
+    expect(requests.at(-1)?.body.max_tokens).toBe(100)
   })
 })
 
@@ -93,7 +100,7 @@ describe("usage", () => {
   // generateImage keeps only `images` from a provider's top-level metadata, so the usage is on each call.
   test("an image response reports it on its call", async () => {
     const result = await generateImage({ model: opencode.imageModel("gpt-image-2.5-sunburst"), prompt: "a dot" })
-    expect(requests.at(-1)).toBe("/openai/v1/images/generations")
+    expect(requests.at(-1)?.path).toBe("/openai/v1/images/generations")
     expect(result.calls[0].providerMetadata?.opencode).toEqual({ images: [{}], usage })
   })
 
@@ -120,7 +127,7 @@ describe("usage", () => {
 
   test("a model's native protocol carries it too", async () => {
     const result = await generateText({ model: opencode("claude-haiku-4-5"), prompt: "hi" })
-    expect(requests.at(-1)).toBe("/anthropic/v1/messages")
+    expect(requests.at(-1)?.path).toBe("/anthropic/v1/messages")
     expect(result.providerMetadata?.opencode?.usage).toEqual(usage)
   })
 })

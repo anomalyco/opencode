@@ -1,4 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic"
+import { getModelCapabilities } from "@ai-sdk/anthropic/internal"
 import { createGoogle } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
@@ -13,7 +14,7 @@ import {
 } from "@ai-sdk/provider"
 import { loadApiKey, withoutTrailingSlash, type FetchFunction } from "@ai-sdk/provider-utils"
 import { z } from "zod"
-import { imageModels, models } from "./models.js"
+import { imageModels, models, outputLimits } from "./models.js"
 
 /** A model OpenCode serves, `opencode-go/<model>` for Go, or `<connection key>/<model>` for a workspace connection. */
 export type OpenCodeModelId = keyof typeof models | (string & {})
@@ -104,7 +105,7 @@ export function createOpenCode(settings: OpenCodeProviderSettings = {}): OpenCod
   } satisfies Record<OpenCodeImageAPI, (modelId: string, fetch: FetchFunction) => ImageModelV4>
 
   const clients = {
-    messages: (modelId: string) => anthropic.messages(modelId),
+    messages: (modelId: string) => withOutputLimit(anthropic.messages(modelId)),
     responses: (modelId: string) => openai.responses(modelId),
     chat: (modelId: string) => compatible.chatModel(modelId),
     google: (modelId: string) => google.languageModel(modelId),
@@ -244,6 +245,23 @@ function withUsage(model: LanguageModelV4): LanguageModelV4 {
       )
       return { ...result, stream }
     },
+  }
+}
+
+// Messages requires `max_tokens`, and `@ai-sdk/anthropic` fills it in only for the Claude models it knows: any other
+// model (Qwen and MiniMax, or a Claude model newer than it) gets 4096 and stops there. Those get their listed limit.
+function withOutputLimit(model: LanguageModelV4): LanguageModelV4 {
+  const limit = getModelCapabilities(model.modelId).isKnownModel ? undefined : outputLimits[model.modelId]
+  if (limit === undefined) return model
+  return {
+    specificationVersion: "v4",
+    provider: model.provider,
+    modelId: model.modelId,
+    get supportedUrls() {
+      return model.supportedUrls
+    },
+    doGenerate: (options) => model.doGenerate({ ...options, maxOutputTokens: options.maxOutputTokens ?? limit }),
+    doStream: (options) => model.doStream({ ...options, maxOutputTokens: options.maxOutputTokens ?? limit }),
   }
 }
 

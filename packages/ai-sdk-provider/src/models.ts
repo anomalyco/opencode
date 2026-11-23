@@ -114,6 +114,33 @@ export const models = {
   "tidepool-alpha-free": "chat",
 } as const
 
+export const outputLimits: Partial<Record<string, number>> = {
+  "claude-fable-5": 128000,
+  "claude-fable-5-1": 128000,
+  "claude-fable-5-2": 128000,
+  "claude-haiku-4-5": 64000,
+  "claude-haiku-5-5": 128000,
+  "claude-opus-4-5": 64000,
+  "claude-opus-4-6": 128000,
+  "claude-opus-4-7": 128000,
+  "claude-opus-4-8": 128000,
+  "claude-opus-5": 128000,
+  "claude-opus-5-5": 128000,
+  "claude-sonnet-4-5": 64000,
+  "claude-sonnet-4-6": 64000,
+  "claude-sonnet-5": 128000,
+  "claude-sonnet-5-5": 128000,
+  "opencode-go/claude-haiku-5-5": 128000,
+  "opencode-go/minimax-m3": 131072,
+  "opencode-go/qwen3.7-plus": 65536,
+  "opencode-go/qwen3.8-flash": 131072,
+  "opencode-go/qwen3.8-max": 131072,
+  "opencode-go/qwen4-max": 262144,
+  "qwen3.5-plus": 65536,
+  "qwen3.6-plus": 65536,
+  "qwen3.8-flash": 131072,
+}
+
 export const imageModels = {
   "gemini-nano-banana-2.1": "google",
   "gpt-image-2.5-sunburst": "openai",
