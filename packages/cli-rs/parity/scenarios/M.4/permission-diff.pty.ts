@@ -19,7 +19,10 @@ export default definePty({
   server: server({ permissions: [editPermission] }),
   setup: (root) => config(root),
   steps: [
-    { ...opened, until: { screen: "Permission required" }, checkpoint: "diff" },
+    // The permission draws in two frames: its heading first, then its diff and actions. Waiting for the heading
+    // alone let a loaded client's 600 ms quiet window expire between them, and the checkpoint captured the
+    // heading over the old transcript. Wait for the whole footer, diff and actions included.
+    { ...opened, until: { screen: /1 - const a = 1[\s\S]*Allow once/ }, checkpoint: "diff" },
     { keys: "\x03", settle: 200 },
     ...leave,
   ],

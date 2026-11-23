@@ -1,5 +1,7 @@
 import { Effect } from "effect"
 
+// For callers that must name a port before the process binds it (a layer that reports no URL), unlike the parity
+// runner, which reads the endpoint the process prints. The window is the test's own, not a setup prompt's seconds.
 export function availableEndpoint() {
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() })
   const endpoint = `ws://127.0.0.1:${server.port}`

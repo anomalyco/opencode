@@ -270,7 +270,7 @@ export const layerDrive = (options: { readonly endpoint: string; readonly versio
       const controllerLock = yield* Semaphore.make(1)
       const tools = yield* makeToolDriver()
       yield* Effect.addFinalizer(() => tools.shutdown)
-      yield* SimulationControlServer.start({
+      const server = yield* SimulationControlServer.start({
         endpoint: options.endpoint,
         label: "opencode drive backend websocket",
         data: () => ({}),
@@ -282,7 +282,7 @@ export const layerDrive = (options: { readonly endpoint: string; readonly versio
             discard: true,
           }),
       })
-      yield* Effect.sync(() => process.stderr.write(`opencode drive backend websocket: ${options.endpoint}\n`))
+      yield* Effect.sync(() => process.stderr.write(`opencode drive backend websocket: ${server.url}\n`))
 
       return Service.of({
         stream: (request) =>
