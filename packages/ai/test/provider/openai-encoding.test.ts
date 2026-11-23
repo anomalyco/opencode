@@ -24,28 +24,32 @@ const encoding = (model: LanguageModel, compact = false) =>
   })
 
 describe("OpenAI request encoding", () => {
-  it.effect("sends zstd to OpenAI's API and the ChatGPT backend by default", () =>
+  it.effect("sends zstd to the ChatGPT backend by default", () =>
     Effect.gen(function* () {
-      // OpenCode passes the catalog's URL explicitly, so the default URL counts however it arrives.
-      for (const baseURL of [undefined, "https://api.openai.com/v1/", "https://chatgpt.com/backend-api/codex"])
+      for (const baseURL of ["https://chatgpt.com/backend-api/codex", "https://chatgpt.com/backend-api/codex/"])
         expect(yield* encoding(OpenAI.model("gpt-6-astra", { apiKey: "test", baseURL }))).toBe("zstd")
     }),
   )
 
-  it.effect("sends plain JSON to another baseURL, to Chat Completions, or when encoding is none", () =>
-    Effect.gen(function* () {
-      expect(
-        yield* encoding(OpenAI.model("gpt-6-astra", { apiKey: "test", baseURL: "https://proxy.example/v1" })),
-      ).toBeNull()
-      expect(yield* encoding(OpenAI.configure({ apiKey: "test" }).chat("gpt-6-astra"))).toBeNull()
-      // /responses/compact rejects compressed bodies.
-      expect(yield* encoding(OpenAI.model("gpt-6-astra", { apiKey: "test" }), true)).toBeNull()
-      // How OpenCode applies a configured encoding: on the model's options, over the route default.
-      const base = OpenAI.model("gpt-6-astra", { apiKey: "test" })
-      const none = LanguageModel.update(base, {
-        options: { ...base.options, http: { ...base.options?.http, encoding: "none" } },
-      })
-      expect(yield* encoding(none)).toBeNull()
-    }),
+  it.effect(
+    "sends plain JSON to OpenAI's API, another baseURL, Chat Completions, compaction, or when encoding is none",
+    () =>
+      Effect.gen(function* () {
+        for (const baseURL of [undefined, "https://api.openai.com/v1"])
+          expect(yield* encoding(OpenAI.model("gpt-6-astra", { apiKey: "test", baseURL }))).toBeNull()
+        expect(
+          yield* encoding(OpenAI.model("gpt-6-astra", { apiKey: "test", baseURL: "https://proxy.example/v1" })),
+        ).toBeNull()
+        const chatgpt = { apiKey: "test", baseURL: "https://chatgpt.com/backend-api/codex" }
+        expect(yield* encoding(OpenAI.configure(chatgpt).chat("gpt-6-astra"))).toBeNull()
+        // /responses/compact rejects compressed bodies.
+        expect(yield* encoding(OpenAI.model("gpt-6-astra", chatgpt), true)).toBeNull()
+        // How OpenCode applies a configured encoding: on the model's options, over the route default.
+        const base = OpenAI.model("gpt-6-astra", chatgpt)
+        const none = LanguageModel.update(base, {
+          options: { ...base.options, http: { ...base.options?.http, encoding: "none" } },
+        })
+        expect(yield* encoding(none)).toBeNull()
+      }),
   )
 })
