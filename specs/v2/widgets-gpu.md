@@ -9,7 +9,7 @@ canvases are unaffected. Clients only: the server stores and validates nothing f
 | --- | --- |
 | Rune desktop | wgpu |
 | iOS | wgpu in `psychoscript-mobile` (Metal) |
-| Android | wgpu in `psychoscript-mobile` (Vulkan 1.1 or newer; Android 15 and 16, API 35 and 36, only) |
+| Android | wgpu in `psychoscript-mobile` (Vulkan 1.1 or newer; Android 15, API 35, or newer: newer releases are never excluded) |
 | Web host | the browser's WebGPU; no WebGL fallback. It must produce the same program errors as wgpu for this subset; a difference is a client bug |
 | TUI | none for now (placeholder); `@opencode/widget`'s `LiveWidget` checks batches (Host checks) without replaying them |
 
