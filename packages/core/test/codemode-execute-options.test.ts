@@ -85,29 +85,35 @@ describe("execute timeout and background", () => {
     }),
   )
 
-  it.effect("adds timeout and background with full_codemode", () =>
+  it.effect("with full_codemode, still takes only code and explains the options line", () =>
     Effect.sync(() => {
-      expect(Object.keys(tool(true).input.fields)).toEqual(["code", "timeout", "background"])
-      expect(Schema.decodeUnknownSync(CodeModeTool.FullInput)({ code: "1", timeout: 3000, background: true })).toEqual({
-        code: "1",
-        timeout: 3000,
-        background: true,
-      })
-      expect(() => Schema.decodeUnknownSync(CodeModeTool.FullInput)({ code: "1", timeout: 0 })).toThrow()
-      expect(() => Schema.decodeUnknownSync(CodeModeTool.FullInput)({ code: "1", timeout: 1.5 })).toThrow()
+      expect(tool(true).input).toBe(CodeMode.Input)
+      expect(tool(true).freeform).toEqual({ type: "text" })
+      expect(tool(true).description).toContain("make the first line `// @options: <JSON object>`")
       expect(tool(true).description).toContain("do not poll")
+      expect(tool(false).description).not.toContain("// @options:")
     }),
   )
 
-  it.live("background returns a job ID at once and notifies on completion", () =>
+  it.effect("moves a leading options line into timeout and background, and fails on one it can't apply", () =>
     Effect.gen(function* () {
-      const h = yield* harness
-      const result = yield* h.run(context("ses_bg"), script(300), { background: true })
-      const jobID = String(result.metadata?.jobID)
-      expect(jobID).toStartWith("cm_")
-      expect((yield* h.jobs.get(jobID))?.status).toBe("running")
-      yield* Deferred.await(h.notified)
-      expect(h.notices[0]?.metadata).toMatchObject({ jobID, state: "completed" })
+      const split = (code: string) => CodeModeTool.splitOptions({ code })
+      expect(yield* split('// @options: {"timeout": 5000, "background": true}\nreturn 1')).toEqual({
+        code: "return 1",
+        timeout: 5000,
+        background: true,
+      })
+      expect(yield* split('  // @options: {"background":true}\r\nreturn 1')).toEqual({ code: "return 1", background: true })
+      expect(yield* split("x()")).toEqual({ code: "x()" })
+      expect(yield* CodeModeTool.splitOptions("x()")).toBe("x()")
+      for (const code of [
+        "// @options: {timeout}\nx()",
+        '// @options: {"timeout": 0}\nx()',
+        '// @options: {"timeout": 1.5}\nx()',
+        '// @options: ["x"]\nx()',
+        '// @options: {"yield_time_ms": 10000, "timeout": 5}\nx()',
+      ])
+        expect((yield* split(code).pipe(Effect.flip)).message).toContain("must be followed by a JSON object with only")
     }),
   )
 

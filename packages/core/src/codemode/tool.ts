@@ -5,15 +5,14 @@ import { CodeMode, Namespace, Tool } from "@opencode/codemode"
 import type {
   Content,
   Context as ToolContext,
-  Error,
   Info,
   Metadata,
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
 import { Identifier } from "@opencode/schema/identifier"
-import { CallID } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
+import { CallID, Error } from "@opencode/schema/tool"
+import { Clock, Context, Effect, Option, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { FileAccess } from "../file-access.js"
@@ -111,6 +110,8 @@ const executionServices = (
     ),
   )
 
+const OPTIONS_LINE = "// @options:"
+
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions. With `full_codemode`,
 // the runtime also has Bun's file APIs.
 const description = (full: boolean) =>
@@ -127,20 +128,33 @@ const description = (full: boolean) =>
     ...(full
       ? [
           "Scripts still running after their timeout move to the background and keep running. Background scripts return a job ID immediately, and you will be notified when they complete; do not poll for them.",
+          `To set options, make the first line \`${OPTIONS_LINE} <JSON object>\` and start the program on the next line, for example \`${OPTIONS_LINE} {"background": true}\`. \`timeout\` is the milliseconds to wait before the script moves to the background (default ${2 * 60 * 1_000}; it is never stopped). \`background: true\` returns its job ID immediately, for long-running work.`,
         ]
       : []),
   ].join("\n")
 
 // Mirrors the shell tool's `timeout` and `background`; only with `full_codemode`, where every script runs as a job.
-export const FullInput = Schema.Struct({
-  ...CodeMode.Input.fields,
-  timeout: Schema.optionalKey(PositiveInt).annotate({
-    description: `Optional time in milliseconds to wait for the script before moving it to the background (default ${2 * 60 * 1_000}). The script keeps running in the background after that; it is never stopped. With \`background: true\` the call returns immediately instead.`,
-  }),
-  background: Schema.optionalKey(Schema.Boolean).annotate({
-    description:
-      "Run the script in the background and return immediately with its job ID (useful for long-running work). You will be notified when it completes. DO NOT poll for completion.",
-  }),
+const Options = Schema.Struct({
+  timeout: Schema.optionalKey(PositiveInt),
+  background: Schema.optionalKey(Schema.Boolean),
+})
+const decodeOptions = Schema.decodeUnknownOption(Schema.fromJsonString(Options), { onExcessProperty: "error" })
+const optionsLine = new RegExp(`^[ \\t]*${RegExp.escape(OPTIONS_LINE)}(.*)\\r?\\n?`)
+
+/**
+ * With `full_codemode`, moves the options line that may start an `execute` program into the call's `timeout` and
+ * `background` fields. A line that can't be applied fails the call, so the model learns its options were ignored.
+ */
+export const splitOptions = Effect.fnUntraced(function* (input: unknown) {
+  if (typeof input !== "object" || input === null || !("code" in input) || typeof input.code !== "string") return input
+  const line = optionsLine.exec(input.code)
+  if (!line) return input
+  const options = decodeOptions(line[1])
+  if (Option.isNone(options))
+    return yield* new Error({
+      message: `\`${OPTIONS_LINE}\` must be followed by a JSON object with only \`timeout\` (a positive integer of milliseconds) and \`background\` (a boolean), for example \`${OPTIONS_LINE} {"background": true}\`.`,
+    })
+  return { ...input, ...options.value, code: input.code.slice(line[0].length) }
 })
 
 export const create = (
@@ -155,7 +169,7 @@ export const create = (
   return {
     name: "execute",
     description: description(services !== undefined),
-    input: services ? FullInput : CodeMode.Input,
+    input: CodeMode.Input,
     freeform: { type: "text" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
