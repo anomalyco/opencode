@@ -69,6 +69,13 @@ export const FilesRevealPath = Rpc.make("FilesRevealPath", {
   success: Schema.Boolean,
 })
 
+// Starts a Windows system drag of a local file for a renderer that cancelled its own `dragstart`. Answers once the drag
+// ends; false when none started.
+export const FilesStartDrag = Rpc.make("FilesStartDrag", {
+  payload: { path: Schema.String },
+  success: Schema.Boolean,
+})
+
 export const FilesReadClipboardImage = Rpc.make("FilesReadClipboardImage", {
   success: Schema.NullOr(ClipboardImage),
 })
@@ -87,6 +94,7 @@ export const FileRpcs = RpcGroup.make(
   FilesOpenBrowser,
   FilesOpenPath,
   FilesRevealPath,
+  FilesStartDrag,
   FilesReadClipboardImage,
   FilesWriteClipboardText,
 )

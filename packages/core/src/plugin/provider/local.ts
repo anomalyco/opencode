@@ -52,13 +52,10 @@ export function createLocalProviderPlugin<Discovered>(input: {
         const config = yield* Config.Service
         const environment = yield* Effect.serviceOption(Environment.Service)
         const location = yield* Effect.serviceOption(Location.Service)
-        const defaultOrigin =
-          origin ??
-          (photonWasm === "" ||
-          (Option.isSome(location) && location.value.workspaceID !== undefined) ||
-          (Option.isSome(environment) && environment.value.spawner === EnvironmentUnavailable.spawner)
-            ? undefined
-            : input.origin)
+        const remote = Option.isSome(environment)
+          ? !environment.value.hostsServer || environment.value.spawner === EnvironmentUnavailable.spawner
+          : Option.isSome(location) && location.value.workspaceID !== undefined
+        const defaultOrigin = origin ?? (photonWasm === "" || remote ? undefined : input.origin)
         const source = { current: configured(yield* config.entries(), input.providerID, defaultOrigin, suffix) }
         const loaded = { models: [] as readonly Discovered[], connected: false, hash: "[]", failing: false }
 

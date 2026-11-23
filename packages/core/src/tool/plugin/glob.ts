@@ -9,7 +9,6 @@ import { ToolSearch } from "../search.js"
 import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
-import { Environment } from "../../environment/index.js"
 import { Ripgrep } from "../../ripgrep.js"
 import { RelativePath } from "../../schema.js"
 import { Permission } from "../../permission.js"
@@ -50,7 +49,6 @@ export const Plugin = {
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
     const access = yield* FileAccess.Service
-    const environment = yield* Environment.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
@@ -65,11 +63,7 @@ export const Plugin = {
             Effect.gen(function* () {
               const searchPath = input.path === "undefined" || input.path === "null" ? undefined : input.path
               const target = yield* access.resolve({ path: searchPath ?? ".", kind: "directory" })
-              // Search walks files with a ripgrep binary on this server, so another machine's files cannot be searched here.
-              if (target.environment.id !== environment.id)
-                return yield* new ToolFailure({
-                  message: `Search is not available on ${target.environment.id} yet.`,
-                })
+              yield* ToolSearch.available(target.environment)
               yield* access.authorizeExternal([target], context)
               yield* permission.assert({
                 action: name,

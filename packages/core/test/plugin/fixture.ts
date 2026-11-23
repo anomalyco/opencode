@@ -26,6 +26,7 @@ import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
+import { ModelsDev } from "@opencode/core/models-dev"
 import { Npm } from "@opencode/util/npm"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -60,6 +61,7 @@ const npmLayer = Layer.succeed(
     resolve: (name) => Effect.succeed({ directory: "", name }),
     check: () => Effect.succeed(false),
     update: (name) => Effect.succeed({ directory: "", name }),
+    follows: () => Effect.succeed(false),
     reject: () => Effect.succeed(false),
     which: () => Effect.undefined,
   }),
@@ -129,6 +131,7 @@ export const makePluginTestLayer = (
       BlobStore.node,
       Provider.node,
       Model.node,
+      ModelsDev.node,
       Command.node,
       InstructionDiscovery.node,
       Integration.node,

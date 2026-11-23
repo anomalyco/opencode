@@ -1,0 +1,513 @@
+//! Check composer edits, dialogs, and styled nodes of a linked plugin.
+
+use crate::prompt::{Setup, session_route};
+use crate::support::{self, Harness};
+
+use std::sync::Arc;
+
+use opencode_plugin::abi;
+use opencode_tui::{Deps, Route};
+use opentui::prelude::Widget;
+
+pub(crate) mod probe;
+
+fn add(h: &Harness) {
+    let definition = abi::Plugin { id: "p0a", setup: probe::setup }.into();
+    opencode_tui::plugins::host::add(&h.tui, definition);
+}
+
+fn home() -> Harness {
+    let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    add(&h);
+    h
+}
+
+fn log(h: &Harness) -> Vec<String> {
+    let json = opencode_plugin::Host::storage_read(&*opencode_tui::plugins::host::host(&h.tui), "plugin.p0a.log");
+    json.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default()
+}
+
+fn logged(h: &Harness, prefix: &str) -> Vec<String> {
+    log(h).into_iter().filter(|entry| entry.starts_with(prefix)).collect()
+}
+
+fn toasts(h: &Harness, text: &str) -> usize {
+    h.app.text().lines().filter(|line| line.contains(text)).count()
+}
+
+#[test]
+fn a_confirm_answers_true_false_or_nothing_on_both_carriers() {
+    let rows: [(&[&str], Option<&str>); 4] = [
+        (&["return"], Some("answered true")),
+        (&["left", "return"], Some("answered false")),
+        (&["escape"], Some("answered false")),
+        (&[], None),
+    ];
+    for (keys, answer) in rows {
+        let h = home();
+        h.tui.keymap.dispatch("p0a.confirm", None);
+        let screen = h.wait_for("Delete the draft?");
+        assert!(screen.contains("It cannot be undone.") && screen.contains("Delete"), "{screen}");
+        assert!(screen.contains("Keep") && !screen.contains("Cancel"), "{screen}");
+        keys.iter().for_each(|key| h.app.press(key));
+        match answer {
+            Some(answer) => {
+                h.wait_for(answer);
+                h.wait_gone("Delete the draft?");
+                assert_eq!(toasts(&h, "answered"), 1, "{keys:?}: {}", h.app.text());
+            }
+            None => {
+                h.tui.keymap.dispatch("p0a.alert", None);
+                h.wait_for("Heads up");
+                h.wait_gone("Delete the draft?");
+                h.app.advance(std::time::Duration::from_millis(50));
+                assert_eq!(toasts(&h, "answered"), 0, "{}", h.app.text());
+            }
+        }
+    }
+}
+
+#[test]
+fn an_alert_runs_its_action_once_however_it_closes() {
+    for close in ["return", "escape", "replace"] {
+        let h = home();
+        h.tui.keymap.dispatch("p0a.alert", None);
+        let screen = h.wait_for("Heads up");
+        assert!(screen.contains("The plugin says hello.") && screen.contains("ok"), "{screen}");
+        match close {
+            "replace" => drop(h.tui.keymap.dispatch("p0a.confirm", None)),
+            key => h.app.press(key),
+        }
+        h.wait_for("alert closed");
+        h.app.advance(std::time::Duration::from_millis(50));
+        assert_eq!(logged(&h, "closed"), ["closed @1"], "{close}");
+        assert_eq!(h.tui.dialogs.is_open(), close == "replace", "{close}");
+    }
+}
+
+/// The probe on `ses_a` with its catalogs loaded, so a submit sends.
+fn session() -> Setup {
+    let setup = Setup::new(session_route());
+    add(&setup);
+    setup.ready();
+    setup
+}
+
+/// What the probe's `p0a.read` says once the event is done.
+fn read(setup: &Setup) -> String {
+    // The toast of the last read has gone.
+    setup.app.advance(std::time::Duration::from_secs(10));
+    setup.wait_gone("composer ");
+    setup.tui.keymap.dispatch("p0a.read", None);
+    let screen = setup.wait_for("composer ");
+    // The toast's rows from the read on, without its frame, joined where the toast wrapped them.
+    let rows = screen.lines().skip_while(|line| !line.contains("composer ")).take(3);
+    let text = rows.map(|row| row.trim().trim_matches('┃').trim()).collect::<Vec<_>>().join(" ");
+    let start = text.find("composer ").unwrap();
+    let end = ["true", "false"].iter().find_map(|focus| text.find(focus).map(|at| at + focus.len()));
+    text[start..end.unwrap_or_else(|| panic!("no focus in the read:\n{screen}"))].to_owned()
+}
+
+#[test]
+fn the_composer_reads_and_edits_the_same_on_both_carriers() {
+    let setup = session();
+    setup.app.type_text("hello");
+    setup.app.press("left");
+    setup.app.press("left");
+    assert_eq!(read(&setup), "composer \"hello\" at 3, focused true");
+    setup.tui.keymap.dispatch("p0a.insert", Some("XY"));
+    setup.wait("the insert", || setup.textarea().text() == "helXYlo");
+    // Typing goes on after what the plugin inserted.
+    setup.app.type_text("!");
+    assert_eq!(setup.textarea().text(), "helXY!lo");
+    setup.tui.keymap.dispatch("p0a.set", Some("héllo wörld"));
+    setup.wait("the set", || setup.textarea().text() == "héllo wörld");
+    assert_eq!(read(&setup), "composer \"héllo wörld\" at 13, focused true");
+    setup.tui.keymap.dispatch("p0a.submit", None);
+    let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+    assert_eq!(prompts[0]["text"], "héllo wörld");
+    setup.wait("the clear", || setup.textarea().text().is_empty());
+    setup.app.type_text("!");
+    setup.wait_for("Shell");
+    setup.tui.keymap.dispatch("p0a.set", Some("ls"));
+    setup.wait("the set in shell mode", || setup.textarea().text() == "ls");
+    setup.app.advance(std::time::Duration::from_millis(50));
+    assert!(setup.app.text().contains("Shell"), "{}", setup.app.text());
+    setup.app.press("escape");
+    setup.wait_for("Build");
+    setup.app.press("ctrl+c");
+    setup.app.type_text("later");
+    setup.tui.keymap.dispatch("p0a.alert", None);
+    setup.wait_for("Heads up");
+    assert_eq!(read(&setup), "composer \"later\" at 5, focused false");
+}
+
+#[test]
+fn the_cursor_read_is_where_an_insert_goes() {
+    let setup = session();
+    for (text, lefts) in [("a\tb", 1), ("\tab\ncd", 4), ("e\u{301}x", 1), ("👨‍👩‍👧x", 1), ("日本語", 1)]
+    {
+        setup.tui.keymap.dispatch("p0a.set", Some(text));
+        setup.wait("the set", || setup.textarea().text() == text);
+        (0..lefts).for_each(|_| setup.app.press("left"));
+        let read = read(&setup);
+        let cursor: usize =
+            read.rsplit(" at ").next().and_then(|rest| rest.split(',').next()?.parse().ok()).expect(&read);
+        setup.tui.keymap.dispatch("p0a.insert", Some("|"));
+        setup.wait("the insert", || setup.textarea().text().contains('|'));
+        assert_eq!(setup.textarea().text().find('|'), Some(cursor), "{text:?}: {read}");
+    }
+}
+
+#[test]
+fn a_set_tells_the_completion_of_the_new_text() {
+    for (typed, popup) in [("/", "Switch agent"), ("@", "@general")] {
+        let setup = session();
+        setup.app.type_text(typed);
+        setup.wait_for(popup);
+        setup.tui.keymap.dispatch("p0a.send", Some("plain words"));
+        let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+        assert_eq!(prompts[0]["text"], "plain words", "{typed}");
+        setup.wait("the clear", || setup.textarea().text().is_empty());
+        setup.wait_gone(popup);
+    }
+    let setup = session();
+    setup.tui.keymap.dispatch("p0a.send", Some("/rev"));
+    setup.wait_for("/review");
+    setup.app.advance(std::time::Duration::from_millis(50));
+    assert_eq!(setup.textarea().text(), "/rev");
+    assert!(setup.requests("POST", "/prompt").is_empty());
+}
+
+/// The probe with the prompt fixture on `route`, answering `reads`, once the catalogs are read, so a submit that the
+/// host lets through would send.
+fn serving(route: Route, reads: Vec<(&str, serde_json::Value)>) -> Setup {
+    serving_at(route, reads, 90)
+}
+
+fn serving_at(route: Route, reads: Vec<(&str, serde_json::Value)>, width: u16) -> Setup {
+    let setup = Setup::serving(route, reads, width);
+    add(&setup);
+    setup.wait("the catalog", || !setup.requests("GET", "/api/model").is_empty());
+    setup.app.advance(std::time::Duration::from_millis(50));
+    setup
+}
+
+#[track_caller]
+fn refused(setup: &Setup, draft: &str) {
+    setup.tui.keymap.dispatch("p0a.send", Some("from the plugin"));
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert_eq!(setup.textarea().text(), draft);
+    assert!(setup.requests("POST", "/prompt").is_empty(), "{:?}", setup.requests("POST", "/prompt"));
+    assert!(setup.requests("POST", "/api/session").is_empty());
+}
+
+#[track_caller]
+fn unread(setup: &Setup) {
+    setup.tui.keymap.dispatch("p0a.read", None);
+    setup.wait_for("no composer");
+}
+
+#[test]
+fn a_hidden_composer_is_not_read_or_edited() {
+    let field = serde_json::json!([{ "key": "ok", "type": "boolean", "title": "Continue?" }]);
+    let form = serde_json::json!({ "id": "frm_1", "sessionID": "ses_a", "title": "Deploy settings", "fields": field });
+    let permission = serde_json::json!({ "id": "per_1", "sessionID": "ses_a", "action": "shell", "resources": ["ls -la"], "save": [] });
+    let rows = [
+        ("/api/session/ses_a/form", serde_json::json!({ "data": [form] }), "Deploy settings"),
+        ("/api/session/ses_a/permission", serde_json::json!({ "data": [permission] }), "ls -la"),
+    ];
+    for (path, value, shown) in rows {
+        let setup = serving(session_route(), vec![(path, value)]);
+        setup.wait_for(shown);
+        setup.wait("the hidden prompt", || !setup.textarea().is_shown());
+        unread(&setup);
+        refused(&setup, "");
+    }
+    let setup = serving(session_route(), Vec::new());
+    setup.app.type_text("unsent");
+    setup.tui.keymap.dispatch("session.child.first", None);
+    setup.wait("the drawer", || !setup.textarea().is_shown());
+    unread(&setup);
+    refused(&setup, "unsent");
+}
+
+#[test]
+fn a_disabled_composer_takes_no_submit() {
+    let field = serde_json::json!([{ "key": "token", "type": "string", "title": "Token" }]);
+    let form = serde_json::json!({ "id": "frm_g", "sessionID": "global", "title": "MCP server needs a token", "fields": field });
+    let setup = serving(Route::Home, vec![("/api/form", support::list("/project", serde_json::json!([form])))]);
+    setup.wait_for("MCP server needs a token");
+    setup.tui.keymap.dispatch("p0a.send", Some("from the plugin"));
+    setup.wait("the set", || setup.textarea().text() == "from the plugin");
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert!(setup.requests("POST", "/api/session").is_empty() && setup.requests("POST", "/prompt").is_empty());
+    let diff = serde_json::json!({
+        "file": "src/main.rs", "patch": "@@ -1 +1 @@\n-old\n+new\n", "additions": 1, "deletions": 1, "status": "modified",
+    });
+    let reads = vec![
+        ("/api/session/ses_a/diff", serde_json::json!({ "data": [diff] })),
+        ("/api/vcs/diff", support::list("/project", serde_json::json!([diff]))),
+        ("/api/vcs/base", support::list("/project", serde_json::Value::Null)),
+    ];
+    let setup = serving_at(session_route(), reads, 160);
+    setup.app.type_text("unsent");
+    setup.tui.keymap.dispatch("diff.open", None);
+    setup.wait_for("src/main.rs");
+    setup.wait("the right pane", || !setup.textarea().is_focused());
+    assert!(setup.textarea().is_shown(), "the diff viewer hides the composer:\n{}", setup.app.text());
+    setup.tui.keymap.dispatch("p0a.submit", None);
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert_eq!(setup.textarea().text(), "unsent");
+    assert!(setup.requests("POST", "/prompt").is_empty());
+}
+
+#[test]
+fn a_submit_behind_a_dialog_sends_and_leaves_the_dialog() {
+    let setup = session();
+    setup.tui.keymap.dispatch("p0a.alert", None);
+    setup.wait_for("Heads up");
+    setup.tui.keymap.dispatch("p0a.send", Some("sent behind"));
+    let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+    assert_eq!(prompts[0]["text"], "sent behind");
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert!(setup.tui.dialogs.is_open() && setup.app.text().contains("Heads up"), "{}", setup.app.text());
+    assert!(!setup.app.text().contains("alert closed"), "{}", setup.app.text());
+}
+
+fn event(kind: &str, data: serde_json::Value) -> opencode_api::generated::V2Event {
+    let id = format!("evt_{}", data.to_string().len());
+    let json = serde_json::json!({
+        "id": id, "created": 1, "type": kind, "location": { "directory": support::DIRECTORY }, "data": data,
+    });
+    serde_json::from_value(json).unwrap()
+}
+
+fn changed(file: &str) -> opencode_api::generated::V2Event {
+    event("filesystem.changed", serde_json::json!({ "file": file, "event": "change" }))
+}
+
+#[test]
+fn a_composer_edit_is_not_overtaken_by_the_next_signal() {
+    let setup = session();
+    opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
+    opencode_tui::features::events::testing::signal(&setup.tui, changed("src/read.rs"));
+    setup.wait("the read", || !logged(&setup, "read").is_empty());
+    assert_eq!(logged(&setup, "read"), ["read from an event"]);
+    setup.tui.keymap.dispatch("p0a.set", Some(""));
+    setup.wait("the clear", || setup.textarea().text().is_empty());
+    opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
+    setup.tui.keymap.dispatch("p0a.wake", None);
+    setup.wait("the wake", || {
+        setup.app.render();
+        !logged(&setup, "woke").is_empty()
+    });
+    assert_eq!(logged(&setup, "woke"), ["woke from an event"]);
+
+    let setup = Setup::new(Route::Home);
+    add(&setup);
+    setup.ready();
+    opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
+    let select = event("tui.session.select", serde_json::json!({ "sessionID": "ses_a" }));
+    opencode_tui::features::events::testing::signal(&setup.tui, select);
+    setup.wait("the session", || matches!(&*setup.tui.route(), Route::Session { .. }));
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert_eq!(setup.textarea().text(), "");
+    assert!(setup.requests("POST", "/prompt").is_empty());
+}
+
+#[test]
+fn a_set_starts_the_history_over() {
+    let setup = session();
+    for (count, text) in [(1, "one"), (2, "two")] {
+        setup.app.type_text(text);
+        setup.app.press("return");
+        setup.wait_request("POST", "/api/session/ses_a/prompt", count);
+        setup.wait("the clear", || setup.textarea().text().is_empty());
+    }
+    setup.app.press("up");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "one");
+    setup.tui.keymap.dispatch("p0a.set", Some("fresh"));
+    setup.wait("the set", || setup.textarea().text() == "fresh");
+    // The first up moves to the start of the text, the second to the newest entry.
+    setup.app.press("up");
+    setup.app.press("up");
+    assert_eq!(setup.textarea().text(), "two");
+}
+
+#[test]
+fn a_call_that_panics_leaves_no_composer_edit_and_no_dialog() {
+    for panics in [false, true] {
+        let setup = session();
+        setup.app.type_text("draft");
+        setup.tui.keymap.dispatch("p0a.all", panics.then_some("panic"));
+        match panics {
+            false => {
+                let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
+                assert_eq!(prompts[0]["text"], "all of it");
+                setup.wait_for("Delete the draft?");
+                setup.wait("the alert's close", || logged(&setup, "closed") == ["closed @1"]);
+                assert_eq!(setup.textarea().text(), "");
+            }
+            true => {
+                setup.wait_for("Plugin failed: p0a");
+                assert_eq!(setup.textarea().text(), "draft");
+                assert!(setup.requests("POST", "/prompt").is_empty());
+                assert!(!setup.tui.dialogs.is_open(), "{}", setup.app.text());
+                assert!(logged(&setup, "closed").is_empty());
+            }
+        }
+    }
+}
+
+#[test]
+fn a_dispose_callback_that_panics_leaves_no_effects() {
+    let setup = session();
+    setup.app.type_text("untouched");
+    setup.tui.keymap.dispatch("p0a.teardown", None);
+    setup.wait("the arming", || logged(&setup, "teardown").len() == 1);
+    let host = opencode_tui::plugins::host::host(&setup.tui);
+    assert!(setup.tui.plugins.set_active(&host, "p0a", false));
+    setup.app.advance(std::time::Duration::from_millis(100));
+    assert_eq!(setup.textarea().text(), "untouched");
+    assert!(setup.requests("POST", "/prompt").is_empty());
+    assert!(!setup.tui.dialogs.is_open(), "{}", setup.app.text());
+    assert_eq!(logged(&setup, "disposed"), ["disposed last @1", "disposed first @1"]);
+    assert!(logged(&setup, "teardown wrote").is_empty());
+}
+
+fn witness() -> abi::Plugin {
+    fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.storage_key("ran");
+        let command = abi::Command::new("witness.ran");
+        setup.command(command, |host, _| {
+            let ran = host.storage_get("ran").and_then(|ran| ran["count"].as_u64()).unwrap_or(0);
+            host.storage_set("ran", serde_json::json!({ "count": ran + 1 }));
+        });
+        let alert = abi::Command::new("witness.alert");
+        setup.command(alert, |host, _| {
+            let message = "A dialog of another plugin.".to_owned();
+            host.dialog(abi::Dialog::Alert(abi::Alert {
+                size: None,
+                centered: false,
+                title: "Witness says".to_owned(),
+                message,
+                action: None,
+            }));
+        });
+        Ok(())
+    }
+    abi::Plugin { id: "witness", setup }
+}
+
+fn witnessed(h: &Harness) -> u64 {
+    let json = opencode_plugin::Host::storage_read(&*opencode_tui::plugins::host::host(&h.tui), "plugin.witness.ran");
+    json.and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok()?["count"].as_u64()).unwrap_or(0)
+}
+
+#[test]
+fn a_dialog_of_a_disabled_plugin_goes_and_answers_nobody() {
+    for (open, title) in [("p0a.alert", "Heads up"), ("p0a.alert-foreign", "Heads up")] {
+        let h = home();
+        opencode_tui::plugins::host::add(&h.tui, witness().into());
+        let host = opencode_tui::plugins::host::host(&h.tui);
+        h.tui.keymap.dispatch(open, None);
+        h.wait_for(title);
+        assert!(h.tui.plugins.set_active(&host, "p0a", false));
+        h.wait_gone(title);
+        h.wait("the composer's focus", || h.textarea().is_focused());
+        assert!(h.tui.plugins.set_active(&host, "p0a", true));
+        h.app.press("return");
+        h.app.advance(std::time::Duration::from_millis(50));
+        let answers: Vec<_> = log(&h).into_iter().filter(|entry| !entry.starts_with("setup ")).collect();
+        assert!(answers.iter().all(|entry| entry.starts_with("disposed ")), "{open}: {answers:?}");
+        assert_eq!(witnessed(&h), 0, "{open}");
+        // Disabled and enabled in one turn, then answered: the dialog of the first activation answers nobody.
+        h.tui.keymap.dispatch(open, None);
+        h.wait_for(title);
+        assert!(h.tui.plugins.set_active(&host, "p0a", false) && h.tui.plugins.set_active(&host, "p0a", true));
+        h.app.press("return");
+        h.app.advance(std::time::Duration::from_millis(50));
+        h.wait_gone(title);
+        let answers: Vec<_> = log(&h).into_iter().filter(|entry| !entry.starts_with("setup ")).collect();
+        assert!(answers.iter().all(|entry| entry.starts_with("disposed ")), "{open}: {answers:?}");
+        assert_eq!(witnessed(&h), 0, "{open}");
+    }
+}
+
+#[test]
+fn a_dialog_of_a_plugin_that_is_not_live_does_not_show() {
+    let h = home();
+    opencode_tui::plugins::host::add(&h.tui, witness().into());
+    h.tui.keymap.dispatch("witness.alert", None);
+    h.wait_for("Witness says");
+    h.tui.keymap.dispatch("p0a.alert", None);
+    assert!(h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "p0a", false));
+    h.app.advance(std::time::Duration::from_millis(50));
+    let screen = h.app.text();
+    assert!(screen.contains("Witness says") && !screen.contains("Heads up"), "{screen}");
+}
+
+#[test]
+fn a_dialog_of_a_failed_plugin_goes_and_answers_nobody() {
+    let h = home();
+    opencode_tui::plugins::host::add(&h.tui, witness().into());
+    h.tui.keymap.dispatch("p0a.alert-foreign", None);
+    h.wait_for("Heads up");
+    h.tui.keymap.dispatch("p0a.all", Some("panic"));
+    h.wait_for("Plugin failed: p0a");
+    h.wait_gone("Heads up");
+    h.wait("the composer's focus", || h.textarea().is_focused());
+    h.app.advance(std::time::Duration::from_millis(50));
+    assert_eq!(witnessed(&h), 0);
+}
+
+// Expected: a confirm or an alert that closed no longer belongs to its plugin, so the dialog the host opens after it,
+// the plugin manager, stays open when the plugin is disabled.
+#[test]
+fn a_closed_dialog_leaves_the_next_one_to_the_host() {
+    for (open, title) in [("p0a.confirm", "Delete the draft?"), ("p0a.alert", "Heads up")] {
+        let h = home();
+        h.tui.keymap.dispatch(open, None);
+        h.wait_for(title);
+        h.app.press("escape");
+        h.wait_gone(title);
+        h.tui.keymap.dispatch("plugins.list", None);
+        h.wait("the plugin manager", || h.tui.dialogs.is_open());
+        let manager = h.tui.dialogs.key();
+        assert!(h.tui.plugins.set_active(&opencode_tui::plugins::host::host(&h.tui), "p0a", false));
+        h.app.advance(std::time::Duration::from_millis(50));
+        assert!(h.tui.dialogs.is_open() && h.tui.dialogs.key() == manager, "{open}: {}", h.app.text());
+    }
+}
+
+#[test]
+fn a_live_dialog_runs_a_foreign_command_once() {
+    let h = home();
+    opencode_tui::plugins::host::add(&h.tui, witness().into());
+    h.tui.keymap.dispatch("p0a.alert-foreign", None);
+    h.wait_for("Heads up");
+    h.app.press("return");
+    h.wait("the witness", || witnessed(&h) == 1);
+    h.app.advance(std::time::Duration::from_millis(50));
+    assert_eq!(witnessed(&h), 1);
+}
+
+#[test]
+fn a_styled_box_draws_its_border_title_and_rule() {
+    let h = home();
+    let screen = h.wait_for("p0a");
+    let rows: Vec<&str> = screen.lines().skip_while(|line| !line.contains("p0a")).take(5).collect();
+    assert_eq!(
+        rows.iter().map(|row| row.trim_end()).collect::<Vec<_>>(),
+        [
+            "  ╭─────────p0a──────────╮",
+            "  │  ┃ ruled             │",
+            "  │  alpha beta gamma    │",
+            "  │                      │",
+            "  ╰──────────────────────╯",
+        ],
+        "{screen}"
+    );
+}

@@ -39,6 +39,14 @@ The provider is called "Claude Agent", with the ID `claude-agent`. The SDK's [br
 - When the list of tools changes, the Claude process restarts, because the SDK cannot swap tools while running.
 - Claude Code's plan mode is not used. opencode's Plan agent works as it does for other models, through its permissions and reminder messages.
 
+### Web Search
+
+- While Claude Agent is connected, the plugin adds an opencode websearch provider, `claude-agent`, that runs Claude Code's WebSearch. It is never the default. Users select it with `"websearch": { "provider": "claude-agent" }`.
+- Why: opencode's own search providers need an API key, while Claude plans include WebSearch. Results go through opencode's `websearch` tool, so they are saved as ordinary tool output and survive switching to a non-Claude model.
+- Each search is a one-off Haiku run with only WebSearch, no transcript and thinking off, stopped as soon as the results arrive. A model has to run it because Claude Code returns page contents encrypted.
+- It uses the provider's connection settings and the account folder chats used last, and times out after a minute.
+- Claude's summary rides on the first result.
+
 ## Claude Code Settings
 
 Claude Code reads none of the user's Claude settings. The plugin passes every setting directly when it starts Claude.

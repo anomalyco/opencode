@@ -42,6 +42,11 @@ export function MenuScroll(
   let thumb: HTMLDivElement | undefined
 
   let idleTimer: ReturnType<typeof setTimeout> | undefined
+  let cachedTrack = 0
+  let cachedSize = 0
+  let cachedMax = 0
+  let measured = false
+  let pointerFocus = false
 
   const onIdleElapsed = () => {
     idleTimer = undefined
@@ -66,21 +71,49 @@ export function MenuScroll(
     }
   }
 
+  const syncThumbStart = (scrollTop: number) => {
+    setGeometry("start", 4 + (cachedMax > 0 ? (scrollTop / cachedMax) * (cachedTrack - cachedSize) : 0))
+  }
+
   const measure = () => {
-    const track = Math.max(0, viewport.clientHeight - 8)
+    const clientHeight = viewport.clientHeight
+    const scrollHeight = viewport.scrollHeight
+    const track = Math.max(0, clientHeight - 8)
+    const size = Math.min(track, Math.max(24, (clientHeight / Math.max(1, scrollHeight)) * track))
+    const max = scrollHeight - clientHeight
 
-    const size = Math.min(track, Math.max(24, (viewport.clientHeight / Math.max(1, viewport.scrollHeight)) * track))
-
-    const max = viewport.scrollHeight - viewport.clientHeight
+    cachedTrack = track
+    cachedSize = size
+    cachedMax = max
+    measured = true
 
     setGeometry("size", size)
-    setGeometry("start", 4 + (max > 0 ? (viewport.scrollTop / max) * (track - size) : 0))
+    syncThumbStart(viewport.scrollTop)
     dispatch(overflowChanged(max > 0, false))
   }
 
   const onPointerEnd = (event: PointerEvent) => dispatch({ type: "drag.ended", pointerId: event.pointerId })
 
-  onMount(() => createResizeObserver([viewport, content], measure))
+  onMount(() => {
+    createResizeObserver([viewport, content], measure)
+
+    const onPointer = () => {
+      pointerFocus = true
+    }
+
+    const onKey = () => {
+      pointerFocus = false
+    }
+
+    viewport.addEventListener("pointermove", onPointer, { passive: true })
+    viewport.addEventListener("pointerdown", onPointer, { passive: true })
+    viewport.addEventListener("keydown", onKey)
+    onCleanup(() => {
+      viewport.removeEventListener("pointermove", onPointer)
+      viewport.removeEventListener("pointerdown", onPointer)
+      viewport.removeEventListener("keydown", onKey)
+    })
+  })
 
   onCleanup(() => dispatch(SCROLL_THUMB_DISPOSED))
 
@@ -101,14 +134,22 @@ export function MenuScroll(
         data-scrollable
         class={local.viewportClass}
         onScroll={(event) => {
-          measure()
+          // Read before the list's own handler runs: it may write styles, and reading scrollTop after that forces a
+          // layout. The thumb and the scrolling state are written last, so that handler reads a clean layout too.
+          const top = viewport.scrollTop
+          local.onScroll?.(event)
+
+          if (measured) syncThumbStart(top)
+
+          if (!measured) measure()
           // Keyboard navigation scrolls without hovering, so the thumb also shows while the list scrolls.
           dispatch(SCROLLED)
-          local.onScroll?.(event)
         }}
-        // Kobalte menus focus items without scrolling and scroll their own content, which no longer overflows here.
+        // Kobalte menus focus items without scrolling on keyboard navigation, and also focus on pointermove; only reveal
+        // non-pointer focus so hovering a clipped row never fights the wheel.
         onFocusIn={(event) => {
-          if (event.target !== viewport) event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
+          if (!pointerFocus && event.target !== viewport)
+            event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
         }}
       >
         <div ref={content} data-slot="menu-scroll-content">

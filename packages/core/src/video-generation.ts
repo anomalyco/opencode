@@ -31,7 +31,7 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("VideoGen
 
 const INTERVAL = Duration.seconds(5)
 const DEADLINE = Duration.hours(2)
-/** How long a finished job's record is kept. Its blobs are kept for good. */
+/** How long a finished job's record is kept. Its videos are blobs, which keep their own week-long retention. */
 const RETENTION = Duration.hours(24)
 const PREFIX = "video:"
 /**

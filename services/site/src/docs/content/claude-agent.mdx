@@ -146,6 +146,22 @@ Then list the folders:
 A chat stays on the account that last answered it, and new chats start on the account that worked last. Rotation only
 applies to Claude subscription logins, not to `apiKey` or `authToken`.
 
+## Web search
+
+Claude Agent can also serve OpenCode's web search with Claude Code's WebSearch, so searches count toward your Claude
+plan instead of needing a search API key. Every model can use it. Select it in `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+See [Web search](/websearch#claude-agent) for details.
+
 ## Limitations
 
 - Claude Code must be installed on the same machine as the OpenCode server. Claude Agent is not available in remote

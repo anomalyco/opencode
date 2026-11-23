@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import { type Extension, isAsync, isConstructible } from "./extension.js"
-import { scanTools } from "./scan.js"
+import { scanProgram, scanTools } from "./scan.js"
 import { hooked, type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
 import {
@@ -13,11 +13,11 @@ import {
   SnapshotError,
   type SnapshotHeader,
   toBytes,
-} from "psychoscript"
+} from "psychoscript/effect"
 
-export const SuspendError = Language.SuspendError
+export const SuspendError: typeof Language.SuspendError = Language.SuspendError
 export type SuspendError = Language.SuspendError
-export { fromBytes, scanTools, SnapshotError, toBytes }
+export { fromBytes, scanProgram, scanTools, SnapshotError, toBytes }
 export type { Snapshot, SnapshotHeader }
 
 /** A tool call admitted during an execution. */

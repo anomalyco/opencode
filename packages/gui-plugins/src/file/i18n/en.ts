@@ -45,6 +45,7 @@ export default {
   "open.app.xcode": "Xcode",
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
+  "open.app.windowsTerminal": "Windows Terminal",
   "open.app.sublimeText": "Sublime Text",
   selectToOpen: "Select a file to open",
   "open.finder": "Finder",
@@ -56,4 +57,7 @@ export default {
   "search.offline": "Can't reach this server",
   "preview.unavailable": "Can't open this workspace file in the browser pane. Check the browser plugin and try again.",
   "preview.outside": "This HTML file is outside this session's workspace and cannot open in the browser pane.",
+  "comment.send": "Send comment",
+  "comment.steer": "Steer comment",
+  "comment.queue": "Queue comment",
 }

@@ -295,8 +295,6 @@ const POPULAR = ["opencode-go", "opencode", "openai", "github-copilot", "anthrop
 
 const providerNote = (id: string) => {
   if (id === "opencode-go") return "dialog.provider.opencodeGo.tagline" as const
-
-  if (id === "opencode") return "dialog.provider.opencode.note" as const
 }
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
@@ -310,13 +308,15 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     filter: "",
   })
 
-  // MCP servers are connected and managed from the MCP dialog, not here.
+  // MCP servers are connected and managed from the MCP dialog, not here. OpenCode Go connects through OpenCode, so
+  // it's only listed for people who already saved a Go key.
   const all = createMemo(() => {
     const query = store.filter.trim().toLowerCase()
 
     return integrations
       .list()
       .filter((row) => row.metadata?.source !== "mcp")
+      .filter((row) => row.id !== "opencode-go" || row.connections.some((item) => item.type === "credential"))
       .filter((row) => !query || `${row.id} ${row.name}`.toLowerCase().includes(query))
   })
 

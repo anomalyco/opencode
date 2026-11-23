@@ -133,8 +133,9 @@ const SourceProvider = Schema.Struct({
   models: Schema.Record(Schema.String, Schema.Unknown),
 })
 
-// The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request.
-const TYPES: readonly string[] = ["chat", "decision", "image", "video"]
+// The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request,
+// realtime ones as voice models.
+const TYPES: readonly string[] = ["chat", "decision", "image", "video", "realtime"]
 
 const ContextCondition = Schema.Struct({ gt: Schema.optional(Schema.Finite), gte: Schema.optional(Schema.Finite) })
 const decodeModel = Schema.decodeUnknownResult(SourceModel)
@@ -147,11 +148,40 @@ const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
 const knownFreeformFormat = Schema.is(FreeformFormat)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
+/** A realtime model that answers in speech and calls tools, by the API it speaks (`live`, `realtime`…). */
+export type VoiceModel = {
+  readonly id: string
+  readonly name: string
+  readonly api: string
+  readonly releaseDate: string
+}
+
 export type Snapshot = {
   readonly info: Provider.Info
   readonly models: readonly Model.Info[]
+  readonly voices?: readonly VoiceModel[]
   readonly environment: readonly string[]
+  /** On `openai` only: the model IDs (modes included) each ChatGPT subscription sign-in can use; see `OPENAI_SUBSCRIPTIONS`. */
+  readonly subscriptions?: Readonly<Record<string, readonly string[]>>
 }
+
+// Temporary stopgap until the official v2 models.dev API, which returns these by default: the ChatGPT subscription
+// sign-ins (Codex, Sign in with ChatGPT) serve a subset of OpenAI's models. models.dev lists each as a provider it hides
+// unless asked for. They never become providers here: their model IDs are attached to `openai`, for that sign-in's
+// plugin to read (see plugin/provider/openai-subscription-models.ts).
+const OPENAI_SUBSCRIPTIONS = ["openai-codex", "openai-chatgpt"]
+const Subscription = Schema.Struct({
+  models: Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      id: Schema.String,
+      experimental: Schema.optional(
+        Schema.Struct({ modes: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)) }),
+      ),
+    }),
+  ),
+})
+const decodeSubscription = Schema.decodeUnknownOption(Subscription)
 
 type Route = {
   readonly package: string
@@ -183,16 +213,34 @@ const BUILDS_OWN_URL = new Set([
 const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>, recommended: boolean) {
   const failed: { readonly model: string; readonly issue: unknown }[] = []
   const unknown = new Set<string>()
-  const snapshots = Object.values(isV1(catalog) ? toV2(catalog) : catalog).flatMap((value) => {
+  const source = isV1(catalog) ? toV2(catalog) : catalog
+  const subscriptions = Object.fromEntries(
+    OPENAI_SUBSCRIPTIONS.flatMap((id) => {
+      const list = Option.getOrUndefined(decodeSubscription(source[id]))
+      if (!list) return []
+      const ids = Object.values(list.models).flatMap((model) => [
+        model.id,
+        ...Object.keys(model.experimental?.modes ?? {}).map((mode) => `${model.id}-${mode}`),
+      ])
+      return [[id, ids]]
+    }),
+  )
+  const snapshots = Object.values(source).flatMap((value) => {
     const item = Option.getOrUndefined(decodeProvider(value))
-    if (!item) return []
+    if (!item || OPENAI_SUBSCRIPTIONS.includes(item.id)) return []
     const providerID = Provider.ID.make(item.id)
     // Vertex needs separate handling for location and Express Mode.
     const prefer = recommended && providerID !== Provider.ID.googleVertex
+    const voices: VoiceModel[] = []
     const sources = Object.entries(item.models).flatMap(([key, value]) => {
       const decoded = decodeModel(value)
       if (Result.isFailure(decoded)) failed.push({ model: `${item.id}/${key}`, issue: decoded.failure })
       const model = Result.isSuccess(decoded) ? decoded.success : undefined
+      // Translation and streaming models are realtime too, but don't answer in speech or call tools.
+      const api = model?.type === "realtime" ? Object.keys(model.api)[0] : undefined
+      const speaks = model?.modalities.output.some((output) => output.startsWith("audio"))
+      if (model && api && speaks && model.capabilities.tools.supported && model.status !== "deprecated")
+        voices.push({ id: model.id, name: model.name, api, releaseDate: model.release_date })
       // The fetch already asks for these types, but custom files and v1 catalogs may hold any type.
       const target = model && TYPES.includes(model.type) && route(providerID, model, unknown, prefer)
       return model && target ? [{ model, route: target }] : []
@@ -231,7 +279,15 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>,
         ),
       ]
     })
-    return [{ info, models, environment: [...item.env] }]
+    return [
+      {
+        info,
+        models,
+        ...(voices.length > 0 ? { voices } : {}),
+        environment: [...item.env],
+        ...(providerID === Provider.ID.openai && Object.keys(subscriptions).length > 0 ? { subscriptions } : {}),
+      },
+    ]
   })
   if (failed.length > 0)
     yield* Effect.logWarning("Skipped models.dev models that failed to parse", {
@@ -507,8 +563,8 @@ const CacheMeta = Schema.Struct({
 })
 const defaultSource = "https://models.opencode.ai"
 
-// The experimental v2 API, limited to the model types opencode keeps.
-export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}`
+// The experimental v2 API, limited to the model types opencode keeps, with the hidden OpenAI subscription lists included.
+export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}&include=${OPENAI_SUBSCRIPTIONS.join(",")}`
 
 export const decodeSnapshot = (text: string, recommended = false) =>
   decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended)))
@@ -531,10 +587,10 @@ const bundledSnapshot = (recommended: boolean) =>
         )
   })
 
-// Versioned so an entry cached from the v1 API is never read as v2.
+// Versioned so an entry cached for another catalog query is never read: v1 was the v1 API, v2 had no realtime models.
 function cacheKey(source: string) {
-  if (source === defaultSource) return "models-dev:v2:catalog"
-  return `models-dev:v2:catalog:${Hash.fast(source)}`
+  if (source === defaultSource) return "models-dev:v3:catalog"
+  return `models-dev:v3:catalog:${Hash.fast(source)}`
 }
 
 export function bodyDigest(text: string) {
@@ -564,9 +620,12 @@ export const layer = (options?: Options) =>
       const metaKey = `${key}:meta`
       const ttl = Duration.minutes(5)
       const lock = Semaphore.makeUnsafe(1)
-      // The v1 catalog was cached under unversioned keys; free that multi-MB row.
-      yield* kv.remove(key.replace("models-dev:v2:", "models-dev:"))
-      yield* kv.remove(`${key.replace("models-dev:v2:", "models-dev:")}:meta`)
+      // Free the multi-MB rows cached under earlier keys.
+      yield* Effect.forEach(
+        ["models-dev:", "models-dev:v2:"].map((prefix) => key.replace("models-dev:v3:", prefix)),
+        (old) => Effect.andThen(kv.remove(old), kv.remove(`${old}:meta`)),
+        { discard: true },
+      )
 
       const loadFromCache = Effect.fnUntraced(function* () {
         const value = yield* kv.get(key)

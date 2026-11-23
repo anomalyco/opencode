@@ -64,6 +64,7 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
   await page.keyboard.press("Tab")
   await expect(settings).toBeFocused()
   await expect(settings).toHaveCSS("outline-style", "solid")
+  await expect(settings).not.toHaveCSS("transition-property", /\b(all|outline)\b/)
   await page.keyboard.press("Tab")
   await expect(help).toBeFocused()
   await expect(help).toHaveCSS("outline-style", "solid")
@@ -72,10 +73,8 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
 
   const field = page.locator('[data-slot="home-session-search-field"]')
 
+  // A text field shows its caret and background, not a ring.
   await page.keyboard.press("Tab")
-  await expect(search).toBeFocused()
-  await expect(field).toHaveCSS("outline-style", "solid")
-  await search.click()
   await expect(search).toBeFocused()
   await expect(field).toHaveCSS("outline-style", "none")
 
@@ -94,8 +93,9 @@ test("Home projects, utility rows, search and recent sessions show keyboard focu
   await expect(viewport).toHaveAttribute("tabindex", "0")
   await viewport.press("Shift+Tab")
   await page.keyboard.press("Tab")
+  // The list takes focus so the keyboard can scroll it, without a ring around the whole area.
   await expect(viewport).toBeFocused()
-  await expect(viewport).toHaveCSS("outline-offset", "-2px")
+  await expect(viewport).toHaveCSS("outline-style", "none")
 })
 
 test("Home keeps the session list in every interface mode", async ({ page }) => {
@@ -197,7 +197,7 @@ test("the session context menu renames, exports, and deletes a Home session", as
   const box = await target.boundingBox()
   await target.click({ button: "right", position: { x: 48, y: 12 } })
   await expect(page).toHaveURL("/")
-  await expect(page.getByRole("menuitem")).toHaveText(["Rename", "Export…", "Delete…"])
+  await expect(page.getByRole("menuitem")).toHaveText(["Open", "Open in background", "Rename", "Export…", "Delete…"])
   const menu = await page.locator('[data-component="menu-v2-content"]').boundingBox()
   expect(Math.abs((menu?.x ?? 0) - (box?.x ?? 0) - 48)).toBeLessThan(4)
 
@@ -245,6 +245,29 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await expect(dialog).toBeHidden()
   await expect(renamedRow).toBeHidden()
   expect(removed.requests).toHaveLength(1)
+})
+
+test("Open in background and a middle click add a Home session's tab without leaving Home, and Open goes to it", async ({
+  page,
+}) => {
+  const background = { id: "ses_home_open_background", title: "Opened in the background" }
+  const middle = { id: "ses_home_open_middle", title: "Opened with a middle click" }
+  const open = { id: "ses_home_open", title: "Opened from the menu" }
+  await mockWorkspace(page, { name: "HomeOpen", sessions: [background, middle, open], seed: { tabs: [] } })
+  await page.goto("/")
+  const tabs = page.locator('[data-slot="titlebar-tabs"] a')
+
+  await row(page, background.title).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Open in background", exact: true }).click()
+  await expect(tabs.filter({ hasText: background.title })).toBeVisible()
+
+  await row(page, middle.title).click({ button: "middle" })
+  await expect(tabs.filter({ hasText: middle.title })).toBeVisible()
+  await expect(page).toHaveURL("/")
+
+  await row(page, open.title).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Open", exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/session/${open.id}$`))
 })
 
 test("a failed session list says so and loads again on Try again, instead of showing the empty state", async ({
@@ -309,7 +332,6 @@ test("tabbing out of session search closes its results, and tabbing back reopens
 
   await page.keyboard.press(`${modifier}+f`)
   await expect(search).toBeFocused()
-  await expect(page.locator('[data-slot="home-session-search-field"]')).toHaveCSS("outline-style", "solid")
   await expect(panel.getByRole("option")).toContainText(earlier.title)
 })
 

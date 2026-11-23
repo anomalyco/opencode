@@ -228,9 +228,10 @@ const layer = (options?: Options) =>
   Layer.unwrap(
     Effect.gen(function* () {
       const location = yield* Location.Service
-      // Workspace-backed Locations resolve in a remote sandbox; fff would index the local server directory
-      // in-process and serve wrong results. Ripgrep routes through the Location environment spawner.
-      if (location.workspaceID) return ripgrepLayer
+      const environment = yield* Environment.Service
+      // fff indexes a directory on the server's own disk in-process, so only the server's own environment can use it.
+      // Ripgrep routes through the Location environment spawner.
+      if (!environment.hostsServer) return ripgrepLayer
       if (options?.fff === false || (options?.fff === undefined && process.platform === "win32") || !Fff.available())
         return ripgrepLayer
       // Non-VCS locations can contain many repositories, so avoid eagerly content-indexing the entire aggregate tree.

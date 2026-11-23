@@ -148,6 +148,24 @@ function make(
         return
       }
 
+      if (process.platform === "win32" && /^wt(?:\.exe)?$/i.test(path.basename(application))) {
+        const info = yield* fs.stat(target)
+        const cwd = info.type === "Directory" ? target : path.dirname(target)
+
+        // Windows Terminal splits its command line on `;` even inside quotes, so the folder goes only to `cwd`,
+        // never onto its command line, and it opens a window of its own rather than a tab in one the user has open.
+        return yield* Effect.tryPromise(() =>
+          new Promise<void>((resolve, reject) => {
+            const child = spawn(application, windowsTerminalArgs, { cwd, stdio: "ignore", detached: true })
+            child.once("error", reject)
+            child.once("spawn", () => {
+              child.unref()
+              resolve()
+            })
+          }),
+        )
+      }
+
       if (process.platform === "win32" && /^(?:powershell|pwsh)(?:\.exe)?$/i.test(path.basename(application))) {
         const info = yield* fs.stat(target)
         const cwd = info.type === "Directory" ? target : path.dirname(target)
@@ -186,6 +204,23 @@ function make(
 
       return true
     }),
+    // Windows runs the drag in a nested loop, so this returns once the file was dropped or the drag was cancelled.
+    startDrag: Effect.fn("DesktopFiles.startDrag")(function* (contents: Electron.WebContents, target: string) {
+      if (process.platform !== "win32" || !path.isAbsolute(target)) return false
+      const exists = yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
+
+      if (!exists) return false
+
+      const icon = yield* Effect.promise(() =>
+        app.getFileIcon(target, { size: "normal" }).catch(() => nativeImage.createEmpty()),
+      )
+
+      if (contents.isDestroyed()) return false
+      // The tree's paths use `/`; the app that takes the drop gets the file's Windows path.
+      contents.startDrag({ file: path.normalize(target), icon })
+
+      return true
+    }),
     readClipboardImage: Effect.fn("DesktopFiles.readClipboardImage")(function* () {
       const items = yield* Effect.promise(() => clipboard.read())
 
@@ -215,6 +250,9 @@ function make(
 
 // Chromium exposes copied bitmaps as image/png; JPEG only appears when an app placed one explicitly.
 const clipboardImageTypes = ["image/png", "image/jpeg"]
+
+// A new Windows Terminal window whose first tab starts in the launch's working directory.
+const windowsTerminalArgs = ["-w", "new", "-d", "."]
 
 export const openExternalURL = Effect.fn("DesktopFiles.openExternalURL")(function* (value: string) {
   const url = resolveExternalURL(value)

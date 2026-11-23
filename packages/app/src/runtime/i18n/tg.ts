@@ -926,7 +926,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Пайвастшавӣ",
   "provider.connect.breadcrumb.label": "Қадамҳои пайвастшавӣ",
   "provider.connect.methods.description": "Тарзи пайваст кардани {{provider}}-ро интихоб кунед.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Аз нав кӯшиш кунед",
   "provider.connect.console.serviceKeyDescription":

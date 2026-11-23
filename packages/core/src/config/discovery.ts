@@ -6,6 +6,7 @@ import { Effect } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Location } from "../location.js"
+import { Project } from "../project.js"
 import { AbsolutePath } from "../schema.js"
 import type { Options } from "../config.js"
 
@@ -55,6 +56,16 @@ export function stripPreferenceMetadata(json: string) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return json
   return JSON.stringify(Object.fromEntries(Object.entries(parsed).filter(([key]) => !preferenceMetadata.has(key))))
 }
+
+/** The project's personal config dir under the global config dir, layered above the repo's own `.opencode` dirs. */
+export const overlay = Effect.fn("ConfigDiscovery.overlay")(function* (options?: Options) {
+  const fs = yield* FSUtil.Service
+  const global = yield* Global.Service
+  const location = yield* Location.Service
+  if (options?.global === false || options?.project === false || location.project.id === Project.ID.global) return
+  const directory = AbsolutePath.make(path.join(global.config, "project", location.project.id))
+  return { path: directory, present: yield* fs.isDir(directory) }
+})
 
 export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options?: Options) {
   const fs = yield* FSUtil.Service

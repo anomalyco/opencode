@@ -376,7 +376,7 @@ function resourceMcpLayer(
     name?: string
     credentials?: Partial<Credential.Interface>
     bus?: Layer.Layer<Bus.Service>
-    /** `OPENCODE_FLAGS`, such as `-mcp_events`. */
+    /** `OPENCODE_FLAGS`, such as `-machines`. */
     flags?: string
   },
 ) {
@@ -1050,7 +1050,7 @@ test("falls back to legacy when a stdio server ignores the version probe", async
             type: "local",
             command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-legacy-silent.ts")],
             protocol: "auto",
-            // The probe waits out the startup timeout before falling back; Windows needs room to start Bun.
+            // The probe waits out the startup timeout, when shorter than the probe's own, before falling back; Windows needs room to start Bun.
             timeout: new ConfigMCP.Timeout({ startup: 1_000 }),
           }),
           import.meta.dir,
@@ -1216,6 +1216,7 @@ for (const entry of [
         url: server.url + entry.query,
         codemode: entry.codemode,
         oauth: false,
+        protocol: "legacy",
       })
       const error = yield* connect("resources", config, import.meta.dir).pipe(Effect.flip)
 
@@ -3542,8 +3543,9 @@ describe("MCP pool", () => {
       expect((yield* status(a.mcp))?.status).toBe("failed")
       expect(probes).toHaveLength(1)
       // On Windows the spawn succeeds through the shell and the missing command shows up only as an exit
-      // during the handshake, which can't be told apart from a server refusing it, so it tries once more.
-      expect(spawns).toHaveLength(process.platform === "win32" ? 1 : 0)
+      // during the handshake, which can't be told apart from a server refusing it, so it connects on its own.
+      // That exit also looks like a legacy server quitting on the version probe, so it respawns once for initialize.
+      expect(spawns).toHaveLength(process.platform === "win32" ? 2 : 0)
     }),
   )
 
@@ -3964,57 +3966,84 @@ describe("MCP events", () => {
       Effect.map((all) => all[0]?.status),
     )
 
-  // Answers `events/stream` with one `active` notification, then closes the stream.
+  // Lists "job.finished", from the second listing on with its `job` argument mirrored into a header, rejects a stream
+  // without that header, and answers any other `events/stream` with one `active` notification, then closes the stream.
   const eventServer = (input: { events?: boolean } = {}) => {
-    const streams: Array<{ name: string | null; params: unknown }> = []
+    const streams: Array<{ name: string | null; job: string | null; params: unknown }> = []
+    let lists = 0
     return resourceServer({
       modern: true,
       events: input.events,
       respond: async (request) => {
         if (request.method !== "POST") return undefined
         const body: unknown = await request.clone().json()
-        if (!isRecord(body) || body.method !== "events/stream") return undefined
-        streams.push({ name: request.headers.get("mcp-name"), params: body.params })
+        if (!isRecord(body)) return undefined
+        if (body.method === "events/list" && ++lists)
+          return Response.json({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              resultType: "complete",
+              events: [
+                {
+                  name: "job.finished",
+                  delivery: ["push"],
+                  inputSchema: {
+                    type: "object",
+                    properties: { job: { type: "string", ...(lists > 1 ? { "x-mcp-header": "Job" } : {}) } },
+                  },
+                  payloadSchema: { type: "object" },
+                },
+              ],
+            },
+          })
+        if (body.method !== "events/stream") return undefined
+        const job = request.headers.get("mcp-param-job")
+        streams.push({ name: request.headers.get("mcp-name"), job, params: body.params })
+        if (job === null)
+          return Response.json(
+            { jsonrpc: "2.0", id: body.id, error: { code: -32020, message: "Header mismatch" } },
+            { status: 400 },
+          )
         const meta = { "io.modelcontextprotocol/subscriptionId": body.id }
         const frame = (message: Record<string, unknown>) =>
           `data: ${JSON.stringify({ jsonrpc: "2.0", ...message })}\n\n`
         return new Response(
-          frame({ method: "notifications/events/active", params: { cursor: "c1", truncated: false, _meta: meta } }) +
-            frame({ id: body.id, result: { resultType: "complete", _meta: meta } }),
+          frame({
+            method: "notifications/events/active",
+            params: { cursor: "c1", truncated: false, heartbeatMs: 30_000, _meta: meta },
+          }) + frame({ id: body.id, result: { resultType: "complete", _meta: meta } }),
           { headers: { "content-type": "text/event-stream" } },
         )
       },
     }).pipe(Effect.map((server) => ({ ...server, streams })))
   }
-  const layer = (url: string, flags: string) =>
-    resourceMcpLayer(
-      new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }),
-      undefined,
-      undefined,
-      {
-        flags,
-      },
-    )
+  const layer = (url: string) =>
+    resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }))
 
-  testEffect(Layer.empty).live("streams a server's events over Streamable HTTP, naming the event in Mcp-Name", () =>
-    Effect.gen(function* () {
-      const server = yield* eventServer({ events: true })
-      yield* Effect.gen(function* () {
-        const mcp = yield* Mcp.Service
-        expect(yield* ready(mcp)).toEqual({ status: "connected" })
-        const events = yield* mcp.events("resources")
-        if (!events) throw new Error("expected MCP events")
-        const messages = yield* Stream.runCollect(events.stream({ name: "job.finished", arguments: { job: "j1" } }))
-        expect(messages).toEqual([{ type: "active", cursor: "c1", truncated: false }])
-        expect(server.streams).toEqual([
-          { name: "job.finished", params: expect.objectContaining({ name: "job.finished", arguments: { job: "j1" } }) },
-        ])
-      }).pipe(Effect.provide(layer(server.url, "mcp_events")))
-    }),
+  testEffect(Layer.empty).live(
+    "streams a server's events over Streamable HTTP with Mcp-Name and Mcp-Param headers",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* eventServer({ events: true })
+        yield* Effect.gen(function* () {
+          const mcp = yield* Mcp.Service
+          expect(yield* ready(mcp)).toEqual({ status: "connected" })
+          const events = yield* mcp.events("resources")
+          if (!events) throw new Error("expected MCP events")
+          const messages = yield* Stream.runCollect(events.stream({ name: "job.finished", arguments: { job: "j1" } }))
+          expect(messages).toEqual([{ type: "active", cursor: "c1", truncated: false }])
+          // The first listing has no annotation, so the stream relists after the server rejects it for the missing header.
+          const params = expect.objectContaining({ name: "job.finished", arguments: { job: "j1" } })
+          expect(server.streams).toEqual([
+            { name: "job.finished", job: null, params },
+            { name: "job.finished", job: "j1", params },
+          ])
+        }).pipe(Effect.provide(layer(server.url)))
+      }),
   )
 
-  // Holds each `events/stream` open so a test can send notifications on it or close it. An event named "missing"
-  // is refused with NotFound.
+  // Lists "job.finished" and holds each `events/stream` open so a test can send notifications on it or close it.
   const streamServer = Effect.fnUntraced(function* (input: { events?: boolean; failedOpens?: number } = {}) {
     const attempts: unknown[] = []
     const streams = yield* Queue.unbounded<{
@@ -4031,12 +4060,19 @@ describe("MCP events", () => {
       respond: async (request) => {
         if (request.method !== "POST") return undefined
         const body: unknown = await request.clone().json()
+        if (isRecord(body) && body.method === "events/list")
+          return Response.json({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              resultType: "complete",
+              events: [{ name: "job.finished", delivery: ["push"], inputSchema: {}, payloadSchema: {} }],
+            },
+          })
         if (!isRecord(body) || body.method !== "events/stream") return undefined
         attempts.push(body.params)
         if (attempts.length <= (input.failedOpens ?? 0))
           return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32603, message: "Temporary failure" } })
-        if (isRecord(body.params) && body.params.name === "missing")
-          return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32023, message: "Unknown event type" } })
         const meta = { "io.modelcontextprotocol/subscriptionId": body.id }
         const controller = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>()
         const aborted = Deferred.makeUnsafe<void>()
@@ -4102,12 +4138,12 @@ describe("MCP events", () => {
     return { layer, published, until, delivered }
   })
 
-  const subscriptionLayer = (url: string, bus: Layer.Layer<Bus.Service>, flags = "mcp_events") =>
+  const subscriptionLayer = (url: string, bus: Layer.Layer<Bus.Service>) =>
     resourceMcpLayer(
       new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }),
       undefined,
       undefined,
-      { flags, bus },
+      { bus },
     )
 
   const only = (mcp: Mcp.Interface) => mcp.subscriptions().pipe(Effect.map((all) => all[0]))
@@ -4130,13 +4166,13 @@ describe("MCP events", () => {
           cursor: null,
         })
         const stream = yield* server.opened
-        stream.send("notifications/events/active", { cursor: "c1", truncated: false })
+        stream.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
         yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
         stream.send("notifications/events/event", {
           eventId: "e1",
           name: "job.finished",
           timestamp: "2026-11-11T00:00:00Z",
-          data: [null, { job: "j1" }, false],
+          data: { job: "j1", ok: false, note: null },
           cursor: "c2",
         })
         expect(yield* bus.delivered(1)).toEqual([
@@ -4148,7 +4184,7 @@ describe("MCP events", () => {
               name: "job.finished",
               eventId: "e1",
               timestamp: "2026-11-11T00:00:00Z",
-              data: [null, { job: "j1" }, false],
+              data: { job: "j1", ok: false, note: null },
               cursor: "c2",
             },
           },
@@ -4202,25 +4238,38 @@ describe("MCP events", () => {
             openedAt.push(clock.currentTimeMillisUnsafe())
             return open(input).pipe(Stream.onError(() => Queue.offer(failed, undefined)))
           })
+          // Each reopen waits its backoff delay after the stream ended, jittered to between 0.8 and 1.2 times it.
+          // The test clock only moves when adjusted, so reading it once the end is seen gives the exact time.
+          const waited = (delay: number, since: number) => {
+            const gap = openedAt[openedAt.length - 1] - since
+            expect(gap).toBeGreaterThanOrEqual(delay * 0.8)
+            expect(gap).toBeLessThanOrEqual(delay * 1.2)
+          }
           yield* mcp.subscribe("resources", { name: "job.finished" })
           yield* Queue.take(failed)
-          yield* TestClock.adjust("1 second")
-          expect(openedAt).toEqual([0, 1000])
+          const firstFailure = clock.currentTimeMillisUnsafe()
+          yield* TestClock.adjust("1200 millis")
+          expect(openedAt).toHaveLength(2)
+          waited(1000, firstFailure)
           yield* Queue.take(failed)
-          yield* TestClock.adjust("2 seconds")
-          expect(openedAt).toEqual([0, 1000, 3000])
+          const secondFailure = clock.currentTimeMillisUnsafe()
+          yield* TestClock.adjust("2400 millis")
+          expect(openedAt).toHaveLength(3)
+          waited(2000, secondFailure)
           const first = yield* server.opened
-          first.send("notifications/events/active", { cursor: "c1", truncated: false })
+          first.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
           yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
           first.send("notifications/events/heartbeat", { cursor: "c5" })
+          const closedAt = clock.currentTimeMillisUnsafe()
           first.close()
           expect(yield* bus.until(only(mcp), (sub) => sub?.status.status === "pending")).toMatchObject({ cursor: "c5" })
-          yield* TestClock.adjust("1 second")
-          expect(openedAt).toEqual([0, 1000, 3000, 4000])
+          yield* TestClock.adjust("1200 millis")
+          expect(openedAt).toHaveLength(4)
+          waited(1000, closedAt)
           const reopened = yield* server.opened
           expect(server.attempts).toHaveLength(4)
           expect(reopened.params).toMatchObject({ name: "job.finished", cursor: "c5" })
-          reopened.send("notifications/events/active", { cursor: "c8", truncated: true })
+          reopened.send("notifications/events/active", { cursor: "c8", truncated: true, heartbeatMs: 30_000 })
           reopened.send("notifications/events/event", finishedEvent("e9", "c9"))
           reopened.send("notifications/events/event", finishedEvent("e10", "c10"))
           const delivered = yield* bus.delivered(2)
@@ -4259,7 +4308,8 @@ describe("MCP events", () => {
           error: { code: -32023 },
         })
         yield* TestClock.adjust("30 seconds")
-        expect(server.attempts).toMatchObject([{ name: "job.finished" }, { name: "missing" }])
+        // "missing" isn't listed, so the client refuses it without asking the server.
+        expect(server.attempts).toMatchObject([{ name: "job.finished" }])
       }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
     }),
   )
@@ -4273,7 +4323,7 @@ describe("MCP events", () => {
         expect(yield* ready(mcp)).toEqual({ status: "connected" })
         yield* mcp.subscribe("resources", { name: "job.finished" })
         const first = yield* server.opened
-        first.send("notifications/events/active", { cursor: null })
+        first.send("notifications/events/active", { cursor: null, heartbeatMs: 30_000 })
         yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
 
         yield* mcp.connect("resources")
@@ -4281,7 +4331,7 @@ describe("MCP events", () => {
         yield* first.aborted
         expect(reopened.params).toMatchObject({ cursor: null })
         // The null cursor means replay is unsupported; reconnecting is not evidence of a gap.
-        reopened.send("notifications/events/active", { cursor: null, truncated: false })
+        reopened.send("notifications/events/active", { cursor: null, truncated: false, heartbeatMs: 30_000 })
         reopened.send("notifications/events/event", finishedEvent("e2", "c2"))
         const delivered = yield* bus.delivered(1)
         expect(delivered).toMatchObject([{ data: { eventId: "e2" } }])
@@ -4296,17 +4346,10 @@ describe("MCP events", () => {
     }),
   )
 
-  testEffect(Layer.empty).live("refuses to subscribe with the flag off, and ends at a server without events", () =>
+  testEffect(Layer.empty).live("ends a subscription at a server without events", () =>
     Effect.gen(function* () {
-      const offering = yield* streamServer()
       const plain = yield* streamServer({ events: false })
       const bus = yield* workingBus
-      const refused = yield* Effect.gen(function* () {
-        const mcp = yield* Mcp.Service
-        return yield* mcp.subscribe("resources", { name: "job.finished" }).pipe(Effect.flip)
-      }).pipe(Effect.provide(subscriptionLayer(offering.url, bus.layer, "-mcp_events")))
-      expect(refused).toBeInstanceOf(Mcp.EventsUnavailableError)
-
       yield* Effect.gen(function* () {
         const mcp = yield* Mcp.Service
         expect(yield* ready(mcp)).toEqual({ status: "connected" })
@@ -4318,18 +4361,14 @@ describe("MCP events", () => {
     }),
   )
 
-  testEffect(Layer.empty).live("offers no events with the mcp_events flag off, or from a server without them", () =>
+  testEffect(Layer.empty).live("offers no events from a server without them", () =>
     Effect.gen(function* () {
-      const offering = yield* eventServer({ events: true })
       const plain = yield* eventServer()
-      const events = (url: string, flags: string) =>
-        Effect.gen(function* () {
-          const mcp = yield* Mcp.Service
-          expect(yield* ready(mcp)).toEqual({ status: "connected" })
-          return yield* mcp.events("resources")
-        }).pipe(Effect.provide(layer(url, flags)))
-      expect(yield* events(offering.url, "-mcp_events")).toBeUndefined()
-      expect(yield* events(plain.url, "mcp_events")).toBeUndefined()
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+        expect(yield* mcp.events("resources")).toBeUndefined()
+      }).pipe(Effect.provide(layer(plain.url)))
     }),
   )
 })

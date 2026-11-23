@@ -924,7 +924,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Csatlakozás",
   "provider.connect.breadcrumb.label": "Csatlakozás lépései",
   "provider.connect.methods.description": "Válassza ki a(z) {{provider}} csatlakoztatásának módját.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Próbálja újra",
   "provider.connect.console.serviceKeyDescription":
