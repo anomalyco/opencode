@@ -1,6 +1,6 @@
-// Design mode for the share card, as on opencode.ai (services/site design-mode.tsx): Ctrl+D turns it on, and the
-// share dialog then shows blue controls above the preview that cycle each option. A development tool: the key only
-// works under `vite dev`, and production cards always use defaultShareOptions.
+// The share card's options. Visitors set layout, size, style and motion in the share editor; Design mode, as on
+// opencode.ai (services/site design-mode.tsx), adds blue controls above the preview that cycle every option,
+// including the ones visitors don't get (`designOnly`). Ctrl+D turns it on under `vite dev` only.
 import { createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { defaultShareOptions, type ShareOptions } from "./card"
@@ -67,6 +67,8 @@ export const shareControls = [
   options: readonly (readonly [string, string])[]
 }[]
 
+export const designOnly: readonly (keyof ShareOptions)[] = ["logo"]
+
 export const [designMode, setDesignModeState] = createSignal(false)
 export const [shareOptions, setShareOptions] = createStore<ShareOptions>({ ...defaultShareOptions })
 
@@ -75,9 +77,13 @@ export function cycleShareOption(key: keyof ShareOptions, direction: 1 | -1) {
   if (!control) return
   const values: readonly string[] = control.options.map((option) => option[0])
   const index = values.indexOf(shareOptions[key])
-  const next = values[(index + direction + values.length) % values.length]
-  setShareOptions(key, next as never)
-  localStorage.setItem(optionsKey, JSON.stringify(shareOptions))
+  setShareOption(key, values[(index + direction + values.length) % values.length] as ShareOptions[typeof key])
+}
+
+/** Sets one option. Under `vite dev` the choice is kept for the next visit, as Design mode's are. */
+export function setShareOption<K extends keyof ShareOptions>(key: K, value: ShareOptions[K]) {
+  setShareOptions(key, value as never)
+  if (import.meta.env.DEV) localStorage.setItem(optionsKey, JSON.stringify(shareOptions))
 }
 
 /** Development only: restores Design mode and its choices, and listens for Ctrl+D. Returns the cleanup. */
