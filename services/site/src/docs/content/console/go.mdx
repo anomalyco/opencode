@@ -217,11 +217,12 @@ curl https://opencode.ai/inference/go/systemone/v1/systemone \
   }'
 ```
 
-| Model               | Model ID            | Input  | Output | Cached Read |
-| ------------------- | ------------------- | ------ | ------ | ----------- |
-| Jev 1.14            | jev-1.14            | $0.042 | Free   | -           |
-| Gemini Decision 1   | gemini-decision-1   | $0.10  | Free   | -           |
-| GPT 6 Luna Decision | gpt-6-luna-decision | $0.10  | Free   | $0.01       |
+| Model                               | Model ID            | Input  | Output | Cached Read | Cached Write |
+| ----------------------------------- | ------------------- | ------ | ------ | ----------- | ------------ |
+| Jev 1.14                            | jev-1.14            | $0.042 | Free   | -           | -            |
+| Gemini Decision 1                   | gemini-decision-1   | $0.10  | Free   | -           | -            |
+| GPT 6 Luna Decision (≤ 272K tokens) | gpt-6-luna-decision | $0.10  | Free   | $0.01       | $0.125       |
+| GPT 6 Luna Decision (> 272K tokens) | gpt-6-luna-decision | $0.20  | Free   | $0.02       | $0.25        |
 
 - Prices are per 1M tokens.
 - Requests in OpenAI's Decisions format work at `https://opencode.ai/inference/go/openai/v1/decisions`.
