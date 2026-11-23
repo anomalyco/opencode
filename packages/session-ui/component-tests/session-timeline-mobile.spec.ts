@@ -99,6 +99,22 @@ story.describe("touch timeline", () => {
     await expect(footer).toHaveCSS("opacity", "1")
     await expect(footer).toHaveCSS("pointer-events", "auto")
   })
+
+  story("stops lighting a compaction divider once a tap closes it", async ({ mount }) => {
+    const timeline = await mount("current-session-timeline-rows--compaction-and-continuation")
+    const divider = timeline.locator('[data-slot="session-compaction-divider"]')
+    const label = divider.locator('[data-slot="session-compaction-label"]')
+    const rest = await label.evaluate((element) => getComputedStyle(element).color)
+
+    await divider.tap()
+    await expect(divider).toHaveAttribute("aria-expanded", "true")
+    await expect(label).not.toHaveCSS("color", rest)
+
+    // The tap leaves :hover on the divider, which must not keep the open colour.
+    await divider.tap()
+    await expect(divider).toHaveAttribute("aria-expanded", "false")
+    await expect(label).toHaveCSS("color", rest)
+  })
 })
 
 story("desktop user message actions still appear on hover and keyboard focus", async ({ mount, page }) => {

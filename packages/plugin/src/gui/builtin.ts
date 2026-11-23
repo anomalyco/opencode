@@ -312,6 +312,18 @@ export interface BuiltinDesktop extends Desktop {
    * @param enabled - Turns it on or off.
    */
   forceFocus(enabled: boolean): Promise<void>
+  /**
+   * Hands a file row's drag to the system, so the file drops into other apps (a file manager, a browser, a chat app)
+   * as the file itself. Call it from `dragstart` after setting the drag's data: a drop back into the app reads as
+   * that data, as the row's own drag would. The host cancels the event's drag when it hands it over; when the file is
+   * gone by then, nothing is dragged. When the system drag ends, the event's target gets the `dragend` its cancelled drag
+   * never fired. Windows desktop only: returns false elsewhere, and the event's own drag goes on.
+   *
+   * @param event - The row's `dragstart`.
+   * @param path - The file's absolute path on this computer.
+   * @returns Whether the system drag started in place of the event's.
+   */
+  dragOut(event: DragEvent, path: string): boolean
 }
 
 /** `OpenOptions` with the placement only built-ins use. */

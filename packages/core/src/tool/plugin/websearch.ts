@@ -31,8 +31,8 @@ const Output = Schema.Array(
   Schema.Struct({
     url: WebSearch.Result.fields.url,
     title: WebSearch.Result.fields.title,
-    content: WebSearch.Result.fields.content,
     published: WebSearch.Result.fields.time.fields.published,
+    content: WebSearch.Result.fields.content,
   }),
 )
 export const Plugin = {
@@ -49,7 +49,10 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: flags.resolve(loaded.entries).full_codemode.enabled },
+          // Pinned so quick questions call it without searching the catalog first.
+          options: flags.resolve(loaded.entries).full_codemode.enabled
+            ? { codemode: { pinned: true } }
+            : { codemode: false },
           description,
           input: Input,
           output: Output,

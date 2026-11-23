@@ -43,10 +43,7 @@ it.live("approves the fixed command once and records a failed exit without wakin
   Effect.gen(function* () {
     const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
     yield* Effect.promise(() =>
-      Bun.write(
-        path.join(directory, "opencode.json"),
-        JSON.stringify({ experimental: { automations: true }, permission: { shell: "ask" } }),
-      ),
+      Bun.write(path.join(directory, "opencode.json"), JSON.stringify({ permission: { shell: "ask" } })),
     )
     const sessions = yield* Session.Service
     const session = yield* sessions.create({ location: { directory } })
@@ -73,7 +70,8 @@ it.live("approves the fixed command once and records a failed exit without wakin
       expect(asks).toMatchObject([
         {
           action: "shell",
-          resources: ["echo automation-output", "exit 7"],
+          // PowerShell treats `exit` as a language statement, not a separate permission resource.
+          resources: expect.arrayContaining(["echo automation-output"]),
           metadata: { automation: "shell test", trigger, unattended: true, command },
           source: invocation.source,
         },
@@ -110,9 +108,7 @@ it.live("uses the saved location after the creating session moves and pauses if 
   Effect.gen(function* () {
     const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
     const destination = AbsolutePath.make((yield* tmpdirScoped()).path)
-    yield* Effect.promise(() =>
-      Bun.write(path.join(directory, "opencode.json"), JSON.stringify({ experimental: { automations: true } })),
-    )
+    yield* Effect.promise(() => Bun.write(path.join(directory, "opencode.json"), JSON.stringify({ automations: true })))
     const sessions = yield* Session.Service
     const session = yield* sessions.create({
       location: { directory },
@@ -182,7 +178,6 @@ it.live("rejects a shell action that changes to a denied external directory", ()
       Bun.write(
         path.join(directory, "opencode.json"),
         JSON.stringify({
-          experimental: { automations: true },
           permission: { shell: "allow", external_directory: "deny" },
         }),
       ),
@@ -227,7 +222,7 @@ it.live("scheduled code uses session capabilities after one-time approval", () =
       Bun.write(
         path.join(directory, "opencode.json"),
         JSON.stringify({
-          experimental: { automations: true, full_codemode: true },
+          experimental: { full_codemode: true },
           permission: {
             execute: "allow",
             shell: "ask",

@@ -3,7 +3,6 @@ export * as McpEventTools from "./mcp-events.js"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
-import { Flag } from "../../flag.js"
 import { Mcp } from "../../mcp/index.js"
 import { Permission } from "../../permission.js"
 
@@ -25,7 +24,6 @@ const EventType = Schema.Struct({
 export const Plugin = {
   id: "opencode.tools.mcp-events",
   effect: Effect.fn("McpEventTools.Plugin")(function* (ctx: Context) {
-    if (!(yield* Flag.enabled("mcp_events"))) return
     const mcp = yield* Mcp.Service
     const permission = yield* Permission.Service
 

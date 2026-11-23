@@ -7,7 +7,6 @@ import { DateTime, Effect, Option, Schema } from "effect"
 import { Automation } from "../../automation.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
-import { Flag } from "../../flag.js"
 import { Permission } from "../../permission.js"
 import PROMPT_AUTOMATION from "../../plugin/command/automation.txt"
 import { Session } from "../../session.js"
@@ -19,13 +18,13 @@ export const View = Schema.Struct({
   name: Schema.String,
   trigger: Automation.Trigger,
   tz: Schema.String,
-  action: Automation.Action,
   status: Automation.Status,
   nextDueAt: Schema.String.pipe(optional),
   expires: Schema.String.pipe(optional),
   runCount: Schema.Number,
   lastRunAt: Schema.String.pipe(optional),
   lastOutcome: Automation.Outcome.pipe(optional),
+  action: Automation.Action,
   lastOutput: Schema.String.pipe(optional),
   state: Schema.Json.pipe(optional),
 })
@@ -54,10 +53,9 @@ export const Plugin = {
       ctx.event,
       Effect.andThen(ctx.tool.reload(), ctx.command.reload()),
     )
-    const flags = yield* Flag.Service
-    const enabled = () => flags.resolve(loaded.entries).automations.enabled
+    const enabled = () => Config.latest(loaded.entries, "automations") ?? true
 
-    // A request keeps the tools it started with after config reloads, so each call rechecks the flag where the
+    // A request keeps the tools it started with after config reloads, so each call rechecks config where the
     // calling Session lives, and returns that Session for scoping.
     const caller = (sessionID: SessionSchema.ID) =>
       Effect.gen(function* () {

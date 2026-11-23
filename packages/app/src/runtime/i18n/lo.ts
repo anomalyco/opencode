@@ -905,7 +905,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "ເຊື່ອມຕໍ່",
   "provider.connect.breadcrumb.label": "ຂັ້ນຕອນການເຊື່ອມຕໍ່",
   "provider.connect.methods.description": "ເລືອກວິທີເຊື່ອມຕໍ່ {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "ລອງອີກຄັ້ງ",
   "provider.connect.console.serviceKeyDescription": "ເຊື່ອມຕໍ່ໂດຍໃຊ້ລະຫັດ API ຂອງບັນຊີບໍລິການຈາກ OpenCode Console.",

@@ -50,7 +50,6 @@ import type {
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment, promptLength } from "../prompt-parts"
 import { editorMatchesPrompt, getCursorPosition, isEditorDomBlank, isPromptInlineBlank } from "./dom"
-import { createFieldFocus } from "@opencode/ui/context/field-focus"
 import {
   INITIAL_EDITOR_SYNC_STATE,
   INPUT_PARSED,
@@ -103,8 +102,6 @@ export type ComposerEditorProps = {
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
-  const keyboardFocus = createFieldFocus()
-
   const i18n = useI18n()
   const markdown = useMarkdown()
   const state = props.controller.state
@@ -176,6 +173,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
   })
   let sync = INITIAL_EDITOR_SYNC_STATE
   let firstFocus = true
+  // A press puts the caret where it lands, and focus follows in the same task.
+  let pressed = false
+  let pressTimer: ReturnType<typeof setTimeout> | undefined
+
+  onCleanup(() => clearTimeout(pressTimer))
 
   const updateCursor = () => {
     const cursor = editor && getCursorPosition(editor)
@@ -429,18 +431,15 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   if (caret.top < bounds.top + 16) viewport.scrollTop += caret.top - bounds.top - 16
                 })
               }}
-              data-field-focus
-              data-keyboard-focus={keyboardFocus.visible() || undefined}
-              onPointerDown={keyboardFocus.pointer}
-              onClick={(event) => {
-                if (event.detail > 0) keyboardFocus.pointer()
+              onPointerDown={() => {
+                pressed = true
+                clearTimeout(pressTimer)
+                pressTimer = setTimeout(() => (pressed = false))
               }}
-              onBlur={keyboardFocus.leave}
-              onFocus={(event) => {
-                keyboardFocus.enter(event.currentTarget)
-
-                // A request dock can replace the editor. Keyboard focus on the new editor must keep the draft's caret.
-                if (firstFocus && keyboardFocus.visible()) props.controller.restoreCaret()
+              onFocus={() => {
+                // A request dock can replace the editor. Focus on the new editor that no press caused must keep the
+                // draft's caret.
+                if (firstFocus && !pressed) props.controller.restoreCaret()
                 firstFocus = false
                 props.controller.dispatch({ type: "focus.editor" })
               }}
@@ -521,6 +520,19 @@ export function ComposerEditor(props: ComposerEditorProps) {
                         keybind={["Shift", "Mod", "D"]}
                         control={control}
                         class={control.current() === "default" ? "composer-variant-default" : undefined}
+                      />
+                    </Show>
+                  )}
+                </Show>
+                <Show when={view.speed} keyed>
+                  {(control) => (
+                    // Hidden at the standard speed, so it adds nothing to the composer until a speed is chosen with
+                    // the speed command.
+                    <Show when={control.options().length > 1 && control.current() !== "standard"}>
+                      <ComposerEditorConfiguredSelect
+                        mobileDrawer
+                        title={i18n.t("ui.promptInput.chooseSpeed")}
+                        control={control}
                       />
                     </Show>
                   )}
@@ -1725,10 +1737,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
           onClick={() => props.controller.submit()}
         >
           {label()}
-          <Show
-            when={busy()}
-            fallback={<Icon name={props.controller.mode() === "shell" ? "enter" : "arrow-up"} />}
-          >
+          <Show when={busy()} fallback={<Icon name={props.controller.mode() === "shell" ? "enter" : "arrow-up"} />}>
             <Loader class="size-4" />
           </Show>
         </Button>

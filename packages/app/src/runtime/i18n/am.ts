@@ -887,7 +887,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "አገናኝ",
   "provider.connect.breadcrumb.label": "የግንኙነት ደረጃዎች",
   "provider.connect.methods.description": "{{provider}}ን እንዴት እንደሚያገናኙ ይምረጡ።",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "እንደገና ሞክር",
   "provider.connect.console.serviceKeyDescription": "ከOpenCode Console በተገኘ የአገልግሎት መለያ API ቁልፍ ያገናኙ።",

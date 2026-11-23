@@ -1,0 +1,161 @@
+//! System commands and settings toggles. Restart is unavailable because the client shares its background service.
+
+use opencode_local::cli_config::{CursorStyle, DiffWrap, Info, PromptPaste, Resolved};
+use opentui::native::{Control, MouseTracking};
+
+use crate::dialogs::settings::{set_path, update};
+use crate::prelude::*;
+
+const DOCS: &str = "https://opencode.ai/docs";
+
+pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
+    let info = tui.settings.info();
+    let command = |id: &str, title: &str, run: fn(&Tui)| {
+        TuiCommand::new(id, bind!(tui, |tui, _, _| run(&tui))).bind(Bind::Off).title(title).group("System")
+    };
+    let commands = vec![
+        command("location.reload", "Reload configuration", reload).palette().slash("reload"),
+        command("docs.open", "Open docs", |tui| {
+            let _ = crate::features::links::open_url(DOCS);
+            tui.dialogs.clear();
+        })
+        .palette(),
+        command("app.debug", "Toggle debug panel", |tui| {
+            tui.app.toggle_debug_overlay();
+            tui.dialogs.clear();
+        }),
+        command("app.console", "Toggle console", |tui| {
+            tui.app.console().toggle();
+            tui.dialogs.clear();
+        })
+        .palette(),
+        command("terminal.suspend", "Suspend terminal", |tui| {
+            opencode_plugin::canvas::handover(&tui.app);
+            tui.app.suspend();
+        })
+        .enabled(if cfg!(windows) { Condition::Never } else { Condition::Always }),
+        command("terminal.title.toggle", &toggle_title(title_enabled(&info), "terminal title"), |tui| {
+            let next = !title_enabled(&tui.settings.info());
+            if !next {
+                crate::features::title::clear(tui);
+            }
+            write(tui, &["terminal", "title"], Value::Bool(next));
+        }),
+        command("app.toggle.animations", &toggle_title(info.animations.unwrap_or(true), "animations"), |tui| {
+            let next = !tui.settings.info().animations.unwrap_or(true);
+            write(tui, &["animations"], Value::Bool(next));
+        }),
+        command("app.toggle.file_context", &toggle_title(file_context(&info), "file context"), |tui| {
+            let next = !file_context(&tui.settings.info());
+            write(tui, &["prompt", "editor"], Value::Bool(next));
+        }),
+        command("app.toggle.diffwrap", &toggle_title(diff_wrap(&info), "diff wrapping"), |tui| {
+            let next = if diff_wrap(&tui.settings.info()) { "none" } else { "word" };
+            write(tui, &["diffs", "wrap"], Value::from(next));
+        }),
+        command("app.toggle.paste_summary", &toggle_title(paste_summary(&info), "paste summary"), |tui| {
+            let next = if paste_summary(&tui.settings.info()) { "full" } else { "compact" };
+            write(tui, &["prompt", "paste"], Value::from(next));
+        }),
+    ];
+    let ids: Vec<String> = commands.iter().filter_map(|c| c.id.clone()).filter(|id| id != "terminal.suspend").collect();
+    let layers = [
+        KeymapLayer::global(commands),
+        KeymapLayer::default().bindings(ids),
+        KeymapLayer::global(Vec::new()).bindings(["terminal.suspend"]),
+    ];
+    install_effects(tui);
+    layers
+        .into_iter()
+        .filter_map(|layer| {
+            tui.keymap.layer(layer).inspect_err(|error| log::error!("system commands keymap layer: {error}")).ok()
+        })
+        .collect()
+}
+
+pub fn mouse_tracking(config: &Resolved) -> MouseTracking {
+    if config.mouse { MouseTracking::Motion } else { MouseTracking::Off }
+}
+
+pub fn cursor(config: &Resolved) -> (opentui::native::CursorStyle, bool) {
+    let style = match config.cursor_style {
+        CursorStyle::Block => opentui::native::CursorStyle::Block,
+        CursorStyle::Underline => opentui::native::CursorStyle::Underline,
+        CursorStyle::Line => opentui::native::CursorStyle::Line,
+        CursorStyle::Default => opentui::native::CursorStyle::Default,
+    };
+    (style, config.cursor_blinking)
+}
+
+/// Retain screenshot payloads only while transcript previews are enabled; live events carry inline base64.
+pub(crate) fn image_preview(info: &Info) -> bool {
+    info.session.as_ref().and_then(|session| session.image_preview) == Some(true)
+}
+
+/// Apply live mouse, title, and transcript preview settings.
+fn install_effects(tui: &Rc<Tui>) {
+    let mouse = Rc::new(Cell::new(tui.config().mouse));
+    let title = Rc::new(Cell::new(title_enabled(&tui.config().info)));
+    let preview = Rc::new(Cell::new(image_preview(&tui.config().info)));
+    tui.settings.on_change(move |tui| {
+        let info = tui.settings.info();
+        if !title.replace(title_enabled(&info)) && title.get() {
+            crate::features::title::route_changed(tui);
+        }
+        let next = image_preview(&info);
+        if preview.replace(next) != next {
+            tui.data.set_omit_tool_file_data(!next);
+            // Reload screenshots discarded while previews are off.
+            if next {
+                tui.data.restore_files();
+            }
+        }
+        let next = info.mouse.unwrap_or(true);
+        if mouse.replace(next) == next {
+            return;
+        }
+        let mouse = next;
+        let tracking = if mouse { MouseTracking::Motion } else { MouseTracking::Off };
+        // Before terminal setup (tests) there is no terminal to tell.
+        if let Err(error) = tui.app.session().control(Control::Mouse(tracking)) {
+            log::debug!("mouse mode not applied: {error}");
+        }
+    });
+}
+
+fn reload(tui: &Tui) {
+    tui.dialogs.clear();
+    tui.toasts.show(
+        ToastOptions::new(Variant::Info, "Reloading configuration…").duration(std::time::Duration::from_secs(30)),
+    );
+    let client = tui.data.client().clone();
+    tui.request(async move { client.location_reload().await }, |tui, ()| {
+        tui.toasts.show(ToastOptions::new(Variant::Success, "Configuration reloaded"));
+    });
+}
+
+fn write(tui: &Tui, path: &'static [&'static str], value: Value) {
+    update(tui, move |draft| set_path(draft, path, value));
+    tui.dialogs.clear();
+}
+
+/// Hidden toggle commands use their startup titles.
+fn toggle_title(on: bool, what: &str) -> String {
+    format!("{} {what}", if on { "Disable" } else { "Enable" })
+}
+
+pub(crate) fn title_enabled(info: &Info) -> bool {
+    info.terminal.as_ref().and_then(|terminal| terminal.title).unwrap_or(true)
+}
+
+fn file_context(info: &Info) -> bool {
+    info.prompt.as_ref().and_then(|prompt| prompt.editor).unwrap_or(true)
+}
+
+fn diff_wrap(info: &Info) -> bool {
+    info.diffs.as_ref().and_then(|diffs| diffs.wrap).unwrap_or(DiffWrap::Word) == DiffWrap::Word
+}
+
+fn paste_summary(info: &Info) -> bool {
+    info.prompt.as_ref().and_then(|prompt| prompt.paste) != Some(PromptPaste::Full)
+}

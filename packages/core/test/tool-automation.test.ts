@@ -3,14 +3,13 @@ import { DateTime, Effect, Layer, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Automation } from "@opencode/core/automation"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
-import { Flag } from "@opencode/core/flag"
+import { Config } from "@opencode/core/config"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { AutomationTools } from "@opencode/core/tool/plugin/automation"
-import { Document, Info, type Entry } from "@opencode/schema/config"
-import { ConfigExperimental } from "@opencode/schema/config/experimental"
+import { Document, Info } from "@opencode/schema/config"
 import type { CommandDefinition } from "@opencode/plugin/effect/command"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -36,7 +35,7 @@ const it = testEffect(AppNodeBuilder.build(Tool.node, toolNodeReplacements()))
 /** An in-memory Automation service. The real one is covered in automation.test.ts; this exercises the tool layer. */
 const memory = () => {
   const rows = new Map<Automation.ID, Automation.Info>()
-  const flag = { enabled: true }
+  const config = { enabled: true }
   const find = (id: Automation.ID): Effect.Effect<Automation.Info, Automation.NotFoundError> => {
     const info = rows.get(id)
     return info ? Effect.succeed(info) : Effect.fail(new Automation.NotFoundError({ automationID: id }))
@@ -77,11 +76,11 @@ const memory = () => {
     pause: (id) => update(id, "paused"),
     resume: (id) => update(id, "active"),
     remove: (id) => find(id).pipe(Effect.map(() => void rows.delete(id))),
-    enabled: () => Effect.sync(() => flag.enabled),
+    enabled: () => Effect.sync(() => config.enabled),
     tick: Effect.void,
     run: Effect.never,
   })
-  return { rows, flag, service }
+  return { rows, config, service }
 }
 
 const sessions = Layer.succeed(Session.Service, {
@@ -89,7 +88,7 @@ const sessions = Layer.succeed(Session.Service, {
     Effect.succeed({ id, projectID: projects[id]!, location: { directory: AbsolutePath.make("/project") } }),
 } as unknown as Session.Interface)
 
-const setup = (experimental: ConfigExperimental.Info | undefined) =>
+const setup = (automationsEnabled?: boolean) =>
   Effect.gen(function* () {
     const automations = memory()
     const commands: CommandDefinition[] = []
@@ -107,7 +106,9 @@ const setup = (experimental: ConfigExperimental.Info | undefined) =>
       },
       session: { prompt: (input) => Effect.sync(() => prompts.push(input)).pipe(Effect.as(undefined as never)) },
     }).pipe(
-      Effect.provide(Flag.testLayer([document(experimental)])),
+      Effect.provide(
+        Config.testLayer([new Document({ type: "document", info: new Info({ automations: automationsEnabled }) })]),
+      ),
       Effect.provide(Layer.succeed(Automation.Service, automations.service)),
       Effect.provide(sessions),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
@@ -155,16 +156,13 @@ const paths = (registry: Tool.Interface) =>
       ),
     )
 
-const on = new ConfigExperimental.Info({ automations: true })
-
 describe("AutomationTools", () => {
-  it.effect("are absent unless experimental.automations is enabled", () =>
+  it.effect("are available by default and absent when automations is false", () =>
     Effect.gen(function* () {
-      expect(yield* paths((yield* setup(undefined)).registry)).not.toContain(names[0])
-      const off = yield* setup(new ConfigExperimental.Info({ automations: false }))
+      const off = yield* setup(false)
       expect(yield* paths(off.registry)).not.toContain(names[0])
       expect(off.commands).toEqual([])
-      const enabled = yield* setup(on)
+      const enabled = yield* setup()
       expect(yield* paths(enabled.registry)).toEqual(expect.arrayContaining(names))
       expect(enabled.commands.map((command) => command.name)).toEqual(["automation"])
     }),
@@ -172,7 +170,7 @@ describe("AutomationTools", () => {
 
   it.effect("passes the originating tool call to the service when creating an event watch", () =>
     Effect.gen(function* () {
-      const { registry, service } = yield* setup(on)
+      const { registry, service } = yield* setup()
       const create = spyOn(service, "create")
       const request = {
         name: "watch build",
@@ -193,7 +191,7 @@ describe("AutomationTools", () => {
 
   it.effect("creates, lists, pauses, resumes and deletes this project's automations", () =>
     Effect.gen(function* () {
-      const { registry, rows } = yield* setup(on)
+      const { registry, rows } = yield* setup()
 
       expect(
         yield* run(registry, "automation_create", {
@@ -223,7 +221,7 @@ describe("AutomationTools", () => {
 
   it.effect("/automation hands the request to the model with the automation instructions", () =>
     Effect.gen(function* () {
-      const { commands, prompts } = yield* setup(on)
+      const { commands, prompts } = yield* setup()
       yield* commands[0]!
         .execute({ sessionID, prompt: { text: "  every morning at 9 check CI  " }, delivery: "steer" })
         .pipe(Effect.orDie)
@@ -235,17 +233,17 @@ describe("AutomationTools", () => {
     }),
   )
 
-  it.effect("rechecks the flag on each call, since a request keeps its tools after config reloads", () =>
+  it.effect("rechecks config on each call, since a request keeps its tools after config reloads", () =>
     Effect.gen(function* () {
-      const { registry, rows, flag } = yield* setup(on)
+      const { registry, rows, config } = yield* setup()
       yield* run(registry, "automation_create", {
         name: "ping",
         trigger: { type: "every", every: "1 hour" },
         action: { type: "prompt", prompt: "ping" },
       })
-      flag.enabled = false
+      config.enabled = false
 
-      // automation_create checks the flag inside the service, which this in-memory one skips.
+      // automation_create checks config inside the service, which this in-memory one skips.
       for (const [name, input] of [
         ["automation_list", {}],
         ["automation_pause", { id: "aut_1" }],
@@ -263,7 +261,7 @@ describe("AutomationTools", () => {
 
   it.effect("rejects a malformed trigger, target or empty name", () =>
     Effect.gen(function* () {
-      const { registry, rows } = yield* setup(on)
+      const { registry, rows } = yield* setup()
       const bad = (input: unknown) => call(registry, "automation_create", input)
       expect(
         yield* bad({ name: "x", trigger: { every: "1 hour" }, action: { type: "prompt", prompt: "ping" } }),
@@ -292,7 +290,7 @@ describe("AutomationTools", () => {
 
   it.effect("puts each automation's id, trigger, status, next run and action in the text without Code Mode", () =>
     Effect.gen(function* () {
-      const { registry } = yield* setup(on)
+      const { registry } = yield* setup()
       expect(
         yield* direct(registry, "automation_create", {
           name: "ci",
@@ -319,7 +317,7 @@ describe("AutomationTools", () => {
 
   it.effect("treats another project's automation as missing", () =>
     Effect.gen(function* () {
-      const { registry, rows } = yield* setup(on)
+      const { registry, rows } = yield* setup()
       yield* run(
         registry,
         "automation_create",
@@ -338,7 +336,3 @@ describe("AutomationTools", () => {
     }),
   )
 })
-
-function document(experimental: ConfigExperimental.Info | undefined): Entry {
-  return new Document({ type: "document", info: new Info(experimental ? { experimental } : {}) })
-}

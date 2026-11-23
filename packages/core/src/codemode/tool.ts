@@ -22,6 +22,7 @@ import { FileWrite } from "../file-write.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { PositiveInt } from "../schema.js"
+import { CodeModeApi } from "./api.js"
 import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeDiffs } from "./diffs.js"
@@ -85,6 +86,9 @@ export const services = Effect.map(
   Context.pick(Location.Service, FileAccess.Service, FileMutation.Service, FileWrite.Service),
 )
 
+/** What `opencode://` fetch acts through: this process's OpenCode API and the session's Location. */
+export type Api = CodeModeApi.Service | Location.Service
+
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
@@ -98,9 +102,10 @@ const executionServices = (
   context: ToolContext,
   permission: Permission.Interface,
   services?: Context.Context<Services>,
+  api?: Context.Context<Api>,
 ) =>
   Effect.map(Effect.abortSignal, (signal) =>
-    (services ?? Context.empty()).pipe(
+    Context.merge(services ?? Context.empty(), api ?? Context.empty()).pipe(
       Context.add(CodeModeExecution.Service, { ...context, signal }),
       Context.add(Permission.Service, permission),
     ),
@@ -144,6 +149,8 @@ export const create = (
   permission: Permission.Interface,
   /** With `full_codemode`, the session's services, which turn on the experimental `path` and `Bun` globals. */
   services?: Context.Context<Services>,
+  /** What `opencode://` fetch sends requests through. Without it, `opencode://` fails as unavailable. */
+  api?: Context.Context<Api>,
 ) => {
   return {
     name: "execute",
@@ -225,7 +232,7 @@ export const create = (
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
-            Effect.provide(yield* executionServices(context, permission, services)),
+            Effect.provide(yield* executionServices(context, permission, services, api)),
             Effect.provideService(CodeModeDiffs.Service, diffs),
           )
         const toolCalls = yield* Ref.get(calls)
@@ -487,6 +494,14 @@ function renderEntry(
 function flattenTools(node: ToolNode, path: ReadonlyArray<string>, tools: Tools) {
   if (node.tool !== undefined) tools[path.join(".")] = node.tool
   for (const [name, child] of node.children) flattenTools(child, [...path, name], tools)
+}
+
+/** An inventory tool and its registry ID, by registry ID or by the path a program calls it at (`opencode.session.search`). */
+export const find = (inventory: Inventory, name: string) => {
+  const registration = inventory.tools.get(name)
+  if (registration) return { id: name, registration }
+  const entry = Array.from(inventory.tools).find(([, item]) => qualifiedName(item) === name)
+  return entry && { id: entry[0], registration: entry[1] }
 }
 
 export function qualifiedName(registration: Info) {

@@ -68,9 +68,14 @@ export const CreateInput = Schema.Struct({
 })
 export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
 
+// Descriptions sit on the inner schema because the query string codec drops annotations on `optional` itself.
 export const OutputInput = Schema.Struct({
-  cursor: optional(NonNegativeInt),
-  limit: optional(NonNegativeInt),
+  cursor: optional(
+    NonNegativeInt.annotateKey({
+      description: "Byte offset to read from, such as the cursor of the previous page. Defaults to 0.",
+    }),
+  ),
+  limit: optional(NonNegativeInt.annotateKey({ description: "Maximum number of bytes to return. Defaults to 65536." })),
 })
 export interface OutputInput extends Schema.Schema.Type<typeof OutputInput> {}
 

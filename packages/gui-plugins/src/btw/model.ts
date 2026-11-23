@@ -1,4 +1,5 @@
 import { batch, createSignal, onCleanup, untrack } from "solid-js"
+import { createStore } from "solid-js/store"
 import { showToast } from "@opencode/ui/toast"
 import { uuid } from "@opencode/util/uuid"
 import type { MountedSession, SetupContext } from "@opencode/plugin/gui"
@@ -16,6 +17,8 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
   const [state, setState] = createSignal(createBtwState())
   // Driver handles only: the machine decides which attempt runs, these end its request and timeout.
   const inFlight = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+  // Tabs whose answer or failure arrived while they were open but not shown, by `${session key}\n${tab id}`.
+  const [unread, setUnread] = createStore<Record<string, boolean | undefined>>({})
 
   const saved = (session: MountedSession) => {
     const store = ctx.stores.chats(session)
@@ -46,8 +49,8 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
       return
     }
 
-    // SAFETY: only `disposed`, `sessions.pruned` and request results without an answer dispatch without a session,
-    // and the machine answers those with `abort` alone.
+    // SAFETY: only `disposed` and `sessions.pruned` dispatch without a session, and the machine answers those with
+    // `abort` alone.
     if (!session) return
     const store = ctx.stores.chats(session)
 
@@ -107,9 +110,18 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     const result = { sessionKey: key, id: effect.id, attempt: effect.attempt }
     const controller = new AbortController()
 
+    // A closed tab or a superseded retry already aborted its attempt, so only a current attempt marks its tab.
+    const settle = (event: BtwEvent) => {
+      const current = inFlight.has(effect.attempt)
+      dispatch(event, session)
+
+      if (current && ctx.layout.state(`${ctx.id}:${effect.id}`, session) !== "visible")
+        setUnread(`${key}\n${effect.id}`, true)
+    }
+
     inFlight.set(effect.attempt, {
       controller,
-      timer: setTimeout(() => dispatch({ type: "generate.timed-out", ...result }), effect.timeout),
+      timer: setTimeout(() => settle({ type: "generate.timed-out", ...result }), effect.timeout),
     })
 
     session.server.client.session
@@ -120,12 +132,12 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
       .then(
         (reply) => {
           if (ctx.signal.aborted) return
-          dispatch({ type: "generate.succeeded", ...result, text: reply.text, now: Date.now() }, session)
+          settle({ type: "generate.succeeded", ...result, text: reply.text, now: Date.now() })
         },
         (cause) => {
           if (ctx.signal.aborted) return
           const message = cause instanceof Error ? cause.message : String(cause)
-          dispatch({ type: "generate.failed", ...result, message })
+          settle({ type: "generate.failed", ...result, message })
         },
       )
   }
@@ -189,11 +201,21 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
         session,
       )
     },
+    /** The tab got its answer or failure while hidden and has not been shown since. */
+    unread: (session: MountedSession, id: string) => !!unread[`${session.key}\n${id}`],
+    seen: (session: MountedSession, id: string) => setUnread(`${session.key}\n${id}`, undefined),
     /** Closing a tab forgets its question and answer. */
-    remove: (session: MountedSession, id: string) =>
-      dispatch({ type: "chat.removed", sessionKey: session.key, id }, session),
+    remove: (session: MountedSession, id: string) => {
+      setUnread(`${session.key}\n${id}`, undefined)
+      dispatch({ type: "chat.removed", sessionKey: session.key, id }, session)
+    },
     /** Ends the requests of sessions whose shell tab closed and forgets their chats. */
-    prune: (keep: ReadonlySet<string>) => dispatch({ type: "sessions.pruned", keep }),
+    prune: (keep: ReadonlySet<string>) => {
+      Object.keys(unread)
+        .filter((key) => !keep.has(key.slice(0, key.lastIndexOf("\n"))))
+        .forEach((key) => setUnread(key, undefined))
+      dispatch({ type: "sessions.pruned", keep })
+    },
   }
 }
 

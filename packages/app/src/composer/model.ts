@@ -10,6 +10,7 @@ import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspace
 import { useComments } from "@/composer/comments"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { orderedSpeeds } from "@/providers/models/speed"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -532,6 +533,19 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
           adapter.controls().model.selection.variant.set(value === "default" ? undefined : value)
         },
         keybind: () => command.keybindParts("model.variant.cycle"),
+      },
+      speed: {
+        options: () =>
+          orderedSpeeds(adapter.controls().model.selection.speed?.list() ?? []).map((id) =>
+            id === undefined ? { id: "standard", label: language.t("composer.speed.standard") } : { id, label: id },
+          ),
+        current: () => adapter.controls().model.selection.speed?.current() ?? "standard",
+        onSelect: (value) => {
+          if (adapter.controls().model.loading) return
+
+          adapter.controls().model.selection.speed?.set(value === "standard" ? undefined : value)
+        },
+        keybind: () => command.keybindParts("model.speed.cycle"),
       },
       submit: {
         available,
