@@ -1096,6 +1096,29 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("hides tools when narrow denies trail a blanket deny", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { skill: make(), question: make() }, { codemode: false })
+      const names = (permissions: Permission.Ruleset) =>
+        toolDefinitions(service, permissions).pipe(Effect.map((definitions) => definitions.map((tool) => tool.name)))
+
+      expect(
+        yield* names([
+          { action: "skill", resource: "*", effect: "deny" },
+          { action: "browser", resource: "*", effect: "deny" },
+          { action: "skill", resource: "browser", effect: "deny" },
+        ]),
+      ).toEqual(["question", "execute"])
+      expect(
+        yield* names([
+          { action: "skill", resource: "*", effect: "deny" },
+          { action: "skill", resource: "browser", effect: "ask" },
+        ]),
+      ).toEqual(["question", "skill", "execute"])
+    }),
+  )
+
   it.effect("keeps permission options isolated between registrations", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
