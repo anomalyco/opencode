@@ -30,7 +30,6 @@ import { Model } from "@opencode/core/model"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { Npm } from "@opencode/util/npm"
 import { Plugin } from "@opencode/core/plugin"
-import { Project } from "@opencode/core/project"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
@@ -148,7 +147,6 @@ export const makePluginTestLayer = (
       LocationServiceMap.node,
       Permission.node,
       PluginHooks.node,
-      Project.node,
       Reference.node,
       Rpc.node,
       Skill.node,
