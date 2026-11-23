@@ -1091,7 +1091,7 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
           </span>
           <span
             data-slot="session-compaction-label"
-            class="relative flex shrink-0 whitespace-nowrap text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
+            class="relative flex shrink-0 whitespace-pre text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
           >
             <span>{label().stem}</span>
             <span data-slot="session-compaction-ending" class="grid justify-items-start">
@@ -1124,10 +1124,14 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
   )
 }
 
-/** Splits Compacting and Compacted at their shared stem, so only the ending changes when the compaction ends. */
+/**
+ * Splits Compacting and Compacted at their shared stem, so only the ending changes when the compaction ends. It splits
+ * between whole characters as they are read, so a vowel sign stays with its consonant.
+ */
 function splitEnding(running: string, done: string) {
-  const chars = [...running]
-  const others = [...done]
+  const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+  const chars = Array.from(graphemes.segment(running), (part) => part.segment)
+  const others = Array.from(graphemes.segment(done), (part) => part.segment)
   const at = chars.findIndex((char, index) => char !== others[index])
   const stem = chars.slice(0, at === -1 ? chars.length : at).join("")
 

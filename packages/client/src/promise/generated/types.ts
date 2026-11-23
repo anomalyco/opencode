@@ -2680,7 +2680,6 @@ export type ConfigEntry =
           todo?: boolean
           media_blob?: boolean
           artifacts?: boolean
-          video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           console_watches?: boolean
           recommended_api?: boolean
           full_codemode?: boolean
@@ -2688,6 +2687,7 @@ export type ConfigEntry =
           home_memory?: boolean
           project_overlay?: boolean
           sqlite_fts?: boolean
+          video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number

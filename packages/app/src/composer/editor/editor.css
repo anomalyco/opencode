@@ -2,12 +2,6 @@
   content: "\200B";
 }
 
-/* Outline the frame, not the editor inside the masked scroll viewport. */
-[data-component="composer"]:has([data-component="composer-editor"][data-keyboard-focus]:focus) {
-  outline: 2px solid var(--v2-border-border-focus);
-  outline-offset: -2px;
-}
-
 /* Transcript session references match this (packages/session-ui/src/components/markdown.css). */
 [data-component="composer-editor"] [data-mention="session"] {
   color: var(--v2-text-text-muted);

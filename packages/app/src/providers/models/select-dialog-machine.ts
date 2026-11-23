@@ -53,8 +53,9 @@ export type DialogFlyoutState =
       readonly apex: Apex | undefined
     }
   /**
-   * `position` is undefined only until the driver measures the row, within the same dispatch. `menu` is the
-   * highlighted item in the flyout and what moved there: the keys belong to the menu only once the arrows entered it.
+   * `position` is undefined only until the driver measures the row (coalesced per microtask) and refines it when the
+   * flyout lays out. `menu` is the highlighted item in the flyout and what moved there: the keys belong to the menu
+   * only once the arrows entered it.
    */
   | {
       readonly status: "open"
@@ -192,14 +193,16 @@ export function transitionDialogFlyout(state: DialogFlyoutState, event: DialogFl
       if (state.status !== "open") return same(state)
 
       // The pointer leaving an item does not pull the keyboard out of the menu it entered.
-      if (event.index === undefined && event.input === "pointer" && state.menu?.input === "keyboard")
-        return same(state)
+      if (event.index === undefined && event.input === "pointer" && state.menu?.input === "keyboard") return same(state)
 
       if (state.menu?.index === event.index && state.menu?.input === event.input) return same(state)
 
       if (state.menu === undefined && event.index === undefined) return same(state)
 
-      return same({ ...state, menu: event.index === undefined ? undefined : { index: event.index, input: event.input } })
+      return same({
+        ...state,
+        menu: event.index === undefined ? undefined : { index: event.index, input: event.input },
+      })
     }
 
     case "wheel":
