@@ -10,8 +10,10 @@ on:
       - "process-daemon-v*"
   pull_request:
     paths:
+      - .github/actions/prefetch-ghostty/**
       - .github/workflows/release-process-daemon.yml
       - packages/process-daemon/build.rs
+      - packages/process-daemon/ghostty-revision
       - packages/process-daemon/npm/**
       - packages/process-daemon/script/npm-packages.mjs
   workflow_dispatch:
@@ -39,6 +41,8 @@ jobs:
       - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
         with:
           version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+      - uses: ./.github/actions/prefetch-ghostty
       - name: Configure baseline Zig builds
         run: |
           chmod +x "$GITHUB_WORKSPACE/packages/process-daemon/script/release-bin/zig"
@@ -94,7 +98,8 @@ jobs:
       - uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
         with:
           version: ${{ env.ZIG_VERSION }}
-          cache-key: ${{ matrix.target }}
+          use-cache: false
+      - uses: ./.github/actions/prefetch-ghostty
       - name: Configure baseline Zig builds
         run: |
           chmod +x "$GITHUB_WORKSPACE/packages/process-daemon/script/release-bin/zig"
@@ -187,7 +192,7 @@ jobs:
         if: matrix.arch == 'x64'
         with:
           version: ${{ env.ZIG_VERSION }}
-          cache-key: release-${{ matrix.target }}
+          use-cache: false
       # Zig 0.16 crashes when building Ghostty on the native ARM64 host, so use
       # the x64-hosted compiler there (matching check-process-daemon.yml).
       - name: Install x64 Zig for ARM64 cross-compilation
@@ -206,8 +211,36 @@ jobs:
           $old = '@ptrCast(try si.loadNtdllProc(@tagName(proc)))'
           if (!$source.Contains($old)) { throw 'Zig alignment workaround no longer matches; re-evaluate it' }
           [System.IO.File]::WriteAllText($file, $source.Replace($old, '@ptrCast(@alignCast(try si.loadNtdllProc(@tagName(proc))))'))
+      - name: Pin MSVC 14.51 for Zig's Clang 21
+        timeout-minutes: 20
+        run: |
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+          $vs = & "$installer\vswhere.exe" -latest -products * -property installationPath
+          $tools = "$vs\VC\Tools\MSVC"
+          $arch = '${{ matrix.arch }}'
+          $hasRuntimes = {
+            (Test-Path "$($_.FullName)\lib\x64\vcruntime.lib") -and
+              (Test-Path "$($_.FullName)\lib\$arch\vcruntime.lib")
+          }
+          if (!(Get-ChildItem $tools -Directory -Filter '14.51.*' | Where-Object $hasRuntimes)) {
+            $components = '--add Microsoft.VisualStudio.Component.VC.14.51.x86.x64'
+            if ($arch -eq 'arm64') { $components += ' --add Microsoft.VisualStudio.Component.VC.14.51.ARM64' }
+            $setup = Start-Process "$installer\setup.exe" -ArgumentList "modify --installPath `"$vs`" $components --quiet --norestart" -Wait -PassThru
+            if ($setup.ExitCode -notin 0, 3010) { throw "VS installer exited with $($setup.ExitCode)" }
+            Write-Output "MSVC 14.51 installer exited with $($setup.ExitCode) for $arch"
+          }
+          $toolset = Get-ChildItem $tools -Directory -Filter '14.51.*' |
+            Where-Object $hasRuntimes |
+            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+          if (!$toolset) { throw "Missing MSVC 14.51 for $arch" }
+          # Zig reads this file for both host and target tools on the disposable runner.
+          Set-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" $toolset.Name -Encoding ascii
+          $libc = zig libc
+          $libc
+          if ($LASTEXITCODE -ne 0 -or $libc -inotcontains "sys_include_dir=$($toolset.FullName)\include") { throw 'Zig selected unexpected MSVC headers' }
       - name: Install Rust toolchain and target
         run: rustup toolchain install $env:RUSTUP_TOOLCHAIN --force-non-host --profile minimal --target $env:CARGO_BUILD_TARGET
+      - uses: ./.github/actions/prefetch-ghostty
       - name: Build
         run: cargo build --locked --release
       - name: Smoke test

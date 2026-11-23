@@ -24,4 +24,9 @@ describe("frontend encoding", () => {
     expect(sampledChecksum(value, value.length)).toBe(checksum(value))
     expect(sampledChecksum(value, value.length - 1)).toBe("600:1isj1k5:1isj1k5:1isj1k5:1isj1k5:1isj1k5")
   })
+
+  test("hashes the end of large values", () => {
+    const value = "a".repeat(500_001)
+    expect(sampledChecksum(`${value.slice(0, -1)}b`)).not.toBe(sampledChecksum(value))
+  })
 })

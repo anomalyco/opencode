@@ -71,6 +71,14 @@ function registerPermissionHandlers(session: Session) {
   return allowed
 }
 
+/**
+ * Whether the window's document may receive the plugin port. A port carries no sender frame, so only the app's own
+ * document may: a page the window was navigated to, or a document of another origin, gets none.
+ */
+export function receivesPluginPort(win: { isDestroyed(): boolean; webContents: { isDestroyed(): boolean; mainFrame: { url: string } } }) {
+  return !win.isDestroyed() && !win.webContents.isDestroyed() && isRendererUrl(win.webContents.mainFrame.url)
+}
+
 export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: string) => void) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)

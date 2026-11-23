@@ -37,4 +37,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Сервер нэмэх",
   "menu.delete": "Устгах",
+  "error.unavailable": "SSH боломжгүй байна",
 }

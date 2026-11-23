@@ -210,6 +210,29 @@ describe("AI promise client", () => {
     await ai.dispose()
   })
 
+  test("rejects image job calls on an inline route without a request", async () => {
+    const seen: Array<string> = []
+    const ai = AI.make({ layer: executor(seen) })
+    const model = openai.image("gpt-image-2")
+    const reasons = await Promise.all(
+      [
+        ai.image.start({ model, prompt: "A lighthouse" }),
+        ai.image.status(model, "job_1"),
+        ai.image.result(model, "job_1"),
+        ai.image.cancel(model, "job_1"),
+      ].map((call) => call.then(() => undefined).catch((error: unknown) => error)),
+    )
+    expect(reasons).toEqual(
+      ["start", "status", "result", "cancel"].map((operation) =>
+        expect.objectContaining({
+          reason: expect.objectContaining({ _tag: "UnsupportedOperation", operation: `image.${operation}` }),
+        }),
+      ),
+    )
+    expect(seen).toEqual([])
+    await ai.dispose()
+  })
+
   test("forwards per-call options to generate, stream, and loop, and checks compaction support", async () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor([]) })
@@ -236,7 +259,7 @@ describe("AI promise client", () => {
   test("exposes a generation's snapshot and terminal state", async () => {
     const ai = AI.make({ layer: executor([]) })
     const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
-    expect(generation.snapshot).toEqual({ id: "tr_1", status: "queued" })
+    expect(generation.snapshot).toEqual({ id: "tr_1", status: "running" })
     expect(generation.terminal).toBe(false)
     const refreshed = await generation.refresh()
     expect(refreshed.terminal).toBe(false)
@@ -251,7 +274,7 @@ describe("AI promise client", () => {
     const events: Array<string> = []
     for await (const event of generation.events({ poll: { interval: 10 } })) events.push(event.type)
     expect(events).toEqual(["generation-progress", "generation-finished"])
-    expect(generation.status).toBe("queued")
+    expect(generation.status).toBe("running")
     expect((await generation.result()).text).toBe("Hello there.")
     await ai.dispose()
   })

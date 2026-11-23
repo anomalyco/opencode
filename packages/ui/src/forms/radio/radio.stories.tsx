@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { createSignal } from "solid-js"
-import { RadioGroup, RadioItem } from "./radio"
+import { RadioGroup, RadioItem, type RadioGroupProps } from "./radio"
 
 const docs = `### Overview
 Single-select options using Kobalte RadioGroup.
@@ -20,6 +19,20 @@ export default {
   title: "UI/Radio",
   id: "ui-radio",
   component: RadioGroup,
+  args: {
+    label: "Notification frequency",
+    description: "",
+    hideLabel: false,
+    disabled: false,
+    readOnly: false,
+    orientation: "vertical",
+    required: false,
+    validationState: "valid",
+  } satisfies RadioGroupProps,
+  argTypes: {
+    validationState: { options: ["valid", "invalid"] },
+    orientation: { options: ["vertical", "horizontal"] },
+  },
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -31,8 +44,8 @@ export default {
 }
 
 export const Basic = {
-  render: () => (
-    <RadioGroup label="Notification frequency" defaultValue="daily" name="frequency">
+  render: (args: RadioGroupProps) => (
+    <RadioGroup {...args} defaultValue="daily" name="frequency">
       <RadioItem value="daily" label="Daily" description="Once per day at 9am." />
       <RadioItem value="weekly" label="Weekly" description="Every Monday morning." />
       <RadioItem value="never" label="Never" description="No notifications." />
@@ -41,12 +54,13 @@ export const Basic = {
 }
 
 export const Controlled = {
-  render: () => {
+  args: { label: "Controlled" },
+  render: (args: RadioGroupProps) => {
     const [value, setValue] = createSignal("weekly")
 
     return (
       <div style={{ display: "grid", gap: "12px" }}>
-        <RadioGroup label="Controlled" value={value()} onChange={(v) => setValue(v)} name="controlled-frequency">
+        <RadioGroup {...args} value={value()} onChange={setValue} name="controlled-frequency">
           <RadioItem value="daily" label="Daily" />
           <RadioItem value="weekly" label="Weekly" />
           <RadioItem value="never" label="Never" />
@@ -60,9 +74,10 @@ export const Controlled = {
 }
 
 export const States = {
-  render: () => (
+  args: { label: "Default" },
+  render: (args: RadioGroupProps) => (
     <div style={{ display: "grid", gap: "20px" }}>
-      <RadioGroup label="Default" defaultValue="a" name="state-default">
+      <RadioGroup {...args} defaultValue="a" name="state-default">
         <RadioItem value="a" label="Option A" />
         <RadioItem value="b" label="Option B" description="Has a description." />
       </RadioGroup>
@@ -89,5 +104,15 @@ export const States = {
         <RadioItem value="b" label="Option B" />
       </RadioGroup>
     </div>
+  ),
+}
+
+export const HiddenItemLabels = {
+  args: { label: "Notification frequency", description: "Daily or weekly" },
+  render: (args: RadioGroupProps) => (
+    <RadioGroup {...args} name="hidden-labels">
+      <RadioItem value="daily" label="Daily" hideLabel />
+      <RadioItem value="weekly" label="Weekly" hideLabel />
+    </RadioGroup>
   ),
 }

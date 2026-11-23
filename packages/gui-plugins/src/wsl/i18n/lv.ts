@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} laiks beidzās pēc {{timeout}} ms",
   "error.failedPort": "Neizdevās iegūt portu",
   "menu.remove": "Noņemt",
+  "error.busy": "{{distro}} ir aizņemts ar citu uzdevumu. Mēģiniet vēlreiz, kad tas būs pabeigts.",
 }

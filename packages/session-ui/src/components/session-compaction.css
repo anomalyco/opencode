@@ -22,13 +22,10 @@
     [data-slot="session-compaction-line"]::before,
     [data-slot="session-compaction-light"],
     [data-slot="session-compaction-running"],
+    [data-slot="session-compaction-done"],
     [data-slot="session-compaction-glint-stem"],
     [data-slot="session-compaction-glint-ending"] {
       transition: none;
-    }
-
-    [data-slot="session-compaction-done"] {
-      transition: color 150ms ease-out;
     }
   }
 
@@ -45,7 +42,7 @@
     }
 
     &:focus-visible {
-      outline: 1px solid var(--v2-text-text-accent);
+      outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
     }
   }
@@ -94,6 +91,12 @@
     }
   }
 
+  /* The label is one word, so it changes colour as one. Its parts inherit that colour and never transition their own,
+     which would trail behind it. */
+  [data-slot="session-compaction-label"] {
+    transition: color 150ms ease-out;
+  }
+
   [data-slot="session-compaction-ending"] > span {
     grid-area: 1 / 1;
   }
@@ -115,8 +118,7 @@
     transition:
       opacity 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms,
       transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms,
-      filter 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms,
-      color 150ms ease-out;
+      filter 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 80ms;
   }
 
   /* The label warms only once each light lands on it, then cools before the next one arrives. */
@@ -166,9 +168,15 @@
       filter: none;
     }
 
-    &:not(:disabled):hover [data-slot="session-compaction-done"],
-    &[aria-expanded="true"] [data-slot="session-compaction-done"] {
+    &[aria-expanded="true"] [data-slot="session-compaction-label"] {
       color: var(--v2-text-text-muted);
+    }
+
+    /* A tap leaves :hover behind, which would keep a closed divider looking open. */
+    @media (hover: hover) {
+      &:not(:disabled):hover [data-slot="session-compaction-label"] {
+        color: var(--v2-text-text-muted);
+      }
     }
   }
 

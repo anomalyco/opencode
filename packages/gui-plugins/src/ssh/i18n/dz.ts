@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost།",
   "form.add": "སར་བར་ཁ་སྐོང་འབད།",
   "menu.delete": "བཏོན༌གཏང༌བ",
+  "error.unavailable": "SSH འཐོབ་མི་ཚུགས།",
 }

@@ -60,7 +60,7 @@ import type {
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
-import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
+import { attached, typeLabel } from "../components/message-file"
 import {
   DISPOSED_ATTACHMENT_MEDIA_EVENT,
   INITIAL_ATTACHMENT_MEDIA_STATE,
@@ -134,17 +134,15 @@ function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy"
+    copied: boolean
     label: JSX.Element
     size?: "small" | "normal"
   },
 ) {
-  const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
-
   return (
-    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4}>
+    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4} forceOpen={props.copied || undefined}>
       <IconButton
-        icon={<Icon name={icon()} size="small" />}
+        icon={<Icon name={props.copied ? "check" : "copy"} />}
         size={props.size ?? "normal"}
         variant="ghost-muted"
         disabled={props.disabled}
@@ -315,7 +313,8 @@ export function CurrentUserMessageDisplay(props: {
   })
 
   // The menu names the day relatively: Today and Yesterday, then the date this year, then the date with its year.
-  const sent = createMemo(() => {
+  // A plain function, not a memo, so each menu open compares against the current day.
+  const sent = () => {
     const created = new Date(props.message.time.created)
     const now = new Date()
     const midnight = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
@@ -337,7 +336,7 @@ export function CurrentUserMessageDisplay(props: {
       }).format(created)
 
     return new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(created)
-  })
+  }
 
   // A waiting steer reads agent · model · Pending; mobile shows the agent and model in the composer instead.
   const metaLabels = createMemo(() => (mobile() ? [] : [...agentItems(), ...modelItems(data, props.model)]))
@@ -434,7 +433,7 @@ export function CurrentUserMessageDisplay(props: {
           {/* The chevron explains itself, so it carries only an accessible name, no tooltip. */}
           <Menu.Trigger
             as={IconButton}
-            icon={<Icon name="chevron-down" size="small" />}
+            icon={<Icon name="chevron-down" />}
             size="small"
             variant="ghost-muted"
             onMouseDown={(event: MouseEvent) => event.preventDefault()}
@@ -453,26 +452,26 @@ export function CurrentUserMessageDisplay(props: {
               <Menu.Separator />
               <Show when={pending() && props.actions?.pending}>
                 <Menu.Item disabled={actionView().disabled.queue} onSelect={() => request("queue")}>
-                  <Icon name="bullet-list" size="small" />
+                  <Icon name="bullet-list" />
                   {i18n.t("ui.message.moveToQueue")}
                 </Menu.Item>
               </Show>
               <Menu.Item disabled={!copyText()} onSelect={() => void writeClipboard(copyText())}>
-                <Icon name="outline-copy" size="small" />
+                <Icon name="copy" />
 
                 {i18n.t("ui.message.copyMessage")}
               </Menu.Item>
               {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
               <Show when={props.voice}>
                 <Menu.Item onSelect={() => void writeClipboard(props.message.text)}>
-                  <Icon name="outline-copy" size="small" />
+                  <Icon name="copy" />
                   {i18n.t("ui.message.copyFullMessage")}
                 </Menu.Item>
               </Show>
               {/* A pending steer has no history to fork from yet. */}
               <Show when={!pending()}>
                 <Menu.Item disabled={actionView().disabled.fork} onSelect={() => request("fork")}>
-                  <Icon name="fork" size="small" />
+                  <Icon name="fork" />
                   {i18n.t("ui.message.forkMessage")}
                 </Menu.Item>
               </Show>
@@ -483,7 +482,7 @@ export function CurrentUserMessageDisplay(props: {
                   <Show when={props.actions?.revert}>
                     <Menu.Separator />
                     <Menu.Item disabled={actionView().disabled.revert} onSelect={() => request("revert")}>
-                      <Icon name={props.latest ? "outline-undo" : "reset"} size="small" />
+                      <Icon name="reset" />
                       {props.latest ? i18n.t("ui.message.undoMessage") : i18n.t("ui.message.revertMessage")}
                     </Menu.Item>
                   </Show>
@@ -495,7 +494,7 @@ export function CurrentUserMessageDisplay(props: {
                   disabled={actionView().disabled.remove}
                   onSelect={() => request("remove")}
                 >
-                  <Icon name="outline-trash" size="small" />
+                  <Icon name="trash" />
                   {i18n.t("ui.message.deletePending")}
                 </Menu.Item>
               </Show>
@@ -580,13 +579,6 @@ export function CurrentUserMessageDisplay(props: {
               return "height" in current ? current.height : undefined
             }
 
-            const placeholderStyle = () =>
-              imageAttachmentPlaceholderStyle({
-                width: width(),
-                height: height(),
-                loaded: mediaView().status === "ready",
-              })
-
             return (
               <Show
                 when={!image()}
@@ -598,7 +590,6 @@ export function CurrentUserMessageDisplay(props: {
                     data-placeholder={mediaView().placeholder ? "true" : undefined}
                     data-width={width()}
                     data-height={height()}
-                    style={placeholderStyle()}
                     onClick={(event) => {
                       const src = mediaView().src
                       const origin = event.currentTarget
@@ -767,7 +758,8 @@ function UserMessageFold(props: {
   }
 
   onMount(() => {
-    measure()
+    // The bubble gets its wrapping width after the surrounding view mounts.
+    queueMicrotask(measure)
     const observer = new ResizeObserver(measure)
     observer.observe(content!)
     onCleanup(() => observer.disconnect())
@@ -808,7 +800,7 @@ function UserMessageFold(props: {
           onClick={flip}
         >
           <span>{props.expanded ? i18n.t("ui.message.showLess") : i18n.t("ui.message.readMore")}</span>
-          <Icon name="chevron-down" size="small" />
+          <Icon name="chevron-down" />
         </button>
       </Show>
     </>
@@ -945,7 +937,6 @@ function CompactionDivider(props: { label: string }) {
 
 export function SessionCompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
   const i18n = useI18n()
-  const data = useData()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
 
   const error = () => {
@@ -992,7 +983,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 
   return (
     <Show
-      when={!data.backgroundCompaction || props.message.reason === "manual" || props.message.status === "failed"}
+      when={props.message.reason === "manual" || props.message.status === "failed"}
       fallback={
         <QuietCompaction
           id={props.message.id}
@@ -1100,7 +1091,7 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
           </span>
           <span
             data-slot="session-compaction-label"
-            class="relative flex shrink-0 whitespace-nowrap text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
+            class="relative flex shrink-0 whitespace-pre text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
           >
             <span>{label().stem}</span>
             <span data-slot="session-compaction-ending" class="grid justify-items-start">
@@ -1133,10 +1124,14 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
   )
 }
 
-/** Splits Compacting and Compacted at their shared stem, so only the ending changes when the compaction ends. */
+/**
+ * Splits Compacting and Compacted at their shared stem, so only the ending changes when the compaction ends. It splits
+ * between whole characters as they are read, so a vowel sign stays with its consonant.
+ */
 function splitEnding(running: string, done: string) {
-  const chars = [...running]
-  const others = [...done]
+  const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+  const chars = Array.from(graphemes.segment(running), (part) => part.segment)
+  const others = Array.from(graphemes.segment(done), (part) => part.segment)
   const at = chars.findIndex((char, index) => char !== others[index])
   const stem = chars.slice(0, at === -1 ? chars.length : at).join("")
 
@@ -1148,6 +1143,7 @@ export function AssistantTextContent(props: {
   text: string
   message: SessionMessageAssistant
   showCopy: boolean
+  keepCopyVisible?: boolean
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
   /** The finished turn's web searches and fetches, shown as a chip in its footer. */
@@ -1244,11 +1240,11 @@ export function AssistantTextContent(props: {
     return (
       <div
         data-slot="text-part-copy-wrapper"
+        data-keep-copy-visible={props.keepCopyVisible ? "" : undefined}
         data-interrupted={interrupted() ? "" : undefined}
-        data-copy-always-visible={data.copyAlwaysVisible ? "" : undefined}
       >
         <MessageActionButton
-          icon={copy.copied() ? "check" : "copy"}
+          copied={copy.copied()}
           size="small"
           label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
           onMouseDown={(event) => event.preventDefault()}

@@ -1,10 +1,15 @@
 import { DropdownMenu, type DropdownMenuTriggerProps } from "@kobalte/core/dropdown-menu"
 import { ContextMenu } from "@kobalte/core/context-menu"
 import type { PolymorphicProps } from "@kobalte/core/polymorphic"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import {
   createComputed,
   createContext,
+  createEffect,
+  createMemo,
   createSignal,
+  createUniqueId,
+  on,
   onCleanup,
   Show,
   splitProps,
@@ -25,9 +30,21 @@ import {
   selectMenuRestoreTriggerWithoutRing,
   transitionMenu,
   type MenuEvent,
-  type MenuInputGesture,
   type MenuState,
 } from "./machine"
+import {
+  selectSubmenuOpen,
+  SUBMENU_CLOSED,
+  SUBMENU_DISPOSED,
+  SUBMENU_FOCUS_LEFT,
+  SUBMENU_FOCUS_RETURNED,
+  submenuLeaveElapsed,
+  submenuRequested,
+  transitionSubmenu,
+  type SubmenuEvent,
+  type SubmenuState,
+} from "./submenu-machine"
+import { createOverlayFocus, openGesture, releaseOpenGesture, retainOpenGesture } from "../../context/overlay-focus"
 import "./menu.css"
 
 const ChevronRight: Component = () => (
@@ -64,9 +81,10 @@ type MenuContextValue = {
   modal: Accessor<boolean>
   onOutsideInteract: () => void
   onCloseAutoFocus: () => void
+  restoreFocus?: (event: Event) => void
 }
 
-// Context menus restore focus through Kobalte alone, so they never run the dropdown machine.
+// Context menus restore focus through `restoreFocus`, so they never run the dropdown machine.
 const UNTRACKED_MENU: MenuContextValue = {
   appearance: () => "compact",
   state: () => createMenuState(false),
@@ -76,52 +94,6 @@ const UNTRACKED_MENU: MenuContextValue = {
 }
 
 const MenuAppearanceContext = createContext<MenuContextValue>(UNTRACKED_MENU)
-
-// One set of window listeners serves every mounted menu. Capture runs before the trigger's own handlers, so while an
-// input event dispatches, `gesture` names the input that may open a menu. It clears once that event's task ends, so a
-// later open without input counts as programmatic.
-let trackers = 0
-
-let gesture: MenuInputGesture = "none"
-
-let gestureReset: ReturnType<typeof setTimeout> | undefined
-
-const trackGesture = (event: Event) => {
-  if (!event.isTrusted) return
-  // Keyboard activation fires a click with no press count.
-  gesture =
-    event.type === "keydown" || (event instanceof MouseEvent && event.type === "click" && event.detail === 0)
-      ? "keyboard"
-      : "pointer"
-
-  // A microtask would run between listeners of this same dispatch, before the trigger's handler reads the gesture.
-  if (gestureReset !== undefined) return
-  gestureReset = setTimeout(() => {
-    gestureReset = undefined
-    gesture = "none"
-  })
-}
-
-const GESTURE_EVENTS = ["pointerdown", "click", "keydown"] as const
-
-const GESTURE_LISTENER_OPTIONS = { capture: true, passive: true }
-
-function retainGestureTracker() {
-  trackers += 1
-
-  if (trackers === 1)
-    GESTURE_EVENTS.forEach((type) => window.addEventListener(type, trackGesture, GESTURE_LISTENER_OPTIONS))
-}
-
-function releaseGestureTracker() {
-  trackers -= 1
-
-  if (trackers > 0) return
-  GESTURE_EVENTS.forEach((type) => window.removeEventListener(type, trackGesture, GESTURE_LISTENER_OPTIONS))
-  clearTimeout(gestureReset)
-  gestureReset = undefined
-  gesture = "none"
-}
 
 function useMenuContext() {
   const ctx = useContext(MenuAppearanceContext)
@@ -168,6 +140,48 @@ function MenuItem(props: ParentProps<MenuItemProps>) {
         {s.children}
       </ItemBody>
     </DropdownMenu.Item>
+  )
+}
+
+export interface MenuItemRowProps extends ComponentProps<typeof DropdownMenu.Group> {
+  /** The row's name, set where an item's label is. It names the group for assistive technology. */
+  label: JSX.Element
+}
+
+// A row that is not an action itself: its name where an item's label is, and small items of its own where an item's
+// shortcut or chevron is. It is laid out as an item, so its name and the edge of its last item cannot drift from the
+// rows around it. Up and Down walk its items in order, as they walk every item; Left and Right move between them.
+function MenuItemRow(props: ParentProps<MenuItemRowProps>) {
+  const ctx = useMenuContext()
+  const [s, r] = splitProps(props, ["class", "classList", "children", "label"])
+
+  const onKeyDown: JSX.EventHandler<HTMLSpanElement, KeyboardEvent> = (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+
+    const items = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-component="menu-v2-item"]:not([data-disabled])')]
+    const forward = (event.key === "ArrowRight") !== event.currentTarget.matches(":dir(rtl)")
+    const next = items[items.findIndex((item) => item === document.activeElement) + (forward ? 1 : -1)]
+
+    // Past either end the key keeps its meaning for the menu, such as closing a submenu.
+    if (!next) return
+    event.preventDefault()
+    event.stopPropagation()
+    next.focus()
+  }
+
+  return (
+    <DropdownMenu.Group
+      {...r}
+      data-component="menu-v2-item"
+      data-row=""
+      data-appearance={ctx.appearance()}
+      classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
+    >
+      <DropdownMenu.GroupLabel data-slot="menu-v2-item-content">{s.label}</DropdownMenu.GroupLabel>
+      <span data-slot="menu-v2-item-actions" onKeyDown={onKeyDown}>
+        {s.children}
+      </span>
+    </DropdownMenu.Group>
   )
 }
 
@@ -254,17 +268,112 @@ export interface MenuSubProps extends ComponentProps<typeof DropdownMenu.Sub> {
     | "right-end"
 }
 
+// Longer than Kobalte's 100ms hover delay, so a submenu the pointer rests on replaces the leaving one in the same frame.
+const SUBMENU_LEAVE_DELAY = 150
+
+type SubmenuGroup = { state: Accessor<SubmenuState>; dispatch: (event: SubmenuEvent) => void }
+
+const SubmenuGroupContext = createContext<SubmenuGroup>()
+
+const SubmenuTriggerContext = createContext<(element: HTMLElement) => void>()
+
+function createSubmenuGroup(): SubmenuGroup {
+  const [state, setState] = createSignal(SUBMENU_CLOSED)
+  let leave: ReturnType<typeof setTimeout> | undefined
+
+  const dispatch = (event: SubmenuEvent) => {
+    const next = transitionSubmenu(state(), event)
+
+    if (next === state()) return
+    clearTimeout(leave)
+
+    if (next.status === "leaving") leave = setTimeout(() => dispatch(submenuLeaveElapsed(next)), SUBMENU_LEAVE_DELAY)
+    setState(next)
+  }
+
+  onCleanup(() => {
+    clearTimeout(leave)
+    dispatch(SUBMENU_DISPOSED)
+  })
+
+  return { state, dispatch }
+}
+
+// Each menu surface owns the submenus it lists, and mounts this with its items so every open starts with none open.
+function SubmenuGroupProvider(props: ParentProps) {
+  const group = createSubmenuGroup()
+
+  return <SubmenuGroupContext.Provider value={group}>{props.children}</SubmenuGroupContext.Provider>
+}
+
+// The menu surface decides which of its submenus is open. A controlled submenu stays with its owner instead.
 function MenuSub(props: MenuSubProps) {
-  return <DropdownMenu.Sub {...props} />
+  const [local, rest] = splitProps(props, ["open", "defaultOpen", "onOpenChange"])
+  const group = useContext(SubmenuGroupContext) ?? createSubmenuGroup()
+  const id = createUniqueId()
+  const open = createMemo(() => selectSubmenuOpen(group.state(), id))
+  let trigger: HTMLElement | undefined
+
+  if (local.defaultOpen) group.dispatch(submenuRequested(id, true))
+  onCleanup(() => group.dispatch(submenuRequested(id, false)))
+
+  createEffect(
+    on(
+      open,
+      (value) => {
+        if (local.open === undefined) local.onOpenChange?.(value)
+      },
+      { defer: true },
+    ),
+  )
+
+  // Kobalte closes a submenu when focus leaves it, but ignores focus inside a top layer, and every menu is one so a modal
+  // dialog keeps it reachable. Focus moves go to the group instead, which waits for the next submenu or the pointer.
+  createEffect(() => {
+    if (!open()) return
+    makeEventListener(
+      document,
+      "focusin",
+      (event) => {
+        if (!(event.target instanceof Node) || !trigger) return
+
+        const left = !trigger.contains(event.target) && !!trigger.closest('[role="menu"]')?.contains(event.target)
+        group.dispatch(left ? SUBMENU_FOCUS_LEFT : SUBMENU_FOCUS_RETURNED)
+      },
+      { capture: true },
+    )
+  })
+
+  return (
+    <SubmenuTriggerContext.Provider value={(element) => (trigger = element)}>
+      <DropdownMenu.Sub
+        {...rest}
+        open={local.open ?? open()}
+        onOpenChange={(next) => {
+          if (local.open !== undefined) return local.onOpenChange?.(next)
+          group.dispatch(submenuRequested(id, next))
+        }}
+      />
+    </SubmenuTriggerContext.Provider>
+  )
 }
 
 function MenuSubTrigger(props: ParentProps<MenuSubTriggerProps>) {
   const ctx = useMenuContext()
-  const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
+  const registerTrigger = useContext(SubmenuTriggerContext)
+  const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge", "ref"])
+
+  const assignRef = (element: HTMLElement) => {
+    registerTrigger?.(element)
+    const ref = s.ref
+
+    if (ref instanceof Function) ref(element)
+  }
 
   return (
     <DropdownMenu.SubTrigger
       {...r}
+      ref={assignRef}
       data-component="menu-v2-item"
       data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
@@ -278,7 +387,7 @@ function MenuSubTrigger(props: ParentProps<MenuSubTriggerProps>) {
 
 function MenuSubContent(props: ComponentProps<typeof DropdownMenu.SubContent>) {
   const ctx = useMenuContext()
-  const [s, r] = splitProps(props, ["class", "classList"])
+  const [s, r] = splitProps(props, ["class", "classList", "children"])
 
   return (
     <DropdownMenu.SubContent
@@ -287,7 +396,9 @@ function MenuSubContent(props: ComponentProps<typeof DropdownMenu.SubContent>) {
       data-component="menu-v2-content"
       data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
-    />
+    >
+      <SubmenuGroupProvider>{s.children}</SubmenuGroupProvider>
+    </DropdownMenu.SubContent>
   )
 }
 
@@ -329,7 +440,7 @@ function MenuTrigger<T extends ValidComponent = "button">(props: PolymorphicProp
 
 function MenuContent(props: ComponentProps<typeof DropdownMenu.Content>) {
   const ctx = useMenuContext()
-  const [s, r] = splitProps(props, ["class", "classList", "onCloseAutoFocus", "onInteractOutside"])
+  const [s, r] = splitProps(props, ["class", "classList", "children", "onCloseAutoFocus", "onInteractOutside"])
 
   // Kobalte's own rule for when an outside press keeps focus where it landed.
   const onInteractOutside: NonNullable<typeof s.onInteractOutside> = (event) => {
@@ -366,7 +477,9 @@ function MenuContent(props: ComponentProps<typeof DropdownMenu.Content>) {
       data-component="menu-v2-content"
       data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
-    />
+    >
+      <SubmenuGroupProvider>{s.children}</SubmenuGroupProvider>
+    </DropdownMenu.Content>
   )
 }
 
@@ -381,16 +494,16 @@ function MenuRoot(props: MenuProps) {
   const [menuState, setMenuState] = createSignal(createMenuState(initialOpen))
   const dispatch = (event: MenuEvent) => setMenuState((state) => transitionMenu(state, event))
 
-  retainGestureTracker()
+  retainOpenGesture()
   onCleanup(() => {
-    releaseGestureTracker()
+    releaseOpenGesture()
     dispatch(MENU_DISPOSED)
   })
 
   // Kobalte does not report a controlled open it did not ask for, so a controlled menu follows `open` itself.
   createComputed(() => {
     if (props.open === undefined) return
-    dispatch(openChangedEvent(props.open, gesture))
+    dispatch(openChangedEvent(props.open, openGesture()))
   })
 
   const context = {
@@ -406,7 +519,7 @@ function MenuRoot(props: MenuProps) {
       <DropdownMenu
         {...rest}
         onOpenChange={(open) => {
-          if (props.open === undefined) dispatch(openChangedEvent(open, gesture))
+          if (props.open === undefined) dispatch(openChangedEvent(open, openGesture()))
           local.onOpenChange?.(open)
         }}
       >
@@ -421,27 +534,44 @@ export interface MenuContextProps extends ComponentProps<typeof ContextMenu> {
 }
 
 function MenuContextRoot(props: MenuContextProps) {
-  const [local, rest] = splitProps(props, ["appearance", "children"])
+  const [local, rest] = splitProps(props, ["appearance", "children", "onOpenChange"])
   const appearance = () => local.appearance ?? "compact"
+  const overlayFocus = createOverlayFocus()
 
   return (
-    <MenuAppearanceContext.Provider value={{ ...UNTRACKED_MENU, appearance }}>
-      <ContextMenu {...rest}>{local.children}</ContextMenu>
+    <MenuAppearanceContext.Provider
+      value={{ ...UNTRACKED_MENU, appearance, restoreFocus: (event) => overlayFocus.restore(event) }}
+    >
+      <ContextMenu
+        {...rest}
+        onOpenChange={(open) => {
+          overlayFocus.openChanged(open)
+          local.onOpenChange?.(open)
+        }}
+      >
+        {local.children}
+      </ContextMenu>
     </MenuAppearanceContext.Provider>
   )
 }
 
 function MenuContextContent(props: ComponentProps<typeof ContextMenu.Content>) {
   const ctx = useMenuContext()
-  const [s, r] = splitProps(props, ["class", "classList"])
+  const [s, r] = splitProps(props, ["class", "classList", "children", "onCloseAutoFocus"])
 
   return (
     <ContextMenu.Content
       {...r}
+      onCloseAutoFocus={(event) => {
+        s.onCloseAutoFocus?.(event)
+        ctx.restoreFocus?.(event)
+      }}
       data-component="menu-v2-content"
       data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}
-    />
+    >
+      <SubmenuGroupProvider>{s.children}</SubmenuGroupProvider>
+    </ContextMenu.Content>
   )
 }
 
@@ -456,6 +586,7 @@ export const Menu = Object.assign(MenuRoot, {
   Portal: DropdownMenu.Portal,
   Content: MenuContent,
   Item: MenuItem,
+  ItemRow: MenuItemRow,
   CheckboxItem: MenuCheckboxItem,
   RadioGroup: DropdownMenu.RadioGroup,
   RadioItem: MenuRadioItem,

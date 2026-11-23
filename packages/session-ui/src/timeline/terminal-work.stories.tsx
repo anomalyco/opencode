@@ -1,6 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageShell } from "@opencode/client/promise"
 import { Match } from "effect"
-import { createMemo, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DataProvider } from "../context/data"
 import { SessionShellMessage } from "../tools/tool-renderer"
@@ -8,6 +8,8 @@ import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybo
 import {
   STORY_TIME,
   executeCodeDocument,
+  executeLongDetailsDocument,
+  executeManyCallsDocument,
   expandedShellDocument,
   recoveryDocument,
   standaloneShellCompletedDocument,
@@ -192,6 +194,30 @@ export const ExecuteCode = {
   ),
 }
 
+export const ExecuteManyCalls = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Execute many calls"
+      description="A script that made 75 calls lists its latest 10; the row above them reveals earlier calls 50 at a time."
+      document={executeManyCallsDocument}
+      width="786px"
+      shellToolDefaultOpen
+    />
+  ),
+}
+
+export const ExecuteLongDetails = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Execute long details"
+      description="A script and output taller than the details dialog scroll inside it and keep the dialog's bottom padding."
+      document={executeLongDetailsDocument}
+      width="786px"
+      shellToolDefaultOpen
+    />
+  ),
+}
+
 export const ExecuteGrouped = {
   render: () => (
     <CurrentSessionTimelineStory
@@ -225,7 +251,7 @@ export const ExecuteFailed = {
           },
           {
             output:
-              "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths and file:// URLs are not browser URLs; use browser.preview to show a local file to the user. The connected server must be able to reach the address; localhost refers to that server.",
+              "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths and file:// URLs are not browser URLs; use browser.tabs.open({ path }) to show a local file to the user. The connected server must be able to reach the address; localhost refers to that server.",
             metadata: {
               error: true,
               toolCalls: [
@@ -262,7 +288,7 @@ export const ExecuteFailed = {
           },
           {
             output:
-              "[browser.operation_failed] browser.screenshot failed. Screenshot needs a visible tab. Call browser.tabs.focus and keep its desktop window visible.",
+              "[browser.operation_failed] browser.screenshot failed. A full-page screenshot needs this tab on screen in the Review pane, and it is not shown now. Omit fullPage to capture the viewport, which works while the tab is hidden, and scroll to capture the rest.",
             metadata: {
               error: true,
               toolCalls: [
@@ -312,15 +338,19 @@ function InteractiveCommandStory(props: {
   existingGroup?: boolean
   tool?: "shell" | "execute" | "subagent"
 }) {
-  const initialPhase: "streaming" | "input" | "running" | "completed" = props.streaming ? "streaming" : "completed"
+  const initialPhase = (): "streaming" | "input" | "running" | "completed" =>
+    props.streaming ? "streaming" : "completed"
 
   const [state, setState] = createStore({
-    phase: initialPhase,
+    phase: initialPhase(),
     started: !props.existingGroup,
     lines: 3,
     sibling: false,
     busy: false,
   })
+
+  createEffect(() => setState("phase", initialPhase()))
+  createEffect(() => setState("started", !props.existingGroup))
 
   const document = createMemo(() => {
     const phase = state.phase
@@ -413,7 +443,11 @@ export const TerminalCommands = {
     streaming: boolean
     existingGroup: boolean
     tool: "shell" | "execute" | "subagent"
-  }) => (args.scenario === "collapsed" ? CollapsedShell.render() : <InteractiveCommandStory {...args} />),
+  }) => (
+    <Show when={args.scenario !== "collapsed"} fallback={<CollapsedShell.render />}>
+      <InteractiveCommandStory {...args} />
+    </Show>
+  ),
 }
 
 export const FixedAndPassed = {

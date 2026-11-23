@@ -12,4 +12,12 @@ export default {
   noChanges: "ບໍ່ມີການປ່ຽນແປງ",
   "settings.wrapLines.title": "ຫໍ່ສາຍ",
   "settings.wrapLines.description": "ຫໍ່ເສັ້ນຍາວຢູ່ໃນຄວາມແຕກຕ່າງຂອງມືຖືແທນທີ່ຈະເລື່ອນຕາມແນວນອນ",
+  "menu.count.one": "ປ່ຽນແປງ {{count}} ໄຟລ໌",
+  "menu.count.other": "ປ່ຽນແປງ {{count}} ໄຟລ໌",
+  "folder.more": "{{count}} · ມີອີກທີ່ບໍ່ໄດ້ສະແດງ",
+  "folder.failed": "ບໍ່ສາມາດໂຫຼດການປ່ຽນແປງໄດ້",
+  "command.open": "ເປີດການທົບທວນ",
+  "load.failed": "ບໍ່ສາມາດໂຫຼດການປ່ຽນແປງໄດ້",
+  "load.timeout": "ເຊີບເວີໃຊ້ເວລາຕອບດົນເກີນໄປ",
+  offline: "ບໍ່ສາມາດເຂົ້າເຖິງເຊີບເວີນີ້ໄດ້",
 }

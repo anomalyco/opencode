@@ -1,10 +1,18 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Keybind } from "@opencode/ui/keybind"
-import { For, onMount, Show } from "solid-js"
+import { createEffect, createSignal, For, on, onMount, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { formatKeybindParts, matchKeybind, parseKeybind } from "@/shell/commands/command"
 import { JumpToMessage } from "./jump-to-message"
+import {
+  selectJumpHistory,
+  selectJumpOpening,
+  selectJumpStatus,
+  transitionJumpToMessage,
+  type JumpToMessageEvent,
+  type JumpToMessageState,
+} from "./jump-to-message-machine"
 
 const shortcut = "mod+alt+g"
 
@@ -48,12 +56,28 @@ const turns = [
   reply,
 }))
 
-function SessionStory(props: { query?: string; empty?: boolean; failed?: boolean }) {
+const scenes = ["browse", "closed", "empty", "loading", "failed", "paged", "opening", "openFailed"] as const
+
+type Args = { scene: (typeof scenes)[number]; query: string }
+
+const recent = turns.slice(4)
+
+const older = turns.slice(0, 4)
+
+function snapshot(scene: Args["scene"], history: typeof turns): JumpToMessageState {
+  if (scene === "loading" || scene === "failed") return { status: scene, attempt: 1 }
+
+  if (scene === "opening") return { status: "opening", history, target: older[0]!.id, attempt: 2 }
+
+  return { status: "ready", history, failed: scene === "openFailed", attempt: 1 }
+}
+
+function SessionStory(props: Args) {
   const language = useLanguage()
 
   const dialog = useDialog()
 
-  const prompts = () => (props.empty ? [] : turns)
+  const [prompts, setPrompts] = createSignal(turns)
 
   const bubbles = new Map<string, HTMLElement>()
 
@@ -61,29 +85,77 @@ function SessionStory(props: { query?: string; empty?: boolean; failed?: boolean
 
   let transcript!: HTMLDivElement
 
-  const open = (query = "") =>
-    dialog.show(() => (
-      <JumpToMessage
-        prompts={prompts()}
-        initialQuery={query}
-        status={props.failed ? language.t("dialog.jump.failed") : undefined}
-        onRetry={props.failed ? () => dialog.close() : undefined}
-        onClose={() => dialog.close()}
-        onJump={(prompt) => {
-          dialog.close()
-          const bubble = bubbles.get(prompt.id)
-          bubble?.focus({ preventScroll: true })
-          bubble?.scrollIntoView({ block: "center", inline: "nearest" })
-        }}
-      />
-    ))
+  const open = () =>
+    dialog.show(() => {
+      const history = prompts() === recent ? older : []
+
+      const [state, setState] = createSignal(snapshot(props.scene, history))
+
+      const status = () => {
+        const note = selectJumpStatus(state())
+
+        return note && language.t(`dialog.jump.${note}`)
+      }
+
+      const dispatch = (event: JumpToMessageEvent) => {
+        const next = transitionJumpToMessage(state(), event)
+        setState(next.state)
+
+        for (const effect of next.effects) {
+          if (effect.type === "history.load") dispatch({ type: "history.loaded", attempt: effect.attempt, history })
+
+          if (effect.type === "open.load") {
+            setPrompts(turns)
+            dispatch({ type: "opened", attempt: effect.attempt })
+          }
+
+          if (effect.type === "jump") {
+            dialog.close()
+            const bubble = bubbles.get(effect.id)
+            bubble?.focus({ preventScroll: true })
+            bubble?.scrollIntoView({ block: "center", inline: "nearest" })
+          }
+        }
+      }
+
+      const [query, setQuery] = createSignal(props.query)
+      createEffect(() => setQuery(props.query))
+
+      return (
+        <JumpToMessage
+          prompts={[...selectJumpHistory(state()), ...prompts()]}
+          query={query()}
+          onQuery={setQuery}
+          status={status()}
+          opening={selectJumpOpening(state())}
+          onRetry={state().status === "failed" ? () => dispatch({ type: "retry" }) : undefined}
+          onClose={() => dialog.close()}
+          onJump={(row) =>
+            dispatch({ type: "selected", id: row.id, loaded: prompts().some((turn) => turn.id === row.id) })
+          }
+        />
+      )
+    })
 
   onMount(() => {
     transcript.scrollTop = transcript.scrollHeight
     session.focus({ preventScroll: true })
-
-    void open(props.query)
   })
+
+  createEffect(
+    on([() => props.scene, () => props.query], ([scene], previous) => {
+      if (previous?.[0] === scene) {
+        if (!dialog.active && scene !== "closed") void open()
+
+        return
+      }
+
+      setPrompts(scene === "empty" ? [] : scene === "browse" || scene === "closed" ? turns : recent)
+
+      if (scene === "closed") return dialog.close()
+      void open()
+    }),
+  )
 
   return (
     <section
@@ -133,17 +205,22 @@ function SessionStory(props: { query?: string; empty?: boolean; failed?: boolean
 }
 
 export default {
-  title: "Session/Jump to message",
+  title: "OpenCode/Session/Jump to message",
   id: "session-jump-to-message",
+  render: (args: Args) => <SessionStory {...args} />,
+  args: { scene: "browse", query: "" },
+  argTypes: { scene: { options: scenes } },
   parameters: { layout: "fullscreen" },
 }
 
-export const Browse = { render: () => <SessionStory /> }
+export const Browse = {}
 
-export const MultilineMatch = { render: () => <SessionStory query="loading dock" /> }
+export const MultilineMatch = { args: { query: "loading dock" } }
 
-export const Empty = { render: () => <SessionStory empty /> }
+export const Empty = { args: { scene: "empty" } }
 
-export const HistoryFailed = { render: () => <SessionStory failed /> }
+export const HistoryFailed = { args: { scene: "failed" } }
 
-export const NoMatches = { render: () => <SessionStory query="missing bookmark" /> }
+export const NoMatches = { args: { query: "missing bookmark" } }
+
+export const MixedDirection = { args: { query: "ليلى" } }

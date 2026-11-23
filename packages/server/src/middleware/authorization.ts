@@ -5,6 +5,7 @@ export { Authorization } from "@opencode/protocol/middleware/authorization"
 import { PTY_CONNECT_PATH, PTY_CONNECT_TICKET_QUERY } from "@opencode/protocol/groups/pty"
 import { PERSISTENT_PTY_CONNECT_PATH } from "@opencode/protocol/groups/persistent-pty"
 import { MCP_CLIENT_PATH } from "@opencode/protocol/groups/mcp"
+import { isWebSocketUpgrade, MACHINE_LINK_PATH } from "@opencode/protocol/groups/machine"
 import { PAIRING_CONNECT_PATH } from "@opencode/protocol/groups/server"
 import { Effect, Layer, Redacted } from "effect"
 import { Base64 } from "effect/encoding"
@@ -92,6 +93,12 @@ export const authorizationLayer = Layer.effect(
           route.route.path === PAIRING_CONNECT_PATH
         )
           return yield* effect
+        // A machine's link takes no server password: a worker holding it could call the whole API. Only a WebSocket
+        // upgrade to the route Effect selected passes here, and that is safe because the socket carries nothing until
+        // the link's own handshake has proved a paired key or a valid join secret, as an SSH port does. Any other
+        // request to the route is checked like the rest, and with machines off the handler answers the upgrade as an
+        // unknown route.
+        if (route.route.path === MACHINE_LINK_PATH && isWebSocketUpgrade(request)) return yield* effect
         if (yield* authorizedRequest(request, config)) return yield* effect
         if (challengeRequest(request))
           yield* HttpEffect.appendPreResponseHandler((_request, response) =>

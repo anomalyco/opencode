@@ -5,7 +5,6 @@ export default {
   "usage.usage": "사용량",
   "usage.cost": "비용",
   "usage.view": "컨텍스트 사용량 보기",
-  "systemPrompt.title": "시스템 프롬프트",
   "rawMessages.title": "원시 메시지",
   "export.session": "세션 내보내기",
   "stats.session": "세션",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "세션 저장 위치: {{filename}}",
   "export.failed.title": "세션 내보내기 실패",
   "export.failed.description": "세션을 내보내는 동안 오류가 발생했습니다",
+  "usage.toggle": "세션 컨텍스트 표시/숨기기",
 }

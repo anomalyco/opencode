@@ -37,6 +37,18 @@ describe("data sync plan", () => {
     expect(error).toBeInstanceOf(CatalogUnavailableError)
   })
 
+  test("drops hidden models from every period, including weeks no run recomputes", async () => {
+    const events: string[] = []
+
+    await Effect.runPromise(
+      planDataSync(new Date("2026-10-23T19:05:00.000Z"), { history: false, loadCatalog }).pipe(
+        Effect.provide(services({ events })),
+      ),
+    )
+
+    expect(events.toSorted()).toEqual(["deleteModels geo zen secret-model", "deleteModels model zen secret-model"])
+  })
+
   test("plans the current week for hourly runs and the rest of the window for history runs", async () => {
     const startedAt = new Date("2026-10-23T19:05:00.000Z")
     const plan = (history: boolean) =>
@@ -198,6 +210,10 @@ const retentionPeriod = {
 
 function services(input: { events: string[]; rows?: R2SqlData[]; failure?: InstanceType<typeof R2SqlQueryError> }) {
   const unused = () => Effect.die("unused")
+  const deleteModels = (table: string) => (dataset: string, models: readonly string[]) =>
+    Effect.sync(() => {
+      input.events.push(`deleteModels ${table} ${dataset} ${models.join(",")}`)
+    })
   const retired = (table: string) => (scope: StatPeriodScope, hidden?: readonly string[]) =>
     Effect.sync(() => {
       input.events.push(`deleteRetired ${table} ${JSON.stringify(scope)}${hidden ? ` ${hidden.join(",")}` : ""}`)
@@ -220,6 +236,7 @@ function services(input: { events: string[]; rows?: R2SqlData[]; failure?: Insta
         upsert: () => Effect.void,
         deleteRetiredDimensions: retired("model"),
         deleteUnknownDimensions: () => Effect.void,
+        deleteModels: deleteModels("model"),
       }),
     ),
     Layer.succeed(
@@ -239,6 +256,7 @@ function services(input: { events: string[]; rows?: R2SqlData[]; failure?: Insta
         upsert: () => Effect.void,
         deleteRetiredDimensions: retired("geo"),
         deleteUnknownDimensions: () => Effect.void,
+        deleteModels: deleteModels("geo"),
       }),
     ),
     Layer.succeed(

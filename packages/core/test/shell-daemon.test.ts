@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { existsSync, readdirSync, realpathSync } from "node:fs"
-import { mkdir, rm, utimes, writeFile } from "node:fs/promises"
+import { appendFile, mkdir, rm, utimes, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Context, Effect, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
@@ -17,7 +17,9 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppProcess } from "@opencode/util/process"
 import { hostEnvironmentLayer } from "./fixture/environment"
-import { location } from "./fixture/location"
+import { tempGlobalLayer } from "./fixture/global"
+import { location, tempLocationLayer } from "./fixture/location"
+import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
 import { daemonShells, until } from "./fixture/shell-daemon"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { binaryPath } from "@opencode/pty"
@@ -98,6 +100,68 @@ describe("Shell on the process daemon", () => {
             capture: { output: "first\nsecond", truncated: false },
           })
           expect(yield* shell.list()).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  it.live("pages shell output at UTF-8 boundaries with byte cursors", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const info = yield* shell.create({ shell: "/bin/sh", command: "pages" })
+          const prefix = "a".repeat(65535)
+          for (const char of ["é", "€", "😀"]) {
+            const text = `${prefix}${char}\uFEFFz`
+            yield* Effect.promise(() => writeFile(info.file, text))
+            const page = yield* shell.output(info.id)
+            expect(page.cursor).toBe(prefix.length)
+            expect(page.size).toBe(Buffer.byteLength(text))
+            const rest = yield* shell.output(info.id, { cursor: page.cursor })
+            expect(page.output + rest.output).toBe(text)
+            expect(rest.cursor).toBe(page.size)
+            const tiny = yield* shell.output(info.id, { cursor: page.cursor, limit: 1 })
+            expect(tiny).toEqual({
+              output: char,
+              cursor: page.cursor + Buffer.byteLength(char),
+              size: page.size,
+              truncated: false,
+            })
+            const tail = yield* shell.output(info.id, { cursor: page.cursor + 1 })
+            expect(tail.output).toBe("\uFEFFz")
+            expect(tail.cursor).toBe(page.size)
+          }
+          expect(yield* shell.output(info.id, { cursor: 65536, limit: 0 })).toMatchObject({ output: "", cursor: 65536 })
+        }),
+      )
+    }),
+  )
+
+  it.live("retries an incomplete live character and consumes malformed bytes at exit", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const info = yield* shell.create({ shell: "/bin/sh", command: "partial" })
+          yield* Effect.promise(() => writeFile(info.file, Buffer.from([0xff, 0xf0, 0x9f])))
+          const page = yield* shell.output(info.id)
+          expect(page).toEqual({ output: "�", cursor: 1, size: 3, truncated: false })
+          expect(yield* shell.output(info.id, { cursor: page.cursor, limit: 1 })).toMatchObject({
+            output: "",
+            cursor: 1,
+          })
+          yield* Effect.promise(() => appendFile(info.file, Buffer.from([0x98, 0x80, 0xe0, 0x80, 0xe2])))
+          const rest = yield* shell.output(info.id, { cursor: page.cursor })
+          expect(rest).toEqual({ output: "😀��", cursor: 7, size: 8, truncated: false })
+          env.daemon.exit(1, 0)
+          yield* shell.wait(info.id)
+          expect(yield* shell.output(info.id, { cursor: rest.cursor })).toEqual({
+            output: "�",
+            cursor: 8,
+            size: 8,
+            truncated: false,
+          })
         }),
       )
     }),
@@ -188,7 +252,7 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
-  it.live("stops what a failed command left in its group, and leaves a successful one's", () =>
+  it.live("records successful and failed exits without signalling a finished command", () =>
     Effect.gen(function* () {
       const env = yield* daemonShells()
       yield* env.withShell(env.directory, (shell) =>
@@ -200,8 +264,28 @@ describe("Shell on the process daemon", () => {
           env.daemon.exit(2, 3)
           expect(yield* shell.wait(failed.id)).toMatchObject({ status: "exited", exit: 3 })
           expect(yield* shell.wait(succeeded.id)).toMatchObject({ status: "exited", exit: 0 })
-          expect(env.signals(2)).toEqual(["SIGTERM"])
+          expect(env.signals(2)).toEqual([])
           expect(env.signals(1)).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  it.live("recreates the output directory removed while the Location is open", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          yield* shell.create({ shell: "/bin/sh", command: "echo first" })
+          yield* Effect.promise(() => rm(path.join(env.data, Shell.DIRECTORY), { recursive: true }))
+          const info = yield* shell.create({ shell: "/bin/sh", command: "echo second" })
+          expect(env.created().map((request) => request.output_path)).toContain(info.file)
+          env.daemon.output(2, "second")
+          env.daemon.exit(2, 0)
+          expect(yield* shell.result(info)).toMatchObject({
+            info: { status: "exited", exit: 0 },
+            capture: { output: "second" },
+          })
         }),
       )
     }),
@@ -490,6 +574,31 @@ describe("Shell on the process daemon", () => {
     }),
   )
 })
+
+it.live("the spawner recreates the output directory removed while the Location is open", () =>
+  Effect.gen(function* () {
+    const shell = yield* Shell.Service
+    const global = yield* Global.Service
+    const program = windows ? (Bun.which("pwsh") ?? "powershell.exe") : "/bin/sh"
+    const run = (output: string) =>
+      shell
+        .create({ shell: program, command: windows ? `[Console]::Out.Write('${output}')` : `printf '${output}'` })
+        .pipe(Effect.flatMap((info) => shell.result(info)))
+    yield* run("first")
+    yield* Effect.promise(() => rm(path.join(global.data, Shell.DIRECTORY), { recursive: true }))
+    expect(yield* run("second")).toMatchObject({ info: { status: "exited", exit: 0 }, capture: { output: "second" } })
+  }).pipe(
+    Effect.provide(
+      AppNodeBuilder.build(LayerNode.group([Shell.node, Global.node]), [
+        Location.node.replace(tempLocationLayer),
+        Global.node.replace(tempGlobalLayer),
+        Config.node.replace(Config.testLayer()),
+        Environment.node.replace(hostEnvironmentLayer),
+        PersistentPty.node.replace(disabledPersistentPtyLayer),
+      ]),
+    ),
+  ),
+)
 
 // Against the real opencode-pty, like server/test/persistent-pty.test.ts.
 const binary = process.env.OPENCODE_PTY_BIN ?? binaryPath

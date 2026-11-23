@@ -1,5 +1,5 @@
 import { Duration, Effect, Schema } from "effect"
-import type { Status } from "./generation.js"
+import type { Reason, Status } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeQueuedRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
@@ -33,7 +33,7 @@ export class VideoModel<Options extends VideoOptions = VideoOptions> extends Med
     return new VideoModel<Options>({
       id: input.id,
       provider: route.protocol.provider,
-      http: input.http,
+      transport: input.transport,
       providerOptions: input.providerOptions,
       route: composeQueuedRoute(route, input) as VideoRoute,
     })
@@ -66,9 +66,9 @@ const VideoRequestSchema = Schema.Struct({
   model: VideoModelSchema,
   prompt: Schema.String,
   /** Image the video starts on exactly. */
-  start: Schema.optional(Media.AssetSchema),
+  start: Schema.optional(Media.ImageAssetSchema),
   /** Image the video ends on exactly. */
-  end: Schema.optional(Media.AssetSchema),
+  end: Schema.optional(Media.ImageAssetSchema),
   /** Images, videos or audio that guide the subject or style without pinning a frame. */
   references: Schema.optional(Schema.Array(Media.AssetSchema)),
   duration: Schema.optional(VideoDuration),
@@ -93,8 +93,9 @@ export type VideoRequestInput<Model extends VideoModel = VideoModel> = Omit<
   VideoRequest<Model>,
   "start" | "end" | "references" | "providerOptions"
 > & {
-  readonly start?: Media.Input
-  readonly end?: Media.Input
+  /** An image: `Media.image(...)`, or a URL, data URL, base64 string or bytes, which must not be a known non-image. */
+  readonly start?: Media.ImageAsset | Media.Data
+  readonly end?: Media.ImageAsset | Media.Data
   readonly references?: ReadonlyArray<Media.Input>
   readonly providerOptions?: NoInfer<VideoModelOptions<Model>>
 }
@@ -114,6 +115,8 @@ export interface VideoJob {
 
 export interface VideoStatus {
   readonly status: Status
+  /** Set when `status` is `error`. */
+  readonly reason?: Reason
   /** 0..1, only when the provider reports progress. */
   readonly progress?: number
 }
@@ -135,8 +138,8 @@ export class VideoResponse extends Schema.Class<VideoResponse>("Video.Response")
 /** Normalize video request input into a plain `VideoRequest`. */
 export const request = <const Model extends VideoModel>(input: VideoRequestInput<Model>): VideoRequest<Model> => ({
   ...input,
-  start: input.start === undefined ? undefined : Media.make(input.start),
-  end: input.end === undefined ? undefined : Media.make(input.end),
+  start: input.start === undefined ? undefined : Media.image(input.start),
+  end: input.end === undefined ? undefined : Media.image(input.end),
   references: input.references?.map((reference) => Media.make(reference)),
 })
 
