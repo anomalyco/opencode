@@ -20,9 +20,14 @@ export const registry = {
     "Give sessions in the home folder a persistent memory/, docs/ and scripts/ workspace the agent can use freely, tidied by a daily maintenance session that reads the day's home-folder conversations.",
   project_overlay:
     "Load a personal config dir for each project from ~/.config/opencode/project/<project-id>/, read like an extra .opencode dir that ranks above the repo's own, and let home memory keep the skills it builds for the user there.",
+  opencode_api:
+    'Let Code Mode scripts call the OpenCode HTTP API with fetch("opencode:///api/..."), in-process and already signed in, with no permission checks. Only in local and dev builds, and off there until you opt in with OPENCODE_FLAGS=opencode_api or experimental.opencode_api: true.',
   sqlite_fts:
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
-export const optInOnly: ReadonlySet<Key> = new Set(["todo"])
+export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api"])
+
+/** Flags that stay off outside local and dev builds, whatever `OPENCODE_FLAGS` or config say. */
+export const localOnly: ReadonlySet<Key> = new Set(["opencode_api"])

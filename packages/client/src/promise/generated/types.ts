@@ -2670,6 +2670,7 @@ export type ConfigEntry =
           machines?: boolean
           home_memory?: boolean
           project_overlay?: boolean
+          opencode_api?: boolean
           sqlite_fts?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
