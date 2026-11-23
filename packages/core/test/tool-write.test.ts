@@ -421,11 +421,8 @@ describe("WriteTool", () => {
           const target = path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "fresh.txt")
           const settled = yield* executeTool(registry, call({ path: "src/fresh.txt", content: "hello" }))
           expect(settled.status).toBe("completed")
-          // Only the pre-write diff probe and the 3-byte BOM header check run; the written file is not re-read.
-          expect(fixture.reads).toEqual([
-            { target, length: undefined },
-            { target, length: 3 },
-          ])
+          // The pre-write diff probe also determines whether there is a BOM.
+          expect(fixture.reads).toEqual([{ target, length: undefined }])
           const mutationSpans = spans.filter((span) => span.name.startsWith("FileMutation."))
           expect(mutationSpans.some((span) => span.name === "FileMutation.readOptionalText")).toBe(true)
           for (const span of mutationSpans) {

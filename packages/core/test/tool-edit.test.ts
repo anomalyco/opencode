@@ -193,33 +193,35 @@ describe("EditTool", () => {
     }),
   )
 
-  it.live("returns the diff for final formatted content", () =>
-    withTempDir((tmp) => {
-      const edit = makeEditFixture()
-      const target = path.join(tmp.path, "formatted.txt")
-      edit.formatFile = (file) =>
-        Effect.promise(async () => {
-          await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace("after", "AFTER"))
-          return true
-        })
-      return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
-        Effect.andThen(
-          withTool(tmp.path, edit, (registry) =>
-            Effect.gen(function* () {
-              const settled = yield* executeTool(
-                registry,
-                call({ path: "formatted.txt", oldString: "before", newString: "after" }),
-              )
-              expect(settled.status).toBe("completed")
-              if (settled.status !== "completed") return
-              expect(settled.metadata?.files?.[0]?.patch).toContain("-before\n+AFTER")
-              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("AFTER\n")
-            }),
+  for (const success of [true, false]) {
+    it.live(`returns the diff for final formatted content when formatter success is ${success}`, () =>
+      withTempDir((tmp) => {
+        const edit = makeEditFixture()
+        const target = path.join(tmp.path, "formatted.txt")
+        edit.formatFile = (file) =>
+          Effect.promise(async () => {
+            await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace("after", "AFTER"))
+            return success
+          })
+        return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, edit, (registry) =>
+              Effect.gen(function* () {
+                const settled = yield* executeTool(
+                  registry,
+                  call({ path: "formatted.txt", oldString: "before", newString: "after" }),
+                )
+                expect(settled.status).toBe("completed")
+                if (settled.status !== "completed") return
+                expect(settled.metadata?.files?.[0]?.patch).toContain("-before\n+AFTER")
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("AFTER\n")
+              }),
+            ),
           ),
-        ),
-      )
-    }),
-  )
+        )
+      }),
+    )
+  }
 
   it.live("accepts an absolute file path inside the active Location", () =>
     withTempDir((tmp) => {
@@ -730,7 +732,10 @@ describe("EditTool", () => {
       // A CRLF file with a block pasted in from an LF editor, edited with surrounding context.
       const target = path.join(tmp.path, "store.cs")
       return Effect.promise(() =>
-        fs.writeFile(target, "All(item.Sku);\r\n\r\nFind(sku);\r\n\r\nvoid Add()\n{\n  _items[item.Sku] = item;\n}\r\n"),
+        fs.writeFile(
+          target,
+          "All(item.Sku);\r\n\r\nFind(sku);\r\n\r\nvoid Add()\n{\n  _items[item.Sku] = item;\n}\r\n",
+        ),
       ).pipe(
         Effect.andThen(
           withTool(tmp.path, edit, (registry) =>
@@ -774,7 +779,10 @@ describe("EditTool", () => {
           withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
               expect(
-                yield* executeTool(registry, call({ path: "strip.sh", oldString: "\r", newString: "", replaceAll: true })),
+                yield* executeTool(
+                  registry,
+                  call({ path: "strip.sh", oldString: "\r", newString: "", replaceAll: true }),
+                ),
               ).toMatchObject({ status: "completed", output: "Edited strip.sh (2 replacements)" })
               expect(
                 yield* executeTool(registry, call({ path: "whole.sh", oldString: "x\r\ny\r\n", newString: "x\ny\n" })),
@@ -814,7 +822,10 @@ describe("EditTool", () => {
             Effect.gen(function* () {
               // The typography tier matches the curly quote, and the replacement writes the same bytes back.
               expect(
-                yield* executeTool(registry, call({ path: "quote.txt", oldString: "it's here", newString: "it’s here" })),
+                yield* executeTool(
+                  registry,
+                  call({ path: "quote.txt", oldString: "it's here", newString: "it’s here" }),
+                ),
               ).toEqual({
                 status: "error",
                 error: {

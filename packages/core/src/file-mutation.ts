@@ -21,6 +21,8 @@ export interface WriteInput {
 export interface TextWriteInput {
   readonly target: Target
   readonly content: string
+  /** BOM from an earlier read; null means missing. Omit to read the header before writing. */
+  readonly knownBom?: boolean | null
 }
 
 export interface WriteResult {
@@ -152,18 +154,19 @@ const layer = Layer.effect(
       withTargetLock(input.target)(
         Effect.gen(function* () {
           const next = Bom.split(input.content)
-          const current = yield* input.target.environment.files
-            .read(input.target.absolute, { offset: 0, length: 3 })
-            .pipe(
-              Effect.map((result) => result.bytes),
-              Effect.catchTag("Environment.NotFound", () => Effect.undefined),
-            )
-          const bom = Boolean(current && Bom.has(current)) || next.bom
+          const current =
+            input.knownBom !== undefined
+              ? input.knownBom
+              : yield* input.target.environment.files.read(input.target.absolute, { offset: 0, length: 3 }).pipe(
+                  Effect.map((result) => Bom.has(result.bytes)),
+                  Effect.catchTag("Environment.NotFound", () => Effect.succeed(null)),
+                )
+          const bom = Boolean(current) || next.bom
           yield* input.target.environment.files.write(
             input.target.absolute,
             new TextEncoder().encode(Bom.join(next.text, bom)),
           )
-          return { ...writeResult(input.target, current !== undefined), bom }
+          return { ...writeResult(input.target, current !== null), bom }
         }),
       ),
     )

@@ -75,6 +75,42 @@ const call = (name: "glob" | "grep", input: unknown) => ({
 
 describe("search tools", () => {
   for (const name of ["glob", "grep"] as const) {
+    for (const replacement of [undefined, "needle\n"]) {
+      it.live(
+        `${name} preserves path handling when the working directory becomes ${replacement === undefined ? "missing" : "a file"}`,
+        () =>
+          withTempDir((tmp) =>
+            Effect.gen(function* () {
+              const root = path.join(tmp.path, "root")
+              yield* Effect.promise(() => fs.mkdir(root))
+              yield* withTools(root, (registry) =>
+                Effect.gen(function* () {
+                  yield* Effect.promise(() => fs.rmdir(root))
+                  if (replacement !== undefined) yield* Effect.promise(() => Bun.write(root, replacement))
+                  const result = yield* executeTool(registry, call(name, { pattern: name === "glob" ? "*" : "needle" }))
+                  if (replacement !== undefined && name === "grep") {
+                    expect(result).toMatchObject({ status: "completed", metadata: { matches: 1, truncated: false } })
+                    return
+                  }
+                  expect(result).toEqual({
+                    status: "error",
+                    error: {
+                      type: "tool.execution",
+                      message:
+                        replacement === undefined
+                          ? "Search path does not exist: ."
+                          : "Search path is not a directory: .",
+                    },
+                  })
+                }),
+              )
+            }),
+          ),
+      )
+    }
+  }
+
+  for (const name of ["glob", "grep"] as const) {
     it.live(`${name} distinguishes a malformed filename glob from an empty search`, () =>
       withTempDir((tmp) =>
         withTools(tmp.path, (registry) =>

@@ -8,6 +8,7 @@ export * as EditTool from "./edit.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
+import { Bom } from "@opencode/util/bom"
 import { Effect, Schema } from "effect"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
@@ -355,9 +356,13 @@ export const Plugin = {
                     : `No changes to apply: the edit leaves ${input.path} unchanged. Line endings follow the file; to change them, write \\r explicitly in oldString or newString.`,
                 })
               }
-              const result = yield* fileWrite.commit(target, replaced)
+              const result = yield* fileWrite.commit(target, replaced, original.bom)
+              // Remote files cannot run server formatters. Locally, even a failed formatter may change the file.
               const formatted =
-                result.formatted ?? (yield* FileMutation.readText(target.environment.files, target.absolute)).text
+                result.formatted ??
+                (target.environment.hostsServer
+                  ? (yield* FileMutation.readText(target.environment.files, target.absolute)).text
+                  : Bom.split(replaced).text.toWellFormed())
               return {
                 output: `Edited ${result.resource} (${replacements} replacement${replacements === 1 ? "" : "s"})`,
                 metadata: { files: [fileDiff(result.resource, source, formatted)] },

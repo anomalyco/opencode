@@ -77,30 +77,33 @@ export const Plugin = {
                 },
                 ...Permission.invocation(context),
               })
-              const type = yield* ToolSearch.pathType(target.environment.files, target.absolute, searchPath ?? ".")
-              if (type !== "directory")
-                return yield* Effect.fail(
-                  new ToolFailure({ message: `Search path is not a directory: ${searchPath ?? "."}` }),
-                )
-              const root = target.absolute
-              const result = yield* ToolSearch.bounded(input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, (limit) =>
-                ripgrep.glob({
-                  environment: target.environment,
-                  cwd: root,
-                  pattern: input.pattern,
-                  hidden: input.hidden,
-                  limit,
+              return yield* ToolSearch.withPathType(target, searchPath ?? ".", location.directory, (type) =>
+                Effect.gen(function* () {
+                  if (type !== "directory")
+                    return yield* Effect.fail(
+                      new ToolFailure({ message: `Search path is not a directory: ${searchPath ?? "."}` }),
+                    )
+                  const root = target.absolute
+                  const result = yield* ToolSearch.bounded(input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, (limit) =>
+                    ripgrep.glob({
+                      environment: target.environment,
+                      cwd: root,
+                      pattern: input.pattern,
+                      hidden: input.hidden,
+                      limit,
+                    }),
+                  )
+                  return {
+                    entries: result.items.map((entry) =>
+                      FileSystem.Entry.make({
+                        ...entry,
+                        path: RelativePath.make(path.relative(location.directory, path.resolve(root, entry.path))),
+                      }),
+                    ),
+                    truncated: result.truncated,
+                  }
                 }),
               )
-              return {
-                entries: result.items.map((entry) =>
-                  FileSystem.Entry.make({
-                    ...entry,
-                    path: RelativePath.make(path.relative(location.directory, path.resolve(root, entry.path))),
-                  }),
-                ),
-                truncated: result.truncated,
-              }
             }).pipe(
               Effect.map((result) => ({
                 output: result.entries,
