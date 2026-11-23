@@ -163,6 +163,17 @@ and for `widget.gpu`'s writes (`widgets-gpu.md`); the run's result can't hold on
 Limits: 250 ms timeout per step; a client may use smaller limits. (`@opencode/widget` compiles each program text once,
 with `Runtime.compile`, and keeps the 32 last used.)
 
+**Budgets count CPU time.** The program budgets (the 250 ms step timeout, the live 50 ms slice without awaiting, the 8
+ms draw budget) count the CPU time of the thread running the program while it runs the program; host work (host
+functions, encoding a view, the host's own work on that thread) isn't counted. A run whose thread wasn't scheduled, on a
+loaded machine, isn't over budget: a lagging thread isn't the program's fault. A wall-clock backstop of 10 times the
+budget (2.5 s, 500 ms, 80 ms) remains, only for a program stuck in a synchronous host call, where its thread uses no
+CPU. Hosts that can't measure it use wall clock for the budgets and say so: the web host's worker (browsers have no
+thread CPU clock) and the TypeScript host (Bun and Node: the TUI, and `@opencode/widget`'s tests and tools). Bun and
+Node have a thread CPU clock (`process.threadCpuUsage()`), but the TypeScript interpreter runs in slices on the event
+loop it shares with everything else on that thread, and PsychoScript's `timeoutMs` counts wall clock, so the thread's
+CPU time would count the host's work too. The server never runs a program.
+
 ### Protocol
 
 The prelude↔host contract has a version, `__widget_protocol`, raised whenever that contract changes (the entries,
@@ -586,9 +597,9 @@ A **program error** is the widget template's own code failing or breaking a cont
 - a parse error or a runtime exception in the program (including a handler, hook, `draw` or `main`);
 - an invalid view or invalid draw output (fails the node or draw command schema, more than 2,000 commands);
 - WGSL that fails validation (naga's or the platform's validator rejects the shader as written);
-- exceeding a program limit: the 250 ms step timeout, the 50 ms slice without awaiting (live), the heap cap or the
-  `send` rate (`rate_limited`). (Live `render` and `draw` posts over their rate wait instead; `widgets-live.md`, Post
-  rate.)
+- exceeding a program limit: the 250 ms step timeout, the 50 ms slice without awaiting (live), both in CPU time (Prelude
+  and step ABI, Budgets count CPU time), the heap cap or the `send` rate (`rate_limited`). (Live `render` and `draw`
+  posts over their rate wait instead; `widgets-live.md`, Post rate.)
 
 Everything else is a **client error**: rendering or translating valid WGSL, a shader too slow on this device (the 50 ms
 frame stop, GPU canvases: `the shader took over 50 ms a frame, three frames in a row`), a GPU hang (`widgets-gpu.md`:

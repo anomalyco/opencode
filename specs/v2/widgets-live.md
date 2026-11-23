@@ -158,9 +158,10 @@ and hands the actual transfer to the app (URLSession / OkHttp), so system TLS an
 - A render whose view breaks Keys and depth (`widgets.md`: a key of another type, more than 100 levels) ends the run
   with that program error in phase `view`, like an invalid post. A program built for another protocol isn't started
   (`widgets.md`, Protocol).
-- Budgets: a program that runs more than 50 ms without awaiting is stopped with an error; at most 2,000 draw commands
-  per `draw`; `render` and `draw` posts beyond the post rate wait and coalesce (Post rate); the heap cap applies as to steps (`widgets.md`, Heap
-  cap: default 32 MB, phase `main`). One error shows inline with "Restart".
+- Budgets: a program that runs more than 50 ms of CPU time without awaiting is stopped with an error (`widgets.md`,
+  Budgets count CPU time: a thread that wasn't scheduled isn't over budget); at most 2,000 draw commands per `draw`;
+  `render` and `draw` posts beyond the post rate wait and coalesce (Post rate); the heap cap applies as to steps
+  (`widgets.md`, Heap cap: default 32 MB, phase `main`). One error shows inline with "Restart".
 - A submitted/dismissed widget (from any client) stops its program; its last rendered view stays, read-only.
 - Answers and sends go to the server exactly as in step mode.
 
