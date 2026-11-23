@@ -2,12 +2,12 @@ export * as ShellTool from "./shell.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
-import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Shell as ShellSchema } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
-import { Clock, Deferred, Effect, Fiber, Option, Schema, Struct } from "effect"
+import { Clock, Deferred, Effect, Fiber, Option, Schema, Stream, Struct } from "effect"
 import { Agent } from "../../agent.js"
+import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
@@ -400,8 +400,17 @@ export const Plugin = {
       })
     })
 
+    // The descriptions name the selected shell, so they're rebuilt whenever it changes.
+    const bus = yield* Bus.Service
+    yield* bus.subscribe(ShellSelect.Event.Updated).pipe(
+      Stream.runForEach(() => ctx.tool.reload()),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    const runSync = Effect.runSyncWith(yield* Effect.context())
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
+        // Named in both the direct and the Code Mode description, so a model knows the shell either way.
+        const shellName = ShellSelect.name(runSync(compatibleShell))
         editor.add({
           name,
           // With full_codemode, shell is allowed in Code Mode and pinned so the catalog always lists it.
@@ -409,12 +418,12 @@ export const Plugin = {
             ? {
                 codemode: {
                   pinned: true,
-                  description: description(undefined, true),
+                  description: description(shellName, true),
                   input: CodeModeInput,
                 },
               }
             : { codemode: false },
-          description: description(),
+          description: description(shellName),
           input: Input,
           output: StructuredOutput,
           execute: (input, context) => {
@@ -553,18 +562,8 @@ export const Plugin = {
               Effect.mapError(toolFailure(`Unable to execute command: ${input.command}`)),
             )
           },
-        }),
-      )
-      .pipe(Effect.orDie)
-
-    const hook = (event: SessionHooks["context"]) =>
-      Effect.gen(function* () {
-        const tool = event.tools[name]
-        if (!tool) return
-        tool.description = description(ShellSelect.name(yield* compatibleShell))
+        })
       })
-    yield* ctx.session.hook("context", hook)
-    yield* ctx.session.hook("compaction", hook)
-    yield* ctx.session.hook("generate", hook)
+      .pipe(Effect.orDie)
   }),
 }
