@@ -56,6 +56,10 @@ export type WebUpdateEvent =
   | { readonly type: "controller.changed" }
   | { readonly type: "disposed" }
 
+export type WebUpdateReport =
+  | { readonly result: "up-to-date" }
+  | { readonly result: "failed"; readonly message: string }
+
 export type WebUpdateEffect =
   /** Ask the server for a newer service worker; `check.timeout` answers once `CHECK_TIMEOUT_MS` passes. */
   | { readonly type: "update"; readonly attempt: number }
@@ -182,6 +186,22 @@ export function webUpdateAction(state: WebUpdateState) {
 /** Whether the titlebar shows the update button: a newer build is ready, or the window is moving to it. */
 export function webUpdatePending(state: WebUpdateState) {
   return state.status === "ready" || state.status === "applying" || state.status === "reloading"
+}
+
+/** The toast copy for a manual web update check outcome. */
+export function webUpdateReport(report: WebUpdateReport) {
+  if (report.result === "up-to-date")
+    return {
+      result: "up-to-date" as const,
+      title: "toast.webLatest.title" as const,
+      description: "toast.webLatest.description" as const,
+    }
+
+  return {
+    result: "failed" as const,
+    title: "common.requestFailed" as const,
+    description: report.message || undefined,
+  }
 }
 
 function checkRequested(

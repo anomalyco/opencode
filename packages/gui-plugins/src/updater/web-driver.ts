@@ -1,5 +1,5 @@
 import { CHECK_TIMEOUT_MS, initialWebUpdate, transitionWebUpdate } from "./web-machine"
-import type { WebUpdateEffect, WebUpdateEvent, WebUpdateState, WebWorker } from "./web-machine"
+import type { WebUpdateEffect, WebUpdateEvent, WebUpdateReport, WebUpdateState, WebWorker } from "./web-machine"
 
 /** How often an open, visible window asks the server for a newer build. */
 const CHECK_INTERVAL_MS = 10 * 60_000
@@ -17,9 +17,7 @@ type Current = {
   timers: { check?: ReturnType<typeof setTimeout>; apply?: ReturnType<typeof setTimeout> }
 }
 
-export type WebUpdateReport =
-  | { readonly result: "up-to-date" }
-  | { readonly result: "failed"; readonly message: string }
+export type { WebUpdateReport }
 
 export type WebUpdaterOptions = {
   /** The state changed. */

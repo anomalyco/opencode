@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import en from "./i18n/en"
 import {
   AUTO_CHECK_SPACING_MS,
   initialWebUpdate,
   transitionWebUpdate,
+  webUpdateReport,
   type WebUpdateEffect,
   type WebUpdateEvent,
   type WebUpdateState,
@@ -203,5 +205,36 @@ describe("web update machine", () => {
     const result = replay([{ type: "registered", worker: "waiting" }, auto(0), manual(0)])
 
     expect(result.effects).toEqual([{ type: "announce" }, { type: "announce" }])
+  })
+
+  // The web updater only checks the server's service-worker build, not whether a newer OpenCode release exists.
+  test("a web check that finds nothing newer reports web-build copy rather than desktop release copy", () => {
+    const toast = webUpdateReport({ result: "up-to-date" })
+
+    expect(toast).toEqual({
+      result: "up-to-date",
+      title: "toast.webLatest.title",
+      description: "toast.webLatest.description",
+    })
+
+    if (toast.result !== "up-to-date") throw new Error("expected up-to-date toast")
+
+    expect(en[toast.title]).toBe("Web app is up to date")
+    expect(en[toast.description]).toBe("You're running the latest web build.")
+    expect(en[toast.title]).not.toBe(en["toast.latest.title"])
+    expect(en[toast.description]).not.toBe(en["toast.latest.description"])
+  })
+
+  test("a failed web check reports the request failure key and optional browser error", () => {
+    expect(webUpdateReport({ result: "failed", message: "offline" })).toEqual({
+      result: "failed",
+      title: "common.requestFailed",
+      description: "offline",
+    })
+    expect(webUpdateReport({ result: "failed", message: "" })).toEqual({
+      result: "failed",
+      title: "common.requestFailed",
+      description: undefined,
+    })
   })
 })
