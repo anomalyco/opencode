@@ -317,6 +317,8 @@ export const DESKTOP_NATIVE_ENGLISH = {
 
   "desktop.contextMenu.spellcheck": "Spellcheck",
   "desktop.contextMenu.spellcheckLanguages": "Spellcheck Languages",
+
+  "desktop.jumpList.recentProjects": "Recent Projects",
 } as const
 
 export type DesktopNativeKey = keyof typeof DESKTOP_NATIVE_ENGLISH

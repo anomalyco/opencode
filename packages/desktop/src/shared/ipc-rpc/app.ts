@@ -67,6 +67,11 @@ export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
   payload: { value: Schema.Unknown },
 })
 
+// The projects used last on this computer's server, for the Windows jump list.
+export const AppSetRecentProjects = Rpc.make("AppSetRecentProjects", {
+  payload: { projects: Schema.Array(Schema.Struct({ name: Schema.String, directory: Schema.String })) },
+})
+
 export const AppRelaunch = Rpc.make("AppRelaunch")
 
 export const AppRpcs = RpcGroup.make(
@@ -85,5 +90,6 @@ export const AppRpcs = RpcGroup.make(
   AppSetSpellcheckEnabled,
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
+  AppSetRecentProjects,
   AppRelaunch,
 )

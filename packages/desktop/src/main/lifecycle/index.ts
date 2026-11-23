@@ -4,7 +4,7 @@ import { app, BrowserWindow } from "electron"
 import type { Event } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DeepLinks } from "../deep-links"
-import { jumpList, jumpTask } from "../native/jump-list"
+import { jumpList, jumpTask, onRecentProjects } from "../native/jump-list"
 import { deepLinkArguments, takeLaunchLinks } from "./launch-links"
 import { DesktopLogging, scoped } from "../native/logging"
 import { sendMenuCommand } from "../native/menu"
@@ -109,14 +109,21 @@ const runtime = Layer.effect(
     // A development build's jump list would start Electron without the app, so only installed builds set one.
     if (process.platform === "win32" && app.isPackaged) {
       const setJumpList = () => {
-        const result = app.setJumpList(jumpList(process.execPath))
+        const removed = new Set(app.getJumpListSettings().removedItems.flatMap((item) => (item.args ? [item.args] : [])))
+        const result = app.setJumpList(jumpList(process.execPath, undefined, removed))
 
         if (result !== "ok") runFork(Effect.logWarning("jump list not set", { result }))
       }
 
       setJumpList()
-      const stopJumpList = onNativeTranslations(setJumpList)
-      yield* Effect.addFinalizer(() => Effect.sync(stopJumpList))
+      const stopTranslations = onNativeTranslations(setJumpList)
+      const stopRecent = onRecentProjects(setJumpList)
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          stopTranslations()
+          stopRecent()
+        }),
+      )
     }
 
     const secondInstance = (_event: Event, argv: string[]) => {
