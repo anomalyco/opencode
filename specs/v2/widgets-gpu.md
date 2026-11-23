@@ -258,12 +258,19 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
   is a bug in the program, and a new device doesn't fix it.
 - **Client errors** (not reported, logged in dev mode): no WebGPU, device creation failure, a driver crash or reset,
   running out of GPU memory under the limits. The canvas shows its placeholder.
+- **GPU hang.** A batch, or a `wgsl` shader frame, whose GPU work is still unfinished 1 s after its submit stops every
+  canvas it draws into (a pass's color attachment `view` or `resolveTarget`) for the rest of the run, as an error
+  would: a client error with exactly this message, `the GPU work took over 1 s; the canvas is stopped`, and the
+  placeholder shows. It applies first, whatever the shader's 50 ms rule has counted (`widgets.md`, GPU canvases). (On
+  macOS a shader running for seconds trips the GPU watchdog, which may blame another queue, the app's own among them,
+  and lose the device.)
 - **Device loss.** When the client loses its device (a reset, the app backgrounded long enough, a live program
   restored from a snapshot), it sends `{ type: "gpu", lost: reason, message? }`; the prelude resolves `device.lost` with
   `{ reason, message }` (`message` `""` when absent) and every handle is gone. While the program has read a live
   device's `lost`, the prelude keeps receiving the client's messages, so awaiting it works (and keeps the run open).
   The program may call `requestDevice()` again and recreate its resources; until it does, the canvases the loss stopped
-  show their placeholder. The new device restarts only those, never a canvas an error stopped.
+  show their placeholder. The new device restarts only those, never a canvas an error or a GPU hang stopped; other
+  canvases and widgets restart as usual.
 - **A batch from before the program learned of the loss** names handles from before it: the host drops it quietly
   (not replayed, not reported, no canvas stops). Exactly: a batch whose first failure (Host checks) is `no handle <h>`
   with `h` from 1 to the greatest handle the host had made when it last lost the device. Before any loss no handle
