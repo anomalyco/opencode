@@ -14,12 +14,6 @@ export const Input = Schema.Struct({
   sessionID: Session.ID.annotate({ description: "The session to interrupt." }),
 })
 
-const Output = Schema.Struct({
-  sessionID: Session.ID,
-  interrupted: Schema.Number.annotate({ description: "Sessions that were running, counting its subagents" }),
-  jobs: Schema.Number.annotate({ description: "Background commands, subagents and other jobs cancelled" }),
-})
-
 export const Plugin = {
   id: "opencode.tool.session-interrupt",
   effect: Effect.fn("SessionInterruptTool.Plugin")(function* (ctx: Context) {
@@ -31,17 +25,13 @@ export const Plugin = {
 
     // Cancelled jobs send no completion notice, so nothing wakes these sessions again. They're cancelled before the
     // interrupt, so none finishes in between, and after it, for any the last step started.
-    const stop = (sessionID: Session.ID): Effect.Effect<{ interrupted: number; jobs: number }> =>
+    const stop = (sessionID: Session.ID): Effect.Effect<void> =>
       Effect.gen(function* () {
-        const before = yield* jobs.cancelSession(sessionID)
-        const interrupted = yield* sessions.interrupt(sessionID)
-        const after = yield* jobs.cancelSession(sessionID)
+        yield* jobs.cancelSession(sessionID)
+        yield* sessions.interrupt(sessionID)
+        yield* jobs.cancelSession(sessionID)
         const children = yield* sessions.list({ parentID: sessionID, limit: 1000 }).pipe(Effect.orDie)
-        const below = yield* Effect.forEach(children.data, (child) => stop(child.id))
-        return {
-          interrupted: below.reduce((total, item) => total + item.interrupted, interrupted ? 1 : 0),
-          jobs: below.reduce((total, item) => total + item.jobs, before.length + after.length),
-        }
+        yield* Effect.forEach(children.data, (child) => stop(child.id), { discard: true })
       })
 
     yield* ctx.tool
@@ -51,7 +41,7 @@ export const Plugin = {
           name: "interrupt",
           description: "Interrupt a session, and stop its background commands and subagents too.",
           input: Input,
-          output: Output,
+          output: Schema.String,
           options: { namespace: "opencode.session", codemode: true },
           execute: (input, context) =>
             Effect.gen(function* () {
@@ -63,11 +53,8 @@ export const Plugin = {
                   return yield* new ToolFailure({ message: "A session can't interrupt itself or a session above it" })
                 id = (yield* sessions.get(id)).parentID
               }
-              const result = yield* stop(input.sessionID)
-              return {
-                output: { sessionID: input.sessionID, ...result },
-                content: `Interrupted session ${input.sessionID}: ${result.interrupted} running, ${result.jobs} jobs cancelled.`,
-              }
+              yield* stop(input.sessionID)
+              return { output: `Interrupted session ${input.sessionID}.` }
             }).pipe(Effect.mapError(toolFailure(`Unable to interrupt session ${input.sessionID}`))),
         })
       })
