@@ -124,6 +124,7 @@ describe("deep links", () => {
 
   test("after the server drops, an accepted link waits for it again", () => {
     const lost = transitionDeepLinks(ready, { type: "server.lost" }).state
+
     const result = replay(
       [
         { type: "links.received", urls: [project] },
