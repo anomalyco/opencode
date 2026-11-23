@@ -31,8 +31,8 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("VideoGen
 
 const INTERVAL = Duration.seconds(5)
 const DEADLINE = Duration.hours(2)
-/** How long a finished job is kept, its record and its videos together. */
-const RETENTION = Duration.days(7)
+/** How long a finished job's record is kept. Its videos are blobs, which keep their own week-long retention. */
+const RETENTION = Duration.hours(24)
 const PREFIX = "video:"
 /**
  * One server per database polls and downloads every job: the one holding this lease, elected like the automation
@@ -88,7 +88,7 @@ const decodeID = Schema.decodeUnknownOption(VideoID)
 
 /**
  * Each job is a record in kv under `video:<id>`, written once the provider accepted it, so a restart resumes polling.
- * Every 5 seconds each server drops jobs, with their videos, a week after they finished, and while jobs are running, tries for
+ * Every 5 seconds each server drops records 24 hours after their job finished, and while jobs are running, tries for
  * the lease. The one holding it checks each running job once.
  */
 const layer = Layer.effect(
@@ -290,11 +290,7 @@ const layer = Layer.effect(
       const running = (yield* Effect.forEach(yield* rows, (row) => {
         const id = Option.getOrUndefined(decodeID(row.key.slice(PREFIX.length)))
         const job = Option.getOrUndefined(decode(row.value))
-        if (!job || expired(job, now))
-          return Effect.forEach(job?.status === "completed" ? job.blobs : [], blobs.remove, { discard: true }).pipe(
-            Effect.andThen(kv.remove(row.key)),
-            Effect.as([]),
-          )
+        if (!job || expired(job, now)) return kv.remove(row.key).pipe(Effect.as([]))
         return Effect.succeed(id && job.status === "running" ? [{ id, job }] : [])
       })).flat()
       const leading =
