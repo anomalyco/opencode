@@ -192,7 +192,7 @@ const layer = Layer.effect(
       const loaded = yield* Effect.all(
         {
           builtins: builtins.load({ cwd: cwd && SessionCwd.describe(cwd, environment.id) }),
-          cwd: cwdInstructions.load(cwd),
+          cwd: cwdInstructions.load(cwd, session.id),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),

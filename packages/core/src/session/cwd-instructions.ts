@@ -1,13 +1,18 @@
 export * as SessionCwdInstructions from "./cwd-instructions.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Effect, Layer, Result, Schema } from "effect"
+import { FSUtil } from "@opencode/util/fs-util"
+import { eq } from "drizzle-orm"
+import { Context, Effect, Layer, Option, Result, Schema } from "effect"
 import { join } from "path"
+import { Database } from "../database/database.js"
 import { Environment } from "../environment/index.js"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
 import { Location } from "../location.js"
 import { SessionCwd } from "./cwd.js"
+import type { SessionSchema } from "./schema.js"
+import { InstructionStateTable } from "./sql.js"
 
 // Guidance belongs in context; a file this large is not guidance, so it is skipped instead of crowding out history.
 const MAX_BYTES = 512 * 1024
@@ -24,9 +29,12 @@ type Outcome =
 export interface Interface {
   /**
    * Loads the working directory's own instruction file: AGENTS.md, or the CLAUDE.md that stands in
-   * for it. The Location's directory is skipped, because instruction discovery already loads it.
+   * for it. Skips when project discovery is off or when InstructionDiscovery already covers the directory.
    */
-  readonly load: (cwd: SessionCwd.Resolved | undefined) => Effect.Effect<Instructions.List>
+  readonly load: (
+    cwd: SessionCwd.Resolved | undefined,
+    sessionID?: SessionSchema.ID,
+  ) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCwdInstructions") {}
@@ -49,9 +57,33 @@ const unavailable: Outcome = { _tag: "Unavailable" }
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const database = Option.getOrUndefined(yield* Effect.serviceOption(Database.Service))
     const discovery = yield* InstructionDiscovery.Service
     const environment = yield* Environment.Service
     const location = yield* Location.Service
+
+    const hasStoredInstructions = (sessionID: SessionSchema.ID | undefined) => {
+      if (!database || !sessionID) return Effect.succeed(false)
+      return database.db
+        .select({ values: InstructionStateTable.current_values })
+        .from(InstructionStateTable)
+        .where(eq(InstructionStateTable.session_id, sessionID))
+        .get()
+        .pipe(
+          Effect.orDie,
+          Effect.map((row) => row !== undefined && Object.hasOwn(row.values, key)),
+        )
+    }
+
+    const coveredByDiscovery = (cwd: SessionCwd.Resolved) => {
+      if (cwd.environment.id !== environment.id) return false
+      if (cwd.absolute === location.directory) return true
+      // InstructionDiscovery walks up from location.directory to location.project.directory,
+      // so any local ancestor along that chain is already loaded.
+      return (
+        FSUtil.contains(location.project.directory, cwd.absolute) && FSUtil.contains(cwd.absolute, location.directory)
+      )
+    }
 
     const candidate = (cwd: SessionCwd.Resolved, name: string): Effect.Effect<Outcome> =>
       Effect.gen(function* () {
@@ -69,27 +101,31 @@ const layer = Layer.effect(
         }
       })
 
-    const read = (cwd: SessionCwd.Resolved) =>
+    const read = (cwd: SessionCwd.Resolved, sessionID: SessionSchema.ID | undefined) =>
       Effect.gen(function* () {
         const candidates = yield* Effect.forEach(
           InstructionDiscovery.filenames(discovery),
           (name) => candidate(cwd, name),
           { concurrency: "unbounded" },
         )
-        // Candidates stay in priority order (AGENTS.md before CLAUDE.md): a transient error on an
-        // earlier candidate preserves durable InstructionState via `unavailable` instead of falling through.
+        // Candidates stay in priority order (AGENTS.md before CLAUDE.md). On a transient error,
+        // preserve previously loaded instructions via `unavailable`, but return `removed` when
+        // nothing was loaded yet so an offline or removed machine never blocks the first step.
         for (const outcome of candidates) {
           if (outcome._tag === "Found") return outcome.file
-          if (outcome._tag === "Unavailable") return Instructions.unavailable
+          if (outcome._tag === "Unavailable")
+            return (yield* hasStoredInstructions(sessionID)) ? Instructions.unavailable : Instructions.removed
         }
         return Instructions.removed
       })
 
     return Service.of({
-      load: Effect.fn("SessionCwdInstructions.load")(function* (cwd: SessionCwd.Resolved | undefined) {
-        if (!cwd || (cwd.environment.id === environment.id && cwd.absolute === location.directory))
-          return source(Effect.succeed(Instructions.removed))
-        return source(read(cwd))
+      load: Effect.fn("SessionCwdInstructions.load")(function* (
+        cwd: SessionCwd.Resolved | undefined,
+        sessionID?: SessionSchema.ID,
+      ) {
+        if (!cwd || !discovery.project || coveredByDiscovery(cwd)) return source(Effect.succeed(Instructions.removed))
+        return source(read(cwd, sessionID))
       }),
     })
   }),
@@ -98,5 +134,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Environment.node, InstructionDiscovery.node, Location.node],
+  deps: [Database.node, Environment.node, InstructionDiscovery.node, Location.node],
 })

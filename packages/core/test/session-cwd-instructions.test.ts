@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import os from "os"
 import { posix } from "node:path"
 import { Effect, Layer } from "effect"
+import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
 import { Global } from "@opencode/util/global"
@@ -9,9 +10,14 @@ import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
 import { Instructions } from "@opencode/core/instructions/index"
 import { Location } from "@opencode/core/location"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { SessionCwd } from "@opencode/core/session/cwd"
 import { SessionCwdInstructions } from "@opencode/core/session/cwd-instructions"
+import { InstructionState } from "@opencode/core/session/instruction-state"
+import { SessionSchema } from "@opencode/core/session/schema"
+import { SessionTable } from "@opencode/core/session/sql"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -32,10 +38,10 @@ const flaky = (name: string) => {
     ...memory,
     files: {
       ...memory.files,
-      stat: (path) =>
+      read: (path, range) =>
         state.offline
           ? Effect.fail(new Environment.Failed({ path, cause: new Error("offline") }))
-          : memory.files.stat(path),
+          : memory.files.read(path, range),
     },
   }
   return { state, environment }
@@ -46,26 +52,48 @@ const at = (environment: Environment.Interface, absolute: string): SessionCwd.Re
   environment,
 })
 
-const layer = (claude = true) =>
-  AppNodeBuilder.build(LayerNode.group([Environment.node, InstructionBuiltIns.node, SessionCwdInstructions.node]), [
-    Location.node.replace(Layer.succeed(Location.Service, Location.Service.of(location({ directory })))),
-    Global.node.replace(Global.layerWith({ config: temporary, tmp: temporary })),
-    InstructionDiscovery.node.replace(
-      Layer.mock(InstructionDiscovery.Service, { project: true, global: true, claude }),
-    ),
-  ])
+const layer = (options?: {
+  readonly claude?: boolean
+  readonly project?: boolean
+  readonly loc?: ReturnType<typeof location>
+}) =>
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Environment.node, InstructionBuiltIns.node, SessionCwdInstructions.node]),
+    [
+      Location.node.replace(
+        Layer.succeed(Location.Service, Location.Service.of(options?.loc ?? location({ directory }))),
+      ),
+      Global.node.replace(Global.layerWith({ config: temporary, tmp: temporary })),
+      InstructionDiscovery.node.replace(
+        Layer.mock(InstructionDiscovery.Service, {
+          project: options?.project ?? true,
+          global: true,
+          claude: options?.claude ?? true,
+        }),
+      ),
+    ],
+  )
 
 const it = testEffect(layer())
-const withoutClaude = testEffect(layer(false))
+const withoutClaude = testEffect(layer({ claude: false }))
+const withoutProject = testEffect(layer({ project: false }))
+const nestedLocation = testEffect(
+  layer({
+    loc: location(
+      { directory: AbsolutePath.make("/repo/packages/core") },
+      { projectDirectory: AbsolutePath.make("/repo") },
+    ),
+  }),
+)
 
 /** What a step sees: the built-in environment block plus the working directory's instructions. */
-const load = (cwd: SessionCwd.Resolved | undefined) =>
+const load = (cwd: SessionCwd.Resolved | undefined, sessionID?: SessionSchema.ID) =>
   Effect.gen(function* () {
     const builtins = yield* InstructionBuiltIns.Service
     const env = yield* Environment.Service
     const instructions = yield* SessionCwdInstructions.Service
     const environment = yield* builtins.load({ cwd: cwd && SessionCwd.describe(cwd, env.id) })
-    return Instructions.combine([environment, yield* instructions.load(cwd)])
+    return Instructions.combine([environment, yield* instructions.load(cwd, sessionID)])
   })
 
 describe("SessionCwdInstructions", () => {
@@ -215,18 +243,62 @@ describe("SessionCwdInstructions", () => {
     }),
   )
 
-  it.effect("keeps the same instructions through a transient machine failure", () =>
+  it.effect("keeps the same instructions through a transient machine failure after initial load", () =>
     Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const sessionID = SessionSchema.ID.make("ses_cwd_offline_keep")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: directory, sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({ id: sessionID, project_id: Project.ID.global, directory, slug: "test", version: "test" })
+        .run()
+        .pipe(Effect.orDie)
       const gpu = flaky("gpu")
       yield* gpu.environment.files.mkdir("/work/app")
       yield* gpu.environment.files.write("/work/app/AGENTS.md", bytes("App rules"))
 
-      const initialized = yield* readInitial(yield* load(at(gpu.environment, "/work/app")))
+      const first = yield* load(at(gpu.environment, "/work/app"), sessionID)
+      const initialized = yield* readInitial(first)
       expect(initialized.text).toContain("Instructions from: gpu:/work/app/AGENTS.md\nApp rules")
+      // Persist the initialized state so subsequent transient failures preserve it via InstructionState.
+      const observed = yield* InstructionState.observe(db, first, sessionID)
+      yield* InstructionState.initialize(db, sessionID, 1, observed.current)
 
       gpu.state.offline = true
-      const unchanged = yield* readUpdate(yield* load(at(gpu.environment, "/work/app")), initialized)
+      const unchanged = yield* readUpdate(yield* load(at(gpu.environment, "/work/app"), sessionID), initialized)
       expect(unchanged).toEqual({ values: initialized.values, text: "", changed: false })
+    }),
+  )
+
+  withoutProject.effect("skips cwd AGENTS.md when project discovery is disabled", () =>
+    Effect.gen(function* () {
+      const gpu = machine("gpu")
+      yield* gpu.files.mkdir("/work/app")
+      yield* gpu.files.write("/work/app/AGENTS.md", bytes("Should stay skipped"))
+
+      const loaded = yield* readInitial(yield* load(at(gpu, "/work/app")))
+      expect(loaded.values["core/cwd-instructions"]).toBeUndefined()
+      expect(loaded.text).toContain("  Working directory: gpu:/work/app")
+    }),
+  )
+
+  nestedLocation.effect("skips a local ancestor cwd already covered by project InstructionDiscovery", () =>
+    Effect.gen(function* () {
+      const local = Environment.make(Environment.localID, Environment.makeMemoryDriver(), {
+        hostsServer: true,
+        path: posix,
+      })
+      yield* local.files.mkdir("/repo")
+      yield* local.files.write("/repo/AGENTS.md", bytes("Root rules"))
+
+      const loaded = yield* readInitial(yield* load(at(local, "/repo")))
+      expect(loaded.values["core/cwd-instructions"]).toBeUndefined()
+      expect(loaded.text).toContain("  Working directory: /repo")
     }),
   )
 })
