@@ -557,9 +557,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   // interrupt ack so the flag and the paint cannot drift apart.
   const paintIdle = (status: string) => {
     state.rootActive = false
-    const phase =
-      status.startsWith("task:") || status.startsWith("waiting_") || status === "awaiting form" ? "running" : "idle"
-    write([], { phase, status })
+    write([], { phase: "idle", status })
   }
 
   const write = (commits: StreamCommit[], patch?: Pick<FooterPatch, "phase" | "status" | "usage">) => {
@@ -642,6 +640,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     wait.terminalError = undefined
   }
 
+  let prevActivityStatus = ""
   const syncBlockers = () => {
     if (state.closed || controller.signal.aborted || input.footer.isClosed) return
     const descendant = subagents.snapshot()
@@ -654,7 +653,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       next.type === "prompt"
         ? footerActivityStatus(next, descendant, state.rootActive)
         : { phase: "running" as const, status: blockerStatus(next) }
-    if (next.type === "prompt" && state.view.type === "prompt" && !footerPatch.status && !state.rootActive) return
+    if (next.type === "prompt" && state.view.type === "prompt" && footerPatch.status === prevActivityStatus && !state.rootActive) return
+    prevActivityStatus = footerPatch.status ?? ""
     state.view = next
     writeSessionOutput(
       { footer: input.footer, trace: input.trace },

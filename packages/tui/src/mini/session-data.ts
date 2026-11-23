@@ -7,7 +7,7 @@ export function pickBlockerView(input: { permission?: MiniPermissionRequest; for
 }
 
 export function blockerStatus(view: FooterView) {
-  if (view.type === "permission") return "waiting_permission"
+  if (view.type === "permission") return "awaiting permission"
   if (view.type === "form") return "awaiting form"
   return ""
 }

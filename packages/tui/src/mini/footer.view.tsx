@@ -186,10 +186,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     return tabs().findIndex((item) => item.sessionID === sessionID) + 1
   })
   const model = createMemo(() => {
-    const childModel = descendantActivityModel(subagent())
-    const current = childModel
-      ? { providerID: childModel.providerID, modelID: childModel.modelID }
-      : props.currentModel()
+    const current = props.currentModel()
     return current ? modelInfo(props.providers(), current) : undefined
   })
   const detail = createMemo(() => {
@@ -414,19 +411,18 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     if (notice()) return notice()
     if (!footerDetails()) return shell() ? "Shell" : ""
+    if (stateStatus() === "reconnecting") return "reconnecting"
+    const s = stateStatus()
+    if (s.startsWith("task:")) {
+      const childModel = descendantActivityModel(subagent())
+      const info = childModel ? modelInfo(props.providers(), childModel) : undefined
+      if (info?.model) return `${s.split(" · ")[0]} · ${info.model}`
+      return s
+    }
     if (busy()) {
-      if (stateStatus() === "reconnecting") return "reconnecting"
-      const s = stateStatus()
-      if (s.startsWith("task:")) {
-        const childModel = descendantActivityModel(subagent())
-        const info = childModel ? modelInfo(props.providers(), childModel) : undefined
-        if (info?.model) return `${s.split(" · ")[0]} · ${info.model}`
-        return s
-      }
-      if (s.startsWith("waiting_")) return s
       return interruptLabel() ? `${interruptLabel()} stop` : "Running"
     }
-    return stateStatus() || (shell() ? "Shell" : "")
+    return s || (shell() ? "Shell" : "")
   })
   const agentStatus = createMemo(() => {
     if (!footerDetails() || !prompt() || shell()) return undefined
