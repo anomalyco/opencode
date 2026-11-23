@@ -14,6 +14,7 @@ export function guardPrint(cdp: Cdp, activity: Readonly<TabActivity>) {
     const sent =
       sessions.get(sessionID) ??
       cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: REFUSE, runImmediately: true }, sessionID).then(() => undefined)
+
     sessions.set(sessionID, sent)
 
     return sent
