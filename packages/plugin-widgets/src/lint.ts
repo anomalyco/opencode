@@ -1,7 +1,7 @@
 export * as WidgetLint from "./lint.js"
 
 import type { Widget } from "@opencode/schema/widget"
-import { prelude } from "@opencode/widget/source"
+import { prelude, preludeLive } from "@opencode/widget/source"
 import { parseProgram } from "psychoscript"
 
 /** The most a widget template's source may hold, in UTF-8 bytes. */
@@ -167,10 +167,11 @@ function removed(root: Node) {
 }
 
 let names: ReadonlySet<string> | undefined
-// Every top-level name the prelude declares, plus the host globals; read from the canonical prelude, not a copy.
+// Every top-level name the preludes declare (the live one's too, in every mode), plus the host globals; read from the
+// canonical preludes, not a copy.
 function preludeNames() {
   if (names) return names
-  const parsed = parseProgram(prelude)
+  const parsed = parseProgram(prelude + "\n" + preludeLive)
   const body = parsed.ok ? (parsed.program.body as ReadonlyArray<Statement>) : []
   names = new Set([
     "__input",

@@ -106,8 +106,11 @@ Every host applies the same rule to a live run's posts; it never drops a post an
   run the client stops drops them.
 - **`frame` requests** are idempotent: at most one is pending. They are never counted, never wait and are never
   dropped; a frame request while one is pending changes nothing (a GPU batch it carries still applies).
-- **Not counted:** `submit`, `dismiss`, `capture` and `gpu` batches go to the client at once (ahead of waiting posts).
-  `send` goes at once too; the server limits it (`rate_limited`, `widgets.md`).
+- **Not counted:** `submit`, `dismiss` and `capture` go to the client at once (ahead of waiting posts). `send` goes at
+  once too; the server limits it (`rate_limited`, `widgets.md`). A post carrying a GPU batch (a `gpu` post, or a
+  `frame` request with `gpu`) takes no token but never overtakes a waiting post: while counted posts wait, it joins the
+  end of the queue, and goes out, in order, as soon as the posts ahead of it have (a batch may configure a canvas a
+  waiting render adds). A frame request without a batch still goes at once.
 
 ## Capabilities
 

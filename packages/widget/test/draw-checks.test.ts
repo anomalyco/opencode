@@ -88,6 +88,7 @@ for (const item of fixture.cases) {
     const widget = LiveWidget.start(
       program(
         `async function main() {\n  widget.render(ui.canvas({ key: "c", height: 1 }))\n  widget.draw("c", ${expression(item)})\n}`,
+        "live",
       ),
       null,
     )

@@ -35,7 +35,7 @@ const start = (source: string, options: { readonly gpu?: false } = {}) => {
   const clock = new ManualClock()
   const posts: LiveMessage[] = []
   const sent: unknown[] = []
-  const widget = LiveWidget.start(program(source), null, {
+  const widget = LiveWidget.start(program(source, "live"), null, {
     clock,
     ...options,
     onMessage: (message) => {
@@ -71,7 +71,8 @@ test("canvas sizes, a lost device, and batches before sleeps and at the end", as
   const clock = new ManualClock()
   const posts: LiveMessage[] = []
   const widget = LiveWidget.start(
-    program(`async function main() {
+    program(
+      `async function main() {
   widget.render(ui.canvas({ key: "c", gpu: true, height: 10 }))
   const context = widget.gpu.getContext("c")
   try { context.getCurrentTexture() } catch (error) { widget.send(error.message) }
@@ -88,7 +89,9 @@ test("canvas sizes, a lost device, and batches before sleeps and at the end", as
   widget.send(again === device)
   context.configure({ device: again, format: "rgba8unorm" })
   again.createBuffer({ size: 8, usage: GPUBufferUsage.UNIFORM })
-}`),
+}`,
+      "live",
+    ),
     null,
     {
       clock,
@@ -167,13 +170,16 @@ test("a GPU batch takes no token but never overtakes a waiting render; a bare fr
   const clock = new ManualClock()
   const order: string[] = []
   const widget = LiveWidget.start(
-    program(`async function main() {
+    program(
+      `async function main() {
   for (let i = 0; i < 9; i++) widget.render(ui.column([ui.text(String(i)), ui.canvas({ key: "c" + i, gpu: true, height: 10 })]))
   const device = await widget.gpu.requestDevice()
   widget.gpu.getContext("c8").configure({ device, format: "rgba8unorm" })
   await widget.sleep(1)
   await widget.frame()
-}`),
+}`,
+      "live",
+    ),
     null,
     {
       clock,

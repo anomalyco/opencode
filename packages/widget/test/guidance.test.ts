@@ -17,7 +17,7 @@ const texts = (node: Node | undefined): string[] =>
 test("the game example plays and submits its score", async () => {
   const clock = new ManualClock()
   const widget = LiveWidget.start(
-    program(example("## Example: a small game")),
+    program(example("## Example: a small game"), "live"),
     { title: "Catch", seconds: 2 },
     {
       clock,
@@ -64,7 +64,7 @@ test("the dashboard example polls, refreshes on demand and when resumed, and sho
   }
   const clock = new ManualClock()
   const widget = LiveWidget.start(
-    program(example("## Example: a live dashboard")),
+    program(example("## Example: a live dashboard"), "live"),
     { repo: "anomalyco/opencode", seconds: 30 },
     { clock, transport, capabilities: { https: { hosts: ["api.github.com"] } } },
   )

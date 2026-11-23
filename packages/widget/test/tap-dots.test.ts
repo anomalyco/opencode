@@ -11,7 +11,7 @@ const BOARD = "0/:board"
 const play = (data: unknown) => {
   const clock = new ManualClock()
   // The TypeScript interpreter on a loaded CI runner can take longer than the spec's 50 ms to start the program.
-  const widget = LiveWidget.start(program(source), data, { clock, busyMs: 2000 })
+  const widget = LiveWidget.start(program(source, "live"), data, { clock, busyMs: 2000 })
   const time = { t: 0 }
   // One display frame 16 ms after the last, once the program asks for it; resolves once it is drawn.
   const frame = async () => {

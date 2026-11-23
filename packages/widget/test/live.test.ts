@@ -19,7 +19,7 @@ const histories = new WeakMap<LiveWidget, LiveMessage[]>()
 const start = (source: string, options: LiveOptions = {}, data: unknown = {}) => {
   const clock = new ManualClock()
   const messages: LiveMessage[] = []
-  const widget = LiveWidget.start(program(source), data, {
+  const widget = LiveWidget.start(program(source, "live"), data, {
     clock,
     onMessage: (message) => messages.push(message),
     ...options,

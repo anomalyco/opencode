@@ -23,7 +23,7 @@ test("the shader game example passes the lint", () => {
 
 test("the shader game renders its shader every frame, jumps on a tap and submits a score", async () => {
   const clock = new ManualClock()
-  const widget = LiveWidget.start(program(source), { title: "Run", seconds: 60 }, { clock, busyMs: 2000 })
+  const widget = LiveWidget.start(program(source, "live"), { title: "Run", seconds: 60 }, { clock, busyMs: 2000 })
   await widget.when((current) => shader(current.view) !== undefined)
   const frame = { t: 0, dt: 1 / 60, width: 360, height: 280, scale: 2, pointer: null, dark: true }
   const tap = () =>

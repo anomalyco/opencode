@@ -2,17 +2,7 @@ import { expect, test } from "bun:test"
 import { MAX_VALUE_DEPTH } from "../src/host.js"
 import { Schema } from "effect"
 import { Host, Runtime } from "psychoscript"
-import {
-  checkDraw,
-  draw,
-  LiveWidget,
-  type LiveMessage,
-  Node,
-  prelude,
-  program,
-  step,
-  StepOutput,
-} from "../src/index.js"
+import { checkDraw, draw, LiveWidget, type LiveMessage, Node, program, step, StepOutput } from "../src/index.js"
 import { prune } from "../src/session.js"
 import { fixtures, scriptedProgram } from "../script/conformance.js"
 
@@ -167,7 +157,7 @@ const scriptedLive = async (source: string, events: ReadonlyArray<unknown>) => {
 
 const nativeLive = async (source: string, events: ReadonlyArray<unknown>) => {
   const messages: unknown[] = []
-  const widget = LiveWidget.start(program(source), null, {
+  const widget = LiveWidget.start(program(source, "live"), null, {
     onMessage: (message: LiveMessage) => messages.push(message),
   })
   events.forEach((event) => widget.event(event as Parameters<LiveWidget["event"]>[0]))
@@ -228,7 +218,7 @@ test("a native live run stays while its view has handlers", async () => {
 })
 
 const postLine = (() => {
-  const lines = prelude.split("\n")
+  const lines = program("", "live").split("\n")
   const line = lines.findIndex((text) => text.includes("__host.post(message)"))
   return { line: line + 1, column: lines[line]!.indexOf("__host.post(message)") + 1 }
 })()
@@ -252,7 +242,7 @@ test("a function posted where none may go fails a native live run at the same li
 
 test("a live render with a key of another type, or deeper than 100 levels, ends the run in phase view", async () => {
   const end = async (expression: string) => {
-    const widget = LiveWidget.start(program(`async function main() {\n  widget.render(${expression})\n}`), null)
+    const widget = LiveWidget.start(program(`async function main() {\n  widget.render(${expression})\n}`, "live"), null)
     const done = await widget.done
     return done.type === "error" ? done.error : done
   }
@@ -272,7 +262,7 @@ test("a live render with a key of another type, or deeper than 100 levels, ends 
       message: "The view nests more than 100 levels",
     })
   // 100 levels, the deepest prop a node has in its deepest node: the render's value depth is 202 exactly.
-  const widget = LiveWidget.start(program(`async function main() {\n  widget.render(${nested(100)})\n}`), null)
+  const widget = LiveWidget.start(program(`async function main() {\n  widget.render(${nested(100)})\n}`, "live"), null)
   expect(await widget.done).toEqual({ type: "return" })
   let deepest: unknown = widget.view
   for (let level = 1; level < 100; level++) deepest = (deepest as { children: unknown[] }).children[0]

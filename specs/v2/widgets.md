@@ -37,7 +37,7 @@ widget-specific goes into PsychoScript (`anomalyco/psychoscript`) or `psychoscri
 type WidgetTemplate = {
   name: string          // /^[a-z][a-z0-9-]{0,47}$/, unique per server
   version: string       // first 16 hex chars of sha256(program + "\n" + JSON.stringify(data)), where
-                        // program = prelude + "\n" + source; a content address that covers the prelude, since
+                        // program as served (below); a content address that covers the preludes, since
                         // clients cache the served program by name@version forever (`version(source, data)` in
                         // @opencode/widget, synchronous)
   description: string   // one line, shown to the model when listing widget templates
@@ -88,7 +88,9 @@ must be deterministic and must not rely on time or randomness. There is no `upda
 
 ## Prelude and step ABI
 
-The prelude is canonical JavaScript in `packages/widget/src/prelude.js`. It defines:
+The prelude is canonical JavaScript in `packages/widget/src/prelude.js`, and the **live prelude**, what only live
+programs use (`widget`, with `widget.gpu`, and `__widget_live`; `widgets-live.md`, `widgets-gpu.md`), in
+`packages/widget/src/prelude-live.js`. The prelude defines:
 
 - `ui`: pure node builders, one per node type. Required fields are positional, optional ones and handlers go in
   `props`: `column|row|carousel|card(props, children)` (or `(children)`), `text(text, props?)`, `markdown(text)`,
@@ -137,7 +139,10 @@ a step, the state and view stay as they were.
 Then it runs `view` on the next state. `draw` calls `draw(state, data, frame)` with `frame.key` (the canvas's `key`, or
 `null`) instead of `frame.id`.
 
-The server serves the full **program** = `prelude + "\n" + source`. Clients never need their own prelude copy.
+The server serves the full **program**: `prelude + "\n" + source` for a step widget template, `prelude + "\n" +
+livePrelude + "\n" + source` for a live one. Clients never need their own copy of either. Each version keeps the
+program it was saved with. The source starts on the program's line `program lines − source lines + 1`, which is how
+clients make positions source-relative (Failures).
 
 To run a step, a client compiles once per widget template version:
 
@@ -296,7 +301,7 @@ psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript r
   in phase `view` with exactly that message, `{ view: false, message }` for the step failing with exactly that message.
   They come from the last prelude that built the tree itself (protocol 1, kept for this in
   `packages/widget/test/fixtures/scripted-prelude.js`) where it agrees (all but a function it left out), and from the
-  TypeScript host for failures. A native host runs `prelude + "\n" + source` on `input` and must give the
+  TypeScript host for failures. A native host runs the step program of `source` on `input` and must give the
   same; `built` tests its walk alone. `packages/widget/src/tree.ts` is the walk in TypeScript.
 
 ## Events
@@ -581,8 +586,8 @@ the client, not a widget state. A fetch error a live program gets from `widget.f
 an exception it lets escape is a program error.
 
 A client that hits a program error shows it on the widget (error card or inline error) and calls `report` once with
-`{ phase, message, line?, column? }`, positions relative to the widget template's source (the prelude's lines subtracted;
-dropped when they fall past the widget template). The server records it as the widget's `failure`. Whether it reaches the
+`{ phase, message, line?, column? }`, positions relative to the widget template's source (the lines of the program before the source subtracted:
+the prelude's, and a live program's live prelude's; dropped when they fall outside the widget template). The server records it as the widget's `failure`. Whether it reaches the
 agent depends on who made the widget template:
 
 - **The widget's Session created the widget template version** (its `widget_template` `save` or `edit` stored that version):
@@ -659,7 +664,7 @@ type Summary = {
   capabilities?: { https?: { hosts: string[] } }   // live widget templates only
   builtin: boolean
 }
-type Program = Summary & { source: string; program: string }   // program = prelude + "\n" + source
+type Program = Summary & { source: string; program: string }   // program as served (Prelude and step ABI)
 ```
 
 Event `changed`, `{ sessionID, state: State }`, published (as `rpc.opencode.widget.changed`) in the Session's Location

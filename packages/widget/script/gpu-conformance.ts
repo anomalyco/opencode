@@ -29,7 +29,7 @@ export interface Recorded {
 export async function run(item: GpuCase): Promise<Recorded> {
   const clock = new ManualClock()
   const batches: Array<{ frame: boolean; ops: unknown; bytes: string }> = []
-  const widget = LiveWidget.start(program(item.source), item.data ?? null, {
+  const widget = LiveWidget.start(program(item.source, "live"), item.data ?? null, {
     clock,
     // GPU programs, not budgets: no 50 ms slice.
     busyMs: 600_000,

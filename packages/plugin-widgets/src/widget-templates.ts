@@ -75,7 +75,7 @@ export interface EditInput {
 
 /** How the server builds a version's program; the current prelude by default, another one in tests. */
 export interface Builder {
-  readonly program: (source: string) => string
+  readonly program: (source: string, mode: Widget.Mode) => string
 }
 const current: Builder = { program }
 
@@ -127,7 +127,10 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
   const builtin = new Map(
     builtins.map((widgetTemplate) => {
       const decoded = decode(widgetTemplate)
-      return [decoded.name, { ...decoded, program: builder.program(decoded.source) } satisfies Widget.Program]
+      return [
+        decoded.name,
+        { ...decoded, program: builder.program(decoded.source, decoded.mode) } satisfies Widget.Program,
+      ]
     }),
   )
 
@@ -136,7 +139,10 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
     const stored = Option.getOrUndefined(decodeOption(yield* storage.get(versionKey(name, version))))
     if (!stored) return undefined
     const { origin: _, program: text, ...widgetTemplate } = stored
-    return { ...widgetTemplate, program: text ?? builder.program(widgetTemplate.source) } satisfies Widget.Program
+    return {
+      ...widgetTemplate,
+      program: text ?? builder.program(widgetTemplate.source, widgetTemplate.mode),
+    } satisfies Widget.Program
   })
   const store = (widgetTemplate: Widget.Program, origin?: string) =>
     storage.set(
@@ -225,7 +231,7 @@ export const make = (storage: StorageDomain, builder: Builder = current) => {
     const mode = input.mode ?? "step"
     const problem = capabilitiesProblem(mode, input.capabilities)
     if (problem) return yield* invalid(problem)
-    const text = builder.program(input.source)
+    const text = builder.program(input.source, mode)
     const widgetTemplate = decode({
       name: input.name,
       version: version(input.source, input.data, mode, input.capabilities),

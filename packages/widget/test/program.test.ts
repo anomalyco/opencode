@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
-import { builtins, compile, prelude, program, step, version } from "../src/index.js"
+import { builtins, compile, prelude, preludeLive, program, step, version } from "../src/index.js"
 import { backdrop, chart, confirm, form, suggestions } from "../src/source.js"
 
 const src = path.resolve(import.meta.dir, "../src")
@@ -108,10 +108,12 @@ test("version covers the mode and a live widget template's capabilities", () => 
   const data = { type: "object" } as const
   const hash = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex").slice(0, 16)
   const base = prelude + "\nsource\n" + JSON.stringify(data)
+  // A live widget template's program has the live prelude too.
+  const live = prelude + "\n" + preludeLive + "\nsource\n" + JSON.stringify(data)
   expect(version("source", data, "step")).toBe(hash(base))
-  expect(version("source", data, "live")).toBe(hash(base + "\nlive"))
+  expect(version("source", data, "live")).toBe(hash(live + "\nlive"))
   const capabilities = { https: { hosts: ["api.example.com"] } }
-  expect(version("source", data, "live", capabilities)).toBe(hash(base + "\nlive\n" + JSON.stringify(capabilities)))
+  expect(version("source", data, "live", capabilities)).toBe(hash(live + "\nlive\n" + JSON.stringify(capabilities)))
 })
 
 test("compile checks syntax without running, with lines counted in the source", () => {

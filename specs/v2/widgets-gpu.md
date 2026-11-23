@@ -11,18 +11,25 @@ canvases are unaffected. Clients only: the server stores and validates nothing f
 | iOS | wgpu in `psychoscript-mobile` (Metal) |
 | Android | wgpu in `psychoscript-mobile` (Vulkan 1.1 or newer; Android 15 and 16, API 35 and 36, only) |
 | Web host | the browser's WebGPU; no WebGL fallback. It must produce the same program errors as wgpu for this subset; a difference is a client bug |
-| TUI | none for now (placeholder) |
+| TUI | none for now (placeholder); `@opencode/widget`'s `LiveWidget` checks batches (Host checks) without replaying them |
 
 **Unavailable is not an error.** Where a client has no WebGPU, or creating the device fails, the canvas shows its
 `poster` (else its `alt`, else "GPU canvas not supported") and everything else in the widget keeps working: other nodes,
 nodes layered over it in a `stack`, handlers, timers. The program runs unchanged: `requestDevice()` still resolves and
 its calls are recorded and dropped (`widget.gpu.available` is `false`), so a widget template needs no fallback path.
 
+**What the program knows.** A host tells the prelude about its GPU in the live input: `__input()` returns
+`{ data, gpu: { available, format } }`, `available` whether it replays batches and `format` its preferred canvas
+format (`"bgra8unorm"` or `"rgba8unorm"`). Without `gpu`, or with `available` not `true`, the program has no GPU: it
+records nothing and posts no batches; `getPreferredCanvasFormat()` returns `format` (default `"rgba8unorm"`).
+
 ## The node
 
 A GPU canvas is `canvas` with `gpu: true` (and a `key`, to reach it): `ui.canvas({ key: "scene", gpu: true, height,
 fill, onPointer, alt, poster })`. It is live mode only; a step widget template uses the `wgsl` shorthand (below).
-`gpu`, `wgsl` and 2D `draw` exclude each other: a canvas is drawn one way. Layout, `fill`, full screen, `onPointer`,
+`gpu`, `wgsl` and 2D `draw` exclude each other: a canvas is drawn one way (a view with a canvas that has both `gpu` and
+`wgsl` is invalid; a live `draw` post to a GPU canvas throws `Canvas "<key>" is drawn by the GPU; it takes no draw
+commands`, as for a `wgsl` canvas). Layout, `fill`, full screen, `onPointer`,
 pointer capture and `close` are as for every canvas (`widgets.md`, Canvas; `widgets-fullscreen.md`). Game input is
 the existing input model: keys and focus, pointer capture with relative `dx`/`dy` (`widgets-input.md`), `widget.keys`
 and `widget.pointer` read each frame (`widgets-live.md`).
@@ -38,6 +45,13 @@ const context = widget.gpu.getContext("scene")            // the canvas with tha
 context.configure({ device, format, alphaMode: "opaque" }) // alphaMode: "opaque" | "premultiplied"
 // context.width / context.height: the canvas's size in physical pixels (logical × scale), updated before each frame
 ```
+
+The prelude defines WebGPU's flag objects for the subset as globals: `GPUBufferUsage` (`COPY_SRC` 4, `COPY_DST` 8,
+`INDEX` 16, `VERTEX` 32, `UNIFORM` 64, `STORAGE` 128), `GPUTextureUsage` (`COPY_SRC` 1, `COPY_DST` 2,
+`TEXTURE_BINDING` 4, `RENDER_ATTACHMENT` 16), `GPUShaderStage` (`VERTEX` 1, `FRAGMENT` 2) and `GPUColorWrite` (`RED`
+1, `GREEN` 2, `BLUE` 4, `ALPHA` 8, `ALL` 15). An argument of the wrong kind where WebGPU takes an object (a buffer where
+a pipeline goes, no descriptor) throws a `TypeError` in the program, as WebGPU's JavaScript API does; anything else
+(values, enums, limits) is recorded as given and checked by the host.
 
 `device` has these methods and objects, each taking WebGPU's descriptor shape and returning an object that stands for
 the resource (a handle):
@@ -72,7 +86,10 @@ the resource (a handle):
 
 `context.getCurrentTexture()` returns the canvas's texture (the same object every frame; it stands for whatever surface
 texture the client presents next). Render into `getCurrentTexture().createView()` to draw the canvas; render into your
-own textures and bind them for render-to-texture. Nothing else from WebGPU exists (no compute, no queries, no error
+own textures and bind them for render-to-texture. `getCurrentTexture()` before `configure` throws; destroying the
+canvas's texture does nothing. A texture's views with equal descriptors are one view (one handle), so a per-frame
+`createView()` costs nothing; so is `pipeline.getBindGroupLayout(index)` per index. `requestDevice()` while a device
+lives returns it. Nothing else from WebGPU exists (no compute, no queries, no error
 scopes, no 3D textures, no compressed formats, no optional features).
 
 ## Frames
@@ -96,11 +113,11 @@ while (true) {
 
 Calls don't touch a GPU in the program. The prelude records them into a **batch**, in queue order: resource creation
 and `writeBuffer`/`writeTexture` at the point they are called, a command buffer's commands at the `submit` that takes
-it. The pending batch goes out at the program's next `await` of a `widget` call: with `widget.frame()` it rides in the
-frame request itself, so a game posts once per frame (about 120 posts a second at 120 Hz); before `widget.sleep()` or
-`widget.fetch()` it is a post of its own (an intermediate batch, allowed; batches aren't counted toward the post rate,
-`widgets-live.md`). The client
-replays each batch in order on its device and presents every canvas whose texture a render pass in the batch wrote to.
+it. The pending batch goes out before the program next waits on the host: with `widget.frame()` it rides in the
+frame request itself, so a game posts once per frame (about 120 posts a second at 120 Hz); before `widget.sleep()`,
+`widget.fetch()`, each wait for client messages (handlers, hooks) and when `main` returns it is a post of its own (an
+intermediate batch, allowed; batches aren't counted toward the post rate, but never overtake a waiting `render` or
+`draw`: `widgets-live.md`, Post rate). A batch with no ops isn't posted. The client replays each batch in order on its device and presents every canvas whose texture a render pass in the batch wrote to.
 It may skip presents beyond one per display frame, never other ops.
 
 ## Transport
@@ -147,11 +164,48 @@ type Op =
   | ["submit"]                                               // the command buffers' commands just before it, in order
 ```
 
-Descriptors are WebGPU's, with handles in place of objects and defaults filled in by the prelude. A context's handle
-stands for that canvas's current texture at replay time, so views of it are created once. The client finds the canvas
-by its `key` in the last rendered view, as for `widget.draw` (`widgets.md`, Native hosts). Before each frame the client
-sends the program `{ type: "canvas", key, width, height }` (physical pixels) for every GPU canvas whose size changed;
-the prelude updates `context.width`/`height`.
+A `context` op comes from `configure`: configuring again posts it again with the same handle (a reconfiguration), and
+configuring with a new device gives a new handle. A context's handle stands for that canvas's current texture at
+replay time, so views of it are created once. An `error` op is a WebGPU validation error the prelude found itself,
+which the ops can't show: `the command encoder is finished` (a command after `finish()`), `a render pass is open on this
+command encoder` (a command, a pass or `finish()` while a pass is open), `the render pass has ended` (a pass command
+after `end()`), `a command buffer can be submitted once`, `a texture's dimension must be "2d"`. An encoder records
+nothing after its first error. Handles count from 1 and only grow; a call on a lost device spends a handle and records
+nothing.
+
+Descriptors are WebGPU's, with handles in place of objects and every default filled in by the prelude, so each op has
+exactly these shapes (`h` a handle; absent optional members are `null`):
+
+- `view`: `{ dimension, baseMipLevel, mipLevelCount, baseArrayLayer, arrayLayerCount }` (dimension `"2d-array"` for a
+  texture of more than one layer, else `"2d"`; counts to the texture's end, 1 layer for `"2d"`, 6 for `"cube"`).
+- `sampler`: `{ addressModeU, addressModeV, addressModeW, magFilter, minFilter, mipmapFilter, lodMinClamp, lodMaxClamp,
+  compare, maxAnisotropy }` (`"clamp-to-edge"`, `"nearest"`, 0, 32, `null`, 1).
+- `bindGroupLayout`: `{ entries: [{ binding, visibility, buffer, sampler, texture }] }`, one of the last three set:
+  `buffer: { type ("uniform"), hasDynamicOffset (false), minBindingSize (0) }`, `sampler: { type ("filtering") }`,
+  `texture: { sampleType ("float"), viewDimension ("2d"), multisampled (false) }`.
+- `pipelineLayout`: a list of bind group layout handles.
+- `bindGroup`: `{ layout: h, entries: [{ binding, resource }] }`, `resource` one of `{ buffer: h, offset (0), size
+  (-1: to the end) }` (a buffer alone is the whole buffer), `{ sampler: h }`, `{ view: h }`.
+- `renderPipeline`: `{ layout: h | "auto", vertex: { module: h, entryPoint, buffers: [null | { arrayStride, stepMode
+  ("vertex"), attributes: [{ format, offset, shaderLocation }] }] }, fragment: null | { module: h, entryPoint, targets:
+  [null | { format, blend: null | { color, alpha }, writeMask (15) }] }, primitive: { topology ("triangle-list"),
+  stripIndexFormat, frontFace ("ccw"), cullMode ("none") }, depthStencil: null | { format, depthWriteEnabled (false),
+  depthCompare ("always") }, multisample: { count (1), mask (4294967295), alphaToCoverageEnabled (false) } }`, a blend
+  component `{ operation ("add"), srcFactor ("one"), dstFactor ("zero") }`, `entryPoint` `null` for the module's only
+  one.
+- `pass`: `{ colorAttachments: [null | { view: h, resolveTarget, clearValue: [r, g, b, a] ([0, 0, 0, 0]; `{ r, g, b, a
+  }` becomes a list), loadOp, storeOp }], depthStencilAttachment: null | { view: h, depthClearValue, depthLoadOp,
+  depthStoreOp, depthReadOnly (false) } }`.
+- `writeBuffer`'s data offset and size count elements of a typed array, bytes of an `ArrayBuffer`; `writeTexture`
+  takes its data from the layout's `offset` to the end. Both copy the bytes when called. Origins default to
+  `[0, 0, 0]`, extents' height and layers to 1, `rowsPerImage` to `null`, `mipLevel` to 0; `setVertexBuffer` and
+  `setIndexBuffer` offset 0 and size -1; `draw` and `drawIndexed` instance count 1, the rest 0; `setBindGroup`'s
+  dynamic offsets `[]`.
+
+The client finds a context's canvas by its `key` among the `gpu: true` canvases of the last render posted (walked, as
+for `widget.draw`: `widgets.md`, Native hosts). Before each frame the client sends the program `{ type: "canvas", key,
+width, height }` (physical pixels) for every GPU canvas whose size changed; the prelude updates `context.width`/`height`
+(and the canvas texture's `width`/`height`; 0 until the first message).
 
 ## Limits
 
@@ -169,15 +223,21 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
 ## Errors and device loss
 
 - **Program errors** (phase `gpu` in `report`): a WGSL module that fails validation, any WebGPU validation error in a
-  replayed op (wgpu's and the browser's validation implement WebGPU's rules), an op the subset doesn't have, a handle
-  that doesn't exist, and exceeding a limit. The client stops that canvas: it shows its placeholder with the error,
-  ignores later batches for it, and reports the error once. The first uncaptured GPU error is enough (no error scopes
-  in v1). The program and the rest of the widget keep running.
+  replayed op (wgpu's and the browser's validation implement WebGPU's rules), an `error` op, and what the host checks
+  (Host checks). The first uncaptured GPU error is enough (no error scopes in v1). The program and the rest of the
+  widget keep running.
+- **Which canvases stop.** The device is the widget's, shared by its GPU canvases. An error in a batch stops the
+  canvases that batch renders into (a pass of the batch has a view of a canvas's texture as a color attachment, the
+  view made in that batch or before); if the batch renders into none (a bad pipeline, a write), every GPU canvas of
+  the widget stops. A stopped canvas shows its placeholder with the error, its error is reported once, and the host
+  ignores later batches for it (after an error that stopped every canvas, all later batches). An error that stops only
+  canvases already stopped isn't reported again.
 - **Client errors** (not reported, logged in dev mode): no WebGPU, device creation failure, a driver crash or reset,
   running out of GPU memory under the limits. The canvas shows its placeholder.
 - **Device loss.** When the client loses its device (a reset, the app backgrounded long enough, a live program
-  restored from a snapshot), it sends `{ type: "gpu", lost: reason }`; the prelude resolves `device.lost` with
-  `{ reason, message }` and every handle is gone. The program may call `requestDevice()` again and recreate its
+  restored from a snapshot), it sends `{ type: "gpu", lost: reason, message? }`; the prelude resolves `device.lost` with
+  `{ reason, message }` (`message` `""` when absent) and every handle is gone. While the program has read a live
+  device's `lost`, the prelude keeps receiving the client's messages, so awaiting it works (and keeps the run open). The program may call `requestDevice()` again and recreate its
   resources; until it does, the canvas shows its placeholder.
 
 ## The `wgsl` shorthand
@@ -185,4 +245,63 @@ The numbers below are verified on wgpu on mobile during implementation. A progra
 `canvas({ wgsl, values })` stays, in step and live mode: it is sugar the client expands into a fixed GPU program on
 the same path. It is a full-screen triangle pipeline whose fragment stage is the `wgsl` between the header and entry
 point in `widgets.md` (GPU canvases), with one uniform buffer for `widget` (`resolution`, `time`, `scale`, `pointer`,
-`values`), redrawn at `fps`. Its limits, errors and placeholder rules are this spec's.
+`values`), redrawn at `fps`. Its limits, errors and placeholder rules are this spec's; there is no WebGL fallback, so
+where WebGPU is unavailable (a browser without it) the canvas shows its placeholder.
+
+## Host checks
+
+Before it replays a batch (or instead, without a GPU), every host checks it without a GPU, with exactly these rules
+and messages, so all hosts fail the same programs the same way. The first failure is the batch's program error (phase
+`gpu`), and the rest of the batch isn't replayed. Errors from replaying (WebGPU validation) follow, in the host's
+wording.
+
+- **The batch:** an object (`a batch must be an object`) with `ops` a list (`a batch's ops must be a list`) of at most
+  20,000 (`the number of ops in a batch is over the limit of 20000`) and `bytes` an `ArrayBuffer` (`a batch's bytes
+  must be an ArrayBuffer`) of at most 4 MB (`the size of a batch's bytes is over the limit of 4194304`).
+- **Each op** fails as `gpu op <i>: <reason>` (`<i>` from 0), checked in order: a list that starts with a string (`an op
+  is a list that starts with its name`), a name in the `Op` type or `error` (`unknown op "<name>"`), exactly its
+  arguments (`"<name>" takes <k> arguments`); an `error` op fails with its message; `pass` not inside a pass (`"pass"
+  inside a render pass`), `setPipeline` … `drawIndexed` and `end` only inside one (`"<name>" outside a render pass`),
+  every other op only outside (`"<name>" inside a render pass`). At the batch's end no pass is open (`a render pass is
+  still open at the end of the batch`, no op index).
+- **Arguments,** first to last, then descriptor members in the order of the shapes above, each named by its path
+  (`"<name>" argument <i>`, then `.member` and `[index]`, as in `"renderPipeline" argument 2.vertex.buffers[0].arrayStride`):
+  `<path> must be a whole number` (an integer ≥ 0: sizes, offsets, counts, indices, handles), `<path> must be a whole
+  number or -1` (sizes that may be -1), `<path> must be an integer` (`drawIndexed`'s base vertex), `<path> must be a
+  finite number` (clear values, viewports, lod clamps, depth clear values), `<path> must be true or false`, `<path>
+  must be a string`, `<path> must be a list` or `must be a list of <n>` (origins and extents 3, clear values 4), `<path>
+  must be an object`, `<path> must be one of <a>, <b>, …` (the subset's values, in the order
+  `packages/widget/src/gpu.ts` lists them), `<path> must combine <A>, <B>, …` (flags outside the subset's: buffer usage
+  `COPY_SRC, COPY_DST, INDEX, VERTEX, UNIFORM, STORAGE`, texture usage `COPY_SRC, COPY_DST, TEXTURE_BINDING,
+  RENDER_ATTACHMENT`, visibility `VERTEX, FRAGMENT`), `<path> needs exactly one of buffer, sampler and texture`,
+  `<path> must be a buffer binding, a sampler or a view`.
+- **Handles:** a new one is greater than every handle before (`handle <h> was already used`; a `context` op may repeat
+  its own handle with the same key); one an op names exists (`no handle <h>`), is of the kind the op takes (`handle <h>
+  is a <kind>, not a <kind>`, or `… not a buffer or texture` for `destroy`; kinds `context`, `buffer`, `texture`, `view`,
+  `sampler`, `shader`, `bindGroupLayout`, `pipelineLayout`, `renderPipeline`, `bindGroup`; a view's texture may be a
+  context) and isn't destroyed (`handle <h> was destroyed`; destroying a texture destroys its views). A `context` op's
+  key is a `gpu: true` canvas of the last render posted (`no GPU canvas with key "<key>"`).
+- **Bytes:** `writeBuffer` and `writeTexture` read inside the batch's bytes (`bytes [<start>, <end>) are outside the
+  batch's <n> bytes`).
+- **Limits** (`<what> is over the limit of <n>`): a buffer's size (`"buffer" argument 2`, 67108864), a texture's width
+  and height (`"texture" argument 2` and `3`, 4096) and layers (`"texture" argument 4`, 256), a shader's UTF-8 bytes
+  (`"shader" argument 2`, 262144), a color target's `writeMask` (its path, 15), `the number of live handles` (4096:
+  handles made, less destroyed buffers and textures and their views; a lost device's handles are gone), `the size of
+  buffers and textures` (268435456: buffers' sizes, and textures' bytes per texel × width × height × layers × samples
+  summed over mip levels, a texel 4 bytes but 1 for `r8unorm` and 8 for `rgba16float`; canvas textures don't count),
+  `the number of render passes in a frame` (16) and `the number of draws in a frame` (10000), counted over a frame's
+  batches up to and including the one in its frame request.
+
+## Conformance
+
+`packages/widget/test/fixtures/gpu/*.json` hold programs, the example widget templates among them
+(`test/fixtures/gpu/templates`: a lit rotating cube, a textured quad, render-to-texture with post-processing, a
+first-person maze), and what a host must do with them. Each is `{ name, source, data?, canvases, inputs?, gpu,
+batches?, errors, end }`. The driver: start the live program of `source` (`widgets.md`, Prelude and step ABI) with
+`{ data, gpu }` and no 50 ms slice; send each of `canvases` as a `canvas` message; then, while the program asks for a
+frame (at most 10), send the `inputs` for frame `i` (client `event`s and `canvas` messages) and frame `i` (`t` =
+`i` / 60, `dt` 1/60, 300 × 200 at scale 2, `pointer` `null`, `dark` `false`). Timers run on a clock that moves while the
+program waits. `batches` are the batches it posts, in order (`frame`: in a frame request; `bytes` base64); `raw-*`
+programs post their own and omit them. `errors` are the host checks' program errors, `{ message, canvases }`, with
+`canvases` the keys stopped or `"all"`. `end` is how the run ended (`return`, `stop` when it stays open, or
+`error: <message>`).
