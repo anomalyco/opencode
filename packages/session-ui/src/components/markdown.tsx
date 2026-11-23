@@ -1475,6 +1475,10 @@ function updateBlock(
       )
       pre.replaceWith(wrapper)
       wrapper.appendChild(pre)
+
+      // The highlighter paints a completed block's background inline. The block says so for its styles, because a
+      // selector on `style` makes Chromium check `:has()` up the tree on every inline style write in the app.
+      if (pre.style.backgroundColor) wrapper.dataset.codePainted = ""
       appendCodeButtons(wrapper, labels, wrapDefault)
       decorateCode(wrapper, code, true, plugins, labels)
     })

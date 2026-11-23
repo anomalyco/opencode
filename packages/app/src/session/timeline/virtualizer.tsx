@@ -723,9 +723,9 @@ export function createTimelineVirtualizer(input: Input) {
     }),
   )
 
-  // Only the viewport carries the inset as a variable, for its fade and scroll padding. The variable does not inherit
-  // (see index.css): the inset changes on every frame while the composer region grows, and an inherited variable would
-  // restyle every rendered row each time.
+  // The viewport carries the inset as a variable for its fade and scroll padding, and the scroll root for its focus
+  // ring (the `style` on ScrollView below). The variable does not inherit (see index.css): the inset changes on every
+  // frame while the composer region grows, and an inherited variable would restyle every rendered row each time.
   createEffect(() => listRoot()?.style.setProperty("--session-timeline-inset", `${bottomInset()}px`))
 
   let contentObserver: MutationObserver | undefined
@@ -1201,7 +1201,10 @@ export function createTimelineVirtualizer(input: Input) {
             if (window.getSelection()?.toString()) input.follow.dispatch({ type: "detach" })
           }}
           class="relative min-w-0 w-full h-full"
-          style={{ "--sticky-accordion-top": input.showHeader() ? "var(--session-header-height, 48px)" : "0px" }}
+          style={{
+            "--sticky-accordion-top": input.showHeader() ? "var(--session-header-height, 48px)" : "0px",
+            "--session-timeline-inset": `${bottomInset()}px`,
+          }}
         >
           <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
             {props.headerInset}

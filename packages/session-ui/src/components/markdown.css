@@ -389,8 +389,11 @@
     --markdown-code-background: var(--color-background-stronger);
   }
 
-  /* A completed block's highlighter paints its own background inline, which the shell colours don't override. */
-  [data-component="markdown-code"][data-code-kind="shell"]:has(> pre:not([style*="background"])) {
+  /* A completed block's highlighter paints its own background inline, which the shell colours don't override. The
+     block marks that itself (markdown.tsx). Never match `[style]` here: with a style selector inside `:has()`,
+     Chromium checks `:has()` up the tree on every inline style write, which restyled the whole timeline each time a
+     row changed height. */
+  [data-component="markdown-code"][data-code-kind="shell"]:not([data-code-painted]) {
     --markdown-code-background: var(--markdown-shell-code-background);
   }
 

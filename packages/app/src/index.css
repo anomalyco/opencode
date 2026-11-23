@@ -3,8 +3,8 @@
 @import "@opencode/ui/styles/tokens";
 @import "tw-animate-css";
 
-/* Set on the timeline viewport and changed on every frame while the composer region grows. Neither inherits, so a change
-   restyles the viewport alone instead of every row inside it. */
+/* Set on the timeline viewport and its scroll root, and changed on every frame while the composer region grows. Neither
+   inherits, so a change restyles those two alone instead of every row inside them. */
 @property --session-timeline-inset {
   syntax: "<length>";
   inherits: false;
@@ -107,20 +107,25 @@
   }
 
   /* The fade mask also erases the viewport's own ring, and the header and composer cover its top and bottom edges.
-     Draw it on the visible area instead, above the header, rounded like the session frame that clips its corners. */
+     Draw it over the visible area instead, above the header, rounded like the session frame that clips its corners.
+     The ring is the scroll root's own pseudo-element, which keeps `:has()` on the element it styles: when a
+     `:has()` selects another element, Chromium restyles everything inside the root, every row, on each focus
+     change. */
   [data-slot="session-timeline-scroll"] > .scroll-view__viewport:focus-visible {
     outline: none;
   }
 
-  [data-slot="session-timeline-scroll"]:has(> .scroll-view__viewport:focus-visible)
-    ~ [data-slot="session-timeline-visible"]::after {
+  [data-slot="session-timeline-scroll"]:has(> .scroll-view__viewport:focus-visible)::after {
+    /* The inset does not inherit, so the ring asks the root for it. */
+    --session-timeline-inset: inherit;
     content: "";
     position: absolute;
-    inset: 0;
+    inset: 0 0 var(--session-timeline-inset);
     z-index: 40;
     border-radius: 10px;
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: -2px;
+    pointer-events: none;
   }
 
   [data-slot="session-timeline-scroll"] > .scroll-view__viewport:has(> [data-slot="session-header-inset"]) {
