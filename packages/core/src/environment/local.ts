@@ -46,10 +46,14 @@ export const makeLocalDriver = (spawner: ChildProcessSpawner["Service"]): Driver
         return entries.map((entry) => ({ name: entry.name, type: fileType(entry) }))
       }),
     write: (value, bytes) =>
-      attempt(value, async () => {
-        await fs.mkdir(path.dirname(value), { recursive: true })
-        await fs.writeFile(value, bytes)
-      }),
+      attempt(value, () => fs.writeFile(value, bytes), true).pipe(
+        Effect.catchTag("Environment.NotFound", () =>
+          attempt(value, async () => {
+            await fs.mkdir(path.dirname(value), { recursive: true })
+            await fs.writeFile(value, bytes)
+          }),
+        ),
+      ),
     remove: (value) => attempt(value, () => fs.rm(value, { recursive: true, force: true })),
     move: (from, to) =>
       Effect.gen(function* () {
