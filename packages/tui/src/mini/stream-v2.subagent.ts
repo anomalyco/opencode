@@ -188,6 +188,15 @@ function childSessionID(metadata: Record<string, unknown> | undefined) {
 }
 
 function tab(child: ChildState): FooterSubagentTab {
+  let activeTool: string | undefined
+  let toolStart: number | undefined
+  for (const { part } of child.tools.values()) {
+    const start = part.time.ran ?? part.time.created
+    if (toolStart === undefined || start > toolStart) {
+      activeTool = part.name
+      toolStart = start
+    }
+  }
   return {
     sessionID: child.sessionID,
     label: child.label,
@@ -195,6 +204,8 @@ function tab(child: ChildState): FooterSubagentTab {
     status: child.status,
     title: child.title,
     model: child.model,
+    activeTool,
+    toolStart,
   }
 }
 
