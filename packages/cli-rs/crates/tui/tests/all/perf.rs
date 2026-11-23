@@ -165,6 +165,32 @@ fn scroll_all() {
     assert!(screen.contains("Question 1 "), "the head never showed again:\n{screen}");
 }
 
+/// The jumps of a reader in a long session: Home (which loads every older page), End, Home and End again, then ten
+/// steps back by user message from the bottom. A step that finds no target among the mounted rows mounts the next
+/// chunk; it used to mount every row.
+#[test]
+#[ignore = "performance scenario; run with `bun run perf`"]
+fn jump_home_end() {
+    let h = mount(Server::new().long(), support::session_route(LONG), 120, 40);
+    wait_tail(&h, LONG, TURNS);
+    settle(&h.app);
+    let probe = Probe::start();
+    first(&h);
+    for command in ["session.last", "session.first", "session.last"] {
+        h.dispatch(command);
+        settle(&h.app);
+    }
+    for _ in 0..10 {
+        h.dispatch("session.message.user.previous");
+        settle(&h.app);
+    }
+    probe.finish("jump_home_end", 14);
+    let screen = h.app.text();
+    // The first step from the bottom lands on the last question, so ten end nine before it.
+    let question = format!("Question {} ", TURNS - 9);
+    assert!(screen.contains(&question), "the walk did not land on {question}:\n{screen}");
+}
+
 #[test]
 #[ignore = "performance scenario; run with `bun run perf`"]
 fn resize() {
