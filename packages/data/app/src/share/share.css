@@ -12,8 +12,9 @@
   margin-top: 0;
 }
 
-/* A neutral button, as tall as the Daily and Weekly toggle beside it. */
-[data-page="stats"] [data-component="share-button"] {
+/* A neutral button, as tall as the Daily and Weekly toggle beside it. Scoped to the heading's actions so it outranks
+   the page's reset for buttons in [data-component="content"] (routes/index.css). */
+[data-page="stats"] [data-slot="section-actions"] [data-component="share-button"] {
   position: relative;
   display: flex;
   align-items: center;
@@ -74,9 +75,10 @@
   --editor-bar: 56px;
   --editor-inspector: 340px;
   box-sizing: border-box;
-  width: min(1440px, calc(100vw - 48px));
+  /* Smaller than the window, so the page stays in view around it. */
+  width: min(1200px, calc(100vw - 160px));
   max-width: none;
-  height: min(920px, calc(100dvh - 48px));
+  height: min(800px, calc(100dvh - 128px));
   max-height: none;
   padding: 0;
   color: var(--stats-text);
@@ -446,6 +448,12 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     border-left: 1px solid var(--stats-line);
+  }
+
+  [data-slot="editor-format"] {
+    flex: none;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--stats-line);
   }
 
   [data-slot="editor-tabs"] {

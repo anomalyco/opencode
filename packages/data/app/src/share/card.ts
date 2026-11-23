@@ -112,7 +112,7 @@ export function drawShareCard(ctx: CanvasRenderingContext2D, card: ShareCard, op
   const rule = footer - 26 - 56
   const legend = card.chart.kind === "stacked" ? legendLayout(card.chart.series, width) : undefined
   const chartBottom = rule - 64 - (legend ? legend.height + 40 : 0)
-  drawBackground(ctx, options.background, colors, width, height, dotGrid(card.chart, width), chartBottom + 160)
+  drawBackground(ctx, options.background, colors, width, height, dotGrid(card.chart, width), rule)
   drawLogo(ctx, options.logo, colors, pad, pad)
 
   const focus = focusAt(card, options, time)
@@ -176,8 +176,8 @@ function drawBackground(
   fadeEnd: number,
 ) {
   if (kind === "plain") return
-  // The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells, fading out down the
-  // card to past the chart's baseline. The first row sits as far from the top as the first column from the side.
+  // The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells, fading out slowly down the
+  // card to the footer's rule. The first row sits as far from the top as the first column from the side.
   const dot = Math.min(8, Math.max(4, Math.round(grid.pitch * 0.36)))
   const first = grid.center - Math.floor(grid.center / grid.pitch) * grid.pitch
   const inset = Math.max(0, first - dot / 2)
@@ -188,7 +188,7 @@ function drawBackground(
   )
   ctx.fillStyle = colors.dot
   for (let y = inset; y < end; y += grid.pitch) {
-    ctx.globalAlpha = Math.max(0, 1 - y / end)
+    ctx.globalAlpha = Math.max(0, 1 - (y / end) ** 2)
     columns.forEach((x) => ctx.fillRect(x, y, dot, dot))
   }
   ctx.globalAlpha = 1
@@ -426,8 +426,8 @@ function drawFooter(
   y: number,
   rule: number,
 ) {
-  // The rule takes the Updated line's colour.
-  ctx.fillStyle = colors.faint
+  // The rule takes the dot grid's colour.
+  ctx.fillStyle = colors.dot
   ctx.fillRect(pad, rule, width - pad * 2, 1)
   ctx.textBaseline = "alphabetic"
   ctx.font = `700 34px ${font}`

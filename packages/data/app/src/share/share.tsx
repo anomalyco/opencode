@@ -27,10 +27,12 @@ export function ShareButton(props: { card: () => ShareDraft | undefined; label: 
       }}
     >
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <path
-          d="M11.5 5.5a2 2 0 1 0-1.94-2.5L5.9 5.1a2 2 0 1 0 0 2.8l3.66 2.1a2 2 0 1 0 .74-1.3L6.64 6.6a2 2 0 0 0 0-1.2L10.3 3.3c.33.13.76.2 1.2.2Z"
-          fill="currentColor"
-        />
+        <g fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="11.5" cy="3.75" r="1.75" />
+          <circle cx="4.5" cy="8" r="1.75" />
+          <circle cx="11.5" cy="12.25" r="1.75" />
+          <path d="m6.05 7.05 3.9-2.35M6.05 8.95l3.9 2.35" />
+        </g>
       </svg>
       <span>Share</span>
     </button>
@@ -292,17 +294,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <span>{value().title}</span>
               </div>
               <div data-slot="editor-actions">
-                <button type="button" data-slot="bar-button" onClick={copyLink}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                    <path
-                      d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 0 1 4.5 9l1-1"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      fill="none"
-                    />
-                  </svg>
-                  <span>Copy link</span>
-                </button>
                 <div data-slot="export">
                   <button
                     ref={exportButton}
@@ -340,6 +331,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                         />
                         <MenuItem label="Download still" hint="The last frame, as PNG" onClick={() => save("image")} />
                       </Show>
+                      <MenuItem label="Copy link" hint="To this section of the page" onClick={copyLink} />
                       <MenuItem label="Post on X" hint="Opens a draft with the link" onClick={post} />
                     </div>
                   </Show>
@@ -398,22 +390,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 </Show>
               </div>
               <div data-slot="editor-toolbar">
-                <div data-slot="segmented" role="group" aria-label="Format">
-                  <For each={["image", "video"] as const}>
-                    {(item) => (
-                      <button
-                        type="button"
-                        aria-pressed={format() === item}
-                        onClick={() => {
-                          setFormat(item)
-                          setPlaying(true)
-                        }}
-                      >
-                        {item === "image" ? "Image" : "Video"}
-                      </button>
-                    )}
-                  </For>
-                </div>
                 <Show when={format() === "video"}>
                   <button
                     type="button"
@@ -443,6 +419,24 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
             </div>
 
             <aside data-slot="editor-inspector" aria-label="Options">
+              <div data-slot="editor-format">
+                <div data-slot="segmented" data-variant="full" role="group" aria-label="Format">
+                  <For each={["image", "video"] as const}>
+                    {(item) => (
+                      <button
+                        type="button"
+                        aria-pressed={format() === item}
+                        onClick={() => {
+                          setFormat(item)
+                          setPlaying(true)
+                        }}
+                      >
+                        {item === "image" ? "Image" : "Video"}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
               <div data-slot="editor-tabs" role="tablist" aria-label="Options">
                 <For each={tabs()}>
                   {(item) => (
