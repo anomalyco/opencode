@@ -1,9 +1,13 @@
 import type { Plugin } from "@opencode/plugin/tui"
 import { Goal } from "@opencode/schema/goal"
+import type { ScrollBoxRenderable } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor } from "solid-js"
+import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { useTheme } from "../../context/theme"
-import { DialogFooter, DialogHeader, DialogLayout, type DialogFooterAction } from "../../ui/dialog"
+import { DialogFooter, DialogHeader, DialogLayout, useDialog, type DialogFooterAction } from "../../ui/dialog"
+import { getScrollAcceleration } from "../../util/scroll"
 
 /**
  * The goal `/goal` set on a Session, from the goal plugin's RPC: fetched when the Session changes or the server
@@ -99,13 +103,20 @@ function showGoal(context: Plugin.Context, sessionID: string, goal: Accessor<Goa
   context.ui.dialog.show(() => <GoalDialog context={context} sessionID={sessionID} goal={goal} />)
 }
 
-function GoalDialog(props: {
+export function GoalDialog(props: {
   context: Plugin.Context
   sessionID: string
   goal: Accessor<Goal.State | undefined>
 }) {
+  const dialog = useDialog()
   const theme = useTheme().surface("dialog")
+  const dimensions = useTerminalDimensions()
+  const config = useConfig().data
+  const maxHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height * 0.6) - 2))
   const goal = props.goal
+  let scroll: ScrollBoxRenderable | undefined
+  // Without centering, Dialog keeps a blank top quarter that a capped body would overflow again.
+  dialog.setCentered(true)
   const run = (text: "pause" | "resume" | "clear") => {
     if (text === "clear") props.context.ui.dialog.clear()
     void props.context.client.session.command({ sessionID: props.sessionID, name: "goal", text }).catch((error) =>
@@ -129,6 +140,12 @@ function GoalDialog(props: {
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
+      ...["up", "k"].map((bind) => ({ bind, title: "Scroll up", group: "Dialog", run: () => scroll?.scrollBy(-1) })),
+      ...["down", "j"].map((bind) => ({ bind, title: "Scroll down", group: "Dialog", run: () => scroll?.scrollBy(1) })),
+      { bind: "pageup", title: "Previous page", group: "Dialog", run: () => scroll?.scrollBy(-maxHeight()) },
+      { bind: "pagedown", title: "Next page", group: "Dialog", run: () => scroll?.scrollBy(maxHeight()) },
+      { bind: "home", title: "Scroll to top", group: "Dialog", run: () => scroll?.scrollTo(0) },
+      { bind: "end", title: "Scroll to bottom", group: "Dialog", run: () => scroll?.scrollTo(Infinity) },
       {
         bind: "p",
         title: "Pause goal",
@@ -156,12 +173,28 @@ function GoalDialog(props: {
           legacyFooter={<DialogFooter actions={{ primary: actions() }} />}
         >
           <box gap={1}>
-            <text fg={theme.text.base}>{current().objective}</text>
+            <scrollbox
+              ref={(element: ScrollBoxRenderable) => (scroll = element)}
+              maxHeight={maxHeight()}
+              contentOptions={{ minHeight: 0 }}
+              scrollbarOptions={{ visible: false }}
+              scrollAcceleration={getScrollAcceleration(config)}
+            >
+              <text fg={theme.text.base} wrapMode="word">
+                {current().objective}
+              </text>
+            </scrollbox>
             <box>
               <text fg={goalColor(theme, current())} wrapMode="none">
                 ◎ {current().status === "active" ? "Active" : current().status === "paused" ? "Paused" : "Met"}
               </text>
-              <Show when={current().reason}>{(reason) => <text fg={theme.text.muted}>{reason()}</text>}</Show>
+              <Show when={current().reason}>
+                {(reason) => (
+                  <text fg={theme.text.muted} wrapMode="word">
+                    {reason()}
+                  </text>
+                )}
+              </Show>
             </box>
           </box>
         </DialogLayout>
