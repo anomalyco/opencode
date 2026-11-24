@@ -398,161 +398,6 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     font-variant-numeric: tabular-nums;
   }
 
-  [data-slot="segmented"] {
-    display: flex;
-    gap: 2px;
-    padding: 2px;
-    background: var(--stats-layer-2);
-
-    button {
-      flex: 1;
-      height: 28px;
-      padding: 0 14px;
-      font-size: 13px;
-      color: var(--stats-faint);
-      background: transparent;
-      border: 0;
-      white-space: nowrap;
-
-      @media (hover: hover) and (pointer: fine) {
-        &:hover {
-          color: var(--stats-text);
-        }
-      }
-
-      &[aria-pressed="true"] {
-        color: var(--stats-text);
-        background: var(--stats-layer);
-        box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
-      }
-    }
-
-    &[data-variant="full"] {
-      width: 100%;
-      box-sizing: border-box;
-
-      button {
-        height: 32px;
-      }
-    }
-  }
-
-  /* The inspector: one group per option, like a design tool's properties panel. */
-  [data-slot="editor-inspector"] {
-    position: absolute;
-    top: var(--editor-inset);
-    inset-inline-end: var(--editor-inset);
-    bottom: var(--editor-inset);
-    display: flex;
-    flex-direction: column;
-    width: var(--editor-inspector);
-    overflow: hidden;
-    background: var(--stats-bg);
-    /* No border: a 1px ring of shadow is its edge, over the panel's lift. */
-    box-shadow:
-      0 0 0 1px light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.08)),
-      0 1px 2px rgb(0 0 0 / 0.06),
-      0 4px 12px -4px rgb(0 0 0 / 0.1),
-      0 16px 32px -12px rgb(0 0 0 / 0.14);
-  }
-
-  /* One day or week of a chart: step either way, or choose it from the list. */
-  [data-slot="day-picker"] {
-    display: flex;
-    gap: 6px;
-
-    [data-slot="icon-button"] {
-      width: 36px;
-      height: 36px;
-      color: var(--stats-text);
-      background: var(--editor-control);
-      border: 1px solid var(--editor-control-line);
-
-      &:disabled {
-        color: var(--stats-faint);
-        opacity: 0.5;
-      }
-    }
-
-    select {
-      flex: 1;
-      min-width: 0;
-      height: 36px;
-      padding: 0 10px;
-      font: inherit;
-      font-size: 13px;
-      color: var(--stats-text);
-      background: var(--editor-control);
-      border: 1px solid var(--editor-control-line);
-      border-radius: 0;
-    }
-  }
-
-  [data-slot="inspector-scroll"] {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-
-  /* The option rows: each label on the left, its choices inline on the right, so the music sits high in the panel. */
-  [data-slot="rows"] {
-    display: flex;
-    flex: none;
-    flex-direction: column;
-    gap: 10px;
-    padding: 16px 20px;
-  }
-
-  [data-slot="row"] {
-    display: grid;
-    grid-template-columns: 52px minmax(0, 1fr);
-    align-items: center;
-    gap: 12px;
-  }
-
-  [data-slot="row-label"] {
-    font-size: 12px;
-    color: var(--stats-faint);
-  }
-
-  /* With a fill row (the embed code), the rows shrink to the panel and that row scrolls instead of the panel. */
-  [data-slot="rows"]:has([data-variant="fill"]) {
-    flex: 0 1 auto;
-    min-height: 0;
-  }
-
-  /* A long list's label stays in view as the panel scrolls, as far below its top as the rows are in from the side. */
-  [data-slot="row"][data-variant="list"] {
-    align-items: start;
-
-    [data-slot="row-label"] {
-      position: sticky;
-      top: 10px;
-      padding-top: 10px;
-    }
-  }
-
-  /* As tall as its content until the panel runs out, then down to the rows' foot, 16px above the footer's line, and
-     its content scrolls. */
-  [data-slot="row"][data-variant="fill"] {
-    flex: 0 1 auto;
-    grid-template-rows: minmax(0, 1fr);
-    align-items: stretch;
-    min-height: 0;
-
-    [data-slot="row-label"] {
-      padding-top: 10px;
-    }
-
-    [data-slot="row-options"] {
-      flex-direction: column;
-      min-height: 0;
-    }
-  }
-
   /* The code to paste: the whole snippet, wrapped, as tall as it needs, on the option buttons' fill and highlighted. */
   /* The embed code's drawer: closed, no height and none of the stage's gap above it; open, the code's height. The rows
      ease, so the card above shrinks to make room smoothly. */
@@ -651,135 +496,6 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     }
   }
 
-  [data-slot="row-options"] {
-    display: flex;
-    gap: 6px;
-    min-width: 0;
-
-    > * {
-      flex: 1;
-      min-width: 0;
-    }
-
-    > [data-slot="segmented"] button {
-      height: 32px;
-    }
-  }
-
-  [data-slot="group"] {
-    display: flex;
-    flex: none;
-    flex-direction: column;
-    gap: 8px;
-    padding: 16px 20px 20px;
-  }
-
-  [data-slot="group-title"] h3 {
-    margin: 0;
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--stats-faint);
-  }
-
-  [data-slot="chip"] {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    height: 64px;
-    padding: 0 4px;
-    font-size: 12px;
-    /* Unchosen choices sit back in the light grey, drawing and words alike; the chosen one is all in the text colour. */
-    color: var(--stats-faint);
-    background: var(--editor-control);
-    border: 1px solid var(--editor-control-line);
-    border-radius: 0;
-    transition:
-      border-color 120ms ease,
-      box-shadow 120ms ease,
-      transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        border-color: var(--stats-faint);
-      }
-    }
-
-    &:active {
-      transform: scale(0.97);
-    }
-
-    /* Chosen: the accent line over a very light wash of it. */
-    &[aria-pressed="true"] {
-      color: var(--stats-text);
-      background: color-mix(in srgb, var(--stats-accent) 7%, var(--editor-control));
-      border-color: var(--stats-accent);
-    }
-
-    /* The swatch sits as far from the left edge as from the top and bottom: (36 - 14) / 2 = 11, less the 1px border. */
-    &[data-variant="wide"] {
-      flex-direction: row;
-      justify-content: flex-start;
-      gap: 8px;
-      height: 36px;
-      padding: 0 9px 0 10px;
-      font-size: 13px;
-    }
-
-    /* More air between a size's shape and its ratio. */
-    &:has([data-slot="aspect"]) {
-      gap: 10px;
-    }
-
-    /* Type: the label alone, centred, as tall as the wide choices. */
-    &[data-variant="text"] {
-      height: 36px;
-      font-size: 13px;
-    }
-
-    small {
-      font-size: 10px;
-      line-height: 1;
-    }
-  }
-
-  /* Layout and size drawings are light grey until chosen, then the text colour. */
-  [data-slot="glyph"] {
-    width: 36px;
-    height: 25px;
-    color: var(--stats-text);
-    opacity: 0.3;
-  }
-
-  [data-slot="chip"][aria-pressed="true"] :is([data-slot="glyph"], [data-slot="aspect"] b) {
-    opacity: 1;
-  }
-
-  /* An 18px slot for every size; the frame inside has the size's shape. */
-  [data-slot="aspect"] {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 18px;
-    height: 18px;
-
-    /* A light grey fill in the size's shape, like the layout icons' bars. */
-    b {
-      background: currentColor;
-      opacity: 0.3;
-    }
-  }
-
-  /* Three wide choices in a row (Style) set tighter, so their labels fit. */
-  [data-slot="row-options"]:has(> [data-variant="wide"]:nth-child(3)) > [data-variant="wide"] {
-    gap: 6px;
-    padding: 0 7px 0 10px;
-    font-size: 12px;
-  }
-
   /* 14px across with its border. */
   /* grey-ok: each swatch shows its card's own background, the same whatever the page's theme */
   [data-slot="swatch"] {
@@ -795,59 +511,6 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     }
   }
   /* grey-ok-end */
-
-  /* Pulled out by each row's padding and border, so the track squares line up with the Music title. */
-  /* The tracks sit in the options column, styled like the chips above it. */
-  [data-slot="track-list"] {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    width: 100%;
-  }
-
-  [data-slot="track"] {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 36px;
-    padding-block: 0;
-    padding-inline: 5px 9px;
-    text-align: start;
-    color: var(--stats-muted);
-    background: var(--editor-control);
-    border: 1px solid var(--editor-control-line);
-    border-radius: 0;
-    transition:
-      border-color 120ms ease,
-      box-shadow 120ms ease,
-      transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        border-color: var(--stats-faint);
-      }
-    }
-
-    &[aria-checked="true"] {
-      color: var(--stats-text);
-      background: color-mix(in srgb, var(--stats-accent) 7%, var(--editor-control));
-      border-color: var(--stats-accent);
-    }
-
-    > span {
-      flex: 1;
-      min-width: 0;
-    }
-
-    strong {
-      display: block;
-      overflow: hidden;
-      font-size: 13px;
-      font-weight: 500;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-  }
 
   /* The explicit-lyrics badge, on the right of its track: solid black with bold white capitals, like the label on a
      CD sleeve. A hairline keeps its edge on a dark page. */
@@ -866,53 +529,6 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     color: #fff;
     background: #000;
     box-shadow: 0 0 0 1px rgb(255 255 255 / 0.18);
-  }
-  /* grey-ok-end */
-
-  [data-slot="track-icon"] {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    color: var(--stats-faint);
-    /* A see-through wash rather than a solid grey, so it tints whatever row it sits on. */
-    background: light-dark(rgb(0 0 0 / 0.06), rgb(255 255 255 / 0.08));
-  }
-
-  /* Chosen, the icon darkens; its see-through square takes the row's light blue under it. */
-  [data-slot="track"][aria-checked="true"] [data-slot="track-icon"] {
-    color: var(--stats-text);
-  }
-
-  /* A track's single cover fills its square; on the chosen track the play state sits over a darkened cover. */
-  /* grey-ok: the play state sits on the cover art, white whatever the theme */
-  [data-slot="track-icon"][data-cover] {
-    position: relative;
-    overflow: hidden;
-    background: var(--stats-layer-2);
-
-    img {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    > :not(img) {
-      position: relative;
-      color: #fff;
-    }
-  }
-
-  [data-slot="track"][aria-checked="true"] [data-slot="track-icon"][data-cover] {
-    color: #fff;
-    background: var(--stats-layer-2);
-
-    img {
-      filter: brightness(0.5);
-    }
   }
   /* grey-ok-end */
 
@@ -1437,16 +1053,6 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     > svg * {
       vector-effect: non-scaling-stroke;
     }
-
-    [data-slot="glyph"] {
-      width: 20px;
-      height: 14px;
-      opacity: 1;
-    }
-
-    [data-slot="aspect"] b {
-      opacity: 1;
-    }
   }
 
   /* The date: the calendar opens under its button. */
@@ -1621,20 +1227,6 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
       padding: 16px 16px 8px;
     }
 
-    [data-slot="editor-inspector"] {
-      position: relative;
-      inset: auto;
-      flex: none;
-      width: auto;
-      max-height: 46dvh;
-      margin: 0 var(--editor-inset) var(--editor-inset);
-    }
-
-    [data-slot="rows"],
-    [data-slot="group"] {
-      padding-inline: 16px;
-    }
-
     /* On a phone the bar wraps onto as many rows as it needs, over the card. */
     /* On a phone the bar holds Close, Settings, and Mute, Shuffle and Export, always to hand; the settings slide up in
        a sheet from the bottom, every one a full row with its name, and slide back down when it's dismissed. */
@@ -1803,22 +1395,6 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
         background: transparent;
         border: 0;
       }
-    }
-
-    /* Taller rows for fingers, the same height for every row of wide choices. */
-    [data-slot="chip"][data-variant="text"],
-    [data-slot="chip"][data-variant="wide"],
-    [data-slot="track"] {
-      height: 44px;
-    }
-
-    [data-slot="track-icon"] {
-      width: 32px;
-      height: 32px;
-    }
-
-    [data-slot="row"][data-variant="list"] [data-slot="row-label"] {
-      padding-top: 14px;
     }
   }
 }
