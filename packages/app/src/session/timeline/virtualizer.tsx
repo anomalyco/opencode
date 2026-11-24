@@ -135,7 +135,8 @@ type Input = {
     row: TimelineRow.TimelineRow,
     disclosure: Readonly<Record<string, boolean | undefined>>,
   ) => boolean
-  setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
+  /** Registers the reveal of a message's row, and the call that ends the scroll a reveal started. */
+  setRevealMessage?: (fn: (id: string, partID?: string) => void, stop: () => void) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
@@ -677,6 +678,13 @@ export function createTimelineVirtualizer(input: Input) {
     flushTouchAdjustment()
   }
 
+  // Ends TanStack's scroll to a revealed row. It writes its target again for up to five seconds, whenever a
+  // measurement moves the row, and so takes the view back from a reader who scrolled on. TanStack has no call for
+  // this. Its declaration names the field, so a rename fails the type check rather than leaving the scroll running.
+  function stopReveal() {
+    virtualizer["scrollState"] = null
+  }
+
   function flushTouchAdjustment() {
     touchAdjustment = 0
     const adjustment = rendering.scrollAdjustment
@@ -801,7 +809,7 @@ export function createTimelineVirtualizer(input: Input) {
       if (index === undefined) return
       prepareNavigation()
       virtualizer.scrollToIndex(index, { align: partIndex >= 0 ? "center" : "start" })
-    })
+    }, stopReveal)
     input.setScrollToEnd?.((behavior) => {
       const root = listRoot()
 
@@ -1482,7 +1490,10 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (active()) {
       input.setScrollRef(undefined)
-      input.setRevealMessage?.(() => {})
+      input.setRevealMessage?.(
+        () => {},
+        () => {},
+      )
       input.setScrollToEnd?.(() => {})
       input.setPage?.(() => {})
     }

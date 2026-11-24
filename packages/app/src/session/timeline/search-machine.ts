@@ -56,15 +56,21 @@ export type TimelineSearchEvent =
       readonly sessionID: string | undefined
       readonly matches: readonly TimelineSearchMatch[]
     }
-  | { readonly type: "seek.missing"; readonly attempt: number }
+  /** A probe did not find the match. `at` is the timeline's scroll offset, when the timeline is mounted. */
+  | { readonly type: "seek.missing"; readonly attempt: number; readonly at: number | undefined }
   | { readonly type: "seek.folded"; readonly attempt: number; readonly foldID: string }
-  | { readonly type: "seek.ready"; readonly attempt: number; readonly top: number }
+  /** A probe found the match. `top` is the scroll offset that centres it, `at` the offset the timeline is at. */
+  | { readonly type: "seek.ready"; readonly attempt: number; readonly top: number; readonly at: number }
+  /** The reader scrolled the timeline. */
+  | { readonly type: "reader.scrolled" }
   | { readonly type: "disposed" }
 
 export type TimelineSearchEffect =
   | { readonly type: "focus-input" }
   | { readonly type: "blur-input" }
   | { readonly type: "reveal"; readonly revealID: string; readonly partID: string }
+  /** End the timeline's own scroll to the match's row. */
+  | { readonly type: "reveal.stop" }
   | {
       readonly type: "seek.schedule"
       readonly attempt: number
@@ -105,6 +111,11 @@ const NO_EFFECTS: readonly TimelineSearchEffect[] = Object.freeze([])
 const FOCUS_INPUT: readonly TimelineSearchEffect[] = Object.freeze([{ type: "focus-input" }])
 
 const SEEK_CANCEL: readonly TimelineSearchEffect[] = Object.freeze([{ type: "seek.cancel" }])
+
+const READER_SCROLLED: readonly TimelineSearchEffect[] = Object.freeze([
+  { type: "seek.cancel" },
+  { type: "reveal.stop" },
+])
 
 const CLOSED_VIEW: TimelineSearchView = Object.freeze({
   visible: false,
@@ -174,7 +185,19 @@ export function transitionTimelineSearch(
 
   if (event.type === "matches.synced") return matchesSynced(state, event.sessionID, event.matches)
 
+  // The view is the reader's from here: the seek ends, and so does the reveal it started, which the timeline would
+  // otherwise go on writing. The match, its highlight and the count stay.
+  if (event.type === "reader.scrolled")
+    return state.status === "seeking" ? changed(settled(state), READER_SCROLLED) : unchanged(state)
+
   if (state.status !== "seeking" || event.attempt !== state.attempt) return unchanged(state)
+
+  // Not every scroll of the reader's tells Find: Ctrl+Home, a page key on a control in a row and the scrollbar send
+  // no input event. So once Find has scrolled, the view is Find's only while it is where Find put it, or where a
+  // size correction took it together with the match. Anywhere else, the reader moved it, and the seek ends: Find
+  // neither scrolls again nor brings the match's row back. That took the view back from a reader who pressed End.
+  if (state.landed !== undefined && event.type !== "seek.folded" && left(state.landed, event))
+    return changed(settled(state))
 
   if (event.type === "seek.ready") {
     // The timeline is still bringing the match's row in while the rows around it measure, and it undoes a scroll made
@@ -212,6 +235,16 @@ export function transitionTimelineSearch(
     reveal(state.matches[state.activeIndex]),
     schedule(state, !state.unfolded),
   ])
+}
+
+// Whether the view is neither where Find scrolled it to nor where the match is now.
+function left(
+  landed: number,
+  event: Extract<TimelineSearchEvent, { readonly type: "seek.ready" | "seek.missing" }>,
+) {
+  if (event.at === undefined || Math.abs(event.at - landed) < 1) return false
+
+  return event.type === "seek.missing" || Math.abs(event.at - event.top) >= 1
 }
 
 export function timelineSearchView(state: TimelineSearchState): TimelineSearchView {
