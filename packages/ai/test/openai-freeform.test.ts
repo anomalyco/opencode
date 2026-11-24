@@ -32,6 +32,13 @@ describe("OpenAI freeform tools", () => {
     })
   })
 
+  test("only sends a format the model accepts, and every format when the model doesn't say", () => {
+    expect(OpenAIFreeform.resolve(tool(), ["text", "lark"])).toEqual(custom)
+    expect(OpenAIFreeform.resolve(tool(), undefined)).toEqual(custom)
+    expect(OpenAIFreeform.resolve(tool(), [])).toBeUndefined()
+    expect(OpenAIFreeform.resolve(tool(), ["regex"])).toBeUndefined()
+  })
+
   test("converts between raw text and the JSON input", () => {
     for (const raw of RAW) {
       const parsed = OpenAIFreeform.parse(custom, raw)
@@ -204,7 +211,7 @@ describe("OpenAI freeform tools with other parameters", () => {
   })
 
   test("parses the line without a grammar for a model that only takes text", () => {
-    const definition = OpenAIFreeform.resolve(tool({ inputSchema: executeSchema, freeform: format }), false)!
+    const definition = OpenAIFreeform.resolve(tool({ inputSchema: executeSchema, freeform: format }), ["text"])!
     expect(OpenAIFreeform.grammar(definition)).toBeUndefined()
     expect(definition.options?.description).toBe(options.options?.description)
     expect(parsed('// @options: {"background": true}\nx', definition)).toMatchObject({
@@ -213,8 +220,8 @@ describe("OpenAI freeform tools with other parameters", () => {
     // Without Lark, only a raw text body can share the wire with the line.
     expect(
       OpenAIFreeform.resolve(
-        tool({ inputSchema: executeSchema, freeform: { type: "lark", grammar: "start: /x/", field: "code" } }),
-        false,
+        tool({ inputSchema: executeSchema, freeform: { type: "regex", pattern: "x", field: "code" } }),
+        ["text", "regex"],
       ),
     ).toBeUndefined()
   })
