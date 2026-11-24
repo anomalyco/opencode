@@ -283,7 +283,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     // music until one is chosen (or Shuffle picks one).
     if (!restoreSettings()) {
       shuffle()
-      setFormat("video")
       setTrack("none")
       setMuted(false)
     }
@@ -413,12 +412,13 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 
   const close = () => dialog?.close()
 
-  // A card made at random: every setting but the date, which belongs to its section. Any type, layout and style, a
+  // A card made at random: every setting but the date, which belongs to its section. A video, any layout and style, a
   // size for a feed or a story (not Wide), and a clean track. Muted stays muted: the track still changes, ready for
   // unmuting. Playing from the start again, as each opening does.
   const shuffle = () =>
     batch(() => {
-      setFormat(pick(["video", "image", "embed"] as const))
+      // Always a video: an image or an embed is for choosing on purpose.
+      setFormat("video")
       setFixed(pick([false, true] as const))
       setShareOption("layout", pick(layouts).value)
       setShareOption("size", pick(sizes.filter((item) => item.value !== "16:9")).value)
