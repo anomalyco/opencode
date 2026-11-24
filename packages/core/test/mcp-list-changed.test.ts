@@ -167,11 +167,13 @@ describe("MCP list changes", () => {
       yield* until(() => server.state.listens.length === 1)
 
       // The reopen is refused, as when access was revoked or the server dropped the capability. Retrying a refusal
-      // would hammer the server for the life of the connection, so the follow loop ends after the first one.
+      // would hammer the server for the life of the connection, so the follow loop ends after the first one. Proving
+      // that nothing follows needs a window, so it is the schedule's first step plus a small margin, not a round
+      // number: a retry would have arrived inside it.
       server.state.refuse = true
       yield* server.end(server.state.listens[0].id)
       yield* until(() => server.state.listens.length === 2)
-      yield* Effect.sleep("2 seconds")
+      yield* Effect.sleep("1200 millis")
       expect(server.state.listens.length).toBe(2)
     }),
   )
