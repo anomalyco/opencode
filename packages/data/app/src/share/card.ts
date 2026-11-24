@@ -2,6 +2,8 @@
 // every frame of the video come from the same code. drawShareCard(ctx, card, options, time) draws the card as it
 // looks `time` seconds into its animation; time past shareDuration() is the still, which is also the PNG.
 
+import { spectrumLevel, type Spectrum } from "./spectrum"
+
 export type ShareSeries = { key: string; label: string; color: string; value: string }
 
 export type ShareChart =
@@ -94,15 +96,23 @@ const axisHeight = 44
 
 // When the chart builds, when the highlights start, how long each takes and how many times they go round. Without
 // music it runs at its own pace; with a soundtrack it follows the track (barTiming) and `beat` drives the dot meter.
-export type ShareTiming = { build: number; start: number; step: number; rounds: number; beat?: number; length?: number }
+export type ShareTiming = {
+  build: number
+  start: number
+  step: number
+  rounds: number
+  beat?: number
+  length?: number
+  spectrum?: Spectrum
+}
 const freeTiming: ShareTiming = { build: 1.2, start: 1.2, step: 1.1, rounds: 1 }
 
 /**
  * The chart builds over the first bar; from the verse each highlight takes half a bar and the leaders go round twice;
  * the dots pulse on every beat; the video ends with the track.
  */
-export function barTiming(bar: number, verse: number, length: number): ShareTiming {
-  return { build: bar, start: verse, step: bar / 2, rounds: 2, beat: bar / 4, length }
+export function barTiming(bar: number, verse: number, length: number, spectrum?: Spectrum): ShareTiming {
+  return { build: bar, start: verse, step: bar / 2, rounds: 2, beat: bar / 4, length, spectrum }
 }
 
 /** Waits for the card's font, so the first frame isn't drawn in the fallback. */
@@ -144,7 +154,7 @@ export function drawShareCard(
     dotGrid(card.chart, width),
     baseline * 0.4,
     baseline,
-    timing.beat && time < (timing.length ?? Infinity) ? meter(time, timing.beat) : undefined,
+    timing.beat && time < (timing.length ?? Infinity) ? meter(time, timing.beat, timing.spectrum) : undefined,
   )
   drawLogo(ctx, options.logo, colors, pad, pad)
 
@@ -211,7 +221,7 @@ function drawBackground(
   grid: { center: number; pitch: number },
   fadeStart: number,
   fadeEnd: number,
-  level?: (column: number) => number,
+  level?: (column: number, columns: number) => number,
 ) {
   if (kind === "plain") return
   // The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells, at full strength from the
@@ -225,14 +235,25 @@ function drawBackground(
     { length: Math.floor((width - inset - dot) / grid.pitch) + 1 },
     (_, index) => inset + index * grid.pitch,
   )
-  // With music, each column is also a level meter hanging from the top: its lit dots reach further down on the beat.
-  const reach = Math.floor((end - inset) / grid.pitch / 2)
-  const lit = columns.map((_, index) => (level ? Math.round(level(index) * reach) : 0))
-  for (let y = inset, row = 0; y < end; y += grid.pitch, row++) {
-    ctx.globalAlpha =
-      kind === "band" ? Math.max(0, 1 - y / end) : Math.min(1, Math.max(0, (end - y) / (end - fadeStart)))
+  // With music, each column is also a bar of an equaliser rising from the x axis: its lit dots climb with its band of
+  // the track, bass on the left and treble on the right. Lit dots ignore the fade, so the bars read from the bottom.
+  // The rows run from the top inset to the x axis, the last row's foot exactly on it, so the equaliser stands on the
+  // axis; their pitch stretches by a fraction of a pixel to land there.
+  const rows = Math.max(1, Math.round((end - dot - inset) / grid.pitch))
+  const pitch = (end - dot - inset) / rows
+  // Only the columns behind the chart play, never the gutters either side of it; the bands spread across them.
+  const playing = columns.filter((x) => x >= pad && x + dot <= width - pad)
+  const lit = columns.map((x) => {
+    const index = playing.indexOf(x)
+    return level && index >= 0 ? Math.round(level(index, playing.length) * rows * 0.85) : 0
+  })
+  for (let row = 0; row <= rows; row++) {
+    const y = inset + row * pitch
+    const fade = kind === "band" ? Math.max(0, 1 - y / end) : Math.min(1, Math.max(0, (end - y) / (end - fadeStart)))
     columns.forEach((x, index) => {
-      ctx.fillStyle = row < (lit[index] ?? 0) ? colors.meter : colors.dot
+      const on = rows - row < (lit[index] ?? 0)
+      ctx.globalAlpha = on ? 1 : fade
+      ctx.fillStyle = on ? colors.meter : colors.dot
       ctx.fillRect(x, y, dot, dot)
     })
   }
@@ -242,10 +263,12 @@ function drawBackground(
   columns.forEach((x) => ctx.fillRect(x, height - inset - dot, dot, dot))
 }
 
-// The meter's level for each dot column at `time`: it jumps on every beat and falls away before the next, higher on the
+// The equaliser's level for each dot column at `time`: the track's own spectrum once it's measured (spectrum.ts);
+// until then a stand-in that jumps on every beat and falls away before the next, higher on the
 // first beat of a bar. A rolling wave across the columns, roughened per beat, so neighbours move together like an
 // equaliser. Deterministic, so the preview and the export match frame for frame.
-function meter(time: number, beat: number) {
+function meter(time: number, beat: number, spectrum?: Spectrum) {
+  if (spectrum) return (column: number, columns: number) => spectrumLevel(spectrum, time, column, columns)
   const count = Math.floor(time / beat)
   const fall = (1 - (time / beat - count)) ** 2.2
   const accent = count % 4 === 0 ? 1 : 0.72

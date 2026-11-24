@@ -12,6 +12,7 @@ import {
 } from "./card"
 import { cycleShareOption, designMode, designOnly, setShareOption, shareControls, shareOptions } from "./design"
 import { shareTracks, type ShareTrack } from "./music"
+import { loadSpectrum, type Spectrum } from "./spectrum"
 
 export type ShareDraft = Omit<ShareCard, "updatedAt" | "url">
 
@@ -85,10 +86,22 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const options = createMemo<ShareOptions>(() => ({ ...shareOptions }))
   const size = createMemo(() => shareSizes[options().size])
   const music = createMemo(() => shareTracks.find((item) => item.id === track()))
+  // The chosen track's spectrum, for the dot equaliser; measured once per track (spectrum.ts). A plain signal, not a
+  // resource: a resource would suspend the page's Suspense boundary, which takes the dialog out of the DOM and puts it
+  // back no longer modal, under the page.
+  const [spectrum, setSpectrum] = createSignal<Spectrum>()
+  createEffect(() => {
+    const url = music()?.url
+    setSpectrum(undefined)
+    if (!url) return
+    let current = true
+    onCleanup(() => (current = false))
+    void loadSpectrum(url).then((value) => current && setSpectrum(value))
+  })
   // With a soundtrack, the animation follows its bars and the video ends with it.
   const timing = createMemo(() => {
     const sound = music()
-    return sound ? barTiming(sound.bar, sound.verse, sound.length) : undefined
+    return sound ? barTiming(sound.bar, sound.verse, sound.length, spectrum()) : undefined
   })
   let video: { key: string; file: Promise<File> } | undefined
   let closing: ReturnType<typeof setTimeout> | undefined
@@ -496,60 +509,27 @@ function TrackOption(props: {
   )
 }
 
+// The layout icons: what sits above the chart (two headline lines, the big number as a block, or a short title),
+// then the same light bars at the foot. The chart layout's bars stand a little taller, as its chart does.
 function LayoutGlyph(props: { layout: ShareOptions["layout"] }) {
+  const heights = () => (props.layout === "chart" ? [16, 21, 18, 25, 22] : [10, 13, 11, 15, 14])
   return (
     <svg data-slot="glyph" viewBox="0 0 40 50" aria-hidden="true">
-      <rect x="4" y="4" width="8" height="3" fill="currentColor" />
       <Show when={props.layout === "headline"}>
-        <rect x="4" y="12" width="30" height="3" fill="currentColor" />
-        <rect x="4" y="17" width="22" height="3" fill="currentColor" />
+        <rect x="4" y="8" width="30" height="3" fill="currentColor" />
+        <rect x="4" y="14" width="22" height="3" fill="currentColor" />
       </Show>
       <Show when={props.layout === "number"}>
-        <rect x="4" y="11" width="18" height="9" fill="currentColor" />
+        <rect x="4" y="7" width="18" height="10" fill="currentColor" />
       </Show>
       <Show when={props.layout === "chart"}>
-        <rect x="4" y="12" width="16" height="4" fill="currentColor" />
+        <rect x="4" y="8" width="12" height="3" fill="currentColor" />
       </Show>
-      <rect
-        x="4"
-        y={props.layout === "chart" ? 30 : 34}
-        width="4"
-        height={props.layout === "chart" ? 14 : 10}
-        opacity="0.5"
-        fill="currentColor"
-      />
-      <rect
-        x="10"
-        y={props.layout === "chart" ? 26 : 31}
-        width="4"
-        height={props.layout === "chart" ? 18 : 13}
-        opacity="0.5"
-        fill="currentColor"
-      />
-      <rect
-        x="16"
-        y={props.layout === "chart" ? 28 : 33}
-        width="4"
-        height={props.layout === "chart" ? 16 : 11}
-        opacity="0.5"
-        fill="currentColor"
-      />
-      <rect
-        x="22"
-        y={props.layout === "chart" ? 22 : 29}
-        width="4"
-        height={props.layout === "chart" ? 22 : 15}
-        opacity="0.5"
-        fill="currentColor"
-      />
-      <rect
-        x="28"
-        y={props.layout === "chart" ? 24 : 30}
-        width="4"
-        height={props.layout === "chart" ? 20 : 14}
-        opacity="0.5"
-        fill="currentColor"
-      />
+      <For each={heights()}>
+        {(height, index) => (
+          <rect x={4 + index() * 6} y={44 - height} width="4" height={height} opacity="0.3" fill="currentColor" />
+        )}
+      </For>
     </svg>
   )
 }
