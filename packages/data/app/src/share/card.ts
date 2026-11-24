@@ -598,6 +598,11 @@ function meter(time: number, beat: number, spectrum?: Spectrum) {
 // with the last bar; other charts take the banner's 24px pitch, centred.
 function dotGrid(chart: ShareChart, width: number) {
   if (chart.kind !== "stacked" || chart.columns.length === 0) return { center: width / 2, pitch: 24 }
+  // One day: a whole number of dots to each bar's slot, with a dot down the middle of every bar (dayBars).
+  if (chart.day !== undefined) {
+    const slot = (width - pad * 2) / Math.max(1, dayOrder(chart).length)
+    return { center: pad + slot / 2, pitch: slot / Math.max(3, Math.round(slot / 16)) }
+  }
   const slot = (width - pad * 2) / chart.columns.length
   return { center: pad + (chart.columns.length - 0.5) * slot, pitch: slot * Math.ceil(14 / slot) }
 }
@@ -881,17 +886,16 @@ function drawDay(
   litDots: (clip: Path2D) => void,
 ) {
   const values = chart.columns[chart.day ?? 0]?.values ?? []
-  const other = (series: number) => (chart.series[series]?.key === "other" ? 1 : 0)
-  const order = chart.series
-    .map((_, series) => series)
-    .filter((series) => (values[series] ?? 0) > 0)
-    .toSorted((a, b) => other(a) - other(b) || (values[b] ?? 0) - (values[a] ?? 0))
+  const order = dayOrder(chart)
   // Room over the bars for their values.
   const top = 64
   const plot = { ...box, y: box.y + top, height: box.height - axisHeight - top }
   const max = Math.max(0, ...order.map((series) => values[series] ?? 0)) || 1
   const slot = plot.width / Math.max(1, order.length)
-  const gap = Math.min(40, slot * 0.28)
+  // On the dot grid (dotGrid): each bar an odd number of dot pitches wide round the dot at its middle, so its edges
+  // fall halfway between dot columns, with two or three pitches between bars.
+  const dots = Math.max(3, Math.round(slot / 16))
+  const gap = slot - (slot / dots) * Math.max(1, dots % 2 === 1 ? dots - 2 : dots - 3)
   const base = plot.y + plot.height
   const bars = order.map((series, position) => {
     const delay = (position / Math.max(1, order.length - 1)) * 0.5
@@ -926,6 +930,16 @@ function drawDay(
     ctx.fillText(name, center - ctx.measureText(name).width / 2, base + axisHeight - 6)
     ctx.restore()
   })
+}
+
+// A one-day chart's bars: its series with anything that day, the most first and Other last.
+function dayOrder(chart: Extract<ShareChart, { kind: "stacked" }>) {
+  const values = chart.columns[chart.day ?? 0]?.values ?? []
+  const other = (series: number) => (chart.series[series]?.key === "other" ? 1 : 0)
+  return chart.series
+    .map((_, series) => series)
+    .filter((series) => (values[series] ?? 0) > 0)
+    .toSorted((a, b) => other(a) - other(b) || (values[b] ?? 0) - (values[a] ?? 0))
 }
 
 // Bars and their segments, in three passes: under the muted ones the card's background, so the dot grid doesn't
