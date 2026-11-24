@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, Show, untrack } from "solid-js"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
@@ -21,15 +21,19 @@ import {
   DISPOSED_QUEUE_PANEL_EVENT,
   isQueuePanelOpen,
   PANEL_CLOSED_EVENT,
+  queuePanelAnyExpanded,
   queuePanelCount,
   queuePanelEntry,
+  queuePanelListExpanded,
   selectQueuePanelIDs,
   selectQueuePanelLiveIDs,
   transitionQueuePanel,
   type QueuePanelEffect,
   type QueuePanelEvent,
 } from "./queue-panel-machine"
+import { useComposerLaneAlignment } from "./composer-lane"
 import { cascade, Grow, queueStagger } from "./spring-height"
+import "./composer-lane.css"
 import "./queue-panel.css"
 
 // Pullout above the composer listing the prompts queued behind the current
@@ -37,6 +41,7 @@ import "./queue-panel.css"
 // composer background) so the two read as one attached surface.
 export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boolean }) {
   const language = useLanguage()
+  const alignment = useComposerLaneAlignment()
 
   let current = createQueuePanelState(
     untrack(() => props.queue.rows()),
@@ -45,11 +50,18 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
 
   const [panelState, setPanelState] = createSignal(current)
   const open = createMemo(() => isQueuePanelOpen(panelState()))
+  const listExpanded = createMemo(() => queuePanelListExpanded(panelState()))
   const count = createMemo(() => queuePanelCount(panelState()))
+  const anyExpanded = createMemo(() => queuePanelAnyExpanded(panelState()))
+  const scrolling = createMemo(() => listExpanded() && count() > 4 && !anyExpanded())
   const ids = createMemo(() => selectQueuePanelIDs(panelState()), undefined, { equals: sameIDs })
   const live = createMemo(() => selectQueuePanelLiveIDs(panelState()), undefined, { equals: sameIDs })
   let stopCascade: (() => void) | undefined
-  let listRef!: HTMLDivElement
+  let listRef: HTMLDivElement | undefined
+  let contentRef: HTMLDivElement | undefined
+  let collapseAllRef: HTMLButtonElement | undefined
+  let expandAllRef: HTMLButtonElement | undefined
+  const [overflowing, setOverflowing] = createSignal(false)
 
   const dispatch = (event: QueuePanelEvent) =>
     untrack(() => {
@@ -72,9 +84,15 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
 
     if (effect.type === "cascade.cancel") return
     stopCascade = cascade(
-      [...listRef.querySelectorAll<HTMLElement>('[data-component="session-queue-row"]')],
+      [...(listRef?.querySelectorAll<HTMLElement>('[data-component="session-queue-row"]') ?? [])],
       effect.step,
     )
+  }
+
+  // The pressed control unmounts with the list state, so keyboard focus moves to the control that replaces it.
+  const toggleList = (expanded: boolean) => {
+    dispatch({ type: "list.expanded", expanded })
+    queueMicrotask(() => (expanded ? collapseAllRef : expandAllRef)?.focus({ preventScroll: true }))
   }
 
   createEffect(
@@ -85,6 +103,31 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
       { defer: true },
     ),
   )
+
+  // The list's own height decides the fade, so expanded rows scroll under the same edge as a long queue.
+  createEffect(() => {
+    open()
+    listExpanded()
+    ids()
+    anyExpanded()
+
+    const list = listRef
+    const content = contentRef
+
+    if (!list?.isConnected || !content?.isConnected) {
+      setOverflowing(false)
+
+      return
+    }
+
+    const measure = () => setOverflowing(list.scrollHeight > list.clientHeight + 1)
+    const observer = new ResizeObserver(measure)
+    observer.observe(list)
+    observer.observe(content)
+    measure()
+    onCleanup(() => observer.disconnect())
+  })
+
   onCleanup(() => dispatch(DISPOSED_QUEUE_PANEL_EVENT))
 
   return (
@@ -92,71 +135,126 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
       <div
         data-component="session-queue-panel"
         inert={!open()}
-        class="relative z-0 -mb-3 rounded-xl bg-v2-background-bg-base px-1.5 pt-1.5 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)]"
-        // Match the composer overlap so the scroll crop meets the input edge.
-        classList={{ "pb-3": count() > 4, "pb-[18px]": count() <= 4 }}
+        class="relative z-0"
+        classList={{
+          "-mb-3 rounded-xl bg-v2-background-bg-base px-1.5 pt-1.5 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)]":
+            listExpanded(),
+          // Match the composer overlap so the scroll crop meets the input edge.
+          "pb-3": listExpanded() && count() > 4,
+          "pb-[18px]": listExpanded() && count() <= 4,
+          "mb-2.5 flex": !listExpanded(),
+          "justify-start": !listExpanded() && alignment() === "start",
+          "justify-center": !listExpanded() && alignment() === "center",
+          "justify-end": !listExpanded() && alignment() === "end",
+        }}
       >
-        <Grow when={count() > 3} fade>
-          <div class="px-1.5 pt-1 pb-px text-[11px] font-[530] uppercase leading-[var(--line-height-tight)] tracking-[0.05px] text-v2-text-text-muted [font-variant-numeric:tabular-nums]">
-            {language.plural("session.queue.count", count())}
-          </div>
-        </Grow>
-        <DragDropProvider
-          sensors={(defaults) => [
-            ...defaults.filter((sensor) => sensor !== PointerSensor),
-            PointerSensor.configure({
-              activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
-            }),
-          ]}
-          modifiers={[RestrictToVerticalAxis, RestrictToElement.configure({ element: () => listRef })]}
-          plugins={(defaults) => [
-            ...defaults.filter((plugin) => plugin !== AutoScroller && plugin !== Feedback),
-            AutoScroller.configure({ acceleration: 8, threshold: { x: 0, y: 0.05 } }),
-            Feedback.configure({ dropAnimation: null }),
-          ]}
-          onDragEnd={(event) => {
-            const source = event.operation.source
-
-            if (event.canceled || !isSortable(source)) return
-
-            if (source.initialIndex === source.index) return
-            void props.queue.reorder(arrayMove(live(), source.initialIndex, source.index))
-          }}
+        <Show
+          when={listExpanded()}
+          fallback={
+            <button
+              ref={(element) => (expandAllRef = element)}
+              type="button"
+              data-composer-pill
+              data-action="session-queue-expand-all"
+              aria-expanded={false}
+              class="max-w-full text-start"
+              onClick={() => toggleList(true)}
+            >
+              <span data-composer-pill-icon class="flex size-4 shrink-0 items-center justify-center">
+                <Icon name="prompt" class="text-v2-icon-icon-muted" />
+              </span>
+              <span class="min-w-0 truncate">{language.plural("session.queue.count", count())}</span>
+              <span class="sr-only">{language.t("session.queue.showQueue")}</span>
+              <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
+            </button>
+          }
         >
-          {/* Keyed on row IDs so store updates move row elements instead of
-              remounting them, which would kill an in-flight drag. */}
-          {/* Four 32px rows, four 1px gaps, and half a row hint at more queued prompts. */}
-          <div
-            ref={listRef}
-            data-slot="session-queue-list"
-            data-focus-scope
-            class="flex flex-col"
-            classList={{ "max-h-[148px] overflow-y-auto": count() > 4 }}
-            style={{
-              "mask-image":
-                count() > 4
-                  ? "linear-gradient(to bottom, transparent, black 8px, black calc(100% - 12px), transparent)"
-                  : undefined,
+          {/* The bulk hide/show control is only meaningful once more than one prompt is queued. */}
+          <Grow when={count() > 1} fade>
+            <div class="flex items-center justify-between gap-2 px-1.5 pt-0.5 pb-px">
+              <span class="min-w-0 truncate text-[11px] font-[530] uppercase leading-[var(--line-height-tight)] tracking-[0.05px] text-v2-text-text-muted [font-variant-numeric:tabular-nums]">
+                {language.plural("session.queue.count", count())}
+              </span>
+              <button
+                ref={(element) => (collapseAllRef = element)}
+                type="button"
+                data-action="session-queue-collapse-all"
+                class="-me-0.5 flex h-5 shrink-0 items-center gap-1 rounded-[4px] px-1 text-[11px] font-[530] leading-[var(--line-height-tight)] tracking-[0.05px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+                onClick={() => toggleList(false)}
+              >
+                <Icon name="chevron-down" size="small" class="rotate-180 text-v2-icon-icon-muted" />
+                {language.t("session.queue.hideQueue")}
+              </button>
+            </div>
+          </Grow>
+          <DragDropProvider
+            sensors={(defaults) => [
+              ...defaults.filter((sensor) => sensor !== PointerSensor),
+              PointerSensor.configure({
+                activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
+              }),
+            ]}
+            modifiers={[RestrictToVerticalAxis, RestrictToElement.configure({ element: () => listRef ?? null })]}
+            plugins={(defaults) => [
+              ...defaults.filter((plugin) => plugin !== AutoScroller && plugin !== Feedback),
+              AutoScroller.configure({ acceleration: 8, threshold: { x: 0, y: 0.05 } }),
+              Feedback.configure({ dropAnimation: null }),
+            ]}
+            onDragEnd={(event) => {
+              const source = event.operation.source
+
+              if (event.canceled || !isSortable(source)) return
+
+              if (source.initialIndex === source.index) return
+              void props.queue.reorder(arrayMove(live(), source.initialIndex, source.index))
             }}
           >
-            <For each={ids()}>
-              {(id) => {
-                const entry = createMemo(() => queuePanelEntry(panelState(), id))
-
-                return (
-                  <Grow
-                    when={!open() || entry()?.phase !== "leaving"}
-                    appear={entry()?.phase === "entering"}
-                    fade
-                    onClosed={() => dispatch({ type: "row.closed", id })}
-                  >
-                    <SessionQueueRow queue={props.queue} id={id} row={entry()?.row} index={live().indexOf(id)} />
-                  </Grow>
-                )
+            {/* Keyed on row IDs so store updates move row elements instead of
+              remounting them, which would kill an in-flight drag. */}
+            {/* Four compact rows, four 1px gaps, and half a row hint at more queued prompts. */}
+            <div
+              ref={listRef}
+              data-slot="session-queue-list"
+              data-focus-scope
+              class="flex flex-col"
+              classList={{
+                "max-h-[148px] overflow-y-auto": scrolling(),
+                "max-h-[min(45vh,360px)] overflow-y-auto": anyExpanded(),
               }}
-            </For>
-          </div>
-        </DragDropProvider>
+              style={{
+                "mask-image": overflowing()
+                  ? "linear-gradient(to bottom, transparent, black 8px, black calc(100% - 12px), transparent)"
+                  : undefined,
+              }}
+            >
+              <div ref={contentRef} class="flex flex-col">
+                <For each={ids()}>
+                  {(id) => {
+                    const entry = createMemo(() => queuePanelEntry(panelState(), id))
+
+                    return (
+                      <Grow
+                        when={!open() || entry()?.phase !== "leaving"}
+                        appear={entry()?.phase === "entering"}
+                        fade
+                        onClosed={() => dispatch({ type: "row.closed", id })}
+                      >
+                        <SessionQueueRow
+                          queue={props.queue}
+                          id={id}
+                          row={entry()?.row}
+                          expanded={entry()?.expanded ?? false}
+                          index={live().indexOf(id)}
+                          onExpandedChange={(expanded) => dispatch({ type: "row.expanded", id, expanded })}
+                        />
+                      </Grow>
+                    )
+                  }}
+                </For>
+              </div>
+            </div>
+          </DragDropProvider>
+        </Show>
       </div>
     </Grow>
   )
@@ -168,13 +266,21 @@ function sameIDs(a: readonly string[], b: readonly string[]) {
   return a.length === b.length && a.every((id, index) => id === b[index])
 }
 
-function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: QueueRow | undefined; index: number }) {
+function SessionQueueRow(props: {
+  queue: SessionQueueView
+  id: string
+  row: QueueRow | undefined
+  expanded: boolean
+  index: number
+  onExpandedChange: (expanded: boolean) => void
+}) {
   const language = useLanguage()
+  const contentID = createUniqueId()
   const leaving = () => props.index < 0
   const editing = () => props.queue.editing() === props.id
   // While the turn is stopped the queue stays parked, so the first prompt
-  // shows its actions without hover and its label reads Send: that is how a
-  // parked queue resumes.
+  // shows its actions without hover and its send action is ready: that is how
+  // a parked queue resumes.
   const active = () => !props.queue.working() && props.index === 0
 
   const sortable = useSortable({
@@ -198,14 +304,17 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: Queu
           ref={sortable.ref}
           data-component={leaving() ? undefined : "session-queue-row"}
           data-leaving={leaving() || undefined}
+          data-expanded={props.expanded || undefined}
           aria-busy={leaving() ? undefined : entry().pending}
-          class="group/queue-row mb-px flex h-8 shrink-0 items-center justify-between gap-2 rounded-md py-1 ps-0.5 pe-1"
+          class="group/queue-row mb-px flex min-h-8 shrink-0 justify-between gap-2 rounded-md py-1 ps-0.5 pe-1"
           classList={{
+            "items-center": !props.expanded,
+            "items-start": props.expanded,
             "bg-v2-overlay-simple-overlay-hover": editing(),
             "opacity-60": sortable.isDragSource(),
           }}
         >
-          <div class="flex min-w-0 flex-1 items-center gap-2">
+          <div class="flex min-w-0 flex-1 items-start gap-1">
             <button
               ref={sortable.handleRef}
               type="button"
@@ -216,14 +325,41 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: Queu
                 {() => <span class="size-[2px] bg-v2-background-bg-layer-04" />}
               </For>
             </button>
-            <div class="flex min-w-0 items-center gap-4">
+            <Show when={entry().text}>
+              <Tooltip
+                placement="top"
+                value={props.expanded ? language.t("session.queue.collapse") : language.t("session.queue.expand")}
+              >
+                <IconButton
+                  data-action="session-queue-expand"
+                  type="button"
+                  size="small"
+                  variant="ghost-muted"
+                  class="rounded-sm"
+                  icon={<Icon name={props.expanded ? "chevron-down" : "chevron-right"} />}
+                  aria-expanded={props.expanded}
+                  aria-controls={contentID}
+                  aria-label={
+                    props.expanded ? language.t("session.queue.collapse") : language.t("session.queue.expand")
+                  }
+                  onClick={() => props.onExpandedChange(!props.expanded)}
+                />
+              </Tooltip>
+            </Show>
+            <div
+              id={contentID}
+              class="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-1"
+              classList={{ "pt-1": props.expanded }}
+            >
               <button
                 type="button"
                 data-action="session-queue-edit"
                 dir="auto"
                 aria-disabled={entry().pending}
-                class="max-w-full min-w-0 self-start truncate rounded-sm text-start text-[13px] font-[440] leading-[var(--line-height-compact)]"
+                class="max-w-full min-w-0 flex-[1_1_min(100%,16rem)] rounded-sm text-start text-[13px] font-[440] leading-[var(--line-height-compact)]"
                 classList={{
+                  truncate: !props.expanded,
+                  "whitespace-pre-wrap [overflow-wrap:anywhere]": props.expanded,
                   "text-v2-text-text-faint": editing() || entry().pending,
                   "cursor-progress": entry().pending,
                   "cursor-text text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover":
@@ -243,7 +379,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: Queu
           </div>
           <div
             data-slot="session-queue-actions"
-            class="flex shrink-0 items-center gap-1"
+            class="flex shrink-0 items-start gap-1"
             classList={{
               "opacity-0 focus-within:opacity-100 group-hover/queue-row:opacity-100 [@media(hover:none)]:opacity-100":
                 !active() && !editing() && !entry().pending,

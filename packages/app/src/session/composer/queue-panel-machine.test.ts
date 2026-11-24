@@ -5,7 +5,9 @@ import {
   DISPOSED_QUEUE_PANEL_EVENT,
   isQueuePanelOpen,
   PANEL_CLOSED_EVENT,
+  queuePanelAnyExpanded,
   queuePanelCount,
+  queuePanelListExpanded,
   transitionQueuePanel,
   type QueuePanelEvent,
   type QueuePanelState,
@@ -27,6 +29,9 @@ const sync = (
 
 const phases = (state: QueuePanelState) =>
   state.status === "disposed" ? [] : state.entries.map((entry) => `${entry.id}:${entry.phase}`)
+
+const expansion = (state: QueuePanelState) =>
+  state.status === "disposed" ? [] : state.entries.map((entry) => `${entry.id}:${entry.expanded}`)
 
 function play(state: QueuePanelState, events: QueuePanelEvent[]) {
   return events.reduce((current, event) => transitionQueuePanel(current, event).state, state)
@@ -109,6 +114,22 @@ describe("queue panel", () => {
     expect(late.effects).toEqual([])
   })
 
+  test("an emptied collapsed queue closes as a summary and comes back in full with a new prompt", () => {
+    const collapsed = play(open(["A", "B"]), [{ type: "list.expanded", expanded: false }])
+    const closing = transitionQueuePanel(collapsed, sync([])).state
+
+    expect(queuePanelListExpanded(closing)).toBe(false)
+
+    const closed = transitionQueuePanel(closing, PANEL_CLOSED_EVENT).state
+
+    expect(queuePanelListExpanded(closed)).toBe(true)
+
+    const reopened = transitionQueuePanel(closed, sync(["C"])).state
+
+    expect(queuePanelListExpanded(reopened)).toBe(true)
+    expect(queuePanelCount(reopened)).toBe(1)
+  })
+
   test("a panel open from the start does not cascade, and an unchanged row keeps its entry", () => {
     const rows = [row("A")]
     const state = createQueuePanelState(rows, false)
@@ -117,5 +138,93 @@ describe("queue panel", () => {
 
     expect(next.effects).toEqual([])
     expect(entries(next.state)[0]).toBe(entries(state)[0]!)
+  })
+
+  test("a row expands and collapses on its own, and the panel knows when any row is expanded", () => {
+    const state = open(["A", "B"])
+
+    expect(queuePanelAnyExpanded(state)).toBe(false)
+
+    const first = transitionQueuePanel(state, { type: "row.expanded", id: "A", expanded: true })
+
+    expect(expansion(first.state)).toEqual(["A:true", "B:false"])
+    expect(queuePanelAnyExpanded(first.state)).toBe(true)
+
+    const second = transitionQueuePanel(first.state, { type: "row.expanded", id: "B", expanded: true })
+
+    expect(expansion(second.state)).toEqual(["A:true", "B:true"])
+
+    const collapsed = transitionQueuePanel(second.state, { type: "row.expanded", id: "A", expanded: false })
+
+    expect(expansion(collapsed.state)).toEqual(["A:false", "B:true"])
+    expect(queuePanelAnyExpanded(collapsed.state)).toBe(true)
+  })
+
+  test("the bulk action hides and restores the whole list without changing per-message expansion", () => {
+    const mixed = play(open(["A", "B", "C"]), [
+      { type: "row.expanded", id: "A", expanded: true },
+      { type: "row.expanded", id: "C", expanded: true },
+    ])
+
+    expect(queuePanelAnyExpanded(mixed)).toBe(true)
+    expect(queuePanelListExpanded(mixed)).toBe(true)
+
+    const collapsed = transitionQueuePanel(mixed, { type: "list.expanded", expanded: false }).state
+
+    expect(queuePanelListExpanded(collapsed)).toBe(false)
+    expect(queuePanelCount(collapsed)).toBe(3)
+    expect(expansion(collapsed)).toEqual(["A:true", "B:false", "C:true"])
+
+    const restored = transitionQueuePanel(collapsed, { type: "list.expanded", expanded: true }).state
+
+    expect(queuePanelListExpanded(restored)).toBe(true)
+    expect(expansion(restored)).toEqual(["A:true", "B:false", "C:true"])
+  })
+
+  test("a single prompt keeps its row disclosure and never collapses the whole list", () => {
+    const single = open(["A"])
+
+    expect(transitionQueuePanel(single, { type: "list.expanded", expanded: false }).state).toBe(single)
+  })
+
+  test("a collapsed list comes back in full when only one prompt remains", () => {
+    const collapsed = play(open(["A", "B"]), [{ type: "list.expanded", expanded: false }])
+
+    expect(queuePanelListExpanded(collapsed)).toBe(false)
+
+    const remaining = transitionQueuePanel(collapsed, sync(["A"])).state
+
+    expect(queuePanelListExpanded(remaining)).toBe(true)
+    expect(queuePanelCount(remaining)).toBe(1)
+  })
+
+  test("expansion follows a prompt whose inbox ID an edit or reorder replaced", () => {
+    const state = play(open(["A", "B"]), [{ type: "row.expanded", id: "A", expanded: true }])
+
+    expect(expansion(transitionQueuePanel(state, sync(["A2", "B"], { moved: { A: "A2" } })).state)).toEqual([
+      "A2:true",
+      "B:false",
+    ])
+    expect(expansion(transitionQueuePanel(state, sync(["B2", "A2"], { moved: { A: "A2", B: "B2" } })).state)).toEqual([
+      "B2:false",
+      "A2:true",
+    ])
+  })
+
+  test("a newly queued prompt starts collapsed while its expanded neighbours keep their state", () => {
+    const state = play(open(["A", "B"]), [
+      { type: "row.expanded", id: "A", expanded: true },
+      { type: "row.expanded", id: "B", expanded: true },
+    ])
+
+    expect(expansion(transitionQueuePanel(state, sync(["A", "B", "C"])).state)).toEqual(["A:true", "B:true", "C:false"])
+  })
+
+  test("expansion survives the panel being hidden and reopened", () => {
+    const expanded = play(open(["A", "B"]), [{ type: "row.expanded", id: "B", expanded: true }])
+    const closed = play(expanded, [sync(["A", "B"], { hidden: true }), PANEL_CLOSED_EVENT])
+
+    expect(expansion(closed)).toEqual(["A:false", "B:true"])
+    expect(expansion(transitionQueuePanel(closed, sync(["A", "B"])).state)).toEqual(["A:false", "B:true"])
   })
 })
