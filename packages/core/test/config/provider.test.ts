@@ -207,13 +207,21 @@ describe("ConfigProviderPlugin.Plugin", () => {
           gateway: {
             npm: "@ai-sdk/openai-compatible",
             options: { baseURL: "http://127.0.0.1:8787/v1" },
-            models: { "claude-sonnet-5-5": { id: "claude-sonnet-5-5" }, "gpt-luna": {} },
+            models: {
+              "claude-sonnet-5-5": { id: "claude-sonnet-5-5" },
+              // V1 read the API id or the config key, so both of these were cached.
+              "claude-proxy": { id: "my-deployment" },
+              "key-only": { id: "anthropic/claude-3" },
+              "gpt-luna": {},
+            },
           },
         },
       })
       if (result.type !== "normalized") throw new Error("Expected normalized config")
       const migrated = decode(result.encoded).providers?.gateway?.models ?? {}
       expect(migrated["claude-sonnet-5-5"]?.compatibility).toEqual({ cacheFormat: "anthropic" })
+      expect(migrated["claude-proxy"]?.compatibility).toEqual({ cacheFormat: "anthropic" })
+      expect(migrated["key-only"]?.compatibility).toEqual({ cacheFormat: "anthropic" })
       expect(migrated["gpt-luna"]?.compatibility).toBeUndefined()
     }),
   )

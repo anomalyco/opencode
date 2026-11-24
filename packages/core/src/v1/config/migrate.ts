@@ -221,10 +221,13 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
       : { settings: ConfigProviderOptionsV1.model(input), body: undefined }
   const migrated = options && split(options)
   const settings = migrated?.settings
-  // V1 marked an OpenAI-compatible endpoint's Claude models for prompt caching by model id; V2 only marks the routes
-  // in its cache policy, so the marker format has to be named. Infer the models V1 would have marked instead of
+  // V1 marked an OpenAI-compatible endpoint's Claude models for prompt caching by API id or config key; V2 only marks
+  // the routes in its cache policy, so the marker format has to be named. Match the set V1 would have marked instead of
   // migrating them to a route that bills every turn uncached (#65400).
-  const cache = compatible && /claude/i.test(info.id ?? name) ? { cacheFormat: "anthropic" as const } : undefined
+  const cache =
+    compatible && [info.id, name].some((id) => id !== undefined && /claude|anthropic/i.test(id))
+      ? { cacheFormat: "anthropic" as const }
+      : undefined
   const legacy = Model.compatibility(info.interleaved)
   const compatibility = legacy || cache ? { ...legacy, ...cache } : undefined
   const costs = info.cost && [
