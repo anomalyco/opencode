@@ -20,12 +20,15 @@ import { shareTracks, type ShareTrack } from "./music"
 import type { ShareView } from "./embed"
 import { loadSpectrum, type Spectrum } from "./spectrum"
 
-// `view` is the range the section showed, so an embed of it can show the same. `days` makes the card for one column
-// of its chart, for the editor's Date row (share/sections.ts).
+// `view` is the range the section showed, so an embed of it can show the same. `variant` makes the card again for a
+// focus, for the editor's Date and Lead rows (share/sections.ts).
 export type ShareDraft = Omit<ShareCard, "updatedAt" | "url"> & {
   view?: ShareView
-  days?: (index: number) => ShareDraft | undefined
+  variant?: (focus: ShareFocus) => ShareDraft | undefined
 }
+
+/** One column of a bar chart (`day`) instead of the whole range, and whether to lead with the top series or the total. */
+export type ShareFocus = { day?: number; lead?: "top" | "total" }
 
 const [request, setRequest] = createSignal<ShareDraft>()
 let opener: HTMLElement | undefined
@@ -121,22 +124,26 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const [settings, setSettings] = createSignal(false)
   // The chart column the card is about, or the whole range; each section starts on the whole range.
   const [day, setDay] = createSignal<number>()
+  // Lead with the top model or the total: the sections that can say a total (Top Models).
+  const [lead, setLead] = createSignal<"top" | "total">("top")
   const section = createMemo(() => request()?.id)
   createEffect(() => {
     section()
     setDay(undefined)
+    setLead("top")
   })
+  const leads = createMemo(() => request()?.id === "top-models" && !!request()?.variant)
   // The columns the Date row can choose from: a bar chart's, when its section can make a card for one.
   const columns = createMemo(() => {
     const value = request()
-    return value?.days && value.chart.kind === "stacked" ? value.chart.columns.map((column) => column.label) : []
+    return value?.variant && value.chart.kind === "stacked" ? value.chart.columns.map((column) => column.label) : []
   })
   const card = createMemo(() => {
     const value = request()
     if (!value) return undefined
-    const index = day()
-    const chosen = index === undefined ? value : (value.days?.(index) ?? value)
-    return { ...chosen, days: undefined, updatedAt: props.updatedAt, url: props.url }
+    const focus = { day: day(), lead: lead() }
+    const chosen = focus.day === undefined && focus.lead === "top" ? value : (value.variant?.(focus) ?? value)
+    return { ...chosen, variant: undefined, updatedAt: props.updatedAt, url: props.url }
   })
   // The card's provider logos (the leaderboard and comparison cards); the preview redraws once they've loaded.
   const [logos, setLogos] = createSignal(0)
@@ -583,6 +590,23 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                         </div>
                       </Row>
                     </Show>
+                  </Show>
+                  <Show when={leads()}>
+                    <Row label="Lead">
+                      <For each={["top", "total"] as const}>
+                        {(item) => (
+                          <button
+                            type="button"
+                            data-slot="chip"
+                            data-variant="text"
+                            aria-pressed={lead() === item}
+                            onClick={() => setLead(item)}
+                          >
+                            <span>{{ top: "Top model", total: "Total" }[item]}</span>
+                          </button>
+                        )}
+                      </For>
+                    </Row>
                   </Show>
                   <Row label="Layout">
                     <For each={layouts}>

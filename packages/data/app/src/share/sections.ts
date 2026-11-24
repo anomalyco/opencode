@@ -15,7 +15,7 @@ import { providerIconId } from "../lib/provider-icon"
 import { formatCatalogLabName, isKnownCatalogLab } from "../routes/model-catalog"
 import type { ShareChart, ShareSeries } from "./card"
 import { shareTitles, type ShareSection, type ShareView } from "./embed"
-import type { ShareDraft } from "./share"
+import type { ShareDraft, ShareFocus } from "./share"
 
 /** A section's card from the whole page's data, as its share button would make it with `view`. */
 export function homeShareCard(section: ShareSection, data: HomePageData, view: ShareView) {
@@ -150,18 +150,49 @@ export function comparisonCard(data: HomePageData, catalogLabs: readonly string[
   }
 }
 
-// `day` is one column of the chart to share instead of the whole range: its headline, number and legend, with the
-// other columns in grey. Without it, a card's `days` makes that card for any column.
+// `focus.day` is one column of the chart to share instead of the whole range: its headline, number and legend, the
+// day broken down. `focus.lead` leads the card with the top model or with all tokens. A card's `variant` makes it
+// again for another focus, for the editor's Date and Lead with rows.
 export function topModelsCard(
   usage: UsagePoint[],
   leaderboard: HomePageData["leaderboard"]["weekly"],
   view: ShareView,
-  day?: number,
+  focus: ShareFocus = {},
 ): ShareDraft | undefined {
   const leader = leaderboard[0]
+  const day = focus.day
   const chart = usageShareChart(usage, (value) => formatTokens(value), "All models", day)
   if (!chart || !leader) return undefined
-  const days = (index: number) => topModelsCard(usage, leaderboard, view, index)
+  const variant = (next: ShareFocus) => topModelsCard(usage, leaderboard, view, next)
+  if (focus.lead === "total") {
+    const sum =
+      day === undefined
+        ? formatTotalTokens(chart.columns.reduce((all, column) => all + column.values.reduce((a, b) => a + b, 0), 0))
+        : chart.total.value
+    const when =
+      day === undefined
+        ? `in the past ${chart.columns.length} ${view.period === "weekly" ? "weeks" : "days"}`
+        : shareWhen(chart, view.period)
+    // Over the whole range the legend and the line under the chart add up the range too, to match the number.
+    const ranged = (series: number) => chart.columns.reduce((all, column) => all + (column.values[series] ?? 0), 0)
+    return {
+      id: "top-models",
+      title: shareTitles["top-models"],
+      range: day === undefined ? shareRange(chart, view.period) : shareDate(chart, view.period),
+      headline: `OpenCode handled ${sum} tokens ${when}`,
+      stat: { value: sum, label: `tokens on OpenCode, ${when}` },
+      chart:
+        day === undefined
+          ? {
+              ...chart,
+              series: chart.series.map((item, index) => ({ ...item, value: formatTotalTokens(ranged(index)) })),
+              total: { label: `All models, ${shareRange(chart, view.period).toLowerCase()}`, value: sum },
+            }
+          : chart,
+      view,
+      variant,
+    }
+  }
   if (day !== undefined) {
     const top = leadingSeries(chart)
     if (!top) return undefined
@@ -176,7 +207,7 @@ export function topModelsCard(
       stat: { value: top.value, label: `tokens for ${name}, ${when}` },
       chart,
       view,
-      days,
+      variant,
     }
   }
   const when = view.leaderboard === "weekly" ? "in the past 7 days" : "yesterday"
@@ -189,7 +220,7 @@ export function topModelsCard(
     stat: { value: formatBillions(leader.tokens), label: `tokens for ${leader.name}, ${when}` },
     chart,
     view,
-    days,
+    variant,
   }
 }
 
@@ -197,8 +228,9 @@ export function uniqueUsersCard(
   users: UsagePoint[],
   period: Period,
   names: Map<string, string>,
-  day?: number,
+  focus: ShareFocus = {},
 ): ShareDraft | undefined {
+  const day = focus.day
   const chart = usageShareChart(users, formatUsers, "All models", day)
   const top = chart && leadingSeries(chart)
   if (!chart || !top) return undefined
@@ -213,7 +245,8 @@ export function uniqueUsersCard(
     stat: { value: top.value, label: `OpenCode users on ${name}, ${when}` },
     chart,
     view: { period, leaderboard: "weekly" },
-    days: (index) => uniqueUsersCard(users, period, names, index),
+    // No Total: a person who used several models is in each of their rows, so the rows don't add up to people.
+    variant: (next) => uniqueUsersCard(users, period, names, { day: next.day }),
   }
 }
 
@@ -286,7 +319,8 @@ export function cacheRatioCard(items: CacheRatioEntry[], names: Map<string, stri
   }
 }
 
-export function marketShareCard(days: MarketDay[], period: Period, day?: number): ShareDraft | undefined {
+export function marketShareCard(days: MarketDay[], period: Period, focus: ShareFocus = {}): ShareDraft | undefined {
+  const day = focus.day
   const chart = marketShareChart(days, getMarketAuthorOrder(days), day)
   const top = chart && leadingSeries(chart)
   if (!chart || !top) return undefined
@@ -300,7 +334,7 @@ export function marketShareCard(days: MarketDay[], period: Period, day?: number)
     stat: { value: top.value, label: `of OpenCode tokens went to ${top.label} models, ${when}` },
     chart,
     view: { period, leaderboard: "weekly" },
-    days: (index) => marketShareCard(days, period, index),
+    variant: (next) => marketShareCard(days, period, { day: next.day }),
   }
 }
 
@@ -375,6 +409,11 @@ export function formatUsers(value: number) {
 
 export function formatRetentionRate(value: number) {
   return `${value.toFixed(1)}%`
+}
+
+// Tokens over a whole range, in trillions: past a thousand with separators rather than a rarely seen Q.
+export function formatTotalTokens(value: number) {
+  return value >= 1000 ? `${new Intl.NumberFormat("en").format(Math.round(value))}T` : formatTokens(value)
 }
 
 export function formatBillions(value: number) {

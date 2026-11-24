@@ -802,6 +802,7 @@ function drawStacked(
   focus: Focus,
   litDots: (clip: Path2D) => void,
 ) {
+  if (chart.day !== undefined) return drawDay(ctx, chart, colors, box, progress, focus, litDots)
   // Room above the bars for the focused series' label.
   // A little room between the intro and the tallest column.
   const headroom = 24
@@ -813,9 +814,7 @@ function drawStacked(
   const gap = Math.min(10, Math.max(2, slot * 0.22))
   const base = plot.y + plot.height
 
-  // Each bar's segments, drawn in three passes: under the muted ones the card's background, so the dot grid doesn't
-  // show through; then, with music, the equaliser's lit dots inside them; then every segment's colour, the muted grey
-  // as a translucent veil over those dots.
+  // Each bar's segments, painted by paintSegments.
   const segments = chart.columns.flatMap((column, index) => {
     // Columns rise left to right, each over half the build.
     const delay = (index / Math.max(1, count - 1)) * 0.5
@@ -851,6 +850,93 @@ function drawStacked(
       { y: base, parts: [] },
     ).parts
   })
+  paintSegments(ctx, segments, colors, litDots)
+
+  ctx.fillStyle = colors.line
+  ctx.fillRect(plot.x, base + 1, plot.width, 1)
+  ctx.fillStyle = colors.faint
+  ctx.font = `400 22px ${font}`
+  ctx.textBaseline = "alphabetic"
+  const ticks = [...new Set([0, Math.round((count - 1) / 3), Math.round(((count - 1) * 2) / 3), count - 1])]
+  ticks.forEach((index, position) => {
+    const label = chart.columns[index]?.label ?? ""
+    const center = plot.x + index * slot + slot / 2
+    const measured = ctx.measureText(label).width
+    const x =
+      position === 0 ? plot.x : position === ticks.length - 1 ? plot.x + plot.width - measured : center - measured / 2
+    ctx.fillText(label, x, base + axisHeight - 6)
+  })
+}
+
+// A card about one day: that day alone, broken down, one bar per series, tallest first and Other last, each in its
+// colour with its value over it and its name under it. They rise one after another over the same dot grid; the
+// highlights and the equaliser work on them as on the whole range's bars.
+function drawDay(
+  ctx: CanvasRenderingContext2D,
+  chart: Extract<ShareChart, { kind: "stacked" }>,
+  colors: Palette,
+  box: Box,
+  progress: number,
+  focus: Focus,
+  litDots: (clip: Path2D) => void,
+) {
+  const values = chart.columns[chart.day ?? 0]?.values ?? []
+  const other = (series: number) => (chart.series[series]?.key === "other" ? 1 : 0)
+  const order = chart.series
+    .map((_, series) => series)
+    .filter((series) => (values[series] ?? 0) > 0)
+    .toSorted((a, b) => other(a) - other(b) || (values[b] ?? 0) - (values[a] ?? 0))
+  // Room over the bars for their values.
+  const top = 64
+  const plot = { ...box, y: box.y + top, height: box.height - axisHeight - top }
+  const max = Math.max(0, ...order.map((series) => values[series] ?? 0)) || 1
+  const slot = plot.width / Math.max(1, order.length)
+  const gap = Math.min(40, slot * 0.28)
+  const base = plot.y + plot.height
+  const bars = order.map((series, position) => {
+    const delay = (position / Math.max(1, order.length - 1)) * 0.5
+    const grow = ease(Math.max(0, Math.min(1, (progress - delay) / 0.5)))
+    const height = ((values[series] ?? 0) / max) * plot.height * grow
+    const own = chart.series[series]?.color ?? colors.idle
+    const muted = series === focus.index ? 0 : own === colors.other ? 1 : focus.amount
+    const color = series === focus.index ? spotlit(own, series, focus.amount, colors) : own
+    const rect = [plot.x + position * slot + gap / 2, base - height, slot - gap, height] as const
+    return { series, grow, rect, color, muted }
+  })
+  paintSegments(ctx, bars, colors, litDots)
+
+  ctx.fillStyle = colors.line
+  ctx.fillRect(plot.x, base + 1, plot.width, 1)
+  ctx.textBaseline = "alphabetic"
+  bars.forEach((bar) => {
+    if (bar.grow <= 0) return
+    const item = chart.series[bar.series]
+    const [x, y, width] = bar.rect
+    const center = x + width / 2
+    ctx.save()
+    ctx.globalAlpha *= bar.grow
+    // The value rides on the bar's top as it rises; the focused one in the text colour, the rest as the legend's.
+    ctx.font = `${bar.series === focus.index && focus.amount > 0.5 ? 700 : 400} 26px ${font}`
+    ctx.fillStyle = mix(colors.text, colors.muted, bar.series === focus.index ? 0 : Math.max(0.6, bar.muted))
+    const value = item?.value ?? ""
+    ctx.fillText(value, center - ctx.measureText(value).width / 2, y - 16)
+    ctx.font = `400 20px ${font}`
+    ctx.fillStyle = colors.faint
+    const name = truncate(ctx, item?.label ?? "", slot - 8)
+    ctx.fillText(name, center - ctx.measureText(name).width / 2, base + axisHeight - 6)
+    ctx.restore()
+  })
+}
+
+// Bars and their segments, in three passes: under the muted ones the card's background, so the dot grid doesn't
+// show through; then, with music, the equaliser's lit dots inside them; then every segment's colour, the muted grey
+// as a translucent veil over those dots.
+function paintSegments(
+  ctx: CanvasRenderingContext2D,
+  segments: Segment[],
+  colors: Palette,
+  litDots: (clip: Path2D) => void,
+) {
   const alpha = ctx.globalAlpha
   const quiet = segments.filter((segment) => segment.muted > 0)
   quiet.forEach((segment) => {
@@ -879,21 +965,6 @@ function drawStacked(
     }
   })
   ctx.globalAlpha = alpha
-
-  ctx.fillStyle = colors.line
-  ctx.fillRect(plot.x, base + 1, plot.width, 1)
-  ctx.fillStyle = colors.faint
-  ctx.font = `400 22px ${font}`
-  ctx.textBaseline = "alphabetic"
-  const ticks = [...new Set([0, Math.round((count - 1) / 3), Math.round(((count - 1) * 2) / 3), count - 1])]
-  ticks.forEach((index, position) => {
-    const label = chart.columns[index]?.label ?? ""
-    const center = plot.x + index * slot + slot / 2
-    const measured = ctx.measureText(label).width
-    const x =
-      position === 0 ? plot.x : position === ticks.length - 1 ? plot.x + plot.width - measured : center - measured / 2
-    ctx.fillText(label, x, base + axisHeight - 6)
-  })
 }
 
 // On the shorter cards (1:1 and 16:9) the legend sets smaller and tighter, so the chart keeps its height.
