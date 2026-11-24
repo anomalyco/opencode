@@ -67,10 +67,12 @@ export function DialogSessionSearch() {
 
   const select = (item: CommandPaletteEntry | undefined) => {
     if (dialog.closing || !item?.sessionID || !item.server) return
+
     const { server, sessionID } = item
     const directory = item.project?.worktree ?? item.directory
 
     dialog.close(layer?.id)
+
     if (directory) global.serverCtx(server)?.projects.touch(directory)
     void startTransition(() => tabs.select(tabs.addSessionTab({ server, sessionId: sessionID })))
   }
