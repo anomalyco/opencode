@@ -826,7 +826,6 @@ export const dict = {
   "session.location.description": "ይህን ክፍለ ጊዜ ለመቀጠል ሌላ ማውጫ ይምረጡ።",
   "session.location.choose": "ማውጫ ምረጥ",
   "session.location.worktree": "worktree ምረጥ",
-  "session.location.worktreesFailed": "worktree-ዎችን መጫን አልተሳካም",
   "session.rewind.toast.title": "ተመልሷል",
   "session.rewind.toast.undo": "ቀልብስ",
   "session.location.moving": "ክፍለ ጊዜን በማንቀሳቀስ ላይ…",

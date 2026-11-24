@@ -844,7 +844,6 @@ export const dict = {
   "session.location.description": "ເລືອກໄດເລກະທໍລີອື່ນເພື່ອສືບຕໍ່ເຊດຊັນນີ້.",
   "session.location.choose": "ເລືອກໄດເລກະທໍລີ",
   "session.location.worktree": "ເລືອກ worktree",
-  "session.location.worktreesFailed": "ໂຫຼດ worktree ບໍ່ສຳເລັດ",
   "session.rewind.toast.title": "ຍ້ອນຄືນແລ້ວ",
   "session.rewind.toast.undo": "ຍົກເລີກ",
   "session.location.moving": "ກຳລັງຍ້າຍເຊດຊັນ…",

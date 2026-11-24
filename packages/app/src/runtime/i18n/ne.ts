@@ -860,7 +860,6 @@ export const dict = {
   "session.location.description": "यो सत्र जारी राख्न अर्को निर्देशिका छान्नुहोस्।",
   "session.location.choose": "निर्देशिका छान्नुहोस्",
   "session.location.worktree": "वर्कट्री छान्नुहोस्",
-  "session.location.worktreesFailed": "वर्कट्रीहरू लोड गर्न असफल भयो",
   "session.rewind.toast.title": "उल्टाइयो",
   "session.rewind.toast.undo": "पूर्ववत गर्नुहोस्",
   "session.location.moving": "सत्र सार्दै…",

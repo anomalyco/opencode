@@ -892,7 +892,6 @@ export const dict = {
   "session.location.description": "选择另一个目录以继续此会话。",
   "session.location.choose": "选择目录",
   "session.location.worktree": "选择工作树",
-  "session.location.worktreesFailed": "加载工作树失败",
   "session.rewind.toast.title": "已还原",
   "session.rewind.toast.undo": "撤销",
   "session.location.moving": "正在移动会话…",

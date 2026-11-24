@@ -865,7 +865,6 @@ export const dict = {
   "session.location.description": "このセッションを続行するには、別のディレクトリを選択してください。",
   "session.location.choose": "ディレクトリを選択",
   "session.location.worktree": "ワークツリーを選択",
-  "session.location.worktreesFailed": "ワークツリーの読み込みに失敗しました",
   "session.rewind.toast.title": "元に戻しました",
   "session.rewind.toast.undo": "取り消す",
   "session.location.moving": "セッションを移動中…",

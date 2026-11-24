@@ -879,7 +879,6 @@ export const dict = {
   "session.location.description": "Za nadaljevanje te seje izberite drug imenik.",
   "session.location.choose": "Izberite imenik",
   "session.location.worktree": "Izberite delovno drevo",
-  "session.location.worktreesFailed": "Delovnih dreves ni bilo mogoče naložiti",
   "session.rewind.toast.title": "Povrnjeno",
   "session.rewind.toast.undo": "Razveljavi",
   "session.location.moving": "Premikanje seje …",

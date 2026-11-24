@@ -856,7 +856,6 @@ export const dict = {
   "session.location.description": "Välj en annan katalog för att fortsätta den här sessionen.",
   "session.location.choose": "Välj katalog",
   "session.location.worktree": "Välj worktree",
-  "session.location.worktreesFailed": "Det gick inte att läsa in worktrees",
   "session.rewind.toast.title": "Återställd",
   "session.rewind.toast.undo": "Ångra",
   "session.location.moving": "Flyttar sessionen…",

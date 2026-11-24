@@ -914,7 +914,6 @@ export const dict = {
   "session.location.description": "Vælg en anden mappe for at fortsætte denne session.",
   "session.location.choose": "Vælg mappe",
   "session.location.worktree": "Vælg worktree",
-  "session.location.worktreesFailed": "Kunne ikke indlæse worktrees",
   "session.rewind.toast.title": "Tilbageført",
   "session.rewind.toast.undo": "Fortryd",
   "session.location.moving": "Flytter session…",

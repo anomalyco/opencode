@@ -864,7 +864,6 @@ export const dict = {
   "session.location.description": "ဤစက်ရှင်ကို ဆက်လုပ်ရန် အခြားဖိုင်တွဲတစ်ခုကို ရွေးပါ။",
   "session.location.choose": "ဖိုင်တွဲ ရွေးရန်",
   "session.location.worktree": "Worktree ရွေးရန်",
-  "session.location.worktreesFailed": "Worktree များကို ဖွင့်၍ မရပါ",
   "session.rewind.toast.title": "ပြန်ပြောင်းပြီးပါပြီ",
   "session.rewind.toast.undo": "မလုပ်တော့ပါ",
   "session.location.moving": "စက်ရှင်ကို ရွှေ့နေသည်…",

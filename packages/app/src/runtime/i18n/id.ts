@@ -918,7 +918,6 @@ export const dict = {
   "session.location.description": "Pilih direktori lain untuk melanjutkan sesi ini.",
   "session.location.choose": "Pilih direktori",
   "session.location.worktree": "Pilih worktree",
-  "session.location.worktreesFailed": "Gagal memuat worktree",
   "session.rewind.toast.title": "Dikembalikan",
   "session.rewind.toast.undo": "Urungkan",
   "session.location.moving": "Memindahkan sesi…",

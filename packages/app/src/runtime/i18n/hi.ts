@@ -861,7 +861,6 @@ export const dict = {
   "session.location.description": "इस सेशन को जारी रखने के लिए कोई दूसरी निर्देशिका चुनें।",
   "session.location.choose": "निर्देशिका चुनें",
   "session.location.worktree": "वर्कट्री चुनें",
-  "session.location.worktreesFailed": "वर्कट्री लोड करने में विफल",
   "session.rewind.toast.title": "पूर्ववत किया गया",
   "session.rewind.toast.undo": "पूर्ववत करें",
   "session.location.moving": "सेशन ले जाया जा रहा है…",
