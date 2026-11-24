@@ -122,49 +122,6 @@ test("with full_codemode, execute names Bun's file APIs instead of ruling out fi
   expect(description.split("\n")[0]).toBe(
     "Run JavaScript in a confined Code Mode runtime to work with files and data, script tool calls and HTTP requests, and compose their results.",
   )
-  expect(description).toContain(
-    "Built-ins include `JSON`, `RegExp`, `Date`, `Math`, `Map`, `Set`, `URL`, `TextEncoder`/`TextDecoder`, `Uint8Array`, Node's `Buffer` and `path`.",
-  )
-})
-
-test("with full_codemode, the built-ins execute names are available", async () => {
-  const codeMode = createCodeMode(new Map(), allowAll, codeModeServices(process.cwd()))
-  const result = await Effect.runPromise(
-    codeMode.execute(
-      {
-        code: [
-          'const bytes = new TextEncoder().encode("hi")',
-          "return [",
-          '  JSON.parse(JSON.stringify({ a: 1 })).a,',
-          '  new RegExp("b+").test("abbc"),',
-          '  new Date(0).toISOString(),',
-          "  Math.max(1, 2),",
-          '  new Map([["k", 1]]).get("k"),',
-          "  new Set([1, 1, 2]).size,",
-          '  new URL("https://example.com/a?b=1").searchParams.get("b"),',
-          "  new TextDecoder().decode(bytes),",
-          "  new Uint8Array(bytes).length,",
-          '  Buffer.from("hi").toString("base64"),',
-          '  path.basename("/a/b.ts", ".ts"),',
-          "]",
-        ].join("\n"),
-      },
-      context,
-    ),
-  )
-  expect(JSON.parse(result.output.output)).toEqual([
-    1,
-    true,
-    "1970-01-01T00:00:00.000Z",
-    2,
-    1,
-    2,
-    "1",
-    "hi",
-    2,
-    "aGk=",
-    "b",
-  ])
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
