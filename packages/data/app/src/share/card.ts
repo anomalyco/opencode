@@ -323,8 +323,9 @@ export function drawShareCard(
   const colors = look.colors
   const card = look.card
   ctx.save()
-  // Every x is a left edge, in either direction; a right-to-left card orders the words within each line.
-  ctx.direction = dir(card.locale)
+  // Every x is a left edge. Names and numbers run left to right; only the card's sentences (drawIntro, drawSlide) take
+  // a right-to-left language's direction, which orders the words within each line.
+  ctx.direction = "ltr"
   ctx.textAlign = "left"
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = colors.background
@@ -401,7 +402,9 @@ export function drawShareCard(
   drawLogo(ctx, options.logo, colors, pad, pad, logo)
 
   const focus = focusAt(card, options, time, timing)
+  ctx.direction = dir(card.locale)
   const top = drawIntro(ctx, card, options, colors, width, pad + 88 + 48 * logo, time)
+  ctx.direction = "ltr"
   const progress = Math.min(1, time / timing.build)
 
   if (card.chart.kind === "stacked" && race && card.chart.style === "race")
@@ -1452,6 +1455,7 @@ function drawSlide(
   ctx.textBaseline = "alphabetic"
 
   if (index < 0) {
+    ctx.direction = dir(card.locale)
     // The headline, as large as fits in five lines, set in the middle of the space, under its eyebrow.
     const sizes = width > height ? [96, 84, 72, 64] : [104, 92, 80, 72, 64, 56]
     const size =
