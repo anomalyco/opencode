@@ -233,6 +233,9 @@ for (const binding of ["custom", "none"]) {
 
     await view.editor.press(`${modifier}+Alt+k`)
     await expect(newSessionBaseBranch(page)).toHaveText("from main")
+    await newSessionBaseBranch(page).hover()
+    await expect(tooltip).toContainText("Choose worktree")
+    await expect(keys).toHaveText([/X$/, /B$/])
     await view.editor.press(`${modifier}+Alt+x`)
     const search = page.getByRole("combobox", { name: "Search worktrees", exact: true })
 
@@ -507,8 +510,8 @@ test("the branch shortcut chooses a base branch and stays inactive on the main c
 
   await expect(base).toHaveAccessibleName("Choose base branch")
   await base.hover()
-  await expect(page.getByRole("tooltip")).toContainText("Choose base branch")
-  await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toContainText("B")
+  await expect(page.getByRole("tooltip")).toContainText(/Choose worktree.*Choose base branch/)
+  await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toHaveText([/O$/, /B$/])
   await expect(view.editor).toBeFocused()
   await view.editor.press(shortcut)
   await expect(search).toBeFocused()
