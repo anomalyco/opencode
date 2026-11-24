@@ -466,11 +466,22 @@ function TrackOption(props: {
           fallback={
             <Show when={!props.cover}>
               <svg width="16" height="16" viewBox="0 0 16 16">
-                {/* No music: a pair of beamed notes, struck through. */}
-                <path d="M5.5 11.25V4.5l7-1.5v7M5.5 6.25l7-1.5" fill="none" stroke="currentColor" stroke-width="1.4" />
-                <circle cx="4.25" cy="11.5" r="1.6" fill="currentColor" />
-                <circle cx="11.25" cy="10.25" r="1.6" fill="currentColor" />
-                <path d="M2 2l12 12" stroke="currentColor" stroke-width="1.4" />
+                {/* No music: a pair of beamed notes, struck through; the notes are cut 1px clear of the line either side. */}
+                <mask id="share-no-music-cut">
+                  <rect width="16" height="16" fill="#fff" />
+                  <path d="M14 2 2 14" stroke="#000" stroke-width="3.4" />
+                </mask>
+                <g mask="url(#share-no-music-cut)">
+                  <path
+                    d="M5.5 11.25V4.5l7-1.5v7M5.5 6.25l7-1.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.4"
+                  />
+                  <circle cx="4.25" cy="11.5" r="1.6" fill="currentColor" />
+                  <circle cx="11.25" cy="10.25" r="1.6" fill="currentColor" />
+                </g>
+                <path d="M14 2 2 14" stroke="currentColor" stroke-width="1.4" />
               </svg>
             </Show>
           }
