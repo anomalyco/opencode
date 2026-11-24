@@ -510,8 +510,10 @@ export interface SettingItem {
   readonly onChange: (next: unknown) => void | Promise<void>
 }
 
+export type DecoratableTool = "shell"
+
 export interface ToolDecorationContext {
-  readonly tool: string
+  readonly tool: DecoratableTool
   readonly status: "streaming" | "running" | "completed" | "error"
   readonly input: Readonly<Record<string, unknown>>
   readonly metadata: Readonly<Record<string, unknown>>
@@ -553,8 +555,11 @@ export interface UI {
     register(setting: SettingItem): () => void
   }
   readonly tools: {
-    /** Registers a reactive display decorator for a built-in tool card (e.g. "shell"). Last active writer wins. */
-    decorate(tool: string, decorator: ToolDecorator): () => void
+    /**
+     * Registers a reactive display decorator for a built-in tool card.
+     * Currently only `"shell"` is supported. Last active writer wins.
+     */
+    decorate(tool: DecoratableTool, decorator: ToolDecorator): () => void
   }
   readonly tabs: {
     /** Returns whether session tabs are enabled for this TUI. */

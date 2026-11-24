@@ -15,6 +15,7 @@ import {
 } from "solid-js"
 import type {
   Context,
+  DecoratableTool,
   Dialog,
   DialogSelectOptions,
   Page,
@@ -63,16 +64,24 @@ export type RegisteredSlot = {
 
 const placements = ["prepend", "append", "before", "after", "replace"] as const satisfies readonly PlacementKind[]
 
+export type RegisteredToolDecorator = {
+  readonly tool: DecoratableTool
+  readonly decorator: ToolDecorator
+}
+
+export type RegistrySetArgs =
+  | [kind: "routes", name: string, value: Page]
+  | [kind: "slots", name: string, value: RegisteredSlot]
+  | [kind: "markdown", name: string, value: MarkdownCodeBlockRenderer]
+  | [kind: "settings", name: string, value: SettingItem]
+  | [kind: "tools", name: string, value: RegisteredToolDecorator]
+
 // The provider's registration store, narrowed to what a plugin context needs:
 // route/slot registration lands there, but ordering and lifecycle stay owned
 // by the provider.
 export type Registry = {
   has(kind: "routes" | "slots" | "markdown" | "settings" | "tools", name: string): boolean
-  set(kind: "routes", name: string, page: Page): void
-  set(kind: "slots", name: string, claim: RegisteredSlot): void
-  set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
-  set(kind: "settings", name: string, setting: SettingItem): void
-  set(kind: "tools", name: string, decorator: ToolDecorator): void
+  set(...args: RegistrySetArgs): void
   remove(kind: "routes" | "slots" | "markdown" | "settings" | "tools", name: string): void
   active(): boolean
 }
@@ -117,6 +126,7 @@ export function createPluginContext(input: {
   input.owned.push(async () => host.panel?.release(input.id))
   let context: Context
   let claims = 0
+  let toolDecorators = 0
   // Every dialog and registered render is wrapped so plugin components can
   // reach their own context through usePlugin().
   const provide = (render: () => JSX.Element) => (
@@ -234,7 +244,7 @@ export function createPluginContext(input: {
           if (input.registry.has("routes", page.name)) throw new Error(`Route already registered: ${page.name}`)
           input.registry.set("routes", page.name, {
             ...page,
-            render: (data) => provide(() => page.render(data)),
+            render: (data: { readonly data?: Record<string, any> }) => provide(() => page.render(data)),
           })
           return registration("routes", page.name)
         },
@@ -273,8 +283,12 @@ export function createPluginContext(input: {
       },
       tools: {
         decorate(tool, decorator) {
-          input.registry.set("tools", tool, decorator)
-          return registration("tools", tool)
+          if (tool !== "shell") throw new Error(`Unsupported tool decorator target: ${tool}`)
+          // Keys are counter-suffixed so one plugin may register several decorators
+          // without an earlier unregister removing a newer registration.
+          const key = `tool#${toolDecorators++}`
+          input.registry.set("tools", key, { tool, decorator })
+          return registration("tools", key)
         },
       },
       tabs: {
@@ -341,7 +355,7 @@ export function createPluginContext(input: {
         input.registry.set("slots", key, {
           placement: { kind, target: value[kind] as string },
           // The registration map erases the path-specific input type.
-          render: (slotInput) => provide(() => (value.render as SlotRender)(slotInput)),
+          render: (slotInput: SlotMap[SlotPath]) => provide(() => (value.render as SlotRender)(slotInput)),
         })
         return registration("slots", key)
       },

@@ -2,7 +2,6 @@ import { createMemo, createSignal } from "solid-js"
 import type { SettingItem } from "@opencode/plugin/tui/context"
 import { useConfig, useNewDesigns } from "../config"
 import { useThemes } from "../context/theme"
-import { useOptionalPlugin } from "../plugin/context"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { DialogSelect, DialogSelectChoice } from "../ui/dialog-select"
 import { useToast } from "../ui/toast"
@@ -401,8 +400,7 @@ export function DialogConfig(props: { current?: string; pluginSettings?: () => R
   const dialog = useDialog()
   const toast = useToast()
   const themes = useThemes()
-  const plugin = useOptionalPlugin()
-  const pluginSettings = () => props.pluginSettings?.() ?? plugin?.settings() ?? []
+  const pluginSettings = () => props.pluginSettings?.() ?? []
   const entries = createMemo<readonly Entry[]>(() => [
     ...settings.map((setting): Entry => ({ kind: "builtin", id: settingID(setting), setting })),
     ...pluginSettings().map(
@@ -416,9 +414,7 @@ export function DialogConfig(props: { current?: string; pluginSettings?: () => R
   const [selected, setSelected] = createSignal(current)
   const [saving, setSaving] = createSignal(false)
 
-  const value = (entry: Entry) => {
-    if (entry.kind === "plugin") return entry.setting.value()
-    const setting = entry.setting
+  const builtinValue = (setting: Setting) => {
     const current = setting.path.reduce<unknown>((result, key) => {
       if (!result || typeof result !== "object") return undefined
       return (result as Record<string, unknown>)[key]
@@ -427,6 +423,14 @@ export function DialogConfig(props: { current?: string; pluginSettings?: () => R
     if (setting.path.join(".") === "theme.name") return themes.selected
     return current ?? setting.default
   }
+  const readValue = (entry: Entry): { readonly ok: true; readonly value: unknown } | { readonly ok: false } => {
+    if (entry.kind === "builtin") return { ok: true, value: builtinValue(entry.setting) }
+    try {
+      return { ok: true, value: entry.setting.value() }
+    } catch {
+      return { ok: false }
+    }
+  }
   const values = (entry: Entry) => {
     if (entry.kind === "plugin") return entry.setting.values
     return entry.setting.path.join(".") === "theme.name"
@@ -434,10 +438,17 @@ export function DialogConfig(props: { current?: string; pluginSettings?: () => R
       : entry.setting.values
   }
   const display = (entry: Entry) => {
-    const current = value(entry)
-    if (entry.setting.format) return entry.setting.format(current)
-    const index = entry.setting.values?.indexOf(current)
-    return index === undefined || index < 0 ? String(current) : (entry.setting.labels?.[index] ?? String(current))
+    const current = readValue(entry)
+    if (!current.ok) return "error"
+    try {
+      if (entry.setting.format) return entry.setting.format(current.value)
+      const index = entry.setting.values?.indexOf(current.value)
+      return index === undefined || index < 0
+        ? String(current.value)
+        : (entry.setting.labels?.[index] ?? String(current.value))
+    } catch {
+      return "error"
+    }
   }
   const options = createMemo(() =>
     entries().map((entry, index) => ({
@@ -463,7 +474,9 @@ export function DialogConfig(props: { current?: string; pluginSettings?: () => R
     if (saving()) return
     const entry = entries()[index]
     if (!entry) return
-    const current = value(entry)
+    const currentState = readValue(entry)
+    if (!currentState.ok) return
+    const current = currentState.value
     const choices = values(entry)
     const next = choices
       ? choices.length > 0
@@ -475,9 +488,13 @@ export function DialogConfig(props: { current?: string; pluginSettings?: () => R
     if (next === current) return
     setSaving(true)
     if (entry.kind === "plugin") {
-      await Promise.resolve(entry.setting.onChange(next))
-        .catch(toast.error)
-        .finally(() => setSaving(false))
+      try {
+        await entry.setting.onChange(next)
+      } catch (error) {
+        toast.error(error)
+      } finally {
+        setSaving(false)
+      }
       return
     }
     const setting = entry.setting

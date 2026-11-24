@@ -3007,7 +3007,6 @@ function Shell(props: ToolProps) {
   return (
     <ShellDisplay
       part={props.part}
-      tool={props.tool}
       input={props.input}
       metadata={props.metadata}
       shellID={stringValue(props.metadata.shellID)}
@@ -3033,7 +3032,6 @@ function stoppedShell(part: SessionMessageAssistantTool, metadata: Record<string
 
 function ShellDisplay(props: {
   part?: SessionMessageAssistantTool
-  tool?: string
   input?: Readonly<Record<string, unknown>>
   metadata?: Readonly<Record<string, unknown>>
   shellID?: string
@@ -3138,7 +3136,7 @@ function ShellDisplay(props: {
     if (!decorate) return undefined
     try {
       return decorate({
-        tool: props.tool ?? "shell",
+        tool: "shell",
         status: props.status,
         input: props.input ?? {},
         metadata: props.metadata ?? {},
