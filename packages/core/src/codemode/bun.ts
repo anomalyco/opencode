@@ -33,8 +33,8 @@ type Range = { readonly offset: number; readonly length: number }
 type Handle = { readonly name: string; readonly target: FileAccess.Target; readonly range?: Range }
 
 // A BunFile reaches a program as a copy and comes back as another, but its functions come back as themselves: its
-// `bytes` function says which file a value passed to `Bun.write` is.
-const handles = new WeakMap<Function, Handle>()
+// `bytes` function says which file a value passed to `Bun.write` or `fetch` is, and its type.
+const handles = new WeakMap<Function, Handle & { readonly type: string }>()
 
 // A run gets `Bun` only with the session's file services (see `CodeModeTool.create`).
 const service = <I, S>(key: Context.Key<I, S>) =>
@@ -88,7 +88,7 @@ const later =
 // The part of Bun's BunFile that is implemented.
 const file = (handle: Handle, type: string, size: number, lastModified: number) => {
   const bytes = later(() => read(handle))
-  handles.set(bytes, handle)
+  handles.set(bytes, { ...handle, type })
   const unlink = later(() => remove(handle))
   // As Blob.slice: a negative index counts from the end, and a string in any position is the new type.
   const index = (value: number | string | undefined, fallback: number) => {
@@ -258,10 +258,11 @@ const typeOf = (files: Environment.Files, absolute: string) =>
 const text = (bytes: Uint8Array) =>
   isUtf8(bytes) ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString() : undefined
 
-/** A BunFile given as a `fetch` body, read to the bytes it names. Any other value is left as it is. */
+/** A BunFile given as a `fetch` body, read to a Blob of its type, which Bun sends as the Content-Type. Any other value is left as it is. */
 export const body = <A>(value: A) => {
   const from = handleOf(value)
-  return from ? Effect.map(read(from), (bytes) => new Uint8Array(bytes)) : Effect.succeed(value)
+  if (!from) return Effect.succeed(value)
+  return Effect.map(read(from), (bytes) => new Blob([new Uint8Array(bytes)], { type: from.type }))
 }
 
 const handleOf = (value: unknown) => {

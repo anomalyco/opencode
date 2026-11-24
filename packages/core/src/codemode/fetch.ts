@@ -14,7 +14,7 @@ const TIMEOUT_MS = 30_000
 type Init = {
   readonly method?: string
   readonly headers?: Record<string, string> | Array<[string, string]>
-  readonly body?: string | Uint8Array<ArrayBuffer> | URLSearchParams
+  readonly body?: string | Uint8Array<ArrayBuffer> | URLSearchParams | Blob
 }
 
 const fetch = (input: string | URL, given: Init = {}) =>
@@ -26,7 +26,8 @@ const fetch = (input: string | URL, given: Init = {}) =>
       typeof init.body === "object" &&
       init.body !== null &&
       !(init.body instanceof Uint8Array) &&
-      !(init.body instanceof URLSearchParams)
+      !(init.body instanceof URLSearchParams) &&
+      !(init.body instanceof Blob)
     )
       return yield* Effect.fail(
         new TypeError("A fetch body must be a string, a Uint8Array, URLSearchParams, or a file from Bun.file()."),
