@@ -1092,7 +1092,7 @@ function LeadGlyph(props: { lead: "top" | "total" }) {
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <g fill="none" stroke="currentColor" stroke-width="1.5">
         <Show when={props.lead === "top"} fallback={<path d="M12 3.25H4.25L8.5 8l-4.25 4.75H12" />}>
-          <path d="M4.75 2.75h6.5v3a3.25 3.25 0 0 1-6.5 0zM4.75 4H2.75v.75a2.25 2.25 0 0 0 2.25 2.25M11.25 4h2v.75A2.25 2.25 0 0 1 11 7M8 9v3.25M5.25 13.25h5.5" />
+          <path d="M4.75 2.75h6.5v3a3.25 3.25 0 0 1-6.5 0zM4.75 4H2.75v.75a2.25 2.25 0 0 0 2.25 2.25M11.25 4h2v.75A2.25 2.25 0 0 1 11 7M8 9v4.25M5.25 13.25h5.5" />
         </Show>
       </g>
     </svg>
