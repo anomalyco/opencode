@@ -10,6 +10,7 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
@@ -67,6 +68,23 @@ describe("Session.list", () => {
       const error = yield* session.list({ cursor: Schema.decodeSync(Session.ListCursor)("invalid") }).pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(Session.InvalidListCursorError)
+    }),
+  )
+
+  it.effect("uses the root updated index for the default all-projects list query", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const plan = yield* db.all<{ detail: string }>(sql`
+        EXPLAIN QUERY PLAN
+        SELECT * FROM session_v2
+        WHERE parent_id IS NULL AND time_archived IS NULL
+        ORDER BY time_updated DESC, id DESC
+        LIMIT 50
+      `)
+      const details = plan.map((row) => row.detail)
+
+      expect(details.some((detail) => detail.includes("session_v2_root_updated_idx"))).toBe(true)
+      expect(details.some((detail) => detail.includes("USE TEMP B-TREE FOR ORDER BY"))).toBe(false)
     }),
   )
 })

@@ -80,6 +80,12 @@ export const SessionTable = sqliteTable(
     index("session_v2_root_project_path_updated_idx")
       .on(table.project_id, table.path, desc(table.time_updated), desc(table.id))
       .where(sql`${table.parent_id} is null and ${table.time_archived} is null`),
+    // Leading parent_id keeps the default `parent_id IS NULL` list query a seek
+    // instead of a full index scan; SQLite ignores the ordering-only index when
+    // the NULL predicate sits in the partial WHERE clause.
+    index("session_v2_root_updated_idx")
+      .on(table.parent_id, desc(table.time_updated), desc(table.id))
+      .where(sql`${table.time_archived} is null`),
     index("session_v2_time_suspended_idx")
       .on(table.time_suspended)
       .where(sql`${table.time_suspended} is not null`),

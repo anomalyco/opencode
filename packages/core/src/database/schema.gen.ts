@@ -357,6 +357,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         `CREATE INDEX \`session_v2_root_project_path_updated_idx\` ON \`session_v2\` (\`project_id\`,\`path\`,"time_updated" desc,"id" desc) WHERE "session_v2"."parent_id" is null and "session_v2"."time_archived" is null;`,
       )
       yield* tx.run(
+        `CREATE INDEX \`session_v2_root_updated_idx\` ON \`session_v2\` (\`parent_id\`,"time_updated" desc,"id" desc) WHERE "session_v2"."time_archived" is null;`,
+      )
+      yield* tx.run(
         `CREATE INDEX \`session_v2_time_suspended_idx\` ON \`session_v2\` (\`time_suspended\`) WHERE "session_v2"."time_suspended" is not null;`,
       )
     })
