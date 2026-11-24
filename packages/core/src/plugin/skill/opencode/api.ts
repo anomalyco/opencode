@@ -10,15 +10,14 @@ import file5 from "./api/form.md" with { type: "text" }
 import file6 from "./api/generate.md" with { type: "text" }
 import file7 from "./api/info.md" with { type: "text" }
 import file8 from "./api/location.md" with { type: "text" }
-import file9 from "./api/media.md" with { type: "text" }
-import file10 from "./api/model.md" with { type: "text" }
-import file11 from "./api/permission.md" with { type: "text" }
-import file12 from "./api/project.md" with { type: "text" }
-import file13 from "./api/provider.md" with { type: "text" }
-import file14 from "./api/session.md" with { type: "text" }
-import file15 from "./api/skill.md" with { type: "text" }
-import file16 from "./api/vcs.md" with { type: "text" }
-import file17 from "./api/worktree.md" with { type: "text" }
+import file9 from "./api/model.md" with { type: "text" }
+import file10 from "./api/permission.md" with { type: "text" }
+import file11 from "./api/project.md" with { type: "text" }
+import file12 from "./api/provider.md" with { type: "text" }
+import file13 from "./api/session.md" with { type: "text" }
+import file14 from "./api/skill.md" with { type: "text" }
+import file15 from "./api/vcs.md" with { type: "text" }
+import file16 from "./api/worktree.md" with { type: "text" }
 
 export const files: Record<string, string> = {
   "api.md": file0,
@@ -30,13 +29,12 @@ export const files: Record<string, string> = {
   "api/generate.md": file6,
   "api/info.md": file7,
   "api/location.md": file8,
-  "api/media.md": file9,
-  "api/model.md": file10,
-  "api/permission.md": file11,
-  "api/project.md": file12,
-  "api/provider.md": file13,
-  "api/session.md": file14,
-  "api/skill.md": file15,
-  "api/vcs.md": file16,
-  "api/worktree.md": file17,
+  "api/model.md": file9,
+  "api/permission.md": file10,
+  "api/project.md": file11,
+  "api/provider.md": file12,
+  "api/session.md": file13,
+  "api/skill.md": file14,
+  "api/vcs.md": file15,
+  "api/worktree.md": file16,
 }

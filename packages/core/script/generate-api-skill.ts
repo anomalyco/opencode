@@ -94,10 +94,9 @@ const SHOWN = [
   "GET /api/skill",
   "GET /api/model*",
   "GET /api/provider*",
-  // Generation, and the stored blobs and media it returns.
+  // Generation, and the stored blobs it returns.
   "* /api/experimental/generate*",
   "GET /api/experimental/blob/*",
-  "GET /api/experimental/media/*",
 ]
 
 const INDEX_HEADER = [

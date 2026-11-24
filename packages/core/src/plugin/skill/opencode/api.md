@@ -50,10 +50,6 @@ Call any endpoint below from Code Mode with `fetch("opencode:///api/...")`. Each
 - GET /api/location: Get location
 - POST /api/location/reload: Reload configuration
 
-## api/media.md
-
-- GET /api/experimental/media/{hash} (experimental): Read media blob
-
 ## api/model.md
 
 - GET /api/model: List models
