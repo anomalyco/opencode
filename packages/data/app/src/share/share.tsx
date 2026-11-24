@@ -275,13 +275,15 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     // Stepping to another section keeps the editor open, its music and its options.
     if (dialog?.open) return
     opening = true
+    // Each opening plays from the start, even on the same card as last time.
+    clock.key = ""
     setMenu(undefined)
     setSheet(false)
     // The settings from last time, once they were changed; otherwise a card made at random that opens silent, with no
     // music until one is chosen (or Shuffle picks one).
     if (!restoreSettings()) {
-      setFormat("video")
       shuffle()
+      setFormat("video")
       setTrack("none")
       setMuted(false)
     }
@@ -342,7 +344,21 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     }
     const length = shareDuration(value, opts, timing()) + 0.6
     loop = { length, sound }
-    const key = [value.id, sound?.id ?? "none", format(), playing()].join(" ")
+    // Any change to the card, a Shuffle (even one that lands on the same card) or a new track starts the video over,
+    // from its blank card.
+    const key = [
+      value.id,
+      sound?.id ?? "none",
+      format(),
+      playing(),
+      opts.layout,
+      opts.size,
+      opts.theme,
+      lead(),
+      style(),
+      day() ?? "",
+      rolls(),
+    ].join(" ")
     if (clock.key !== key) clock = { key, start: performance.now(), loop: -1 }
     const frame = () => {
       const elapsed = (performance.now() - clock.start) / 1000
@@ -351,7 +367,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
         clock.loop = turn
         restartAudio(sound)
       }
-      drawShareCard(ctx, value, opts, elapsed - turn * length, timing())
+      // The pause between loops stays on the blank card the next one opens on, not the finished card.
+      const at = elapsed - turn * length
+      drawShareCard(ctx, value, opts, at > length - 0.6 ? 0 : at, timing())
       if (playhead) playhead.style.scale = `${Math.min(1, (elapsed - turn * length) / length)} 1`
       handle = requestAnimationFrame(frame)
     }
@@ -395,11 +413,13 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 
   const close = () => dialog?.close()
 
-  // A card made at random: any layout and style, a size for a feed or a story (not Wide), and a clean track. Muted
-  // stays muted: the track still changes, ready for unmuting.
-  // Playing from the start again, as each opening does.
+  // A card made at random: every setting but the date, which belongs to its section. Any type, layout and style, a
+  // size for a feed or a story (not Wide), and a clean track. Muted stays muted: the track still changes, ready for
+  // unmuting. Playing from the start again, as each opening does.
   const shuffle = () =>
     batch(() => {
+      setFormat(pick(["video", "image", "embed"] as const))
+      setFixed(pick([false, true] as const))
       setShareOption("layout", pick(layouts).value)
       setShareOption("size", pick(sizes.filter((item) => item.value !== "16:9")).value)
       setShareOption("theme", pick(["dark", "light", "leader"] as const))
@@ -658,6 +678,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 </div>
                 <Dropdown
                   id="type"
+                  roll={rolls()}
+                  rollDelay={0}
                   label="Type"
                   open={menu()}
                   onOpen={setMenu}
@@ -712,7 +734,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   <Dropdown
                     id="lead"
                     roll={rolls()}
-                    rollDelay={0}
+                    rollDelay={45}
                     label="Lead with"
                     open={menu()}
                     onOpen={setMenu}
@@ -729,7 +751,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     id="chart"
                     label="Chart"
                     roll={rolls()}
-                    rollDelay={45}
+                    rollDelay={90}
                     open={menu()}
                     onOpen={setMenu}
                     value={style()}
@@ -744,7 +766,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <Dropdown
                   id="layout"
                   roll={rolls()}
-                  rollDelay={90}
+                  rollDelay={135}
                   label="Layout"
                   open={menu()}
                   onOpen={setMenu}
@@ -797,6 +819,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <Show when={format() === "embed"}>
                   <Dropdown
                     id="data"
+                    roll={rolls()}
+                    rollDelay={315}
                     label="Data"
                     open={menu()}
                     onOpen={setMenu}
@@ -1438,7 +1462,8 @@ function AspectGlyph(props: { size: ShareOptions["size"] }) {
 // The chart's style: columns rising for bars, rows of different lengths for a race.
 function ChartGlyph(props: { style: "bars" | "race" | "list" | "dots" }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    // Snapped to whole pixels: these lines fall between them at 20px, and blur thinner than the other icons' lines.
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges">
       <Show when={props.style === "list"}>
         <path d="M2.5 3.5h11M2.5 6h8M2.5 9.5h11M2.5 12h3" fill="none" stroke="currentColor" stroke-width="1.5" />
       </Show>
