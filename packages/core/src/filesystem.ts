@@ -148,7 +148,23 @@ const baseLayer = Layer.effect(
       return { absolute, real, directory: location.directory }
     })
     return Service.of({
-      find: search.find,
+      find: Effect.fn("FileSystem.find")(function* (input) {
+        const entries = yield* search.find(input)
+        // Both search backends omit ignored files. Probe only exact relative paths, never fuzzy queries.
+        if (!input.query.includes("/") || path.isAbsolute(input.query)) return entries
+        const exact = input.query.replace(/\/$/, "")
+        if (entries.some((entry) => entry.path === exact || entry.path === `${exact}${path.sep}`)) return entries
+        const found = yield* resolve(RelativePath.make(exact)).pipe(
+          Effect.flatMap((target) => fs.stat(target.real)),
+          Effect.map((info) => {
+            const type = info.type === "File" ? "file" : info.type === "Directory" ? "directory" : undefined
+            if (!type || (input.type && input.type !== type)) return undefined
+            return Entry.make({ path: RelativePath.make(exact + (type === "directory" ? path.sep : "")), type })
+          }),
+          Effect.orElseSucceed(() => undefined),
+        )
+        return found ? [found, ...entries].slice(0, input.limit ?? 50) : entries
+      }),
       read: Effect.fn("FileSystem.read")(function* (input) {
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(

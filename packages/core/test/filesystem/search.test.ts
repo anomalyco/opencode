@@ -1,6 +1,6 @@
 import { describe, expect, spyOn } from "bun:test"
 import fuzzysort from "fuzzysort"
-import { mkdir } from "node:fs/promises"
+import { mkdir, symlink } from "node:fs/promises"
 import os from "os"
 import path from "path"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
@@ -169,6 +169,73 @@ describe("FileSystemSearch", () => {
         const search = yield* FileSystemSearch.Service
         const entries = yield* search.find({ query: "target" })
         expect(entries.every((entry) => !entry.path.startsWith("rust/target/"))).toBe(true)
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.live("finds an exact ignored path without adding ignored files to fuzzy results", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-fff-exact-")))).path
+      yield* Effect.promise(() => mkdir(path.join(directory, ".slim/deepwork"), { recursive: true }))
+      yield* Effect.promise(() => Bun.write(path.join(directory, ".gitignore"), ".slim/\n"))
+      yield* Effect.promise(() => Bun.write(path.join(directory, ".slim/deepwork/restant.md"), "notes"))
+      const outside = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-fff-outside-")))).path
+      yield* Effect.promise(() => Bun.write(path.join(outside, "secret.md"), "private"))
+      yield* Effect.promise(() => symlink(path.join(outside, "secret.md"), path.join(directory, ".slim/deepwork/outside.md")))
+      expect(Bun.spawnSync(["git", "init", "-q"], { cwd: directory }).exitCode).toBe(0)
+
+      const layer = AppNodeBuilder.build(FileSystem.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location({ directory: AbsolutePath.make(directory) }, {
+                vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) },
+              }),
+            ),
+          ),
+        ),
+        FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: true })),
+      ])
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystem.Service
+        const exact = yield* search.find({ query: ".slim/deepwork/restant.md", type: "file" })
+        expect(exact).toContainEqual({ path: RelativePath.make(".slim/deepwork/restant.md"), type: "file" })
+        expect(yield* search.find({ query: "restant", type: "file" })).toEqual([])
+        expect(yield* search.find({ query: "../outside.txt", type: "file" })).toEqual([])
+        expect(yield* search.find({ query: ".slim/deepwork/outside.md", type: "file" })).toEqual([])
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.live("finds an exact ignored path through the ripgrep backend", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-rg-exact-")))).path
+      yield* Effect.promise(() => mkdir(path.join(directory, ".slim/deepwork"), { recursive: true }))
+      yield* Effect.promise(() => Bun.write(path.join(directory, ".gitignore"), ".slim/\n"))
+      yield* Effect.promise(() => Bun.write(path.join(directory, ".slim/deepwork/restant.md"), "notes"))
+      expect(Bun.spawnSync(["git", "init", "-q"], { cwd: directory }).exitCode).toBe(0)
+
+      const layer = AppNodeBuilder.build(FileSystem.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location({ directory: AbsolutePath.make(directory) }, {
+                vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) },
+              }),
+            ),
+          ),
+        ),
+        FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: false })),
+      ])
+      yield* Effect.gen(function* () {
+        const filesystem = yield* FileSystem.Service
+        expect(yield* filesystem.find({ query: ".slim/deepwork/restant.md", type: "file" })).toContainEqual({
+          path: RelativePath.make(".slim/deepwork/restant.md"),
+          type: "file",
+        })
+        expect(yield* filesystem.find({ query: "restant", type: "file" })).toEqual([])
       }).pipe(Effect.provide(layer))
     }),
   )
