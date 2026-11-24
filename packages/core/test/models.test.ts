@@ -765,6 +765,37 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.effect("names a mode's tier after the tier when another model already has the mode's ID", () =>
+    Effect.gen(function* () {
+      const [acme] = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          acme: {
+            ...fixture.acme,
+            models: {
+              "acme-1": sourceModel("acme-1", {
+                capabilities: {
+                  tools: { supported: true },
+                  reasoning: { supported: false },
+                  service_tier: ["priority", "fast"],
+                },
+                experimental: { modes: { fast: { service_tier: "priority", body: { service_tier: "priority" } } } },
+              }),
+              // A separate model already holds "acme-1-fast", so the priority tier keeps its own name.
+              "acme-1-fast": sourceModel("acme-1-fast"),
+            },
+          },
+        }),
+        false,
+        true,
+      )
+      expect(acme?.models.map((item) => [item.id, item.settings?.serviceTier])).toEqual([
+        ["acme-1", undefined],
+        ["acme-1-priority", "priority"],
+        ["acme-1-fast", undefined],
+      ])
+    }),
+  )
+
   it.effect("skips non-chat models whose only opencode package serves another type", () =>
     Effect.gen(function* () {
       const api = (opencodeai: string) => ({

@@ -291,9 +291,14 @@ const normalize = Effect.fnUntraced(function* (
         { ...base, variants },
         ...tiers.flatMap((tier) => {
           const mode = modes.find(([key, options]) => (options.service_tier ?? key) === tier)
-          // A mode for the tier keeps its ID, so a saved session asks for the same tier. Otherwise "priority" is the
-          // tier people know as fast.
-          const name = mode?.[0] ?? (tier === "priority" && !tiers.includes("fast") ? "fast" : tier)
+          // A mode for the tier keeps its ID, so a saved session asks for the same tier, unless another model already
+          // has that ID. Otherwise "priority" is the tier people know as fast.
+          const name =
+            mode && !ids.has(Model.ID.make(`${source.model.id}-${mode[0]}`))
+              ? mode[0]
+              : tier === "priority" && !tiers.includes("fast")
+                ? "fast"
+                : tier
           const speedID = Model.ID.make(`${source.model.id}-${name}`)
           // A mode's ID stays with the tier it asks for, even when another tier has that name.
           if (ids.has(speedID) || (!mode && modes.some(([key]) => key === name))) return []
