@@ -119,51 +119,83 @@ test("jump to latest is reachable only while it is shown", async ({ page }) => {
 })
 
 // Focus that rests nowhere is not handed to a control the reader cannot see: that would scroll the timeline to it. A
-// reader far up in history who opens or closes Review keeps the row they read.
+// reader far up in history who opens or closes Review keeps the words they read where they are.
 for (const newTimeline of [false, true]) {
   test(`opening and closing Review leaves a reader of old history where they were (${newTimeline ? "New" : "current"} timeline)`, async ({
     page,
   }) => {
-    await setupTimeline(page, {
-      messages: [userMessage(), assistantMessage([textPart("prt_review_place_latest", "Latest response.")])],
-      settings: { newTimeline },
-      seedHistory: true,
-    })
+    // Short turns: no row wraps again when Review narrows the timeline, so only a scroll can move the words.
+    const turns = Array.from({ length: 30 }, (_, index) => {
+      const value = String(index).padStart(4, "0")
+      const user = `msg_0${value}_place_a_user`
+
+      return [
+        userMessage(undefined, { id: user, created: 1690000000000 + index * 10_000 }),
+        assistantMessage([{ id: `prt_0${value}_place_text`, type: "text", text: `Old reply ${index}.` }], {
+          id: `msg_0${value}_place_b_assistant`,
+          parentID: user,
+          created: 1690000001000 + index * 10_000,
+        }),
+      ]
+    }).flat()
+
+    await setupTimeline(page, { messages: turns, settings: { newTimeline } })
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
-    const read = page.getByText(/^Historical response 0\./)
     const panel = page.locator("#review-panel")
     const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
     const search = page.locator('[data-component="timeline-search-bar"] input')
-    const offset = () => scroller.evaluate((element) => element.scrollTop)
-    const top = async () => Math.round((await read.boundingBox())?.y ?? Number.NaN)
 
-    await expect(page.getByText("Latest response.", { exact: true })).toBeInViewport()
+    // How far down the screen the marked words are, read from the text itself. Their row may not be mounted.
+    const place = () =>
+      scroller.evaluate((element) => {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const at = node.textContent?.indexOf("Old reply 1.") ?? -1
+
+          if (at < 0) continue
+          const range = new Range()
+          range.setStart(node, at)
+          range.setEnd(node, at + "Old reply 1.".length)
+
+          return Math.round(range.getBoundingClientRect().top)
+        }
+      })
+
+    await expect(page.getByText("Old reply 29.", { exact: true })).toBeInViewport()
     await scroller.hover()
     await page.mouse.wheel(0, -100_000)
-    await expect.poll(offset).toBe(0)
-    await expect(read).toBeInViewport()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0)
+    await expect(page.getByText("Old reply 1.", { exact: true })).toBeInViewport()
 
     // The reader clicks in the timeline, searches it and closes Find. Focus then rests on the page, and the timeline
-    // is what had it last. The latest reply's Copy is still mounted, far below.
-    await read.click()
+    // is what had it last. Copy under the latest reply is still mounted, far below.
+    await page.getByText("Old reply 1.", { exact: true }).click()
     await expect(scroller).toBeFocused()
     await page.keyboard.press("ControlOrMeta+f")
     await expect(search).toBeFocused()
     await page.keyboard.press("Escape")
     await expect(search).toHaveCount(0)
-    const before = await top()
+    const before = await place()
+    expect(before).toEqual(expect.any(Number))
+
+    const words = async () => {
+      const now = await place()
+
+      if (now === undefined) return "gone"
+
+      return Math.abs(now - Number(before)) <= 2 ? "in place" : `moved ${now - Number(before)} px`
+    }
 
     await toggle.click()
-    await expect(toggle).toHaveAttribute("aria-expanded", "true")
     await expect(panel.getByRole("button", { name: /^Review/ })).toBeVisible()
-    await expect.poll(offset).toBe(0)
-    await expect.poll(top).toBe(before)
+    await expect.poll(words).toBe("in place")
 
-    await toggle.click()
+    // While Review is open its toggle is in the panel; the header's hands over to it as the panel finishes opening.
+    await panel.getByRole("button", { name: "Toggle review", exact: true }).click()
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     await expect(panel).toHaveAttribute("aria-hidden", "true")
-    await expect.poll(offset).toBe(0)
-    await expect.poll(top).toBe(before)
+    await expect.poll(words).toBe("in place")
   })
 }
 
