@@ -24,8 +24,17 @@ export type FollowState =
   | { readonly type: "following"; readonly gesture?: FollowGesture }
   /** Follows, with a scroll to the end queued for the next frame. */
   | { readonly type: "returning"; readonly attempt: number; readonly gesture?: FollowGesture }
-  /** Stays where the reader is. `endPending`: a scroll landed within the zoom slack of the end and may have reached it. */
-  | { readonly type: "detached"; readonly gesture?: FollowGesture; readonly endPending: boolean }
+  /**
+   * Stays where the reader is. `endPending`: a scroll landed within the zoom slack of the end and may have reached it.
+   * `by`: what put the view here, while that decides how it returns to the end. `"navigation"`: navigation or a
+   * selection did, and the reader has not scrolled on since.
+   */
+  | {
+      readonly type: "detached"
+      readonly gesture?: FollowGesture
+      readonly endPending: boolean
+      readonly by?: "navigation"
+    }
   /** Holds a revealed tool call in place. */
   | { readonly type: "anchored"; readonly anchor: FollowAnchor }
 
@@ -101,12 +110,17 @@ export function transitionFollow(state: FollowState, event: FollowEvent): Follow
 
   if (state.type === "anchored") return releaseAnchor(state, event)
 
-  if (event.type === "detach") return state.type === "detached" ? state : detached(state.gesture, false)
+  if (event.type === "detach")
+    return state.type === "detached" && state.by === "navigation" ? state : detached(state.gesture, false, "navigation")
 
   if (event.type === "release") return withGesture(state, contact(state.gesture))
 
-  if (event.type === "scroll.intent")
-    return event.upward && event.overflow && state.type !== "detached" ? detached(state.gesture, false) : state
+  if (event.type === "scroll.intent") {
+    if (state.type !== "detached") return event.upward && event.overflow ? detached(state.gesture, false) : state
+
+    // The reader scrolls on from where navigation sent the view.
+    return state.by ? detached(state.gesture, state.endPending) : state
+  }
 
   if (event.type === "pointer.down") return touchHeld(state.gesture) ? state : withGesture(state, "pointer")
 
@@ -210,7 +224,11 @@ function releaseAnchor(state: FollowState, event: FollowEvent): FollowState {
 // was already there. Merely resting near the end is not enough, otherwise a later scroll would overwrite an upward
 // intent expressed a pixel short of the bottom.
 function scrolled(state: Unanchored, event: Extract<FollowEvent, { type: "scroll" }>): FollowState {
-  const arrived = event.scrollTop > event.previousTop + END_EPSILON || event.maxScroll < event.previousMaxScroll
+  // A scroll range that shrinks to where the view is lowers the offset by itself: the browser clamps it to the new
+  // end. A view that navigation sent somewhere has not arrived at the end that way. Its target is where it stays.
+  const shrank = event.maxScroll < event.previousMaxScroll && !(state.type === "detached" && state.by === "navigation")
+  const movedDown = event.scrollTop > event.previousTop + END_EPSILON
+  const arrived = movedDown || shrank
   const movedUp = event.scrollTop < event.previousTop - END_EPSILON
 
   const atEnd =
@@ -231,7 +249,10 @@ function scrolled(state: Unanchored, event: Extract<FollowEvent, { type: "scroll
         ? false
         : state.endPending
 
-  return endPending === state.endPending ? state : detached(state.gesture, endPending)
+  // A view that moves under a held pointer or touch is the reader scrolling on from where navigation sent it.
+  const by = state.gesture && (movedUp || movedDown) ? undefined : state.by
+
+  return endPending === state.endPending && by === state.by ? state : detached(state.gesture, endPending, by)
 }
 
 function settled(state: Unanchored, atReachableEnd: boolean): FollowState {
@@ -240,14 +261,16 @@ function settled(state: Unanchored, atReachableEnd: boolean): FollowState {
 
   if (state.type !== "detached" || !state.endPending) return withGesture(state, gesture)
 
-  return atReachableEnd ? following(gesture) : detached(gesture, false)
+  return atReachableEnd ? following(gesture) : detached(gesture, false, state.by)
 }
 
 function following(gesture: FollowGesture | undefined): FollowState {
   return gesture ? { type: "following", gesture } : FOLLOWING
 }
 
-function detached(gesture: FollowGesture | undefined, endPending: boolean): FollowState {
+function detached(gesture: FollowGesture | undefined, endPending: boolean, by?: "navigation"): FollowState {
+  if (by) return { type: "detached", gesture, endPending, by }
+
   return gesture || endPending ? { type: "detached", gesture, endPending } : DETACHED
 }
 
@@ -256,7 +279,7 @@ function withGesture(state: Unanchored, gesture: FollowGesture | undefined): Fol
 
   if (state.type === "following") return following(gesture)
 
-  if (state.type === "detached") return detached(gesture, state.endPending)
+  if (state.type === "detached") return detached(gesture, state.endPending, state.by)
 
   return { ...state, gesture }
 }
