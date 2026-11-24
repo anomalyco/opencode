@@ -879,7 +879,7 @@ function drawStacked(
 }
 
 // A card about one day: that day alone, broken down, one bar per series, tallest first and Other last, each in its
-// colour with its value over it and its name under it. They rise one after another over the same dot grid; the
+// colour with its value over it. No names under the bars, which would truncate past reading; the legend names them. They rise one after another over the same dot grid; the
 // highlights and the equaliser work on them as on the whole range's bars.
 function drawDay(
   ctx: CanvasRenderingContext2D,
@@ -929,10 +929,6 @@ function drawDay(
     ctx.fillStyle = mix(colors.text, colors.muted, bar.series === focus.index ? 0 : Math.max(0.6, bar.muted))
     const value = item?.value ?? ""
     ctx.fillText(value, center - ctx.measureText(value).width / 2, y - 16)
-    ctx.font = `400 20px ${font}`
-    ctx.fillStyle = colors.faint
-    const name = truncate(ctx, item?.label ?? "", slot - 8)
-    ctx.fillText(name, center - ctx.measureText(name).width / 2, base + axisHeight - 6)
     ctx.restore()
   })
 }
