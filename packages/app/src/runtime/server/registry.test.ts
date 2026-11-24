@@ -142,7 +142,10 @@ test("used and last projects follow dynamic server scopes, and migration consume
   props.canonicalLocalServer = props.server
   expect(projects.last()).toBeUndefined()
   expect(projects.legacy()).toEqual(["/a"])
-  projects.migrate(["a", "b"])
+  projects.migrate([])
+  expect(projects.legacy()).toEqual(["/a"])
+  projects.migrate([{ directory: "/a", projectID: "a" }])
+  projects.use(["b"])
   projects.touch("a")
   projects.hide(["b"])
   expect(projects.legacy()).toBeUndefined()

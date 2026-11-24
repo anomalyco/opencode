@@ -319,12 +319,19 @@ function createServerController(
     )
   }
 
-  // Older builds kept opened directories locally; once the server's list loads they become used project IDs.
+  // Keep unmatched older directories until a later project list or event can resolve them.
   createEffect(() => {
     const legacy = projects.legacy()
 
     if (!legacy || !sync.project.ready()) return
-    untrack(() => projects.migrate(legacy.flatMap((directory) => forDirectory(directory)?.id ?? [])))
+
+    const resolved = legacy.flatMap((directory) => {
+      const project = forDirectory(directory)
+
+      return project ? [{ directory, projectID: project.id }] : []
+    })
+
+    untrack(() => projects.migrate(resolved))
   })
 
   // Resolving a directory registers its project on the server; the list then reloads to include it, and the

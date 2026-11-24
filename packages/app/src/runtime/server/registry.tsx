@@ -77,14 +77,19 @@ export function createServerProjects(input: {
     legacy() {
       return input.store.projects[input.scope()]?.map((project) => project.worktree)
     },
-    migrate(projectIDs: string[]) {
+    migrate(projects: { directory: string; projectID: string }[]) {
+      if (projects.length === 0) return
+
       const scope = input.scope()
+      const migrated = new Set(projects.map((project) => project.directory))
+      const pending = input.store.projects[scope]?.filter((project) => !migrated.has(project.worktree)) ?? []
+      const next = Object.fromEntries(Object.entries(input.store.projects).filter(([key]) => key !== scope))
+
+      if (pending.length > 0) next[scope] = pending
+
       batch(() => {
-        use(projectIDs)
-        input.setStore(
-          "projects",
-          reconcile(Object.fromEntries(Object.entries(input.store.projects).filter(([key]) => key !== scope))),
-        )
+        use(projects.map((project) => project.projectID))
+        input.setStore("projects", reconcile(next))
       })
     },
   }
