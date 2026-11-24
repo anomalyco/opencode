@@ -903,6 +903,7 @@
   /* The bar across the top: a line under it, its options in a row, Export at the far end. */
   /* When the editor is too narrow for one row, the bar wraps onto another and the stage gives up the room. */
   [data-slot="editor-bar"] {
+    container: share-bar / inline-size;
     position: relative;
     z-index: 2;
     display: flex;
@@ -1080,6 +1081,36 @@
 
     [data-slot="dropdown-value"] {
       display: block;
+    }
+  }
+
+  /* A narrower editor keeps the bar to one row: the date hugs its label, the music shows its cover alone, Export
+     takes less room; narrower still, the date is its calendar alone. (Phones have the sheet instead.) */
+  @media (min-width: 761px) {
+    @container share-bar (max-width: 1180px) {
+      [data-slot="editor-bar"] [data-slot="date-tool"] [data-slot="dropdown-trigger"] {
+        width: auto;
+      }
+
+      [data-slot="editor-bar"] [data-slot="music-tool"] [data-slot="dropdown-trigger"] {
+        width: auto;
+        padding-right: 6px;
+
+        :is([data-slot="dropdown-value"], [data-slot="explicit"]) {
+          display: none;
+        }
+      }
+
+      [data-slot="editor-bar"] [data-slot="bar-end"] [data-variant="primary"] {
+        min-width: 0;
+        padding-inline: 12px;
+      }
+    }
+
+    @container share-bar (max-width: 860px) {
+      [data-slot="editor-bar"] [data-slot="date-tool"] [data-slot="dropdown-trigger"] [data-slot="dropdown-value"] {
+        display: none;
+      }
     }
   }
 
