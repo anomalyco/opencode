@@ -80,8 +80,7 @@ const SHOWN = [
   "GET /api/session/{sessionID}/permission*",
   "GET /api/form",
   "GET /api/permission/request",
-  // Background work and scheduling.
-  "* /api/experimental/job*",
+  // Scheduling.
   "* /api/experimental/automation*",
   // Where the session is: location, projects, worktrees and version control.
   "* /api/location*",

@@ -9,17 +9,16 @@ import file4 from "./api/command.md" with { type: "text" }
 import file5 from "./api/form.md" with { type: "text" }
 import file6 from "./api/generate.md" with { type: "text" }
 import file7 from "./api/info.md" with { type: "text" }
-import file8 from "./api/job.md" with { type: "text" }
-import file9 from "./api/location.md" with { type: "text" }
-import file10 from "./api/media.md" with { type: "text" }
-import file11 from "./api/model.md" with { type: "text" }
-import file12 from "./api/permission.md" with { type: "text" }
-import file13 from "./api/project.md" with { type: "text" }
-import file14 from "./api/provider.md" with { type: "text" }
-import file15 from "./api/session.md" with { type: "text" }
-import file16 from "./api/skill.md" with { type: "text" }
-import file17 from "./api/vcs.md" with { type: "text" }
-import file18 from "./api/worktree.md" with { type: "text" }
+import file8 from "./api/location.md" with { type: "text" }
+import file9 from "./api/media.md" with { type: "text" }
+import file10 from "./api/model.md" with { type: "text" }
+import file11 from "./api/permission.md" with { type: "text" }
+import file12 from "./api/project.md" with { type: "text" }
+import file13 from "./api/provider.md" with { type: "text" }
+import file14 from "./api/session.md" with { type: "text" }
+import file15 from "./api/skill.md" with { type: "text" }
+import file16 from "./api/vcs.md" with { type: "text" }
+import file17 from "./api/worktree.md" with { type: "text" }
 
 export const files: Record<string, string> = {
   "api.md": file0,
@@ -30,15 +29,14 @@ export const files: Record<string, string> = {
   "api/form.md": file5,
   "api/generate.md": file6,
   "api/info.md": file7,
-  "api/job.md": file8,
-  "api/location.md": file9,
-  "api/media.md": file10,
-  "api/model.md": file11,
-  "api/permission.md": file12,
-  "api/project.md": file13,
-  "api/provider.md": file14,
-  "api/session.md": file15,
-  "api/skill.md": file16,
-  "api/vcs.md": file17,
-  "api/worktree.md": file18,
+  "api/location.md": file8,
+  "api/media.md": file9,
+  "api/model.md": file10,
+  "api/permission.md": file11,
+  "api/project.md": file12,
+  "api/provider.md": file13,
+  "api/session.md": file14,
+  "api/skill.md": file15,
+  "api/vcs.md": file16,
+  "api/worktree.md": file17,
 }

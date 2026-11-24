@@ -45,11 +45,6 @@ Call any endpoint below from Code Mode with `fetch("opencode:///api/...")`. Each
 
 - GET /api/info: Get server info
 
-## api/job.md
-
-- GET /api/experimental/job (experimental): List background jobs
-- POST /api/experimental/job/{id}/cancel (experimental): Cancel background job
-
 ## api/location.md
 
 - GET /api/location: Get location
