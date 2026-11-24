@@ -441,7 +441,7 @@ function drawBackground(
     columns.forEach((x, index) => {
       const on = rows - row < (lit[index] ?? 0)
       if (litOnly && !on) return
-      ctx.globalAlpha = on ? 0.35 : fade
+      ctx.globalAlpha = on ? 0.25 : fade
       ctx.fillStyle = on ? colors.meter : colors.dot
       ctx.fillRect(x, y, dot, dot)
     })
