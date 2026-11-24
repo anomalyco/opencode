@@ -2,8 +2,13 @@ name: triage-close-issues
 
 on:
   schedule:
-    - cron: "0 2 * * *" # Daily at 2:00 AM
+    - cron: "0 2 * * *" # Daily at 2:00 AM UTC
   workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Log matching issues without closing them"
+        type: boolean
+        default: true
 
 jobs:
   close:
@@ -18,7 +23,12 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Close stale issues
+      - name: Close stale needs-info issues
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: bun script/github/close-issues.ts
+        run: |
+          args=()
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs['dry-run'] }}" != "false" ]; then
+            args+=("--dry-run")
+          fi
+          bun script/github/close-issues.ts "${args[@]}"

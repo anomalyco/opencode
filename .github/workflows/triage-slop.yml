@@ -1,0 +1,48 @@
+name: triage-slop
+
+permissions:
+  contents: read
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+jobs:
+  close-slop:
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'slop' && github.repository == 'anomalyco/opencode'
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Comment, scrub, and close PR
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const pullNumber = context.payload.pull_request.number;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pullNumber,
+              body: [
+                'This pull request has been closed because it was flagged as low-quality AI slop.',
+                '',
+                'Common reasons include:',
+                '- Failing to verify the underlying problem exists',
+                '- Failing to test that the change actually fixes it',
+                '- Making unverified assumptions about the codebase or adding speculative/misleading changes',
+                '',
+                'If you believe this was closed in error, leave a comment explaining how you reproduced and verified the change.',
+              ].join('\n'),
+            });
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber,
+              title: 'ai slop',
+              body: 'This pull request was closed as AI slop and its title/description were cleared to avoid misleading reviewers. If you believe this was closed in error, leave a comment explaining why.',
+              state: 'closed',
+            });
