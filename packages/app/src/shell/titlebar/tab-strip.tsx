@@ -312,10 +312,16 @@ function SessionTabEntry(
     const value = session()
 
     if (!value) return
+    const data = props.serverCtx?.data
+
+    // Only a session that was opened stores its transcript. For a tab nobody looked at, the record says that the
+    // session ran, and the inbox that a prompt waits.
     tabs.rememberSessionInfo(
       props.tab,
       value,
-      props.serverCtx?.data.session.message.list(value.id).some((message) => message.type === "user") ?? false,
+      value.time.busy !== undefined ||
+        !!data?.session.pending.list(value.id).some((item) => item.type === "user") ||
+        !!data?.session.message.list(value.id).some((message) => message.type === "user"),
     )
     const current = sdk()
 

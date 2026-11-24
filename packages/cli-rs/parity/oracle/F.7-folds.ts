@@ -56,6 +56,20 @@ const allow: { case: string; field: string; deviation: string }[] = [
   // The loaded message already holds text and reasoning part 0, so the minimal start (ordinal 0) is a replay.
   { case: "session.text.started@loaded", field: "messages.ses_a", deviation: "O5-text-started-replay.md" },
   { case: "session.reasoning.started@loaded", field: "messages.ses_a", deviation: "O5-text-started-replay.md" },
+  // TypeScript stores a message only for a session whose transcript was asked for; the empty store asked for none.
+  ...[
+    "session.agent.selected",
+    "session.inbox.enqueued",
+    "session.execution.succeeded",
+    "session.execution.failed",
+    "session.execution.interrupted",
+    "session.instructions.updated",
+    "session.synthetic",
+    "session.shell.started",
+    "session.compaction.started",
+    "session.compaction.ended",
+    "session.compaction.failed",
+  ].map((type) => ({ case: `${type}@empty`, field: "messages.ses_a", deviation: "O89-unopened-transcript.md" })),
 ]
 
 const SESSIONS = ["ses_a", "ses_b"]

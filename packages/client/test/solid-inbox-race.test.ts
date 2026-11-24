@@ -51,8 +51,14 @@ test.each(["delivered", "cancelled"] as const)(
   "a delayed inbox snapshot cannot resurrect a %s prompt",
   async (action) => {
     const response = Promise.withResolvers<Response>()
-    const setup = fixture(() => response.promise)
+    const setup = fixture(async (request) =>
+      new URL(request.url).pathname.endsWith("/message")
+        ? Response.json({ data: [], cursor: {} })
+        : response.promise,
+    )
     try {
+      // The session is on screen, so its rows are stored.
+      await setup.data.session.message.sync(item.sessionID)
       setup.emit(enqueued)
       const reading = setup.data.session.pending.sync(item.sessionID)
       setup.emit({

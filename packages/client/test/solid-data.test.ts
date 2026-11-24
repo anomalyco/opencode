@@ -1630,6 +1630,8 @@ test.each([
   })
 
   try {
+    // The session is on screen, so its idle marker is stored.
+    await setup.data.session.message.sync("ses_refresh")
     if (type !== "session.execution.started") setup.data.session.setStatus("ses_refresh", "running")
     setup.emit({ type: "server.connected", data: {} })
     await requested.promise
@@ -1705,9 +1707,10 @@ test("ignores activity snapshots from an older connection", async () => {
   }
 })
 
-test("projects background user shell metadata from durable shell data", () => {
+test("projects background user shell metadata from durable shell data", async () => {
   const setup = activityFixture(() => Response.json({ data: {} }))
   try {
+    await setup.data.session.message.sync("ses_refresh")
     setup.emit({
       id: "evt_user_shell",
       created: 1,
@@ -1759,6 +1762,7 @@ function activityFixture(read: () => Response | Promise<Response>, sessions: Ses
       const request = input instanceof Request ? input : new Request(input, init)
       const path = new URL(request.url).pathname
       if (path === "/api/session/active") return read()
+      if (path.endsWith("/message")) return Response.json({ data: [], cursor: {} })
       const known = sessions.find((item) => path === `/api/session/${item.id}`)
       if (known) return Response.json({ data: known })
       if (path === "/api/project") return Response.json([])

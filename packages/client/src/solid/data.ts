@@ -55,7 +55,7 @@ import {
 } from "../promise"
 import { createStore, produce, reconcile } from "solid-js/store"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
-import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
 /**
@@ -203,6 +203,15 @@ const hasDroppedFileData = (message: SessionMessageInfo) =>
   message.content.some(
     (part) => part.type === "tool" && "content" in part.state && !!part.state.content?.some(isDroppedFile),
   )
+
+// A message that later events still change.
+const unsettled = (message: SessionMessageInfo) =>
+  message.type === "assistant"
+    ? !message.time.completed ||
+      message.content.some(
+        (part) => part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
+      )
+    : (message.type === "shell" || message.type === "compaction") && message.status === "running"
 
 // Returns the same message when there is nothing to drop, so the store keeps its objects.
 function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
@@ -383,6 +392,17 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
+  // Sessions whose transcript was asked for: a read of its messages ran or runs, or this client created the session
+  // or sent a prompt into it. Only these store the messages their events bring. Any other session holds at most the
+  // assistant message of the step that runs now, which a permission prompt in its root's view reads, and nothing once
+  // that step ends. Without this, every session the server streamed grew a transcript here that nothing read.
+  const opened = new Set<string>()
+  // Opened sessions into which no page has been read yet. Events built every message they hold from its start, with
+  // none missed, so a page that lands later is older than their copy of what both have.
+  const unread = new Set<string>()
+  // Sessions nobody opened whose running step was built before the event stream last broke. It may have missed events,
+  // so when such a session is opened, the page that is read is the newer copy.
+  const suspect = new Set<string>()
   const omitFiles = () =>
     typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
   const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
@@ -533,6 +553,18 @@ export function createData(config: CreateDataInput) {
     })
   }
 
+  // From here on the session stores every message. The inputs that wait in its inbox get their rows, as they do when
+  // their events arrive for a session that is open.
+  function open(sessionID: string) {
+    if (opened.has(sessionID)) return
+    opened.add(sessionID)
+    unread.add(sessionID)
+    batch(() => {
+      if (suspect.has(sessionID)) message.forget(sessionID)
+      store.session.pending[sessionID]?.forEach(materializeInboxMessage)
+    })
+  }
+
   function materializeInboxMessage(item: SessionInboxInfo) {
     if (item.type !== "user" && item.type !== "synthetic") return
     message.update(item.sessionID, (draft, index) => {
@@ -563,12 +595,47 @@ export function createData(config: CreateDataInput) {
   }
 
   const message = {
-    update(sessionID: string, fn: (messages: SessionMessageInfo[], index: Map<string, number>) => void) {
+    // `step` marks the event that starts a step: in a session nobody opened, only that one makes a list.
+    update(
+      sessionID: string,
+      fn: (messages: SessionMessageInfo[], index: Map<string, number>) => void,
+      step = false,
+    ) {
+      const whole = opened.has(sessionID)
+      if (!whole && !step && !store.session.message[sessionID]) return
+      // A list that this event makes holds a step from its start.
+      if (!whole && !store.session.message[sessionID]) suspect.delete(sessionID)
       setStore(
         "session",
         "message",
         produce((draft) => {
-          fn((draft[sessionID] ??= []), index(sessionID))
+          const messages = (draft[sessionID] ??= [])
+          fn(messages, index(sessionID))
+          if (whole) return
+          // The list holds the running step alone, and goes when that step ends.
+          const running = message.activeAssistant(messages)
+          if (running && messages.length === 1) return
+          messageIndex.delete(sessionID)
+          if (!running) {
+            delete draft[sessionID]
+            return
+          }
+          // The step that runs now is the one this event appended.
+          suspect.delete(sessionID)
+          draft[sessionID] = [running]
+          messageIndex.set(sessionID, new Map([[running.id, 0]]))
+        }),
+      )
+    },
+    forget(sessionID: string) {
+      messageIndex.delete(sessionID)
+      suspect.delete(sessionID)
+      if (!store.session.message[sessionID]) return
+      setStore(
+        "session",
+        "message",
+        produce((draft) => {
+          delete draft[sessionID]
         }),
       )
     },
@@ -630,6 +697,15 @@ export function createData(config: CreateDataInput) {
         if (item) index.set(item.id, position)
       }
     },
+  }
+
+  // The event stream broke, so events may be missing: no stored message is newer than a page any more. The step that
+  // a session nobody opened holds stays for its readers, and is not trusted over a page.
+  function missed() {
+    unread.clear()
+    untrack(() => Object.keys(store.session.message))
+      .filter((sessionID) => !opened.has(sessionID))
+      .forEach((sessionID) => suspect.add(sessionID))
   }
 
   function index(sessionID: string) {
@@ -704,6 +780,9 @@ export function createData(config: CreateDataInput) {
     const messages = store.session.message[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
     messageIndex.delete(sessionID)
     if (messages.length) messageIndex.set(sessionID, new Map(messages.map((item, index) => [item.id, index])))
+    // A submission on its way still has its row here, so its session stays open for its echo.
+    if (!messages.length) opened.delete(sessionID)
+    unread.delete(sessionID)
     setStore(
       "session",
       produce((draft) => {
@@ -752,6 +831,8 @@ export function createData(config: CreateDataInput) {
     removeJobTree(sessionID)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
+    opened.delete(sessionID)
+    unread.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.family:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -781,6 +862,7 @@ export function createData(config: CreateDataInput) {
   function handleEvent(event: OpenCodeEvent) {
     switch (event.type) {
       case "server.connected": {
+        missed()
         const updates = new Map<string, DataSessionStatus | undefined>()
         activeUpdates = updates
         refresh(() =>
@@ -859,7 +941,9 @@ export function createData(config: CreateDataInput) {
         // causing both requests to miss it and overwrite event-built state. Skip those racy initial reads until
         // hydration can load pending and projected messages atomically.
         sync.complete(`session.pending:${event.data.sessionID}`)
-        sync.complete(`session.message:${event.data.sessionID}`)
+        // Events are the whole transcript only where they are stored. A session nobody opened reads its newest page
+        // when it is opened.
+        if (opened.has(event.data.sessionID)) sync.complete(`session.message:${event.data.sessionID}`)
         return
       case "session.deleted":
         markDeleted(event.data.sessionID)
@@ -888,7 +972,7 @@ export function createData(config: CreateDataInput) {
         const previous = event.data.previous ?? store.session.info[event.data.sessionID]?.model
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "model", event.data.model)
-        if (!store.session.message[event.data.sessionID]) return
+        if (!store.session.message[event.data.sessionID] || !opened.has(event.data.sessionID)) return
         message.insert(event.data.sessionID, {
           id: SessionMessage.ID.fromEvent(event.id),
           type: "model-switched",
@@ -1108,7 +1192,7 @@ export function createData(config: CreateDataInput) {
             snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
             time: { created: event.data.started },
           })
-        })
+        }, true)
         return
       case "session.step.streamed":
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
@@ -1281,6 +1365,8 @@ export function createData(config: CreateDataInput) {
       case "session.execution.failed":
       case "session.execution.interrupted":
         setSessionActive(event.data.sessionID, "idle")
+        // The step that a session nobody opened holds ends with its run, whether or not the step said so.
+        if (!opened.has(event.data.sessionID)) message.forget(event.data.sessionID)
         message.update(event.data.sessionID, (draft) => {
           const currentAssistant = message.activeAssistant(draft)
           if (currentAssistant) currentAssistant.retry = undefined
@@ -1797,6 +1883,7 @@ export function createData(config: CreateDataInput) {
         if (fresh) {
           const now = Date.now()
           sessionOutbox.add(id)
+          open(id)
           result.session.remember({
             id,
             projectID: projectID ?? store.location[locationKey(location)]?.info?.project.id ?? "",
@@ -1837,6 +1924,7 @@ export function createData(config: CreateDataInput) {
         // A known pending control ID may be consumed while setup waits. Propose
         // a fresh ID and let the server coalesce, without duplicating its row.
         const id = SessionMessage.ID.create()
+        open(input.sessionID)
         if (!store.session.pending[input.sessionID]?.some((item) => item.type === "compaction")) {
           outbox.add(id)
           admitLocal({
@@ -1924,6 +2012,7 @@ export function createData(config: CreateDataInput) {
           }
           if (files) payload.files = files
           outbox.add(id)
+          open(request.sessionID)
           admitLocal({
             id,
             sessionID: request.sessionID,
@@ -2005,6 +2094,7 @@ export function createData(config: CreateDataInput) {
           )
         },
         sync(sessionID: string) {
+          open(sessionID)
           return sync.run(`session.message:${sessionID}`, async () => {
             const started = deletionEpoch
             const response = await api()
@@ -2024,10 +2114,22 @@ export function createData(config: CreateDataInput) {
                 item.type === "user" || item.type === "synthetic" ? [item.id] : [],
               ),
             )
-            const local = (store.session.message[sessionID] ?? []).filter(
-              (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
-            )
-            const messages = local.length === 0 ? fetched : [...fetched, ...local]
+            const held = store.session.message[sessionID] ?? []
+            const local = held.filter((item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)))
+            // On a first read, events built every other message here from its start: the step that ran when the
+            // session was opened, and what arrived since. The page was read at some moment in between. A message it
+            // has as still running stays as it is here, where its later events already landed, and the messages after
+            // the last one the page has are newer than the page, so they follow it. Messages before the page are
+            // left to its cursor.
+            const live = unread.has(sessionID)
+              ? held.filter((item) => !outbox.has(item.id) && !admitted.has(item.id))
+              : []
+            const followed = new Map(live.map((item) => [item.id, item]))
+            const messages = [
+              ...fetched.map((item) => (unsettled(item) ? (followed.get(item.id) ?? item) : item)),
+              ...live.slice(live.findLastIndex((item) => ids.has(item.id)) + 1),
+              ...local,
+            ]
             // The transcript only holds delivered input, so a pending row it contains missed its
             // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
             const delivered = [...admitted].filter((id) => ids.has(id))
@@ -2036,6 +2138,7 @@ export function createData(config: CreateDataInput) {
                 outbox.delete(id)
                 removePending(sessionID, id)
               })
+              unread.delete(sessionID)
               messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
               setStore("session", "message", sessionID, reconcile(messages))
               setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
@@ -2379,6 +2482,7 @@ export function createData(config: CreateDataInput) {
   createEffect(() => {
     if (config.connection?.status() === "connected") return
     sync.invalidate()
+    missed()
   })
 
   onCleanup(
