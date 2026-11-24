@@ -298,22 +298,37 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
               <div data-slot="inspector-scroll">
                 <div data-slot="rows">
                   <Row label="Type">
-                    <div data-slot="segmented" role="group" aria-label="Type">
-                      <For each={["video", "image"] as const}>
-                        {(item) => (
-                          <button
-                            type="button"
-                            aria-pressed={format() === item}
-                            onClick={() => {
-                              setFormat(item)
-                              setPlaying(true)
-                            }}
-                          >
-                            {item === "image" ? "Image" : "Video"}
-                          </button>
-                        )}
-                      </For>
-                    </div>
+                    <For each={["video", "image"] as const}>
+                      {(item) => (
+                        <button
+                          type="button"
+                          data-slot="chip"
+                          data-variant="wide"
+                          aria-pressed={format() === item}
+                          onClick={() => {
+                            setFormat(item)
+                            setPlaying(true)
+                          }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                            <Show
+                              when={item === "video"}
+                              fallback={
+                                <path
+                                  d="M2.75 3.25h10.5v9.5H2.75zM2.75 10.5l3.25-3 2.5 2.25 1.75-1.5 3 2.75"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  stroke-width="1.5"
+                                />
+                              }
+                            >
+                              <path d="M5 3.5v9l7-4.5-7-4.5Z" fill="currentColor" />
+                            </Show>
+                          </svg>
+                          <span>{item === "image" ? "Image" : "Video"}</span>
+                        </button>
+                      )}
+                    </For>
                   </Row>
                   <Row label="Layout">
                     <For each={layouts}>
@@ -371,29 +386,29 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                       )}
                     </For>
                   </Row>
+                  <Show when={format() === "video"}>
+                    <Row label="Music" variant="list">
+                      <div data-slot="track-list" role="radiogroup" aria-label="Music">
+                        <TrackOption
+                          name="No music"
+                          selected={track() === "none"}
+                          onSelect={() => chooseTrack("none")}
+                        />
+                        <For each={shareTracks}>
+                          {(item) => (
+                            <TrackOption
+                              name={item.name}
+                              explicit={item.explicit}
+                              selected={track() === item.id}
+                              playing={playing()}
+                              onSelect={() => chooseTrack(item.id)}
+                            />
+                          )}
+                        </For>
+                      </div>
+                    </Row>
+                  </Show>
                 </div>
-
-                <Show when={format() === "video"}>
-                  <section data-slot="group">
-                    <div data-slot="group-title">
-                      <h3>Music</h3>
-                    </div>
-                    <div data-slot="track-list" role="radiogroup" aria-label="Music">
-                      <TrackOption name="No music" selected={track() === "none"} onSelect={() => chooseTrack("none")} />
-                      <For each={shareTracks}>
-                        {(item) => (
-                          <TrackOption
-                            name={item.name}
-                            explicit={item.explicit}
-                            selected={track() === item.id}
-                            playing={playing()}
-                            onSelect={() => chooseTrack(item.id)}
-                          />
-                        )}
-                      </For>
-                    </div>
-                  </section>
-                </Show>
               </div>
               <div data-slot="inspector-footer">
                 <button
@@ -415,9 +430,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 }
 
 // One option row: its label on the left, its choices inline on the right.
-function Row(props: { label: string; children: JSX.Element }) {
+function Row(props: { label: string; variant?: "list"; children: JSX.Element }) {
   return (
-    <div data-slot="row" role="group" aria-label={props.label}>
+    <div data-slot="row" data-variant={props.variant} role="group" aria-label={props.label}>
       <span data-slot="row-label">{props.label}</span>
       <div data-slot="row-options">{props.children}</div>
     </div>
@@ -470,13 +485,13 @@ function TrackOption(props: {
         </Show>
       </i>
       <span>
-        <strong>
-          {props.name}
-          <Show when={props.explicit}>
-            <em title="Explicit lyrics">E</em>
-          </Show>
-        </strong>
+        <strong>{props.name}</strong>
       </span>
+      <Show when={props.explicit}>
+        <em data-slot="explicit" title="Explicit lyrics">
+          Explicit
+        </em>
+      </Show>
     </button>
   )
 }
