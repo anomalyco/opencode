@@ -317,6 +317,7 @@ function SessionScreenContent(props: {
             follow={timeline.follow}
             onUserScroll={timeline.view.markUserScroll}
             onHistoryScroll={timeline.view.onHistoryScroll}
+            onHistoryIntent={timeline.view.onHistoryIntent}
             centered={screen.centered()}
             reserveReviewToggle={!sideVisible()}
             reviewToggle={

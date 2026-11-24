@@ -80,8 +80,9 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   let historyProbe: (() => void) | undefined
   let historyLoad: { controller: AbortController; timer: ReturnType<typeof setTimeout> } | undefined
   let historyCooldown: ReturnType<typeof setTimeout> | undefined
-  // The offset at the last scroll: a lower one now is the reader moving toward the top.
-  let historyTop = 0
+  // The offset at the last scroll: a lower one now is the reader moving toward the top. Not a number before the
+  // first scroll, so nothing compares as lower or as at the top.
+  let historyTop = Number.NaN
   // Changes only when an older page lands or the transcript is replaced, not while a reply streams.
   const oldestMessage = createMemo(() => timeline.messages()[0]?.id)
   const visibleUserMessages = timeline.visibleUserMessages
@@ -236,7 +237,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   const setScrollRef = (element: HTMLDivElement | undefined) => {
     scroller = element
     // Another timeline's offset says nothing about this one: its first scroll is not one toward the top.
-    historyTop = 0
+    historyTop = Number.NaN
     setState("refs", "scroller", element)
 
     if (!element) return
@@ -252,6 +253,16 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     if (untrack(follow.following) || !canRequestScrollPage(untrack(historyState))) return
 
     if (!scrollLoadsHistory(historyTop, previousTop, scroller.clientHeight)) return
+    dispatchHistory(SCROLL_TOP_EVENT)
+  }
+
+  // A reader at the top cannot scroll further, so upward input there stands for the scroll it cannot cause: a page
+  // that lands meanwhile is followed by the next, and a page that failed is asked for again. The offset is the one
+  // the last scroll reported, so input on every wheel event reads no layout.
+  const onHistoryIntent = () => {
+    if (!(historyTop < HISTORY_SCROLL_THRESHOLD)) return
+
+    if (untrack(follow.following) || !canRequestScrollPage(untrack(historyState))) return
     dispatchHistory(SCROLL_TOP_EVENT)
   }
 
@@ -325,7 +336,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       }
 
       historyLoad = load
-      timeline.history.loadMore(effect.sessionID, load.controller.signal).then(
+      timeline.history.loadMore(effect.sessionID, load.controller.signal, effect.messages).then(
         () =>
           settle({
             type: "page.loaded",
@@ -448,6 +459,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       anchor,
       markUserScroll,
       onHistoryScroll,
+      onHistoryIntent,
       scheduleScrollState,
       contentResized: () => {
         if (scroller) scheduleScrollState(scroller)

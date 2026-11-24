@@ -90,6 +90,7 @@ type MessageTimelineProps = {
   follow: TimelineFollow
   onUserScroll: (target?: EventTarget | null) => void
   onHistoryScroll: () => void
+  onHistoryIntent?: () => void
   centered: boolean
   reserveReviewToggle: boolean
   reviewToggle?: JSX.Element
@@ -229,6 +230,7 @@ function MessageTimelineView(
     onScheduleScrollState: props.onScheduleScrollState,
     onUserScroll: props.onUserScroll,
     onHistoryScroll: props.onHistoryScroll,
+    onHistoryIntent: props.onHistoryIntent,
     canRenderImmediately: (row, disclosure) => {
       if (
         Predicate.isTagged(row, "TurnGap") ||

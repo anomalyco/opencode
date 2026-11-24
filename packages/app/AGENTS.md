@@ -161,6 +161,12 @@ This section is the single source for what may move or restyle the session timel
   - Do not page until a distance is filled. Rows can be far shorter than the messages they hold (a run of tool calls is one row), and a row that is not measured yet counts 60 px, so that loop can load a whole session after one wheel notch.
   - A page that lands moves the scroll offset down the list. That scroll is not the reader's: only a lower offset counts as moving toward the top.
 - Keeper: "loads the next older page while the reader is two screens from the top, then waits for the reader" in `e2e/regression/timeline-history.spec.ts`.
+- A reader the pages do not keep up with gets larger ones. A page that lands and leaves the reader inside the runway, still moving or at the top, is followed by a page of twice the messages, up to 80 (`HISTORY_PAGE_MESSAGES_MAX` in `src/session/timeline/history-machine.ts`). One page of 20 messages for each round trip was the limit before: with pages of about 1,100 px, a reader on PageUp waited at the top on 4 to 5 of 20 pages when a page took 150 to 300 ms.
+  - A reader at the top cannot scroll further, so no scroll says they are still coming. Upward input there (a wheel, a key, PageUp from the composer) counts as that scroll: `onHistoryIntent` in `src/session/timeline/interaction.ts`. It also asks again for a page that failed.
+  - Each scroll that asks for a page starts at 20 messages again. Only a page that falls short makes the next one larger.
+  - 80 is the largest because of the frame the page lands in. A page of 80 messages costs about what a page of 20 costs at the same depth. A page of 160 costs 1.5 to 2 times as much, and is a hitch by itself.
+  - A view that fills, a search for a message and the leading-turn backfill keep pages of 20: they must not load more than they need.
+- Keepers: "pages grow for a reader the last one left at the top" and "upward input at the top asks for the page after the one that is loading" in `e2e/regression/timeline-history.spec.ts`.
 
 ## Localization
 
