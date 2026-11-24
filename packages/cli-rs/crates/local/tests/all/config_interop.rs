@@ -583,6 +583,9 @@ fn model_and_storage_files_match_typescript() {
         {"variant": {"providerID": "a", "modelID": "b"}, "value": "high"},
         {"variant": {"providerID": "c", "modelID": "d"}, "value": null},
         {"favorite": {"providerID": "c", "modelID": "d"}, "enabled": false},
+        {"speed": {"providerID": "a", "modelID": "b"}, "value": "fast"},
+        {"speed": {"providerID": "a", "modelID": "b"}, "value": null},
+        {"speed": {"providerID": "c", "modelID": "d"}, "value": "flex"},
         {},
     ]);
     let seed = "{\"x\":1,\"recent\":[{\"providerID\":\"z\",\"modelID\":\"y\",\"extra\":1},5],\"variant\":{\"\":\"a\"}}";
@@ -604,9 +607,12 @@ fn model_and_storage_files_match_typescript() {
         if let Some(m) = op.get("recent") {
             prefs.add_recent(&model(m)).unwrap();
         } else if let Some(m) = op.get("favorite") {
-            prefs.set_favorite(&model(m), op["enabled"].as_bool().unwrap()).unwrap();
+            let key = model(m).key();
+            prefs.set_favorite(&model(m), op["enabled"].as_bool().unwrap(), |item| item.key() == key).unwrap();
         } else if let Some(m) = op.get("variant") {
             prefs.save_variant(&model(m), op["value"].as_str()).unwrap();
+        } else if let Some(m) = op.get("speed") {
+            prefs.save_speed(&model(m), op["value"].as_str()).unwrap();
         }
     }
     assert_eq!(fs::read_to_string(&mixed_file).unwrap(), fs::read_to_string(&ts_file).unwrap());
@@ -620,6 +626,7 @@ fn model_and_storage_files_match_typescript() {
         Value::Object(loaded.variant.into_iter().map(|(k, v)| (k, Value::String(v))).collect()),
         last["variant"]
     );
+    assert_eq!(Value::Object(loaded.speed.into_iter().map(|(k, v)| (k, Value::String(v))).collect()), last["speed"]);
 
     // Storage: the same updates by TypeScript alone and alternating with Rust.
     let initial = json!({"pinned": [], "sort": "updated"});

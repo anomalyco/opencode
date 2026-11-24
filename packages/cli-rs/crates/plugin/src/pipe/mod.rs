@@ -1351,8 +1351,8 @@ impl Scripts {
     }
 
     /// Refuses `message`, of `size` bytes, which no queue holds: it is not sent, its sequence goes so the stream has no
-    /// gap, and a handler's call is answered with nothing, as one that asked for nothing. What settles the JS host's
-    /// work goes still ([`Scripts::settle`]).
+    /// gap (a ping's number is free again, as nothing waits on a question never asked), and a handler's call is answered
+    /// with nothing, as one that asked for nothing. What settles the JS host's work goes still ([`Scripts::settle`]).
     fn refuse(&self, message: &Down, size: usize) {
         log::warn!("a message of {size} bytes for the JS host has no room; it is not sent");
         count(|crossed| crossed.refused_sends += 1);
@@ -1376,6 +1376,17 @@ impl Scripts {
             let (id, key, activation) = (id.clone(), key.clone(), *activation);
             let failed = Down::Snapshot { id, activation, key, value: serde_json::Value::Null, error, parted: false };
             return self.settle(&failed, 0);
+        }
+        // A ping is only a question, and a full queue answers none: the JS host never saw it, so its number is free
+        // again and no skip takes the room a settlement needs. Its sender asks again, as a settle of a full queue does;
+        // without this, settles that retry pings while the JS host is behind fill the settlement reserve with skips and
+        // end the host (pipe-flakes: 2,288 refused pings filled it, and a deactivation's skip was denied).
+        if let Down::Ping { seq } = message {
+            self.waiting.borrow_mut().remove(seq);
+            if *seq == self.seq.get() {
+                self.seq.set(seq.saturating_sub(1));
+            }
+            return;
         }
         let seq = message.seq();
         if let Some(seq) = seq {
@@ -2813,6 +2824,25 @@ mod tests {
     thread_local! {
         /// The replies [`Scripts::split`] built, on this thread.
         pub(super) static SPLITS: Cell<usize> = const { Cell::new(0) };
+    }
+
+    #[test]
+    fn a_refused_ping_takes_no_number_and_leaves_no_skip() {
+        let mut config = Config::new("bun".into());
+        config.limits.inbox = 512;
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(config, &host);
+        let seq = scripts.next();
+        scripts.waiting.borrow_mut().insert(seq, Waiting::Ping);
+        scripts.refuse(&Down::Ping { seq }, 64);
+        assert!(!scripts.pinging(seq), "the refused ping still waits");
+        assert_eq!(scripts.next(), seq, "the refused ping took a number");
+        assert_eq!(scripts.overflow_bytes(), 0, "the refused ping left a skip");
+        // A settle's retries must never fill the reserve a settlement needs: with it at its bound, a refused ping asks
+        // for nothing there.
+        scripts.overflow.borrow_mut().1 = 2 * scripts.config.limits.inbox;
+        scripts.refuse(&Down::Ping { seq }, 64);
+        assert!(scripts.stopped.borrow().is_none(), "a refused ping ended the JS host");
     }
 
     #[test]

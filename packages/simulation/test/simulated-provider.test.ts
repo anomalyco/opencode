@@ -11,6 +11,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { Plugin } from "@opencode/core/plugin"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -260,7 +261,9 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             expect.objectContaining({ name: "lookup", description: "Look up a value" }),
           )
           expect(
-            (yield* registry.snapshot([{ action: "simulate_lookup", resource: "*", effect: "deny" }])).definitions,
+            (yield* registry.snapshot(
+              PermissionPolicy.fromRules([{ action: "simulate_lookup", resource: "*", effect: "deny" }]),
+            )).definitions,
           ).not.toContainEqual(expect.objectContaining({ name: "lookup" }))
           const secondaryToolSet = yield* Tool.Service.use((secondaryRegistry) => secondaryRegistry.snapshot()).pipe(
             Effect.provide(secondary),

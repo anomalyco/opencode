@@ -59,6 +59,33 @@ test("Tab moves between timeline controls without stopping on the timeline itsel
   await expect(scroller).not.toBeFocused()
 })
 
+test("a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled", async ({
+  page,
+}) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        shell("prt_focus_unmount_shell", "completed", lines(5)),
+        textPart("prt_focus_unmount_text", "Latest response."),
+      ]),
+    ],
+    settings: { shellToolPartsExpanded: false },
+    seedHistory: true,
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const trigger = page.getByRole("button", { name: "Used 1 Shell", exact: true })
+  await trigger.focus()
+  await expect(trigger).toBeFocused()
+  await scroller.hover()
+  await page.mouse.wheel(0, -100_000)
+  // The row left the mounted range, and its control went with it.
+  await expect(trigger).toHaveCount(0)
+  // The timeline keeps focus for the scroll keys. No control in another row takes it and scrolls the timeline to itself.
+  await expect(scroller).toBeFocused()
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0)
+})
+
 test("jump to latest is reachable only while it is shown", async ({ page }) => {
   await setupTimeline(page, {
     messages: [userMessage(), assistantMessage([textPart("prt_jump_latest_text", "Latest response.")])],

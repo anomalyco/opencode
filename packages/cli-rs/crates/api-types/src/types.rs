@@ -5347,6 +5347,19 @@ pub struct ModelVariant {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ModelSpeed {
+    pub base: String,
+    pub id: String,
+    pub faster: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ModelInfoExperimental {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<ModelSpeed>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelInfoTime {
     #[serde(serialize_with = "crate::ser::number")]
     pub released: f64,
@@ -5423,6 +5436,8 @@ pub struct ModelInfo {
     pub body: Option<IndexMap<String, serde_json::Value>>,
     pub capabilities: ModelCapabilities,
     pub variants: Vec<ModelVariant>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub experimental: Option<ModelInfoExperimental>,
     pub time: ModelInfoTime,
     pub cost: Vec<ModelCost>,
     pub status: ModelInfoStatus,
@@ -12606,11 +12621,11 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub console_watches: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recommended_api: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_speeds: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_codemode: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12620,7 +12635,11 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_overlay: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opencode_api: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite_fts: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_rows: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -13085,17 +13104,6 @@ impl crate::TaggedError for ProviderRequestError {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ForbiddenError {
-    #[serde(rename = "_tag")]
-    pub tag: String,
-    pub message: String,
-}
-
-impl crate::TaggedError for ForbiddenError {
-    const TAG: &'static str = "ForbiddenError";
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct VideoNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
@@ -13161,6 +13169,17 @@ pub struct McpServerNotFoundError {
 
 impl crate::TaggedError for McpServerNotFoundError {
     const TAG: &'static str = "McpServerNotFoundError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ForbiddenError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    pub message: String,
+}
+
+impl crate::TaggedError for ForbiddenError {
+    const TAG: &'static str = "ForbiddenError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]

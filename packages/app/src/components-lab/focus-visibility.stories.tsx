@@ -15,7 +15,6 @@ import "@opencode/session-ui/sources/panel"
 import "../../../gui-plugins/src/browser/bar.css"
 import treeFocusCss from "../../../gui-plugins/src/file/tree-focus.css?inline"
 
-import { File } from "@opencode/session-ui/file"
 import { SessionFilePanelV2 } from "@opencode/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar, SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
 import { Accordion } from "@opencode/ui/accordion"
@@ -23,7 +22,6 @@ import { StickyAccordionHeader } from "@opencode/ui/sticky-accordion-header"
 import { Button } from "@opencode/ui/button"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { Collapsible } from "@opencode/ui/collapsible"
-import { ErrorDetails } from "@opencode/ui/error-details"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { ProjectAvatar } from "@opencode/ui/project-avatar"
@@ -788,25 +786,6 @@ const surfaces: Surface[] = [
         source: "gui-plugins/src/file/pierre-tree.tsx, tree-focus.css",
         fix: "Use the shared inset ring on the keyboard-focused row, independently of the selected background.",
         render: () => <TreeFocusExample />,
-      },
-      {
-        name: "Review diff viewer: no visible keyboard focus",
-        failure: "Invisible",
-        target: '[data-component="file"]',
-        keys: "Open a changed file in Review and Tab from the diff toolbar to the code.",
-        sizing: "The file viewer sits inside a scrolling preview.",
-        source: "session-ui/src/components/file.tsx, file.css",
-        fix: "Keep keyboard access to the diff and paint the shared inset ring above the code, clear of the scrollport edge.",
-        render: () => (
-          <div class="w-[360px] max-w-full overflow-auto">
-            <File
-              mode="diff"
-              class="min-h-12"
-              before={{ name: "example.ts", contents: 'export const status = "draft"\n' }}
-              after={{ name: "example.ts", contents: 'export const status = "ready"\n' }}
-            />
-          </div>
-        ),
       },
       {
         name: "Git changes: file-tree toggle covers the start of the ring",
@@ -1821,20 +1800,6 @@ const surfaces: Surface[] = [
   {
     name: "Shared controls",
     cases: [
-      {
-        name: "Error details: thin focus outline",
-        failure: "Inconsistent",
-        target: "pre",
-        keys: "Tab into the selectable details on an error.",
-        sizing: "The details fill a scrollable area.",
-        source: "ui/src/components/error-details.css",
-        fix: "Use the same inset 2px ring as other scrollable regions.",
-        render: () => (
-          <ErrorDetails error="Could not load this file.">
-            <span />
-          </ErrorDetails>
-        ),
-      },
       ...(["palette-menu-row", "search-list-row"] as const).map(
         (row): Case => ({
           name: `${row === "palette-menu-row" ? "Palette" : "Search list"}: active option loses contrast in forced colours`,

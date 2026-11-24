@@ -1,6 +1,8 @@
 //! Scrollback is immutable, so its colors use palette slots that still track terminal palette changes. Mono mode uses
 //! only terminal defaults.
 
+use std::sync::Arc;
+
 use opencode_ui::theme::{
     Catalog, TerminalColors, Theme as UiTheme, ThemeMode, discover, generate_system, terminal_mode,
 };
@@ -88,7 +90,7 @@ pub struct RunTheme {
     pub splash: SplashTheme,
     pub block: BlockTheme,
     /// Code and Markdown highlighting, quantized like the entries; `None` in mono.
-    pub syntax: Option<SyntaxTheme>,
+    pub syntax: Option<Arc<SyntaxTheme>>,
     pub markdown: MarkdownColors,
 }
 
@@ -186,7 +188,7 @@ fn map(theme: &UiTheme, indexed: &[(u8, Color)], system: bool) -> RunTheme {
             categorical.push(color);
         }
     }
-    let mut syntax = opencode_ui::code::syntax_theme(theme);
+    let mut syntax = Arc::unwrap_or_clone(opencode_ui::code::syntax_theme(theme));
     let names: Vec<String> = syntax.names().map(str::to_owned).collect();
     for name in names {
         if let Some(mut style) = syntax.get(&name) {
@@ -250,7 +252,7 @@ fn map(theme: &UiTheme, indexed: &[(u8, Color)], system: bool) -> RunTheme {
             diff_added_line_number_bg: scrollback(theme.diff.line_number.background.added),
             diff_removed_line_number_bg: scrollback(theme.diff.line_number.background.removed),
         },
-        syntax: Some(syntax),
+        syntax: Some(Arc::new(syntax)),
         markdown: MarkdownColors {
             text: scrollback(markdown.text),
             heading: scrollback(markdown.heading),

@@ -723,6 +723,12 @@
   }
 }
 
+/* Tool output regions take focus so the keyboard can scroll them, and draw no ring. */
+[data-component="tool-output"]:focus-visible,
+[data-slot="bash-scroll"]:focus-visible {
+  outline: none;
+}
+
 [data-component="tool-output"] {
   white-space: pre;
   padding: 0;
@@ -2018,6 +2024,107 @@
     width: 342px;
     padding-bottom: 12px;
   }
+
+  [data-slot="user-message-quotes"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    white-space: normal;
+  }
+
+  [data-slot="user-message-text"] > [data-slot="user-message-quotes"]:not(:first-child),
+  [data-slot="user-message-fold"] > div > [data-slot="user-message-quotes"]:not(:first-child) {
+    margin-top: 8px;
+  }
+
+  [data-slot="user-message-quote-group"] {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  [data-slot="user-message-quote"] {
+    margin: 0;
+    padding-inline-start: 8px;
+    border-inline-start: 2px solid var(--v2-border-border-strong);
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="user-message-quote-text"],
+  [data-slot="user-message-quote-comment"] {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    unicode-bidi: plaintext;
+
+    /* Each paragraph reads in its own direction but lines up with the bubble, so an English quote in a Hebrew message
+       starts at the bar. */
+    &:dir(ltr) {
+      text-align: left;
+    }
+
+    &:dir(rtl) {
+      text-align: right;
+    }
+  }
+
+  [data-slot="user-message-quote-text"] {
+    &:not([data-open]) {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      overflow: hidden;
+    }
+
+    &[data-expandable] {
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    &[data-expandable]:hover,
+    &[data-expandable]:focus-visible {
+      color: var(--v2-text-text-base);
+    }
+  }
+
+  /* A source's icon leads the quote like a file's. It sits inline, so wrapped lines return to the bar. */
+  [data-slot="user-message-quote-icon"] {
+    display: inline-flex;
+    vertical-align: -2px;
+    margin-inline-end: 6px;
+    color: var(--v2-icon-icon-muted);
+
+    [data-slot="icon-svg"] {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  [data-slot="user-message-quote-reference"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+
+    [data-component="file-icon"],
+    [data-slot="icon-svg"] {
+      width: 14px;
+      height: 14px;
+      flex: none;
+    }
+  }
+
+  [data-slot="user-message-quote-reference-label"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot="user-message-quote-reference-detail"] {
+    flex: none;
+    color: var(--v2-text-text-faint);
+  }
 }
 
 /* Only delivery animates. A steer can render once before its admission marks it pending, and must not fade from the
@@ -2027,4 +2134,9 @@
   background: var(--v2-background-bg-layer-01);
   color: var(--v2-text-text-muted);
   transition: none;
+}
+
+:root body [data-component="user-message"][data-pending] [data-slot="user-message-quote"] {
+  border-color: var(--v2-border-border-base);
+  color: var(--v2-text-text-faint);
 }

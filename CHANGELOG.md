@@ -2,6 +2,63 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.4.1 — 2026-11-23
+
+### Highlights
+
+- **macOS 12 Session Fix**: OpenCode can save assistant messages again on the older SQLite version included with macOS 12. ([#65771](https://github.com/anomalyco/opencode/pull/65771))
+- **Config-Only Providers Show Their Models**: Providers you set up only in your config, such as Ollama, now show their models in `/models` without a `/connect` login. ([#65793](https://github.com/anomalyco/opencode/pull/65793))
+- **Unread `/btw` Answers**: When a side question finishes behind another side-panel tab, its tab shows an unread dot until you open it. ([#65821](https://github.com/anomalyco/opencode/pull/65821))
+
+### Core
+
+#### Improvements
+
+- With `experimental.model_speeds` enabled, model service tiers are exposed as remembered speeds instead of separate model-picker entries. ([#65749](https://github.com/anomalyco/opencode/pull/65749))
+
+#### Bug fixes
+
+- Fixed assistant messages failing to save on macOS 12 because its system SQLite does not support the JSON operator used in v2.4.0. ([#65771](https://github.com/anomalyco/opencode/pull/65771))
+- Fixed compaction retaining more recent history than `keep.tokens`, including when a single newest message already exceeds the allowance. ([#65768](https://github.com/anomalyco/opencode/pull/65768))
+- Fixed occasional extra cache cost in long goal sessions after a compaction. ([#65788](https://github.com/anomalyco/opencode/pull/65788))
+
+### TUI
+
+#### Improvements
+
+- With `experimental.model_speeds` enabled, `/speed` and `/fast` list the current model’s service tiers and relative prices. The `speed.list` and `speed.cycle` keybinds are available without default bindings. ([#65749](https://github.com/anomalyco/opencode/pull/65749))
+
+#### Bug fixes
+
+- Fixed `/models` hiding models from config-only providers such as Ollama when no `/connect` login exists. ([#65793](https://github.com/anomalyco/opencode/pull/65793))
+
+### Desktop
+
+#### Improvements
+
+- With `experimental.model_speeds` enabled, models with service tiers have a speed dropdown beside the variant selector; `/speed` cycles through the available speeds. ([#65749](https://github.com/anomalyco/opencode/pull/65749))
+- Layout choices in Settings now use consistent navigation-card previews and accent styling. ([#65757](https://github.com/anomalyco/opencode/pull/65757), [#65800](https://github.com/anomalyco/opencode/pull/65800))
+
+#### Bug fixes
+
+- Fixed `/btw` answers completed behind another side-panel tab providing no unread indication. The tab now shows a dot until viewed. ([#65821](https://github.com/anomalyco/opencode/pull/65821))
+- Fixed the timeline, Home list, file viewers and tool output adding invisible or oversized stops to keyboard Tab navigation. They remain focusable by clicking for keyboard scrolling. ([#65758](https://github.com/anomalyco/opencode/pull/65758), [#65785](https://github.com/anomalyco/opencode/pull/65785))
+- Fixed unwanted focus rings around clicked Settings pages, error details, What’s New and the terminal, and corrected the split button’s focus-ring corners. ([#65783](https://github.com/anomalyco/opencode/pull/65783), [#65785](https://github.com/anomalyco/opencode/pull/65785))
+- Fixed folder paths showing middle-truncation markers unnecessarily at fractional UI zoom levels. ([#65225](https://github.com/anomalyco/opencode/pull/65225))
+
+### SDK
+
+#### Bug fixes
+
+- An aborted shared event subscription now stops immediately even when the source has already completed or failed with buffered events remaining. Thanks @chirag127. ([#65441](https://github.com/anomalyco/opencode/pull/65441))
+
+### Extensions
+
+#### Improvements
+
+- Effect and Promise plugins can create, list and delete automations through `ctx.experimental.automation.{create,list,delete}`. ([#65747](https://github.com/anomalyco/opencode/pull/65747))
+- `@opencode/plugin` now supports `@opentui/core` and `@opentui/solid` from version 0.8.0, allowing plugins capped below OpenTUI 0.9 to install again. ([#65819](https://github.com/anomalyco/opencode/pull/65819))
+
 ## v2.4.0 — 2026-11-23
 
 ### Highlights
