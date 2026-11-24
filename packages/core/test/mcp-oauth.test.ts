@@ -338,6 +338,125 @@ describe("MCP OAuth", () => {
     issuer.stop(true)
   })
 
+  test("uses the bare published resource URL when the configured URL carries a query string", async () => {
+    const tokenRequests: URLSearchParams[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        const bare = `${url.origin}/mcp`
+        if (request.method === "POST" && url.pathname === "/mcp")
+          return new Response(null, {
+            status: 401,
+            headers: {
+              "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp"`,
+            },
+          })
+        if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
+          return Response.json({ resource: bare, authorization_servers: [url.origin] })
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/v1/authorize`,
+            token_endpoint: `${url.origin}/v1/token`,
+            response_types_supported: ["code"],
+          })
+        if (request.method === "GET" && url.pathname === "/v1/authorize") {
+          if (url.searchParams.get("client_id") !== "static-client" || url.searchParams.get("resource") !== bare)
+            return new Response("Bad Request", { status: 400 })
+          const redirect = new URL(url.searchParams.get("redirect_uri") ?? "")
+          redirect.searchParams.set("code", "accepted")
+          redirect.searchParams.set("state", url.searchParams.get("state") ?? "")
+          return new Response(null, { status: 302, headers: { location: redirect.href } })
+        }
+        if (request.method === "POST" && url.pathname === "/v1/token") {
+          const body = new URLSearchParams(await request.text())
+          if (body.get("resource") !== bare) return Response.json({ error: "invalid_target" }, { status: 400 })
+          tokenRequests.push(body)
+          return Response.json({
+            access_token: "access",
+            token_type: "Bearer",
+            refresh_token: "refresh",
+            expires_in: 3600,
+          })
+        }
+        return new Response(null, { status: 404 })
+      },
+    })
+
+    const bare = `${server.url.origin}/mcp`
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { authorization, url: authorizationUrl } = yield* start(`${bare}?oauth=initialize`, {
+            client_id: "static-client",
+          })
+          const response = yield* Effect.promise(() => fetch(authorizationUrl, { redirect: "manual" }))
+          const location = response.headers.get("location")
+          const callbackStatus = location ? (yield* Effect.promise(() => fetch(location))).status : undefined
+          const credential = location ? yield* authorization.callback : undefined
+          return { authorizationUrl, status: response.status, callbackStatus, credential }
+        }),
+      ),
+    ).finally(() => server.stop(true))
+
+    expect(result.authorizationUrl.searchParams.get("resource")).toBe(bare)
+    expect(result.status).toBe(302)
+    expect(result.callbackStatus).toBe(200)
+    expect(result.credential?.access).toBe("access")
+    expect(result.credential?.metadata?.discovery).toEqual({
+      authorizationServer: server.url.origin,
+      resource: bare,
+    })
+    expect(tokenRequests).toHaveLength(1)
+    expect(tokenRequests[0]?.get("resource")).toBe(bare)
+  })
+
+  test("strips the configured query string from resource when protected-resource metadata is absent", async () => {
+    const { server } = authorizationServer({})
+    const bare = `${server.url.origin}/mcp`
+
+    const { url: discovered } = await Effect.runPromise(
+      Effect.scoped(start(`${bare}?oauth=initialize`, { client_id: "client" })),
+    )
+    const { url: configured } = await Effect.runPromise(
+      Effect.scoped(
+        start(`${bare}?oauth=initialize`, {
+          client_id: "client",
+          auth_server_metadata_url: `${server.url.origin}/.well-known/oauth-authorization-server`,
+        }),
+      ),
+    ).finally(() => server.stop(true))
+
+    expect(discovered.searchParams.get("resource")).toBe(bare)
+    expect(configured.searchParams.get("resource")).toBe(bare)
+  })
+
+  test("preserves query parameters explicitly published in protected-resource metadata", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
+          return Response.json({ resource: `${url.origin}/mcp?tenant=acme`, authorization_servers: [url.origin] })
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+          })
+        return new Response(null, { status: 404 })
+      },
+    })
+
+    const { url } = await Effect.runPromise(
+      Effect.scoped(start(`${server.url.origin}/mcp?tenant=acme&oauth=initialize`, { client_id: "client" })),
+    ).finally(() => server.stop(true))
+
+    expect(url.searchParams.get("resource")).toBe(`${server.url.origin}/mcp?tenant=acme`)
+  })
+
   test("requests offline_access without forcing a consent prompt", async () => {
     const { server } = authorizationServer({ scopes_supported: ["read", "offline_access"] })
     const { url } = await Effect.runPromise(

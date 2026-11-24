@@ -11,7 +11,6 @@ import {
   OAuthErrorCode,
   parseErrorResponse,
   refreshAuthorization,
-  resourceUrlFromServerUrl,
   UnauthorizedError,
   type AuthProvider,
   type FetchLike,
@@ -120,7 +119,7 @@ const configuredDiscovery = async (input: {
   return {
     authorizationServerUrl: metadata.issuer,
     authorizationServerMetadata: metadata,
-    resourceMetadata: { resource: resourceUrlFromServerUrl(input.config.url).toString() },
+    resourceMetadata: { resource: selectResource(input.config, undefined).toString() },
   }
 }
 
@@ -193,18 +192,26 @@ const provider = (options: Options): OAuthClientProvider => {
 }
 
 // The SDK sends no RFC 8707 resource when the server publishes no resource metadata; some
-// authorization servers require one, so fall back to the configured URL.
+// authorization servers require one, so fall back to the configured URL without its query.
 const selectResource = (config: typeof ConfigMCP.Remote.Type, resource: string | undefined) => {
-  const identity = new URL(config.url)
-  identity.hash = ""
-  if (!resource) return identity
-  if (!checkResourceAllowed({ requestedResource: identity, configuredResource: resource }))
-    throw new Error(`Protected resource ${resource} does not cover ${identity}`)
+  const configured = new URL(config.url)
+  const fallback = new URL(configured.href)
+  fallback.hash = ""
+  fallback.search = ""
+  if (!resource) return fallback
+  if (!checkResourceAllowed({ requestedResource: fallback, configuredResource: resource }))
+    throw new Error(`Protected resource ${resource} does not cover ${fallback}`)
   const canonical = new URL(resource)
-  // The transport dials the configured URL with extra query parameters and some servers echo
-  // that back as the resource. Query is transport detail, not identity: the token stays bound
-  // to the configured URL so a later refresh names the same resource the login did.
-  if (canonical.origin === identity.origin && canonical.pathname === identity.pathname) return identity
+  // The transport dials remote servers with ?codemode=false and some servers echo that
+  // query back in protected-resource metadata. Strip only the transport-added parameter
+  // so login and refresh name the same server-published resource.
+  if (
+    canonical.origin === fallback.origin &&
+    canonical.pathname === fallback.pathname &&
+    !configured.searchParams.has("codemode") &&
+    canonical.searchParams.has("codemode")
+  )
+    canonical.searchParams.delete("codemode")
   return canonical
 }
 
