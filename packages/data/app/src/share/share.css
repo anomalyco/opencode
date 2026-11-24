@@ -421,7 +421,6 @@
     flex-direction: column;
     gap: 10px;
     padding: 16px 20px;
-    border-bottom: 1px solid var(--stats-line);
   }
 
   [data-slot="row"] {
@@ -444,22 +443,39 @@
     }
   }
 
-  /* The code to paste: the whole snippet in small mono type, selected on focus. */
+  /* The code to paste: the whole snippet, wrapped, as tall as it needs; a Copy button in its corner. */
   [data-slot="embed-code"] {
-    display: block;
-    width: 100%;
-    padding: 10px;
-    font: 11px/1.5 var(--font-mono, monospace);
-    color: var(--stats-text);
-    word-break: break-all;
-    resize: none;
+    position: relative;
+    padding: 10px 64px 10px 10px;
     background: var(--stats-layer-2);
     border: 1px solid var(--stats-line-strong);
-    border-radius: 0;
-    outline: none;
 
-    &:focus-visible {
-      border-color: var(--stats-accent);
+    code {
+      display: block;
+      font: 11px/1.5 var(--font-mono, monospace);
+      color: var(--stats-text);
+      white-space: pre-wrap;
+      word-break: break-all;
+      user-select: all;
+    }
+  }
+
+  [data-slot="embed-copy"] {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    min-width: 52px;
+    height: 24px;
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--stats-text);
+    background: var(--stats-bg);
+    border: 1px solid var(--stats-line-strong);
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        border-color: var(--stats-text);
+      }
     }
   }
 

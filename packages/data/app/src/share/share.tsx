@@ -104,6 +104,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   // An embed shows the latest data by default; a fixed one keeps today's numbers (share/embed.ts).
   const [fixed, setFixed] = createSignal(false)
   const [snippet, setSnippet] = createSignal("")
+  const [copied, setCopied] = createSignal(false)
   const [notice, setNotice] = createSignal<string>()
   const [rendering, setRendering] = createSignal<number>()
   const [ready, setReady] = createSignal(false)
@@ -522,15 +523,21 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                       </For>
                     </Row>
                     <Row label="Code" variant="list">
-                      <textarea
-                        data-slot="embed-code"
-                        readOnly
-                        rows={4}
-                        spellcheck={false}
-                        aria-label="Embed code"
-                        value={snippet()}
-                        onFocus={(event) => event.currentTarget.select()}
-                      />
+                      <div data-slot="embed-code">
+                        <code>{snippet()}</code>
+                        <button
+                          type="button"
+                          data-slot="embed-copy"
+                          onClick={() =>
+                            void navigator.clipboard.writeText(snippet()).then(() => {
+                              setCopied(true)
+                              setTimeout(() => setCopied(false), 1600)
+                            })
+                          }
+                        >
+                          {copied() ? "Copied" : "Copy"}
+                        </button>
+                      </div>
                     </Row>
                   </Show>
                 </div>
