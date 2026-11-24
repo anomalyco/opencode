@@ -20,6 +20,7 @@ import { ServerAuth } from "./auth"
 import { isAllowedCorsOrigin } from "./cors"
 import { machinesEnabled } from "./handlers/machine"
 import { authorizedRequest, unauthorizedResponse } from "./middleware/authorization"
+import { ProcessPriority } from "./process-priority"
 import { withoutParentSpan } from "./request-tracing"
 import { RequestSite } from "./request-site"
 import { createRoutes } from "./routes"
@@ -133,6 +134,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     // Likewise the one-time session search build, once a location has sqlite_fts on.
     yield* Effect.forkIn(Context.get(context, SessionSearchBuild.Service).run, applicationScope)
     yield* Ref.set(machinesFlag, yield* machinesEnabled.pipe(Effect.provide(context)))
+    if (options.priority) yield* ProcessPriority.apply.pipe(Effect.provide(context))
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
     const bus = Context.get(context, Bus.Service)
