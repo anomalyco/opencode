@@ -643,7 +643,7 @@ export const layer = (options?: Options) =>
         const pooled =
           config.pool === true &&
           config.protocol !== "legacy" &&
-          (config.type === "remote" || environment.hostsServer === true)
+          (config.type === "remote" || environment.local === true)
         const share = (input: McpConnection.Input) =>
           pool.connection({
             ...input,

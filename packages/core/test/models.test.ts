@@ -12,6 +12,7 @@ import { Model } from "@opencode/core/model"
 import { bodyDigest, ModelsDev } from "@opencode/core/models-dev"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
+import { SessionUsage } from "@opencode/core/session/usage"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
@@ -561,6 +562,7 @@ describe("ModelsDev Service", () => {
                       overrides: [
                         { when: { context: { gt: 272000 } }, price: 22.5 },
                         { when: flex, price: 7.5 },
+                        { when: { ...flex, context: { gt: 272000 } }, price: 11.25 },
                       ],
                     },
                   },
@@ -573,16 +575,52 @@ describe("ModelsDev Service", () => {
         true,
       )
       const price = Money.USDPerMillionTokens.make
-      const context = {
-        tier: { type: "context" as const, size: 272000 },
-        input: price(5),
-        output: price(22.5),
-        cache: { read: price(0.5), write: price(0) },
-      }
-      expect(acme?.models.find((item) => item.id === "acme-1-flex")?.cost).toEqual([
+      const cost = acme?.models.find((item) => item.id === "acme-1-flex")?.cost ?? []
+      // Above 272k tokens the tier's long-context prices apply, not the standard tier's.
+      expect(
+        SessionUsage.calculateCost(cost, { input: 300_000, output: 1_000, reasoning: 0, cache: { read: 0, write: 0 } }),
+      ).toBe(Money.USD.make(0.76125))
+      expect(cost).toEqual([
         { input: price(1.25), output: price(7.5), cache: { read: price(0.13), write: price(0) } },
-        context,
+        {
+          tier: { type: "context" as const, size: 272000 },
+          input: price(2.5),
+          output: price(11.25),
+          cache: { read: price(0.25), write: price(0) },
+        },
       ])
+    }),
+  )
+
+  it.effect("does not price a speed from its tier's prices when the text prices are not per token", () =>
+    Effect.gen(function* () {
+      const [acme] = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          acme: {
+            ...fixture.acme,
+            models: {
+              "acme-1": sourceModel("acme-1", {
+                capabilities: { tools: { supported: true }, reasoning: { supported: false }, service_tier: ["flex"] },
+                cost: {
+                  text: {
+                    input: {
+                      unit: "character",
+                      price: 2,
+                      overrides: [{ when: { service_tier: { equals: "flex" } }, price: 5 }],
+                    },
+                    output: { unit: "character", price: 10 },
+                  },
+                },
+              }),
+            },
+          },
+        }),
+        false,
+        true,
+      )
+      const model = (id: string) => acme?.models.find((item) => item.id === id)
+      expect(model("acme-1")?.cost).toEqual(zeroCost)
+      expect(model("acme-1-flex")?.cost).toEqual(zeroCost)
     }),
   )
 

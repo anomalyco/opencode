@@ -29,7 +29,7 @@
   "dependencies": {
     "acorn": "8.15.0",
     "effect": "catalog:",
-    "psychoscript": "0.2.1"
+    "psychoscript": "0.3.0"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

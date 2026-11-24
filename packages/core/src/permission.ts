@@ -94,6 +94,19 @@ export type Error = BlockedError | CorrectedError
 
 export { ignoresCase, pathActions } from "./permission/policy.js"
 
+/**
+ * What "Allow always" saves for a web URL: its site, so approving one page doesn't allow every URL. Rules match the URL
+ * as written, so the site is kept as written, with and without a path. The site ends where URL parsing ends it,
+ * including at `\`, which parsers treat as `/`. A URL with credentials or whitespace in its site
+ * (`https://opencode.ai@evil.com` goes to evil.com) saves only itself. Rules treat `*` and `?` as wildcards, so a site
+ * with either, such as `https://*`, gets no pattern, and neither does an unusual URL with either: no "Allow always".
+ */
+export function site(url: string) {
+  const origin = /^https?:\/\/[^/\\?#@\s*]+(?=[/\\?#]|$)/i.exec(url)?.[0]
+  if (origin) return [origin, `${origin}/*`]
+  return /[*?]/.test(url) ? [] : [url]
+}
+
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
   return PermissionPolicy.evaluate(PermissionPolicy.fromRules(...rulesets), action, resource)
 }

@@ -83,6 +83,17 @@ describe("weekly series", () => {
     ])
   })
 
+  test("colors past leaders that fell out of the past 7 days' top models", () => {
+    const past = buildStatsHomeData(days, [...weeks, metric("2026-W32", "model-c", 50_000_000_000_000, 9)], [], [])
+    expect(past.weekly.usage.find((point) => point.start === "2026-08-03")?.segments).toEqual([
+      { model: "model-b", value: 0 },
+      { model: "model-a", value: 0 },
+      { model: "model-c", value: 50 },
+      { model: "Other", value: 0 },
+    ])
+    expect(past.usage.Go["2M"].at(-1)?.segments.map((segment) => segment.model)).toEqual(["model-b", "model-a", "Other"])
+  })
+
   test("parses ISO week keys across year boundaries", () => {
     expect(
       ["2025-W01", "2026-W53", "2027-W01"].map((key) =>
