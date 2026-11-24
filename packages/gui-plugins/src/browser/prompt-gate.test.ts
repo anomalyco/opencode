@@ -26,7 +26,7 @@ const grant = [
 ]
 
 // SAFETY: `attachesUnopened` reads only these fields of a session, its server and that server's session data.
-const tab = (input: { running?: boolean; connected?: boolean; rules?: { action: string; resource: string; effect: string }[] }) =>
+const tab = (input: { running?: boolean; connected?: boolean; loaded?: boolean; rules?: { action: string; resource: string; effect: string }[] }) =>
   ({
     id: "ses_tab",
     location: { directory: "/repo" },
@@ -37,7 +37,7 @@ const tab = (input: { running?: boolean; connected?: boolean; rules?: { action: 
       data: {
         session: {
           status: (id: string) => (id === "ses_tab" && (input.running ?? true) ? "running" : "idle"),
-          get: (id: string) => (id === "ses_tab" ? { permissions: input.rules } : undefined),
+          get: (id: string) => (id === "ses_tab" && (input.loaded ?? true) ? { permissions: input.rules } : undefined),
         },
       },
     },
@@ -48,6 +48,7 @@ test.each([
   ["runs under rules that do not grant the browser", tab({ rules: [{ action: "browser", resource: "*", effect: "deny" }] }), true],
   ["is idle", tab({ running: false }), false],
   ["runs and already holds a pane's browser grant", tab({ rules: grant }), false],
+  ["runs before this window has loaded its details", tab({ loaded: false }), false],
   ["runs on a server that is not connected", tab({ connected: false }), false],
 ] as const)("a session in a tab nobody opened attaches only while it runs without a pane: it %s", (_label, ref, expected) => {
   expect(attachesUnopened(ref, true)).toBe(expected)

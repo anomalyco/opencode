@@ -16,14 +16,16 @@ export function attachable(session: SessionRef, online: boolean) {
  * screen attaches: one the server resumed, or that an automation, a finished job or a subagent woke, would run every
  * step without them until someone opened its tab. A session that holds the browser grant has a pane already, this
  * window's or another's, and keeps it: a window that only lists a tab must not take the pane from the one that shows
- * it.
+ * it. Details this window has not loaded say nothing about a grant, so the session waits for them.
  */
 export function attachesUnopened(session: SessionRef, online: boolean) {
   if (!attachable(session, online)) return false
   const data = session.server.data.session
+  const info = data.get(session.id)
 
   return (
+    info !== undefined &&
     data.status(session.id) === "running" &&
-    !data.get(session.id)?.permissions?.some((rule) => rule.action === "browser" && rule.resource === "*" && rule.effect === "allow")
+    !info.permissions?.some((rule) => rule.action === "browser" && rule.resource === "*" && rule.effect === "allow")
   )
 }
