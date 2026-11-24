@@ -29,7 +29,7 @@ import {
 import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared, withUntypedFrames } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
-import { addsTools, foldTools, toolsUpdate, withdrawnTools, type ToolUpdateEncoding } from "../tool-updates.js"
+import { addsTools, toolsUpdate, type ToolUpdateEncoding } from "../tool-updates.js"
 import * as Cache from "./utils/cache.js"
 import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -806,7 +806,6 @@ const lowerWrappedSystemUpdate = Effect.fnUntraced(function* (
 const lowerToolsUpdate = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   update: ToolChanges,
-  withdrawn: ReadonlyArray<string>,
   breakpoints: Cache.Breakpoints,
 ) {
   const text = message.content.length === 0 ? [] : (yield* lowerNativeSystemUpdate(message, breakpoints)).content
@@ -817,7 +816,7 @@ const lowerToolsUpdate = Effect.fnUntraced(function* (
         type: "tool_addition" as const,
         tool: { type: "tool_definition" as const, definition: lowerTool(breakpoints, tool) },
       })),
-      ...withdrawn.map((name) => ({
+      ...update.remove.map((name) => ({
         type: "tool_removal" as const,
         tool: { type: "tool_reference" as const, name },
       })),
@@ -839,17 +838,13 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   // user turn, the nearest spot where Anthropic accepts a native system message.
   const holdUpdates = supportsNativeSystemUpdates(request)
   const held: Array<LLMRequest["messages"][number]> = []
-  // The tools declared so far, so each tool update can name the flattened tools it takes away.
-  let declared = request.tools
   const releaseHeld = Effect.fnUntraced(function* () {
     const native = acceptsNativeSystemAfter(messages.findLast((message) => message.role !== "system"))
     for (const update of held.splice(0)) {
       const tools = toolsUpdate(update)
       if (tools !== undefined) {
         if (!native) return yield* invalid("Anthropic Messages tool updates must follow a user message or tool result")
-        const next = foldTools(declared, tools.add, tools.remove)
-        const lowered = yield* lowerToolsUpdate(update, tools, withdrawnTools(declared, next), breakpoints)
-        declared = next
+        const lowered = yield* lowerToolsUpdate(update, tools, breakpoints)
         if (lowered.content.length > 0) messages.push(lowered)
         continue
       }
@@ -1027,8 +1022,8 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
-  const flattened = ProviderShared.flattenToolRequest(updates.request)
-  const tools = flattened.tools.length === 0 ? undefined : flattened.tools.map((tool) => lowerTool(breakpoints, tool))
+  const definitions = ProviderShared.flattenTools(updates.request.tools)
+  const tools = definitions.length === 0 ? undefined : definitions.map((tool) => lowerTool(breakpoints, tool))
   // Anthropic rejects tool_choice when no tool is declared; "none" is only meaningful with tools present.
   const declared = tools !== undefined || addsTools(request)
   const toolChoice = !declared || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
@@ -1041,7 +1036,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
           text: part.text,
           cache_control: cacheControl(breakpoints, part.cache),
         }))
-  const messages = yield* lowerMessages(flattened.request, breakpoints)
+  const messages = yield* lowerMessages(updates.request, breakpoints)
   yield* Cache.warnDropped(breakpoints, "Anthropic Messages", ANTHROPIC_BREAKPOINT_CAP)
   // Read the markers from the finished body: a held system update goes out after the user turns that follow it.
   // A tool added mid-conversation carries its marker on the definition inside the block.

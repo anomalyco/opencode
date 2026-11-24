@@ -8,6 +8,7 @@ import { State } from "./state.js"
 import { Location } from "./location.js"
 import { freeze } from "immer"
 import { AISDKNative } from "./aisdk-native.js"
+import { lookupModel } from "./model-lookup.js"
 
 export const ID = Model.ID
 export type ID = typeof ID.Type
@@ -233,6 +234,14 @@ const layer = Layer.effect(
             byProvider.get(providerID)?.forEach((model, id, models) => {
               if (!model.cost.some((cost) => cost.input > 0)) models.delete(id)
             })
+        // A model's speeds ("gpt-5.5-fast") are offered only while the model is: whatever disabled or removed the
+        // model, such as a workspace's settings, did not name its speeds.
+        byProvider.forEach((models) =>
+          models.forEach((model, id) => {
+            const base = model.experimental?.speed?.base
+            if (base && model.enabled && !models.get(base)?.enabled) models.set(id, { ...model, enabled: false })
+          }),
+        )
         // Non-chat models (image, decision…) only show up when listed by type, so nothing that
         // picks or resolves a session model can reach them.
         const other = new Map<Model.Type, Info[]>()
@@ -285,7 +294,12 @@ const layer = Layer.effect(
       transform: (update) => prepare.pipe(Effect.andThen(state.transform(update))),
       reload,
       get: Effect.fn("Model.get")((providerID, modelID) =>
-        read().pipe(Effect.map((value) => value.byProvider.get(providerID)?.get(modelID))),
+        read().pipe(
+          Effect.map((value) => {
+            const models = value.byProvider.get(providerID)
+            return lookupModel(providerID, modelID, (id) => models?.get(id))
+          }),
+        ),
       ),
       all: Effect.fn("Model.all")(() => read().pipe(Effect.map((value) => value.all))),
       available: Effect.fn("Model.available")((types?: readonly Model.Type[]) =>
@@ -329,7 +343,6 @@ export const node = makeLocationNode({ service: Service, layer, deps: [Provider.
 const PREFERRED_FREE = [
   "big-pickle",
   "deepseek-v4.1-flash-free",
-  "glm-5.3-flash-free",
   "muse-spark-1.3-contributor-free",
 ]
 

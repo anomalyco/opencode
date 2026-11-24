@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.3.0",
+  "version": "2.4.1",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -50,6 +50,7 @@
     "./file-tree.css": "./src/styles/file-tree.css",
     "./icon": "./src/icons/icon/icon.tsx",
     "./icons/catalog": "./src/icons/catalog.ts",
+    "./icons/registry": "./src/icons/registry.ts",
     "./icon-button": "./src/actions/icon-button/icon-button.tsx",
     "./inline-input": "./src/forms/inline-input/inline-input.tsx",
     "./keybind": "./src/data-display/keybind/keybind.tsx",
@@ -114,6 +115,7 @@
     "test": "bun test src --only-failures",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts",
+    "generate:spinner": "bun run script/generate-spinner.ts",
     "generate:v2-oc2": "bun run script/build-oc2-v2-overrides.ts"
   },
   "devDependencies": {

@@ -1,8 +1,10 @@
+import { useRenderer } from "@opentui/solid"
 import { useClient } from "../context/client"
 import { useToast } from "../ui/toast"
 import { isMissingMedia } from "../util/media"
 import { restoredPromptInput, type ProjectedPrompt } from "./codec"
 import type { PromptInfo } from "./history"
+import { promptMentionsToCells } from "./mention"
 
 /**
  * Reads a sent prompt back for the composer, with its images as bytes. Reading before an undo or revert means a failed
@@ -14,6 +16,7 @@ import type { PromptInfo } from "./history"
 export function usePromptRestore() {
   const client = useClient()
   const toast = useToast()
+  const renderer = useRenderer()
   return async (input: ProjectedPrompt, options?: { allowMissing?: false }): Promise<PromptInfo> => {
     let missing = 0
     const prompt = await restoredPromptInput(input, (uri) =>
@@ -31,6 +34,6 @@ export function usePromptRestore() {
             : `${missing} images in this message are no longer stored, so they can't be restored`,
         variant: "warning",
       })
-    return { ...prompt, pasted: [] }
+    return { ...promptMentionsToCells(prompt, renderer.widthMethod), pasted: [] }
   }
 }

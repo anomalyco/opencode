@@ -1,0 +1,133 @@
+//! Plugin reads backed by the local host: locale, UTC offset and terminal text measurements.
+
+use opencode_plugin_abi as abi;
+use opentui::prelude::*;
+use unicode_segmentation::UnicodeSegmentation;
+
+/// The user's locale as a BCP 47 tag, from the first of `LC_ALL`, `LC_MESSAGES` and `LANG` that is set, as POSIX
+/// orders them; when that names none (unset, `C`, `POSIX`, empty), the user's default locale on Windows (win-locale), and
+/// elsewhere `None`.
+pub fn locale() -> Option<String> {
+    locale_of(|name| std::env::var(name).ok()).or_else(system_locale)
+}
+
+#[cfg(windows)]
+fn system_locale() -> Option<String> {
+    opencode_util::win::user_locale()
+}
+
+#[cfg(not(windows))]
+fn system_locale() -> Option<String> {
+    None
+}
+
+/// [`locale`] over the variables `var` gives.
+pub fn locale_of(var: impl Fn(&str) -> Option<String>) -> Option<String> {
+    let value = ["LC_ALL", "LC_MESSAGES", "LANG"].into_iter().filter_map(var).find(|value| !value.is_empty())?;
+    // `en_US.UTF-8@euro`: the language and the territory, without the codeset and the modifier.
+    let name = value.split(['.', '@']).next().unwrap_or_default();
+    if name.is_empty() || name == "C" || name == "POSIX" {
+        return None;
+    }
+    Some(name.replace('_', "-"))
+}
+
+/// The seconds local time is east of UTC at `at`, in milliseconds since the epoch, in the process's zone.
+pub fn utc_offset(at: i64) -> i32 {
+    opencode_util::time::Zone::Local.offset(at)
+}
+
+/// The cells `text` takes in a row as OpenTUI draws it in `app`, and its graphemes; a line break (`\n` or `\r\n`) takes
+/// no cell and is no grapheme.
+pub fn measure(app: &App, text: &str) -> abi::Measure {
+    let lines = text.split('\n').map(|line| line.strip_suffix('\r').unwrap_or(line));
+    let context = app.session().context();
+    let (mut cells, mut graphemes) = (0, 0);
+    for line in lines {
+        cells += context
+            .text_width(line, app.width_method())
+            .unwrap_or_else(|_| unicode_width::UnicodeWidthStr::width(line) as u32);
+        graphemes += line.graphemes(true).count() as u32;
+    }
+    abi::Measure { cells, graphemes }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_locale_is_the_first_variable_set() {
+        let vars = |pairs: &'static [(&'static str, &'static str)]| {
+            move |name: &str| pairs.iter().find(|(key, _)| *key == name).map(|(_, value)| (*value).to_owned())
+        };
+        assert_eq!(locale_of(vars(&[("LANG", "de_DE.UTF-8")])).as_deref(), Some("de-DE"));
+        assert_eq!(locale_of(vars(&[("LANG", "de_DE.UTF-8"), ("LC_ALL", "fr_FR@euro")])).as_deref(), Some("fr-FR"));
+        assert_eq!(locale_of(vars(&[("LANG", "en_US"), ("LC_MESSAGES", "sv_SE.UTF-8")])).as_deref(), Some("sv-SE"));
+        assert_eq!(locale_of(vars(&[("LC_ALL", ""), ("LANG", "ja_JP")])).as_deref(), Some("ja-JP"));
+        assert_eq!(locale_of(vars(&[("LANG", "C.UTF-8")])), None);
+        assert_eq!(locale_of(vars(&[("LANG", "POSIX")])), None);
+        assert_eq!(locale_of(vars(&[])), None);
+    }
+
+    // Runs with the variables `a_posix_locale_wins_over_the_windows_one` sets: what a plugin is told.
+    #[test]
+    fn the_locale_here() {
+        let Some(expected) = std::env::var("FACTS_LOCALE").ok() else { return };
+        assert_eq!(locale().unwrap_or_default(), expected);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_posix_locale_wins_over_the_windows_one() {
+        let user = opencode_util::win::user_locale().unwrap();
+        for (lang, expected) in [(None, user.as_str()), (Some("de_DE.UTF-8"), "de-DE")] {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command.args(["--exact", "facts::tests::the_locale_here", "--test-threads=1"]);
+            command.env_remove("LC_ALL").env_remove("LC_MESSAGES").env_remove("LANG").env("FACTS_LOCALE", expected);
+            if let Some(lang) = lang {
+                command.env("LANG", lang);
+            }
+            let output = command.output().unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(output.status.success() && stdout.contains("1 passed"), "{lang:?}:\n{stdout}");
+        }
+    }
+
+    // Runs in the zone `TZ` names, which `the_offset_follows_tz` sets with the offset it must read.
+    #[test]
+    fn the_offset_in_this_zone() {
+        let Some(expected) = std::env::var("FACTS_OFFSET").ok() else { return };
+        assert_eq!(utc_offset(1_700_000_000_000).to_string(), expected);
+    }
+
+    #[test]
+    fn the_offset_follows_tz() {
+        for (zone, offset) in [("UTC", 0), ("Etc/GMT-2", 7_200), ("Etc/GMT+5", -18_000)] {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "facts::tests::the_offset_in_this_zone", "--test-threads=1"])
+                .env("TZ", zone)
+                .env("FACTS_OFFSET", offset.to_string())
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(output.status.success() && stdout.contains("1 passed"), "{zone}:\n{stdout}");
+        }
+    }
+
+    #[test]
+    fn the_measure_counts_cells_and_graphemes_as_the_host_draws() {
+        let app = opentui::testing::TestApp::new(40, 4);
+        let text = |points: &[u32]| points.iter().filter_map(|point| char::from_u32(*point)).collect::<String>();
+        let measure = |points: &[u32]| {
+            let measure = measure(app.app(), &text(points));
+            (measure.cells, measure.graphemes)
+        };
+        assert_eq!(measure(&[0x61, 0x62]), (2, 2));
+        assert_eq!(measure(&[0x65e5, 0x672c]), (4, 2));
+        assert_eq!(measure(&[0x65, 0x301]), (1, 1));
+        assert_eq!(measure(&[0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467]), (2, 1));
+        assert_eq!(measure(&[0x61, 0x0a, 0x65e5]), (3, 2));
+        assert_eq!(measure(&[0x61, 0x0d, 0x0a, 0x62]), (2, 2));
+    }
+}

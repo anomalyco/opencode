@@ -7,7 +7,7 @@ import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/
 import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
+import { mergeTransport, ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import { CloudflareShared } from "./cloudflare-shared.js"
 
@@ -61,8 +61,7 @@ export const configure = (input: Config) => {
         provider: id,
         endpoint: { baseURL: runBaseURL(input) },
         auth: auth,
-        headers: input.headers,
-        http: input.http,
+        ...mergeTransport(input),
       })
       .model({ id: modelID, providerOptions })
   return {

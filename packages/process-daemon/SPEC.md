@@ -230,10 +230,10 @@ code. Unlike `terminate`, `signal` keeps the process: `wait` then gets a normal
 `Exited` with `signal`. Signalling an exited process returns `Ok` without
 sending a signal; after `terminate` the record is gone and `signal` fails.
 
-If an outer job refuses the child (`ERROR_ACCESS_DENIED`, for example a job
-with UI restrictions), the daemon runs the command anyway without a job, logs
-a warning once, and kills only the main process; descendants then survive a
-signal or terminate.
+If the child cannot join its job (for example when an outer job with UI
+restrictions refuses it), the daemon runs the command anyway without a job,
+logs a warning once, and kills only the main process; descendants then survive
+a signal or terminate.
 
 `metadata` on `create_pipe` is an opaque JSON object the daemon stores and
 returns as `pipe.metadata` without interpreting it. `set_metadata { id,

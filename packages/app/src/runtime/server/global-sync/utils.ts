@@ -87,8 +87,7 @@ export function normalizeProviderList(
         // Always-on reasoning models may expose no selectable variants yet still stream reasoning via reasoningField;
         // a disabled-only `none` variant does not count as reasoning support.
         reasoning:
-          model.compatibility?.reasoningField !== undefined ||
-          model.variants.some((variant) => variant.id !== "none"),
+          model.compatibility?.reasoningField !== undefined || model.variants.some((variant) => variant.id !== "none"),
         attachment: model.capabilities.input.some((item) => item !== "text"),
         toolcall: model.capabilities.tools,
         input: {
@@ -121,6 +120,7 @@ export function normalizeProviderList(
       headers: model.headers ?? {},
       release_date: model.time.released === 0 ? "" : new Date(model.time.released).toISOString().slice(0, 10),
       variants: Object.fromEntries(model.variants.map((variant) => [variant.id, variant.settings ?? {}])),
+      speed: model.experimental?.speed,
     }
   }
 

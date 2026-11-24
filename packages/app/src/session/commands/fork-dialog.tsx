@@ -141,7 +141,7 @@ export function ForkDialog(props: {
             autofocus
             aria-label={language.t("common.search.placeholder")}
             showClearButton={!props.disabled && !!list.filter()}
-            clearIcon="circle-xmark"
+            clearIcon="close"
             clearLabel={language.t("common.clear")}
             onClearClick={() => list.clear()}
           />

@@ -11,6 +11,7 @@ import type {
   FormInfo,
   SessionFormReplyInput,
   IntegrationInfo,
+  JobInfo,
   LocationRef,
   LocationGetOutput,
   McpResource,
@@ -144,6 +145,12 @@ type Store = {
     permission: Record<string, PermissionSavedInfo[]>
   }
   location: Record<string, LocationData>
+  // Running background jobs keyed by job id, for the session trees that synced them. Settled jobs are removed.
+  job: Record<string, JobInfo>
+  // Job ids the server listed for each synced tree root (it filters descendants itself), plus ids that events added
+  // for owners known to be in the tree. Loaded session info only reaches direct children, so walking parents alone
+  // would drop a grandchild's jobs.
+  jobTree: Record<string, Record<string, true>>
 }
 
 export function locationKey(location: LocationRef) {
@@ -275,6 +282,26 @@ function createSync() {
 }
 
 const CHILD_PAGE = 200
+// TODO: `sequence` and SEQUENCE_HANDOFF_MS patch a rare ordering race: a
+// `!shell` or `/command` sent behind a prompt that waits on a gate (the
+// desktop browser's attachment) must not reach the server before it. That is
+// fine for now and needs no core, server or protocol change. `session.prompt`
+// and `session.compact` already return on durable admission: core's
+// SessionInbox.admit and admitCompaction publish `session.inbox.enqueued`
+// (one `session_inbox` row), SessionExecution.wake starts the work, and its
+// progress arrives as events. `session.shell` and `session.command` do not:
+// Session.shell joins its fiber until the process exits, publishing
+// `session.shell.started` and `session.shell.ended` on the way, and
+// SessionCommand.execute runs the command, whose template may run shell,
+// before it prompts, so their POST stays open for the whole run. Admitting
+// both through the inbox, returning on admission and streaming output and
+// completion as events would make this chain as deterministic as prompt and
+// compact, and both could then go. The gate exists because the browser
+// plugin's `attach` RPC needs an existing session; `session.create` already
+// takes `permissions`, but nothing attaches at creation today.
+// How long a sequenced request that stays open holds its session's send chain
+// once it has left: time to reach the server before the next send does.
+const SEQUENCE_HANDOFF_MS = 250
 const DELETED_SESSION_LIMIT = 512
 
 export function createData(config: CreateDataInput) {
@@ -347,6 +374,8 @@ export function createData(config: CreateDataInput) {
       permission: {},
     },
     location: {},
+    job: {},
+    jobTree: {},
   })
 
   const [defaultLocation, setDefaultLocation] = createSignal<LocationRef>({ directory: config.directory })
@@ -359,6 +388,9 @@ export function createData(config: CreateDataInput) {
   const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
+  // Job events that arrive while a tree's list is in flight, applied over its response: the latest info, or undefined
+  // once settled.
+  const jobUpdates = new Map<string, Map<string, JobInfo | undefined>>()
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -441,9 +473,10 @@ export function createData(config: CreateDataInput) {
   // to exist server-side instead of failing with "not found".
   const creating = new Map<string, Promise<unknown>>()
 
-  // Per-session send chain: prompts and compactions must be admitted in
-  // submission order. Each waits for the previous POST to settle, so one
-  // failure does not block the next.
+  // Per-session send chain: prompts, compactions and the requests a caller
+  // puts in it with `sequence` must reach the server in submission order.
+  // Each waits for the previous POST to settle, so one failure does not block
+  // the next.
   const sending = new Map<string, Promise<unknown>>()
   const messageLoads = new Map<string, Promise<unknown>>()
   const compacting = new Map<string, { id: string; observed: Set<string>; request: Promise<SessionInboxCompaction> }>()
@@ -459,8 +492,14 @@ export function createData(config: CreateDataInput) {
     void promise.then(settle, settle)
   }
 
-  // Capture creation before settlement clears its entry, so dependent RPCs still see a failed create.
-  function sendAdmission<Value>(sessionID: string, send: () => Promise<Value>, gate?: Promise<unknown>) {
+  // Capture creation before settlement clears its entry, so dependent RPCs still see a failed create. The chain's
+  // link is the request itself, or `link` of it for a request that stays open after the server has it.
+  function sendAdmission<Value>(
+    sessionID: string,
+    send: () => Promise<Value>,
+    gate?: Promise<unknown>,
+    link?: (request: Promise<Value>) => Promise<unknown>,
+  ) {
     const created = creating.get(sessionID)
     const previous = sending.get(sessionID)
     const request = Promise.resolve()
@@ -469,7 +508,7 @@ export function createData(config: CreateDataInput) {
     track(
       sending,
       sessionID,
-      request.catch(() => undefined),
+      (link?.(request) ?? request).catch(() => undefined),
     )
     return request
   }
@@ -710,6 +749,7 @@ export function createData(config: CreateDataInput) {
 
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
+    removeJobTree(sessionID)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
@@ -776,6 +816,34 @@ export function createData(config: CreateDataInput) {
         )
         refresh(() => result.location.vcs.sync())
         refresh(() => result.project.sync())
+        Object.keys(store.jobTree).forEach((sessionID) => {
+          result.job.invalidate(sessionID)
+          refresh(() => result.job.sync(sessionID))
+        })
+        return
+      }
+      case "experimental.job.updated": {
+        const info = event.data.info
+        const running = info.status === "running"
+        jobUpdates.forEach((updates) => updates.set(info.id, running ? info : undefined))
+        if (!running) {
+          if (!store.job[info.id]) return
+          setStore(
+            produce((draft) => {
+              delete draft.job[info.id]
+              Object.values(draft.jobTree).forEach((members) => delete members[info.id])
+            }),
+          )
+          return
+        }
+        setStore(
+          produce((draft) => {
+            draft.job[info.id] = info
+            Object.entries(draft.jobTree).forEach(([rootID, members]) => {
+              if (jobWithin(info, rootID)) members[info.id] = true
+            })
+          }),
+        )
         return
       }
       case "project.updated":
@@ -1536,6 +1604,38 @@ export function createData(config: CreateDataInput) {
     }
   })
 
+  // Whether a session is the ancestor or one of its descendants, by the parents in loaded session info.
+  function withinTree(sessionID: string, ancestorID: string) {
+    const seen = new Set<string>()
+    let current: string | undefined = sessionID
+    while (current && !seen.has(current)) {
+      if (current === ancestorID) return true
+      seen.add(current)
+      current = store.session.info[current]?.parentID
+    }
+    return false
+  }
+
+  // A subagent job's session is the parent of the child it runs, so either can place it in a tree.
+  function jobWithin(job: JobInfo, ancestorID: string) {
+    return (
+      withinTree(job.sessionID, ancestorID) || (job.kind === "subagent" && withinTree(job.childSessionID, ancestorID))
+    )
+  }
+
+  function removeJobTree(rootID: string) {
+    jobUpdates.delete(rootID)
+    sync.invalidate(`job:${rootID}`)
+    const members = store.jobTree[rootID]
+    if (!members) return
+    setStore(
+      produce((draft) => {
+        Object.keys(members).forEach((id) => delete draft.job[id])
+        delete draft.jobTree[rootID]
+      }),
+    )
+  }
+
   const result = {
     on: config.event.on,
     listen: config.event.listen,
@@ -1773,6 +1873,33 @@ export function createData(config: CreateDataInput) {
           })
         compacting.set(input.sessionID, { id, observed, request })
         return request
+      },
+      // Runs a session request this layer does not model, such as a shell or a
+      // server command, in the session's send chain: `prepare` and then `send`
+      // start once the prompts, compactions and sequenced requests made before
+      // it have left, so the server receives them in the order they were made.
+      // The chain keeps the order in which requests leave, not the work they
+      // start: such a request can stay open for as long as that work runs, as a
+      // shell command's does until its process exits. Its link therefore ends
+      // when the request settles or has had `SEQUENCE_HANDOFF_MS` to reach the
+      // server, whichever is first.
+      sequence<Value>(sessionID: string, send: () => Promise<Value>, prepare?: () => Promise<unknown>) {
+        const left = Promise.withResolvers<void>()
+        return sendAdmission(
+          sessionID,
+          async () => {
+            await prepare?.()
+            const request = send()
+            left.resolve()
+            return request
+          },
+          undefined,
+          (request) =>
+            Promise.race([
+              request,
+              left.promise.then(() => new Promise((resolve) => setTimeout(resolve, SEQUENCE_HANDOFF_MS))),
+            ]),
+        )
       },
       // Optimistic prompt admission: render the prompt immediately under a
       // client-minted ID, send it, and let the durable inbox.enqueued echo
@@ -2118,6 +2245,48 @@ export function createData(config: CreateDataInput) {
       },
       sync: shells.sync,
       invalidate: shells.invalidate,
+    },
+    job: {
+      // Running jobs owned by the session or any session below it: a synced tree's listed members, plus jobs whose
+      // owner loaded session info places below it.
+      list(sessionID: string) {
+        const members = store.jobTree[sessionID]
+        return Object.values(store.job).filter((job) => members?.[job.id] || jobWithin(job, sessionID))
+      },
+      sync(sessionID: string) {
+        return sync.run(`job:${sessionID}`, async () => {
+          const updates = new Map<string, JobInfo | undefined>()
+          jobUpdates.set(sessionID, updates)
+          const list = await api()
+            .experimental.job.list({ sessionID, descendants: true, status: "running" })
+            .catch((error: unknown) => {
+              if (jobUpdates.get(sessionID) === updates) jobUpdates.delete(sessionID)
+              return evictMissing(error)
+            })
+          if (jobUpdates.get(sessionID) !== updates) return
+          jobUpdates.delete(sessionID)
+          const listed = new Map(list.map((job) => [job.id, job]))
+          const next = new Map(listed)
+          updates.forEach((info, id) => {
+            if (!info) return next.delete(id)
+            if (listed.has(id) || jobWithin(info, sessionID)) next.set(id, info)
+          })
+          const previous = store.jobTree[sessionID] ?? {}
+          setStore(
+            produce((draft) => {
+              Object.values(draft.job).forEach((job) => {
+                if (next.has(job.id)) return
+                if (previous[job.id] || jobWithin(job, sessionID)) delete draft.job[job.id]
+              })
+              next.forEach((job, id) => (draft.job[id] = job))
+              draft.jobTree[sessionID] = Object.fromEntries([...next.keys()].map((id) => [id, true as const]))
+            }),
+          )
+        })
+      },
+      invalidate(sessionID: string) {
+        sync.invalidate(`job:${sessionID}`)
+      },
     },
     location: {
       info(ref?: LocationRef) {

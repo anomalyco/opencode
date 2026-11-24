@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { createMemo, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useQueries } from "@tanstack/solid-query"
 import type { SessionInfo } from "@opencode/client/promise"
@@ -18,11 +18,10 @@ import { projectSettingsKey, useSettings } from "@/settings/model"
 import { sessionStatus } from "@/shell/layout/project-avatar-state"
 import { ProjectIcon } from "@/shell/layout/project-icon"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
-import { tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
+import { tabKey, useTabs, type SessionTab, type Tab } from "@/shell/tabs/tabs"
 import { ProjectSessionRow } from "./project-session-row"
-import { createSidebarActivityListener } from "./sidebar-organized"
-import { mergeSidebarSessions } from "./sidebar-sessions"
-import type { TabStripSection } from "./tab-strip"
+import { isSidebarSessionActivity, mergeSidebarSessions } from "./sidebar-sessions"
+import type { TabStripLeading, TabStripSection } from "./tab-strip"
 import { SidebarViewMenu } from "./sidebar-view-menu"
 import {
   SIDEBAR_GROUPINGS,
@@ -95,8 +94,11 @@ function samePlans(a: SectionPlan[], b: SectionPlan[]) {
 
 export type SidebarStripGrouping = {
   sections: TabStripSection[]
-  tabFooter: (tab: Tab) => JSX.Element | undefined
-  tabLabel: (tab: Tab) => string | undefined
+  tabFooter?: (tab: Tab) => JSX.Element | undefined
+  tabLabel?: (tab: Tab) => string | undefined
+  tabMenu?: (tab: SessionTab) => JSX.Element
+  tabMuted?: (tab: SessionTab) => boolean
+  leading?: TabStripLeading
 }
 
 /** The "Customize" vertical sidebar: open tabs and recent sessions from every server, grouped, sorted and filtered. */
@@ -500,7 +502,6 @@ export function SidebarCustomized(props: {
 
       result().groups.forEach((parent) => {
         if (parent.collapsed) return
-
         ;(parent.children ?? [parent]).forEach((group) => {
           if (group.collapsed) return
 
@@ -539,6 +540,7 @@ export function SidebarCustomized(props: {
   }
 
   function GroupHeader(headerProps: { groupKey: string }) {
+
     return (
       <Show when={groupByKey().get(headerProps.groupKey)}>{(group) => <GroupHeaderView group={group()} />}</Show>
     )
@@ -585,6 +587,7 @@ export function SidebarCustomized(props: {
 
     return (
       <div
+        data-slot="sidebar-project-row"
         class="group/sidebar-group relative flex min-w-0 shrink-0 items-center rounded-[6px] pe-1"
         classList={{
           "h-7 hover:bg-v2-overlay-simple-overlay-hover has-[:focus-visible]:bg-v2-overlay-simple-overlay-hover":
@@ -611,7 +614,6 @@ export function SidebarCustomized(props: {
               fallback={
                 <Icon
                   name={group().kind === "server" ? "server" : "outline-dots"}
-                  size="small"
                   class="text-v2-icon-icon-muted"
                 />
               }
@@ -711,4 +713,35 @@ export function SidebarCustomized(props: {
       </div>
     </div>
   )
+}
+
+/** Tracks session activity on every server, and keeps a preview tab once its session does something. */
+function createSidebarActivityListener() {
+  const tabs = useTabs()
+
+  const global = useGlobal()
+
+  // Keep a preview tab once its session shows activity. Ordering comes from the shared data layer, so this listener
+  // only decides when a preview has become worth keeping.
+  createEffect(() => {
+    global.servers.list().forEach((conn) => {
+      const server = ServerConnection.key(conn)
+      const ctx = global.serverCtx(server)
+
+      if (!ctx) return
+      onCleanup(
+        ctx.data.listen(({ details }) => {
+          if (!isSidebarSessionActivity(details)) return
+          const sessionID = details.data.sessionID
+          const preview = tabs.preview()
+
+          if (
+            preview?.server === server &&
+            (preview.sessionId === sessionID || preview.sessionId === ctx.data.session.root(sessionID))
+          )
+            tabs.keepPreview()
+        }),
+      )
+    })
+  })
 }

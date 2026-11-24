@@ -3,6 +3,8 @@ import { Duration, Effect, Fiber, Layer, Schema } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { Permission } from "@opencode/core/permission"
@@ -17,7 +19,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNod
 const webFetchToolNode = makeLocationNode({
   name: "test/webfetch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WebFetchTool.Plugin)),
-  deps: [Tool.node, Permission.node, LayerNodePlatform.httpClient],
+  deps: [Tool.node, Config.node, Flag.node, Permission.node, LayerNodePlatform.httpClient],
 })
 
 const sessionID = Session.ID.make("ses_webfetch_test")
@@ -431,12 +433,18 @@ describe("WebFetchTool registration", () => {
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["webfetch", "execute"])
       expect(yield* executeTool(registry, call({ url, format: "text", timeout: 4 }))).toEqual({
         status: "completed",
-        output: { url, contentType: "text/plain", format: "text", output: "hello" },
+        output: { contentType: "text/plain", output: "hello" },
         content: [{ type: "text", text: "hello" }],
         metadata: { contentType: "text/plain" },
       })
       expect(assertions).toMatchObject([
-        { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text", timeout: 4 } },
+        {
+          sessionID,
+          action: "webfetch",
+          resources: [url],
+          save: ["http://example.com", "http://example.com/*"],
+          metadata: { url, format: "text", timeout: 4 },
+        },
       ])
       expect(requests).toMatchObject([
         {
@@ -463,7 +471,13 @@ describe("WebFetchTool registration", () => {
         content: [{ type: "text", text: "hello" }],
       })
       expect(assertions).toMatchObject([
-        { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
+        {
+          sessionID,
+          action: "webfetch",
+          resources: [url],
+          save: ["http://localhost", "http://localhost/*"],
+          metadata: { url, format: "text" },
+        },
       ])
       expect(requests.map((request) => request.url)).toEqual([url])
     }),
@@ -499,7 +513,13 @@ describe("WebFetchTool registration", () => {
             content: [{ type: "text", text: "redirected" }],
           })
           expect(assertions).toMatchObject([
-            { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
+            {
+              sessionID,
+              action: "webfetch",
+              resources: [url],
+              save: [server.url.origin, `${server.url.origin}/*`],
+              metadata: { url, format: "text" },
+            },
           ])
           const target = new URL("/target", server.url).toString()
           expect(checks).toMatchObject([{ sessionID, action: "webfetch", resources: [target] }])

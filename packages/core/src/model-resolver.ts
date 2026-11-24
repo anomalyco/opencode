@@ -251,11 +251,13 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       const timeouts = Provider.timeouts(configured)
+      const base = resolved.compatibility
+        ? capabilities(runtime.capabilities, resolved.compatibility)
+        : runtime.capabilities
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
-        capabilities: resolved.compatibility
-          ? capabilities(runtime.capabilities, resolved.compatibility)
-          : runtime.capabilities,
+        // The catalog's freeform formats decide whether the AI package sends a tool as raw text, and with which grammar.
+        capabilities: { ...base, tools: { ...base?.tools, freeform: model.capabilities.freeform ?? [] } },
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, Struct.omit(resolved.compatibility, CAPABILITY_KEYS))
           : runtime.compatibility,
@@ -320,6 +322,7 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
   dependencies?: Dependencies,
 ) {
   const { resolved, configured, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
+  const timeouts = Provider.timeouts(configured)
   const tls = Provider.tls(configured)
   const runtime: unknown = yield* Effect.try({
     try: () => module.model(resolved.modelID ?? resolved.id, settings),
@@ -335,10 +338,14 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
         })
       : runtime
   if (!is(adapted)) return yield* unsupported(resolved)
-  if (!tls || !(adapted instanceof DecisionModel || adapted instanceof ImageModel)) return adapted
+  if (!(adapted instanceof DecisionModel || adapted instanceof ImageModel || adapted instanceof VideoModel))
+    return adapted
   // Media and decision models are plain classes with readonly fields, so copy onto the same prototype.
   const copy: Runtime = Object.assign(Object.create(Object.getPrototypeOf(adapted)), adapted, {
-    http: { ...adapted.http, tls },
+    transport: mergeTransport(adapted.transport, {
+      timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
+      http: { tls },
+    }),
   })
   return copy
 })

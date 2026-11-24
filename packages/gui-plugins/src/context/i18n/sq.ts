@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Përdorimi",
   "usage.cost": "Kostoja",
   "usage.view": "Shikoni përdorimin e kontekstit",
-  "systemPrompt.title": "Prompt i sistemit",
   "rawMessages.title": "Mesazhe të papërpunuara",
   "export.session": "Sesioni i eksportit",
   "stats.session": "Sesioni",

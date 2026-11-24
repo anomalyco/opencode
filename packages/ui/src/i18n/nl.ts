@@ -85,6 +85,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Opmerking bij ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Opmerking toevoegen",
+  "ui.lineComment.add": "Opmerking toevoegen",
+  "ui.lineComment.actions": "Selectieacties",
   "ui.lineComment.contextPlaceholder": "Context voor deze wijziging toevoegen",
   "ui.lineComment.submit": "Opmerking plaatsen",
   "ui.lineComment.cancel": "Annuleren",

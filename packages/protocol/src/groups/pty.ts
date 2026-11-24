@@ -103,7 +103,11 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
       HttpApiEndpoint.post("pty.connectToken", "/api/pty/:ptyID/connect-token", {
         params: { ptyID: Pty.ID },
         query: LocationQuery,
-        headers: Schema.Struct({ [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String) }),
+        headers: Schema.Struct({
+          [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String).annotateKey({
+            description: `Must be ${PTY_CONNECT_TOKEN_HEADER_VALUE}; requests without it are refused.`,
+          }),
+        }),
         success: Location.response(PtyTicket.ConnectToken),
         error: [ForbiddenError, PtyNotFoundError],
       })
@@ -133,11 +137,14 @@ export const makePtyGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
             "x-websocket": true,
             parameters: [
               ...(operation.parameters ?? []),
-              ...["location[directory]", "cursor", PTY_CONNECT_TICKET_QUERY].map((name) => ({
-                in: "query",
-                name,
-                schema: { type: "string" },
-              })),
+              ...Object.entries({
+                "location[directory]":
+                  "Absolute path of the location directory. Omit to use the server's default location.",
+                cursor:
+                  "Output offset to replay from. Use -1 to start at the current end; omit to replay all retained output.",
+                [PTY_CONNECT_TICKET_QUERY]:
+                  "Single-use ticket from pty.connect.token, which authorizes the connection without the usual credentials.",
+              }).map(([name, description]) => ({ in: "query", name, description, schema: { type: "string" } })),
             ],
           }),
         }),

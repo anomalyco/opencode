@@ -1,0 +1,124 @@
+//! Terminal picker for the current session.
+
+use opencode_api::generated::PersistentPtyInfo;
+use opentui::prelude::Container;
+
+use super::{Inner, Label, RowState, Tab, row};
+
+use crate::prelude::*;
+
+#[derive(Default)]
+pub(super) struct State {
+    entries: Vec<PersistentPtyInfo>,
+    visible: Option<String>,
+    /// An index into the entries and the "+ New terminal" row after them.
+    selected: Option<usize>,
+    /// What the selection effect last saw: whether the tab showed, the terminals, and the shown one.
+    seen: Option<(Vec<String>, Option<String>)>,
+}
+
+pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
+    let session = &inner.session.0;
+    let entries = tui.terminals.list(session);
+    let visible = crate::frame::terminal_shown(tui).then(|| tui.terminals.selected(session)).flatten();
+    let mut state = inner.terminals.borrow_mut();
+    state.entries = entries;
+    state.visible = visible;
+    if !inner.is_active(Tab::Terminals) {
+        state.seen = None;
+        return;
+    }
+    let seen = (state.entries.iter().map(|terminal| terminal.id.0.clone()).collect(), state.visible.clone());
+    if state.seen.as_ref() != Some(&seen) {
+        state.selected = state.entries.iter().position(|terminal| Some(&terminal.id.0) == state.visible.as_ref());
+        state.seen = Some(seen);
+    }
+}
+
+pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
+    vec![
+        inner.command("composer.terminal.up", "Previous terminal", |inner, tui| {
+            {
+                let mut state = inner.terminals.borrow_mut();
+                let len = state.entries.len();
+                state.selected = Some((state.selected.unwrap_or(0) + len) % (len + 1));
+            }
+            inner.refresh(tui);
+        }),
+        inner.command("composer.terminal.down", "Next terminal", |inner, tui| {
+            {
+                let mut state = inner.terminals.borrow_mut();
+                let len = state.entries.len();
+                state.selected = Some(state.selected.map_or(0, |index| index + 1) % (len + 1));
+            }
+            inner.refresh(tui);
+        }),
+        inner.command("composer.terminal.select", "Select terminal", select),
+    ]
+}
+
+fn select(inner: &Rc<Inner>, tui: &Tui) {
+    let terminal = {
+        let state = inner.terminals.borrow();
+        let Some(index) = state.selected else { return };
+        state.entries.get(index).map(|terminal| terminal.id.0.clone())
+    };
+    let session: SessionID = inner.session.clone();
+    inner.close(tui);
+    match terminal {
+        Some(id) => crate::terminal::select(tui, &session.0, Some(&id), true),
+        None => crate::terminal::create(tui, &session, true, |_, _| {}),
+    }
+}
+
+pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, String)> {
+    let (entries, visible, selected) = {
+        let state = inner.terminals.borrow();
+        (state.entries.clone(), state.visible.clone(), state.selected)
+    };
+    // The list does not scroll with the selection; it shows the first five rows.
+    let rows = entries.len() + 1;
+    for index in 0..rows.min(super::ROWS) {
+        let terminal = entries.get(index);
+        let current = terminal.is_some_and(|terminal| Some(&terminal.id.0) == visible.as_ref());
+        let state = if Some(index) == selected {
+            RowState::Focused
+        } else if current {
+            RowState::Selected
+        } else {
+            RowState::Base
+        };
+        let label = match terminal {
+            Some(terminal) => terminal.foreground_process.clone().unwrap_or_else(|| terminal.title.clone()),
+            None => "+ New terminal".to_owned(),
+        };
+        let hover = {
+            bind!(inner, |inner| {
+                let Some(tui) = inner.tui.upgrade() else { return };
+                if inner.terminals.borrow_mut().selected.replace(index) != Some(index) {
+                    inner.redraw_later(&tui);
+                }
+            })
+        };
+        let click = {
+            bind!(inner, |inner| {
+                let Some(tui) = inner.tui.upgrade() else { return };
+                inner.terminals.borrow_mut().selected = Some(index);
+                tui.app.defer(bind!(inner, |inner, _| {
+                    if let Some(tui) = inner.tui.upgrade() {
+                        select(&inner, &tui);
+                    }
+                }));
+            })
+        };
+        inner.body.add(&row(
+            tui,
+            theme,
+            state,
+            Label { text: label, status: None, truncate: true, gap: 0 },
+            hover,
+            click,
+        ));
+    }
+    Vec::new()
+}

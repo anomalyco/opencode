@@ -46,6 +46,11 @@ export type NewTabsEvent =
   | { readonly type: "select.new"; readonly pane: SessionPane; readonly id: string }
   /** The user selects a tab of the pane, which shows over its New tabs. */
   | { readonly type: "select.tab"; readonly pane: SessionPane }
+  /**
+   * A tab opens in the pane that already selects it. The open changes no selection for `sync` to see, so this replaces
+   * the New tab the pane shows over it, as a tab that selects itself does.
+   */
+  | { readonly type: "open.selected"; readonly pane: SessionPane }
   /** `empty`: the strip holds no tab, so closing the last New tab empties the region. */
   | { readonly type: "dismiss"; readonly id: string; readonly empty: boolean }
 
@@ -80,6 +85,18 @@ export function transitionNewTabs(state: NewTabsState, event: NewTabsEvent): New
     if (pane.chosen === undefined) return { state, effects: [] }
 
     return { state: withPane(state, event.pane, { ids: pane.ids, chosen: undefined }), effects: [] }
+  }
+
+  if (event.type === "open.selected") {
+    // The pane selects a tab, so the New tab it shows is the chosen one.
+    const pane = state.panes[event.pane]
+
+    if (pane.chosen === undefined) return { state, effects: [] }
+
+    return {
+      state: withPane(state, event.pane, { ids: pane.ids.filter((id) => id !== pane.chosen), chosen: undefined }),
+      effects: [],
+    }
   }
 
   const owner = SESSION_PANES.find((pane) => state.panes[pane].ids.includes(event.id))

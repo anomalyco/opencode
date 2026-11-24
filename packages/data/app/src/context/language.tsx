@@ -5,11 +5,9 @@ import { createSimpleContext } from "@opencode/ui/context"
 import {
   LOCALES,
   cookie,
-  detectFromLanguages,
   dir,
   fromPathname,
   label,
-  localeFromCookieHeader,
   localeFromRequest,
   parseLocale,
   route,
@@ -27,15 +25,11 @@ function initial() {
   }
 
   if (typeof document === "object") {
-    const fromCookie = localeFromCookieHeader(document.cookie)
-    if (fromCookie) return fromCookie
     const fromDom = parseLocale(document.documentElement.dataset.locale)
     if (fromDom) return fromDom
   }
 
-  if (typeof navigator !== "object") return "en" satisfies Locale
-  const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
-  return detectFromLanguages(languages)
+  return "en" satisfies Locale
 }
 
 export const { use: useLanguage, provider: LanguageProvider } = createSimpleContext({
@@ -49,7 +43,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       document.documentElement.lang = tag(store.locale)
       document.documentElement.dir = dir(store.locale)
       document.documentElement.dataset.locale = store.locale
-      // Remember a language picked by URL, so unprefixed /data links redirect back to it.
+      // Remember a language picked by URL, for the other apps that read the shared cookie.
       if (fromPathname(window.location.pathname)) document.cookie = cookie(store.locale)
     })
 

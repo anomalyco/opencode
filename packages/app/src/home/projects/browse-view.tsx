@@ -89,7 +89,7 @@ export default function ProjectBrowserView(props: { initial?: ProjectBrowserTarg
                   <button type="button" class="command-palette-row" data-size="compact" {...row}>
                     <SessionTabAvatarView project={item().project} directory={item().directory} unread={false} />
                     <ResultLabel title={displayName(item().project)} directory={item().directory} />
-                    <Icon name="chevron-right" size="small" class="shrink-0 text-v2-icon-icon-muted rtl:rotate-180" />
+                    <Icon name="chevron-right" class="shrink-0 text-v2-icon-icon-muted rtl:rotate-180" />
                   </button>
                 )}
               </SearchList>
