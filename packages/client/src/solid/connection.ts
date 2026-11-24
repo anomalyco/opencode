@@ -81,12 +81,15 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
     }, options.flushInterval ?? 10)
   }
 
-  async function connect(signal: AbortSignal, attempt: number, limit: number) {
+  async function connect(signal: AbortSignal, attempt: number, limit: number, cutOff: () => void) {
     let connectedAt: number | undefined
     const request = new AbortController()
     current = request
     const cancel = () => request.abort(signal.reason)
-    const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), limit)
+    const timeout = setTimeout(() => {
+      cutOff()
+      request.abort(new Error("Timed out connecting to server"))
+    }, limit)
     signal.addEventListener("abort", cancel, { once: true })
 
     // Any received bytes, including keepalive comments, push the stall deadline out. A timer whose
@@ -154,7 +157,8 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
 
   async function runStream(active: number) {
     let attempt = 0
-    // Attempts in a row that ended without the server's handshake.
+    // Attempts that the limit cut off since the last handshake. One that failed at once (a refused connection, no
+    // network) says nothing about how long the server takes, so it does not count.
     let unanswered = 0
     while (!abort.signal.aborted && started && generation === active) {
       setConnection({ status: attempt === 0 ? "connecting" : "reconnecting", attempt })
@@ -166,10 +170,11 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
         controller.signal,
         attempt,
         Math.min(connectTimeout * 2 ** unanswered, connectTimeoutLimit),
+        () => (unanswered += 1),
       )
       abort.signal.removeEventListener("abort", cancel)
       if (abort.signal.aborted || !started || generation !== active) return
-      unanswered = result.connectedAt === undefined ? unanswered + 1 : 0
+      if (result.connectedAt !== undefined) unanswered = 0
       if (result.connectedAt !== undefined && Date.now() - result.connectedAt >= reconnectDelay) attempt = 0
       attempt += 1
       const message = errorMessage(result.error)
@@ -184,6 +189,8 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
         })
         if (abort.signal.aborted || controller.signal.aborted || !started || generation !== active) return
         if (next) {
+          // A limit learned at one address says nothing about another.
+          if (next !== api) unanswered = 0
           api = next
           if (attempt === 1) continue
         }

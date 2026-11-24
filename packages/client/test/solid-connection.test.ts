@@ -7,7 +7,8 @@ const connected = { id: "evt_connected", created: 1, type: "server.connected", d
 
 // One fake server whose event streams stay open until the test writes to them or the client aborts. With
 // `answerAfter`, each stream sends the handshake that many milliseconds after it opens, as a server under load does.
-function server(answerAfter?: number) {
+// The first `refused` requests fail at once, as they do while the server is away.
+function server(answerAfter?: number, refused = 0) {
   const encoder = new TextEncoder()
   const streams: {
     headers: Headers
@@ -16,9 +17,13 @@ function server(answerAfter?: number) {
     error: (reason: Error) => void
     aborted: boolean
   }[] = []
+
+  const refusals = { left: refused }
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
     fetch: async (input, init) => {
+      if (refusals.left-- > 0) throw new TypeError("Failed to fetch")
+
       const request = input instanceof Request ? input : new Request(input, init)
       let controller!: ReadableStreamDefaultController<Uint8Array>
       const entry = {
@@ -112,6 +117,19 @@ test("an attempt after an unanswered one waits twice as long for the handshake",
       attempt: 1,
       error: "Timed out connecting to server",
     })
+  } finally {
+    ctx.dispose()
+  }
+})
+
+// After a spell with the server away, an attempt that hangs must still be dropped at the first limit.
+test("an attempt that fails at once leaves the limit as it was", async () => {
+  const fake = server(150, 1)
+  const ctx = setup(fake, 10_000, 100)
+  try {
+    await until(() => ctx.connection.status() === "connected", 4_000)
+    // The stream after the refused request still had the first limit, so it was cut off before its handshake.
+    expect(fake.streams.map((stream) => stream.aborted)).toEqual([true, false])
   } finally {
     ctx.dispose()
   }
