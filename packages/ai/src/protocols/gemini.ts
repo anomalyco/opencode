@@ -400,11 +400,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
       const media: GeminiFunctionResponseMediaPart[] = []
       for (const item of content) {
         if (item.type === "text") continue
-        const asset =
-          nestedAudioVideo && /^audio\//i.test(item.mime) && item.uri.startsWith("gs://")
-            ? Media.ref("google", item.uri, item.mime)
-            : GeminiGenerateContent.toolMedia(item)
-        const value = yield* GeminiGenerateContent.mediaPart("Gemini", asset)
+        const value = yield* GeminiGenerateContent.mediaPart("Gemini", GeminiGenerateContent.toolMedia(item))
         const nestFileData =
           nestedAudioVideo && "fileData" in value && /^(?:audio|video)\//i.test(value.fileData.mimeType)
         if (legacyToolMedia || ("fileData" in value && !nestFileData)) (pendingMedia ??= []).push(value)
