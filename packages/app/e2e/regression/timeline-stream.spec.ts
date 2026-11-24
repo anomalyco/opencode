@@ -1140,6 +1140,7 @@ for (const [input, verb] of [
   ["a streamed line", "outlasts"],
   ["the reader's wheel", "yields to"],
   ["a frame that runs long", "keeps its pace through"],
+  ["a reply that outruns it", "gives way to"],
 ] as const) {
   test(`the glide to the latest message ${verb} ${input}`, async ({ page }) => {
     // The glide was the browser's smooth scroll to where the end was. A streamed line measured during it jumped the
@@ -1183,6 +1184,28 @@ for (const [input, verb] of [
       expect(step).toBeLessThan(screen / 5)
       await page.clock.runFor(2_000)
       await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+
+      return
+    }
+
+    if (input === "a reply that outruns it") {
+      // One frame of the glide moves the view a limited distance. A reply that grows by more than that in every frame
+      // kept the view behind it for as long as it grew.
+      expect(await fromEnd()).toBeGreaterThan(screen / 4)
+
+      for (const round of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        const grown = await height()
+        await timeline.send(partDelta("prt_glide", `\n\n${notes(`Round ${round}`, 24)}`))
+        // Two frames render the lines, and a third comes late: 300 ms a round, in which the reply grows by more than
+        // three frames of the glide may move the view.
+        await page.clock.runFor(32)
+        await expect.poll(height).toBeGreaterThan(grown + (screen * 3) / 5)
+        await page.clock.fastForward(268)
+      }
+
+      // The reply is still ahead after 2.4 s. The glide has given way, and the view is at the end.
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      await expect(page.getByText("Round 8 note 24.", { exact: true })).toBeInViewport()
 
       return
     }
