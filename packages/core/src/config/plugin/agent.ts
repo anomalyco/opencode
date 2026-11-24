@@ -122,11 +122,14 @@ function isPathAction(action: string): action is PathAction {
 
 function expandHome(resource: string, home: string) {
   if (resource === "~" || resource === "$HOME") return home
-  const relative = resource.startsWith("~/")
-    ? resource.slice(2)
-    : resource.startsWith("$HOME/") || resource.startsWith("$HOME\\")
-      ? resource.slice(6)
-      : undefined
+  // `~\` is the home directory only where tools read it that way, which is a Windows home.
+  const windows = path.win32.isAbsolute(home) && !path.posix.isAbsolute(home)
+  const relative =
+    resource.startsWith("~/") || (windows && resource.startsWith("~\\"))
+      ? resource.slice(2)
+      : resource.startsWith("$HOME/") || resource.startsWith("$HOME\\")
+        ? resource.slice(6)
+        : undefined
   if (relative !== undefined) return (path.posix.isAbsolute(home) ? path.posix : path.win32).join(home, relative)
   return resource
 }

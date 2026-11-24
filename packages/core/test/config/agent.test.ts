@@ -166,6 +166,8 @@ permissions: [{ action: edit, resource: "*", effect: deny }]`,
       expect(permissions).toContainEqual({ action: "shell", resource: "$HOME/private/**", effect: "deny" })
       expect(permissions).not.toContainEqual({ action: "shell", resource: "/home/test/private/**", effect: "deny" })
       expect(Permission.evaluate("shell", "$HOME/private/key", permissions).effect).toBe("deny")
+      // A Windows separator names no home on a POSIX one, so the rule stays as written.
+      expect(permissions).toContainEqual({ action: "external_directory", resource: "~\\w\\**", effect: "allow" })
     }),
   )
 
@@ -183,6 +185,12 @@ permissions: [{ action: edit, resource: "*", effect: deny }]`,
       expect(Permission.evaluate("external_directory", "C:\\Users\\test\\cache\\files\\*", permissions).effect).toBe(
         "deny",
       )
+      expect(permissions).toContainEqual({
+        action: "external_directory",
+        resource: "C:\\Users\\test\\w\\**",
+        effect: "allow",
+      })
+      expect(Permission.evaluate("external_directory", "C:\\Users\\test\\w\\src\\*", permissions).effect).toBe("allow")
     }),
   )
 
@@ -845,6 +853,7 @@ function loadHomePermissions(home: string) {
             permission: {
               external_directory: {
                 "~/p/**": "allow",
+                "~\\w\\**": "allow",
                 "/some/~/path": "deny",
                 "$HOMELESS/**": "deny",
               },
