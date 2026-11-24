@@ -297,6 +297,23 @@
     min-height: 0;
   }
 
+  /* The video preview's playback, a 2px line just under the card, its fill growing as it plays. */
+  [data-slot="playback"] {
+    position: absolute;
+    height: 2px;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--stats-line);
+
+    i {
+      display: block;
+      height: 100%;
+      background: var(--stats-faint);
+      transform-origin: left;
+      scale: 0 1;
+    }
+  }
+
   [data-slot="share-preview"] {
     display: block;
     width: auto;

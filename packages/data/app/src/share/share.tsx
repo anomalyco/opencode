@@ -111,7 +111,10 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   let dialog: HTMLDialogElement | undefined
   let preview: HTMLCanvasElement | undefined
   // The card's width on screen, for the embed code under it to match.
-  const [cardWidth, setCardWidth] = createSignal(0)
+  const [cardBox, setCardBox] = createSignal({ left: 0, top: 0, width: 0, height: 0 })
+  const cardWidth = () => cardBox().width
+  // The fill of the thin bar under the card that follows the video preview as it plays.
+  let playhead: HTMLElement | undefined
   let audio: HTMLAudioElement | undefined
   const [format, setFormat] = createSignal<"image" | "video" | "embed">("video")
   // An embed shows the latest data by default; a fixed one keeps today's numbers (share/embed.ts).
@@ -303,6 +306,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
         restartAudio(sound)
       }
       drawShareCard(ctx, value, opts, elapsed - turn * length, timing())
+      if (playhead) playhead.style.scale = `${Math.min(1, (elapsed - turn * length) / length)} 1`
       handle = requestAnimationFrame(frame)
     }
     let handle = requestAnimationFrame(frame)
@@ -845,8 +849,17 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <canvas
                   ref={(element) => {
                     preview = element
-                    const observer = new ResizeObserver(() => setCardWidth(element.getBoundingClientRect().width))
+                    // Where the card sits in its area, for the playback bar and the embed code under it.
+                    const observer = new ResizeObserver(() =>
+                      setCardBox({
+                        left: element.offsetLeft,
+                        top: element.offsetTop,
+                        width: element.offsetWidth,
+                        height: element.offsetHeight,
+                      }),
+                    )
                     observer.observe(element)
+                    if (element.parentElement) observer.observe(element.parentElement)
                     onCleanup(() => observer.disconnect())
                   }}
                   data-slot="share-preview"
@@ -854,6 +867,20 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   aria-label={value().headline}
                   style={{ "aspect-ratio": `${size()[0]} / ${size()[1]}` }}
                 />
+                {/* A video's playback: a thin bar just under the card, filling as the preview plays. */}
+                <Show when={format() === "video"}>
+                  <div
+                    data-slot="playback"
+                    aria-hidden="true"
+                    style={{
+                      left: `${cardBox().left}px`,
+                      top: `${cardBox().top + cardBox().height + 6}px`,
+                      width: `${cardBox().width}px`,
+                    }}
+                  >
+                    <i ref={playhead} />
+                  </div>
+                </Show>
               </div>
               {/* An embed's code under the card, as wide as it, highlighted as it will be copied; pressing it copies it too.
                   It opens by growing, so the card eases smaller to make room rather than jumping. */}
