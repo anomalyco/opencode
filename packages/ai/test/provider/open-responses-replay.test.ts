@@ -118,3 +118,66 @@ for (const model of [
     )
   })
 }
+
+// Copilot rejects replayed item ids and encrypted reasoning from another connection with
+// `401 input item does not belong to this connection`; the default `store: false` keeps none of them useful.
+describe("github-copilot responses replay", () => {
+  const history = (model: ReturnType<typeof configure>["model"] extends (id: never) => infer M ? M : never) => {
+    const key = model.route.providerMetadataKey ?? "openresponses"
+    return ai.request({
+      model,
+      messages: [
+        Message.user("Hi"),
+        Message.make({
+          role: "assistant",
+          providerMetadata: { [key]: { itemId: "msg_old" } },
+          content: [
+            {
+              type: "reasoning",
+              text: "thinking",
+              providerMetadata: { [key]: { itemId: "rs_old", reasoningEncryptedContent: "enc_old" } },
+            },
+            { type: "text", text: "Answer", providerMetadata: { [key]: { itemId: "msg_old" } } },
+            {
+              type: "tool-call",
+              id: "call_1",
+              name: "lookup",
+              input: {},
+              providerMetadata: { [key]: { itemId: "fc_old" } },
+            },
+          ],
+        }),
+        Message.tool({ id: "call_1", name: "lookup", result: "ok" }),
+        Message.user("Continue"),
+      ],
+    })
+  }
+  const configured = (provider: string, store?: boolean) =>
+    configure({
+      baseURL: "https://copilot.example.test",
+      apiKey: "test-key",
+      provider,
+      ...(store === undefined ? {} : { providerOptions: { store } }),
+    }).model("gpt-example")
+
+  it.effect("drops provider-scoped ids and encrypted reasoning when nothing is stored", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(history(configured("github-copilot")))
+      const input = JSON.stringify(prepared.body.input)
+      for (const scoped of ["msg_old", "rs_old", "fc_old", "enc_old", '"reasoning"'])
+        expect(input).not.toContain(scoped)
+      expect(input).toContain("Answer")
+      expect(input).toContain("call_1")
+    }),
+  )
+
+  it.effect("keeps ids for other providers and for stored Copilot history", () =>
+    Effect.gen(function* () {
+      for (const model of [configured("example"), configured("github-copilot", true)]) {
+        const prepared = yield* compileRequest(history(model))
+        expect(JSON.stringify(prepared.body.input)).toContain("rs_old")
+        expect(JSON.stringify(prepared.body.input)).toContain("fc_old")
+      }
+    }),
+  )
+})
