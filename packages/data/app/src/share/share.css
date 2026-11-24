@@ -982,7 +982,8 @@
     margin-right: 4px;
   }
 
-  /* Rendering, the button cancels: its percentage gives way to Cancel under the pointer or keyboard focus. */
+  /* Rendering, the button cancels: its percentage gives way to Cancel under the pointer (once it has left and come
+     back, share.tsx) or keyboard focus. */
   [data-slot="bar-button"][data-rendering] {
     position: relative;
     cursor: pointer;
@@ -995,7 +996,7 @@
       opacity: 0;
     }
 
-    &:is(:hover, :focus-visible) {
+    &:is([data-cancel]:hover, :focus-visible) {
       [data-slot="button-cancel"] {
         opacity: 1;
       }

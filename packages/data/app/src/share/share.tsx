@@ -120,6 +120,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const [copied, setCopied] = createSignal(false)
   const [notice, setNotice] = createSignal<string>()
   const [rendering, setRendering] = createSignal<number>()
+  // Cancel shows on hover only once the pointer has left the button since Export was pressed, so the press that
+  // started the render doesn't flash Cancel under it.
+  const [cancelReady, setCancelReady] = createSignal(false)
   const [ready, setReady] = createSignal(false)
   const [playing, setPlaying] = createSignal(true)
   // The chosen track, and whether the video is muted; muting keeps the choice for unmuting.
@@ -388,6 +391,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     if (kind === "image") return renderImage(value, options())
     const key = JSON.stringify([value, options(), music()?.id])
     if (video?.key !== key) {
+      setCancelReady(false)
       setRendering(0)
       video = {
         key,
@@ -754,6 +758,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   data-slot="bar-button"
                   data-variant="primary"
                   data-rendering={rendering() !== undefined ? "" : undefined}
+                  data-cancel={cancelReady() ? "" : undefined}
+                  onPointerLeave={() => setCancelReady(true)}
                   // While a video renders, the button is its progress bar: it fills from the left as the frames go.
                   style={{ "--progress": `${(rendering() ?? 0) * 100}%` } as JSX.CSSProperties}
                   aria-live="polite"
