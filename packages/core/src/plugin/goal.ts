@@ -243,7 +243,7 @@ export const Plugin = define({
     // run in the Session or below it for WAIT_LIMIT (a hung subagent, a shell that never exits, a missed wake), pause
     // instead of staying active.
     const timers = yield* FiberMap.make<string>()
-    const watch = (sessionID: Session.ID) =>
+    const watch = (sessionID: Session.ID, onlyIfMissing = false) =>
       read(sessionID).pipe(
         Effect.flatMap((goal) =>
           goal?.status !== "active"
@@ -264,6 +264,7 @@ export const Plugin = define({
                     Effect.logWarning("failed to pause a waiting goal", { sessionID, cause }),
                   ),
                 ),
+                { onlyIfMissing },
               ).pipe(Effect.asVoid),
         ),
       )
@@ -337,7 +338,10 @@ export const Plugin = define({
               if (Option.isNone(session)) return yield* ctx.storage.remove(entry.key)
               const goal = Option.getOrUndefined(decodeState(entry.value))
               if (goal?.status !== "active" || goal.boot === boot()) return
-              yield* replace(session.value.id, goal, { ...goal, boot: boot() })
+              if (!(yield* replace(session.value.id, goal, { ...goal, boot: boot() }))) return
+              // Nothing may wake this Session after a restart: start the wait so the goal pauses on its own. An
+              // execution that finished while the sweep ran may already have armed the watchdog; keep that timer.
+              yield* watch(session.value.id, true)
             }),
           { discard: true },
         )

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Duration, Effect, Option, Queue, Schema, Stream } from "effect"
+import { DateTime, Deferred, Duration, Effect, Option, Queue, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { Plugin } from "@opencode/plugin/effect"
 import type { CommandDefinition } from "@opencode/plugin/effect/command"
@@ -33,8 +33,17 @@ const execution = (type: Execution["type"]): Execution => ({
 const step = (stepSessionID: Session.ID) =>
   ({ type: "session.step.started", data: { sessionID: stepSessionID } }) as unknown as SessionEvent.Step.Started
 
+type RunOptions = {
+  /** Holds the startup sweep until the test releases it. */
+  readonly gate?: Deferred.Deferred<void>
+  /** Signals the next goal write, so a test knows when the sweep finished. */
+  readonly written?: Deferred.Deferred<void>
+  /** A stale entry returned by the startup scan, to make a re-arm fail against the current stored goal. */
+  readonly scanned?: Goal.State
+}
+
 /** Runs the goal plugin against stubbed domains: plugin storage in memory, and RPC that records what it publishes. */
-const run = Effect.fnUntraced(function* (seed?: Goal.State) {
+const run = Effect.fnUntraced(function* (seed?: Goal.State, options?: RunOptions) {
   const stored = new Map<string, Schema.Json>(seed ? [[`session:${sessionID}`, seed]] : [])
   const changed: unknown[] = []
   const handlers: { get?: (input: { sessionID: string }) => Effect.Effect<Goal.State | null> } = {}
@@ -60,12 +69,17 @@ const run = Effect.fnUntraced(function* (seed?: Goal.State) {
       session,
       storage: {
         get: (key) => Effect.sync(() => stored.get(key)),
-        set: (key, value) => Effect.sync(() => void stored.set(key, value)),
+        set: (key, value) =>
+          Effect.sync(() => void stored.set(key, value)).pipe(
+            Effect.tap(() => (options?.written ? Deferred.succeed(options.written, undefined) : Effect.void)),
+          ),
         remove: (key) => Effect.sync(() => void stored.delete(key)),
-        scan: (options) =>
+        scan: (scan) =>
           Effect.sync(() => ({
-            entries: [...stored].flatMap(([key, value]) => (key.startsWith(options.prefix) ? [{ key, value }] : [])),
-          })),
+            entries: options?.scanned
+              ? [{ key: `session:${sessionID}`, value: options.scanned }]
+              : [...stored].flatMap(([key, value]) => (key.startsWith(scan.prefix) ? [{ key, value }] : [])),
+          })).pipe(Effect.tap(() => (options?.gate ? Deferred.await(options.gate) : Effect.void))),
       },
       rpc: Object.assign(
         () => {
@@ -112,7 +126,7 @@ const run = Effect.fnUntraced(function* (seed?: Goal.State) {
 })
 
 describe("goal plugin waiting", () => {
-  it.effect("re-arms an active goal left by an earlier process so it survives a restart", () =>
+  it.effect("re-arms an active goal left by an earlier process and pauses it when nothing wakes the Session", () =>
     Effect.gen(function* () {
       const plugin = yield* run({
         id: "goal-earlier",
@@ -129,6 +143,76 @@ describe("goal plugin waiting", () => {
         rounds: 1,
       })
       expect(plugin.goal()?.boot).not.toBe("an-earlier-process")
+
+      // The Session never wakes after the restart, so the watchdog started by the re-arm must pause the goal.
+      yield* TestClock.adjust(GoalPlugin.WAIT_LIMIT)
+      expect(plugin.goal()).toMatchObject({
+        status: "paused",
+        reason: "Nothing ran for 30 minutes while the goal waited on background work",
+      })
+    }),
+  )
+
+  it.effect("does not restart a watchdog already armed when the restart sweep re-arms the goal", () =>
+    Effect.gen(function* () {
+      const gate = yield* Deferred.make<void>()
+      const written = yield* Deferred.make<void>()
+      const plugin = yield* run(
+        {
+          id: "goal-earlier",
+          objective: "Ship the release",
+          status: "active",
+          rounds: 1,
+          maxRounds: 50,
+          boot: "an-earlier-process",
+          updatedAt: 0,
+        },
+        { gate, written },
+      )
+
+      // An execution that finished during startup armed the wait before the sweep reached the stored goal.
+      yield* plugin.emit("session.execution.succeeded")
+      yield* TestClock.adjust(Duration.subtract(GoalPlugin.WAIT_LIMIT, Duration.minutes(1)))
+      expect(plugin.goal()).toMatchObject({ status: "active" })
+
+      yield* Deferred.succeed(gate, undefined)
+      yield* Deferred.await(written)
+      expect(plugin.goal()?.boot).not.toBe("an-earlier-process")
+
+      // The sweep re-arms the goal's boot but must keep the pending deadline instead of starting a second wait.
+      yield* TestClock.adjust(Duration.minutes(1))
+      expect(plugin.goal()).toMatchObject({ status: "paused" })
+    }),
+  )
+
+  it.effect("does not arm a watchdog when the stored goal changed during the restart sweep", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(
+        {
+          id: "goal-current",
+          objective: "Ship the release",
+          status: "active",
+          rounds: 1,
+          maxRounds: 50,
+          boot: "an-earlier-process",
+          updatedAt: 1,
+        },
+        {
+          scanned: {
+            id: "goal-current",
+            objective: "Ship the release",
+            status: "active",
+            rounds: 1,
+            maxRounds: 50,
+            boot: "an-earlier-process",
+            updatedAt: 0,
+          },
+        },
+      )
+
+      // The re-arm lost to the current goal, so no wait was started for it.
+      yield* TestClock.adjust(GoalPlugin.WAIT_LIMIT)
+      expect(plugin.goal()).toMatchObject({ status: "active", boot: "an-earlier-process" })
     }),
   )
 
