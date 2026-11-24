@@ -24,7 +24,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@opencode/util/uuid"
 import { contextItemKey } from "@/composer/schema"
 import type { QuoteSource } from "@/composer/quote-source"
-import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
+import type { ComposerDelivery, ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import { useComposerCommands } from "@/composer/commands"
@@ -40,7 +40,7 @@ import { createSessionComposerController, type SessionComposerController } from 
 import { SessionQueuePanel } from "./queue-panel"
 import { SessionGoLimitTray } from "./go-limit-tray"
 import { SessionFreeLimitPanel, useFreeLimit } from "./free-limit-panel"
-import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
+import { reuseActivityItems, SessionActivityChips, type SessionActivityItem } from "./activity-chips"
 import { SessionComposerLane, useComposerLaneAlignment } from "./composer-lane"
 import { SessionTodoPill } from "./todo-pill"
 import { sessionTodos, todoFinished } from "./todos"
@@ -141,10 +141,6 @@ export function createActiveSessionRegion(input: {
     void platform.revealPath(path).then((revealed) => {
       if (!revealed) download()
     }, download)
-  }
-
-  const focus = () => {
-    if (!input.session.data.isChild()) promptRef?.focus()
   }
 
   const openParent = () => {
@@ -320,7 +316,9 @@ export function createActiveSessionRegion(input: {
     navigateMessageByOffset: input.timeline.actions.navigateMessage,
     jumpToMessage: input.timeline.actions.jumpToMessage,
     revert,
-    focusInput: focus,
+    focusInput: () => {
+      if (promptRef && !input.session.data.isChild()) promptRef.focus()
+    },
     model: () => {
       const selection = controls().model.selection
       const model = selection.current()
@@ -398,6 +396,18 @@ export function createActiveSessionRegion(input: {
         focusPrompt()
       },
       focus: focusPrompt,
+      delivery: (): ComposerDelivery | undefined => {
+        const send = active()?.composer.view.submit.comment
+
+        if (!send?.available()) return
+
+        return send.delivery() ?? "send"
+      },
+      send: (key: string, comment: string) => {
+        const send = active()?.composer.view.submit.comment
+
+        if (send?.available()) void send.onSubmit(key, comment)
+      },
     },
     actions: {
       // Each timeline passes its own session and child flag, which a kept timeline holds while another is routed.
@@ -450,26 +460,35 @@ export function ActiveSessionComposerRegion(props: {
     },
   )
 
-  const subagents = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background
-      .tasks()
-      .filter((task) => task.type === "subagent")
-      .map((task) => ({
-        ...task,
-        agent: task.agent ?? data.session.get(task.sessionID)?.agent,
-        key: task.id,
-        target: task.id,
-      })),
+  const subagents = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background
+        .tasks()
+        .filter((task) => task.type === "subagent")
+        .map((task) => ({
+          ...task,
+          agent: task.agent ?? data.session.get(task.sessionID)?.agent,
+          key: task.id,
+          target: task.id,
+        })),
+    ),
   )
 
-  const shells = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background
-      .tasks()
-      .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
+  const shells = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background
+        .tasks()
+        .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
+    ),
   )
 
-  const scripts = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background.scripts().map((task) => ({ ...task, key: task.id, target: task.id })),
+  const scripts = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background.scripts().map((task) => ({ ...task, key: task.id, target: task.id })),
+    ),
   )
 
   const alignment = useComposerLaneAlignment()

@@ -133,6 +133,7 @@ export function Dialog(props: DialogProps) {
       <div data-slot="dialog-container" class={local.containerClass}>
         <Content
           data-slot="dialog-content"
+          data-focus-scope
           onCloseAutoFocus={local.onCloseAutoFocus}
           onPointerDownOutside={(event) => {
             if (local.preventBackdropDismiss) event.preventDefault()
@@ -170,11 +171,14 @@ export function Dialog(props: DialogProps) {
                   ? active
                   : undefined
 
-              const field = Array.from(content.querySelectorAll<HTMLElement>(TEXT_FIELD)).find(
-                (element) => element.getClientRects().length > 0,
-              )
+              const target =
+                autofocus ??
+                kept ??
+                Array.from(content.querySelectorAll<HTMLElement>(TEXT_FIELD)).find(
+                  (element) => element.getClientRects().length > 0,
+                ) ??
+                content
 
-              const target = autofocus ?? kept ?? field ?? content
               target.focus({ preventScroll: true })
             })
           }}

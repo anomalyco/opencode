@@ -68,7 +68,7 @@ export function TimelineSearchBar(props: { controller: TimelineSearchController 
             {(delta) => (
               <button
                 type="button"
-                class="flex size-5 shrink-0 self-center items-center justify-center rounded-[2px] border-0 bg-transparent p-0 text-v2-icon-icon-muted outline outline-1 outline-transparent hover:bg-v2-overlay-simple-overlay-hover active:bg-v2-overlay-simple-overlay-pressed focus-visible:outline-v2-border-border-focus disabled:pointer-events-none disabled:opacity-40"
+                class="flex size-5 shrink-0 self-center items-center justify-center rounded-[4px] border-0 bg-transparent p-0 text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover active:bg-v2-overlay-simple-overlay-pressed focus-visible:-outline-offset-2 disabled:pointer-events-none disabled:opacity-40"
                 disabled={c.result.count() === 0}
                 aria-label={delta < 0 ? c.result.previousLabel() : c.result.nextLabel()}
                 onMouseDown={(event) => event.preventDefault()}
@@ -80,7 +80,7 @@ export function TimelineSearchBar(props: { controller: TimelineSearchController 
           </For>
           <button
             type="button"
-            class="-me-1 flex size-5 shrink-0 self-center items-center justify-center rounded-[2px] border-0 bg-transparent p-0 text-v2-icon-icon-muted outline outline-1 outline-transparent hover:bg-v2-overlay-simple-overlay-hover active:bg-v2-overlay-simple-overlay-pressed focus-visible:outline-v2-border-border-focus"
+            class="-me-1 flex size-5 shrink-0 self-center items-center justify-center rounded-[4px] border-0 bg-transparent p-0 text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover active:bg-v2-overlay-simple-overlay-pressed focus-visible:-outline-offset-2"
             aria-label={c.query.placeholder()}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => c.query.close()}

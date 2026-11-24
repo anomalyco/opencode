@@ -409,21 +409,11 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
           <Show when={local.variant === "compact"}>
             <Tooltip
               value={
-                <div class="flex flex-col gap-1.5">
-                  <div class="flex items-center gap-1.5">
-                    {compactLabel()}
-                    <Keybind
-                      keys={view().alternateActive ? local.alternateSubmit!.keys : [view().compactCancel ? "Esc" : "⏎"]}
-                      variant="neutral"
-                    />
-                  </div>
-                  <Show when={local.alternateSubmit && !view().alternateActive}>
-                    <div class="flex items-center gap-1.5">
-                      {local.alternateSubmit!.label}
-                      <Keybind keys={local.alternateSubmit!.keys} variant="neutral" />
-                    </div>
-                  </Show>
-                </div>
+                <SubmitTooltip
+                  label={compactLabel()}
+                  keys={view().alternateActive ? local.alternateSubmit!.keys : [view().compactCancel ? "Esc" : "⏎"]}
+                  alternate={view().alternateActive ? undefined : local.alternateSubmit}
+                />
               }
               placement="top"
             >
@@ -485,19 +475,76 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
               >
                 {local.cancelLabel ?? i18n.t("ui.lineComment.cancel")}
               </Button>
-              <Button
-                type="button"
-                size="small"
-                variant="contrast"
-                disabled={!view().canSubmit || view().submitting}
-                onClick={() => dispatch({ type: "submit.requested", config: readConfig() })}
+              <Show
+                when={local.alternateSubmit}
+                fallback={
+                  <Button
+                    type="button"
+                    size="small"
+                    variant="contrast"
+                    disabled={!view().canSubmit || view().submitting}
+                    onClick={() => dispatch({ type: "submit.requested", config: readConfig() })}
+                  >
+                    {local.submitLabel ?? i18n.t("ui.lineComment.submit")}
+                  </Button>
+                }
               >
-                {local.submitLabel ?? i18n.t("ui.lineComment.submit")}
-              </Button>
+                {(alternate) => (
+                  <Tooltip
+                    value={
+                      <SubmitTooltip
+                        label={local.submitLabel ?? i18n.t("ui.lineComment.submit")}
+                        keys={["⏎"]}
+                        alternate={alternate()}
+                      />
+                    }
+                    placement="top"
+                  >
+                    <Button
+                      type="button"
+                      size="small"
+                      variant="contrast"
+                      disabled={view().defaultDisabled}
+                      onPointerEnter={(event: PointerEvent) =>
+                        dispatch({ type: "modifier.changed", active: modified(event), config: readConfig() })
+                      }
+                      onPointerDown={(event: PointerEvent) =>
+                        dispatch({ type: "modifier.changed", active: modified(event), config: readConfig() })
+                      }
+                      onClick={(event: MouseEvent) =>
+                        dispatch({ type: "action.clicked", modified: modified(event), config: readConfig() })
+                      }
+                    >
+                      {view().alternateActive
+                        ? alternate().label
+                        : (local.submitLabel ?? i18n.t("ui.lineComment.submit"))}
+                    </Button>
+                  </Tooltip>
+                )}
+              </Show>
             </div>
           </div>
         </Show>
       </div>
+    </div>
+  )
+}
+
+function SubmitTooltip(props: { label: string; keys: string[]; alternate?: { label: string; keys: string[] } }) {
+  return (
+    <div class="flex flex-col items-center gap-1.5">
+      <div class="flex items-center gap-1.5">
+        {props.label}
+        <Keybind keys={props.keys} variant="neutral" />
+      </div>
+      <Show when={props.alternate}>
+        {(alternate) => (
+          <div class="flex items-center gap-1.5">
+            {alternate().label}
+            <Keybind keys={alternate().keys} variant="neutral" />
+          </div>
+        )}
+      </Show>
     </div>
   )
 }

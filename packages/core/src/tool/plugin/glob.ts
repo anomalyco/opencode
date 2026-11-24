@@ -63,6 +63,7 @@ export const Plugin = {
             Effect.gen(function* () {
               const searchPath = input.path === "undefined" || input.path === "null" ? undefined : input.path
               const target = yield* access.resolve({ path: searchPath ?? ".", kind: "directory" })
+              yield* ToolSearch.available(target.environment)
               yield* access.authorizeExternal([target], context)
               yield* permission.assert({
                 action: name,

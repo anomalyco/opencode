@@ -93,6 +93,7 @@ export function NewSessionView(props: {
       <div
         ref={panel}
         data-component="new-session"
+        data-focus-scope
         class="relative isolate flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
       >
         <ComposerDropzone
@@ -191,7 +192,7 @@ function fitPath(value: string, width: number, font: string) {
 }
 
 const TRIGGER =
-  "flex h-7 items-center gap-1.5 rounded-sm text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
+  "flex h-7 items-center gap-1.5 rounded-[4px] text-start ps-1.5 pe-2 text-v2-text-text-muted transition-[background-color,color] hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base"
 
 function NewSessionLocation(props: {
   project: PromptProject

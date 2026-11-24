@@ -3103,6 +3103,8 @@ test("opens an optional comment beside the quote action and skips it with Alt-cl
   await chips.nth(0).hover()
   await page.getByRole("button", { name: "Remove attachment" }).click()
   await expect(chips).toHaveCount(0)
+  // Removing the last chip hands focus back to the editor a task later, and its caret would replace the next selection.
+  await expect(editor).toBeFocused()
 
   // A slow tooltip names the action and its shortcut.
   await select("The first sentence to quote.")

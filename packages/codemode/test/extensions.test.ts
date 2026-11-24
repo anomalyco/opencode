@@ -696,7 +696,7 @@ describe("host errors", () => {
       await value(
         `try { open() } catch (e) {
           const c = e.cause
-          return [e.message, Object.keys(e), c instanceof Error, c.code, c.errno, c.path, c.detail, Object.keys(c), "stack" in c]
+          return [e.message, Object.keys(e), c instanceof Error, c.code, c.errno, c.path, c.detail, Object.keys(c), c.stack, e.stack]
         }`,
         target,
       ),
@@ -709,7 +709,8 @@ describe("host errors", () => {
       "x",
       { retried: true },
       ["code", "errno", "path", "detail"],
-      false,
+      "Error: ENOENT: no such file or directory, open 'x'",
+      "Error: open failed",
     ])
   })
 

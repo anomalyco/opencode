@@ -28,7 +28,7 @@ import {
 } from "./content-machine"
 import { createFileViewCache } from "./view-cache"
 import { useServerSDK } from "@/runtime/server/client"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { formatServerError } from "@/runtime/server/errors"
 import { createFileTreeStore } from "./tree-store"
 import { invalidateFromWatcher } from "./watcher"
@@ -46,12 +46,13 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const params = useParams()
     const serverSDK = useServerSDK()
     const data = useData()
+    const server = useServer()
     const platform = usePlatform()
     const language = useLanguage()
     const attachment = usePluginAttachment()
 
     const scope = createMemo(() => sdk().directory)
-    const path = createPathHelpers(scope)
+    const path = createPathHelpers(scope, () => server.ctx.sync.data.path.home)
 
     const cache = createFileContentCache()
     const [store, setStore] = createStore({ machine: createFileContentState(untrack(scope)) })

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "ބޭނުންކުރުން",
   "usage.cost": "ހަރަދު",
   "usage.view": "ކޮންޓެކްސްޓް ބޭނުންކުރުން ބަލާށެވެ",
-  "systemPrompt.title": "ސިސްޓަމް ޕްރޮމްޕްޓް",
   "rawMessages.title": "ރޯ މެސެޖުތަކެވެ",
   "export.session": "އެކްސްޕޯޓް ސެޝަން",
   "stats.session": "ސެޝަން",

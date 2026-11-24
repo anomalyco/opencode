@@ -169,9 +169,11 @@ export const lineCommentStyles = `
   line-height: var(--line-height-large);
 }
 
+/* An outline, not a shadow: forced colours drop shadows, and the outline outside the border still marks focus there. */
 [data-component="line-comment"] [data-slot="line-comment-textarea"]:focus {
-  outline: none;
-  box-shadow: var(--shadow-xs-border-select);
+  border-color: var(--v2-border-border-focus);
+  outline: 1px solid var(--v2-border-border-focus);
+  outline-offset: 0;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-mention-list"] {

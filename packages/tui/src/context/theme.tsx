@@ -9,7 +9,6 @@ import {
 } from "@opencode/theme/tui"
 import {
   allThemes,
-  getOpenCode2Theme,
   hasTheme,
   parseTheme,
   setCustomThemes,
@@ -20,7 +19,16 @@ import {
 import { generateSystem, terminalMode } from "../theme/system"
 import { discoverThemes } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/component"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+  type Accessor,
+  type ParentProps,
+} from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useConfig, useNewDesigns } from "../config"
@@ -136,17 +144,23 @@ const themeContext = createSimpleContext({
         const mode = lock ?? renderer.themeMode ?? props.mode
         draft.mode = mode
         draft.lock = lock
-        draft.active = config.theme?.name ?? "opencode"
+        draft.active = config.theme?.name || "opencode"
         draft.ready = false
       }),
     )
 
-    createEffect(() => {
-      const theme = config.theme?.name
-      if (!theme) return
-      setStore("active", theme)
-      if (theme === "system") refreshPalette()
-    })
+    createEffect(
+      on(
+        () => config.theme?.name,
+        (name) => {
+          const theme = name || "opencode"
+          if (store.active === theme) return
+          setStore("active", theme)
+          if (theme === "system") refreshPalette()
+        },
+        { defer: true },
+      ),
+    )
 
     createEffect(() => {
       const mode = config.theme?.mode
@@ -292,16 +306,16 @@ const themeContext = createSimpleContext({
       themeRefreshTimeouts.length = 0
     })
 
-    const available = createMemo(
-      (): Record<string, ThemeDocumentSource> =>
-        newDesigns() ? { opencode2: getOpenCode2Theme(), ...themeSources() } : themeSources(),
-    )
-    const has = (name: string) => Boolean(name) && available()[name] !== undefined
+    const available = themeSources
+    // "opencode2" was the new theme's name before it became "opencode".
+    const alias = (name: string) => (name === "opencode2" && !available().opencode2 ? "opencode" : name)
+    const has = (name: string) => Boolean(name) && available()[alias(name)] !== undefined
 
     const initStarted = performance.now()
     const selected = createMemo(() => {
       const sources = available()
-      const name = sources[store.active] ? store.active : "opencode"
+      const active = alias(store.active)
+      const name = sources[active] ? active : "opencode"
       try {
         return loadTheme(sources[name], name, store.mode, newDesigns())
       } catch (error) {
@@ -326,7 +340,7 @@ const themeContext = createSimpleContext({
       currentTokens: tokens,
       currentSyntax,
       get selected() {
-        return store.active
+        return alias(store.active)
       },
       all: available,
       has,
@@ -341,8 +355,9 @@ const themeContext = createSimpleContext({
         pin(requested, persist)
         return true
       },
-      set(theme: string) {
-        if (!has(theme)) return false
+      set(requested: string) {
+        if (!has(requested)) return false
+        const theme = alias(requested)
         setStore("active", theme)
         if (theme === "system") refreshPalette()
         void configState

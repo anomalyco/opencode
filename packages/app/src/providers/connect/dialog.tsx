@@ -190,7 +190,7 @@ export const DialogConnectProvider: Component<{
                                 {(value) => (
                                   <button
                                     type="button"
-                                    class="flex min-w-0 items-center gap-1.5 rounded-sm font-[530] text-v2-text-text-base hover:text-v2-text-text-muted focus-visible:text-v2-text-text-muted focus-visible:outline-none"
+                                    class="flex min-w-0 items-center gap-1.5 rounded-[4px] font-[530] text-v2-text-text-base hover:text-v2-text-text-muted"
                                     onClick={() => controller.navigate(value())}
                                   >
                                     {content()}
@@ -202,7 +202,7 @@ export const DialogConnectProvider: Component<{
                               {(value) => (
                                 <button
                                   type="button"
-                                  class="flex min-w-0 shrink items-center gap-1.5 rounded-sm font-[440] text-v2-text-text-faint hover:text-v2-text-text-base focus-visible:text-v2-text-text-base focus-visible:outline-none"
+                                  class="flex min-w-0 shrink items-center gap-1.5 rounded-[4px] font-[440] text-v2-text-text-faint hover:text-v2-text-text-base"
                                   onClick={() => controller.navigate(value())}
                                 >
                                   {content()}
@@ -241,7 +241,7 @@ export const DialogConnectProvider: Component<{
               placement="bottom"
               contentClass="!max-w-64 !whitespace-normal"
               triggerTabIndex={0}
-              class="me-3 flex min-w-0 shrink-0 !cursor-default items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted focus-visible:outline-none focus-visible:text-v2-text-text-base"
+              class="me-3 flex min-w-0 shrink-0 !cursor-default items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
             >
               <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
               <span class="max-w-40 truncate">{language.t("provider.connect.remote.label", { server: server() })}</span>
@@ -295,8 +295,6 @@ const POPULAR = ["opencode-go", "opencode", "openai", "github-copilot", "anthrop
 
 const providerNote = (id: string) => {
   if (id === "opencode-go") return "dialog.provider.opencodeGo.tagline" as const
-
-  if (id === "opencode") return "dialog.provider.opencode.note" as const
 }
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
@@ -310,13 +308,15 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     filter: "",
   })
 
-  // MCP servers are connected and managed from the MCP dialog, not here.
+  // MCP servers are connected and managed from the MCP dialog, not here. OpenCode Go connects through OpenCode, so
+  // it's only listed for people who already saved a Go key.
   const all = createMemo(() => {
     const query = store.filter.trim().toLowerCase()
 
     return integrations
       .list()
       .filter((row) => row.metadata?.source !== "mcp")
+      .filter((row) => row.id !== "opencode-go" || row.connections.some((item) => item.type === "credential"))
       .filter((row) => !query || `${row.id} ${row.name}`.toLowerCase().includes(query))
   })
 
@@ -426,7 +426,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                         <button
                           type="button"
                           data-provider-id={provider.id}
-                          class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none disabled:pointer-events-none"
+                          class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 disabled:pointer-events-none"
                           classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
                           onMouseEnter={() => setStore("active", provider.id)}
                           disabled={disabled(provider)}
@@ -844,7 +844,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
             <button
               type="button"
               data-action="provider-connect-method"
-              class="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+              class="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
               onClick={() => props.controller.input({ type: "method.selected", index: index() })}
             >
               <Icon name={METHOD_ICON[item.type]} class="shrink-0 text-v2-icon-icon-muted" />
@@ -1069,7 +1069,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
               <button
                 type="button"
                 aria-expanded={pasteOpen()}
-                class="flex h-12 items-center gap-1.5 text-start font-[440] text-v2-text-text-base focus-visible:outline-none focus-visible:underline"
+                class="flex h-12 items-center gap-1.5 rounded-md text-start font-[440] text-v2-text-text-base focus-visible:-outline-offset-2"
                 onClick={() => props.controller.input({ type: "paste.toggled", open: !pasteOpen() })}
               >
                 <Icon
@@ -1179,7 +1179,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                       type="button"
                       role="radio"
                       aria-checked={input.body.activeID === account.id}
-                      class="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 ps-2 pe-2 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
+                      class="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md ps-2 pe-2 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:-outline-offset-2"
                       disabled={input.body.busy}
                       onClick={() => props.controller.chooseAccount(account)}
                     >
@@ -1248,7 +1248,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
         <button
           type="button"
           data-action="provider-account-add"
-          class="flex h-8 w-full items-center gap-1.5 rounded-md ps-2 pe-2 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none disabled:pointer-events-none"
+          class="flex h-8 w-full items-center gap-1.5 rounded-md ps-2 pe-2 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:-outline-offset-2 disabled:pointer-events-none"
           disabled={!input.body.canAdd}
           onClick={() => props.controller.dispatch({ type: "account.add" })}
         >
@@ -1381,7 +1381,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                     data-first-provider-model=""
                     data-selected={checked() ? "" : undefined}
                     aria-checked={checked()}
-                    class="connected-model-row text-start focus-visible:outline-none"
+                    class="connected-model-row text-start"
                     onClick={() => props.controller.dispatch({ type: "model.selected", modelKey: modelKey(model) })}
                   >
                     <div data-slot="settings-row-copy">

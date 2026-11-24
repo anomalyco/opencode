@@ -28,17 +28,20 @@ function ToastRegion(props: ToastRegionProps) {
     // A modal dialog hides what's outside it from assistive tech. The region is in the Portal's own div, so that div,
     // rather than the toaster, is what the dialog would hide.
     container.setAttribute("data-kb-top-layer", "")
+    // Dismissing a toast moves focus to the next one, or back to where it was before the last.
+    container.setAttribute("data-focus-scope", "")
 
     const sync = () => {
       container.querySelectorAll<HTMLElement>(".toast-v2-region .toast-v2").forEach((element) => {
         const hidden = element.dataset.visible === "false"
+        element.toggleAttribute("data-floating-overlay", !hidden || element.dataset.removed === "true")
         element.inert = hidden
         element.tabIndex = hidden ? -1 : 0
       })
     }
 
     const observer = new MutationObserver(sync)
-    observer.observe(container, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-visible"] })
+    observer.observe(container, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-visible", "data-removed"] })
     sync()
     onCleanup(() => observer.disconnect())
   }

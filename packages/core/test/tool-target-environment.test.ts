@@ -52,6 +52,7 @@ const fileToolsNode = makeLocationNode({
     FileWrite.node,
     Formatter.node,
     Image.node,
+    Environment.node,
     Permission.node,
     SessionInstructions.node,
     InstructionDiscovery.node,
@@ -161,7 +162,7 @@ describe("Code Mode Bun", () => {
             metadata: { files: [{ status: "modified", patch: expect.stringContaining("-one\n+two") }] },
           },
           { action: "edit" },
-          { action: "glob" },
+          { action: "read", resources: ["notes.txt"] },
         ])
         expect(yield* Environment.exists(other.environment.files, file)).toBe(false)
         expect(yield* Effect.promise(() => fs.readdir(tmp.path))).toEqual(["notes.txt"])

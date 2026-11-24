@@ -5,7 +5,7 @@ import { expect, test } from "bun:test"
 import { resolveThemeDocument } from "@opencode/theme/tui"
 import { ConfigProvider, useConfig, type Info } from "../../src/config"
 import { ThemeProvider, useTheme, useThemes } from "../../src/context/theme"
-import { getOpenCode2Theme, getOpenCodeTheme } from "../../src/theme"
+import { getOpenCodeTheme, getOpenCodeClassicTheme } from "../../src/theme"
 import { emptyThemeSource, tmpdir } from "../fixture/fixture"
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
@@ -58,9 +58,9 @@ test("the system theme follows a palette reply that arrives after the query", as
   }
 })
 
-test("offers opencode2 only while the new designs experiment is enabled", async () => {
+test("names the new theme opencode and the previous one opencode-classic", async () => {
   await using temporary = await tmpdir()
-  const settings: Info = {}
+  const settings: Info = { theme: { name: "opencode" } }
   let config!: ReturnType<typeof useConfig>
   let themes!: ReturnType<typeof useThemes>
   let theme!: ReturnType<typeof useTheme>
@@ -92,24 +92,91 @@ test("offers opencode2 only while the new designs experiment is enabled", async 
   try {
     app.renderer.start()
     await app.waitForFrame(() => themes !== undefined)
-    expect(themes.has("opencode2")).toBeFalse()
-    expect(Object.keys(themes.all())).not.toContain("opencode2")
-    expect(themes.set("opencode2")).toBeFalse()
-
-    await config.update((draft) => {
-      draft.experimental = { "new-designs": true }
-    })
-    expect(themes.has("opencode2")).toBeTrue()
+    const newTheme = resolveThemeDocument(getOpenCodeTheme(), "dark").background.base
+    const classic = resolveThemeDocument(getOpenCodeClassicTheme(), "dark").background.base
+    expect(theme.background.base.equals(newTheme)).toBeTrue()
+    expect(themes.set("opencode-classic")).toBeTrue()
+    expect(theme.background.base.equals(classic)).toBeTrue()
     expect(themes.set("opencode2")).toBeTrue()
-    expect(theme.background.base.equals(resolveThemeDocument(getOpenCode2Theme(), "dark").background.base)).toBeTrue()
+    expect(theme.background.base.equals(newTheme)).toBeTrue()
 
+    // The names do not depend on the new designs experiment.
     await config.update((draft) => {
       draft.experimental = { "new-designs": false }
     })
-    expect(themes.has("opencode2")).toBeFalse()
-    expect(theme.background.base.equals(resolveThemeDocument(getOpenCodeTheme(), "dark").background.base)).toBeTrue()
-    expect(themes.selected).toBe("opencode2")
-    expect(settings.theme?.name).toBe("opencode2")
+    expect(theme.background.base.equals(newTheme)).toBeTrue()
+    expect(themes.has("opencode-classic")).toBeTrue()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("removing theme or theme.name from config reverts to opencode", async () => {
+  await using temporary = await tmpdir()
+  let settings: Info = { theme: { name: "gruvbox", mode: "light" } }
+  let config!: ReturnType<typeof useConfig>
+  let themes!: ReturnType<typeof useThemes>
+  let theme!: ReturnType<typeof useTheme>
+  function Probe() {
+    config = useConfig()
+    themes = useThemes()
+    theme = useTheme()
+    return null
+  }
+  const app = await testRender(
+    () => (
+      <TestTuiContexts paths={{ state: temporary.path }}>
+        <ConfigProvider
+          config={createTuiResolvedConfig(settings)}
+          service={{
+            get: async () => structuredClone(settings),
+            update: async (update) => {
+              const next = structuredClone(settings)
+              update(next)
+              settings = next
+              return structuredClone(settings)
+            },
+          }}
+        >
+          <ThemeProvider mode="dark" source={emptyThemeSource}>
+            <Probe />
+          </ThemeProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 20, height: 2 },
+  )
+
+  try {
+    await app.renderOnce()
+    const opencodeLight = resolveThemeDocument(getOpenCodeTheme(), "light").background.base
+    expect(themes.selected).toBe("gruvbox")
+    expect(themes.mode()).toBe("light")
+    expect(theme.background.base.equals(opencodeLight)).toBeFalse()
+
+    // Removing theme.name reverts to opencode while preserving pinned mode.
+    await config.update((draft) => {
+      delete draft.theme?.name
+    })
+    await app.renderOnce()
+    expect(themes.selected).toBe("opencode")
+    expect(themes.mode()).toBe("light")
+    expect(theme.background.base.equals(opencodeLight)).toBeTrue()
+
+    // Re-applying a theme and removing the entire theme block also reverts to opencode.
+    await config.update((draft) => {
+      draft.theme = { name: "gruvbox", mode: "light" }
+    })
+    await app.renderOnce()
+    expect(themes.selected).toBe("gruvbox")
+    expect(theme.background.base.equals(opencodeLight)).toBeFalse()
+
+    await config.update((draft) => {
+      delete draft.theme
+    })
+    await app.renderOnce()
+    expect(themes.selected).toBe("opencode")
+    expect(theme.background.base.equals(opencodeLight)).toBeTrue()
   } finally {
     app.renderer.destroy()
   }

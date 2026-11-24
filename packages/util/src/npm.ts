@@ -38,6 +38,12 @@ export interface Interface {
   readonly check: (pkg: string) => Effect.Effect<boolean, InstallFailedError>
   readonly update: (pkg: string) => Effect.Effect<Package, InstallFailedError | EffectFlock.LockError>
   /**
+   * Whether newer versions should install on their own because the package names what to follow: `name@latest`, a
+   * version range, a Git `semver:` range, or a Git ref the remote lists as a branch. A bare name or repository, other
+   * dist-tags, Git tags and commits stay on what's installed.
+   */
+  readonly follows: (pkg: string) => Effect.Effect<boolean, InstallFailedError>
+  /**
    * Stop using the newest installed version when it is `version`, so the previous one is current again. Its files stay
    * until they expire, for anything still running it. False when it isn't the newest or there is no previous one.
    */
@@ -67,19 +73,36 @@ export async function cacheKey(pkg: string) {
 }
 
 type Target =
-  | { readonly type: "registry"; readonly name: string; readonly spec: string; readonly mutable: boolean }
-  | { readonly type: "git"; readonly name?: string; readonly slug: string; readonly mutable: boolean }
+  | {
+      readonly type: "registry"
+      readonly name: string
+      readonly spec: string
+      readonly mutable: boolean
+      readonly follows: boolean
+    }
+  | {
+      readonly type: "git"
+      readonly name?: string
+      readonly slug: string
+      readonly mutable: boolean
+      readonly follows: boolean
+      /** A named ref that may be a branch or a tag. */
+      readonly ref?: string
+    }
 
 async function parse(pkg: string): Promise<Target | undefined> {
   const { default: npa } = await import("npm-package-arg")
   try {
     const result = npa(pkg)
     if (result.type === "git") {
+      const mutable = !isCommit(result.gitCommittish)
       return {
         type: "git",
         ...(result.name ? { name: result.name } : {}),
         slug: gitSlug(pkg),
-        mutable: !isCommit(result.gitCommittish),
+        mutable,
+        follows: Boolean(result.gitRange),
+        ...(mutable && result.gitCommittish ? { ref: result.gitCommittish } : {}),
       }
     }
     if (!result.name || !["version", "range", "tag"].includes(result.type)) return
@@ -88,6 +111,10 @@ async function parse(pkg: string): Promise<Target | undefined> {
       name: result.name,
       spec: result.raw === result.name ? "latest" : result.rawSpec,
       mutable: result.type !== "version",
+      // npm parses a bare name as the range `*`; only a written `@latest` or range follows.
+      follows:
+        result.raw !== result.name &&
+        (result.type === "range" || (result.type === "tag" && result.rawSpec === "latest")),
     }
   } catch {
     return
@@ -417,6 +444,26 @@ const layer = Layer.effect(
       return installed
     }, Effect.scoped)
 
+    const follows = Effect.fn("Npm.follows")(function* (pkg: string) {
+      const target = yield* Effect.promise(() => parse(pkg))
+      if (target?.type !== "git" || !target.ref) return target?.follows ?? false
+      const root = directory(pkg, target)
+      // Only the remote knows whether a ref is a branch or a tag. pacote keeps the ref it resolved, and Git reuses the
+      // refs the update check just listed for a few minutes, so this usually doesn't ask the remote again.
+      const { GitFetcher } = (yield* Effect.promise(() => import("pacote"))) as unknown as {
+        GitFetcher: new (
+          spec: string,
+          options: Record<string, unknown>,
+        ) => { resolve(): Promise<string>; resolvedRef: { readonly type: string } | null }
+      }
+      const fetcher = new GitFetcher(pkg, { ...(yield* NpmConfig.load(root)), ignoreScripts: true, windowsHide: true })
+      yield* Effect.tryPromise({
+        try: () => fetcher.resolve(),
+        catch: (cause) => new InstallFailedError({ dir: root, cause }),
+      })
+      return fetcher.resolvedRef?.type === "branch"
+    })
+
     const reject = Effect.fn("Npm.reject")(function* (pkg: string, version: string) {
       const target = yield* Effect.promise(() => parse(pkg))
       const dir = directory(pkg, target)
@@ -488,6 +535,7 @@ const layer = Layer.effect(
       resolve,
       check,
       update,
+      follows,
       reject,
       which,
     })

@@ -40,6 +40,7 @@ export type DialogStackEvent<F = unknown, R = unknown> =
       readonly id: string
       readonly aborted: boolean
       readonly focus: F | undefined
+      readonly refreshFocus?: boolean
       readonly request: R
     }
   /**
@@ -173,7 +174,7 @@ function open<F, R>(
     exitMs: DIALOG_EXIT_MS,
     backdropDismiss: true,
     // A replacement returns focus to where the dialogs it replaces would have, not to their now-removed content.
-    focus: replace && first ? first.focus : event.focus,
+    focus: replace && first && !event.refreshFocus ? first.focus : event.focus,
     // A dialog that had already started closing was not replaced: a late close from inside it still closes nothing.
     replaced: replace
       ? state.entries.flatMap((item) => (item.status === "open" ? [item.attempt, ...item.replaced] : []))

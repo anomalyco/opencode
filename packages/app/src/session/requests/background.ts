@@ -156,10 +156,12 @@ export function createSessionBackground(input: {
 
     const jobs = (input.jobs?.() ?? []).filter((job) => job.status === "running")
 
-    // The latest call for a child names it; its own session or its tree's jobs decide whether it still runs.
-    return sessions.flatMap((info): Subagent[] => {
-      if (!descends(info.id, id)) return []
-
+    // The latest call for a child names it; its own session or its tree's jobs decide whether it still runs. The
+    // session list is most recently updated first, so its order would move a child each time its info is read again.
+    return oldestFirst(
+      sessions.filter((info) => descends(info.id, id)),
+      (info) => info.time.created,
+    ).flatMap((info): Subagent[] => {
       const owned = jobs.filter((job) => {
         const owner = job.kind === "subagent" ? job.childSessionID : job.sessionID
 
@@ -194,7 +196,7 @@ export function createSessionBackground(input: {
     if (!id) return []
     const current = history()
 
-    const shells = input.shells().flatMap((shell) => {
+    const shells = oldestFirst(input.shells(), (shell) => shell.time.started).flatMap((shell) => {
       if (shell.status !== "running" || shell.metadata.sessionID !== id) return []
 
       if (
@@ -212,15 +214,17 @@ export function createSessionBackground(input: {
     return [...subagents(), ...shells]
   })
 
-  // The session's own scripts moved to the background, while their job runs.
+  // The session's own scripts moved to the background, while their job runs. Every script runs as a job, so a
+  // foreground one only counts once its execute call has ended with the job's id.
   const scripts = createMemo((): Script[] => {
     const id = input.sessionID()
 
     if (!id) return []
     const current = history()
 
-    return (input.jobs?.() ?? []).flatMap((job) => {
-      if (job.kind !== "codemode" || job.status !== "running" || job.sessionID !== id) return []
+    return oldestFirst(input.jobs?.() ?? [], (job) => job.time.started).flatMap((job) => {
+      if (job.kind !== "codemode" || job.status !== "running" || job.sessionID !== id || !current.scripts.has(job.id))
+        return []
 
       return [
         {
@@ -234,6 +238,12 @@ export function createSessionBackground(input: {
   })
 
   return { blocking, tasks, scripts }
+}
+
+// A row keeps its place for as long as it is listed: work is ordered by when it was created, which never changes, and
+// then by id, so two rows never trade places.
+function oldestFirst<T extends { id: string }>(items: readonly T[], created: (item: T) => number) {
+  return items.toSorted((a, b) => created(a) - created(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
 function firstLine(code: string | undefined) {
@@ -253,4 +263,17 @@ function executeShellCommands(calls: JsonValue | undefined) {
       onSome: (item) => (item.tool === "shell" && item.status === "running" ? [item.input.command] : []),
     }),
   )
+}
+
+// Applies the job.updated events that arrived while the list request was in flight on top of its response, which may
+// predate them.
+export function mergeJobList<T extends Pick<JobInfo, "id"> & { status: string }>(
+  listed: readonly T[],
+  updates: ReadonlyMap<string, T>,
+) {
+  const jobs = new Map(listed.map((job) => [job.id, job]))
+
+  updates.forEach((info, id) => (info.status === "running" ? jobs.set(id, info) : jobs.delete(id)))
+
+  return jobs
 }

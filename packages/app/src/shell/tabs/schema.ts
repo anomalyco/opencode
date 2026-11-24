@@ -63,6 +63,8 @@ export const Regions = Schema.Record(
   ),
 )
 
+export const SharedSide = Persistence.struct({ opened: Schema.optional(Schema.Boolean) })
+
 export const ClosedTab = Persistence.struct({
   tab: SessionCodec,
   index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

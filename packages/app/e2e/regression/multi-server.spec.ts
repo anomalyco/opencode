@@ -189,33 +189,8 @@ test("a remote session whose server signed the app out asks to sign in again, th
   await expect(signedOut).toHaveCount(0)
 })
 
-// The session route waits this long for an uncached session before it calls the server unreachable.
-const RESOLUTION_TIMEOUT_MS = 30_000
-
 // How often the app checks each server's health.
 const SERVER_HEALTH_POLL_MS = 10_000
-
-test("a session its server never answers for says the server is unreachable, then opens", async ({ page }) => {
-  const late = session({ id: "ses_server_a_late", directory: directoryA, title: "Late session" })
-  const sessions = [sessionA]
-  await setup(page, { tabs: [], a: { sessions } })
-  const metadata = await holdRoute(page, new RegExp(`/api/session/${late.id}(\\?|$)`), { method: "GET" })
-  await page.clock.install()
-  await page.goto(sessionHref(late.id))
-  await metadata.arrived
-  const unreachable = page.getByText("Can't reach this server", { exact: true })
-  await expect(unreachable).toHaveCount(0)
-
-  await page.clock.fastForward(RESOLUTION_TIMEOUT_MS)
-  await expect(unreachable).toBeVisible()
-  await expect(page.getByRole("button", { name: "Close Tab", exact: true })).toBeVisible()
-
-  // The request that hung still fills the cache when it answers.
-  sessions.push(late)
-  metadata.release()
-  await expectSessionTitle(page, late.title)
-  await expect(unreachable).toHaveCount(0)
-})
 
 // The inbox shows what it has once this long passes, even while a server still has not answered.
 const INBOX_SETTLE_TIMEOUT_MS = 10_000

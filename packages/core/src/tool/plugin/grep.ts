@@ -81,6 +81,7 @@ export const Plugin = {
           execute: (input, context) =>
             Effect.gen(function* () {
               const target = yield* access.resolve({ path: input.path ?? "." })
+              yield* ToolSearch.available(target.environment)
               yield* access.authorizeExternal([target], context)
               yield* permission.assert({
                 action: name,

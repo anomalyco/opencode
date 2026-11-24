@@ -4,3 +4,8 @@
   z-index: 10;
   background-color: var(--background-stronger);
 }
+
+/* Items overlap by a pixel, so the next header would paint over the bottom of this one's inset ring. */
+[data-component="sticky-accordion-header"]:has(> [data-slot="accordion-trigger"]:focus-visible) {
+  z-index: 11;
+}
