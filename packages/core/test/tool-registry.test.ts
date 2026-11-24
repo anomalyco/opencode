@@ -660,7 +660,9 @@ describe("Tool", () => {
         (yield* snapshot.execute({ ...call("acme.tools.echo"), definitions: withoutExecute }).pipe(Effect.flip))
           .message,
       ).toContain('No tool named "acme.tools.echo"')
-      const denied = yield* service.snapshot([{ action: "acme_tools_echo", resource: "*", effect: "deny" }])
+      const denied = yield* service.snapshot(
+        Permission.Policy.fromRules([{ action: "acme_tools_echo", resource: "*", effect: "deny" }]),
+      )
       expect((yield* denied.execute(call("acme.tools.echo")).pipe(Effect.flip)).message).toContain(
         'No tool named "acme.tools.echo"',
       )
@@ -789,7 +791,9 @@ describe("Tool", () => {
       expect(available.definitions.map((tool) => tool.name)).toEqual(["execute"])
       expect(available.codeModeCatalog?.tools).toEqual([])
 
-      const denied = yield* service.snapshot([{ action: "execute", resource: "*", effect: "deny" }])
+      const denied = yield* service.snapshot(
+        Permission.Policy.fromRules([{ action: "execute", resource: "*", effect: "deny" }]),
+      )
       expect(denied.definitions).toEqual([])
       expect(denied.codeModeCatalog).toBeUndefined()
     }),
@@ -907,7 +911,7 @@ describe("Tool", () => {
             code: 'return await tools.shell({ command: "build", background: true })',
             tools: ["shell"],
             bindings: {},
-            permissions: [],
+            policy: Permission.Policy.empty,
             limits: {},
             context: { sessionID, ...identity, progress: () => Effect.void },
           }),
@@ -917,7 +921,7 @@ describe("Tool", () => {
             code: 'return await tools.glob({ pattern: "*" })',
             tools: ["glob"],
             bindings: {},
-            permissions: [],
+            policy: Permission.Policy.empty,
             limits: {},
             context: { sessionID, ...identity, progress: () => Effect.void },
           }),
@@ -944,9 +948,12 @@ describe("Tool", () => {
         ).toBe("ls:true:false")
 
         // When execute is denied, Code Mode tools fall back to their direct form while hidden tools stay hidden.
-        const denied = yield* service.snapshot([{ action: "execute", resource: "*", effect: "deny" }], {
-          tools: { hidden: new Set(["glob"]) },
-        })
+        const denied = yield* service.snapshot(
+          Permission.Policy.fromRules([{ action: "execute", resource: "*", effect: "deny" }]),
+          {
+            tools: { hidden: new Set(["glob"]) },
+          },
+        )
         expect(denied.codeModeCatalog).toBeUndefined()
         expect(denied.definitions.map((tool) => tool.name)).toEqual([
           "legacy_pin",
@@ -999,7 +1006,7 @@ describe("Tool", () => {
         t5: make(),
         t6: make(),
       })
-      const deny = (action: string): Permission.Ruleset => [{ action, resource: "*", effect: "deny" }]
+      const deny = (action: string) => Permission.Policy.fromRules([{ action, resource: "*", effect: "deny" }])
 
       const s1 = yield* service.snapshot(deny("t1"))
       const s2 = yield* service.snapshot(deny("t2"))
@@ -1037,14 +1044,16 @@ describe("Tool", () => {
       const service = yield* Tool.Service
       yield* transform(service, { lookup: make() }, { namespace: "mcp" })
       yield* transform(service, { bash: make() }, { codemode: false })
-      const denyExecute: Permission.Ruleset = [{ action: "execute", resource: "*", effect: "deny" }]
+      const denyExecute = Permission.Policy.fromRules([{ action: "execute", resource: "*", effect: "deny" }])
 
       const snapshot = yield* service.snapshot(denyExecute)
       expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["bash", "mcp_lookup"])
       expect(snapshot.codeModeCatalog).toBeUndefined()
       expect((yield* snapshot.execute(call("mcp_lookup"))).output).toEqual({ text: "mcp_lookup" })
 
-      const hidden = yield* service.snapshot([...denyExecute, { action: "mcp_lookup", resource: "*", effect: "deny" }])
+      const hidden = yield* service.snapshot(
+        Permission.Policy.override(denyExecute, [{ action: "mcp_lookup", resource: "*", effect: "deny" }]),
+      )
       expect(hidden.definitions.map((tool) => tool.name)).toEqual(["bash"])
       expect(yield* hidden.execute(call("mcp_lookup")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
     }),
@@ -1054,14 +1063,16 @@ describe("Tool", () => {
     Effect.gen(function* () {
       const service = yield* Tool.Service
       yield* transform(service, { move: make(), rename: make() }, { namespace: "opencode.session" })
-      const deny: Permission.Ruleset = [{ action: "opencode_session_move", resource: "*", effect: "deny" }]
+      const deny = Permission.Policy.fromRules([{ action: "opencode_session_move", resource: "*", effect: "deny" }])
 
       const codeMode = yield* service.snapshot(deny)
       const paths = codeModeListings(codeMode.codeModeCatalog!).map((entry) => entry.path)
       expect(paths).toContain("opencode.session.rename")
       expect(paths).not.toContain("opencode.session.move")
 
-      const direct = yield* service.snapshot([...deny, { action: "execute", resource: "*", effect: "deny" }])
+      const direct = yield* service.snapshot(
+        Permission.Policy.override(deny, [{ action: "execute", resource: "*", effect: "deny" }]),
+      )
       expect(direct.definitions.map((tool) => tool.name)).toEqual(["opencode_session_rename"])
     }),
   )
@@ -1092,6 +1103,12 @@ describe("Tool", () => {
           { action: "*", resource: "*", effect: "deny" },
         ]),
       ).toEqual([])
+      expect(
+        yield* names([
+          { action: "question", resource: "*", effect: "deny" },
+          { action: "question", resource: "private", effect: "deny" },
+        ]),
+      ).toEqual(["bash", "edit", "write", "execute"])
       expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["bash", "question", "execute"])
     }),
   )
@@ -1326,7 +1343,7 @@ describe("Tool", () => {
           code: 'return await tools.echo({ text: "constant" })',
           tools,
           bindings: {},
-          permissions: [],
+          policy: Permission.Policy.empty,
           limits: {},
           context: { sessionID, ...identity, progress: () => Effect.void },
         })

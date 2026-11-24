@@ -1,0 +1,90 @@
+name: triage-slop
+
+permissions:
+  contents: read
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+jobs:
+  close-slop:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.label.name == 'slop' &&
+      github.repository == 'anomalyco/opencode' &&
+      github.event.pull_request.state == 'open'
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Close, scrub, and comment on AI slop PR
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const pullNumber = pr.number;
+            const login = pr.user?.login?.toLowerCase();
+
+            // Never touch merged/closed PRs, bots, or team members.
+            if (pr.state !== "open" || pr.merged) return;
+            if (pr.user?.type === "Bot" || ["OWNER", "MEMBER"].includes(pr.author_association)) {
+              core.info(`Skipping #${pullNumber}: author ${pr.user?.login} is exempt`);
+              return;
+            }
+            try {
+              const { data: file } = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: ".github/TEAM_MEMBERS",
+                ref: "dev",
+              });
+              const members = new Set(
+                Buffer.from(file.content, "base64").toString("utf8").split("\n").map((l) => l.trim().toLowerCase()).filter(Boolean),
+              );
+              if (login && members.has(login)) {
+                core.info(`Skipping #${pullNumber}: author ${pr.user?.login} is in TEAM_MEMBERS`);
+                return;
+              }
+            } catch (error) {
+              core.warning(`Could not read TEAM_MEMBERS: ${error.message}`);
+              return;
+            }
+
+            // Close and scrub first so a failed update never leaves a misleading closed comment.
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber,
+              title: 'ai slop',
+              body: 'This pull request was closed as AI slop and its title/description were cleared to avoid misleading reviewers. If you believe this was closed in error, leave a comment explaining why.',
+              state: 'closed',
+            });
+
+            const marker = "<!-- triage-slop -->";
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pullNumber,
+              per_page: 100,
+            });
+            if (comments.some((c) => (c.body || "").includes(marker))) return;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pullNumber,
+              body: [
+                marker,
+                'This pull request has been closed because it was flagged as low-quality AI slop.',
+                '',
+                'Common reasons include:',
+                '- Failing to verify the underlying problem exists',
+                '- Failing to test that the change actually fixes it',
+                '- Making unverified assumptions about the codebase or adding speculative/misleading changes',
+                '',
+                'If you believe this was closed in error, leave a comment explaining how you reproduced and verified the change.',
+              ].join('\n'),
+            });

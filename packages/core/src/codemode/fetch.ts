@@ -6,6 +6,7 @@ import { Effect, Option } from "effect"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { CodeModeApi } from "./api.js"
+import { CodeModeBun } from "./bun.js"
 import { CodeModeExecution } from "./execution.js"
 
 const TIMEOUT_MS = 30_000
@@ -13,11 +14,24 @@ const TIMEOUT_MS = 30_000
 type Init = {
   readonly method?: string
   readonly headers?: Record<string, string> | Array<[string, string]>
-  readonly body?: string | Uint8Array<ArrayBuffer> | URLSearchParams
+  readonly body?: string | Uint8Array<ArrayBuffer> | URLSearchParams | Blob
 }
 
-const fetch = (input: string | URL, init: Init = {}) =>
+const fetch = (input: string | URL, given: Init = {}) =>
   Effect.gen(function* () {
+    // A BunFile reaches here as a plain copy, which `globalThis.fetch` would send as "[object Object]", as it would any
+    // other object, such as a response or its stream.
+    const init: Init = { ...given, body: yield* CodeModeBun.body(given.body) }
+    if (
+      typeof init.body === "object" &&
+      init.body !== null &&
+      !(init.body instanceof Uint8Array) &&
+      !(init.body instanceof URLSearchParams) &&
+      !(init.body instanceof Blob)
+    )
+      return yield* Effect.fail(
+        new TypeError("A fetch body must be a string, a Uint8Array, URLSearchParams, or a file from Bun.file()."),
+      )
     // Rules match the URL as written. The fragment is never sent, and would keep a rule for the exact URL from
     // matching.
     const url = String(input).split("#")[0]

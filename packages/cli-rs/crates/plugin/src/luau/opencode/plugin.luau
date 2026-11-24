@@ -3359,6 +3359,7 @@ export type ProjectUpdated = _Event1<"project.updated", {
 
 export type ProjectVcs = string
 
+--- An agent @-mentioned in the prompt, such as @explore, to suggest the model use it. Only the @name in text reaches the model; this records which agent it names and doesn't change the session's own agent.
 export type PromptAgentAttachment = {
     name: string,
     mention: PromptMention?,
@@ -3644,6 +3645,7 @@ export type SessionInboxDelivered = _Event2<"session.inbox.delivered", {
     inboxID: SessionMessageID,
 }>
 
+--- steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer.
 export type SessionInboxDelivery = ("steer" | "queue")
 
 export type SessionInboxDeliveryChanged = _Event2<"session.inbox.delivery.changed", {
