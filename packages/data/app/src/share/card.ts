@@ -676,7 +676,9 @@ function drawIntro(
     // A sentence of its own under the number, so it starts with a capital.
     const caption = card.stat.label.charAt(0).toUpperCase() + card.stat.label.slice(1)
     const lines = balance(ctx, caption, max).slice(0, 2)
-    const first = y + gap + size * 0.8 + gap
+    // A comma's tail hangs below the number, so the caption moves down to clear it.
+    const tail = /[,;]/.test(card.stat.value) ? size * 0.18 : 0
+    const first = y + gap + size * 0.8 + gap + tail
     lines.forEach((line, index) =>
       rise(ctx, time, 0.3 + index * 0.07, first + index * leading, label, () => {
         ctx.fillStyle = colors.muted
@@ -753,12 +755,7 @@ function odometer(
   ctx.clip()
   chars.reduce((wheel, char, index) => {
     const left = x + index * advance
-    if (!/\d/.test(char)) {
-      ctx.globalAlpha = settle(time, 0.1, 0.5)
-      ctx.fillText(char, left, baseline)
-      ctx.globalAlpha = 1
-      return wheel
-    }
+    if (!/\d/.test(char)) return wheel
     // Wheels land left to right, each a beat after the last, on a long, steep ease-out: they race at first, then crawl
     // the last few digits into place.
     const progress = Math.max(0, Math.min(1, (time - 0.1) / (1.6 + wheel * 0.35)))
@@ -770,6 +767,13 @@ function odometer(
     if (offset > 0) ctx.fillText(String((shown + 1) % 10), left, baseline - offset + pitch)
     return wheel + 1
   }, 0)
+  ctx.restore()
+  // The rest (separators, units) don't turn, so they fade in outside the window: a comma's tail hangs below it.
+  ctx.save()
+  ctx.globalAlpha *= settle(time, 0.1, 0.5)
+  chars.forEach((char, index) => {
+    if (!/\d/.test(char)) ctx.fillText(char, x + index * advance, baseline)
+  })
   ctx.restore()
 }
 

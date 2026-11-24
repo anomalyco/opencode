@@ -1022,31 +1022,37 @@
     display: none;
   }
 
-  /* Shuffle: the settings it changes roll like a slot machine's reels, flicking through a couple of turns before they
-     settle on their new value, one after another. */
-  [data-slot="editor-bar"][data-rolling] {
-    :is([data-id="layout"], [data-id="size"], [data-id="style"], [data-id="music"])
-      [data-slot="dropdown-trigger"]
-      :is([data-slot="tool-icon"], [data-slot="dropdown-value"], [data-slot="explicit"]) {
-      animation: share-roll 520ms cubic-bezier(0.23, 1, 0.32, 1) both;
-    }
+  /* Shuffle's odometer: a changed setting shows a reel of choices in a window a row tall, scrolling up fast and
+     slowing to rest on its new value. The first row is where it was, the last where it lands. */
+  [data-slot="reel"] {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    height: 24px;
+    overflow: hidden;
+  }
 
-    [data-id="size"] [data-slot="dropdown-trigger"] > * {
-      animation-delay: 60ms;
-    }
+  [data-component="dropdown"][data-show="icon"] [data-slot="reel"] {
+    flex: none;
+    width: 20px;
+  }
 
-    [data-id="style"] [data-slot="dropdown-trigger"] > * {
-      animation-delay: 120ms;
-    }
+  [data-slot="reel-strip"] {
+    display: flex;
+    flex-direction: column;
+    animation: share-odometer 900ms cubic-bezier(0.16, 0.84, 0.24, 1) both;
+  }
 
-    [data-id="music"] [data-slot="dropdown-trigger"] > * {
-      animation-delay: 180ms;
-    }
+  [data-slot="reel-row"] {
+    display: flex;
+    flex: none;
+    gap: 6px;
+    align-items: center;
+    height: 24px;
+    white-space: nowrap;
 
-    @media (prefers-reduced-motion: reduce) {
-      * {
-        animation: none !important;
-      }
+    [data-slot="dropdown-value"] {
+      display: block;
     }
   }
 
@@ -1685,30 +1691,12 @@
   }
 }
 
-@keyframes share-roll {
-  0% {
-    opacity: 0;
-    translate: 0 -10px;
-  }
-  22% {
-    opacity: 1;
-    translate: 0 6px;
-  }
-  23% {
-    opacity: 0;
-    translate: 0 -10px;
-  }
-  45% {
-    opacity: 1;
-    translate: 0 4px;
-  }
-  46% {
-    opacity: 0;
-    translate: 0 -8px;
-  }
-  100% {
-    opacity: 1;
+@keyframes share-odometer {
+  from {
     translate: 0 0;
+  }
+  to {
+    translate: 0 calc(-100% + 24px);
   }
 }
 

@@ -1,5 +1,5 @@
 import "./share.css"
-import { batch, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js"
 import {
   barTiming,
   drawShareCard,
@@ -132,18 +132,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const [hovered, setHovered] = createSignal<string>()
   // The open dropdown or the date picker, by id; one at a time.
   const [menu, setMenu] = createSignal<string>()
-  // A moment after Shuffle is pressed, while the settings it changed roll to their new values (share.css).
-  const [rolling, setRolling] = createSignal(false)
-  let rollTimer: ReturnType<typeof setTimeout> | undefined
-  const roll = () => {
-    clearTimeout(rollTimer)
-    // Off for a frame first, so a second press restarts the roll.
-    setRolling(false)
-    requestAnimationFrame(() => {
-      setRolling(true)
-      rollTimer = setTimeout(() => setRolling(false), 700)
-    })
-  }
+  // Counts Shuffle presses: each one spins the changed settings' reels, like an odometer, to their new values.
+  const [rolls, setRolls] = createSignal(0)
+  const roll = () => setRolls((count) => count + 1)
   // On phones, the settings sheet: closed until Settings opens it.
   const [sheet, setSheet] = createSignal(false)
   // The chart column the card is about, or the whole range; each section starts on the whole range.
@@ -340,6 +331,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       setShareOption("theme", pick(["dark", "light", "leader"] as const))
       // Never an explicit track: those are for choosing on purpose.
       setTrack(pick(shareTracks.filter((item) => !item.explicit)).id)
+      setLead(pick(["top", "total"] as const))
       setMuted(false)
       setPlaying(true)
     })
@@ -509,12 +501,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
           <div data-slot="editor">
             {/* The bar across the top, like an editor's: Close and Shuffle, every option as a dropdown, the music with
                 arrows either side, and Export on the right. */}
-            <div
-              data-slot="editor-bar"
-              data-rolling={rolling() ? "" : undefined}
-              role="toolbar"
-              aria-label={`Share ${value().title}`}
-            >
+            <div data-slot="editor-bar" role="toolbar" aria-label={`Share ${value().title}`}>
               <button type="button" data-slot="icon-button" aria-label="Close" data-tooltip="Close" onClick={close}>
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                   <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" />
@@ -610,6 +597,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <Show when={leads()}>
                   <Dropdown
                     id="lead"
+                    roll={rolls()}
+                    rollDelay={0}
                     label="Lead with"
                     open={menu()}
                     onOpen={setMenu}
@@ -623,6 +612,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 </Show>
                 <Dropdown
                   id="layout"
+                  roll={rolls()}
+                  rollDelay={90}
                   label="Layout"
                   open={menu()}
                   onOpen={setMenu}
@@ -636,6 +627,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 />
                 <Dropdown
                   id="size"
+                  roll={rolls()}
+                  rollDelay={180}
                   label="Size"
                   open={menu()}
                   onOpen={setMenu}
@@ -646,6 +639,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 />
                 <Dropdown
                   id="style"
+                  roll={rolls()}
+                  rollDelay={270}
                   label="Style"
                   open={menu()}
                   onOpen={setMenu}
@@ -690,6 +685,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     <span data-slot="sheet-label">Music</span>
                     <Dropdown
                       id="music"
+                      roll={rolls()}
+                      rollDelay={360}
                       label="Music"
                       open={menu()}
                       onOpen={setMenu}
@@ -974,12 +971,31 @@ function Dropdown<T extends string>(props: {
   value: T
   options: { value: T; label: string; detail?: string; explicit?: boolean; icon?: JSX.Element }[]
   show?: "icon" | "value" | "both"
+  // Shuffle's count: each change spins a reel of random choices that lands on the value, starting rollDelay ms in.
+  roll?: number
+  rollDelay?: number
   // Called with the choice under the pointer or keyboard focus while the list is open, and with undefined once it closes.
   onPreview?: (value: T | undefined) => void
   trigger?: JSX.Element
   onSelect: (value: T) => void
 }) {
   const show = () => props.show ?? "icon"
+  // The reel: random choices, then the value, scrolled up through the button like an odometer's wheel.
+  const [reel, setReel] = createSignal<T[]>()
+  createEffect(
+    on(
+      () => props.roll,
+      () => {
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
+        const others = props.options.filter((item) => item.value !== props.value)
+        if (others.length === 0) return
+        const turns = Array.from({ length: 9 }, () => others[Math.floor(Math.random() * others.length)]!.value)
+        setReel([...turns, props.value])
+      },
+      { defer: true },
+    ),
+  )
+  const option = (value: T) => props.options.find((item) => item.value === value)
   let element: HTMLDivElement | undefined
   const open = () => props.open === props.id
   const current = () => props.options.find((item) => item.value === props.value)
@@ -1031,10 +1047,40 @@ function Dropdown<T extends string>(props: {
         aria-expanded={open() ? "true" : "false"}
         onClick={() => props.onOpen(open() ? undefined : props.id)}
       >
-        <Show when={show() !== "value"}>
-          <span data-slot="tool-icon">{props.trigger ?? current()?.icon}</span>
+        <Show
+          when={reel()}
+          fallback={
+            <>
+              <Show when={show() !== "value"}>
+                <span data-slot="tool-icon">{props.trigger ?? current()?.icon}</span>
+              </Show>
+              <span data-slot="dropdown-value">{current()?.label}</span>
+            </>
+          }
+        >
+          {(items) => (
+            <span data-slot="reel" aria-hidden="true">
+              <span
+                data-slot="reel-strip"
+                style={{ "animation-delay": `${props.rollDelay ?? 0}ms` }}
+                onAnimationEnd={() => setReel(undefined)}
+              >
+                <For each={items()}>
+                  {(value) => (
+                    <span data-slot="reel-row">
+                      <Show when={show() !== "value"}>
+                        <span data-slot="tool-icon">{option(value)?.icon}</span>
+                      </Show>
+                      <Show when={show() !== "icon"}>
+                        <span data-slot="dropdown-value">{option(value)?.label}</span>
+                      </Show>
+                    </span>
+                  )}
+                </For>
+              </span>
+            </span>
+          )}
         </Show>
-        <span data-slot="dropdown-value">{current()?.label}</span>
         <Show when={current()?.explicit}>
           <em data-slot="explicit" title="Explicit lyrics">
             {short() ? "E" : "Explicit"}
