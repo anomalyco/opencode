@@ -178,7 +178,7 @@ export function classifyRequest(method: string, url: URL, prefix = ""): RequestC
         ? 3
         : pathname === "/api/session" || initialMessages
           ? 2
-          : messages && url.searchParams.has("cursor")
+          : messages && url.searchParams.has("cursor") && !url.searchParams.has("type")
             ? 1
             : 0,
   }
