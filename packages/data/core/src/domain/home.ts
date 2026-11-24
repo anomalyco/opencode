@@ -176,6 +176,8 @@ const RETENTION_MIN_ELIGIBLE_USER_WEEKS = 100
 const RETENTION_COHORT_WEEKS = 7
 const NEW_MODEL_WINDOW_DAYS = 30
 const TOP_MODEL_SEGMENT_LIMIT = 9
+// The weekly series also colors this many past leaders that fell out of the past 7 days' top models.
+const WEEKLY_PAST_LEADER_LIMIT = 2
 const WEEKLY_BUCKETS = 20
 const QUERY_CACHE_TTL_MS = 5 * 60 * 1000
 const QUERY_CACHE_MAX_ENTRIES = 256
@@ -535,14 +537,14 @@ export function buildStatsHomeData(
         weekly,
         SITE_PRODUCT,
         weeks,
-        topModels(normalized, SITE_PRODUCT, rankWindow, "tokens"),
+        weeklyModels(normalized, weekly, weeks, rankWindow, "tokens"),
         "tokens",
       ),
       users: buildUsagePoints(
         weekly,
         SITE_PRODUCT,
         weeks,
-        topModels(normalized, SITE_PRODUCT, rankWindow, "users"),
+        weeklyModels(normalized, weekly, weeks, rankWindow, "users"),
         "users",
       ),
       market: buildMarketShare(weekly, SITE_PRODUCT, weeks),
@@ -823,6 +825,22 @@ function topModels(rows: StatMetricRow[], product: UsageProduct, rankWindow: Dat
     .toSorted((a, b) => modelUsageValue(b, metric) - modelUsageValue(a, metric))
     .slice(0, TOP_MODEL_SEGMENT_LIMIT)
     .map((item) => item.model)
+}
+
+// The weekly series reaches back 20 weeks, so the biggest models over that span keep their own color too.
+function weeklyModels(
+  daily: StatMetricRow[],
+  weekly: StatMetricRow[],
+  weeks: Bucket[],
+  rankWindow: DateWindow,
+  metric: "tokens" | "users",
+) {
+  const current = topModels(daily, SITE_PRODUCT, rankWindow, metric)
+  const leaders = aggregateByModelName(rowsForProduct(weekly, SITE_PRODUCT, weeks[0]!.start, weeks.at(-1)!.end))
+    .toSorted((a, b) => modelUsageValue(b, metric) - modelUsageValue(a, metric))
+    .map((item) => item.model)
+    .filter((model) => !current.includes(model))
+  return [...current, ...leaders.slice(0, WEEKLY_PAST_LEADER_LIMIT)]
 }
 
 function buildUsagePoints(
