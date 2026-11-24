@@ -184,6 +184,64 @@ test.describe("timeline history", () => {
     expect(oldest).toBeGreaterThan(0)
   })
 
+  // In the New timeline the notice is a link inside an events row, and it keeps focus after the click. An older page
+  // that lands builds that row again: focus went to the link that took its place, and the browser scrolled the
+  // timeline back to it, away from the call.
+  test("a shell's link in the New timeline opens its call from an older page", async ({ page }) => {
+    const history = historyMessages(120)
+
+    const call = assistantMessage(
+      [
+        toolPart(
+          "prt_older_call",
+          "shell",
+          "completed",
+          { command: "bun serve.ts", background: true },
+          { output: "listening", metadata: { shellID: "sh_00079_history_d_shell", status: "running" } },
+        ),
+      ],
+      { id: "msg_00079_history_c_call", parentID: "msg_00079_history_a_user", created: 1690000792000 },
+    )
+
+    const messages: SessionMessageInfo[] = [
+      ...history.slice(0, 160),
+      call,
+      ...history.slice(160),
+      {
+        id: "msg_00120_shell_finished",
+        type: "synthetic",
+        text: '<shell id="sh_00079_history_d_shell" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+        description: "bun serve.ts",
+        metadata: { source: "shell", shellID: "sh_00079_history_d_shell", state: "completed" },
+        time: { created: 1690001200000 },
+      },
+    ]
+
+    await setupTimeline(page, {
+      settings: { newTimeline: true },
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(16, limit))
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+    })
+
+    const scroller = timelineScroller(page)
+    const link = scroller.locator('[data-slot="timeline-event-item"][data-kind="shell"]')
+    const tool = scroller.locator('[data-timeline-part-id="prt_older_call"]')
+
+    await scroller.locator('[data-component="timeline-event-row"] [data-slot="collapsible-trigger"]').click()
+    await expect(tool).toHaveCount(0)
+    await link.click()
+    await expect(tool).toBeInViewport()
+    // Once every page the search asked for has landed, the call is still where the reader was taken.
+    await page.clock.install()
+    await page.clock.runFor(1_000)
+    await expect(tool).toBeInViewport()
+  })
+
   // The search for the call ended only on input the timeline handles itself: the wheel, a touch, its own scroll keys
   // and a press. A key the browser handles or a drag of the scrollbar thumb left it running, and the call took the
   // view from wherever the reader had gone.

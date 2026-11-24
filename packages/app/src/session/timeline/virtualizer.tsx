@@ -622,6 +622,11 @@ export function createTimelineVirtualizer(input: Input) {
   // A call older than the loaded messages is not in the list yet, so older history is paged toward it.
   function revealOrSeekPart(target: string) {
     const revealed = revealPart(target)
+    const root = listRoot()
+
+    // The control that asked keeps focus while history pages. A page that lands builds its row again, focus goes to
+    // the control that takes its place, and the browser scrolls the timeline back to that one.
+    if (!revealed && root?.contains(document.activeElement)) root.focus({ preventScroll: true })
 
     if (active()) input.reveal?.attempted(target, revealed)
 
