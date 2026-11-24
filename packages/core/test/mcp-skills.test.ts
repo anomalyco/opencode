@@ -207,7 +207,20 @@ describe("MCP skills", () => {
   it.live("leaves out the instructions of servers that offer skills", () =>
     Effect.gen(function* () {
       const withSkills = yield* skillServer({ deploy }, { instructions: "Use the deploy skill." })
-      const without = yield* skillServer({}, { instructions: "Call ping." })
+      // Dynamic skills aren't registered, so they don't replace instructions.
+      const without = yield* skillServer(
+        {},
+        {
+          instructions: "Call ping.",
+          extra: [
+            {
+              uri: "skill://live/SKILL.md",
+              frontmatter: { name: "live", description: "Generated" },
+              resources: "dynamic",
+            },
+          ],
+        },
+      )
       yield* connect("team", withSkills.url, ["team:deploy"])
       yield* connect("other", without.url, [])
       const mcp = yield* Mcp.Service

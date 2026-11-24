@@ -1116,8 +1116,8 @@ export const layer = (options?: Options) =>
           return Array.from(entries)
             .flatMap(([server, entry]) => {
               const instructions = entry.connection.client?.instructions
-              // A server that offers skills says what it needs to in them.
-              if (!instructions || entry.connection.skills?.length) return []
+              // A server that offers skills says what it needs to in them. Dynamic skills aren't registered.
+              if (!instructions || entry.connection.skills?.some((skill) => skill.resources !== "dynamic")) return []
               return [{ server, instructions }]
             })
             .toSorted((a, b) => a.server.localeCompare(b.server))
