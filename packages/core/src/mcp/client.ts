@@ -82,6 +82,11 @@ const isTransient = (error: unknown) =>
     ? error.status === 408 || error.status === 429 || (error.status >= 500 && error.status !== 501)
     : error instanceof TypeError && "code" in error
 
+// These statuses say the server is unreachable for now rather than that it rejects the modern probe, so the
+// fallback initialize would fail the same way the retried probe does and only doubles the requests it sends.
+const isUnavailable = (status: number) =>
+  status === 408 || status === 429 || status === 502 || status === 503 || status === 504
+
 // MCP Events (SEP-3415), a beta extension on 2026-07-28. Every `notifications/events/*` names its stream by the
 // JSON-RPC id of the `events/stream` request that opened it.
 const EVENTS = "io.modelcontextprotocol/events"
@@ -557,11 +562,19 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     // Every attempt opens a fresh transport; no retry starts once the startup timeout has passed.
     const deadline = (yield* Clock.currentTimeMillis) + (timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
     // Over HTTP the SDK treats an unanswered auto probe as an outage, but slow legacy servers may still initialize
-    // within what is left of the startup timeout.
+    // within what is left of the startup timeout. A probe answered with an HTTP error is no era verdict either —
+    // Spring servers crash with a 500 on the unknown `server/discover` — so fall back like the stdio path does unless
+    // the status only says unavailable. Auth refusals carry their own errors and never reach this predicate.
     const negotiate = (url: URL) =>
       open(url, protocol).pipe(
         Effect.catchIf(
-          (error) => protocol === "auto" && error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout,
+          (error) =>
+            protocol === "auto" &&
+            error instanceof SdkError &&
+            (error.code === SdkErrorCode.RequestTimeout ||
+              (error.code === SdkErrorCode.EraNegotiationFailed &&
+                error instanceof SdkHttpError &&
+                !isUnavailable(error.status))),
           (error) =>
             Clock.currentTimeMillis.pipe(
               Effect.flatMap((now) => (now < deadline ? open(url, "legacy", deadline - now) : Effect.fail(error))),

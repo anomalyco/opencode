@@ -1064,6 +1064,43 @@ test("falls back to legacy when a stdio server ignores the version probe", async
   expect(result.tools.map((tool) => tool.name)).toEqual(["echo"])
 })
 
+test("falls back to legacy when a remote server answers the version probe with an HTTP error", async () => {
+  const result = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const probes: Array<unknown> = []
+        // Stands in for servers that crash with an HTTP 500 on the unknown probe request instead of answering
+        // the JSON-RPC method-not-found the SDK reads as a legacy verdict; their initialize handshake works.
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+            if (!isJSONRPCRequest(body) || body.method !== "server/discover") return undefined
+            probes.push(body)
+            return Response.json({ error: "internal error" }, { status: 500 })
+          },
+        })
+        const connection = yield* connect(
+          "legacy-broken-probe",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+          import.meta.dir,
+        )
+        return {
+          modern: connection.modern,
+          probes: probes.length,
+          initializations: server.state.initializations,
+          tools: yield* connection.tools(),
+        }
+      }),
+    ),
+  )
+
+  // The probe is answered badly once; the fallback speaks plain initialize and never probes again.
+  expect(result.probes).toBe(1)
+  expect(result.initializations).toBe(1)
+  expect(result.modern).toBe(false)
+  expect(result.tools.map((tool) => tool.name)).toEqual(["echo"])
+})
+
 test("applies the configured MCP catalog timeout", async () => {
   const result = Effect.runPromise(
     Effect.scoped(
