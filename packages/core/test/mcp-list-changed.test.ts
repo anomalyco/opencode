@@ -16,6 +16,7 @@ const catalogServer = Effect.fnUntraced(function* () {
   const state = {
     tools: [] as Array<{ name: string; inputSchema: Record<string, unknown> }>,
     listens: [] as Array<{ id: string | number; params: unknown; at: number }>,
+    cancelled: [] as unknown[],
     refuse: false,
     hangUp: false,
   }
@@ -26,6 +27,7 @@ const catalogServer = Effect.fnUntraced(function* () {
     if (!("method" in message)) return
     // Every 2026-07-28 request carries the protocol envelope in `_meta`.
     const { _meta: meta, ...params } = message.params ?? {}
+    if (message.method === "notifications/cancelled") state.cancelled.push(params.requestId)
     if (!("id" in message)) return
     if (message.method === "server/discover")
       void reply(message.id, {
@@ -119,11 +121,15 @@ describe("MCP list changes", () => {
       // Reopening refreshes once, so a change announced while the stream was down is not lost.
       yield* until(() => changes.tools >= 1)
       const caughtUp = changes.tools
+      // And the reopened stream is actually open: a subscription released as soon as it opened would have been
+      // cancelled here, which is what the earlier version of this change got wrong.
+      expect(server.state.cancelled).toEqual([])
 
       // And the reopened stream delivers changes again.
       yield* server.add("added")
       yield* server.change(server.state.listens[1].id)
       yield* until(() => changes.tools > caughtUp)
+      expect(server.state.cancelled).toEqual([])
       expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["added"])
     }),
   )

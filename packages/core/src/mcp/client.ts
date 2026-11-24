@@ -1033,8 +1033,6 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         // Opening waits for the server's ack; without this, closing the connection would wait for it too.
         { interruptible: true },
       ).pipe(
-        // One scope per attempt, so its release runs when the attempt ends instead of accumulating on the connection.
-        Effect.scoped,
         Effect.tap(() =>
           Effect.sync(() => {
             changed.tools()
@@ -1052,6 +1050,9 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
             ),
           ),
         ),
+        // One scope per attempt, around the open *and* the wait: inside the pipe it would release the stream as soon
+        // as `listen` returned. This way the release runs when the attempt ends, and not on the connection's scope.
+        Effect.scoped,
       )
       yield* Effect.promise(() => autoOpened.closed).pipe(
         Effect.flatMap((reason) =>
