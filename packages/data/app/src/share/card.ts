@@ -13,8 +13,9 @@ export type ShareChart =
       // Market share: each column fills the chart height.
       normalized: boolean
       series: ShareSeries[]
-      // values[i] is series[i]'s value in the column; series[0] stacks at the bottom.
-      columns: { label: string; values: number[] }[]
+      // values[i] is series[i]'s value in the column; series[0] stacks at the bottom. `start` is its first day
+      // (YYYY-MM-DD), for the editor's calendar.
+      columns: { label: string; values: number[]; start?: string }[]
       // The line under the chart before a series takes it, such as the latest column's total.
       total: { label: string; value: string }
       // A card about one column (a day or a week): its index. The other columns go grey, and the series values, the

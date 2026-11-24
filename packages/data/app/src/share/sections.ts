@@ -519,6 +519,7 @@ export function usageShareChart(data: UsagePoint[], format: (value: number) => s
   return stackedShareChart(
     points.map((point) => ({
       label: formatTopModelsMobileDate(point.date),
+      start: point.start,
       values: new Map(point.segments.map((segment) => [segment.model, segment.value])),
     })),
     keys.map((key) => ({ key, label: key, color: getRankColor(key, 0, order, usageColors) })),
@@ -535,6 +536,7 @@ export function marketShareChart(data: MarketDay[], order: Map<string, number>, 
   return stackedShareChart(
     days.map((day) => ({
       label: marketDateParts(day.date).start,
+      start: day.start,
       values: new Map(day.authors.map((author) => [author.author, author.share])),
     })),
     keys.map((key) => ({
@@ -550,7 +552,7 @@ export function marketShareChart(data: MarketDay[], order: Map<string, number>, 
 }
 
 export function stackedShareChart(
-  columns: { label: string; values: Map<string, number> }[],
+  columns: { label: string; start?: string; values: Map<string, number> }[],
   named: Omit<ShareSeries, "value">[],
   format: (value: number) => string,
   normalized: boolean,
@@ -562,7 +564,7 @@ export function stackedShareChart(
   const rows = columns.map((column) => {
     const values = named.map((item) => column.values.get(item.key) ?? 0)
     const other = [...column.values].reduce((sum, [key, value]) => (keys.has(key) ? sum : sum + value), 0)
-    return { label: column.label, values: [...values, other] }
+    return { label: column.label, start: column.start, values: [...values, other] }
   })
   if (day !== undefined && !rows[day]) return undefined
   // The column the legend and total are for: the chosen day, or the latest.

@@ -19,6 +19,7 @@ import { cycleShareOption, designMode, designOnly, setShareOption, shareControls
 import { shareTracks, type ShareTrack } from "./music"
 import type { ShareView } from "./embed"
 import { loadSpectrum, type Spectrum } from "./spectrum"
+import { ShareCalendar, shareDayLabel, shareRangeLabel } from "./calendar"
 
 // `view` is the range the section showed, so an embed of it can show the same. `variant` makes the card again for a
 // focus, for the editor's Date and Lead rows (share/sections.ts).
@@ -120,8 +121,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const [ready, setReady] = createSignal(false)
   const [playing, setPlaying] = createSignal(true)
   const [track, setTrack] = createSignal("none")
-  // The options panel: closed when the editor opens, on a card made at random, until Customize opens it.
-  const [settings, setSettings] = createSignal(false)
+  // The date picker, open over the toolbar.
+  const [calendar, setCalendar] = createSignal(false)
   // The chart column the card is about, or the whole range; each section starts on the whole range.
   const [day, setDay] = createSignal<number>()
   // Lead with the top model or the total: the sections that can say a total (Top Models).
@@ -133,11 +134,15 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setLead("top")
   })
   const leads = createMemo(() => request()?.id === "top-models" && !!request()?.variant)
-  // The columns the Date row can choose from: a bar chart's, when its section can make a card for one.
-  const columns = createMemo(() => {
+  // The first days of the columns the date picker can choose from: a bar chart's, when its section can make a card
+  // for one.
+  const starts = createMemo(() => {
     const value = request()
-    return value?.variant && value.chart.kind === "stacked" ? value.chart.columns.map((column) => column.label) : []
+    if (!value?.variant || value.chart.kind !== "stacked") return []
+    const dates = value.chart.columns.map((column) => column.start ?? "")
+    return dates.every(Boolean) ? dates : []
   })
+  const weekly = () => request()?.view?.period === "weekly"
   const card = createMemo(() => {
     const value = request()
     if (!value) return undefined
@@ -204,7 +209,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     // Stepping to another section keeps the editor open, its music and its options.
     if (dialog?.open) return
     setFormat("video")
-    setSettings(false)
+    setCalendar(false)
     shuffle()
     dialog?.showModal()
     void loadShareFonts().then(() => setReady(true))
@@ -358,6 +363,12 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       onClick={(event) => {
         if (event.target === event.currentTarget) close()
       }}
+      // Escape closes the date picker first, then the editor.
+      onCancel={(event) => {
+        if (!calendar()) return
+        event.preventDefault()
+        setCalendar(false)
+      }}
       onClose={() => {
         setPlaying(false)
         audio?.pause()
@@ -372,7 +383,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     >
       <Show when={card()}>
         {(value) => (
-          <div data-slot="editor" data-settings={settings() ? "open" : "closed"}>
+          <div data-slot="editor">
             <div data-slot="editor-stage" data-card-theme={options().theme}>
               <button type="button" data-slot="icon-button" data-variant="close" aria-label="Close" onClick={close}>
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -451,33 +462,146 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   {notice() ?? `${value().title} · ${size()[0]} × ${size()[1]}`}
                 </span>
               </div>
-              {/* Under the card: a new random card, the options panel, and Export. */}
-              <div data-slot="editor-actions">
-                <button type="button" data-slot="bar-button" onClick={shuffle}>
+              {/* Under the card, every option as a button that steps to the next choice, the date in a calendar, the
+                  music with arrows either side, then Shuffle and Export. */}
+              <div data-slot="editor-actions" role="toolbar" aria-label={`Share ${value().title}`}>
+                <button
+                  type="button"
+                  data-slot="tool"
+                  data-variant="icon"
+                  aria-label="Shuffle"
+                  title="Shuffle"
+                  onClick={shuffle}
+                >
                   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                     <g fill="none" stroke="currentColor" stroke-width="1.5">
                       <path d="M2 4.5h2.5c3.5 0 3.5 7 7 7H14M2 11.5h2.5c1.4 0 2.2-1.1 2.9-2.4M14 4.5h-2.5c-1.4 0-2.2 1.1-2.9 2.4" />
                       <path d="m12 2.5 2 2-2 2M12 9.5l2 2-2 2" />
                     </g>
                   </svg>
-                  <span>Shuffle</span>
                 </button>
-                <button
-                  type="button"
-                  data-slot="bar-button"
-                  aria-expanded={settings() ? "true" : "false"}
-                  aria-controls="share-settings"
-                  onClick={() => setSettings(!settings())}
+                <Tool
+                  label="Type"
+                  value={{ video: "Video", image: "Image", embed: "Embed" }[format()]}
+                  onClick={() => {
+                    setFormat(next(["video", "image", "embed"] as const, format()))
+                    setPlaying(true)
+                  }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                    <g fill="none" stroke="currentColor" stroke-width="1.5">
-                      <path d="M2 4.5h6M12 4.5h2M2 11.5h2M8 11.5h6" />
-                      <circle cx="10" cy="4.5" r="1.75" />
-                      <circle cx="6" cy="11.5" r="1.75" />
-                    </g>
-                  </svg>
-                  <span>Customize</span>
-                </button>
+                  <TypeGlyph format={format()} />
+                </Tool>
+                <Show when={starts().length > 1}>
+                  <div data-slot="date-tool">
+                    <Tool
+                      label="Date"
+                      value={
+                        day() === undefined
+                          ? shareRangeLabel(starts(), weekly())
+                          : shareDayLabel(starts()[day() ?? 0] ?? "", weekly())
+                      }
+                      expanded={calendar()}
+                      onClick={() => setCalendar(!calendar())}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                        <g fill="none" stroke="currentColor" stroke-width="1.5">
+                          <path d="M2.75 3.75h10.5v9.5H2.75zM2.75 6.75h10.5M5.5 2v3M10.5 2v3" />
+                        </g>
+                      </svg>
+                    </Tool>
+                    <Show when={calendar()}>
+                      <ShareCalendar
+                        starts={starts()}
+                        weekly={weekly()}
+                        day={day()}
+                        onPick={setDay}
+                        onClose={() => setCalendar(false)}
+                      />
+                    </Show>
+                  </div>
+                </Show>
+                <Show when={leads()}>
+                  <Tool
+                    label="Lead"
+                    value={lead() === "top" ? "Top model" : "Total"}
+                    onClick={() => setLead(lead() === "top" ? "total" : "top")}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                      <Show when={lead() === "top"} fallback={<path d="M3 3h10v10H3z" fill="currentColor" />}>
+                        <path d="M3 13V7h3v6zM6.5 13V3h3v10zM10 13V9h3v4z" fill="currentColor" />
+                      </Show>
+                    </svg>
+                  </Tool>
+                </Show>
+                <Tool
+                  label="Layout"
+                  value={layouts.find((item) => item.value === options().layout)?.label ?? ""}
+                  onClick={() =>
+                    setShareOption(
+                      "layout",
+                      next(
+                        layouts.map((item) => item.value),
+                        options().layout,
+                      ),
+                    )
+                  }
+                >
+                  <LayoutGlyph layout={options().layout} />
+                </Tool>
+                <Tool
+                  label="Size"
+                  value={options().size}
+                  onClick={() =>
+                    setShareOption(
+                      "size",
+                      next(
+                        sizes.map((item) => item.value),
+                        options().size,
+                      ),
+                    )
+                  }
+                >
+                  <i data-slot="aspect" aria-hidden="true">
+                    <b
+                      style={{
+                        width: `${aspectSide(options().size, 0)}px`,
+                        height: `${aspectSide(options().size, 1)}px`,
+                      }}
+                    />
+                  </i>
+                </Tool>
+                <Tool
+                  label="Style"
+                  value={{ dark: "Dark", light: "Light", leader: "Top" }[options().theme]}
+                  onClick={() => setShareOption("theme", next(["dark", "light", "leader"] as const, options().theme))}
+                >
+                  <i
+                    data-slot="swatch"
+                    data-theme={options().theme}
+                    style={options().theme === "leader" ? { background: leaderColor(value()) } : undefined}
+                  />
+                </Tool>
+                <Show when={format() === "embed"}>
+                  <Tool label="Data" value={fixed() ? "Fixed" : "Live"} onClick={() => setFixed(!fixed())}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                      <Show when={fixed()} fallback={<circle cx="8" cy="8" r="4" fill="currentColor" />}>
+                        <path
+                          d="M4.5 7.5h7v5.5h-7zM6 7.5V5.5a2 2 0 0 1 4 0v2"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                        />
+                      </Show>
+                    </svg>
+                  </Tool>
+                </Show>
+                <Show when={format() === "video"}>
+                  <MusicTool
+                    track={music()}
+                    playing={playing()}
+                    onStep={(direction) => chooseTrack(stepTrack(track(), direction))}
+                    onToggle={() => chooseTrack(track())}
+                  />
+                </Show>
                 <button
                   type="button"
                   data-slot="bar-button"
@@ -487,238 +611,21 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   style={{ "--progress": `${(rendering() ?? 0) * 100}%` } as JSX.CSSProperties}
                   disabled={rendering() !== undefined}
                   aria-live="polite"
+                  aria-label={{ image: "Export image", video: "Export video", embed: "Copy embed code" }[format()]}
                   onClick={exportFile}
                 >
-                  {/* A new label fades up when the button changes what it does; the render's percentage counts in place. */}
-                  <Show when={rendering() !== undefined ? "rendering" : copied() ? "copied" : format()} keyed>
+                  <Show when={rendering() !== undefined ? "rendering" : copied() ? "copied" : "export"} keyed>
                     <span data-slot="button-label">
                       {rendering() !== undefined
-                        ? `Rendering video ${Math.round((rendering() ?? 0) * 100)}%`
-                        : {
-                            image: "Export image",
-                            video: "Export video",
-                            embed: copied() ? "Copied" : "Copy embed code",
-                          }[format()]}
+                        ? `${Math.round((rendering() ?? 0) * 100)}%`
+                        : copied()
+                          ? "Copied"
+                          : "Export"}
                     </span>
                   </Show>
                 </button>
               </div>
             </div>
-
-            <aside
-              id="share-settings"
-              data-slot="editor-inspector"
-              aria-label={`Share ${value().title}`}
-              inert={!settings()}
-            >
-              <div data-slot="inspector-scroll">
-                <div data-slot="rows">
-                  <Row label="Type">
-                    <For each={["video", "image", "embed"] as const}>
-                      {(item) => (
-                        <button
-                          type="button"
-                          data-slot="chip"
-                          data-variant="text"
-                          aria-pressed={format() === item}
-                          onClick={() => {
-                            setFormat(item)
-                            setPlaying(true)
-                          }}
-                        >
-                          <span>{{ video: "Video", image: "Image", embed: "Embed" }[item]}</span>
-                        </button>
-                      )}
-                    </For>
-                  </Row>
-                  <Show when={columns().length > 1}>
-                    <Row label="Date">
-                      <For each={[false, true]}>
-                        {(item) => (
-                          <button
-                            type="button"
-                            data-slot="chip"
-                            data-variant="text"
-                            aria-pressed={(day() !== undefined) === item}
-                            onClick={() => setDay(item ? (day() ?? columns().length - 1) : undefined)}
-                          >
-                            <span>
-                              {item ? (request()?.view?.period === "weekly" ? "One week" : "One day") : "Whole range"}
-                            </span>
-                          </button>
-                        )}
-                      </For>
-                    </Row>
-                    <Show when={day() !== undefined}>
-                      <Row label={request()?.view?.period === "weekly" ? "Week" : "Day"}>
-                        <div data-slot="day-picker">
-                          <button
-                            type="button"
-                            data-slot="icon-button"
-                            aria-label="Earlier"
-                            disabled={day() === 0}
-                            onClick={() => setDay(Math.max(0, (day() ?? 0) - 1))}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                              <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-                            </svg>
-                          </button>
-                          <select
-                            aria-label={request()?.view?.period === "weekly" ? "Week" : "Day"}
-                            value={day()}
-                            onChange={(event) => setDay(Number(event.currentTarget.value))}
-                          >
-                            <For each={columns()}>
-                              {(label, index) => (
-                                <option value={index()} selected={index() === day()}>
-                                  {request()?.view?.period === "weekly" ? `Week of ${label}` : label}
-                                </option>
-                              )}
-                            </For>
-                          </select>
-                          <button
-                            type="button"
-                            data-slot="icon-button"
-                            aria-label="Later"
-                            disabled={day() === columns().length - 1}
-                            onClick={() => setDay(Math.min(columns().length - 1, (day() ?? 0) + 1))}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                              <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-                            </svg>
-                          </button>
-                        </div>
-                      </Row>
-                    </Show>
-                  </Show>
-                  <Show when={leads()}>
-                    <Row label="Lead">
-                      <For each={["top", "total"] as const}>
-                        {(item) => (
-                          <button
-                            type="button"
-                            data-slot="chip"
-                            data-variant="text"
-                            aria-pressed={lead() === item}
-                            onClick={() => setLead(item)}
-                          >
-                            <span>{{ top: "Top model", total: "Total" }[item]}</span>
-                          </button>
-                        )}
-                      </For>
-                    </Row>
-                  </Show>
-                  <Row label="Layout">
-                    <For each={layouts}>
-                      {(item) => (
-                        <button
-                          type="button"
-                          data-slot="chip"
-                          aria-label={item.label}
-                          aria-pressed={options().layout === item.value}
-                          onClick={() => setShareOption("layout", item.value)}
-                        >
-                          <LayoutGlyph layout={item.value} />
-                          <small>{item.label}</small>
-                        </button>
-                      )}
-                    </For>
-                  </Row>
-                  <Row label="Size">
-                    <For each={sizes}>
-                      {(item) => (
-                        <button
-                          type="button"
-                          data-slot="chip"
-                          aria-label={`${item.label} ${item.value}`}
-                          aria-pressed={options().size === item.value}
-                          onClick={() => setShareOption("size", item.value)}
-                        >
-                          <i data-slot="aspect" aria-hidden="true">
-                            <b
-                              style={{
-                                width: `${aspectSide(item.value, 0)}px`,
-                                height: `${aspectSide(item.value, 1)}px`,
-                              }}
-                            />
-                          </i>
-                          <small>{item.value}</small>
-                        </button>
-                      )}
-                    </For>
-                  </Row>
-                  <Row label="Style">
-                    <For each={["dark", "light", "leader"] as const}>
-                      {(item) => (
-                        <button
-                          type="button"
-                          data-slot="chip"
-                          data-variant="wide"
-                          aria-pressed={options().theme === item}
-                          onClick={() => setShareOption("theme", item)}
-                        >
-                          <i
-                            data-slot="swatch"
-                            data-theme={item}
-                            style={item === "leader" ? { background: leaderColor(value()) } : undefined}
-                          />
-                          <span>{{ dark: "Dark", light: "Light", leader: "Top" }[item]}</span>
-                        </button>
-                      )}
-                    </For>
-                  </Row>
-                  <Show when={format() === "video"}>
-                    <Row label="Music" variant="list">
-                      <div data-slot="track-list" role="radiogroup" aria-label="Music">
-                        <TrackOption
-                          name="No music"
-                          selected={track() === "none"}
-                          onSelect={() => chooseTrack("none")}
-                        />
-                        <For each={shareTracks}>
-                          {(item) => (
-                            <TrackOption
-                              name={item.name}
-                              explicit={item.explicit}
-                              cover={item.cover}
-                              selected={track() === item.id}
-                              playing={playing()}
-                              onSelect={() => chooseTrack(item.id)}
-                            />
-                          )}
-                        </For>
-                      </div>
-                    </Row>
-                  </Show>
-                  <Show when={format() === "embed"}>
-                    <Row label="Data">
-                      <For each={[false, true]}>
-                        {(item) => (
-                          <button
-                            type="button"
-                            data-slot="chip"
-                            data-variant="text"
-                            aria-pressed={fixed() === item}
-                            onClick={() => setFixed(item)}
-                          >
-                            <span>{item ? "Fixed data" : "Live data"}</span>
-                          </button>
-                        )}
-                      </For>
-                    </Row>
-                    <Row label="Code" variant="fill">
-                      <div data-slot="embed-code">
-                        <code>
-                          <For each={tokens(snippet())}>
-                            {(token) => <span data-token={token.kind}>{token.text}</span>}
-                          </For>
-                        </code>
-                      </div>
-                    </Row>
-                  </Show>
-                </div>
-              </div>
-            </aside>
           </div>
         )}
       </Show>
@@ -730,99 +637,143 @@ function pick<T>(items: readonly T[]) {
   return items[Math.floor(Math.random() * items.length)]!
 }
 
-// One option row: its label on the left, its choices inline on the right.
-// The embed code split for highlighting: the tag's name, each attribute's name and quoted value, and the brackets.
-function tokens(code: string) {
-  return [...code.matchAll(/(<\/?)([\w-]+)|([\w-]+)(=)("[^"]*")|(>)|(\s+)/g)].flatMap((match) => {
-    if (match[2])
-      return [
-        { kind: "punctuation", text: match[1]! },
-        { kind: "tag", text: match[2] },
-      ]
-    if (match[3])
-      return [
-        { kind: "attribute", text: match[3] },
-        { kind: "punctuation", text: match[4]! },
-        { kind: "string", text: match[5]! },
-      ]
-    return [{ kind: match[6] ? "punctuation" : "space", text: match[0] }]
-  })
-}
-
-function Row(props: { label: string; variant?: "list" | "fill"; children: JSX.Element }) {
-  return (
-    <div data-slot="row" data-variant={props.variant} role="group" aria-label={props.label}>
-      <span data-slot="row-label">{props.label}</span>
-      <div data-slot="row-options">{props.children}</div>
-    </div>
-  )
-}
-
-function TrackOption(props: {
-  name: string
-  selected: boolean
-  playing?: boolean
-  explicit?: boolean
-  cover?: string
-  onSelect: () => void
-}) {
+// One option in the toolbar: its icon, its name small over its value; pressing it steps to the next choice.
+function Tool(props: { label: string; value: string; expanded?: boolean; onClick: () => void; children: JSX.Element }) {
   return (
     <button
       type="button"
-      role="radio"
-      aria-checked={props.selected}
-      aria-label={
-        props.selected && props.playing !== undefined
-          ? `${props.name}, ${props.playing ? "playing. Press to pause" : "paused. Press to play"}`
-          : undefined
-      }
-      data-slot="track"
-      onClick={props.onSelect}
+      data-slot="tool"
+      aria-label={`${props.label}: ${props.value}`}
+      aria-expanded={props.expanded === undefined ? undefined : props.expanded ? "true" : "false"}
+      onClick={props.onClick}
     >
-      <i data-slot="track-icon" data-cover={props.cover ? "" : undefined} aria-hidden="true">
-        <Show when={props.cover}>{(cover) => <img src={cover()} alt="" width="24" height="24" />}</Show>
-        <Show
-          when={props.selected && props.playing !== undefined}
-          fallback={
-            <Show when={!props.cover}>
-              <svg width="16" height="16" viewBox="0 0 16 16">
-                {/* No music: the familiar muted speaker. */}
-                <path d="M1 6h2.5L7 3v10L3.5 10H1Z" fill="currentColor" />
-                <path d="m10.5 6 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
-              </svg>
-            </Show>
-          }
-        >
-          <Show
-            when={props.playing}
-            fallback={
-              <svg width="16" height="16" viewBox="0 0 16 16">
-                <path d="M5 3.5v9l7-4.5-7-4.5Z" fill="currentColor" />
-              </svg>
-            }
-          >
-            <span data-slot="eq">
-              <b />
-              <b />
-              <b />
-            </span>
-          </Show>
-        </Show>
-      </i>
-      <span>
-        <strong>{props.name}</strong>
+      <span data-slot="tool-icon">{props.children}</span>
+      <span data-slot="tool-text">
+        <small>{props.label}</small>
+        <span>{props.value}</span>
       </span>
-      <Show when={props.explicit}>
-        <em data-slot="explicit" title="Explicit lyrics">
-          Explicit
-        </em>
-      </Show>
     </button>
   )
 }
 
-// The layout icons, centred: only what sits above the chart. Two headline lines, the big number as a block, or a single title
-// line.
+// The music: the track's cover and name, pressed to play or pause, with arrows either side to step through the
+// tracks, No music first. The arrow keys step too.
+function MusicTool(props: {
+  track: ShareTrack | undefined
+  playing: boolean
+  onStep: (direction: 1 | -1) => void
+  onToggle: () => void
+}) {
+  const keys = (event: KeyboardEvent) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+    event.preventDefault()
+    props.onStep(event.key === "ArrowLeft" ? -1 : 1)
+  }
+  return (
+    <div data-slot="music-tool" role="group" aria-label="Music" onKeyDown={keys}>
+      <button type="button" data-slot="music-step" aria-label="Previous track" onClick={() => props.onStep(-1)}>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        data-slot="music-track"
+        disabled={!props.track}
+        aria-label={
+          props.track
+            ? `${props.track.name}, ${props.playing ? "playing. Press to pause" : "paused. Press to play"}`
+            : "No music"
+        }
+        onClick={props.onToggle}
+      >
+        <i data-slot="music-cover" aria-hidden="true">
+          <Show
+            when={props.track?.cover}
+            fallback={
+              <svg width="16" height="16" viewBox="0 0 16 16">
+                <path d="M1 6h2.5L7 3v10L3.5 10H1Z" fill="currentColor" />
+                <path d="m10.5 6 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
+              </svg>
+            }
+          >
+            {(cover) => <img src={cover()} alt="" width="36" height="36" />}
+          </Show>
+          <Show when={props.track}>
+            <span data-slot="music-state">
+              <Show
+                when={props.playing}
+                fallback={
+                  <svg width="14" height="14" viewBox="0 0 16 16">
+                    <path d="M5 3.5v9l7-4.5-7-4.5Z" fill="currentColor" />
+                  </svg>
+                }
+              >
+                <span data-slot="eq">
+                  <b />
+                  <b />
+                  <b />
+                </span>
+              </Show>
+            </span>
+          </Show>
+        </i>
+        <span data-slot="tool-text">
+          <small>
+            Music
+            <Show when={props.track?.explicit}>
+              <em data-slot="explicit" title="Explicit lyrics">
+                E
+              </em>
+            </Show>
+          </small>
+          <span>{props.track?.name ?? "No music"}</span>
+        </span>
+      </button>
+      <button type="button" data-slot="music-step" aria-label="Next track" onClick={() => props.onStep(1)}>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
+// The type icons: a play triangle in a frame, a picture, and the angle brackets of code.
+function TypeGlyph(props: { format: "video" | "image" | "embed" }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <Show when={props.format === "video"}>
+        <path d="M5.5 4.5v7l6-3.5z" fill="currentColor" />
+      </Show>
+      <Show when={props.format === "image"}>
+        <g fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2.75 3.25h10.5v9.5H2.75zM3 12l3.5-4 3 3 1.5-1.5 2.25 2.5" />
+        </g>
+      </Show>
+      <Show when={props.format === "embed"}>
+        <path
+          d="m5.5 4.5-3.5 3.5 3.5 3.5M10.5 4.5l3.5 3.5-3.5 3.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+        />
+      </Show>
+    </svg>
+  )
+}
+
+// The choice after `current`, round to the first after the last.
+function next<T>(items: readonly T[], current: T) {
+  return items[(items.indexOf(current) + 1) % items.length]!
+}
+
+// The track after or before `current` in the music list, No music first, round and round.
+function stepTrack(current: string, direction: 1 | -1) {
+  const ids = ["none", ...shareTracks.map((item) => item.id)]
+  return ids[(ids.indexOf(current) + direction + ids.length) % ids.length]!
+}
+
 function LayoutGlyph(props: { layout: ShareOptions["layout"] }) {
   return (
     <svg data-slot="glyph" viewBox="0 0 40 28" aria-hidden="true">

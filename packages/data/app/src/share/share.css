@@ -256,9 +256,8 @@
     align-items: center;
     gap: 16px;
     min-height: 0;
-    /* The same 48px either side of the card's area: from the stage's left edge, and from the panel's (its width and
-       its inset). The section arrows sit in those margins. */
-    padding: 56px calc(var(--editor-inspector) + var(--editor-inset) + 48px) 20px 48px;
+    /* The same 48px either side of the card's area; the section arrows sit in those margins. */
+    padding: 56px 48px 20px;
     /* Grey on the light page; on the dark one a step lighter than the card (#0c0c0c), so it stands out, but well below
        the page's second layer, which glared. */
     background-color: light-dark(var(--stats-layer-2), color-mix(in srgb, var(--stats-bg) 50%, var(--stats-layer)));
@@ -301,9 +300,9 @@
       left: 4px;
     }
 
-    /* ...and as far in from the stage's visible right edge, the panel's left edge. */
+    /* ...and as far in from its right edge. */
     &[data-side="next"] {
-      right: calc(var(--editor-inspector) + var(--editor-inset) + 4px);
+      right: 4px;
     }
   }
 
@@ -400,41 +399,6 @@
       0 16px 32px -12px rgb(0 0 0 / 0.14);
   }
 
-  /* Closed, the panel slides off to the side and the card takes the whole stage. */
-  [data-slot="editor"][data-settings="closed"] {
-    [data-slot="editor-stage"] {
-      padding-right: 48px;
-    }
-
-    [data-slot="icon-button"][data-variant="step"][data-side="next"] {
-      right: 4px;
-    }
-
-    [data-slot="editor-inspector"] {
-      visibility: hidden;
-      opacity: 0;
-      translate: 16px 0;
-    }
-  }
-
-  [data-slot="editor-inspector"] {
-    transition:
-      opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
-      translate 240ms cubic-bezier(0.23, 1, 0.32, 1),
-      visibility 0s 0s;
-
-    @media (prefers-reduced-motion: reduce) {
-      translate: none !important;
-    }
-  }
-
-  [data-slot="editor"][data-settings="closed"] [data-slot="editor-inspector"] {
-    transition:
-      opacity 160ms ease,
-      translate 160ms ease,
-      visibility 0s 160ms;
-  }
-
   /* One day or week of a chart: step either way, or choose it from the list. */
   [data-slot="day-picker"] {
     display: flex;
@@ -476,28 +440,22 @@
     overscroll-behavior: contain;
   }
 
-  /* Under the card: Shuffle, Customize and Export, centred on the stage. */
+  /* Under the card: every option as a button, the music, then Export; centred, wrapping on narrow stages. */
   [data-slot="editor-actions"] {
     display: flex;
     flex: none;
-    gap: 8px;
+    flex-wrap: wrap;
+    align-items: stretch;
+    justify-content: center;
+    gap: 6px;
     max-width: 100%;
 
-    [data-slot="bar-button"] {
+    [data-variant="primary"] {
       justify-content: center;
-      height: 40px;
+      min-width: 104px;
+      height: 48px;
       font-size: 14px;
     }
-
-    [data-slot="bar-button"]:not([data-variant="primary"])[aria-expanded="true"] {
-      background: color-mix(in srgb, var(--stats-accent) 7%, var(--stats-layer));
-      border-color: var(--stats-accent);
-    }
-
-    [data-variant="primary"] {
-      min-width: 180px;
-    }
-
     [data-slot="button-label"] {
       animation: share-label-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
 
@@ -892,6 +850,288 @@
     }
   }
 
+  /* One option: its icon, then its name small over its value. Pressing steps to the next choice. */
+  [data-slot="tool"],
+  [data-slot="music-track"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 48px;
+    padding: 0 12px 0 10px;
+    color: var(--stats-text);
+    text-align: left;
+    background: var(--stats-bg);
+    border: 1px solid var(--stats-line-strong);
+    border-radius: 0;
+    white-space: nowrap;
+    transition: border-color 120ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        border-color: var(--stats-faint);
+      }
+    }
+
+    &[aria-expanded="true"] {
+      background: color-mix(in srgb, var(--stats-accent) 7%, var(--stats-bg));
+      border-color: var(--stats-accent);
+    }
+  }
+
+  [data-slot="tool"][data-variant="icon"] {
+    justify-content: center;
+    width: 48px;
+    padding: 0;
+    color: var(--stats-faint);
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--stats-text);
+      }
+    }
+  }
+
+  [data-slot="tool-icon"] {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+
+    [data-slot="glyph"] {
+      width: 20px;
+      height: 14px;
+      opacity: 1;
+    }
+
+    [data-slot="aspect"] b {
+      opacity: 1;
+    }
+  }
+
+  [data-slot="tool-text"] {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    line-height: 1;
+
+    small {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: 10px;
+      color: var(--stats-faint);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    > span {
+      overflow: hidden;
+      font-size: 13px;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* The date: the calendar opens above its button. */
+  [data-slot="date-tool"] {
+    position: relative;
+    display: flex;
+  }
+
+  [data-component="share-calendar"] {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    z-index: 2;
+    width: 280px;
+    padding: 12px;
+    translate: -50% 0;
+    background: var(--stats-bg);
+    box-shadow:
+      0 0 0 1px light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.08)),
+      0 4px 12px -4px rgb(0 0 0 / 0.14),
+      0 16px 32px -12px rgb(0 0 0 / 0.2);
+    animation: share-calendar-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    transform-origin: bottom center;
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+
+  [data-slot="calendar-head"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 13px;
+
+    button {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      color: var(--stats-text);
+      background: transparent;
+      border: 0;
+
+      &:disabled {
+        color: var(--stats-faint);
+        opacity: 0.4;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover:not(:disabled) {
+          background: var(--stats-layer);
+        }
+      }
+    }
+  }
+
+  [data-slot="calendar-grid"] {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+
+  [data-slot="weekday"] {
+    padding: 4px 0;
+    font-size: 10px;
+    color: var(--stats-faint);
+    text-align: center;
+  }
+
+  [data-slot="calendar-day"] {
+    height: 34px;
+    padding: 0;
+    font-size: 12px;
+    color: var(--stats-faint);
+    font-variant-numeric: tabular-nums;
+    background: transparent;
+    border: 1px solid transparent;
+
+    &[data-outside] {
+      opacity: 0.45;
+    }
+
+    /* The days the chart covers: on a light wash, in the text colour. */
+    &[data-range] {
+      color: var(--stats-text);
+      background: var(--editor-control);
+    }
+
+    &:disabled {
+      opacity: 0.35;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not(:disabled) {
+        border-color: var(--stats-faint);
+      }
+    }
+
+    &[aria-pressed="true"] {
+      color: var(--stats-on-accent);
+      background: var(--stats-accent);
+      border-color: var(--stats-accent);
+    }
+  }
+
+  [data-slot="calendar-range"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 40px;
+    margin-top: 10px;
+    padding: 0 12px;
+    font-size: 13px;
+    color: var(--stats-text);
+    background: var(--editor-control);
+    border: 1px solid var(--editor-control-line);
+
+    small {
+      font-size: 11px;
+      color: var(--stats-faint);
+    }
+
+    &[aria-pressed="true"] {
+      background: color-mix(in srgb, var(--stats-accent) 7%, var(--editor-control));
+      border-color: var(--stats-accent);
+    }
+  }
+
+  /* The music, made a feature of: the cover large, the name, arrows either side. */
+  [data-slot="music-tool"] {
+    display: flex;
+    align-items: stretch;
+
+    [data-slot="music-track"] {
+      min-width: 168px;
+      max-width: 220px;
+      padding-left: 6px;
+      border-inline: 0;
+
+      &:disabled {
+        cursor: default;
+        opacity: 1;
+      }
+    }
+  }
+
+  [data-slot="music-step"] {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    padding: 0;
+    color: var(--stats-faint);
+    background: var(--stats-bg);
+    border: 1px solid var(--stats-line-strong);
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        color: var(--stats-text);
+      }
+    }
+  }
+
+  [data-slot="music-cover"] {
+    position: relative;
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    overflow: hidden;
+    color: var(--stats-faint);
+    background: var(--editor-control);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  /* grey-ok: the play state sits on the cover art, white whatever the theme */
+  [data-slot="music-state"] {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: rgb(0 0 0 / 0.35);
+  }
+  /* grey-ok-end */
+
+  [data-slot="music-tool"] [data-slot="explicit"] {
+    padding: 1px 3px;
+    font-size: 8px;
+    font-style: normal;
+    line-height: 1;
+  }
+
   @media (max-width: 760px) {
     width: 100vw;
     height: 100dvh;
@@ -957,30 +1197,42 @@
       padding-inline: 16px;
     }
 
-    /* The panel opens under the card, which shrinks to make room. */
-    [data-slot="editor"][data-settings="closed"] {
-      [data-slot="editor-stage"] {
-        padding-right: 16px;
-      }
-
-      [data-slot="editor-inspector"] {
-        display: none;
-      }
-    }
-
+    /* On a phone the options go two to a row; the date, the music and Export a full row each. */
     [data-slot="editor-actions"] {
       width: 100%;
 
-      [data-slot="bar-button"] {
+      > [data-slot="tool"]:not([data-variant="icon"]) {
+        flex: 1 1 40%;
+        min-width: 0;
+      }
+
+      > [data-slot="date-tool"] {
+        flex: 1 1 100%;
+      }
+
+      [data-slot="date-tool"] [data-slot="tool"] {
         flex: 1;
         min-width: 0;
-        height: 44px;
-        padding: 0 10px;
+      }
+
+      [data-slot="music-tool"] {
+        flex: 1 1 100%;
+
+        [data-slot="music-track"] {
+          flex: 1;
+          max-width: none;
+        }
       }
 
       [data-variant="primary"] {
-        flex: 1.6;
+        flex: 1 1 60%;
       }
+    }
+
+    [data-component="share-calendar"] {
+      position: fixed;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      left: 50%;
     }
 
     /* Taller rows for fingers, the same height for every row of wide choices. */
@@ -998,6 +1250,14 @@
     [data-slot="row"][data-variant="list"] [data-slot="row-label"] {
       padding-top: 14px;
     }
+  }
+}
+
+@keyframes share-calendar-in {
+  from {
+    opacity: 0;
+    scale: 0.96;
+    translate: -50% 6px;
   }
 }
 
