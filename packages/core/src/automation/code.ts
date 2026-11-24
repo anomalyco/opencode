@@ -88,17 +88,10 @@ export const FromPlugin = Context.Reference<Plugin.Interface | undefined>("@open
   defaultValue: () => undefined,
 })
 
-/**
- * Waits for this registry's plugins. A create from a plugin in this same registry is refused instead while it activates:
- * its activation may be waiting on that plugin's setup, and configured permissions are applied by plugins that load later.
- */
+/** Wait unless this registry's activation could be waiting on the calling plugin's setup. */
 export const awaitPlugins = Effect.gen(function* () {
   const plugins = yield* Plugin.Service
-  if ((yield* FromPlugin) !== plugins) return yield* plugins.awaitActivation
-  if (yield* plugins.activated) return
-  return yield* Effect.fail(
-    "Plugins in this location are still loading, so configured permissions are not applied yet. Create this automation after plugin setup, for example from an event handler.",
-  )
+  if ((yield* FromPlugin) !== plugins) yield* plugins.awaitActivation
 })
 
 /**
