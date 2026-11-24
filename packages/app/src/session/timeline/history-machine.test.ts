@@ -216,32 +216,6 @@ describe("history machine", () => {
     expect(rested.effects).toEqual([])
   })
 
-  test("a reader who keeps scrolling toward the top while a page loads gets the next page when it lands", () => {
-    const loading = replay([sync(), SCROLL_TOP_EVENT]).state
-    const advanced = transitionTimelineHistory(loading, SCROLL_TOP_EVENT)
-
-    // The page under way is kept: the scroll only marks it.
-    expect(advanced.state).toEqual({ status: "loading", target: sessionA, attempt: attempt(loading), advanced: true })
-    expect(advanced.effects).toEqual([])
-    expectIgnored(advanced.state, SCROLL_TOP_EVENT)
-
-    // With less than the runway above the reader, the next page loads without another scroll.
-    const prepended = transitionTimelineHistory(advanced.state, loaded(advanced.state, "msg_0000"))
-    expect(prepended.state).toMatchObject({ status: "idle", probe: "runway" })
-    expect(prepended.effects).toEqual([
-      { type: "probe.schedule", probe: "runway", attempt: attempt(prepended.state) },
-    ])
-
-    const next = transitionTimelineHistory(prepended.state, {
-      type: "probe.settled",
-      attempt: attempt(prepended.state),
-      load: true,
-    })
-
-    // The reader has to move again for the page after that one.
-    expect(next.state).toMatchObject({ status: "loading", advanced: false })
-  })
-
   test.each<{ name: string; top: number; previousTop: number; viewport: number; loads: boolean }>([
     { name: "any scroll at the top", top: 150, previousTop: 100, viewport: 800, loads: true },
     { name: "a scroll toward the top with less than the runway above", top: 2000, previousTop: 2100, viewport: 800, loads: true },
@@ -297,8 +271,7 @@ describe("history machine", () => {
     const idle = replay([sync()]).state
     expectIgnored(idle, sync())
 
-    // The first scroll while a page loads marks it; that is covered above.
-    const loading = replay([sync(), SCROLL_TOP_EVENT, SCROLL_TOP_EVENT]).state
+    const loading = transitionTimelineHistory(idle, SCROLL_TOP_EVENT).state
     expectIgnored(loading, SCROLL_TOP_EVENT)
     expectIgnored(loading, SEEK_REQUESTED_EVENT)
     expectIgnored(loading, FILL_REQUESTED_EVENT)
@@ -328,9 +301,7 @@ describe("history machine", () => {
     const loading = transitionTimelineHistory(idle, SCROLL_TOP_EVENT).state
     const failed = transitionTimelineHistory(loading, { type: "page.failed", attempt: attempt(loading) }).state
 
-    const advanced = transitionTimelineHistory(loading, SCROLL_TOP_EVENT).state
-
-    expect([idle, loading, advanced, failed].map(canRequestScrollPage)).toEqual([true, true, false, false])
+    expect([idle, loading, failed].map(canRequestScrollPage)).toEqual([true, false, false])
     expect([idle, loading, failed].map(canRequestFillProbe)).toEqual([true, false, false])
     expect([idle, loading, failed].map(canSeekHistory)).toEqual([true, false, false])
 

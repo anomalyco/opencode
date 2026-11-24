@@ -16,7 +16,6 @@ import {
   HISTORY_LOAD_TIMEOUT_MS,
   HISTORY_RETRY_COOLDOWN_MS,
   HISTORY_SCROLL_THRESHOLD,
-  historyRunway,
   historySeekStatus,
   scrollLoadsHistory,
   SCROLL_TOP_EVENT,
@@ -282,9 +281,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
             !!scroller &&
             (effect.probe === "fill"
               ? follow.following() && scroller.scrollHeight <= scroller.clientHeight + 1
-              : !follow.following() &&
-                scroller.scrollTop <
-                  (effect.probe === "runway" ? historyRunway(scroller.clientHeight) : HISTORY_SCROLL_THRESHOLD))
+              : !follow.following() && scroller.scrollTop < HISTORY_SCROLL_THRESHOLD)
         },
         () => {
           historyProbe = undefined
