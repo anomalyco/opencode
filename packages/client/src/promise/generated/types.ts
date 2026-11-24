@@ -2788,6 +2788,7 @@ export type AgentInfo = {
   model?: ModelRef
   request: ProviderRequest
   system?: string
+  instructions?: string | { selected: string; unselected: string }
   description?: string
   mode: "subagent" | "primary" | "all"
   hidden: boolean
