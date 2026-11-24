@@ -43,6 +43,8 @@ import type { Interface } from "../plugin.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
+// Promise plugins are plain JavaScript, so a skill's files are checked here, like the skill itself.
+const SkillFiles = Schema.Record(Schema.String, Schema.String)
 type RpcEvent = Event.Payload & {
   readonly type: `rpc.${string}`
   readonly location: Location.Ref
@@ -499,7 +501,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
           callback({
             list: () => mutable(editor.list()),
             get: editor.get,
-            add: (value, files) => editor.add(Schema.decodeUnknownSync(Skill.Info)(value), files),
+            add: (value, files) =>
+              editor.add(
+                Schema.decodeUnknownSync(Skill.Info)(value),
+                files === undefined ? undefined : Schema.decodeUnknownSync(SkillFiles)(files),
+              ),
             update: editor.update,
             remove: editor.remove,
           })
