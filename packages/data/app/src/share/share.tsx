@@ -385,7 +385,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                             data-theme={item}
                             style={item === "leader" ? { background: leaderColor(value()) } : undefined}
                           />
-                          <span>{{ dark: "Dark", light: "Light", leader: "Leader" }[item]}</span>
+                          <span>{{ dark: "Dark", light: "Light", leader: "Top" }[item]}</span>
                         </button>
                       )}
                     </For>

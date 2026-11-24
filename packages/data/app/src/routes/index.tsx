@@ -431,6 +431,7 @@ function TopModelsSection(props: {
                 id: "top-models",
                 title: i18n.t("nav.topModels"),
                 range: shareRange(chart, chartPeriod()),
+                highlight: leader.name,
                 headline: `${leader.name} led OpenCode usage ${when}, with ${formatBillions(leader.tokens)} tokens`,
                 stat: { value: formatBillions(leader.tokens), label: `tokens for ${leader.name}, ${when}` },
                 chart,
@@ -729,6 +730,7 @@ function UniqueUsersSection(props: { data: HomePageData["users"]; names: Map<str
             id: "unique-users",
             title: i18n.t("home.uniqueUsersTitle"),
             range: shareRange(chart, period()),
+            highlight: props.names.get(top.key) ?? top.label,
             headline: `${props.names.get(top.key) ?? top.label} had the most OpenCode users ${when}, with ${top.value}`,
             stat: { value: top.value, label: `OpenCode users on ${props.names.get(top.key) ?? top.label}, ${when}` },
             chart,
@@ -771,6 +773,7 @@ function RetentionSection(props: { data: HomeRetentionEntry[] }) {
             id: "retention",
             title: "Weekly Retention",
             range: "Week over week",
+            highlight: top.name,
             headline: `${top.name} kept ${formatRetentionRate(top.rate)} of its OpenCode users from one week to the next`,
             stat: { value: formatRetentionRate(top.rate), label: `of ${top.name} users came back the next week` },
             chart: rankedShareChart(
@@ -1145,6 +1148,7 @@ function MarketShareSection(props: { data: HomePageData["market"]; labPaths: Hom
             id: "market-share",
             title: i18n.t("home.marketShareTitle"),
             range: shareRange(chart, period()),
+            highlight: top.label,
             headline: `${top.label} served ${top.value} of OpenCode tokens ${when}`,
             stat: { value: top.value, label: `of OpenCode tokens went to ${top.label} models, ${when}` },
             chart,
@@ -1463,6 +1467,7 @@ function GeoBreakdownSection(props: { data: CountryEntry[] }) {
             id: "geo-breakdown",
             title: i18n.t("home.geoTitle"),
             range: "Past 2 months",
+            highlight: name(top.country),
             headline: `${name(top.country)} sent the most OpenCode tokens in the past 2 months, ${formatGeoShare(top.share)} of the total`,
             stat: { value: formatGeoShare(top.share), label: `of OpenCode tokens came from ${name(top.country)}` },
             chart: rankedShareChart(
@@ -1667,6 +1672,7 @@ function TokenCostSection(props: { data: TokenCostEntry[]; names: Map<string, st
             id: "token-cost",
             title: i18n.t("home.tokenCostTitle"),
             range: "USD per 1M output tokens",
+            highlight: props.names.get(top.model) ?? top.model,
             headline: `${props.names.get(top.model) ?? top.model} has the lowest output price on OpenCode, at ${formatDollars(top.total)} per 1M tokens`,
             stat: {
               value: formatDollars(top.total),
@@ -1758,6 +1764,7 @@ function CacheRatioSection(props: { data: CacheRatioEntry[]; names: Map<string, 
             id: "cache-ratio",
             title: i18n.t("home.cacheRatioTitle"),
             range: "Share of input tokens",
+            highlight: props.names.get(top.model) ?? top.model,
             headline: `${props.names.get(top.model) ?? top.model} served ${formatRatio(top.ratio)} of its input tokens from cache`,
             stat: {
               value: formatRatio(top.ratio),
@@ -1893,6 +1900,7 @@ function SessionCostSection(props: { data: SessionCostEntry[]; names: Map<string
             id: "session-cost",
             title: i18n.t("home.sessionCostTitle"),
             range: "Average per session",
+            highlight: props.names.get(top.model) ?? top.model,
             headline: `An OpenCode session with ${props.names.get(top.model) ?? top.model} costs ${formatSessionCost(top.cost)} on average`,
             stat: {
               value: formatSessionCost(top.cost),

@@ -24,6 +24,8 @@ export type ShareChart =
 
 export type ShareCard = {
   id: string
+  // The winner's name as the headline writes it, which the Leader style sets in the winner's colour.
+  highlight?: string
   title: string
   range: string
   headline: string
@@ -73,6 +75,9 @@ const palettes = {
     track: "#1c1c1c",
     accent: "#8190ff",
     mark: "#4b4b4b",
+    // The first ranked row's bar, and the winner's name in the headline; the Leader style colours them.
+    lead: "#8190ff",
+    highlight: "#ffffff",
   },
   light: {
     background: "#fbfbfb",
@@ -86,6 +91,8 @@ const palettes = {
     track: "#eeeeee",
     accent: "#3b5cf6",
     mark: "#c8c8c8",
+    lead: "#3b5cf6",
+    highlight: "#161616",
   },
 }
 
@@ -96,41 +103,28 @@ export function leaderColor(card: Pick<ShareCard, "chart">) {
   return card.chart.kind === "stacked" ? (card.chart.series[0]?.color ?? "#a684ff") : "#a684ff"
 }
 
-// The Leader style. The card is the leader's colour, so the leader can't also be drawn in it: every part of the card
-// turns to one ink, black or white, whichever reads better on that colour, mixed into the background in steps. The
-// leader is the solid ink, the next series lighter tints of it, and the rest of the card follows the same scale.
+// The Leader style: the dark card, where only the winner keeps its colour. The other series turn to greys, the dot
+// grid takes a faint tint of the winner's colour, the equaliser plays in it, and the headline sets the winner's name
+// and the big number in it.
 function leaderLook(card: ShareCard): { colors: Palette; card: ShareCard } {
-  const background = leaderColor(card)
-  const ink = luminance(background) > 0.4 ? "#0c0c0c" : "#ffffff"
-  const tone = (amount: number) => hex(background, ink, amount)
+  const color = leaderColor(card)
+  const base = palettes.dark
+  const grey = (amount: number) => hex(base.background, "#ffffff", amount)
   const colors: Palette = {
-    background,
-    text: ink,
-    muted: tone(0.8),
-    faint: tone(0.62),
-    line: tone(0.22),
-    dot: tone(0.1),
-    meter: tone(0.4),
-    idle: tone(0.16),
-    track: tone(0.12),
-    accent: ink,
-    mark: tone(0.45),
+    ...base,
+    dot: hex(base.background, color, 0.14),
+    meter: color,
+    accent: grey(0.3),
+    lead: color,
+    highlight: color,
   }
   if (card.chart.kind !== "stacked") return { colors, card }
-  const steps = [1, 0.66, 0.5, 0.4, 0.32, 0.26]
+  const steps = [1, 0.36, 0.29, 0.23, 0.19, 0.16]
   const series = card.chart.series.map((item, index) => ({
     ...item,
-    color: item.key === "other" ? tone(0.2) : tone(steps[index] ?? 0.22),
+    color: index === 0 ? item.color : item.key === "other" ? grey(0.12) : grey(steps[index] ?? 0.14),
   }))
   return { colors, card: { ...card, chart: { ...card.chart, series } } }
-}
-
-function luminance(color: string) {
-  const [r = 0, g = 0, b = 0] = rgb(color).map((value) => {
-    const channel = value / 255
-    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
-  })
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
 // mix() as a #rrggbb colour, for palette entries that are mixed again later.
@@ -423,7 +417,7 @@ function drawIntro(
     const leading = compact ? 36 : 44
     const gap = compact ? 52 : 64
     rise(ctx, time, 0.14, y + gap + size * 0.8, size * 0.8, () => {
-      ctx.fillStyle = colors.text
+      ctx.fillStyle = colors.highlight
       ctx.font = `400 ${size}px ${font}`
       ctx.fillText(card.stat.value, pad - size * 0.04, y + gap + size * 0.8)
     })
@@ -458,13 +452,24 @@ function drawIntro(
   ctx.font = `400 ${size}px ${font}`
   const lines = balance(ctx, card.headline, max).slice(0, 4)
   const leading = size * 1.18
-  lines.forEach((line, index) =>
+  // Where the winner's name falls in the headline, counted across its lines (they join with single spaces).
+  const words = lines.join(" ")
+  const from = card.highlight ? words.indexOf(card.highlight) : -1
+  const to = from + (card.highlight?.length ?? 0)
+  lines.forEach((line, index) => {
+    const offset = lines.slice(0, index).reduce((sum, item) => sum + item.length + 1, 0)
     rise(ctx, time, 0.14 + index * 0.08, y + 56 + size * 0.8 + index * leading, size, () => {
-      ctx.fillStyle = colors.text
       ctx.font = `400 ${size}px ${font}`
-      ctx.fillText(line, pad - 2, y + 56 + size * 0.8 + index * leading)
-    }),
-  )
+      const start = Math.max(0, from - offset)
+      const end = Math.min(line.length, to - offset)
+      const parts = from >= 0 && end > start ? [line.slice(0, start), line.slice(start, end), line.slice(end)] : [line]
+      parts.reduce((x, part, slot) => {
+        ctx.fillStyle = parts.length === 3 && slot === 1 ? colors.highlight : colors.text
+        ctx.fillText(part, x, y + 56 + size * 0.8 + index * leading)
+        return x + ctx.measureText(part).width
+      }, pad - 2)
+    })
+  })
   return y + 56 + lines.length * leading + 32
 }
 
@@ -696,7 +701,7 @@ function drawRanked(
     const bar = y + size + 18
     ctx.fillStyle = colors.track
     ctx.fillRect(box.x + 72, bar, box.width - 72, 10)
-    ctx.fillStyle = mix(colors.accent, colors.idle, dim)
+    ctx.fillStyle = mix(index === 0 ? colors.lead : colors.accent, colors.idle, dim)
     ctx.fillRect(box.x + 72, bar, (box.width - 72) * Math.max(0.01, Math.min(1, item.fill)) * grow, 10)
     ctx.restore()
   })
