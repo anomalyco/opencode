@@ -75,7 +75,7 @@
    screen and the inspector sits under the card, one group at a time behind tabs. */
 
 [data-page="stats"] dialog[data-component="share-editor"] {
-  --editor-bar: 56px;
+  --editor-bar: 48px;
   --editor-inset: 12px;
   /* The option cards, track rows and code: on the light panel a white card with a firm line; on the dark one a fill
      and line only just off the panel, so the choices don't shout. */
@@ -829,14 +829,14 @@
     align-items: center;
     gap: 4px;
     min-height: var(--editor-bar);
-    padding: 10px 12px 10px 8px;
+    padding: 6px 8px 6px 8px;
     background: var(--stats-bg);
     box-shadow: 0 1px 0 var(--stats-line);
 
     [data-variant="primary"] {
       justify-content: center;
       min-width: 96px;
-      margin-left: auto;
+      margin-left: 4px;
     }
 
     [data-slot="button-label"] {
@@ -846,6 +846,14 @@
         animation: none;
       }
     }
+  }
+
+  /* Mute, Shuffle and Export, together at the far end. */
+  [data-slot="bar-end"] {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-left: auto;
   }
 
   [data-component="dropdown"],
@@ -1006,7 +1014,7 @@
   }
 
   /* Muted: the mute button lit, the music's button faded back, its choice kept for unmuting. */
-  [data-slot="music-tool"] [data-slot="icon-button"][aria-pressed="true"] {
+  [data-slot="bar-end"] [data-slot="icon-button"][aria-pressed="true"] {
     color: var(--stats-text);
     background: var(--stats-layer);
   }
@@ -1019,7 +1027,7 @@
     }
   }
 
-  /* The music: the mute button, then its dropdown, which shows the cover and the name. */
+  /* The music: its dropdown shows the cover and the name. */
   [data-slot="music-tool"] {
     display: flex;
     align-items: center;
@@ -1270,7 +1278,7 @@
 
     /* On a phone the bar wraps onto as many rows as it needs, over the card. */
     [data-slot="editor-bar"] {
-      padding: calc(8px + env(safe-area-inset-top, 0px)) 8px 8px;
+      padding: calc(6px + env(safe-area-inset-top, 0px)) 6px 6px;
     }
 
     /* Taller rows for fingers, the same height for every row of wide choices. */

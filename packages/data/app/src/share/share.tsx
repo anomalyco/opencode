@@ -401,14 +401,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" />
                 </svg>
               </button>
-              <button type="button" data-slot="icon-button" aria-label="Shuffle" title="Shuffle" onClick={shuffle}>
-                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                  <g fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M2 4.5h2.5c3.5 0 3.5 7 7 7H14M2 11.5h2.5c1.4 0 2.2-1.1 2.9-2.4M14 4.5h-2.5c-1.4 0-2.2 1.1-2.9 2.4" />
-                    <path d="m12 2.5 2 2-2 2M12 9.5l2 2-2 2" />
-                  </g>
-                </svg>
-              </button>
 
               <Dropdown
                 id="type"
@@ -532,6 +524,33 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
               </Show>
               <Show when={format() === "video"}>
                 <div data-slot="music-tool" role="group" aria-label="Music">
+                  <Dropdown
+                    id="music"
+                    label="Music"
+                    open={menu()}
+                    onOpen={setMenu}
+                    value={track()}
+                    options={shareTracks.map((item) => ({
+                      value: item.id,
+                      label: item.name,
+                      explicit: item.explicit,
+                      icon: <MusicCover cover={item.cover} />,
+                    }))}
+                    show="both"
+                    muted={muted()}
+                    trigger={
+                      <MusicCover
+                        cover={chosen()?.cover}
+                        state={muted() ? undefined : playing() ? "playing" : "paused"}
+                      />
+                    }
+                    onSelect={chooseTrack}
+                  />
+                </div>
+              </Show>
+              {/* The bar's far end: Mute (for a video), Shuffle, then Export. */}
+              <div data-slot="bar-end">
+                <Show when={format() === "video"}>
                   <button
                     type="button"
                     data-slot="icon-button"
@@ -565,52 +584,38 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                       </Show>
                     </svg>
                   </button>
-                  <Dropdown
-                    id="music"
-                    label="Music"
-                    open={menu()}
-                    onOpen={setMenu}
-                    value={track()}
-                    options={shareTracks.map((item) => ({
-                      value: item.id,
-                      label: item.name,
-                      explicit: item.explicit,
-                      icon: <MusicCover cover={item.cover} />,
-                    }))}
-                    show="both"
-                    muted={muted()}
-                    trigger={
-                      <MusicCover
-                        cover={chosen()?.cover}
-                        state={muted() ? undefined : playing() ? "playing" : "paused"}
-                      />
-                    }
-                    onSelect={chooseTrack}
-                  />
-                </div>
-              </Show>
-              <button
-                type="button"
-                data-slot="bar-button"
-                data-variant="primary"
-                data-rendering={rendering() !== undefined ? "" : undefined}
-                // While a video renders, the button is its progress bar: it fills from the left as the frames go.
-                style={{ "--progress": `${(rendering() ?? 0) * 100}%` } as JSX.CSSProperties}
-                disabled={rendering() !== undefined}
-                aria-live="polite"
-                aria-label={{ image: "Export image", video: "Export video", embed: "Copy embed code" }[format()]}
-                onClick={exportFile}
-              >
-                <Show when={rendering() !== undefined ? "rendering" : copied() ? "copied" : "export"} keyed>
-                  <span data-slot="button-label">
-                    {rendering() !== undefined
-                      ? `${Math.round((rendering() ?? 0) * 100)}%`
-                      : copied()
-                        ? "Copied"
-                        : "Export"}
-                  </span>
                 </Show>
-              </button>
+                <button type="button" data-slot="icon-button" aria-label="Shuffle" title="Shuffle" onClick={shuffle}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                    <g fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M2 4.5h2.5c3.5 0 3.5 7 7 7H14M2 11.5h2.5c1.4 0 2.2-1.1 2.9-2.4M14 4.5h-2.5c-1.4 0-2.2 1.1-2.9 2.4" />
+                      <path d="m12 2.5 2 2-2 2M12 9.5l2 2-2 2" />
+                    </g>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  data-slot="bar-button"
+                  data-variant="primary"
+                  data-rendering={rendering() !== undefined ? "" : undefined}
+                  // While a video renders, the button is its progress bar: it fills from the left as the frames go.
+                  style={{ "--progress": `${(rendering() ?? 0) * 100}%` } as JSX.CSSProperties}
+                  disabled={rendering() !== undefined}
+                  aria-live="polite"
+                  aria-label={{ image: "Export image", video: "Export video", embed: "Copy embed code" }[format()]}
+                  onClick={exportFile}
+                >
+                  <Show when={rendering() !== undefined ? "rendering" : copied() ? "copied" : "export"} keyed>
+                    <span data-slot="button-label">
+                      {rendering() !== undefined
+                        ? `${Math.round((rendering() ?? 0) * 100)}%`
+                        : copied()
+                          ? "Copied"
+                          : "Export"}
+                    </span>
+                  </Show>
+                </button>
+              </div>
             </div>
 
             <div data-slot="editor-stage" data-card-theme={options().theme}>
