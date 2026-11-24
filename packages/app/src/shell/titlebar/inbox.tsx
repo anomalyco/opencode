@@ -802,7 +802,8 @@ export function InboxSessionCard(props: {
             {sessionTabTitle(props.title, language.t("session.tab.session"))}
           </span>
           <Show when={props.pinned}>
-            <Icon name="pin" aria-label={language.t("sidebar.recent.pinned")} class="shrink-0 text-v2-icon-icon-muted" />
+            <Icon name="pin" class="shrink-0 text-v2-icon-icon-muted" />
+            <span class="sr-only">{language.t("sidebar.recent.pinned")}</span>
           </Show>
         </span>
         <span class="relative flex h-4 w-full min-w-0 shrink-0 items-center gap-2 ps-6 text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted">

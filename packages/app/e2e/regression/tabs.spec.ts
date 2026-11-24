@@ -2406,10 +2406,12 @@ test("the inbox lists archived sessions in a collapsed section and pins sessions
 
   const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
 
-  const pin = inbox.getByRole("img", { name: "Pinned", exact: true })
+  const pinIcon = 'use[href="#opencode-v2-icon-pin"]'
+
+  const pin = inbox.locator(pinIcon)
 
   await expect(recent).toHaveText([/Older inbox session/, /Active inbox session/])
-  await expect(recent.filter({ hasText: "Older inbox session" }).getByRole("img", { name: "Pinned" })).toBeVisible()
+  await expect(recent.filter({ hasText: "Older inbox session" }).locator(pinIcon)).toHaveCount(1)
   await expect(pin).toHaveCount(1)
   await expect(rows).toHaveText([
     /Older inbox session/,
