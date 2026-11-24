@@ -254,6 +254,7 @@ test.describe("timeline history", () => {
 
     const scroller = timelineScroller(page)
     await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+
     // Load the older page, then rest at its start: further back than the newest page reaches.
     const top = () =>
       scroller.evaluate((element) => {
