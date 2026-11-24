@@ -701,18 +701,18 @@
   }
 
   /* A small equaliser on the chosen track. */
+  /* Three bars made of 2px dots, like the card's equaliser, that climb and fall dot by dot from the bottom. */
   [data-slot="eq"] {
     display: flex;
     align-items: flex-end;
     gap: 2px;
-    height: 12px;
+    height: 14px;
 
     b {
-      width: 3px;
+      width: 2px;
       height: 100%;
-      background: currentColor;
-      transform-origin: bottom;
-      animation: share-eq 900ms ease-in-out infinite;
+      background: repeating-linear-gradient(to top, currentColor 0 2px, transparent 2px 3px);
+      animation: share-eq 900ms steps(4, jump-none) infinite alternate;
 
       &:nth-child(2) {
         animation-delay: -300ms;
@@ -797,12 +797,11 @@
 }
 
 @keyframes share-eq {
-  0%,
-  100% {
-    transform: scaleY(0.3);
+  from {
+    clip-path: inset(80% 0 0 0);
   }
-  50% {
-    transform: scaleY(1);
+  to {
+    clip-path: inset(0 0 0 0);
   }
 }
 
@@ -812,7 +811,7 @@
 
     [data-slot="eq"] b {
       animation: none;
-      transform: scaleY(0.7);
+      clip-path: inset(40% 0 0 0);
     }
   }
 }
