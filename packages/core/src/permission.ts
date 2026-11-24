@@ -96,11 +96,13 @@ export { ignoresCase, pathActions } from "./permission/policy.js"
 
 /**
  * What "Allow always" saves for a web URL: its site, so approving one page doesn't allow every URL. Rules match the URL
- * as written, so the site is kept as written too, with and without a path.
+ * as written, so the site is kept as written, with and without a path. The site ends where URL parsing ends it,
+ * including at `\`, which parsers treat as `/`. A URL with credentials or whitespace in its site
+ * (`https://opencode.ai@evil.com` goes to evil.com) saves only itself.
  */
 export function site(url: string) {
-  const origin = /^https?:\/\/[^/?#]+/i.exec(url)?.[0]
-  return origin ? [origin, `${origin}/*`] : ["*"]
+  const origin = /^https?:\/\/[^/\\?#@\s]+(?=[/\\?#]|$)/i.exec(url)?.[0]
+  return origin ? [origin, `${origin}/*`] : [url]
 }
 
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
