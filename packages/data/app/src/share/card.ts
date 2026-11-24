@@ -419,7 +419,8 @@ function drawStacked(
   focus: Focus,
 ) {
   // Room above the bars for the focused series' label.
-  const headroom = 72
+  // A little room between the intro and the tallest column.
+  const headroom = 24
   const plot = { ...box, y: box.y + headroom, height: box.height - axisHeight - headroom }
   const count = chart.columns.length
   const totals = chart.columns.map((column) => column.values.reduce((sum, value) => sum + value, 0))
@@ -454,20 +455,6 @@ function drawStacked(
     }, base)
   })
 
-  const focused = chart.series[focus.index]
-  if (focused && focus.amount > 0) {
-    ctx.globalAlpha = focus.amount
-    ctx.font = `700 30px ${font}`
-    ctx.textBaseline = "middle"
-    const label = `${focused.label}  ${focused.value}`
-    const top = box.y + 4
-    ctx.fillStyle = focused.color
-    ctx.fillRect(plot.x, top + 18, 20, 20)
-    ctx.fillStyle = colors.text
-    ctx.fillText(label, plot.x + 36, top + 29)
-    ctx.globalAlpha = 1
-  }
-
   ctx.fillStyle = colors.line
   ctx.fillRect(plot.x, base + 1, plot.width, 1)
   ctx.fillStyle = colors.faint
@@ -500,6 +487,31 @@ function drawLegend(
   focus: Focus,
   time: number,
 ) {
+  // While a series is highlighted the legend gives way to that series alone, set large where the legend was.
+  const focused = series[focus.index]
+  if (focused && focus.amount > 0) {
+    ctx.save()
+    ctx.globalAlpha = focus.amount
+    ctx.translate(0, (1 - focus.amount) * 16)
+    ctx.textBaseline = "middle"
+    const middle = y + 36
+    ctx.fillStyle = focused.color
+    ctx.fillRect(x, middle - 18, 36, 36)
+    ctx.font = `700 52px ${font}`
+    const value = ctx.measureText(focused.value).width
+    ctx.fillStyle = colors.text
+    ctx.fillText(focused.value, x + layout.column * layout.columns - value, middle + 2)
+    ctx.fillText(
+      truncate(ctx, focused.label, layout.column * layout.columns - value - 36 - 24 - 40),
+      x + 36 + 24,
+      middle + 2,
+    )
+    ctx.restore()
+  }
+  const shown = 1 - focus.amount
+  if (shown <= 0) return
+  ctx.save()
+  ctx.globalAlpha = shown
   ctx.textBaseline = "middle"
   series.forEach((item, index) => {
     const column = Math.floor(index / layout.rows)
@@ -511,7 +523,7 @@ function drawLegend(
     const amount = settle(time, 0.45 + index * 0.05, 0.6)
     if (amount <= 0) return
     ctx.save()
-    ctx.globalAlpha = amount
+    ctx.globalAlpha = amount * shown
     ctx.translate(0, (1 - amount) * 14)
     ctx.fillStyle = mix(item.color, colors.idle, dim)
     ctx.fillRect(left, middle - 9, 18, 18)
@@ -525,6 +537,7 @@ function drawLegend(
     ctx.fillText(truncate(ctx, item.label, right - measured - 24 - (left + 38)), left + 38, middle)
     ctx.restore()
   })
+  ctx.restore()
 }
 
 function drawRanked(
