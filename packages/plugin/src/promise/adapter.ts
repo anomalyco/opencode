@@ -2,7 +2,7 @@ import { Tool } from "@opencode/schema/tool"
 import type { Rpc } from "@opencode/schema/rpc"
 import type { OpenCodeEvent } from "@opencode/client"
 import type { RpcCallOptions, RpcEventPayload, SelectedEvent, SubscribeOptions } from "@opencode/client/promise/api"
-import { Effect, Schema, SchemaAST, Stream } from "effect"
+import { Cause, Effect, Exit, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
@@ -302,9 +302,10 @@ export function fromPromise(plugin: Plugin) {
         ) => {
           const compiled = compileEndpoint(endpoint)
           return ((input?: unknown, options?: { readonly signal?: AbortSignal }) => {
+            const signal = options?.signal
             // The runner evaluates synchronously before it checks the signal, so an aborted call could start a mutation.
-            if (options?.signal?.aborted) return Promise.reject(options.signal.reason)
-            return Effect.runPromiseWith(runtime)(
+            if (signal?.aborted) return Promise.reject(signal.reason)
+            return Effect.runPromiseExitWith(runtime)(
               Effect.gen(function* () {
                 // Match the generated Promise client, whose request body crosses JSON before endpoint decoding.
                 const normalized = yield* Schema.encodeUnknownEffect(JsonInput)(input ?? {}).pipe(
@@ -315,9 +316,19 @@ export function fromPromise(plugin: Plugin) {
                 if (compiled.noContent) return undefined
                 return yield* compiled.encode(result)
               }),
-              { signal: options?.signal },
-              // An abort mid-call interrupts the fiber; reject with the signal's reason, as fetch does.
-            ).catch((error) => Promise.reject(options?.signal?.aborted ? options.signal.reason : error))
+              { signal },
+            ).then((exit) => {
+              if (Exit.isSuccess(exit)) return exit.value
+              // Effect records AbortSignal interruptions without an interrupting fiber ID.
+              if (
+                signal?.aborted &&
+                Cause.hasInterruptsOnly(exit.cause) &&
+                exit.cause.reasons.some((reason) => Cause.isInterruptReason(reason) && reason.fiberId === undefined)
+              ) {
+                throw signal.reason
+              }
+              throw Cause.squash(exit.cause)
+            })
           }) as PromiseMethod
         }
 
