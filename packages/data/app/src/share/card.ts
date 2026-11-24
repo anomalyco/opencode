@@ -244,15 +244,18 @@ export function mainLength(card: ShareCard, options: ShareOptions, timing = free
 }
 
 // The slides the leaderboard and comparison open with: the headline until the first cut, then a slide a place (the top
-// three) or two for a comparison (head to head, then the radar), a bar each with music (the cuts on the track's strong
+// three) or two for a comparison (head to head, then the radar, held twice as long), a bar each with music (the cuts on the track's strong
 // beats, where its highlights would fall) or 1.6 s each without. The Build motion keeps the card alone.
 function introSlides(card: ShareCard, options: ShareOptions, timing: ShareTiming) {
-  const count = card.chart.kind === "podium" ? card.chart.entries.length : card.chart.kind === "versus" ? 2 : 0
-  if (options.motion === "build" || count === 0) return undefined
+  // Each slide's length in units of one slide; the comparison's radar stays for two, so it can be read.
+  const units =
+    card.chart.kind === "podium" ? card.chart.entries.map(() => 1) : card.chart.kind === "versus" ? [1, 2] : []
+  if (options.motion === "build" || units.length === 0) return undefined
   const length = timing.beat ? timing.beat * 4 : 1.6
   const grid = timing.beat ? timing.start % length : 0
   const first = grid + length * Math.max(1, Math.ceil((1.4 - grid) / length))
-  return { first, length, count, end: first + length * count }
+  const starts = units.map((_, index) => first + units.slice(0, index).reduce((sum, unit) => sum + unit, 0) * length)
+  return { first, starts, end: first + units.reduce((sum, unit) => sum + unit, 0) * length }
 }
 
 // The closing slides, cut on the beat: the lockup large for 4 beats, the line for 3, then the address for 3. At 96 BPM
@@ -1002,7 +1005,7 @@ function drawSlide(
   width: number,
   height: number,
   time: number,
-  slides: { first: number; length: number; count: number },
+  slides: { first: number; starts: number[] },
 ) {
   const chart = card.chart
   drawBackground(
@@ -1021,8 +1024,8 @@ function drawSlide(
   const rule = footer - 26 - 56
   drawFooter(ctx, card, colors, width, footer, rule)
   const box = { x: pad, y: pad + 88 + 48 * zoom, width: width - pad * 2, height: rule - 64 - (pad + 88 + 48 * zoom) }
-  const index = time < slides.first ? -1 : Math.min(slides.count - 1, Math.floor((time - slides.first) / slides.length))
-  const since = index < 0 ? time : time - slides.first - index * slides.length
+  const index = slides.starts.findLastIndex((start) => time >= start)
+  const since = index < 0 ? time : time - slides.starts[index]!
   ctx.textBaseline = "alphabetic"
 
   if (index < 0) {
@@ -1246,17 +1249,22 @@ function drawHeadToHead(
       ctx.drawImage(logo, area.x + area.width - size * 0.75, area.y + (area.height - size) / 2, size, size)
       ctx.restore()
     }
-    const name = Math.min(72, fit(ctx, model.label, area.width, 72, 700))
+    const name = Math.min(72, fit(ctx, model.label, area.width - 56, 72, 700))
     const foot = area.y + area.height / 2 + name * 0.4
+    // The name in the text colour, after a square in the model's colour: the legend for the radar that follows.
+    const swatch = Math.round(name * 0.42)
+    const indent = swatch + Math.round(name * 0.36)
     rise(ctx, since, 0.1 + side * 0.15, foot, name, () => {
-      ctx.font = `700 ${name}px ${font}`
       ctx.fillStyle = side === 0 ? colors.first : colors.second
-      ctx.fillText(model.label, area.x - 2, foot)
+      ctx.fillRect(area.x, foot - name * 0.36 - swatch / 2, swatch, swatch)
+      ctx.font = `700 ${name}px ${font}`
+      ctx.fillStyle = colors.text
+      ctx.fillText(model.label, area.x + indent - 2, foot)
     })
     rise(ctx, since, 0.18 + side * 0.15, foot + 56, 36, () => {
       ctx.font = `400 36px ${font}`
       ctx.fillStyle = colors.muted
-      ctx.fillText(model.provider, area.x, foot + 56)
+      ctx.fillText(model.provider, area.x + indent, foot + 56)
     })
   })
   rise(ctx, since, 0.3, across ? box.y + box.height / 2 + 28 : middle + 28, 80, () => {
