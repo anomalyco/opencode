@@ -66,6 +66,9 @@ import type { RunTheme } from "./theme"
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
+// How long a running subagent may go without an update before the collapsed footer shows its stall time.
+const STALL_HINT_MS = 10_000
+
 const EMPTY_BORDER = {
   topLeft: "",
   bottomLeft: "",
@@ -203,8 +206,11 @@ export function RunFooterView(props: RunFooterViewProps) {
   const variantCycle = () => monoShortcut(shortcuts.all("variant.cycle") ?? "", props.mono)
   const clearShortcut = () => shortcut("prompt.clear")
   const busy = createMemo(() => props.state().phase === "running")
+  // Show the work spinner while the parent is running or a subagent is working, so the footer is
+  // never visibly frozen during subagent-only activity.
+  const showSpinner = createMemo(() => busy() || activeTabs().length > 0)
   const started = createMemo(() => (busy() ? performance.now() : undefined))
-  const statusWidth = createMemo(() => Math.max(1, width() - (busy() ? 2 : 0)))
+  const statusWidth = createMemo(() => Math.max(1, width() - (showSpinner() ? 2 : 0)))
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
   const usage = createMemo(() => props.state().usage)
@@ -364,9 +370,10 @@ export function RunFooterView(props: RunFooterViewProps) {
   const [promptRows, setPromptRows] = createSignal(1)
   const [expanded, setExpanded] = createSignal(false)
   const [now, setNow] = createSignal(Date.now())
-  // Ticker runs only while the panel is open to avoid a 1 Hz tick during idle sessions.
+  // Ticker runs only while the panel is open or a subagent is running, so elapsed/stall times stay
+  // live without a 1 Hz tick during idle sessions.
   createEffect(() => {
-    if (!expanded()) return
+    if (!expanded() && activeTabs().length === 0) return
     setNow(Date.now())
     const id = setInterval(() => setNow(Date.now()), 1000)
     onCleanup(() => clearInterval(id))
@@ -374,6 +381,17 @@ export function RunFooterView(props: RunFooterViewProps) {
   const toolSummaries = createMemo(() =>
     expanded() ? activeToolSummaries(tabs(), now()) : [],
   )
+  // Longest time any running subagent has gone without an update. Surfaced in the collapsed footer
+  // once it crosses STALL_HINT_MS so a stuck subagent (e.g. a downed MCP server) is visible without
+  // opening the panel.
+  const subagentStall = createMemo(() => {
+    let max = 0
+    for (const tab of activeTabs()) {
+      if (tab.lastUpdatedAt === undefined) continue
+      max = Math.max(max, now() - tab.lastUpdatedAt)
+    }
+    return max
+  })
   const activityShortcut = createMemo(() => shortcut("session.child.activity"))
   const composer = createPromptState({
     directory: props.directory,
@@ -475,11 +493,14 @@ export function RunFooterView(props: RunFooterViewProps) {
       items.push({ id: "queued", key: queuedShortcut(), label: `${queuedPrompts().length} pending` })
     }
     if (activeTabs().length > 0 && subagentShortcut()) {
+      // Append the stall time once a subagent has been quiet long enough to look stuck.
+      const stall = subagentStall()
+      const suffix = stall >= STALL_HINT_MS ? `${props.mono ? " - " : " · "}${Math.round(stall / 1000)}s` : ""
       items.push({
         id: "subagents",
         key: subagentShortcut(),
-        label: `${activeTabs().length} sub`,
-        expanded: `${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}`,
+        label: `${activeTabs().length} sub${suffix}`,
+        expanded: `${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}${suffix}`,
       })
     }
     if (activeTabs().length > 0 && activityShortcut()) {
@@ -523,7 +544,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       cost: footerDetails() ? cost() : undefined,
       provider: info?.provider,
       menu: commandHint(),
-      spinner: busy() ? (props.mono ? "*" : "\u25aa") : undefined,
+      spinner: showSpinner() ? (props.mono ? "*" : "\u25aa") : undefined,
     })
   })
   const statusSections = createMemo(() => statuslineLayout().groups.filter((group) => group.id !== "spinner"))
@@ -1025,7 +1046,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                           {props.mono ? " - " : " · "}
                         </text>
                         <text fg={row.tool ? theme().text : theme().muted} flexShrink={0}>
-                          {row.tool || "—"}
+                          {row.tool || "thinking"}
                         </text>
                         <text fg={theme().muted} flexShrink={1} wrapMode="none">
                           {row.elapsedMs > 0 ? `  ${Math.round(row.elapsedMs / 1000)}s` : ""}
@@ -1053,7 +1074,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                 flexShrink={0}
                 backgroundColor="transparent"
               >
-                <Show when={busy()}>
+                <Show when={showSpinner()}>
                   <box id="mini-work-spinner" width={1} flexShrink={0}>
                     <OneCellSpinner
                       animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
@@ -1061,7 +1082,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                       animations={props.tuiConfig.animations}
                       glow={!props.mono}
                       still={props.mono ? "*" : undefined}
-                      age={performance.now() - (started() ?? performance.now())}
+                      age={started() !== undefined ? performance.now() - started()! : 0}
                     />
                   </box>
                 </Show>

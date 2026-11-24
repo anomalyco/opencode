@@ -206,6 +206,7 @@ function tab(child: ChildState): FooterSubagentTab {
     model: child.model,
     activeTool,
     toolStart,
+    lastUpdatedAt: child.lastUpdatedAt,
   }
 }
 

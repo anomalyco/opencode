@@ -322,6 +322,7 @@ export type FooterSubagentTab = {
   model?: { providerID: string; modelID: string }
   activeTool?: string
   toolStart?: number
+  lastUpdatedAt?: number
 }
 
 export type FooterSubagentDetail = {

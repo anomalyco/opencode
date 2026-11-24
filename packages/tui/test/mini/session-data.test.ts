@@ -140,12 +140,31 @@ describe("activeToolSummaries", () => {
     expect(result).toEqual([])
   })
 
-  it("excludes running tab without activeTool", () => {
+  it("excludes non-running tabs", () => {
+    const result = activeToolSummaries([makeTab({ status: "completed", activeTool: "read" })], Date.now())
+    expect(result).toEqual([])
+  })
+
+  it("includes a running tab without an active tool as a thinking row", () => {
+    const now = Date.now()
+    const tabs: import("../../src/mini/types").FooterSubagentTab[] = [
+      { sessionID: "s1", label: "agent-1", description: "", status: "running", lastUpdatedAt: now - 3000 },
+    ]
+    const result = activeToolSummaries(tabs, now)
+    expect(result).toHaveLength(1)
+    expect(result[0]!.tool).toBe("")
+    expect(result[0]!.elapsedMs).toBeGreaterThanOrEqual(2900)
+    expect(result[0]!.elapsedMs).toBeLessThanOrEqual(3100)
+  })
+
+  it("thinking row has zero elapsed when the tab has no timestamp", () => {
     const tabs: import("../../src/mini/types").FooterSubagentTab[] = [
       { sessionID: "s1", label: "agent-1", description: "", status: "running" },
     ]
     const result = activeToolSummaries(tabs, 1000)
-    expect(result).toHaveLength(0)
+    expect(result).toHaveLength(1)
+    expect(result[0]!.tool).toBe("")
+    expect(result[0]!.elapsedMs).toBe(0)
   })
 
   it("includes running tab with active tool", () => {

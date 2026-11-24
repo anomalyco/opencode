@@ -54,12 +54,20 @@ export interface ToolSummaryRow {
 }
 
 export function activeToolSummaries(tabs: FooterSubagentTab[], now: number): ToolSummaryRow[] {
+  // One row per running subagent. When a tool is executing, show the tool and the time since it
+  // started. Between tool calls (thinking/writing) there is no tool, so show "thinking" and the
+  // time since the subagent last updated — a stalled subagent (e.g. a downed MCP server) makes
+  // that timer grow, which is the signal this panel exists to surface.
   return tabs
-    .filter((tab) => tab.status === "running" && tab.activeTool !== undefined)
-    .map((tab) => ({
-      label: tab.label || tab.sessionID,
-      tool: tab.activeTool!,
-      inputPreview: "",
-      elapsedMs: Math.max(0, now - tab.toolStart!),
-    }))
+    .filter((tab) => tab.status === "running")
+    .map((tab) => {
+      const hasTool = tab.activeTool !== undefined
+      const since = hasTool ? tab.toolStart : tab.lastUpdatedAt
+      return {
+        label: tab.label || tab.sessionID,
+        tool: hasTool ? tab.activeTool! : "",
+        inputPreview: "",
+        elapsedMs: since === undefined ? 0 : Math.max(0, now - since),
+      }
+    })
 }
