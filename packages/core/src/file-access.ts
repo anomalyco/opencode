@@ -159,7 +159,10 @@ const layer = Layer.effect(
         const written = parsed?.path ?? text
         const origin = parsed ? location.directory : from.absolute
         return {
-          absolute: AbsolutePath.make(resolvePath(origin, written)),
+          // A sandboxed workspace Location's paths follow its environment's own (POSIX) rules, not the server's.
+          absolute: AbsolutePath.make(
+            environment.path ? environment.path.resolve(origin, written) : resolvePath(origin, written),
+          ),
           environment: { id },
         } satisfies Environment.Place
       }
