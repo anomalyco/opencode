@@ -488,10 +488,59 @@
   }
 
   /* The code to paste: the whole snippet, wrapped, as tall as it needs, on the option buttons' fill and highlighted. */
-  /* An embed's code under the card: a few wrapped lines at most, scrolling past that, on the controls' fill. */
-  [data-slot="embed-code"] {
+  /* The embed code's drawer: closed, no height and none of the stage's gap above it; open, the code's height. The rows
+     ease, so the card above shrinks to make room smoothly. */
+  [data-slot="embed-drawer"] {
+    display: grid;
     flex: none;
-    width: min(640px, 100%);
+    grid-template-rows: 0fr;
+    max-width: 100%;
+    margin-top: -12px;
+    opacity: 0;
+    transition:
+      grid-template-rows 280ms cubic-bezier(0.23, 1, 0.32, 1),
+      margin-top 280ms cubic-bezier(0.23, 1, 0.32, 1),
+      opacity 200ms ease;
+
+    &[data-open] {
+      grid-template-rows: 1fr;
+      margin-top: 0;
+      opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
+
+  [data-slot="embed-drawer-inner"] {
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  [data-slot="embed-copied"] {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--stats-bg);
+    pointer-events: none;
+    background: color-mix(in srgb, var(--stats-text) 85%, transparent);
+    animation: share-label-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+
+  /* An embed's code: a few wrapped lines at most, scrolling past that. */
+  [data-slot="embed-code"] {
+    display: block;
+    width: 100%;
     max-height: 88px;
     padding: 10px 12px;
     overflow-y: auto;

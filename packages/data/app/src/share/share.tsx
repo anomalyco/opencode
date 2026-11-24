@@ -110,6 +110,8 @@ const layouts = [
 export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   let dialog: HTMLDialogElement | undefined
   let preview: HTMLCanvasElement | undefined
+  // The card's width on screen, for the embed code under it to match.
+  const [cardWidth, setCardWidth] = createSignal(0)
   let audio: HTMLAudioElement | undefined
   const [format, setFormat] = createSignal<"image" | "video" | "embed">("video")
   // An embed shows the latest data by default; a fixed one keeps today's numbers (share/embed.ts).
@@ -403,7 +405,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       const kind = format()
       // The button says Copied for a moment instead of a notice.
       if (kind === "embed") {
-        await navigator.clipboard.writeText(snippet())
+        await copyText(snippet(), dialog)
         setCopied(true)
         setTimeout(() => setCopied(false), 1600)
         return undefined
@@ -745,21 +747,45 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
               </Show>
               <div data-slot="editor-canvas">
                 <canvas
-                  ref={preview}
+                  ref={(element) => {
+                    preview = element
+                    const observer = new ResizeObserver(() => setCardWidth(element.getBoundingClientRect().width))
+                    observer.observe(element)
+                    onCleanup(() => observer.disconnect())
+                  }}
                   data-slot="share-preview"
                   role="img"
                   aria-label={value().headline}
                   style={{ "aspect-ratio": `${size()[0]} / ${size()[1]}` }}
                 />
               </div>
-              {/* An embed's code under the card, highlighted, as it will be copied; pressing it copies it too. */}
-              <Show when={format() === "embed" && snippet()}>
-                <button type="button" data-slot="embed-code" aria-label="Copy embed code" onClick={exportFile}>
-                  <code>
-                    <For each={tokens(snippet())}>{(token) => <span data-token={token.kind}>{token.text}</span>}</For>
-                  </code>
-                </button>
-              </Show>
+              {/* An embed's code under the card, as wide as it, highlighted as it will be copied; pressing it copies it too.
+                  It opens by growing, so the card eases smaller to make room rather than jumping. */}
+              <div
+                data-slot="embed-drawer"
+                data-open={format() === "embed" && snippet() ? "" : undefined}
+                style={{ width: `${cardWidth()}px` }}
+              >
+                <div data-slot="embed-drawer-inner">
+                  {/* Copying shows here as well as on the button, where the press was. */}
+                  <Show when={copied()}>
+                    <span data-slot="embed-copied" aria-hidden="true">
+                      Copied
+                    </span>
+                  </Show>
+                  <button
+                    type="button"
+                    data-slot="embed-code"
+                    aria-label="Copy embed code"
+                    tabIndex={format() === "embed" ? 0 : -1}
+                    onClick={exportFile}
+                  >
+                    <code>
+                      <For each={tokens(snippet())}>{(token) => <span data-token={token.kind}>{token.text}</span>}</For>
+                    </code>
+                  </button>
+                </div>
+              </div>
               {/* Under the card, the section's name between arrows that step to the previous and next section; a saved or
                   copied notice takes the name's place for a moment. */}
               <div data-slot="editor-toolbar">
@@ -795,6 +821,26 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       </Show>
     </dialog>
   )
+}
+
+// Copies `text`: the Clipboard API, or where a browser refuses it (no focus, no permission) a selected hidden field
+// inside the editor and the copy command, which the top-layer dialog lets through.
+async function copyText(text: string, host: HTMLElement | undefined) {
+  const written = await navigator.clipboard?.writeText(text).then(
+    () => true,
+    () => false,
+  )
+  if (written) return
+  const field = document.createElement("textarea")
+  field.value = text
+  field.setAttribute("readonly", "")
+  field.style.position = "fixed"
+  field.style.opacity = "0"
+  ;(host ?? document.body).append(field)
+  field.select()
+  const copied = document.execCommand("copy")
+  field.remove()
+  if (!copied) throw new Error("Couldn't copy the embed code")
 }
 
 // The embed code split for highlighting: the tag's name, each attribute's name and quoted value, and the brackets.
