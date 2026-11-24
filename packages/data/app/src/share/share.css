@@ -1188,8 +1188,9 @@
     align-items: center;
 
     /* The cover as far from the left edge as from the top and bottom: (36 - 24) / 2, less the border. */
+    /* As wide as its list, the longest name with its Explicit badge. */
     [data-slot="dropdown-trigger"] {
-      width: 200px;
+      width: 248px;
       padding-left: 5px;
     }
   }
