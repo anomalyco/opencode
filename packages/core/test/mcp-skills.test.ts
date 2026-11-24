@@ -180,11 +180,11 @@ describe("MCP skills", () => {
       yield* connect("team", server.url, ["team:deploy"])
       const skills = yield* Skill.Service
       expect(yield* skills.content(id)).toBe("# Deploy\n\nRun scripts/run.sh.\n")
-      expect(new TextDecoder().decode((yield* skills.file(id, "scripts/run.sh")) as Uint8Array)).toBe("echo run")
+      expect(new TextDecoder().decode(yield* skills.read(id, "scripts/run.sh"))).toBe("echo run")
       // Once loaded, the content is listed and nothing is read again.
       yield* eventually(skills.get(id), (skill) => skill?.content === "# Deploy\n\nRun scripts/run.sh.\n")
       yield* skills.content(id)
-      yield* skills.file(id, "scripts/run.sh")
+      yield* skills.read(id, "scripts/run.sh")
       expect(server.state.reads).toEqual(["skill://deploy/SKILL.md", "skill://deploy/scripts/run.sh"])
     }),
   )
@@ -201,7 +201,7 @@ describe("MCP skills", () => {
       expect(content).toBeInstanceOf(Skill.LoadError)
       expect(content.message).toStartWith("Failed to load SKILL.md of MCP skill team:deploy: ")
       expect(content.message).toContain("digest")
-      const file = yield* skills.file(id, "scripts/run.sh").pipe(Effect.flip)
+      const file = yield* skills.read(id, "scripts/run.sh").pipe(Effect.flip)
       expect(file.message).toContain("digest")
     }),
   )

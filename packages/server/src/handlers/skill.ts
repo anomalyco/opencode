@@ -11,20 +11,24 @@ export const SkillHandler = HttpApiBuilder.group(Api, "server.skill", (handlers)
     .handle("skill.file", (ctx) =>
       Effect.gen(function* () {
         const skills = yield* Skill.Service
-        const id = ctx.params.skillID
         // The path after /api/experimental/skill/<id>/file/.
         const raw = new URL(ctx.request.url, "http://localhost").pathname.split("/").slice(6).join("/")
         const file = yield* Effect.try({
           try: () => decodeURIComponent(raw),
           catch: () => new FileNotFoundError({ path: raw, message: `File not found: ${raw}` }),
         })
-        if (!(yield* skills.get(id)))
-          return yield* new SkillNotFoundError({ skill: id, message: `Skill not found: ${id}` })
-        const value = yield* (file === "SKILL.md" ? skills.content(id) : skills.file(id, file)).pipe(
-          Effect.mapError((error) => new SkillLoadError({ skill: id, message: error.message })),
+        return yield* skills.read(ctx.params.skillID, file).pipe(
+          Effect.catchTags({
+            "Skill.NotFoundError": (error) =>
+              Effect.fail(
+                new SkillNotFoundError({ skill: ctx.params.skillID, message: `Skill not found: ${error.skill}` }),
+              ),
+            "Skill.FileNotFoundError": (error) =>
+              Effect.fail(new FileNotFoundError({ path: error.file, message: `File not found: ${error.file}` })),
+            "Skill.LoadError": (error) =>
+              Effect.fail(new SkillLoadError({ skill: ctx.params.skillID, message: error.message })),
+          }),
         )
-        if (value === undefined) return yield* new FileNotFoundError({ path: file, message: `File not found: ${file}` })
-        return typeof value === "string" ? new TextEncoder().encode(value) : value
       }),
     ),
 )
