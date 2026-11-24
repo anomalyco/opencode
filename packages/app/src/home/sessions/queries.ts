@@ -1,8 +1,10 @@
 import type { SessionInfo } from "@opencode/client/promise"
+import { containsDirectory } from "@opencode/util/path"
 import { queryOptions, skipToken } from "@tanstack/solid-query"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import type { LocalProject } from "@/shell/state/layout"
+import { ProjectID } from "@opencode/schema/project-id"
 import { workspaceSelectionDirectories } from "@/workspaces/paths"
 import { isSessionNotFoundError } from "@/runtime/server/errors"
 import { looksLikeSessionID } from "@/session/search"
@@ -28,8 +30,18 @@ export function homeSessionsQuery(conn: ServerConnection.Any | undefined, ctx: S
   })
 }
 
-export function projectSessionDirectories(project: LocalProject) {
-  return [project.worktree, ...workspaceSelectionDirectories(project, [])]
+export function projectSessionDirectories(project: LocalProject, projects: readonly LocalProject[]) {
+  const workspaces = workspaceSelectionDirectories(project, [])
+
+  if (project.id !== ProjectID.global) return [project.worktree, ...workspaces]
+
+  // The global inventory can contain directories owned by other added projects.
+  const otherProjects = projects.filter((item) => !containsDirectory(item.worktree, project.worktree))
+
+  return [
+    project.worktree,
+    ...workspaces.filter((directory) => !otherProjects.some((item) => containsDirectory(item.worktree, directory))),
+  ]
 }
 
 export async function lookupHomeSession(ctx: ServerCtx, sessionID: string, signal?: AbortSignal) {

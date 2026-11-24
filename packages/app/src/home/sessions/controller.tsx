@@ -78,7 +78,7 @@ export function createHomeSessionsController(home: HomeController) {
     if (!selected) return
     const project = home.project.selected()
 
-    return project ? projectSessionDirectories(project) : [selected]
+    return project ? projectSessionDirectories(project, home.project.list()) : [selected]
   })
 
   const [load, setLoad] = createSignal(INITIAL_HOME_SESSIONS_LOAD_STATE)
