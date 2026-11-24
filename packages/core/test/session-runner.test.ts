@@ -409,10 +409,9 @@ const layer = Layer.unwrap(
       load: () => Effect.succeed(Instructions.empty),
     })
     const skillInstructions = Layer.mock(SkillInstructions.Service, {
-      load: (permissions) => {
+      load: (policy) => {
         // `setup` tags each agent's ruleset with a `skill` rule naming that agent.
-        const baseline = permissions
-          .filter((rule) => rule.action === "skill")
+        const baseline = Permission.Policy.relevant(policy, "skill")
           .map((rule) => state.skillBaselines.get(Agent.ID.make(rule.resource)))
           .findLast((text) => text !== undefined)
         return Effect.succeed(
@@ -2097,9 +2096,7 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(last)).toEqual(["First", "Fourth"])
     expect(last.system.map((part) => part.text).join("\n")).not.toContain("Entered mode")
     // Clients still see every message; only the model context hides the stale update.
-    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([
-      { text: "Entered mode" },
-    ])
+    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([{ text: "Entered mode" }])
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {

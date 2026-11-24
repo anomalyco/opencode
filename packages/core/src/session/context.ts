@@ -164,7 +164,7 @@ const layer = Layer.effect(
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
-      const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
+      const policy = Permission.Policy.fromRules(agent.info.permissions, session.permissions ?? [])
       const [selected, hasWebSearch, fullCodeMode, opencodeApi] = yield* Effect.all(
         [
           models.select(session, model.available).pipe(Effect.orElseSucceed(() => undefined)),
@@ -176,7 +176,7 @@ const layer = Layer.effect(
       )
       const fallbackRef = session.model ?? agent.info.model
       const policyModel = selected?.info ?? (fallbackRef && Model.Info.default(fallbackRef.providerID, fallbackRef.id))
-      const tools = yield* registry.snapshot(permissions, {
+      const tools = yield* registry.snapshot(policy, {
         services,
         api: Context.make(CodeModeApi.Service, opencodeApi ? api : CodeModeApi.disabled).pipe(
           Context.add(Location.Service, location),
@@ -185,7 +185,7 @@ const layer = Layer.effect(
         tools: modelTools({
           model: policyModel,
           websearch: hasWebSearch,
-          fullCodeMode: fullCodeMode && Tool.codeModeAvailable(permissions),
+          fullCodeMode: fullCodeMode && Tool.codeModeAvailable(policy),
         }),
       })
       const cwd = yield* sessionCwd.current(session.id)
@@ -194,7 +194,7 @@ const layer = Layer.effect(
           builtins: builtins.load({ cwd: cwd && SessionCwd.describe(cwd, environment.id) }),
           cwd: cwdInstructions.load(cwd, session.id),
           discovery: discovery.load(),
-          skills: skillInstructions.load(permissions),
+          skills: skillInstructions.load(policy),
           references: referenceInstructions.load(),
           mcp: mcpInstructions.load(tools),
           machines: machineInstructions.load(),

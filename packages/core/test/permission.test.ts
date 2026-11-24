@@ -147,6 +147,42 @@ describe("Permission.isActionDenied", () => {
       expect(Permission.isActionDenied(item.action, item.rules)).toBe(true)
     }
   })
+
+  test("composes override, restrict, and fallback with distinct precedence laws", () => {
+    const base = Permission.Policy.fromRules([
+      rule("read", "*", "ask"),
+      rule("read", ".env", "deny"),
+      rule("read", "README.md", "allow"),
+    ])
+    const withSaved = Permission.Policy.fallback(base, Permission.Policy.fromRules([rule("read", "*", "allow")]))
+
+    // fallback settles ask, never overrides deny or allow
+    expect(Permission.Policy.evaluate(withSaved, "read", "src/index.ts").effect).toBe("allow")
+    expect(Permission.Policy.evaluate(withSaved, "read", ".env").effect).toBe("deny")
+    expect(Permission.Policy.evaluate(withSaved, "read", "README.md").effect).toBe("allow")
+
+    // evaluateAll follows the deny > ask > allow lattice
+    expect(Permission.Policy.evaluateAll(base, "read", ["README.md", "src/index.ts"])).toBe("ask")
+    expect(Permission.Policy.evaluateAll(base, "read", ["README.md", ".env"])).toBe("deny")
+    expect(Permission.Policy.evaluateAll(withSaved, "read", ["README.md", "src/index.ts"])).toBe("allow")
+
+    // restrict is monotone: cannot be undone by fallback, and narrow restricts never unmask a blanket deny
+    const restricted = Permission.Policy.fallback(
+      Permission.Policy.restrict(Permission.Policy.fromRules([rule("skill", "*", "allow")]), [
+        { action: "skill", resource: "browser" },
+      ]),
+      Permission.Policy.fromRules([rule("skill", "*", "allow")]),
+    )
+    expect(Permission.Policy.evaluate(restricted, "skill", "browser").effect).toBe("deny")
+    expect(Permission.Policy.evaluate(restricted, "skill", "other").effect).toBe("allow")
+    expect(Permission.Policy.isActionDenied(restricted, "skill")).toBe(false)
+    expect(Permission.Policy.hasDeny(restricted, "skill")).toBe(true)
+
+    const blanketRestricted = Permission.Policy.restrict(Permission.Policy.fromRules([rule("skill", "*", "deny")]), [
+      { action: "skill", resource: "browser" },
+    ])
+    expect(Permission.Policy.isActionDenied(blanketRestricted, "skill")).toBe(true)
+  })
 })
 
 describe("Permission", () => {
