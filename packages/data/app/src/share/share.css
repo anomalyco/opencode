@@ -256,12 +256,14 @@
     z-index: 1;
     translate: 0 -50%;
 
+    /* In line with the close button, 4px in from the stage's left edge... */
     &[data-side="previous"] {
-      left: 0;
+      left: 4px;
     }
 
+    /* ...and as far in from the stage's visible right edge, the panel's left edge (its width plus its 1px borders). */
     &[data-side="next"] {
-      right: 0;
+      right: calc(var(--editor-inspector) + 2px + var(--editor-inset) + 4px);
     }
   }
 
@@ -800,6 +802,13 @@
 
     [data-slot="editor-canvas"] {
       padding-inline: 40px;
+    }
+
+    /* The panel sits under the stage here, so the right arrow mirrors the close button. */
+    [data-slot="icon-button"][data-variant="step"] {
+      &[data-side="next"] {
+        right: 4px;
+      }
     }
 
     /* Below the notch, still on a dot. */

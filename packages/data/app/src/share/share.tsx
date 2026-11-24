@@ -313,31 +313,31 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   </For>
                 </div>
               </Show>
+              <button
+                type="button"
+                data-slot="icon-button"
+                data-variant="step"
+                data-side="previous"
+                aria-label="Previous section"
+                onClick={() => step(-1)}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                data-slot="icon-button"
+                data-variant="step"
+                data-side="next"
+                aria-label="Next section"
+                onClick={() => step(1)}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+                </svg>
+              </button>
               <div data-slot="editor-canvas">
-                <button
-                  type="button"
-                  data-slot="icon-button"
-                  data-variant="step"
-                  data-side="previous"
-                  aria-label="Previous section"
-                  onClick={() => step(-1)}
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  data-slot="icon-button"
-                  data-variant="step"
-                  data-side="next"
-                  aria-label="Next section"
-                  onClick={() => step(1)}
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-                  </svg>
-                </button>
                 <canvas
                   ref={preview}
                   data-slot="share-preview"
