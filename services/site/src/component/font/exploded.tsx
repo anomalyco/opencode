@@ -1,5 +1,6 @@
-import { createMemo, createSignal, For, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount } from "solid-js"
 import { buildOrder, cellToFont, cells, fontContent, glyphNames, letters, type Letter } from "~/lib/font-content"
+import { useVisible } from "~/component/site/visible"
 import { GlyphShape } from "./glyph"
 import { clamp, ease, Plate, prefersReducedMotion } from "./plate"
 
@@ -136,12 +137,12 @@ export function Exploded() {
   const [manual, setManual] = createSignal<number>()
   const explode = () => manual() ?? scroll()
 
-  onMount(() => {
-    // Reduced motion: a still, half-exploded view, so the rule is still visible.
-    if (prefersReducedMotion()) {
-      setManual(0.5)
-      return
-    }
+  const visible = useVisible(() => section)
+  // Reduced motion: a still, half-exploded view, so the rule is still visible.
+  onMount(() => prefersReducedMotion() && setManual(0.5))
+  // Only while the plate is near the screen: it arrives at the lift for where the page is.
+  createEffect(() => {
+    if (!visible() || prefersReducedMotion()) return
     let frame = 0
     let target = 1
     const progress = () => {

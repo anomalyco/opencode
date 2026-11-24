@@ -24,7 +24,6 @@ import type definition from "./index"
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
   whatsNew(ctx)
-  betaNotes(ctx)
 
   if (!ctx.desktop) return webUpdates(ctx)
   const updater = ctx.main(Updater)
@@ -125,35 +124,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 }
 
 /**
- * What's new in beta as a settings page, to come back to after its dialog closes. Only builds that embed the notes
- * have it: beta builds and the desktop dev server.
- */
-function betaNotes(ctx: SetupContext<typeof definition>) {
-  if (!import.meta.env.OPENCODE_BETA_NOTES) return
-
-  const Page = lazy(() => import("./beta-page"))
-
-  ctx.add(SettingsPage, {
-    id: "whats-new",
-    icon: "outline-list-changelog",
-    group: "about",
-    get title() {
-      return ctx.t("beta.title")
-    },
-    get entries() {
-      return [{ id: "whats-new", title: ctx.t("beta.title"), keywords: "changelog release notes beta" }]
-    },
-    render: () => (
-      <Suspense>
-        <Page />
-      </Suspense>
-    ),
-  })
-}
-
-/**
- * What's New after an update, on every platform: the release highlights since the version last seen, or on beta the
- * features and fixes of the beta builds since then. The first run and a disabled What's New only remember the version.
+ * What's New after an update, on every platform: the release highlights since the version last seen. The first run
+ * and a disabled What's New only remember the version.
  */
 function whatsNew(ctx: SetupContext<typeof definition>) {
   const seen = ctx.stores.seen
@@ -161,10 +133,7 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
 
   const start = initWhatsNew({
     version: ctx.app.version,
-    commit: import.meta.env.OPENCODE_COMMIT,
-    channel: ctx.app.channel === "beta" ? "beta" : "stable",
     previousVersion: seen.value.version,
-    previousCommit: seen.value.commit,
     enabled: ctx.stores.releaseNotes.value.enabled,
   })
 
@@ -182,9 +151,6 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
     if (effect.type === "mark-seen")
       return seen.update((draft) => {
         draft.version = effect.version
-
-        // Beta remembers the build's commit even when nothing shows, so the next update lists what came after it.
-        if (effect.commit) draft.commit = effect.commit
       })
 
     if (effect.type === "abort-load") {
@@ -194,7 +160,7 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
       return
     }
 
-    if (effect.type === "open") return void open(effect.content, effect.previousVersion)
+    if (effect.type === "open") return void open(effect.content)
 
     timer = setTimeout(() => dispatch({ type: "load.timed-out" }), effect.timeoutMs)
     void load(effect).then(
@@ -204,13 +170,6 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
   }
 
   const load = async (effect: Extract<WhatsNewEffect, { type: "load" }>): Promise<WhatsNewContent | undefined> => {
-    if (effect.channel === "beta") {
-      const { readBetaNotes } = await import("./beta-dialog")
-      const notes = readBetaNotes(effect.previousCommit)
-
-      return notes && { channel: "beta", notes }
-    }
-
     const { loadWhatsNewHighlights } = await import("./whats-new")
 
     const highlights = await loadWhatsNewHighlights({
@@ -219,19 +178,11 @@ function whatsNew(ctx: SetupContext<typeof definition>) {
       signal: controller.signal,
     })
 
-    return { channel: "stable", highlights }
+    return { highlights }
   }
 
   // The chunk loaded with the notes, so this resolves at once.
-  const open = async (content: WhatsNewContent, previousVersion: string) => {
-    if (content.channel === "beta") {
-      const { openBetaNotes } = await import("./beta-dialog")
-
-      if (!ctx.signal.aborted) openBetaNotes(ctx, content.notes, previousVersion)
-
-      return
-    }
-
+  const open = async (content: WhatsNewContent) => {
     const { openWhatsNew } = await import("./whats-new")
 
     if (!ctx.signal.aborted) openWhatsNew(ctx, content.highlights)

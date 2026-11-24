@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionStatus } from "@opencode/client/promise"
-import { createRoot } from "solid-js"
+import { createComputed, createRoot } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import {
   createReactiveTimelineProjection,
@@ -9,6 +9,8 @@ import {
   TimelineRow,
   type ReasoningMode,
 } from "@opencode/session-ui/timeline/projection"
+import { createNextTimelineProjection } from "@opencode/session-ui/timeline-next"
+import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createTimelineProjection } from "../src/session/timeline/projection"
 
 const assistant = (id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant => ({
@@ -310,3 +312,52 @@ for (const factory of [createTimelineProjection, createReactiveTimelineProjectio
     })
   })
 }
+
+test("the New timeline drops a thought that ends without text in one step", () => {
+  createRoot((dispose) => {
+    const [state, setState] = createStore<{ messages: SessionMessageInfo[] }>({
+      messages: [{ id: "user", type: "user", text: "question", time: { created: 1 } }],
+    })
+
+    const projection = createNextTimelineProjection({
+      sessionMessages: () => state.messages,
+      status: () => ({ type: "busy" }),
+      timelineDetail: () => timelinePresets.find((preset) => preset.id === "compact")!.value,
+    })
+
+    const published: string[][] = []
+
+    // Row renderers read the messages and the rows together. That builds the rows of a new step before its thought's
+    // visibility is watched, so the rows hear that the thought ended before its visibility does.
+    createComputed(() => {
+      projection.messageByID()
+      published.push(projection.rows().map(TimelineRow.key))
+    })
+
+    // The step and its thought arrive as events, after the projection exists.
+    setState("messages", 1, assistant("answer", []))
+    setState(
+      "messages",
+      1,
+      produce((message) => {
+        if (message.type === "assistant") message.content.push({ type: "reasoning", text: "", time: { created: 2 } })
+      }),
+    )
+    expect(published.at(-1)).toEqual(["user-message:user", "thinking:user"])
+    published.length = 0
+
+    // Some providers stream thinking with no readable text, so the thought ends as empty as it started.
+    setState(
+      "messages",
+      1,
+      produce((message) => {
+        if (message.type === "assistant" && message.content[0].type === "reasoning")
+          message.content[0].time = { created: 2, completed: 3 }
+      }),
+    )
+
+    // Rows built from the thought's old visibility would publish it once more, as a row nothing can draw.
+    expect(published).toEqual([["user-message:user"]])
+    dispose()
+  })
+})

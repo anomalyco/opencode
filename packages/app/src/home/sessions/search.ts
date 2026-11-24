@@ -1,13 +1,17 @@
 import { useCommand } from "@/shell/commands/command"
-import { useLayout } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServers } from "@/runtime/server/registry"
 import { displayName } from "@opencode/ui/project-avatar"
 import { sessionLabel } from "@/session/title"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import type { HomeController } from "../model"
-import { homeSessionSearchKey, type HomeSessionRecord, type HomeSessionsController } from "./controller"
+import {
+  groupSessions,
+  homeSessionSearchKey,
+  type HomeSessionRecord,
+  type HomeSessionsController,
+} from "./controller"
 import {
   INITIAL_HOME_SESSION_SEARCH_STATE,
   selectSearchExact,
@@ -25,10 +29,14 @@ type HomeSessionSearchSource = Pick<HomeSessionsController, "data" | "session">
 
 type PendingLookup = { controller: AbortController; timer: ReturnType<typeof setTimeout> }
 
-export function createHomeSessionSearchController(home: HomeController, sessions: HomeSessionSearchSource) {
+/** `inline` filters Home's list in place instead of opening a results panel. */
+export function createHomeSessionSearchController(
+  home: HomeController,
+  sessions: HomeSessionSearchSource,
+  inline: () => boolean = () => false,
+) {
   const command = useCommand()
   const language = useLanguage()
-  const layout = useLayout()
   const servers = useServers()
 
   const [searchState, setSearchState] = createSignal(INITIAL_HOME_SESSION_SEARCH_STATE)
@@ -96,7 +104,9 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     return records[0] ? homeSessionSearchKey(records[0]) : ""
   })
 
-  const open = createMemo(() => selectSearchOpen(searchState()))
+  const open = createMemo(() => !inline() && selectSearchOpen(searchState()))
+
+  const groups = createMemo(() => (inline() && query() ? groupSessions(results(), language) : sessions.data.groups()))
 
   const placeholder = createMemo(() => {
     const project = home.project.selected()
@@ -130,9 +140,6 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     }),
   )
   onCleanup(() => dispatch({ type: "disposed" }))
-  onMount(() => {
-    if (layout.home.searchFocus.take()) focus()
-  })
 
   // Home's Find focuses its session search, so Settings > Shortcuts lists one Find and one Search sessions.
   command.register("home.search", () => [
@@ -179,6 +186,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     result: {
       loading: () => sessions.data.loading() || selectSearchLookingUp(searchState()),
       list: results,
+      groups,
       active,
       noResultsLabel: () => language.t("home.sessions.search.noResults", { query: query() }),
       highlight: (record: HomeSessionRecord) =>

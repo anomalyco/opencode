@@ -54,4 +54,5 @@ export default {
   "error.commandTimeout": "Isteklo je vrijeme za {{command}} {{args}} nakon {{timeout}} ms",
   "error.failedPort": "Nije uspjelo dohvaćanje porta",
   "menu.remove": "Ukloni",
+  "error.busy": "{{distro}} je zauzet drugim zadatkom. Pokušajte ponovo kada završi.",
 }

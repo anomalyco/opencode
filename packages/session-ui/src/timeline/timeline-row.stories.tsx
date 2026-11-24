@@ -4,7 +4,8 @@ import type {
   SessionMessageInfo,
   SessionMessageUser,
 } from "@opencode/client/promise"
-import { createMemo, For, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, onMount } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
@@ -49,7 +50,14 @@ export default {
 }
 
 export const AgentThinking = {
-  render: () => <AgentReasoningStory mode="compact" reasoning="heading" tool={false} text="" />,
+  args: { mode: "compact", reasoning: "heading", tool: false, text: "" },
+  argTypes: {
+    mode: { options: ["hidden", "compact", "full"] },
+    reasoning: { options: ["none", "blank", "heading"] },
+  },
+  render: (args: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) => (
+    <AgentReasoningStory {...args} />
+  ),
 }
 
 export const StreamingReasoningAndText = {
@@ -125,65 +133,66 @@ export const ResponseSpeed = {
 }
 
 function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) {
-  const content = [
-    ...(props.reasoning === "none"
-      ? []
-      : [
-          {
-            type: "reasoning" as const,
-            text:
-              props.reasoning === "blank"
-                ? "   "
-                : "## Inspecting stability\n\nI will inspect the timeline before changing its state.",
-            time: { created: STORY_TIME + 100, completed: props.tool || props.text ? STORY_TIME + 7100 : undefined },
-          },
-        ]),
-    ...(props.tool
-      ? [
-          {
-            type: "tool" as const,
-            id: "tool_reasoning_projection_skill",
-            name: "skill",
-            state: { status: "running" as const, input: { name: "inspect" }, metadata: {} },
-            time: { created: STORY_TIME + 7200, ran: STORY_TIME + 7250 },
-          },
-        ]
-      : []),
-    ...(props.text ? [{ type: "text" as const, text: props.text }] : []),
-  ] satisfies SessionMessageAssistant["content"]
+  const content = createMemo(
+    () =>
+      [
+        ...(props.reasoning === "none"
+          ? []
+          : [
+              {
+                type: "reasoning" as const,
+                text:
+                  props.reasoning === "blank"
+                    ? "   "
+                    : "## Inspecting stability\n\nI will inspect the timeline before changing its state.",
+                time: {
+                  created: STORY_TIME + 100,
+                  completed: props.tool || props.text ? STORY_TIME + 7100 : undefined,
+                },
+              },
+            ]),
+        ...(props.tool
+          ? [
+              {
+                type: "tool" as const,
+                id: "tool_reasoning_projection_skill",
+                name: "skill",
+                state: { status: "running" as const, input: { name: "inspect" }, metadata: {} },
+                time: { created: STORY_TIME + 7200, ran: STORY_TIME + 7250 },
+              },
+            ]
+          : []),
+        ...(props.text ? [{ type: "text" as const, text: props.text }] : []),
+      ] satisfies SessionMessageAssistant["content"],
+  )
 
-  const document = {
-    sessionID: CURRENT_SESSION_ID,
-    messages: [
-      ...thinkingDocument.messages,
-      {
-        id: "msg_projection_assistant",
-        type: "assistant",
-        agent: "build",
-        model: STORY_MODEL,
-        content,
-        time: { created: STORY_TIME },
-      },
-    ],
-    status: { type: "busy" },
-    diffs: [],
-  } satisfies SessionDocument
+  const document = createMemo(
+    () =>
+      ({
+        sessionID: CURRENT_SESSION_ID,
+        messages: [
+          ...thinkingDocument.messages,
+          {
+            id: "msg_projection_assistant",
+            type: "assistant",
+            agent: "build",
+            model: STORY_MODEL,
+            content: content(),
+            time: { created: STORY_TIME },
+          },
+        ],
+        status: { type: "busy" },
+        diffs: [],
+      }) satisfies SessionDocument,
+  )
 
   return (
     <section class="mx-auto w-full max-w-[720px] p-6">
-      <CurrentSessionProviders document={document}>
-        <SessionTimeline document={document} reasoningMode={props.mode} />
+      <CurrentSessionProviders document={document()}>
+        <SessionTimeline document={document()} reasoningMode={props.mode} />
       </CurrentSessionProviders>
     </section>
   )
-}
-
-const AgentReasoning = {
-  args: { mode: "compact", reasoning: "heading", tool: false, text: "" },
-  argTypes: { reasoning: { control: "select", options: ["none", "blank", "heading"] } },
-  render: (args: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) => (
-    <AgentReasoningStory {...args} />
-  ),
 }
 
 function HiddenReasoningStory() {
@@ -302,7 +311,7 @@ function RetryAndRecoverStory() {
           Finish response
         </button>
       </div>
-      <CurrentSessionProviders document={document()} backgroundCompaction>
+      <CurrentSessionProviders document={document()}>
         <SessionTimeline document={document()} />
       </CurrentSessionProviders>
     </section>
@@ -435,7 +444,7 @@ function CompactSessionStory() {
           Cancel next compaction
         </button>
       </div>
-      <CurrentSessionProviders document={document()} backgroundCompaction>
+      <CurrentSessionProviders document={document()}>
         <SessionTimeline document={document()} />
       </CurrentSessionProviders>
     </section>
@@ -444,34 +453,24 @@ function CompactSessionStory() {
 
 const CompactSession = { render: () => <CompactSessionStory /> }
 
-// Automatic compactions only show quietly with experimental.background_compaction on; turn it off to see today's record.
-const backgroundCompaction = {
-  args: { backgroundCompaction: true },
-  argTypes: { backgroundCompaction: { control: "boolean" } },
-}
-
 export const CompactionInProgress = {
-  ...backgroundCompaction,
-  render: (args: { backgroundCompaction: boolean }) => (
+  render: () => (
     <CurrentSessionTimelineStory
       title="Compaction in progress"
-      description="With background compaction on, an automatic compaction is one quiet divider whose lines carry light toward Compacting."
+      description="An automatic compaction is one quiet divider whose lines carry light toward Compacting."
       document={compactionRunningDocument}
       width="600px"
-      backgroundCompaction={args.backgroundCompaction}
     />
   ),
 }
 
 export const CompactionAndContinuation = {
-  ...backgroundCompaction,
-  render: (args: { backgroundCompaction: boolean }) => (
+  render: () => (
     <CurrentSessionTimelineStory
       title="Compaction and continuation"
-      description="With background compaction on, a finished automatic compaction reads Compacted; clicking it opens the summary."
+      description="A finished automatic compaction reads Compacted; clicking it opens the summary."
       document={compactionDocument}
       width="600px"
-      backgroundCompaction={args.backgroundCompaction}
     />
   ),
 }
@@ -483,7 +482,6 @@ export const CompactionManual = {
       description="A /compact keeps the full record: started divider, summary and usage."
       document={compactionManualDocument}
       width="600px"
-      backgroundCompaction
     />
   ),
 }
@@ -533,7 +531,7 @@ function CompactionReplayStory(props: { duration: number }) {
           Replay
         </button>
       </div>
-      <CurrentSessionProviders document={document()} backgroundCompaction>
+      <CurrentSessionProviders document={document()}>
         <SessionTimeline document={document()} />
       </CurrentSessionProviders>
     </section>
@@ -559,7 +557,6 @@ export const CompactionFailed = {
       description="A failed compaction keeps the production divider and shows the provider error."
       document={compactionFailedDocument}
       width="600px"
-      backgroundCompaction
     />
   ),
 }
@@ -571,7 +568,6 @@ export const CompactionCancelled = {
       description="An interrupted compaction keeps the production divider without an empty error block."
       document={compactionCancelledDocument}
       width="600px"
-      backgroundCompaction
     />
   ),
 }
@@ -929,7 +925,7 @@ const MediaAttachmentRetry = {
 }
 
 const conversationScenarios = {
-  reasoning: AgentReasoning,
+  reasoning: AgentThinking,
   hidden: WorkingWithoutReasoningDetails,
   retry: RetryAndRecover,
   notices: AgentActivityNotices,
@@ -947,7 +943,9 @@ const conversationScenarios = {
  * the running turn. Send next adds the next prompt; Deliver next delivers the oldest steer.
  */
 export const PromptRuns = {
-  render: () => {
+  args: { count: 1 },
+  argTypes: { count: { control: { type: "range", min: 1, max: 6, step: 1 } } },
+  render: (args: { count: number }) => {
     const start = Date.now() - 10 * 60_000
 
     const prompt = (id: string, text: string, minute: number, variant?: string) => ({
@@ -973,10 +971,12 @@ export const PromptRuns = {
     const steers = ["msg_end_4", "msg_end_5"]
 
     const [state, setState] = createStore<{ count: number; delivered: string[]; removed: string[] }>({
-      count: 1,
+      count: args.count,
       delivered: [],
       removed: [],
     })
+
+    createEffect(() => setState({ count: args.count, delivered: [], removed: [] }))
 
     const session = createMemo(
       (): SessionDocument => ({
@@ -1027,18 +1027,23 @@ export const PromptRuns = {
 }
 
 export const Conversation = {
-  args: { scenario: "notices", mode: "compact", reasoning: "heading", tool: false, text: "" },
+  args: { ...AgentThinking.args, scenario: "notices" },
   argTypes: {
+    ...AgentThinking.argTypes,
     scenario: { control: "select", options: Object.keys(conversationScenarios) },
-    reasoning: { control: "select", options: ["none", "blank", "heading"] },
-    mode: { control: "select", options: ["hidden", "compact", "full"] },
   },
-  render: (args: { scenario: string; mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) => {
-    if (args.scenario === "reasoning") return <AgentReasoningStory {...args} />
-
-    // SAFETY: the scenario control only offers conversationScenarios keys, and "reasoning" returned above.
-    return conversationScenarios[args.scenario as Exclude<keyof typeof conversationScenarios, "reasoning">].render()
-  },
+  render: (args: {
+    scenario: keyof typeof conversationScenarios
+    mode: ReasoningMode
+    reasoning: string
+    tool: boolean
+    text: string
+  }) => (
+    <Dynamic
+      component={conversationScenarios[args.scenario]?.render ?? conversationScenarios.notices.render}
+      {...args}
+    />
+  ),
 }
 
 export const InstructionsUpdatedSingle = {

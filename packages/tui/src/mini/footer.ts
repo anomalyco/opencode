@@ -100,7 +100,6 @@ type RunFooterOptions = {
   onModelSelect?: (model: NonNullable<RunInput["model"]>) => CycleResult | void | Promise<CycleResult | void>
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
-  onBackground?: () => void
   onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: string) => Promise<void>
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onSubagentSelect?: (sessionID: string | undefined) => void
@@ -234,6 +233,7 @@ export class RunFooter implements FooterApi {
       shellOutput: () => this.miniSettings().shell_output === "show",
       mono: this.miniSettings().mono,
       imagePreview: this.options.tuiConfig.session?.image_preview,
+      markdown: this.options.tuiConfig.session?.markdown,
     })
   }
 
@@ -358,7 +358,6 @@ export class RunFooter implements FooterApi {
               onFormCancel: footer.handleFormCancel,
               onCycle: footer.handleCycle,
               onInterrupt: footer.handleInterrupt,
-              onBackground: options.onBackground,
               onQueuedPromptAction: options.onQueuedPromptAction,
               onEditorOpen: (input) => {
                 footer.finishStartup()

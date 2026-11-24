@@ -1,0 +1,4 @@
+#!/bin/sh
+# A TypeScript `opencode` that cannot serve: `serve --service` fails at once.
+echo "serve failed" >&2
+exit 1

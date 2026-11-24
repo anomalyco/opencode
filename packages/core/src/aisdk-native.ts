@@ -1,7 +1,65 @@
 export * as AISDKNative from "./aisdk-native.js"
 
 import { Effect, Option, Schema, Struct } from "effect"
-import { Provider } from "./provider.js"
+import { isRecord } from "@opencode/util/record"
+import type { Provider } from "./provider.js"
+
+export const AISDK_PREFIX = "aisdk:"
+export const isAISDK = (value: string | undefined): value is string => value?.startsWith(AISDK_PREFIX) ?? false
+export const aisdk = (value: string) => (isAISDK(value) ? value : `${AISDK_PREFIX}${value}`)
+export function packageName(value: string): string
+export function packageName(value: undefined): undefined
+export function packageName(value: string | undefined): string | undefined
+export function packageName(value: string | undefined) {
+  // Native provider entrypoints can persist in user configuration across the npm scope migration.
+  if (value?.startsWith("@opencode-ai/ai/")) return value.replace("@opencode-ai/", "@opencode/")
+  if (value === undefined || !isAISDK(value)) return value
+  return value.slice(AISDK_PREFIX.length)
+}
+
+type Json = Schema.Schema.Type<typeof Schema.Json>
+const JsonRecord = Schema.Record(Schema.String, Schema.Json)
+const decodeJsonRecord = Schema.decodeUnknownSync(JsonRecord)
+
+export function mergeOverlay(
+  base: Readonly<Record<string, unknown>> | undefined,
+  overlay: Readonly<Record<string, unknown>> | undefined,
+): Record<string, Json> | undefined {
+  if (base === undefined) return overlay && decodeJsonRecord({ ...overlay })
+  if (overlay === undefined) return decodeJsonRecord({ ...base })
+  return decodeJsonRecord(mergeRecord(base, overlay))
+}
+
+function mergeRecord(
+  base: Readonly<Record<string, unknown>>,
+  overlay: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    new Set([...Object.keys(base), ...Object.keys(overlay)]).values().map((key): [string, unknown] => {
+      const left = base[key]
+      const right = overlay[key]
+      if (right === undefined) return [key, left]
+      if (isRecord(left) && isRecord(right)) return [key, mergeRecord(left, right)]
+      return [key, right]
+    }),
+  )
+}
+
+export function mergeHeaders(
+  base: Readonly<Record<string, string>> | undefined,
+  overlay: Readonly<Record<string, string>> | undefined,
+) {
+  if (base === undefined) return overlay && { ...overlay }
+  if (overlay === undefined) return { ...base }
+  return Object.fromEntries(
+    [...Object.entries(base), ...Object.entries(overlay)]
+      .reduce((result, entry) => {
+        result.set(entry[0].toLowerCase(), entry)
+        return result
+      }, new Map<string, [string, string]>())
+      .values(),
+  )
+}
 
 type Overlays = {
   settings?: Provider.Settings
@@ -23,7 +81,7 @@ type Context = {
 
 export function rewrite<ID extends string>(
   target: Target<ID>,
-  input: Context & { readonly specifier: string | undefined },
+  input: Context & { readonly specifier: string | undefined; readonly builtins: ReadonlySet<string> },
 ) {
   if (input.specifier === undefined) return
   const settings = decode(target.settings ?? {})
@@ -33,16 +91,16 @@ export function rewrite<ID extends string>(
   if (target.package !== undefined || replacement !== input.specifier) target.package = replacement
   // Without `provider`, the native compatible package reports every AI SDK-mapped host as `openai-compatible`.
   const identity =
-    replacement === "@opencode/ai/providers/openai-compatible" && !Provider.builtinPackages.has(input.specifier)
+    replacement === "@opencode/ai/providers/openai-compatible" && !input.builtins.has(input.specifier)
       ? { provider: input.canonical ?? input.providerID }
       : {}
   target.settings = target.settings === undefined ? undefined : { ...translated.settings, ...identity }
-  target.headers = Provider.mergeHeaders(translated.headers, target.headers)
-  target.body = Provider.mergeOverlay(translated.body, target.body)
+  target.headers = mergeHeaders(translated.headers, target.headers)
+  target.body = mergeOverlay(translated.body, target.body)
   target.variants = target.variants?.map((variant) => {
     const overlay = options(replacement, input.modelID, decode(variant.settings ?? {}))
-    const headers = Provider.mergeHeaders(overlay.headers, variant.headers)
-    const body = Provider.mergeOverlay(overlay.body, variant.body)
+    const headers = mergeHeaders(overlay.headers, variant.headers)
+    const body = mergeOverlay(overlay.body, variant.body)
     return {
       id: variant.id,
       ...(variant.settings === undefined ? {} : { settings: overlay.settings }),
@@ -144,10 +202,12 @@ const LEGACY_VERTEX: Readonly<Record<string, string>> = {
   "@opencode/ai/providers/google-vertex-mistral": "@opencode/ai/providers/google-vertex/mistral",
 }
 
-function resolve(specifier: string, context: Context & { readonly settings?: Provider.Settings }): string | undefined {
-  const npm = Provider.packageName(specifier)
-  if (Provider.isAISDK(specifier) || npm in PACKAGES || npm in (HOSTS[context.providerID] ?? {}))
-    return native(npm, context)
+function resolve(
+  specifier: string,
+  context: Context & { readonly settings?: Provider.Settings; readonly builtins: ReadonlySet<string> },
+): string | undefined {
+  const npm = packageName(specifier)
+  if (isAISDK(specifier) || npm in PACKAGES || npm in (HOSTS[context.providerID] ?? {})) return native(npm, context)
   if (npm === "@opencode/ai/providers/amazon-bedrock/mantle" || npm === "@opencode/ai/providers/amazon-bedrock-mantle")
     return mantle(context.modelID)
   if (npm in LEGACY_VERTEX) return LEGACY_VERTEX[npm]
@@ -156,7 +216,7 @@ function resolve(specifier: string, context: Context & { readonly settings?: Pro
     azureChat(context)
   )
     return "@opencode/ai/providers/azure/chat"
-  return Provider.builtinPackages.has(npm) ? npm : undefined
+  return context.builtins.has(npm) ? npm : undefined
 }
 
 type Overlay = {
@@ -236,7 +296,7 @@ function bedrockRequest(modelID: string | undefined, settings: Legacy): Pick<Ove
   const budget = reasoning?.budgetTokens
   const display = reasoning?.display
   const betas = settings.anthropicBeta ?? []
-  const fields = Provider.mergeOverlay(additional, {
+  const fields = mergeOverlay(additional, {
     ...(betas.length > 0 ? { anthropic_beta: [...(additional.anthropic_beta ?? []), ...betas] } : {}),
     ...(anthropic && type === "adaptive"
       ? { thinking: { type: "adaptive", ...(display === undefined ? {} : { display }) } }
@@ -269,7 +329,7 @@ const OPENROUTER_KEYS = ["appName", "appUrl", "api_keys", "compatibility"] as co
 
 function openRouterRequest(settings: Legacy): Pick<Overlay, "headers"> {
   const headers =
-    Provider.mergeHeaders(
+    mergeHeaders(
       {
         ...(settings.appName === undefined ? {} : { "X-OpenRouter-Title": settings.appName }),
         ...(settings.appUrl === undefined ? {} : { "HTTP-Referer": settings.appUrl }),

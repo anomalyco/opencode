@@ -160,6 +160,32 @@
   }
 }
 
+/* Menu.ItemRow: a row laid out as an item, whose trailing column holds small items of its own. */
+[data-slot="menu-v2-item-actions"] {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+
+  > [data-component="menu-v2-item"] {
+    justify-content: center;
+    gap: 0;
+    height: 20px;
+    min-width: 20px;
+    padding: 0 3px;
+
+    > [data-slot="menu-v2-item-content"] {
+      flex: none;
+      justify-content: center;
+    }
+  }
+}
+
+/* Like a native menu, an item stays highlighted while the pointer is in the submenu it opened. */
+[data-component="menu-v2-content"]:not(:has([data-highlighted])) [data-component="menu-v2-item"][data-expanded] {
+  background: var(--menu-v2-hover);
+}
+
 [data-slot="menu-v2-separator"] {
   height: 1px;
   width: calc(100% + 4px);
@@ -255,6 +281,15 @@
       margin-inline-start: auto;
       color: var(--icon-base);
     }
+  }
+
+  [data-slot="menu-v2-item-actions"] > [data-component="menu-v2-item"] {
+    height: 20px;
+    padding: 0 3px;
+  }
+
+  &:not(:has([data-highlighted])) [data-component="menu-v2-item"][data-expanded] {
+    background: var(--surface-raised-base-hover);
   }
 
   [data-slot="menu-v2-separator"] {

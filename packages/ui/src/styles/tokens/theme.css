@@ -181,7 +181,7 @@
       --v2-border-border-base: var(--v2-alpha-light-10);
       --v2-border-border-strong: var(--v2-alpha-light-20);
       --v2-border-border-inverse: var(--v2-grey-100);
-      --v2-border-border-focus: var(--v2-blue-500);
+      --v2-border-border-focus: var(--v2-blue-400);
 
       --v2-overlay-simple-overlay-hover: var(--v2-alpha-light-6);
       --v2-overlay-simple-overlay-pressed: var(--v2-alpha-light-10);
@@ -431,7 +431,7 @@
     --v2-border-border-base: var(--v2-alpha-light-10);
     --v2-border-border-strong: var(--v2-alpha-light-20);
     --v2-border-border-inverse: var(--v2-grey-100);
-    --v2-border-border-focus: var(--v2-blue-500);
+    --v2-border-border-focus: var(--v2-blue-400);
 
     --v2-overlay-simple-overlay-hover: var(--v2-alpha-light-6);
     --v2-overlay-simple-overlay-pressed: var(--v2-alpha-light-10);

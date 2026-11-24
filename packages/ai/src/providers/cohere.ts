@@ -1,9 +1,10 @@
 import { CohereChat } from "../protocols/cohere-chat.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { ProviderID, type ModelID, type OpenString, type RequestOptions } from "../schema/index.js"
+import { mergeTransport, ProviderID, type ModelID, type OpenString, type RequestOptions } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
@@ -33,7 +34,14 @@ export const routes = [route, chatRoute]
 export const configure = (input: Config = {}) => {
   const options = bearerRouteDefaults(input, "COHERE_API_KEY", CohereChat.DEFAULT_BASE_URL)
   const native = route.with(options)
-  const chat = chatRoute.with({ ...options, endpoint: { baseURL: input.baseURL ?? COMPATIBILITY_BASE_URL } })
+  const compatibility = { ...options, endpoint: { baseURL: input.baseURL ?? COMPATIBILITY_BASE_URL } }
+  const chat = chatRoute.with(compatibility)
+  const embeddingRoute = OpenAIEmbeddings.route.with({
+    provider: id,
+    endpoint: compatibility.endpoint,
+    auth: options.auth,
+    ...mergeTransport(input),
+  })
   return {
     id,
     model: (modelID: string | ModelID) => native.model<CohereChat.ProviderOptionsInput>({ id: modelID }),
@@ -46,11 +54,19 @@ export const configure = (input: Config = {}) => {
         },
         capabilities: { tools: { strict: false } },
       }),
+    /** Embeddings through the OpenAI-compatible API; the native `/v2/embed` API is not wired up. */
+    embedding: (modelID: string | ModelID, providerOptions?: Readonly<Record<string, unknown>>) =>
+      embeddingRoute.model({ id: modelID, providerOptions }),
     configure,
   }
 }
 export const provider = configure()
 export const chat = provider.chat
+export const embedding = provider.embedding
 export const model: ProviderPackage.Model<Settings, CohereChat.ProviderOptionsInput> = (modelID, settings) =>
   configure(toConfig(settings)).model(modelID)
+export const embeddingModel = (modelID: string, settings?: Settings<Readonly<Record<string, unknown>>>) => {
+  const input = toConfig(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
+}
 export * as Cohere from "./cohere.js"

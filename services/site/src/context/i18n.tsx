@@ -1,4 +1,4 @@
-import { useContext, type ParentProps } from "solid-js"
+import type { ParentProps } from "solid-js"
 import { interpolate, lookup, translated, type Key } from "~/i18n"
 import { useLanguage } from "~/context/language"
 import { I18nContext } from "~/context/i18n-context"
@@ -16,8 +16,4 @@ export function I18nProvider(props: ParentProps) {
   return <I18nContext.Provider value={value}>{props.children}</I18nContext.Provider>
 }
 
-export function useI18n() {
-  const value = useContext(I18nContext)
-  if (!value) throw new Error("I18n context must be used within a context provider")
-  return value
-}
+export { useI18n } from "~/context/i18n-context"

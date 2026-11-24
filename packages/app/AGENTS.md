@@ -93,6 +93,14 @@ This section is the single source for loading indicators across `app`, `ui`, `se
 - Every other loading state uses `Loader` (`@opencode/ui/loader`): page, pane and file loads, browser reload, search, connecting, authenticating, sending, installing. Use a purpose-built indicator only when the state has one, such as the titlebar update ring.
 - Choose the indicator at each call site. Never restyle a shared indicator (`Loader`, `ActivityRing`, `Spinner`) to look like another one; that silently changes every caller.
 
+## Floating surfaces over native pages
+
+A native page view, such as the browser pane's, paints above every DOM element, so `src/runtime/plugin/embeds.tsx` hides it while floating app UI overlaps it.
+
+- Mark the painted box of a floating surface with `data-floating-overlay` for its whole visible lifetime, including its exit animation. Mark the surface, not a full-window transparent portal wrapper.
+- Popper positioners, `aria-modal` dialogs, open `<dialog>` elements and open popovers count without the marker. Tooltips never cover the page.
+- A positioned surface that takes pointer input and is portalled to `document.body` after the app root also counts without the marker. It is a fallback: mark new surfaces.
+
 ## Scrolling
 
 This section is the single source for scroll containers across `app`, `ui`, `session-ui`, `gui-plugins` and `desktop`.
@@ -107,6 +115,29 @@ This section is the single source for scroll containers across `app`, `ui`, `ses
 - A ref runs before the element's children render and before it is in the document. Restore a scroll position from `onMount` or a frame later, not in the ref.
 - `ScrollView` (`@opencode/ui/scroll-view`) is only for the session timeline and Home, which draw the thumb in an external track (`thumbContainer`) and, in the timeline, correct it for virtualized rows. Use it again only for one of those needs, and not for menus.
 - Never set `scrollbar-width: thin`, `scrollbar-width: auto` or `scrollbar-color`. Chromium then ignores the shared style and draws the native Windows scrollbar. Hide a scrollbar only with `no-scrollbar` or `scrollbar-width: none`.
+
+## Timeline stability
+
+This section is the single source for what may move or restyle the session timeline. It applies to every component and stylesheet that renders in or around the timeline, across `app`, `ui`, `session-ui` and `gui-plugins`. Each rule comes from a regression that shipped.
+
+### Scroll position
+
+- The timeline moves when the reader scrolls it or asks to go somewhere (a jump, a search hit, a link). Nothing else scrolls it: not focus, not an update, not a row that mounts.
+- `element.focus()` scrolls its element into view. When code moves focus inside a scroll container, pass `{ preventScroll: true }` unless the reader must see that control next: keyboard navigation to it, or the item that takes the place of a removed one.
+- A virtualized row unmounts when it scrolls out of range, and a control that holds focus goes with it. Chromium then leaves focus on `<body>`, and the focus rescue (`packages/ui/src/context/focus-rescue.tsx`) handles the row as a deleted item: it focuses a control in another row, and the browser scrolls the timeline there. After a click on one tool header, the timeline jumped 13 times in 8 wheel bursts.
+- A virtualized list therefore gives focus to its own viewport, without scrolling, before a row that holds focus unmounts. `VirtualRow`'s `onCleanup` in `src/session/timeline/virtualizer.tsx` does this. Keep it when you change how rows mount, and do the same in a new virtualized list.
+- Keeper: "a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled" in `e2e/regression/session-timeline-accessibility.spec.ts`.
+- To check by hand: click a tool header, a link and a notice in the timeline, then scroll up and down with the wheel. The timeline must follow the wheel.
+
+### `:has()` selectors
+
+- Chromium rechecks an element's `:has()` when focus moves, an attribute changes, or an element is added or removed near it. In and around the timeline, that happens many times a second during a scroll.
+- When the selector ends at the `:has()` element (`x:has(…)`, `x:has(…)::after`), a recheck restyles that element only.
+- When the selector continues (`x:has(…) y`, `x:has(…) ~ y`), a recheck restyles nearly every element inside `x`. Other rules decide how many: once any rule in the app ends in `[data-slot=…]` after a `:has()`, a recheck restyles every element inside `x` that has a `data-slot` attribute, whatever its value. Such rules exist, and almost every element has a `data-slot`.
+- On an element that contains the timeline, a list, a panel or a page, end the selector at the `:has()` element. To style another element, set a `data-` attribute on that element from code.
+- On a small component (a row, a tab, a card, a menu), the selector may continue after `:has()`. A recheck costs the size of that component.
+- Never select on `style` inside `:has()`. Every inline style write then rechecks the `:has()` of the element's ancestors, and the virtualizer writes inline styles while the reader scrolls. Set a `data-` attribute when the element is built, and select on that.
+- To check: record a Chrome trace of the `devtools.timeline` category while you scroll through history that has not been visited, click in the timeline and press a scroll key. Read `elementCount` on each `UpdateLayoutTree` event; DevTools shows it as Recalculate Style, Elements Affected. A pass that affects about as many elements as the timeline contains is this regression.
 
 ## Localization
 

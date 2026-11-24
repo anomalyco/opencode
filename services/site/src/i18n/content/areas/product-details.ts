@@ -1,4 +1,5 @@
-import { productDetails, type PageSlug } from "~/component/site/product-data"
+import type { PageSlug } from "~/component/site/product-data"
+import { productDetails } from "~/component/site/product-details"
 
 /** The product pages' English copy, by product. */
 export const productDetailsSource = Object.fromEntries(

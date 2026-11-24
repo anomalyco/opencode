@@ -36,4 +36,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Lisää palvelin",
   "menu.delete": "Poista",
+  "error.unavailable": "SSH ei ole käytettävissä",
 }

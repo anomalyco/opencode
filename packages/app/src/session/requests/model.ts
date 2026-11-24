@@ -1,5 +1,10 @@
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
-import { isPermissionNotFoundError, type FormInfo, type PermissionRequest } from "@opencode/client/promise"
+import {
+  isPermissionNotFoundError,
+  type FormInfo,
+  type JobInfo,
+  type PermissionRequest,
+} from "@opencode/client/promise"
 import { abort } from "@opencode/util/abort"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@/shell/notifications/toast"
@@ -7,9 +12,14 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useLanguage } from "@/runtime/i18n/language"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
+import {
+  sessionFormRequest,
+  sessionMayHoldRequests,
+  sessionPermissionRequest,
+  sessionTreeIDs,
+} from "@/session/requests/session-request-tree"
 import { createWebSearchRequest } from "./websearch"
-import { createSessionBackground } from "@/session/requests/background"
+import { createSessionBackground, mergeJobList } from "@/session/requests/background"
 import { createSteerBackground } from "@/session/requests/steer-background"
 import { useData, useServer } from "@/runtime/server/current"
 import { needsUser } from "./auto-approve-machine"
@@ -46,20 +56,16 @@ export function createSessionRequestModel() {
   })
 
   createEffect(() => {
-    const id = params.id
-
-    if (!id || serverSDK.connection.status() !== "connected") return
-    void Promise.all([data.shell.sync({ directory: sdk().directory }), data.session.permission.sync(id)]).catch(
-      () => undefined,
-    )
+    if (!params.id || serverSDK.connection.status() !== "connected") return
+    void data.shell.sync({ directory: sdk().directory }).catch(() => undefined)
   })
 
-  // Only a running Session can hold a pending form, and events keep loaded forms current. Comparing by value
-  // keeps every session update in a large subagent tree from re-requesting forms.
-  const formSessions = createMemo(
+  // Permissions and forms are per Session, so each one in the tree that may hold a request is read. Comparing by value
+  // keeps every session update in a large subagent tree from re-requesting them.
+  const requestSessions = createMemo(
     () =>
       sessionTreeIDs(data.session.list(), params.id).filter(
-        (id) => id === params.id || data.session.status(id) === "running",
+        (id) => id === params.id || sessionMayHoldRequests(data, id),
       ),
     [],
     { equals: (a, b) => a.join() === b.join() },
@@ -67,7 +73,12 @@ export function createSessionRequestModel() {
 
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
-    void Promise.all(formSessions().map((sessionID) => data.session.form.sync(sessionID))).catch(() => undefined)
+    void Promise.all(
+      requestSessions().flatMap((sessionID) => [
+        data.session.permission.sync(sessionID),
+        data.session.form.sync(sessionID),
+      ]),
+    ).catch(() => undefined)
   })
 
   const formRequest = createMemo((): FormInfo | undefined => {
@@ -158,18 +169,64 @@ export function createSessionRequestModel() {
     return !!id && !data.session.get(id)?.parentID
   }
 
+  // Running jobs in the session's tree: listed once when the session opens or the connection returns, then kept by
+  // job.updated events.
+  const [jobs, setJobs] = createSignal<ReadonlyMap<string, JobInfo>>(new Map())
+  const runningJobs = createMemo(() => [...jobs().values()])
+  // Events seen while the latest list request is in flight, applied over its response.
+  let jobUpdates: Map<string, JobInfo> | undefined
+
+  const stopJobs = serverSDK.event.on("experimental.job.updated", (event) => {
+    const info = event.data.info
+
+    jobUpdates?.set(info.id, info)
+
+    setJobs((previous) => {
+      if (info.status === "running") return new Map(previous).set(info.id, info)
+
+      if (!previous.has(info.id)) return previous
+
+      const next = new Map(previous)
+      next.delete(info.id)
+
+      return next
+    })
+  })
+
+  onCleanup(stopJobs)
+
+  createEffect(() => {
+    const sessionID = params.id
+
+    if (!sessionID || serverSDK.connection.status() !== "connected") return
+    const updates = new Map<string, JobInfo>()
+    jobUpdates = updates
+    void serverSDK.api.experimental.job
+      .list({ sessionID, descendants: true, status: "running" })
+      .then((list) => {
+        if (jobUpdates === updates && params.id === sessionID) setJobs(mergeJobList(list, updates))
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (jobUpdates === updates) jobUpdates = undefined
+      })
+  })
+
   const running = createSessionBackground({
     sessionID: () => params.id,
     messages: data.session.message.list,
     sessions: data.session.list,
     status: data.session.status,
     shells: () => data.shell.list({ directory: sdk().directory }),
+    jobs: runningJobs,
   })
 
   // Moving to the background and the plugins' background list stay with the primary session's own work.
   const blocking = createMemo(() => (primary() ? running.blocking() : []))
-  const subagents = createMemo(() => (primary() ? running.subagents() : []))
   const tasks = createMemo(() => (primary() ? running.tasks() : []))
+  const scripts = createMemo(() => (primary() ? running.scripts() : []))
+
+  const cancelJob = (id: string) => serverSDK.api.experimental.job.cancel({ id })
 
   const moveToBackground = async () => {
     if (!primary()) return
@@ -268,8 +325,9 @@ export function createSessionRequestModel() {
     permissionResponding,
     background: {
       blocking,
-      subagents,
       tasks,
+      scripts,
+      cancelJob,
       move: moveToBackground,
       steer,
     },

@@ -57,6 +57,21 @@ function hasRunningChild(data: Data, sessionID: string) {
     )
 }
 
+// What a request asks, for the notification's second line: the permission's action and what it acts on, or the
+// form's title. The server's own words, not app copy.
+function requestDetail(data: Data, kind: keyof typeof requestTitles, sessionID: string, requestID: string) {
+  if (kind !== "permission") return data.session.form.list(sessionID)?.find((form) => form.id === requestID)?.title
+
+  const request = data.session.permission.list(sessionID)?.find((item) => item.id === requestID)
+
+  if (!request) return
+
+  // A request record without resources still says what it asks: its action.
+  const resources = request.resources ?? []
+
+  return resources.length ? `${request.action}: ${resources.join(", ")}` : request.action
+}
+
 // The list Desktop kept before unread state moved to the server. Until its viewed state reaches the server, unread
 // state still honours it, so sessions read here don't light up while the server catches up.
 const LegacyNotificationStore = Persistence.struct({
@@ -71,11 +86,16 @@ const LEGACY_MIGRATION_PAGE = 200
 
 const LEGACY_MIGRATION_CONCURRENCY = 4
 
+// Manual unread is client-local: the server's viewed watermark can only move forwards.
+const ManualUnreadStore = Persistence.struct({ sessions: Persistence.array(Schema.String) })
+
 export function createServerNotificationState(input: {
   sdk: ServerSDK
   data: Data
   key: ServerConnection.Key
   coordinator: ReturnType<typeof createNotificationCoordinator>
+  muted: (sessionID: string) => boolean
+  preferencesLoaded?: Promise<unknown>
 }) {
   const platform = usePlatform()
   const settings = useSettings()
@@ -129,6 +149,15 @@ export function createServerNotificationState(input: {
 
   const legacyTarget = Persist.serverGlobal(input.sdk.scope, "notification")
   const [legacy, setLegacy, , legacyReady] = persisted(legacyTarget, LegacyNotificationStore, {}, platform)
+
+  const [manual, setManual, , manualReady] = persisted(
+    Persist.serverGlobal(input.sdk.scope, "notification.manual-unread"),
+    ManualUnreadStore,
+    { sessions: [] },
+    platform,
+  )
+
+  const manuallyUnread = createMemo(() => new Set(manual.sessions))
   const [legacyState, setLegacyState] = createSignal(INITIAL_LEGACY_MIGRATION_STATE)
   const discovered = Date.now()
   let legacyRun: AbortController | undefined
@@ -241,7 +270,20 @@ export function createServerNotificationState(input: {
     if (online) reports.forEach((_, root) => dispatchView(root, { type: "connected" }))
   })
 
-  const unread = (session?: Pick<SessionInfo, "id" | "time">) => selectSessionUnread(legacyState(), session)
+  const unread = (session?: Pick<SessionInfo, "id" | "time">) =>
+    (!!session && manuallyUnread().has(session.id)) || selectSessionUnread(legacyState(), session)
+
+  const updateManual = (sessionID: string, unread: boolean) => {
+    const apply = () => {
+      if (disposed.value || manuallyUnread().has(sessionID) === unread) return
+      setManual("sessions", (sessions) =>
+        unread ? [...sessions, sessionID] : sessions.filter((id) => id !== sessionID),
+      )
+    }
+
+    if (manualReady()) return apply()
+    void manualReady.promise?.then(apply, apply)
+  }
 
   const roots = (directory: string) =>
     input.data.session
@@ -255,13 +297,38 @@ export function createServerNotificationState(input: {
     const root = input.data.session.root(sessionID)
     const session = input.data.session.get(root)
     const idle = session?.time.idle
+    platform.dismissNotification?.(sessionTag(root))
 
     if (idle === undefined || !isSessionUnread(session)) return
     dispatchView(root, { type: "view", idle })
   }
 
+  // The system notification each run and request posts, so a repeat replaces it and an answer takes it back.
+  const sessionTag = (sessionID: string) => `${input.key}\0session:${sessionID}`
+
+  const requestTag = (requestID: string) => `${input.key}\0request:${requestID}`
+
+  // Requests whose notification may still be shown, with what tells whether they still wait.
+  const [shown, setShown] = createSignal<ReadonlyArray<{ readonly id: string; readonly pending: () => boolean }>>([])
+
+  createEffect(() => {
+    const answered = shown().filter((request) => !request.pending())
+
+    if (answered.length === 0) return
+    answered.forEach((request) => platform.dismissNotification?.(requestTag(request.id)))
+    setShown((list) => list.filter((request) => !answered.includes(request)))
+  })
+
+  const opened = (sessionID: string) => updateManual(input.data.session.root(sessionID), false)
+
+  const read = (sessionID: string) => {
+    opened(sessionID)
+    view(sessionID)
+  }
+
   // Loading the session keeps a background completion visible in the server-derived unread state.
   const lookup = async (sessionID: string) => {
+    if (input.preferencesLoaded) await input.preferencesLoaded
     const session = input.data.session.get(sessionID)
 
     if (session) return session
@@ -277,7 +344,7 @@ export function createServerNotificationState(input: {
     if (hasRunningChild(input.data, sessionID)) return
 
     void lookup(sessionID).then((session) => {
-      if (disposed.value) return
+      if (disposed.value || input.muted(sessionID)) return
 
       if (!session) return
 
@@ -291,8 +358,11 @@ export function createServerNotificationState(input: {
 
       if (hasOpenTab && settings.notifications.agent()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.responseReady.title"),
+            session.title ?? sessionID,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            { tag: sessionTag(sessionID) },
           ),
         )
       }
@@ -301,7 +371,7 @@ export function createServerNotificationState(input: {
 
   const handleSessionError = (sessionID: string, eventID: string) => {
     void lookup(sessionID).then((session) => {
-      if (disposed.value) return
+      if (disposed.value || input.muted(sessionID)) return
 
       if (session?.parentID) return
 
@@ -315,8 +385,11 @@ export function createServerNotificationState(input: {
 
       if (hasOpenTab && settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.error.title"), description, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.error.title"),
+            description,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            { tag: sessionTag(sessionID) },
           ),
         )
       }
@@ -337,7 +410,7 @@ export function createServerNotificationState(input: {
     const category = kind === "question" || kind === "mcp-elicitation" ? "questions" : "permissions"
 
     const pending = () => {
-      if (disposed.value) return false
+      if (disposed.value || input.muted(sessionID) || input.muted(input.data.session.root(sessionID))) return false
 
       if (kind !== "permission") return input.data.session.form.list(sessionID)?.some((form) => form.id === requestID)
 
@@ -360,14 +433,28 @@ export function createServerNotificationState(input: {
 
     void input.coordinator.system(key, () => {
       if (!pending()) return
+      setShown((list) => [
+        ...list.filter((request) => request.id !== requestID),
+        { id: requestID, pending: () => !!pending() },
+      ])
+      void platform.requestAttention?.().catch(() => undefined)
 
-      return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, () =>
-        openNotificationSession(tabs, input.key, target),
+      return platform.notify(
+        language.t(requestTitles[kind]),
+        session.title ?? sessionID,
+        () => openNotificationSession(tabs, input.key, target),
+        { tag: requestTag(requestID), detail: requestDetail(input.data, kind, sessionID, requestID) },
       )
     })
   }
 
   const unsub = input.sdk.event.listen((event) => {
+    if (event.type === "session.deleted") {
+      updateManual(event.data.sessionID, false)
+
+      return
+    }
+
     if (event.type === "permission.asked") {
       void handleRequest("permission", event.data.sessionID, event.data.id)
 
@@ -402,6 +489,7 @@ export function createServerNotificationState(input: {
 
   return {
     session: {
+      ready: manualReady,
       /**
        * Whether the session's root has an execution result no client has viewed yet. `snapshot` stands in for a root
        * session that isn't loaded, such as a row from the fetched home index.
@@ -409,15 +497,23 @@ export function createServerNotificationState(input: {
       unread(sessionID: string, snapshot?: SessionInfo) {
         return unread(input.data.session.get(input.data.session.root(sessionID)) ?? snapshot)
       },
+      manuallyUnread(sessionID: string) {
+        return manuallyUnread().has(input.data.session.root(sessionID))
+      },
       /** Reports the session's latest idle transition to the server as viewed. */
       markViewed: view,
+      opened,
+      markRead: read,
+      markUnread(sessionID: string) {
+        updateManual(input.data.session.root(sessionID), true)
+      },
     },
     project: {
       hasUnread(directory: string) {
         return roots(directory).some((session) => unread(session))
       },
       markViewed(directory: string) {
-        roots(directory).forEach((session) => view(session.id))
+        roots(directory).forEach((session) => read(session.id))
       },
     },
   }

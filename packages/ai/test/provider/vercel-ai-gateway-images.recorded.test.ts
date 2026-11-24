@@ -26,8 +26,8 @@ describe("Vercel AI Gateway Images recorded", () => {
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType).toBe("image/webp")
-      expect(new TextDecoder().decode((yield* response.image.bytes()).subarray(8, 12))).toBe("WEBP")
+      expect(response.images[0].mediaType).toBe("image/webp")
+      expect(new TextDecoder().decode((yield* response.images[0].bytes()).subarray(8, 12))).toBe("WEBP")
       expect(model.provider).toBe("vercel-ai-gateway")
       expect(response.usage?.details).toHaveProperty("vercel-ai-gateway")
       expect(response.providerMetadata).toHaveProperty("vercel-ai-gateway")
@@ -48,7 +48,7 @@ describe("Vercel AI Gateway Images recorded", () => {
           resolution: "1K",
         })
 
-        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 1280, height: 720 })
+        expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 1280, height: 720 })
       }),
     { timeout: 120_000 },
   )

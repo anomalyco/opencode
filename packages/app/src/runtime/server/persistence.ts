@@ -69,6 +69,15 @@ export const ModelState = Persistence.struct({
       Schema.UndefinedOr(Schema.String).pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
     ),
   ),
+  /** The speed last chosen for each model; a model without an entry runs at its standard speed. */
+  speed: Persistence.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.mutableKey(
+        Schema.UndefinedOr(Schema.String).pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
+      ),
+    ),
+  ),
 })
 
 export const VcsState = Persistence.struct({

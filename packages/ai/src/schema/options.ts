@@ -72,6 +72,15 @@ export interface HttpOptions {
   readonly body?: Record<string, unknown>
   /** Compression for JSON request bodies. Only set it for endpoints known to decode it. */
   readonly encoding?: RequestEncoding
+  /** Client certificate presented to HTTPS endpoints that request one (mutual TLS). */
+  readonly tls?: ClientTls
+}
+
+/** PEM client certificate and private key, with the passphrase of an encrypted key. */
+export interface ClientTls {
+  readonly cert: string
+  readonly key: string
+  readonly passphrase?: string
 }
 
 /** Per-phase time limits in milliseconds. */
@@ -91,7 +100,7 @@ export type RequestTimeout = HttpTimeout | TimeoutConfig
 export interface TransportOptions {
   /** Merged over the provider's headers; these win. */
   readonly headers?: Record<string, string>
-  /** Applied to text requests; media requests do not apply it yet. */
+  /** Applied to every HTTP request. */
   readonly timeout?: RequestTimeout
   readonly http?: HttpOptions
 }
@@ -127,6 +136,7 @@ export const mergeTransport = (...items: ReadonlyArray<TransportOptions | undefi
       query: mergeStringRecords(...http.map((item) => item?.query)),
       body: mergeJsonRecords(...http.map((item) => item?.body)),
       encoding: last(http.map((item) => item?.encoding)),
+      tls: last(http.map((item) => item?.tls)),
     }),
   }
 }
@@ -239,8 +249,16 @@ export interface Capabilities {
     readonly search?: boolean
     /** Input formats accepted by custom (free-form) tools. */
     readonly freeform?: ReadonlyArray<"text" | "lark" | "regex">
-    /** Accepts a changed tool list mid-conversation. */
-    readonly updates?: boolean
+    /**
+     * Tool changes the model takes mid-conversation without changing the leading tool declaration, so the prompt
+     * cache holds. `add`: declares a tool not declared before. `remove`: withdraws a declared tool. `replace`:
+     * declares a tool under a name declared before (a redefinition, or re-adding a removed tool). Unset or empty:
+     * every change folds into the top-level tools. Anthropic Messages sends all three as native blocks. OpenAI
+     * Responses needs `add` for any of them: it declares every tool in `additional_tools` items with a short
+     * incremental-update hint before each later item, and announces a removal as developer text while the tool
+     * stays declared, so list `remove` only for models that follow that announcement.
+     */
+    readonly updates?: ReadonlyArray<"add" | "remove" | "replace">
   }
   readonly reasoning?: {
     readonly supported?: boolean

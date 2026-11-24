@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "İleri",
   "releaseNotes.action.hideFuture": "Bunu gelecekte bir daha gösterme",
   "releaseNotes.media.alt": "Sürüm önizlemesi",
+  "action.reload": "Güncellemek için yeniden yükle",
+  "action.reloading": "Yeniden yükleniyor…",
+  "web.ready.title": "Güncelleme hazır",
+  "web.ready.message": "OpenCode'un yeni bir sürümü hazır. Tüm açık pencerelerde kullanmak için yeniden yükleyin.",
+  "web.reload": "Yeniden yükle",
+  "web.reset.title": "Sunucudan yeniden yükle",
+  "web.reset.description": "Uygulamanın kayıtlı kopyasını temizleyip sunucunun güncel sürümünü yükleyin",
+  "web.reset.action": "Sunucudan yeniden yükle",
 }

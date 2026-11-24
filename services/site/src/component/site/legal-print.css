@@ -1,13 +1,7 @@
-/* The designed print styles for legal documents (legal-print.tsx). The cover and the colophon only
-   print. Everything is black on white and drawn with borders, SVG and text, never backgrounds, so it
-   prints the same with "Background graphics" off. */
-
-@media screen {
-  [data-component="legal-print-cover"],
-  [data-component="legal-print-colophon"] {
-    display: none;
-  }
-}
+/* The designed print styles for legal documents (legal-print.tsx), which legal.tsx links for print
+   only. The cover and the colophon only print (legal.css hides them on screen). Everything is black
+   on white and drawn with borders, SVG and text, never backgrounds, so it prints the same with
+   "Background graphics" off. */
 
 /* The architect cover's parts, on paper and in the layout editor's preview (/dev/print-editor).
    Positions and sizes come from the layout (architectCoverCss in lib/legal/architect.ts). */

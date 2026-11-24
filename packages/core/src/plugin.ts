@@ -143,8 +143,14 @@ const layer = Layer.effect(
                     ([id, slot]) =>
                       Effect.gen(function* () {
                         active.delete(id)
-                        if (slot.activation && !slot.activation.failure)
-                          yield* Scope.close(slot.activation.scope, Exit.void)
+                        if (!slot.activation || slot.activation.failure) return
+                        // Later plugins, including the config agents and commands, are already closed. A failing
+                        // finalizer must not abort the swap, or they stay unregistered until the next reload.
+                        yield* Scope.close(slot.activation.scope, Exit.void).pipe(
+                          Effect.catchCause((cause) =>
+                            Effect.logError("failed to clean up plugin", { "plugin.id": id, cause }),
+                          ),
+                        )
                       }),
                     { discard: true },
                   )

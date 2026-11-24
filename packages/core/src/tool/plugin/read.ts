@@ -1,12 +1,15 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { basename, dirname, extname, isAbsolute, join, relative } from "path"
+import path, { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Location } from "../../location.js"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Flag } from "../../flag.js"
 import { FileAccess } from "../../file-access.js"
+import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Permission } from "../../permission.js"
 import { SessionInstructions } from "../../session/instructions.js"
 import { AbsolutePath } from "../../schema.js"
@@ -16,7 +19,6 @@ import { ReadToolFileSystem } from "../read-filesystem.js"
 import { Environment } from "../../environment/index.js"
 
 export const name = "read"
-const FILENAME = "AGENTS.md"
 const LocationInput = Schema.Struct({
   path: Schema.String.annotate({ description: "File or directory to read" }),
   offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
@@ -28,31 +30,45 @@ const LocationInput = Schema.Struct({
 })
 export const Input = LocationInput
 type Missing = { input: string; requested: FileAccess.Target; context: FileAccess.Invocation }
-const Output = Schema.Union([ReadToolFileSystem.FileContent, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
+
+const description = (codemode: boolean) =>
+  [
+    "Read the contents of a file or directory. Supports text files, images, and PDFs.",
+    codemode
+      ? "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference."
+      : "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
+    "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+  ].join(" ")
 
 export const Plugin = {
   id: "opencode.tool.read",
   effect: Effect.fn("ReadTool.Plugin")(function* (ctx: Context) {
-    const reader = yield* ReadToolFileSystem.Service
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
     const skills = yield* Skill.Service
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
-    const location = yield* Location.Service
     const environment = yield* Environment.Service
+    const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
+    const config = yield* Config.Service
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
+    const discovery = yield* InstructionDiscovery.Service
 
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false },
-          description:
-            "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+          options: flags.resolve(loaded.entries).full_codemode.enabled
+            ? { codemode: { pinned: true, description: description(true) } }
+            : { codemode: false },
+          description: description(false),
           input: Input,
-          output: Output,
+          output: ReadToolFileSystem.Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
+              const workingDirectory = yield* currentWorkingDirectory
+              if (input.limit === 0) return yield* new ToolFailure({ message: "Limit must be a positive integer" })
               if (Skill.isUri(input.path)) {
                 const parsed = parseSkillUri(input.path)
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
@@ -94,7 +110,7 @@ export const Plugin = {
               }
 
               const read = (target: FileAccess.Target) =>
-                reader.read(target.absolute, target.resource, {
+                ReadToolFileSystem.read(target.environment.files, target.absolute, target.resource, {
                   offset: input.offset,
                   limit: input.limit,
                 })
@@ -106,9 +122,7 @@ export const Plugin = {
                   (error) => error instanceof Environment.NotFound,
                   () =>
                     Effect.gen(function* () {
-                      const alternate = yield* alternatePath(requested.absolute).pipe(
-                        Effect.orElseSucceed(() => undefined),
-                      )
+                      const alternate = yield* alternatePath(requested).pipe(Effect.orElseSucceed(() => undefined))
                       if (!alternate) return yield* missing({ input: input.path, requested, context })
                       const target = yield* access.authorizeRead(alternate, context, { siblingOf: requested })
                       const content = yield* read(target).pipe(
@@ -117,7 +131,7 @@ export const Plugin = {
                           () => missing({ input: input.path, requested, context }),
                         ),
                       )
-                      if (content.type === "list-page") return yield* missing({ input: input.path, requested, context })
+                      if (content.type === "directory") return yield* missing({ input: input.path, requested, context })
                       return {
                         content,
                         target,
@@ -126,26 +140,30 @@ export const Plugin = {
                     }),
                 ),
               )
-              // After a successful read, discover nearby AGENTS.md walking up to the Location
+              // After a successful read, discover nearby AGENTS.md (or CLAUDE.md) walking up to the Location
               // root exclusive and inject them as durable synthetic instructions. For a
               // directory listing the walk starts at the directory itself (so its own AGENTS.md
               // is discovered); for a file it starts at the file's dirname. External reads are
               // skipped, and discovery failures never fail the read.
               yield* Effect.gen(function* () {
                 if (result.target.externalDirectory !== undefined) return
+                // Discovery walks this server's files, so it follows only a target on the Location's own environment.
+                // A cwd on a paired machine brings its instructions with it in a later change.
+                if (result.target.environment.id !== environment.id) return
                 const resolved = yield* fs.resolve(result.target.absolute)
-                const root = yield* fs.resolve(location.directory)
+                const root = yield* fs.resolve(workingDirectory.absolute)
                 // The Location and its ancestors are already supplied by initial instructions,
                 // even when an upward walk from elsewhere in the project cannot reach root.
                 const discovered = yield* fs.up({
-                  targets: [FILENAME],
-                  start: result.content.type === "list-page" ? resolved : dirname(resolved),
+                  targets: InstructionDiscovery.filenames(discovery),
+                  start: result.content.type === "directory" ? resolved : dirname(resolved),
                   stop: root,
                   type: "file",
                 })
-                const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
-                  (file) => !FSUtil.contains(dirname(file), root) && file !== resolved,
-                )
+                const candidates = (yield* Effect.forEach(
+                  InstructionDiscovery.preferAgents(discovered),
+                  fs.resolve,
+                )).filter((file) => !FSUtil.contains(dirname(file), root) && file !== resolved)
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
               }).pipe(
@@ -155,9 +173,17 @@ export const Plugin = {
               return { output: result.content, path: result.path }
             }).pipe(
               Effect.map((result) => ({
-                output: result.output,
+                output:
+                  result.output.type === "media"
+                    ? {
+                        type: result.output.type,
+                        uri: result.output.uri,
+                        mime: result.output.mime,
+                        name: result.output.name,
+                      }
+                    : result.output,
                 content: toModelContent(result.path, input.offset, result.output),
-                metadata: { truncated: result.output.type === "file" ? false : result.output.truncated },
+                metadata: { truncated: result.output.type !== "media" && result.output.next !== undefined },
               })),
               Effect.mapError((error) => {
                 if (error instanceof ToolFailure) return error
@@ -176,18 +202,20 @@ export const Plugin = {
       )
       .pipe(Effect.orDie)
 
-    const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (absolute: string) {
-      const base = canonical(basename(absolute))
-      const matches = (yield* reader.list(AbsolutePath.make(dirname(absolute)))).filter(
+    const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (target: FileAccess.Target) {
+      const base = canonical(basename(target.absolute))
+      const matches = (yield* target.environment.files.list(AbsolutePath.make(dirname(target.absolute)))).filter(
         (entry) => entry.type === "file" && canonical(entry.name) === base,
       )
       if (matches.length !== 1) return
-      return join(dirname(absolute), matches[0].name)
+      // The path follows its environment's rules, whatever this server's platform joins with.
+      const rules = target.environment.path ?? path
+      return rules.join(rules.dirname(target.absolute), matches[0].name)
     })
 
-    // Lists through the session's environment, which may be a remote workspace rather than this host.
-    const listing = (path: string) =>
-      reader.list(AbsolutePath.make(path)).pipe(
+    // Lists through the requested target's environment, which may be a remote workspace rather than this host.
+    const listing = (files: Environment.Files, path: string) =>
+      files.list(AbsolutePath.make(path)).pipe(
         Effect.map((entries) => ({ type: "found" as const, names: entries.map((entry) => entry.name) })),
         Effect.catchTag("Environment.NotFound", () => Effect.succeed({ type: "missing" as const })),
         Effect.orElseSucceed(() => ({ type: "unknown" as const })),
@@ -196,11 +224,13 @@ export const Plugin = {
     // A path written from the wrong root, such as /Users/me/src/a.ts for a location at /Users/me/repo,
     // usually means <location>/src/a.ts, so check that one path and nothing else.
     const reroot = Effect.fn("ReadTool.reroot")(function* (miss: Missing) {
-      const root = location.directory
+      const root = (yield* currentWorkingDirectory).absolute
+      // A machine's path is not this server's path to reroot, even when the text happens to sit under the Location.
+      if (miss.requested.environment.id !== environment.id) return []
       if (FSUtil.contains(root, miss.requested.absolute) || !FSUtil.contains(dirname(root), miss.requested.absolute))
         return []
       const target = yield* access.resolve({ path: join(root, relative(dirname(root), miss.requested.absolute)) })
-      if (!(yield* Environment.exists(environment.files, target.absolute))) return []
+      if (!(yield* Environment.exists(target.environment.files, target.absolute))) return []
       const readable = yield* permission.allows({
         action: "read",
         resources: [target.resource],
@@ -217,19 +247,19 @@ export const Plugin = {
     // A missing folder usually means a removed worktree, a moved directory, or a relative path
     // resolved from the wrong place, so name the first missing folder and its nearest existing parent.
     const missingFolder = Effect.fn("ReadTool.missingFolder")(function* (
-      input: string,
+      miss: Missing,
       folder: string,
       moved: string[],
     ) {
       let child = folder
       let parent = dirname(folder)
       while (parent !== child) {
-        const found = yield* listing(parent)
+        const found = yield* listing(miss.requested.environment.files, parent)
         if (found.type === "unknown") break
         if (found.type === "found") {
           const suggestions = [...moved, ...similar(found.names, basename(child)).map((entry) => join(parent, entry))]
           const message = [
-            `File not found: ${input}`,
+            `File not found: ${miss.input}`,
             `The folder ${child} does not exist. The nearest folder that does is ${parent}.`,
             ...didYouMean(suggestions),
           ].join("\n\n")
@@ -238,14 +268,16 @@ export const Plugin = {
         child = parent
         parent = dirname(parent)
       }
-      return yield* new ToolFailure({ message: [`File not found: ${input}`, ...didYouMean(moved)].join("\n\n") })
+      return yield* new ToolFailure({
+        message: [`File not found: ${miss.input}`, ...didYouMean(moved)].join("\n\n"),
+      })
     })
 
     const missing = Effect.fn("ReadTool.missing")(function* (miss: Missing) {
       const moved = yield* reroot(miss).pipe(Effect.orElseSucceed(() => []))
       const folder = dirname(miss.requested.absolute)
-      const found = yield* listing(folder)
-      if (found.type === "missing") return yield* missingFolder(miss.input, folder, moved)
+      const found = yield* listing(miss.requested.environment.files, folder)
+      if (found.type === "missing") return yield* missingFolder(miss, folder, moved)
       const suggestions = [
         ...moved,
         ...(found.type === "found"
@@ -320,44 +352,46 @@ function parseSkillUri(value: string) {
   return { id, target: rest === "" ? "/" : `/${rest}`, uri: Skill.uri(id, rest || undefined) }
 }
 
-export const toModelContent = (path: string, offset: number | undefined, output: typeof Output.Type) => {
-  if (output.type === "file" && output.encoding === "base64")
+export const toModelContent = (
+  path: string,
+  offset: number | undefined,
+  output: ReadToolFileSystem.TextContent | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
+) => {
+  if (output.type === "media")
     return [
       { type: "text", text: output.mime === "application/pdf" ? "PDF read successfully" : "Image read successfully" },
       {
         type: "file",
-        uri: `data:${output.mime};base64,${output.content}`,
+        uri: `data:${output.mime};base64,${Buffer.from(output.bytes).toString("base64")}`,
         mime: output.mime,
         name: path,
       },
     ] as const
 
-  if (output.type === "list-page") {
+  if (output.type === "directory") {
     const start = offset || 1
     const content = [
       output.entries.length === 0
         ? `Read directory ${path}, 0 entries`
         : `Read directory ${path}, entries ${start}-${start + output.entries.length - 1}`,
+      ...output.entries,
     ]
-    output.entries.forEach((entry) => content.push(entry.path))
-    if (output.truncated && output.next !== undefined)
-      content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
+    if (output.next !== undefined) content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
     return content.join("\n")
   }
 
-  const start = output.type === "text-page" ? output.offset : 1
-  // Pages already join selected lines; a trailing newline represents a selected blank line.
-  const text = output.type === "file" ? output.content.replace(/\n$/, "") : output.content
-  const lines = output.content === "" ? [] : text.split("\n")
+  const start = output.offset
+  // Whole-file content keeps its final newline and a selected trailing blank line is an empty last
+  // line, so the line count decides which pieces are lines.
+  const lines = output.lineCount === 0 ? [] : output.content.split("\n").slice(0, output.lineCount)
   // A page that starts before the requested offset is the file's tail, returned for an offset past the end.
   const total = start + lines.length - 1
-  const pastEnd = output.type === "text-page" && offset !== undefined && start < offset
+  const pastEnd = offset !== undefined && start < offset
   const content = [
     (lines.length === 0 ? `Read file ${path}, 0 lines` : `Read file ${path}, lines ${start}-${total}`) +
       (pastEnd ? ` (offset ${offset} is past the end; the file has ${total} ${total === 1 ? "line" : "lines"})` : ""),
   ]
   lines.forEach((line, index) => content.push(`${start + index}: ${line}`))
-  if (output.type === "text-page" && output.truncated && output.next !== undefined)
-    content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
+  if (output.next !== undefined) content.push(`[Output truncated. Continue reading with offset: ${output.next}]`)
   return content.join("\n")
 }

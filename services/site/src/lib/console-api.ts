@@ -6,16 +6,18 @@ import { detectPlatform } from "~/lib/platform"
 import { modules, type Letter } from "~/lib/font-content"
 import { freeModels } from "~/lib/get-started"
 import { sdkInstalls } from "~/lib/install-commands"
+import { liteQuitKey } from "~/lib/console-stub"
 
-// window.opencode: a small console API for developers who open DevTools on the site. Site loads
-// this module once the page is idle (Settings › Other › Console API). opencode.try() and
-// opencode.install.pick() load Text.js console apps from /textjs/ (services/site/textjs) on
-// demand, so React and Text.js never enter the site's own bundles.
+// window.opencode: a small console API for developers who open DevTools on the site. The page's
+// stub (console-stub.ts, Settings › Other › Console API) loads this module when someone types
+// `opencode`. opencode.try() and opencode.install.pick() load Text.js console apps from /textjs/
+// (services/site/textjs) on demand, so React and Text.js never enter the site's own bundles.
 //
 // OpenCode Lite also starts on its own once a visitor shows they want the console: DevTools docks,
 // they press a DevTools shortcut on the page, or it already started in this tab. Text.js's
-// onConsoleIntent watches for that; its ~2 kB chunk is all a desktop visitor downloads until then,
-// and touch screens skip it. Quitting Lite turns this off for the browser until opencode.try().
+// onConsoleIntent (in the stub) watches for that; its ~2 kB chunk is all a desktop visitor
+// downloads until then, and touch screens skip it. Quitting Lite turns this off for the browser
+// until opencode.try().
 
 const brand = {
   light: { open: "#626262", code: "#1f1f1f", inner: "#d2d2d2", text: "#333333", dim: "#737373", link: "#3b5cf6" },
@@ -46,11 +48,9 @@ const buildIds: Record<string, string> = {
   "linux-x64-appimage": "appimage",
   "linux-aarch64-appimage": "appimage-arm",
 }
-const liteQuitKey = "opencode-lite-quit"
 const docsTopics = [...docsPages, ...docsConfigure, ...docsProducts.filter((item) => item.label !== "V1")]
 
 export function install() {
-  if (Object.hasOwn(window, "opencode")) return
   const colors = matchMedia("(prefers-color-scheme: dark)").matches ? brand.dark : brand.light
   const say = (...parts: [string, string?][]) =>
     console.log(
@@ -293,28 +293,7 @@ export function install() {
     toString: () => "opencode: type opencode.help()",
   }
   Object.defineProperty(window, "opencode", { value: api, configurable: true, writable: true })
-  // The greeting waits in the console for whoever opens DevTools later, and OpenCode Lite's first
-  // frame replaces it then. When DevTools is already docked (or Lite already ran in this tab), Lite
-  // starts at once and the greeting is skipped. If Lite can't load, the greeting shows instead.
-  // After a visitor quits Lite, only the greeting shows.
-  const greetOnce = () => {
-    if (sessionStorage.getItem("opencode-console-greeted")) return
-    sessionStorage.setItem("opencode-console-greeted", "1")
-    greet(colors, say)
-  }
-  if (matchMedia("(hover: none) and (pointer: coarse)").matches || localStorage.getItem(liteQuitKey)) return greetOnce()
-  import("@textjs/core/experimental").then((textjs) => {
-    // Settings › Other › Console API removes window.opencode when it's turned off, and Lite may have
-    // been started by hand and quit since this page loaded.
-    const intent = textjs.onConsoleIntent(
-      (e) =>
-        (window as { opencode?: unknown }).opencode === api &&
-        !localStorage.getItem(liteQuitKey) &&
-        void startLite(e.reason).catch(greetOnce),
-      { engageSelector: false },
-    )
-    if (!intent.triggered) greetOnce()
-  }, greetOnce)
+  return { api, startLite, greet: () => greet(colors, say) }
 }
 
 type ModelsDev = Record<

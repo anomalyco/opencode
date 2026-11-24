@@ -85,6 +85,24 @@ export function wheelZoomFactor(deltaY: number) {
   return Math.exp(-clamp(deltaY, -30, 30) / 100)
 }
 
+/** The zoom a Cmd/Ctrl shortcut asks for, from the key it is pressed with. */
+export function zoomShortcut(key: string) {
+  if (key === "=" || key === "+") return "in"
+
+  if (key === "-" || key === "_") return "out"
+
+  if (key === "0") return "fit"
+}
+
+/** A wheel event's delta in pixels, whether it counts in pixels, lines or pages. */
+export function wheelPixels(event: WheelEvent, delta: number) {
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return delta * 16
+
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return delta * window.innerHeight
+
+  return delta
+}
+
 /** Keeps one axis of a zoomed image of `size` covering a `viewport` it overflows, and centered in one it fits. */
 export function clampAxis(offset: number, size: number, viewport: number) {
   const limit = Math.max(0, (size - viewport) / 2)

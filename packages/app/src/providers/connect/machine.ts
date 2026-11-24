@@ -33,6 +33,8 @@ export type ProviderSignIn =
       readonly method: Extract<ProviderConnectMethod, { type: "oauth" }>
       readonly authorization: ProviderAuthorization
       readonly browserFailed: boolean
+      /** Set when the attempt also takes the redirect URL pasted from a browser that cannot reach the server. */
+      readonly paste?: ProviderPaste
     }
   | {
       readonly kind: "code"
@@ -54,6 +56,14 @@ export type ProviderTypedSignIn = Extract<ProviderSignIn, { kind: "key" | "code"
 export type ProviderPolledSignIn = Extract<ProviderSignIn, { kind: "browser" | "command" }>
 
 export type ProviderEntryError = { readonly type: "required" } | { readonly type: "rejected"; readonly message: string }
+
+/** The pasted redirect URL of a browser sign-in. The browser's own callback still completes the sign-in meanwhile. */
+export type ProviderPaste =
+  /** `open` is whether the user showed or hid the field; undefined leaves it to the server (open on a remote one). */
+  | { readonly status: "editing"; readonly value: string; readonly error?: ProviderEntryError; readonly open?: boolean }
+  | { readonly status: "submitting"; readonly value: string }
+  /** The server took the URL and finishes the sign-in; polling reports how it ends. */
+  | { readonly status: "accepted"; readonly value: string }
 
 export type ProviderRetry =
   | { readonly type: "start" }
@@ -110,6 +120,12 @@ export type ProviderConnectEvent =
       readonly opened: boolean
     }
   | { readonly type: "entry.submitted"; readonly value: string }
+  | { readonly type: "paste.changed"; readonly value: string }
+  | { readonly type: "paste.toggled"; readonly open: boolean }
+  | { readonly type: "paste.submitted" }
+  /** The server took the pasted URL; the sign-in still settles through polling. */
+  | { readonly type: "paste.accepted"; readonly attempt: number }
+  | { readonly type: "paste.rejected"; readonly attempt: number; readonly error: string }
   | { readonly type: "oauth.started"; readonly attempt: number; readonly authorization: ProviderAuthorization }
   | { readonly type: "command.started"; readonly attempt: number; readonly command: ProviderCommandAttempt }
   | { readonly type: "external.saved"; readonly attempt: number }
@@ -151,6 +167,12 @@ export type ProviderConnectEffect =
       readonly signIn: ProviderTypedSignIn
       readonly value: string
       readonly answer?: FormAnswer
+    }
+  | {
+      readonly type: "paste"
+      readonly attempt: number
+      readonly signIn: Extract<ProviderSignIn, { kind: "browser" }>
+      readonly value: string
     }
   | { readonly type: "refresh"; readonly attempt: number; readonly method: ProviderConnectMethod }
   /** Reloads the catalogs without reporting back, for a credential saved after the dialog moved on. */
@@ -333,6 +355,8 @@ export function selectProviderConnectView(state: ProviderConnectState) {
     commandOutput: signIn?.kind === "command" ? signIn.output : "",
     form: state.status === "form" ? selectProviderFormView(state.form) : undefined,
     entryError: state.status === "entering" ? state.error : undefined,
+    paste:
+      state.status === "waiting" && signIn?.kind === "browser" && signIn.paste ? pasteView(signIn.paste) : undefined,
     // A typed secret is sent and the catalogs are refreshing: the form takes no second submit.
     submitting: state.status === "submitting" || state.status === "refreshing",
     error: state.status === "failed" ? state.error : undefined,
@@ -452,6 +476,15 @@ function polled(
   state: Extract<ProviderConnectState, { status: "waiting" }>,
   event: ProviderConnectEvent,
 ): ProviderConnectTransition {
+  if (
+    event.type === "paste.changed" ||
+    event.type === "paste.toggled" ||
+    event.type === "paste.submitted" ||
+    event.type === "paste.accepted" ||
+    event.type === "paste.rejected"
+  )
+    return pasted(state, event)
+
   if (event.type !== "polled") return unchanged(state)
   const outcome = event.outcome
 
@@ -473,15 +506,87 @@ function polled(
   return unchanged({ ...selection(state, state.attempt), status: "failed", error: outcome.error, retry })
 }
 
+// A paste only hands the server the URL: polling keeps running and reports how the sign-in ends.
+function pasted(
+  state: Extract<ProviderConnectState, { status: "waiting" }>,
+  event: Extract<
+    ProviderConnectEvent,
+    { type: "paste.changed" | "paste.toggled" | "paste.submitted" | "paste.accepted" | "paste.rejected" }
+  >,
+): ProviderConnectTransition {
+  const signIn = state.signIn
+
+  if (signIn.kind !== "browser" || !signIn.paste) return unchanged(state)
+  const paste = signIn.paste
+  const set = (next: ProviderPaste) => ({ ...state, signIn: { ...signIn, paste: next } })
+
+  if (event.type === "paste.toggled") {
+    if (paste.status !== "editing" || paste.open === event.open) return unchanged(state)
+
+    return unchanged(set({ ...paste, open: event.open }))
+  }
+
+  if (event.type === "paste.changed") {
+    if (paste.status !== "editing" || (event.value === paste.value && !paste.error)) return unchanged(state)
+
+    return unchanged(set({ status: "editing", value: event.value, open: paste.open }))
+  }
+
+  if (event.type === "paste.submitted") {
+    if (paste.status !== "editing") return unchanged(state)
+    const value = paste.value.trim()
+
+    if (!value)
+      return unchanged(set({ status: "editing", value: paste.value, error: { type: "required" }, open: true }))
+
+    return {
+      state: set({ status: "submitting", value: paste.value }),
+      effects: [{ type: "paste", attempt: state.attempt, signIn, value }],
+    }
+  }
+
+  if (paste.status !== "submitting") return unchanged(state)
+
+  if (event.type === "paste.accepted") return unchanged(set({ status: "accepted", value: paste.value }))
+
+  return unchanged(
+    set({ status: "editing", value: paste.value, error: { type: "rejected", message: event.error }, open: true }),
+  )
+}
+
+function pasteView(paste: ProviderPaste) {
+  return {
+    value: paste.value,
+    error: paste.status === "editing" ? paste.error : undefined,
+    locked: paste.status !== "editing",
+    // A URL the user already sent keeps the field in view.
+    open: paste.status === "editing" ? paste.open : true,
+    submitting: paste.status === "submitting",
+  }
+}
+
 function poll(
   state: Extract<ProviderConnectState, { status: "starting" | "failed" }>,
   signIn: ProviderPolledSignIn,
 ): ProviderConnectTransition {
   const attempt = state.status === "starting" ? state.attempt : state.attempt + 1
 
+  // A paste in flight when polling failed reports to the old attempt, so a resumed sign-in starts editable too.
+  const next: ProviderPolledSignIn =
+    signIn.kind === "browser" && signIn.authorization.paste
+      ? {
+          ...signIn,
+          paste: {
+            status: "editing",
+            value: signIn.paste?.value ?? "",
+            open: signIn.paste?.status === "editing" ? signIn.paste.open : signIn.paste ? true : undefined,
+          },
+        }
+      : signIn
+
   return {
-    state: { ...selection(state, attempt), status: "waiting", signIn },
-    effects: [{ type: "poll", attempt, signIn, delay: false }],
+    state: { ...selection(state, attempt), status: "waiting", signIn: next },
+    effects: [{ type: "poll", attempt, signIn: next, delay: false }],
   }
 }
 

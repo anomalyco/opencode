@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite"
 import { afterEach, expect, setSystemTime, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
-import worker, { allowedChannels, validGitHubClaims } from "../src/index"
+import worker, { allowedChannels, markArtifact, validGitHubClaims } from "../src/index"
 
 type Env = Parameters<typeof worker.fetch>[1]
 
@@ -157,16 +157,51 @@ test("ignores minimum artifacts outside the latest channel", async () => {
 
 test("rejects setting a minimum outside the latest channel", async () => {
   const db = database()
-  const response = await worker.fetch(
+  const response = await markArtifact(
     new Request("https://opencode.ai/update/admin/minimum", {
       method: "POST",
       body: new URLSearchParams({ channel: "dev", name: "cli", distribution: "opencode", version: "0.0.0-dev-18952" }),
     }),
     db.env,
-    { waitUntil: () => {} },
+    "minimum",
   )
   expect(response.status).toBe(400)
   expect(await response.json()).toEqual({ error: "Minimum is only supported on the latest channel" })
+})
+
+function request(url: string, init?: RequestInit) {
+  return worker.fetch(new Request(url, init), database().env, { waitUntil: () => {} })
+}
+
+test.each([
+  ["GET", "https://opencode.ai/update/admin", {}],
+  ["POST", "https://opencode.ai/update/admin/activate", {}],
+  ["POST", "https://opencode.ai/update/admin/minimum", { "Cf-Access-Jwt-Assertion": "invalid" }],
+  ["POST", "https://opencode.ai./update/admin/rollout", { Cookie: "CF_Authorization=invalid" }],
+  ["GET", "https://OPENCODE.AI./update/admin/", {}],
+] as const)("rejects %s %s without a valid Access identity", async (method, url, headers) => {
+  const response = await request(url, { method, headers })
+  expect(response.status).toBe(403)
+})
+
+test.each([
+  "https://update.opencode.ai/admin",
+  "https://update.opencode.ai./update/admin",
+  "https://update.opencode.ai/api/latest/cli/npm",
+  "https://example.com/update/admin",
+  "https://opencode.ai/admin",
+])("does not serve %s", async (url) => {
+  expect((await request(url)).status).toBe(404)
+})
+
+test("serves the public API without an Access identity", async () => {
+  const db = database()
+  db.insert({ channel: "public", version: "1.0.0", time: 1, active: true })
+  expect(await version(await lookup(db.env, "public/cli/opencode"))).toBe("1.0.0")
+  const trailing = await worker.fetch(new Request("https://opencode.ai./update/api/public/cli/opencode"), db.env, {
+    waitUntil: () => {},
+  })
+  expect(await version(trailing)).toBe("1.0.0")
 })
 
 test("caches rollout fallback reads across caller IPs and overlapping releases", async () => {

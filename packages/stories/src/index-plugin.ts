@@ -12,6 +12,14 @@ export function storyIndex(roots: string[]): Plugin {
   return {
     name: "opencode:story-index",
     resolveId: (source) => (source === id ? `\0${id}` : undefined),
+    hotUpdate({ file }) {
+      if (!file.endsWith(".stories.tsx")) return
+
+      // The index reads the export names itself. Recompute them for the next /?id=… visit.
+      const graph = this.environment.moduleGraph
+      const index = graph.getModuleById(`\0${id}`)
+      if (index) graph.invalidateModule(index)
+    },
     load(source) {
       if (source !== `\0${id}`) return
 

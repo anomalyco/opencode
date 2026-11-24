@@ -48,6 +48,7 @@ type Tabs = Accessor<{
   setActive(tab: string | undefined): void
   close(tab: string): void
   remap(rewrite: (tab: string) => string): void
+  target(pane: SessionPane, plugin?: string, index?: number): void
 }>
 
 export type RegionEntry = {
@@ -77,6 +78,7 @@ const SidebarState = Persistence.struct({
     Schema.isBetween({ minimum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN, maximum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX }),
   ),
   expandMode: Schema.Literals(["expand", "collapse"]),
+  sidebarSide: Schema.Literals(["start", "end"]),
 })
 
 /**
@@ -88,6 +90,7 @@ export function createPanelSidebar(): PanelSidebar {
     sidebarOpened: true,
     sidebarWidth: SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
     expandMode: "collapse",
+    sidebarSide: "start",
   })
 
   const sidebar: PanelSidebar = {
@@ -100,6 +103,8 @@ export function createPanelSidebar(): PanelSidebar {
         Math.min(SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX, Math.max(SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN, width)),
       ),
     toggle: () => setStore("sidebarOpened", (opened) => !opened),
+    side: () => store.sidebarSide,
+    move: (side) => setStore("sidebarSide", side),
   }
 
   onCleanup(usePluginAttachment().sidebar(sidebar))
@@ -333,7 +338,13 @@ export function createRegion(input: {
 
   // Focus leaves before the close starts, back to where it was; otherwise the panel hands it to its toggle.
   const giveBackFocus = () => {
-    const inside = !!document.getElementById("review-panel")?.contains(document.activeElement)
+    const focused = document.activeElement
+
+    // The review toggle in the panel's strip belongs to the session, so the panel hands its focus to the header's copy.
+    const inside =
+      !!document.getElementById("review-panel")?.contains(focused) &&
+      !focused?.closest('[data-slot="session-review-panel-toggle"]')
+
     const back = returnFocus
     returnFocus = undefined
 
@@ -412,6 +423,15 @@ export function createRegion(input: {
         input.tabs().setActive(key)
       })
     },
+    /**
+     * A tab is about to open. When its pane already selects it, the open changes no selection, so the New tab the pane
+     * shows over it is replaced here; any other open replaces it by becoming the selection.
+     */
+    opening(key: string) {
+      const pane = paneOfKey(key)
+
+      if (untrack(panes[pane].active) === key) dispatchNewTabs({ type: "open.selected", pane })
+    },
     /** The new tab views of a pane, by id in strip order. */
     newTabs,
     /** The id of the new tab view a pane shows: the chosen one, else the newest while the pane selects no tab. */
@@ -470,8 +490,10 @@ export function createRegion(input: {
       const entry = byKey().get(key)
       const last = stored().length === 1 && stored()[0] === key
       const closed = entry && closedEntry(key, entry.provider, panelInput(input.view, input.screen, { tab: entry.tab }))
+      const index = stored().indexOf(key)
 
-      if (closed) input.closed.push(input.view(), closed)
+      if (closed)
+        input.closed.push(input.view(), { ...closed, pane: paneOfKey(key), index: index === -1 ? undefined : index })
       // New tabs left in the strip keep the region open.
       batch(() => {
         input.tabs().close(key)
@@ -496,13 +518,17 @@ export function createRegion(input: {
 
       return input.closed.list(input.view()).filter((entry) => !!entry.file && !open.has(entry.key))
     }),
-    /** Brings back the closed tab under `key`, or the newest one. */
-    reopen(key?: string) {
+    /** When the tab `reopen()` brings back closed. */
+    lastClosedTime: () => input.closed.list(input.view())[0]?.closed,
+    /** Brings back the closed tab under `key`, or the newest one, where it closed or in `pane`. */
+    reopen(key?: string, pane?: SessionPane) {
       const entry = input.closed.take(input.view(), key)
 
       if (!entry) return
       const plugin = entry.key.slice(0, entry.key.indexOf(":"))
       const provider = providers().find((item) => item.plugin === plugin)?.value
+
+      if (!stored().includes(entry.key)) input.tabs().target(pane ?? entry.pane ?? "side", plugin, entry.index)
 
       if (!provider?.restore) return input.open(entry.key)
       provider.restore({

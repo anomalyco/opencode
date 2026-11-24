@@ -96,7 +96,7 @@ export type MarkdownWorkerEffect =
   | { readonly type: "post"; readonly attempt: number; readonly message: MarkdownWorkerRequest }
   | { readonly type: "arm-watchdog"; readonly attempt: number; readonly delay: number }
   | { readonly type: "schedule-retry"; readonly attempt: number; readonly delay: number }
-  | { readonly type: "resolve-parse"; readonly id: number; readonly html: string }
+  | { readonly type: "resolve-parse"; readonly id: number; readonly html: Extract<MarkdownWorkerResponse, { type: "parse" }>["html"] }
   | { readonly type: "resolve-project"; readonly id: number; readonly projection: Projection }
   | { readonly type: "resolve-highlight"; readonly id: number; readonly value: MarkdownWorkerState }
   | { readonly type: "reject"; readonly ids: readonly number[]; readonly reason: WorkerRejectReason }

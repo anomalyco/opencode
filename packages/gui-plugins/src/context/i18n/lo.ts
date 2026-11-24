@@ -5,7 +5,6 @@ export default {
   "usage.usage": "ການນໍາໃຊ້",
   "usage.cost": "ຄ່າໃຊ້ຈ່າຍ",
   "usage.view": "ເບິ່ງການໃຊ້ງານບໍລິບົດ",
-  "systemPrompt.title": "System prompt",
   "rawMessages.title": "ຂໍ້ຄວາມດິບ",
   "export.session": "ເຊດຊັນສົ່ງອອກ",
   "stats.session": "ເຊດຊັນ",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "ບັນທຶກເຊດຊັນໃສ່ {{filename}}",
   "export.failed.title": "ລົ້ມເຫລວໃນການສົ່ງອອກເຊດຊັນ",
   "export.failed.description": "ມີຂໍ້ຜິດພາດເກີດຂຶ້ນໃນຂະນະທີ່ສົ່ງອອກເຊດຊັນ",
+  "usage.toggle": "ສະຫຼັບບໍລິບົດເຊດຊັນ",
 }

@@ -16,13 +16,17 @@ describe("voice orb", () => {
     expect(siteSettingsSchema().parse({}).voiceOrb).toBe("always")
   })
 
-  // For launch the orb is a Hex promo: voice mode's code, audio and speech must not load with it.
+  // For launch the orb is a Hex promo: voice mode's code, audio and speech must not load with it, and
+  // its pop-up (hex-panel.tsx, with voice-mode.css) loads only once the orb is hovered, focused or pressed.
   test("voice mode is off and only the Hex promo loads", async () => {
     const { voiceMode } = await import("~/component/site/voice/flag")
     expect(voiceMode).toBe(false)
     const host = await Bun.file(new URL("../src/component/site/voice/host.ts", import.meta.url)).text()
-    expect(host).toMatch(/voiceMode \? import\("\.\/voice-mode"\) : import\("\.\/hex-promo"\)/)
+    expect(host).toContain('if (voiceMode) void import("./voice-mode")')
     const promo = await Bun.file(new URL("../src/component/site/voice/hex-promo.tsx", import.meta.url)).text()
+    const panel = await Bun.file(new URL("../src/component/site/voice/hex-panel.tsx", import.meta.url)).text()
+    expect(promo).not.toContain('import "./voice-mode.css"')
+    expect(promo).not.toMatch(/^import (?!type ).*"\.\/hex-panel"/m)
     for (const heavy of [
       '"./voice-mode"',
       "wisp-orb",
@@ -31,7 +35,9 @@ describe("voice orb", () => {
       "/api/voice",
       "getUserMedia",
       "SpeechRecognition",
-    ])
+    ]) {
       expect(promo).not.toContain(heavy)
+      expect(panel).not.toContain(heavy)
+    }
   })
 })

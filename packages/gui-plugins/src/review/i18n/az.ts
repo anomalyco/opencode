@@ -12,4 +12,12 @@ export default {
   noChanges: "Dəyişiklik yoxdur",
   "settings.wrapLines.title": "Sətirləri bük",
   "settings.wrapLines.description": "Mobil diff-lərdə üfüqi sürüşdürmək əvəzinə uzun sətirləri bük",
+  "menu.count.one": "{{count}} fayl dəyişdi",
+  "menu.count.other": "{{count}} fayl dəyişdi",
+  "folder.more": "{{count}} · qalanları göstərilmir",
+  "folder.failed": "Dəyişiklikləri yükləmək mümkün olmadı",
+  "command.open": "İcmalı aç",
+  "load.failed": "Dəyişiklikləri yükləmək mümkün olmadı",
+  "load.timeout": "Server çox gec cavab verdi",
+  offline: "Bu serverə çatmaq mümkün deyil",
 }
