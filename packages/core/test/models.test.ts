@@ -592,6 +592,38 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.effect("does not price a speed from its tier's prices when the text prices are not per token", () =>
+    Effect.gen(function* () {
+      const [acme] = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          acme: {
+            ...fixture.acme,
+            models: {
+              "acme-1": sourceModel("acme-1", {
+                capabilities: { tools: { supported: true }, reasoning: { supported: false }, service_tier: ["flex"] },
+                cost: {
+                  text: {
+                    input: {
+                      unit: "character",
+                      price: 2,
+                      overrides: [{ when: { service_tier: { equals: "flex" } }, price: 5 }],
+                    },
+                    output: { unit: "character", price: 10 },
+                  },
+                },
+              }),
+            },
+          },
+        }),
+        false,
+        true,
+      )
+      const model = (id: string) => acme?.models.find((item) => item.id === id)
+      expect(model("acme-1")?.cost).toEqual(zeroCost)
+      expect(model("acme-1-flex")?.cost).toEqual(zeroCost)
+    }),
+  )
+
   it.effect("lists each service tier as a model of its own, marked as a speed of the model", () =>
     Effect.gen(function* () {
       const api = (protocol: string, opencodeai: string) => ({

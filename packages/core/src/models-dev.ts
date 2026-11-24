@@ -434,10 +434,8 @@ const zero = Money.USDPerMillionTokens.zero
 // no place in opencode's cost yet. Context overrides become tiers; other conditions
 // (service tier, time of day…) are left out.
 function cost(input: SourceCost | undefined): Model.Info["cost"] {
-  const text = input?.text
-  const perToken = (unit: string | undefined) => unit === undefined || unit === "token"
-  if (!text?.input || !text.output || !perToken(text.input.unit) || !perToken(text.output.unit))
-    return [{ input: zero, output: zero, cache: { read: zero, write: zero } }]
+  const text = perTokenText(input)
+  if (!text) return [{ input: zero, output: zero, cache: { read: zero, write: zero } }]
   const textInput = text.input
   const textOutput = text.output
   const base = {
@@ -472,6 +470,14 @@ function cost(input: SourceCost | undefined): Model.Info["cost"] {
     if (entry) tiers.set(entry.tier!.size, { ...entry, output: override.price ?? entry.output })
   }
   return [base, ...tiers.values()]
+}
+
+// Both text prices, when both are set and per token; otherwise opencode can't price the model.
+function perTokenText(source: SourceCost | undefined) {
+  const text = source?.text
+  const perToken = (unit: string | undefined) => unit === undefined || unit === "token"
+  if (!text?.input || !text.output || !perToken(text.input.unit) || !perToken(text.output.unit)) return undefined
+  return { input: text.input, output: text.output }
 }
 
 // opencode has one cache write price: the first TTL listed, else the explicit cache's.
@@ -531,8 +537,11 @@ function tierPrices(source: SourceCost | undefined, base: Model.Info["cost"][num
       (!base.tier || (context?.gt ?? context?.gte) === base.tier.size)
     )
   }
-  const input = source?.text?.input?.overrides?.find((override) => matches(override.when))
-  const output = source?.text?.output?.overrides?.find((override) => matches(override.when))
+  // The base is free when its prices aren't per token, and so is every tier.
+  const text = perTokenText(source)
+  if (!text) return base
+  const input = text.input.overrides?.find((override) => matches(override.when))
+  const output = text.output.overrides?.find((override) => matches(override.when))
   return {
     ...base,
     input: input?.price ?? base.input,
