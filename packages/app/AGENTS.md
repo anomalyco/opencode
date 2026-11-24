@@ -145,6 +145,13 @@ This section is the single source for what may move or restyle the session timel
 - Never select on `style` inside `:has()`. Every inline style write then rechecks the `:has()` of the element's ancestors, and the virtualizer writes inline styles while the reader scrolls. Set a `data-` attribute when the element is built, and select on that.
 - To check: record a Chrome trace of the `devtools.timeline` category while you scroll through history that has not been visited, click in the timeline and press a scroll key. Read `elementCount` on each `UpdateLayoutTree` event; DevTools shows it as Recalculate Style, Elements Affected. A pass that affects about as many elements as the timeline contains is this regression.
 
+### Work on every transcript change
+
+- The transcript changes with each message, tool update and history page. A memo that reads it and returns a new array or object (`visibleUserMessages()`, the revert view, the list of running tasks) notifies its readers every time, whether or not their result changes.
+- Code outside the timeline that needs one fact about the transcript reads it through a memo of that fact, such as a boolean or an id. The session command list (`src/session/commands/use-session-commands.tsx`) does this. When it read the transcript directly, every history page rebuilt all commands, registered every keybind again and rebuilt the review toggle in the session header, whose fit forces a layout.
+- A control that shows a keybind reads `command.keybind()` or `command.keybindParts()`, which change only when a keybind does. Do not read `command.options` for a label.
+- Keeper: "the header keeps its controls while the transcript changes" in `e2e/regression/session-header.spec.ts`.
+
 ## Localization
 
 - NEVER hardcode user-visible English strings in production code. ALWAYS use an i18n key for visible copy, placeholders, accessible labels, tooltips, menus, dialogs, toasts, empty states, and displayed errors.
