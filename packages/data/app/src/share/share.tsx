@@ -556,11 +556,18 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   aria-live="polite"
                   onClick={exportFile}
                 >
-                  {rendering() !== undefined
-                    ? `Rendering video ${Math.round((rendering() ?? 0) * 100)}%`
-                    : { image: "Export image", video: "Export video", embed: copied() ? "Copied" : "Copy embed code" }[
-                        format()
-                      ]}
+                  {/* A new label fades up when the button changes what it does; the render's percentage counts in place. */}
+                  <Show when={rendering() !== undefined ? "rendering" : copied() ? "copied" : format()} keyed>
+                    <span data-slot="button-label">
+                      {rendering() !== undefined
+                        ? `Rendering video ${Math.round((rendering() ?? 0) * 100)}%`
+                        : {
+                            image: "Export image",
+                            video: "Export video",
+                            embed: copied() ? "Copied" : "Copy embed code",
+                          }[format()]}
+                    </span>
+                  </Show>
                 </button>
               </div>
             </aside>

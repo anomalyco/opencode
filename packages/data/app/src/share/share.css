@@ -411,6 +411,14 @@
       height: 40px;
       font-size: 14px;
     }
+
+    [data-slot="button-label"] {
+      animation: share-label-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+
+      @media (prefers-reduced-motion: reduce) {
+        animation: none;
+      }
+    }
   }
 
   /* Close, centred on the canvas's second dot from the side and the top: the dots sit at the middle of 16px cells,
@@ -909,6 +917,13 @@
     [data-slot="row"][data-variant="list"] [data-slot="row-label"] {
       padding-top: 14px;
     }
+  }
+}
+
+@keyframes share-label-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
   }
 }
 
