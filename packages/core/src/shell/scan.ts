@@ -20,6 +20,7 @@ type Command = {
   wordEnds?: number[]
   statementHead?: true
   declaration?: true
+  hasRedirect?: true
   // Words before the first redirect when redirects appear between arguments.
   redirectWordCount?: number
   // Exclusive prefix end relative to resource for commandless or group redirects.
@@ -395,6 +396,7 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
       resource.startsWith(state.rawWords[0])
         ? { declaration: true as const }
         : {}),
+      ...(state.hasRedirect ? { hasRedirect: true as const } : {}),
       ...(state.redirectWordCount !== undefined && state.redirectWordCount < state.words.length
         ? { redirectWordCount: state.redirectWordCount - name }
         : {}),
@@ -1875,6 +1877,7 @@ function scanPowerShellList(
   let indexable: false | "variable" | "closed" | "member" = false
   let memberChainStart: number | undefined
   let hasMemberAccess = false
+  let hasRedirect = false
   let hasFileRedirect = false
   let stopParsing = false
   let commandEnd = start
@@ -1926,6 +1929,7 @@ function scanPowerShellList(
         rawWords: [...rawWords],
         wordEnds: wordEnds.map((value) => value - segment),
         ...(statementHead && !invocation && !expression && !clause ? { statementHead: true as const } : {}),
+        ...(hasRedirect ? { hasRedirect: true as const } : {}),
       })
     else if (
       (!expression && !clause && invocation) ||
@@ -1939,6 +1943,7 @@ function scanPowerShellList(
     rawWords.length = 0
     wordEnds.length = 0
     redirectTarget = false
+    hasRedirect = false
     hasFileRedirect = false
     invocation = false
     expression = initialExpression
@@ -2086,6 +2091,7 @@ function scanPowerShellList(
       if (redirectTarget || words.length === 0 || (clause && clause !== "member"))
         return { kind: "opaque", reason: "invalid-redirect" }
       redirectTarget = !redirect.includes("&")
+      hasRedirect = true
       if (redirectTarget) hasFileRedirect = true
       resetMember()
       index += redirect.length - 1
@@ -2156,6 +2162,7 @@ function scanPowerShellList(
       rawWords.length = 0
       wordEnds.length = 0
       expression = false
+      hasRedirect = false
       hasFileRedirect = false
       resetMember()
       if (!assign || char !== "=") index++

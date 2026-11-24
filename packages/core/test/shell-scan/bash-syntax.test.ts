@@ -277,6 +277,7 @@ describe("Bash shared heredoc delimiter grammar", () => {
         resource: body.trim(),
         words: ["cat"],
         rawWords: ["cat"],
+        hasRedirect: true,
       })
       if (!quoted) expect(result.commands.some((command) => command.resource === "printf probe")).toBe(true)
     }
