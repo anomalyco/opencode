@@ -27,6 +27,12 @@ export const ACK_LIMIT = 1000
 const POLL_WAIT = 25
 /** How long the client polls before it tries the WebSocket again. */
 const POLL_RETRY_WEBSOCKET = Duration.minutes(10)
+/**
+ * How long a session's status changes wait for another before they wake it, and the longest the first one waits. A
+ * merge's checks, its merge and the runs it starts arrive seconds apart, often while the agent checks them itself.
+ */
+export const SETTLE = Duration.seconds(20)
+export const MAX_SETTLE = Duration.minutes(1)
 /** Wakes in 10 minutes, and since the user's last prompt, before updates wait for a person, so agents can't loop. */
 export const WINDOW_LIMIT = 5
 export const PROMPT_LIMIT = 20
@@ -506,6 +512,11 @@ function stream(hub: Hub) {
     const reader = yield* socket.reader.pipe(Effect.option)
     if (Option.isNone(reader)) return "refused" as const
     const writer = yield* socket.writer
+    const handle = yield* settle(hub, (ids) =>
+      Effect.forEach(chunks(ids), (chunk) => writer.write(JSON.stringify({ type: "ack", ids: chunk })), {
+        discard: true,
+      }),
+    )
     return yield* reader.value.pull.pipe(
       Effect.timeoutOrElse({
         duration: SILENCE,
@@ -519,10 +530,7 @@ function stream(hub: Hub) {
               const message = decodeServerMessage(typeof frame === "string" ? frame : decoder.decode(frame))
               if (Option.isNone(message))
                 return yield* Effect.logWarning("ignored an event stream message this version can't read")
-              const ids = yield* (yield* leader(hub)).deliver(message.value.events)
-              yield* Effect.forEach(chunks(ids), (chunk) => writer.write(JSON.stringify({ type: "ack", ids: chunk })), {
-                discard: true,
-              })
+              yield* handle(message.value.events)
             }),
           { discard: true },
         ),
@@ -548,6 +556,18 @@ function stream(hub: Hub) {
 function poll(hub: Hub) {
   return Effect.gen(function* () {
     const started = yield* Clock.currentTimeMillis
+    const handle = yield* settle(hub, (ids) =>
+      Effect.forEach(
+        chunks(ids),
+        (chunk) =>
+          leader(hub).pipe(
+            Effect.flatMap((member) => call(member, "POST", "/api/event-watches/ack", { ids: chunk })),
+            Effect.flatMap(HttpClientResponse.filterStatusOk),
+            Effect.scoped,
+          ),
+        { discard: true },
+      ),
+    )
     let cursor: string | undefined
     let polled = false
     while (true) {
@@ -564,19 +584,80 @@ function poll(hub: Hub) {
       )
       if (Option.isNone(page)) return polled ? ("polled" as const) : ("failed" as const)
       polled = true
-      const ids = yield* member.deliver(page.value.events)
-      const acked = yield* Effect.forEach(chunks(ids), (chunk) =>
-        call(member, "POST", "/api/event-watches/ack", { ids: chunk }).pipe(
-          Effect.flatMap(HttpClientResponse.filterStatusOk),
-          Effect.scoped,
-        ),
-      ).pipe(Effect.option)
+      const acked = yield* handle(page.value.events).pipe(Effect.option)
       if (Option.isNone(acked)) return "polled" as const
       // A full page means more is waiting: the next poll after its cursor answers at once.
       cursor = page.value.cursor
     }
-  })
+  }).pipe(Effect.scoped)
 }
+
+/** A session's status changes waiting to wake it: since when, the latest's arrival, and the fiber that sends them. */
+interface Held {
+  readonly events: WatchEvent[]
+  readonly first: number
+  last: number
+  fiber?: Fiber.Fiber<void>
+}
+
+/**
+ * Delivers each session's events through the connection's leader, then acknowledges them with `ack`. A session's
+ * status changes wait until `SETTLE` passes without another, at most `MAX_SETTLE`, so a burst of them wakes it once.
+ * Anything someone wrote goes at once, with whatever was waiting. Events still waiting when the connection's scope
+ * closes stay unacknowledged, so the next connection gets them again.
+ */
+const settle = Effect.fnUntraced(function* (
+  hub: Hub,
+  ack: (ids: ReadonlyArray<string>) => Effect.Effect<unknown, unknown>,
+) {
+  const scope = yield* Scope.Scope
+  const waiting = new Map<string, Held>()
+  const send = (events: ReadonlyArray<WatchEvent>) =>
+    leader(hub).pipe(
+      Effect.flatMap((member) => member.deliver(events)),
+      Effect.flatMap(ack),
+    )
+  const wait = (sessionID: string, held: Held) =>
+    Effect.gen(function* () {
+      while (true) {
+        const now = yield* Clock.currentTimeMillis
+        const due = Math.min(held.last + Duration.toMillis(SETTLE), held.first + Duration.toMillis(MAX_SETTLE))
+        if (now >= due) break
+        yield* Effect.sleep(Duration.millis(due - now))
+      }
+      // Once taken, the events are delivered and acknowledged even if the connection closes meanwhile.
+      yield* Effect.uninterruptible(
+        Effect.suspend(() => {
+          waiting.delete(sessionID)
+          return send(held.events)
+        }),
+      )
+    }).pipe(Effect.catch((cause) => Effect.logWarning("failed to deliver settled watch events", { sessionID, cause })))
+  return Effect.fnUntraced(function* (events: ReadonlyArray<WatchEvent>) {
+    const now = yield* Clock.currentTimeMillis
+    const ready = yield* Effect.forEach(Map.groupBy(events, (event) => event.sessionID), ([sessionID, batch]) =>
+      Effect.gen(function* () {
+        const held = waiting.get(sessionID)
+        if (batch.every(settles)) {
+          if (held) {
+            held.events.push(...batch)
+            held.last = now
+            return []
+          }
+          const fresh: Held = { events: [...batch], first: now, last: now }
+          waiting.set(sessionID, fresh)
+          fresh.fiber = yield* wait(sessionID, fresh).pipe(Effect.forkIn(scope, { startImmediately: true }))
+          return []
+        }
+        if (!held) return batch
+        waiting.delete(sessionID)
+        if (held.fiber) yield* Fiber.interrupt(held.fiber)
+        return [...held.events, ...batch]
+      }),
+    )
+    yield* send(ready.flat())
+  })
+})
 
 function chunks(ids: ReadonlyArray<string>) {
   return Array.from({ length: Math.ceil(ids.length / ACK_LIMIT) }, (_, index) =>
@@ -710,6 +791,11 @@ const actions = new Map<string, (target: string) => string>([
   ["comment", (target) => `commented on ${target}`],
   ["review", (target) => `reviewed ${target}`],
 ])
+
+/** A status change, which waits for the others that follow it; not something someone wrote or a server's own event. */
+function settles(event: WatchEvent) {
+  return !actions.has(event.kind) && event.kind !== "event" && event.kind !== "channel_post"
+}
 
 /**
  * The member's own words read as theirs, so a reply from their phone steers the agent. Anyone else's, and anything a
