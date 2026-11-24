@@ -64,7 +64,9 @@ export const refundPolicy: LegalDocumentContent = {
       {},
       "We don't refund payments or remaining credit for an account or workspace that we suspend or close because it violated our ",
       ["a", { href: "/legal/terms-of-service" }, "Terms of Use"],
-      " or Customer Agreement, or because it was used for fraudulent or abusive activity, except where the law requires a refund. If a payment is disputed or reversed, we may suspend the account and remove the credit or access that payment bought.",
+      " or ",
+      ["a", { href: "https://opencode.ai/console/legal/opencode-customer-agreement.pdf" }, "Customer Agreement"],
+      ", or because it was used for fraudulent or abusive activity, except where the law requires a refund. If a payment is disputed or reversed, we may suspend the account and remove the credit or access that payment bought.",
     ],
     ["h2", { id: "cancelling" }, "Cancelling"],
     [
@@ -89,7 +91,9 @@ export const refundPolicy: LegalDocumentContent = {
       ["a", { href: "mailto:help@anoma.ly" }, "help@anoma.ly"],
       " with any questions. Our ",
       ["a", { href: "/legal/terms-of-service" }, "Terms of Use"],
-      " and Customer Agreement also apply.",
+      " and ",
+      ["a", { href: "https://opencode.ai/console/legal/opencode-customer-agreement.pdf" }, "Customer Agreement"],
+      " also apply.",
     ],
   ],
 }
