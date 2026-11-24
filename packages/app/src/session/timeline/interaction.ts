@@ -440,11 +440,10 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     const target = revealSeekTarget(revealSeek()[0]())
 
     if (!target || !viewReady()) return
-    const oldestAssistantID = timeline.messages().find((message) => message.type === "assistant")?.id
+    // Read so that this runs again when an older page lands.
+    oldestMessage()
     const history = historyStatus()
-    untrack(() =>
-      dispatchRevealSeek({ type: "seek.synced", found: revealPart(target), oldestAssistantID, history }),
-    )
+    untrack(() => dispatchRevealSeek({ type: "seek.synced", found: revealPart(target), history }))
   })
   createResizeObserver(
     () => state.refs.dock,
