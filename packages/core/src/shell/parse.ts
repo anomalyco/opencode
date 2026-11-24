@@ -234,7 +234,8 @@ export function scan(
       if (directoryCommand) {
         const resolved = directoryArgs(directoryCommand, powershell, cwd, shell, home)
         output.directories.push(...resolved.directories)
-        if (directoryCommand === parts && resolved.complete) continue
+        // A bare directory command only steers the working directory, which its directory requests cover.
+        if (directoryCommand === parts && resolved.complete && !item.fileRedirect) continue
       }
       const selected = prefix(words.slice(0, PREFIX_LENGTH))
       const conventional = `${selected.join(" ")} *`

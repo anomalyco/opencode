@@ -160,9 +160,41 @@ describe("Bash redirect resource oracle", () => {
     ])
   })
 
-  test("redirect before cd operand retains the target directory", async () => {
+  test("redirect before cd operand retains the target directory and the redirected command", async () => {
     const source = "pwd && cd >out /outside"
     const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
-    expect(parsed).toEqual({ commands: [{ resource: "pwd", save: "pwd *" }], directories: ["/outside"] })
+    // >out writes a file, so the directory request for /outside cannot authorize the command on its own.
+    expect(parsed).toEqual({
+      commands: [
+        { resource: "pwd", save: "pwd *" },
+        { resource: "cd >out /outside", save: "cd *" },
+      ],
+      directories: ["/outside"],
+    })
+  })
+
+  test.each(["cd . > out.txt", "cd .>out.txt", "cd . 2> err.txt", "pushd /tmp >> log.txt"])(
+    "redirected directory command keeps its shell request: %j",
+    async (source) => {
+      const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+      expect(parsed.commands).toEqual([{ resource: source, save: `${source.split(" ")[0]} *` }])
+    },
+  )
+
+  test.each(["Set-Location . > out.txt", "Push-Location /tmp >> log.txt"])(
+    "redirected PowerShell location command keeps its shell request: %j",
+    async (source) => {
+      const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/pwsh", "/workspace"))
+      expect(parsed.commands).toEqual([{ resource: source, save: `${source.split(" ")[0]} *` }])
+    },
+  )
+
+  test("directory command without a file redirect keeps no shell request", async () => {
+    for (const source of ["cd .", "cd . 2>&1"]) {
+      const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+      expect(parsed.commands, source).toEqual([])
+    }
+    const powershell = await Effect.runPromise(ShellParse.scan("Set-Location .", "/bin/pwsh", "/workspace"))
+    expect(powershell.commands).toEqual([])
   })
 })

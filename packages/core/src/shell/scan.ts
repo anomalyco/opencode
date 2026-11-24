@@ -24,6 +24,8 @@ type Command = {
   redirectWordCount?: number
   // Exclusive prefix end relative to resource for commandless or group redirects.
   redirectPrefixEnd?: number
+  // A redirect names a filesystem path, so directory requests alone cannot authorize the command.
+  fileRedirect?: true
 }
 
 // Opaque describes a parsing limitation, not a permission decision.
@@ -298,8 +300,10 @@ function finishBashWord(state: BashState) {
     state.rawWords.push(state.input.slice(state.wordStart, state.wordEnd))
   }
   if (state.redirectTarget) {
-    if (!state.dupRedirect || !/^(?:\d+-?|-)$/.test(state.input.slice(state.wordStart, state.wordEnd)))
+    if (!state.dupRedirect || !/^(?:\d+-?|-)$/.test(state.input.slice(state.wordStart, state.wordEnd))) {
       state.hasFileRedirect = true
+      if (!state.hereString) state.pathRedirect = true
+    }
     state.redirectPrefixEnd ??= state.wordEnd
   }
   state.redirectTarget = false
@@ -398,6 +402,7 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
       ...(state.redirectWordCount !== undefined && state.redirectWordCount < state.words.length
         ? { redirectWordCount: state.redirectWordCount - name }
         : {}),
+      ...(state.pathRedirect ? { fileRedirect: true as const } : {}),
     }
     state.commands.push(command)
     const builtin = bashBuiltinIndex(state)
@@ -482,6 +487,7 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
   state.dupRedirect = false
   state.hasRedirect = false
   state.hasFileRedirect = false
+  state.pathRedirect = false
   state.redirectWordCount = undefined
   state.redirectPrefixEnd = undefined
   state.ampersandRedirectWords = undefined
@@ -528,6 +534,7 @@ function scanBash(
     hereString: false,
     hasRedirect: false,
     hasFileRedirect: false,
+    pathRedirect: false,
     compoundEnd: false,
     dangling: false,
     outer,
@@ -1926,6 +1933,7 @@ function scanPowerShellList(
         rawWords: [...rawWords],
         wordEnds: wordEnds.map((value) => value - segment),
         ...(statementHead && !invocation && !expression && !clause ? { statementHead: true as const } : {}),
+        ...(hasFileRedirect ? { fileRedirect: true as const } : {}),
       })
     else if (
       (!expression && !clause && invocation) ||
