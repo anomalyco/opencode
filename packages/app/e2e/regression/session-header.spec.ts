@@ -3,7 +3,17 @@ import { expect, test, type Page } from "@playwright/test"
 import { REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { reviewTabs } from "../utils/side-panel"
-import { chooseUserMessageAction, openUserMessageMenu } from "../utils/timeline"
+import {
+  assistantMessage,
+  chooseUserMessageAction,
+  historyMessages,
+  openUserMessageMenu,
+  partUpdated,
+  setupTimeline,
+  shell,
+  textPart,
+  userMessage,
+} from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
 
@@ -216,6 +226,44 @@ test("the web session header leaves window dragging to the browser", async ({ pa
   await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
   await expect(page.locator('[data-slot="session-header-drag"]')).toHaveCount(0)
   await expect(page.locator('[data-slot="shell-drag-inset"]')).toHaveCount(0)
+})
+
+// The header fits its controls again, with a forced layout, whenever one of them is rebuilt.
+test("the header keeps its controls while the transcript changes", async ({ page }) => {
+  const messages = [
+    ...historyMessages(30),
+    userMessage(),
+    assistantMessage([textPart("prt_active", "Checking the route")], { completed: false }),
+  ]
+
+  const timeline = await setupTimeline(page, {
+    sessionMessages: messages,
+    pageMessages: (_, limit, before) => {
+      const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+      const start = Math.max(0, end - Math.min(16, limit))
+
+      return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+    },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const review = page.getByRole("button", { name: "Toggle review", exact: true })
+  await expect(scroller.getByText("Checking the route", { exact: true })).toBeInViewport()
+  // A rebuilt icon is another element, without the mark.
+  await review.locator("svg").evaluate((icon) => icon.setAttribute("data-kept", ""))
+
+  // A running shell enables Move to background, so the command list changes; the review keybind does not.
+  await timeline.send(partUpdated(shell("prt_header_shell", "running")))
+  await expect(scroller.locator('[data-timeline-part-ids*="prt_header_shell"]')).toBeVisible()
+  await expect(review.locator("svg[data-kept]")).toHaveCount(1)
+
+  // Each scroll to the top loads an older page, until the first message is in view.
+  await scroller.hover()
+  await expect(async () => {
+    await page.mouse.wheel(0, -100_000)
+    await expect(scroller.getByText(/^Historical response 0\. /)).toBeInViewport({ timeout: 1_000 })
+  }).toPass()
+  await expect(review.locator("svg[data-kept]")).toHaveCount(1)
 })
 
 test.describe("location", () => {
