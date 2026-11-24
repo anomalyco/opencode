@@ -661,18 +661,20 @@
     }
   }
 
-  /* The explicit-lyrics badge, on the right of its track. */
+  /* The explicit-lyrics badge, on the right of its track: solid black with bold white capitals, like the label on a
+     CD sleeve. A hairline keeps its edge on a dark page. */
   [data-slot="explicit"] {
     flex: none;
-    padding: 3px 4px;
+    padding: 3px 5px;
     font-size: 9px;
     font-style: normal;
-    font-weight: 500;
+    font-weight: 700;
     line-height: 1;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--stats-faint);
-    border: 1px solid var(--stats-line-strong);
+    color: #fff;
+    background: #000;
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.18);
   }
 
   [data-slot="track-icon"] {

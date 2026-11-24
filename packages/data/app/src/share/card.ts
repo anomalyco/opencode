@@ -439,11 +439,9 @@ function drawIntro(
     const label = compact ? 28 : 34
     const leading = compact ? 36 : 44
     const gap = compact ? 52 : 64
-    rise(ctx, time, 0.14, y + gap + size * 0.8, size * 0.8, () => {
-      ctx.fillStyle = colors.highlight
-      ctx.font = `400 ${size}px ${font}`
-      ctx.fillText(card.stat.value, pad - size * 0.04, y + gap + size * 0.8)
-    })
+    ctx.fillStyle = colors.highlight
+    ctx.font = `400 ${size}px ${font}`
+    odometer(ctx, card.stat.value, pad - size * 0.04, y + gap + size * 0.8, size, time)
     ctx.font = `400 ${label}px ${font}`
     const lines = balance(ctx, card.stat.label, max).slice(0, 2)
     const first = y + gap + size * 0.8 + gap
@@ -494,6 +492,47 @@ function drawIntro(
     })
   })
   return y + 56 + lines.length * leading + 32
+}
+
+// The big number rolling into place like an odometer: each digit spins up through 0 to 9 and settles on its own, the
+// right-hand digits turning over more times than the left, as a real counter's wheels do. Other characters (the
+// unit, a decimal point, a currency sign) stand still. OpenMono's fixed advance keeps every wheel in its column.
+function odometer(
+  ctx: CanvasRenderingContext2D,
+  value: string,
+  x: number,
+  baseline: number,
+  size: number,
+  time: number,
+) {
+  const chars = [...value]
+  const advance = ctx.measureText("0").width
+  const pitch = size * 1.05
+  ctx.save()
+  ctx.beginPath()
+  // A window one digit tall, so the wheels' other numbers stay hidden above and below it.
+  ctx.rect(x - size * 0.1, baseline - size * 0.8, advance * chars.length + size * 0.2, size * 0.86)
+  ctx.clip()
+  chars.reduce((wheel, char, index) => {
+    const left = x + index * advance
+    if (!/\d/.test(char)) {
+      ctx.globalAlpha = settle(time, 0.1, 0.5)
+      ctx.fillText(char, left, baseline)
+      ctx.globalAlpha = 1
+      return wheel
+    }
+    // Wheels land left to right, each a beat after the last, on a long, steep ease-out: they race at first, then crawl
+    // the last few digits into place.
+    const progress = Math.max(0, Math.min(1, (time - 0.1) / (1.6 + wheel * 0.35)))
+    const turned = 1 - (1 - progress) ** 6
+    const travel = (Number(char) + 10 * (wheel + 2)) * turned
+    const shown = Math.floor(travel)
+    const offset = (travel - shown) * pitch
+    ctx.fillText(String(shown % 10), left, baseline - offset)
+    if (offset > 0) ctx.fillText(String((shown + 1) % 10), left, baseline - offset + pitch)
+    return wheel + 1
+  }, 0)
+  ctx.restore()
 }
 
 // A line of text rising into place from behind its own baseline, as in an editorial title reveal: it slides up
