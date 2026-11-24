@@ -100,7 +100,14 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/api/plugin")
       return json({
         location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
-        data: [],
+        data: [
+          {
+            id: "opencode.config.provider",
+            source: { type: "builtin" },
+            features: { server: true },
+            state: { status: "active" },
+          },
+        ],
       })
     if (url.pathname === "/api/vcs")
       return json({

@@ -162,6 +162,72 @@ test("same-model agent switches clear drafts without a model acknowledgment", as
   expect(setup.local.model.current()?.modelID).toBe("second")
 })
 
+test("waits for initial server plugin activation before falling back to the first model", async () => {
+  const bigPickle = { ...model("big-pickle"), providerID: "opencode" }
+  const stub = { ...model("stub"), providerID: "stub" }
+  let activated = false
+  await using setup = await renderLocal({
+    fetch: (url) => {
+      const location = { directory: url.searchParams.get("location[directory]") ?? "/tmp/opencode/packages/tui" }
+      if (url.pathname === "/api/config") return json([{ type: "document", info: { model: "stub/stub" } }])
+      if (url.pathname === "/api/model") return json({ location, data: activated ? [stub] : [bigPickle] })
+      if (url.pathname === "/api/plugin")
+        return json({
+          location,
+          data: activated
+            ? [
+                {
+                  id: "opencode.config.provider",
+                  source: { type: "builtin" },
+                  features: { server: true },
+                  state: { status: "active" },
+                },
+              ]
+            : [],
+        })
+    },
+  })
+
+  expect(setup.local.model.catalogReady).toBe(false)
+  expect(setup.local.model.current()).toBeUndefined()
+
+  activated = true
+  setup.events.emit({ id: "evt_plugin", created: 1, type: "plugin.updated", data: {} })
+  await setup.waitFor(async () => {
+    await Bun.sleep(10)
+    return setup.local.model.catalogReady
+  })
+
+  expect(setup.local.model.current()).toEqual({ providerID: "stub", modelID: "stub" })
+})
+
+test("does not mark the catalog ready before location config has loaded", async () => {
+  const bigPickle = { ...model("big-pickle"), providerID: "opencode" }
+  const stub = { ...model("stub"), providerID: "stub" }
+  const alt = { directory: "/tmp/opencode/other" }
+  const configGate = Promise.withResolvers<Response>()
+  await using setup = await renderLocal({
+    models: [bigPickle, stub],
+    fetch: (url) => {
+      if (url.pathname === "/api/config" && url.searchParams.get("location[directory]") === alt.directory)
+        return configGate.promise
+    },
+  })
+
+  setup.location.set(alt)
+  await setup.data.location.plugin.sync(alt)
+  await setup.data.location.model.sync(alt)
+
+  expect(setup.local.model.catalogReady).toBe(false)
+  expect(setup.local.model.current()).toBeUndefined()
+
+  configGate.resolve(json([{ type: "document", info: { model: "stub/stub" } }]))
+  await setup.data.location.config.sync(alt)
+
+  expect(setup.local.model.catalogReady).toBe(true)
+  expect(setup.local.model.current()).toEqual({ providerID: "stub", modelID: "stub" })
+})
+
 async function publishSelection(
   setup: Awaited<ReturnType<typeof renderLocal>>,
   agent: string,

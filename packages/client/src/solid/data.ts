@@ -21,6 +21,7 @@ import type {
   PermissionSavedInfo,
   PermissionRequest,
   PermissionReplyInput,
+  PluginInfo,
   Project,
   ProviderInfo,
   ReferenceInfo,
@@ -111,6 +112,7 @@ type LocationData = {
   mcpServer?: McpServer[]
   mcpResource?: McpResource[]
   model?: ModelInfo[]
+  plugin?: PluginInfo[]
   provider?: ProviderInfo[]
   reference?: ReferenceInfo[]
   websearch?: WebSearchProvider[]
@@ -1457,6 +1459,34 @@ export function createData(config: CreateDataInput) {
       return
     }
 
+    if (event.type === "plugin.updated") {
+      const locations = event.location
+        ? [event.location]
+        : Object.keys(store.location).map((key) => {
+            const ref = JSON.parse(key) as [string, string | null]
+            return { directory: ref[0], workspaceID: ref[1] ?? undefined }
+          })
+      locations.forEach((location) => {
+        const refreshModels = hasLocation("model", location)
+        const refreshProviders = hasLocation("provider", location)
+        const refreshPlugins = hasLocation("plugin", location)
+        result.location.model.invalidate(location)
+        result.location.provider.invalidate(location)
+        result.location.plugin.invalidate(location)
+        if (!refreshModels && !refreshProviders && !refreshPlugins) return
+        // Refresh models/providers before publishing the updated plugin inventory so readers
+        // gating on initial plugin activation never observe a pre-activation model list.
+        refresh(async () => {
+          await Promise.all([
+            refreshModels ? result.location.model.sync(location) : undefined,
+            refreshProviders ? result.location.provider.sync(location) : undefined,
+          ])
+          if (refreshPlugins) await result.location.plugin.sync(location)
+        })
+      })
+      return
+    }
+
     if (!event.location) return
     const location = event.location
     switch (event.type) {
@@ -2336,6 +2366,7 @@ export function createData(config: CreateDataInput) {
         result.location.mcp.server.invalidate(location)
         result.location.mcp.resource.invalidate(location)
         result.location.model.invalidate(location)
+        result.location.plugin.invalidate(location)
         result.location.provider.invalidate(location)
         result.location.reference.invalidate(location)
         result.location.skill.invalidate(location)
@@ -2359,6 +2390,7 @@ export function createData(config: CreateDataInput) {
         }),
       },
       model: locationResource("model", (location) => api().model.list({ location }), { alias: true }),
+      plugin: locationResource("plugin", (location) => api().plugin.list({ location }), { alias: true }),
       provider: locationResource("provider", (location) => api().provider.list({ location }), { alias: true }),
       reference: locationResource("reference", (location) => api().reference.list({ location })),
       websearch: {
