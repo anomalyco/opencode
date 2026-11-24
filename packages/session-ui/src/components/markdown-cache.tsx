@@ -378,6 +378,40 @@ export async function preloadMarkdown(text: string, cacheKey: string, signal?: A
   await renderCachedMarkdown(block, key, signal)
 }
 
+// Blocks to render into the cache while the main thread is idle, nearest first, and whether a callback is waiting.
+const warming = { blocks: [] as readonly { text: string; cacheKey: string }[], scheduled: false }
+
+/**
+ * Renders small Markdown blocks into the cache while the main thread is idle, so a row that shows one mounts without
+ * parsing or sanitizing it. A later call replaces the blocks still waiting.
+ */
+export function prewarmMarkdown(blocks: readonly { text: string; cacheKey: string }[]) {
+  warming.blocks = blocks
+
+  if (warming.scheduled || blocks.length === 0) return
+  warming.scheduled = true
+
+  // Safari has no idle callbacks; a timer that renders one block keeps each task short there.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- feature detection
+  if (typeof requestIdleCallback === "undefined") return void setTimeout(warm, 200)
+  requestIdleCallback(warm)
+}
+
+function warm(deadline?: IdleDeadline) {
+  warming.scheduled = false
+  let done = 0
+
+  // One block for each callback, then as many as the idle period has time left for.
+  do {
+    const block = warming.blocks[done++]
+
+    // The same block and key a completed `Markdown` reads when it mounts.
+    if (block) getReadyMarkdown({ raw: block.text, src: block.text }, `${block.cacheKey}:0:full`)
+  } while (done < warming.blocks.length && deadline && deadline.timeRemaining() >= 1)
+
+  prewarmMarkdown(warming.blocks.slice(done))
+}
+
 export function getReadyMarkdown(block: { raw: string; src: string }, key?: string) {
   const cached = key ? getCachedMarkdown(key) : undefined
 

@@ -5,6 +5,7 @@ import { expected, messages } from "../utils/markdown-sessions"
 import { expectPath, holdRoute, seed, sessionHref, type SeedInput } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
+import { setupTimeline } from "../utils/timeline"
 import { mockWorkspace } from "../utils/workspace"
 
 test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" })
@@ -283,6 +284,55 @@ test("scrolls within a long answer without mounting unrelated history", async ({
 })
 
 // Each cached view provides its own Markdown context, so it must pass the app's code wrap setting on.
+// A reply's text is parsed and sanitized when its row mounts, in the frame that scrolls it in, unless the cache has it.
+test("renders the Markdown of the rows next to the mounted ones before they mount", async ({ page }) => {
+  // DOMPurify builds one document for each block it sanitizes, counted here by whether an idle callback is running.
+  await page.addInitScript(() => {
+    const sanitized = (window.__sanitized = { idle: 0, busy: 0 })
+    const run = { idle: false }
+    const request = window.requestIdleCallback
+    const parse = DOMParser.prototype.parseFromString
+
+    window.requestIdleCallback = (callback, options) =>
+      request.call(
+        window,
+        (deadline) => {
+          run.idle = true
+
+          try {
+            callback(deadline)
+          } finally {
+            run.idle = false
+          }
+        },
+        options,
+      )
+
+    DOMParser.prototype.parseFromString = function (this: DOMParser, text: string, type: DOMParserSupportedType) {
+      sanitized[run.idle ? "idle" : "busy"]++
+
+      return parse.call(this, text, type)
+    }
+  })
+  await setupTimeline(page, { seedHistory: true })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const sanitized = () => page.evaluate(() => window.__sanitized ?? { idle: 0, busy: 0 })
+  await expect(scroller.getByText(/^Historical response 17\. /)).toBeInViewport()
+
+  // The idle callbacks stop when every block near the mounted rows is in the cache.
+  await expect(async () => {
+    const before = await sanitized()
+    expect(before.idle).toBeGreaterThan(0)
+    await page.evaluate(() => new Promise((resolve) => requestIdleCallback(resolve)))
+    expect((await sanitized()).idle).toBe(before.idle)
+  }).toPass()
+  const settled = await sanitized()
+  await scroller.hover()
+  await page.mouse.wheel(0, -500)
+  await expect(scroller.getByText(/^Historical response 15\. /)).toBeInViewport()
+  expect((await sanitized()).busy).toBe(settled.busy)
+})
+
 test("wraps the code blocks of a cached view when the setting is on", async ({ page }) => {
   await mockStressTimeline(page, { pageMessages: () => ({ items: messages[fixture.sourceID] }) })
   await installTimelineSettings(page)
@@ -679,6 +729,7 @@ type TabPaint = { first?: { last: boolean; bottomError?: number }; settled: bool
 declare global {
   interface Window {
     __coldReveal?: Reveal
+    __sanitized?: { idle: number; busy: number }
     __tabPaint?: TabPaint
   }
 }

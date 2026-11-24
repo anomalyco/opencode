@@ -61,6 +61,9 @@ import {
 
 const fallbackItemSize = 60
 
+// How many rows past each end of the mounted ones the owner prepares: about a screen of short rows.
+const PREPARED_ROWS = 8
+
 const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
 const upwardKeys = new Set(["up", "page-up", "home"])
@@ -127,6 +130,8 @@ type Input = {
     row: TimelineRow.TimelineRow,
     disclosure: Readonly<Record<string, boolean | undefined>>,
   ) => boolean
+  /** The rows just outside the mounted ones, nearest in the scroll direction first: the next scroll mounts them. */
+  prepareRows?: (rows: TimelineRow.TimelineRow[]) => void
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
@@ -660,6 +665,28 @@ export function createTimelineVirtualizer(input: Input) {
       }),
     ).values(),
   ])
+
+  const mountedRange = createMemo(
+    () => {
+      mountedRows()
+
+      return virtualizer.range ?? undefined
+    },
+    undefined,
+    { equals: (previous, next) => previous?.startIndex === next?.startIndex && previous?.endIndex === next?.endIndex },
+  )
+
+  createEffect(() => {
+    const range = mountedRange()
+
+    if (!active() || !range || !input.prepareRows) return
+    const list = untrack(rows)
+    // Past the overscan rows, which are mounted.
+    const before = list.slice(Math.max(0, range.startIndex - 2 - PREPARED_ROWS), Math.max(0, range.startIndex - 2))
+    const after = list.slice(range.endIndex + 3, range.endIndex + 3 + PREPARED_ROWS)
+    before.reverse()
+    input.prepareRows(virtualizer.scrollDirection === "forward" ? [...after, ...before] : [...before, ...after])
+  })
 
   createEffect(() => {
     if (!active()) return

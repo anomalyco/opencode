@@ -20,7 +20,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
 import { createNextTimelineRowRenderer, laneGap, StatusLane, timelineStatus } from "@opencode/session-ui/timeline-next"
-import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
+import { getReadyMarkdown, preloadMarkdown, prewarmMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import type { TimelineFollow } from "./follow"
 import { createTimelineVirtualizer, type TimelineRouteReveal } from "./virtualizer"
@@ -279,6 +279,21 @@ function MessageTimelineView(
         !!getReadyMarkdown({ raw: content.text, src: content.text }, `${row.group.ref.partID}:0:full`)
       )
     },
+    // A finished reply's text is parsed and sanitized when its row mounts, unless the cache already holds it.
+    prepareRows: (rows) =>
+      prewarmMarkdown(
+        rows.flatMap((row) => {
+          if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return []
+          const message = messageByID().get(row.group.ref.messageID)
+
+          if (message?.type !== "assistant" || message.time.completed === undefined) return []
+          const content = Timeline.resolveContent(message, row.group.ref.partID)
+
+          return content?.type === "text" && content.text.trim()
+            ? [{ text: content.text, cacheKey: row.group.ref.partID }]
+            : []
+        }),
+      ),
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
     setPage: props.setPage,
