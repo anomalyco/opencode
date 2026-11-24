@@ -1,5 +1,5 @@
 // Soundtracks for share videos: 90s East Coast boom-bap rap songs with our own lyrics, for the kinds of data on the
-// page: the original eight (two explicit), then seven explicit ones. ElevenLabs Music v2.5, one take each with custom
+// page: seven of the originals (two explicit), then seven explicit ones. ElevenLabs Music v2.5, one take each with custom
 // lyrics, on one grid: 96 BPM, a bar is 2.5 s, a spoken line over the filtered intro (bars 1 and 2), a 4-bar verse from
 // 5 s, a 2-bar hook from 15 s, then the drop at about 20 s into a heavier beat for the closing slides. Cut 6.25 s after
 // the drop with a short fade and loudness-matched to -14 LUFS. public/share-music has the files.
@@ -24,7 +24,6 @@ export type ShareTrack = {
 export const shareTracks: ShareTrack[] = [
   { id: "market", name: "Hold the Block", mood: "Piano stabs and baritone sax", beat: 0.239 },
   { id: "models", name: "Rank and File", mood: "Tremolo guitar and horns", beat: 0.139 },
-  { id: "usage", name: "Come Back", mood: "Vibraphone and muted trumpet", beat: 0.029 },
   { id: "cache", name: "Cache Hit", mood: "Cold piano and organ", beat: 0.129 },
   { id: "newblood", name: "New Blood", mood: "Soul vocal and horn stab", beat: 0.015 },
   { id: "cheapshot", name: "Cheap Shot", mood: "Warped Rhodes and bowed bass", beat: 1.16 },
