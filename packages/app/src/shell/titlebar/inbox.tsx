@@ -415,20 +415,26 @@ export function SidebarInbox() {
         onToggle: () => setState("workingExpanded", !state.workingExpanded),
       }}
       menu={() => (
-        <Menu.Group>
-          <Menu.GroupLabel>{language.t("sidebar.inbox.working.placement")}</Menu.GroupLabel>
-          <Menu.RadioGroup
-            value={state.workingPlacement}
-            onChange={(value) => setState("workingPlacement", value === "inline" ? "inline" : "shelf")}
-          >
-            <Menu.RadioItem value="shelf" closeOnSelect>
-              {language.t("sidebar.inbox.working.shelf")}
-            </Menu.RadioItem>
-            <Menu.RadioItem value="inline" closeOnSelect>
-              {language.t("sidebar.inbox.working.inline")}
-            </Menu.RadioItem>
-          </Menu.RadioGroup>
-        </Menu.Group>
+        <Menu.Sub gutter={4} overflowPadding={16} overlap>
+          <Menu.SubTrigger class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted">
+            <span>{language.t("sidebar.inbox.working.placement")}</span>
+          </Menu.SubTrigger>
+          <Menu.Portal>
+            <Menu.SubContent>
+              <Menu.RadioGroup
+                value={state.workingPlacement}
+                onChange={(value) => setState("workingPlacement", value === "inline" ? "inline" : "shelf")}
+              >
+                <Menu.RadioItem value="shelf" closeOnSelect>
+                  {language.t("sidebar.inbox.working.shelf")}
+                </Menu.RadioItem>
+                <Menu.RadioItem value="inline" closeOnSelect>
+                  {language.t("sidebar.inbox.working.inline")}
+                </Menu.RadioItem>
+              </Menu.RadioGroup>
+            </Menu.SubContent>
+          </Menu.Portal>
+        </Menu.Sub>
       )}
     />
   )

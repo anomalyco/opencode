@@ -2465,6 +2465,8 @@ test("the inbox list's own menu moves Working between the bottom shelf and above
   await page.keyboard.press("Escape")
 
   await inbox.getByRole("button", { name: "Archived", exact: true }).click({ button: "right" })
+  await expect(page.getByRole("menuitemradio")).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "Working sessions", exact: true }).click()
   await expect(page.getByRole("menuitemradio", { name: "Pinned to the bottom" })).toBeChecked()
   await page.getByRole("menuitemradio", { name: "Above archived" }).click()
 
@@ -2483,6 +2485,7 @@ test("the inbox list's own menu moves Working between the bottom shelf and above
     /Archived inbox session/,
   ])
   await inbox.getByRole("button", { name: "Working", exact: true }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Working sessions", exact: true }).click()
   await page.getByRole("menuitemradio", { name: "Pinned to the bottom" }).click()
   await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Working inbox session/])
 })
