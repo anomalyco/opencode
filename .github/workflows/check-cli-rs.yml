@@ -1,0 +1,46 @@
+name: check-cli-rs
+
+# Checks packages/cli-rs, the Rust client, which check-test.yml leaves out. Its tests compare it with the TypeScript
+# packages listed below, so a change there runs it too.
+on:
+  pull_request:
+    paths: &paths
+      - packages/cli-rs/**
+      - packages/cli/src/**
+      - packages/client/**
+      - packages/plugin/**
+      - packages/protocol/**
+      - packages/schema/**
+      - packages/theme/**
+      - packages/tui/**
+      - packages/util/**
+      - bun.lock
+      - .github/workflows/check-cli-rs.yml
+  push:
+    branches: [dev]
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: packages/cli-rs
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      # Bun and node_modules: the tests run the TypeScript side they compare against.
+      - uses: ./.github/actions/setup-bun
+      # rustup reads rust-toolchain.toml; `bun run cargo` first fetches OpenTUI's native library from its release.
+      - run: rustup toolchain install
+      - run: bun run cargo fmt --check
+      - run: bun run cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: bun run cargo test --locked --workspace
