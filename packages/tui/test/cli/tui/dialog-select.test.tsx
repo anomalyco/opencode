@@ -626,6 +626,23 @@ test.each([false, 0, "", null, "current", undefined])(
   },
 )
 
+test("renders legacy category headings with the badge base color", async () => {
+  await using tmp = await tmpdir()
+  const theme = resolveThemeDocument(getOpenCodeClassicTheme(), "dark")
+  const select = await mountSelect(tmp.path, [{ title: "Alpha", value: "alpha", category: "Projects" }])
+
+  try {
+    await select.app.waitForFrame((frame) => frame.includes("Projects") && frame.includes("Alpha"))
+    const category = select.app
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .find((span) => span.text.includes("Projects"))
+    expect(category?.fg.toInts()).toEqual(theme.text.badge.base.toInts())
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
 test("shows no-match and still closes after a flat filter goes empty", async () => {
   await using tmp = await tmpdir()
   const select = await mountSelect(

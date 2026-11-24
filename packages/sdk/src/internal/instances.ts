@@ -89,7 +89,8 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
                   Effect.gen(function* () {
                     yield* Deferred.succeed(self, context)
                     const plugins = yield* Plugin.Service
-                    yield* plugins.awaitActivation
+                    // Embedded callers are one-shot clients: give activation a deadline, then use the current inventory.
+                    yield* plugins.awaitActivation.pipe(Effect.timeoutOption("5 seconds"), Effect.ignore)
                     // Covers setup failures and IDs colliding with host plugins; Core reports both in the inventory.
                     const failed = (yield* plugins.list()).filter(
                       (plugin) =>

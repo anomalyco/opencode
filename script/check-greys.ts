@@ -62,7 +62,9 @@ const scale = new Set([...SCALE.light, ...SCALE.dark, "#000000"])
 
 const files = (
   await Promise.all(ROOTS.map((root) => Array.fromAsync(new Bun.Glob(`${root}/**/*.css`).scan({ cwd: repo() }))))
-).flat()
+)
+  .flat()
+  .map((file) => file.replaceAll("\\", "/"))
 
 const entries = (
   await Promise.all(

@@ -181,7 +181,7 @@ function OneCellSpinnerStory(props: { context: Plugin.Context }) {
                               animations={animations()}
                               paused={paused()}
                               glow={glow()}
-                              color={theme.hue.interactive[200]}
+                              color={theme.text.action.secondary.focused}
                             />
                           </box>
                         )}
@@ -236,7 +236,7 @@ function OneCellSpinnerStory(props: { context: Plugin.Context }) {
                     animations={animations()}
                     paused={paused()}
                     glow={glow()}
-                    color={theme.hue.interactive[200]}
+                    color={theme.text.action.secondary.focused}
                   />
                   <text fg={theme.text.base}> esc stop</text>
                 </box>

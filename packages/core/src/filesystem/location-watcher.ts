@@ -8,7 +8,6 @@ import { Bus } from "../bus.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "../git.js"
 import { Location } from "../location.js"
-import { Plugin } from "../plugin.js"
 import { LocationWatcherPolicy } from "./location-watcher-policy.js"
 import { Watcher } from "./watcher.js"
 
@@ -88,7 +87,6 @@ const layer = Layer.effect(
     )
     yield* policy.observe(reconcile)
     yield* Effect.gen(function* () {
-      yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
       yield* reconcile()
     }).pipe(
       Effect.catchCauseIf(
@@ -104,5 +102,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Watcher.node, FSUtil.node, Location.node, Git.node, Bus.node, Plugin.node, LocationWatcherPolicy.node],
+  deps: [Watcher.node, FSUtil.node, Location.node, Git.node, Bus.node, LocationWatcherPolicy.node],
 })

@@ -56,7 +56,6 @@ import { KVTable } from "./kv/sql.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { Permission } from "./permission.js"
-import { Plugin } from "./plugin/service.js"
 import { Project } from "./project.js"
 import { Session } from "./session.js"
 import { SessionExecution } from "./session/execution.js"
@@ -841,7 +840,6 @@ const layer = Layer.effect(
         })
       const action = "opencode_watch_mcp_event"
       yield* Effect.gen(function* () {
-        yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
         const agents = yield* Agent.Service
         const agent = yield* agents.select(owner.agent)
         if (!agent.info || agent.id !== row.event_position?.agent)

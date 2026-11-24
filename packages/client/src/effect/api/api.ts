@@ -824,6 +824,22 @@ export type ExperimentalSessionLogOutput =
           readonly id: Event.ID
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.inbox.enriched"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly inboxID: SessionMessage.ID
+            readonly payload: SessionInbox.UserPayload
+            readonly delivery: SessionInbox.Delivery
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.inbox.delivery.changed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?:
@@ -2120,6 +2136,7 @@ export type EventSubscribeInput = {
         | "session.inbox.delivered"
         | "session.inbox.enqueued"
         | "session.inbox.cancelled"
+        | "session.inbox.enriched"
         | "session.inbox.delivery.changed"
         | "session.execution.started"
         | "session.execution.succeeded"

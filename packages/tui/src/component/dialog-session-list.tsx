@@ -179,7 +179,7 @@ export function DialogSessionList() {
           !attention &&
             (data.session.status(session.id) === "running" ||
               data.session.family(session.id).some((id) => data.session.status(id) === "running")),
-          slot === undefined ? undefined : () => <text fg={theme.text.badge}>{slot}</text>,
+          slot === undefined ? undefined : () => <text fg={theme.text.badge.base}>{slot}</text>,
         ),
       }
     }

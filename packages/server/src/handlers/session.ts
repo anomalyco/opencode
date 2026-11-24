@@ -315,9 +315,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 Effect.catchTag("Session.AttachmentError", (error) =>
                   Effect.fail(new InvalidRequestError({ message: error.message, field: "files" })),
                 ),
-                Effect.catchTag("Session.SkillNotFoundError", (error) =>
-                  Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
-                ),
                 locationErrors,
               ),
           }

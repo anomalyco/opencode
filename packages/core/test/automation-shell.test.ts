@@ -39,6 +39,20 @@ const it = testEffect(
 const command = "echo automation-output; exit 7"
 const trigger = { type: "every", every: "1 hour" } as const
 
+const waitForAgent = (session: Session.Info, instances: Instance.Interface) =>
+  Agent.Service.use((agents) => agents.resolve(Agent.defaultID)).pipe(
+    instances.provide(session),
+    Effect.repeat({ until: (agent) => agent !== undefined, schedule: Schedule.spaced("10 millis") }),
+    Effect.timeout("5 seconds"),
+  )
+
+const waitForPermission = (session: Session.Info, instances: Instance.Interface, input: Permission.AssertInput) =>
+  Permission.Service.use((permission) => permission.allows(input)).pipe(
+    instances.provide(session),
+    Effect.repeat({ until: (allowed) => !allowed, schedule: Schedule.spaced("10 millis") }),
+    Effect.timeout("5 seconds"),
+  )
+
 it.live("approves the fixed command once and records a failed exit without waking a session", () =>
   Effect.gen(function* () {
     const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
@@ -48,6 +62,7 @@ it.live("approves the fixed command once and records a failed exit without wakin
     const sessions = yield* Session.Service
     const session = yield* sessions.create({ location: { directory } })
     const instances = yield* Instance.Service
+    yield* waitForAgent(session, instances)
     const automations = yield* Automation.Service
     const invocation = Permission.invocation({
       sessionID: session.id,
@@ -55,6 +70,7 @@ it.live("approves the fixed command once and records a failed exit without wakin
       messageID: SessionMessage.ID.make("msg_automation_shell"),
       id: Tool.CallID.make("automation_create"),
     })
+    yield* waitForPermission(session, instances, { action: "shell", resources: [command], ...invocation })
     const create = yield* automations
       .create({ name: "shell test", sessionID: session.id, trigger, action: { type: "shell", command } }, invocation)
       .pipe(Effect.forkChild)
@@ -115,6 +131,8 @@ it.live("uses the saved location after the creating session moves and pauses if 
       permissions: [{ action: "shell", resource: "*", effect: "allow" }],
     })
     const automations = yield* Automation.Service
+    const instances = yield* Instance.Service
+    yield* waitForAgent(session, instances)
     const created = yield* automations.create({
       name: "saved location",
       sessionID: session.id,
@@ -122,7 +140,6 @@ it.live("uses the saved location after the creating session moves and pauses if 
       action: { type: "shell", command: "echo automation-output" },
     })
     const directories: string[] = []
-    const instances = yield* Instance.Service
     yield* Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       yield* hooks.register("shell", "create.before", (input) =>
@@ -184,6 +201,19 @@ it.live("rejects a shell action that changes to a denied external directory", ()
     )
     const sessions = yield* Session.Service
     const session = yield* sessions.create({ location: { directory } })
+    const instances = yield* Instance.Service
+    yield* waitForAgent(session, instances)
+    const invocation = Permission.invocation({
+      sessionID: session.id,
+      agent: Agent.defaultID,
+      messageID: SessionMessage.ID.make("msg_external_directory"),
+      id: Tool.CallID.make("automation_create"),
+    })
+    yield* waitForPermission(session, instances, {
+      action: "external_directory",
+      resources: ["*"],
+      ...invocation,
+    })
     const automations = yield* Automation.Service
     const error = yield* automations
       .create(
@@ -193,12 +223,7 @@ it.live("rejects a shell action that changes to a denied external directory", ()
           trigger,
           action: { type: "shell", command: "cd ..; echo outside" },
         },
-        Permission.invocation({
-          sessionID: session.id,
-          agent: Agent.defaultID,
-          messageID: SessionMessage.ID.make("msg_external_directory"),
-          id: Tool.CallID.make("automation_create"),
-        }),
+        invocation,
       )
       .pipe(Effect.flip)
     expect(error).toMatchObject({
@@ -237,6 +262,18 @@ it.live("scheduled code uses session capabilities after one-time approval", () =
     )
     yield* Effect.promise(() => Bun.write(path.join(directory, "fixture.txt"), "fixture contents"))
     const session = yield* sessions.create({ location: { directory } })
+    const instances = yield* Instance.Service
+    yield* waitForAgent(session, instances)
+    yield* waitForPermission(session, instances, {
+      action: "shell",
+      resources: ["echo automation-output"],
+      ...Permission.invocation({
+        sessionID: session.id,
+        agent: Agent.defaultID,
+        messageID: SessionMessage.ID.make("msg_automation_code"),
+        id: Tool.CallID.make("automation_create"),
+      }),
+    })
     const creating = yield* automations
       .create({
         name: "check capabilities",
@@ -256,7 +293,6 @@ it.live("scheduled code uses session capabilities after one-time approval", () =
         },
       })
       .pipe(Effect.forkChild)
-    const instances = yield* Instance.Service
     yield* Effect.gen(function* () {
       const permission = yield* Permission.Service
       for (const action of ["shell", "webfetch", "read", "external_directory", "edit"]) {

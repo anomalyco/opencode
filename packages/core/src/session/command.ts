@@ -6,7 +6,6 @@ import type { SessionInbox } from "@opencode/schema/session-inbox"
 import { Effect } from "effect"
 import { Command } from "../command.js"
 import { Instance } from "../instance/service.js"
-import { Plugin } from "../plugin/service.js"
 
 export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
   session: Session.Info
@@ -19,7 +18,6 @@ export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
 }) {
   const instances = yield* Instance.Service
   yield* Effect.gen(function* () {
-    yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
     const commands = yield* Command.Service
     yield* commands.execute({
       name: input.command,

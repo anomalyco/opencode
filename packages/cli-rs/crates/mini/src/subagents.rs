@@ -816,6 +816,10 @@ impl Tracker {
                     child.prompts.insert(enqueued.data.inbox_id.0.clone(), prompt);
                 }
             }
+            V2Event::SessionInboxEnriched(enriched) => {
+                let prompt = prompt(&enriched.data.payload.text, enriched.data.payload.files.as_deref());
+                child.prompts.insert(enriched.data.inbox_id.0.clone(), prompt);
+            }
             V2Event::SessionInboxDelivered(delivered) => {
                 let id = delivered.data.inbox_id.as_str();
                 if let Some(prompt) = child.prompts.remove(id)

@@ -11,13 +11,14 @@ import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { emptyThemeSource } from "../../fixture/fixture"
+import { cloneConfig } from "../../fixture/config"
 
 test("searches settings globally and opens the matching setting", async () => {
   let current: Info = { experimental: { "new-designs": false } }
   const service: Interface = {
     get: async () => current,
     update: async (update) => {
-      const draft = structuredClone(current)
+      const draft = cloneConfig(current)
       update(draft)
       current = draft
       return current

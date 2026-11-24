@@ -10394,6 +10394,7 @@
                     "session.inbox.delivered",
                     "session.inbox.enqueued",
                     "session.inbox.cancelled",
+                    "session.inbox.enriched",
                     "session.inbox.delivery.changed",
                     "session.execution.started",
                     "session.execution.succeeded",
@@ -10506,6 +10507,7 @@
                           "session.inbox.delivered",
                           "session.inbox.enqueued",
                           "session.inbox.cancelled",
+                          "session.inbox.enriched",
                           "session.inbox.delivery.changed",
                           "session.execution.started",
                           "session.execution.succeeded",
@@ -24132,6 +24134,9 @@
             "$ref": "#/components/schemas/session.inbox.cancelled"
           },
           {
+            "$ref": "#/components/schemas/session.inbox.enriched"
+          },
+          {
             "$ref": "#/components/schemas/session.inbox.delivery.changed"
           },
           {
@@ -24657,6 +24662,14 @@
           },
           "revert": {
             "$ref": "#/components/schemas/Session.Revert"
+          },
+          "resumeAttempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "suspended": {
+            "type": "number"
           },
           "location": {
             "$ref": "#/components/schemas/Location.PublicRef"
@@ -26647,6 +26660,9 @@
           },
           {
             "$ref": "#/components/schemas/session.inbox.cancelled"
+          },
+          {
+            "$ref": "#/components/schemas/session.inbox.enriched"
           },
           {
             "$ref": "#/components/schemas/session.inbox.delivery.changed"
@@ -29552,6 +29568,64 @@
               }
             },
             "required": ["sessionID", "inboxID", "item"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.inbox.enriched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.inbox.enriched"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "inboxID": {
+                "$ref": "#/components/schemas/Session.Message.ID"
+              },
+              "payload": {
+                "$ref": "#/components/schemas/Session.Inbox.UserPayload"
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
+              }
+            },
+            "required": ["sessionID", "inboxID", "payload", "delivery"],
             "additionalProperties": false
           }
         },

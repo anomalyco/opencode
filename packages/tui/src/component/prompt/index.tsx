@@ -1941,7 +1941,7 @@ export function Prompt(props: PromptProps) {
                   <Match when={move.progress()}>
                     {(progress) => (
                       <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
-                        <Spinner color={theme.hue.accent[500]}>
+                        <Spinner color={theme.text.action.primary.selected}>
                           {progress()}
                           <span style={{ fg: theme.text.muted }}>{".".repeat(move.creatingDots())}</span>
                         </Spinner>
@@ -1950,7 +1950,7 @@ export function Prompt(props: PromptProps) {
                   </Match>
                   <Match when={move.pendingNew()}>
                     <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
-                      <text fg={theme.hue.accent[500]} wrapMode="none" truncate>
+                      <text fg={theme.text.action.primary.selected} wrapMode="none" truncate>
                         (new worktree)
                       </text>
                     </box>
@@ -1984,7 +1984,7 @@ export function Prompt(props: PromptProps) {
                     wrapMode="none"
                     truncate
                     flexShrink={1}
-                    fg={editorContextLabelState() === "pending" ? theme.hue.accent[500] : theme.text.muted}
+                    fg={editorContextLabelState() === "pending" ? theme.text.action.primary.selected : theme.text.muted}
                   >
                     {file()}
                   </text>

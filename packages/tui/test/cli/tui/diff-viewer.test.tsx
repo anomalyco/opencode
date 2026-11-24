@@ -25,6 +25,7 @@ import type {
 } from "@opencode/plugin/tui/context"
 import { ThemeProvider, useThemes } from "../../../src/context/theme"
 import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
+import { cloneConfig } from "../../fixture/config"
 import { StorageProvider, useStorage } from "../../../src/context/storage"
 import { TuiAppProvider } from "../../../src/context/runtime"
 import { ConfigProvider, type Info } from "../../../src/config"
@@ -2129,7 +2130,7 @@ async function renderDiffViewer(
               service={{
                 get: async () => stored.info,
                 update: async (update) => {
-                  const next = structuredClone(stored.info)
+                  const next = cloneConfig(stored.info)
                   update(next)
                   stored.info = next
                   writes.push(next)

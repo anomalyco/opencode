@@ -200,10 +200,9 @@ function extensionActions(scanned: Result.Result.Success<ReturnType<typeof CodeM
   return actions
 }
 
-/** Runs the program once under the permissions authorized at creation. Plugin activation counts toward the time cap. */
+/** Runs the program once under the permissions authorized at creation. */
 export const run = Effect.fnUntraced(
   function* (session: SessionSchema.Info, action: Automation.CodeAction, input: RunInput) {
-    yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
     const permission = yield* Permission.Service
     const agents = yield* Agent.Service
     const agent = yield* agents.select(session.agent)

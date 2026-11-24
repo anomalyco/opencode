@@ -5,6 +5,7 @@ import { Global } from "@opencode/util/global"
 import type { TuiInput } from "../../src/app"
 import type { Config } from "../../src/config"
 import { tmpdir } from "./fixture"
+import { cloneConfig } from "./config"
 import { createEventStream, createFetch, type FetchHandler } from "./tui-client"
 
 export async function createAppFixture(
@@ -50,7 +51,7 @@ export async function createAppFixture(
       config: {
         get: async () => config,
         update: async (mutate) => {
-          const next = structuredClone(config)
+          const next = cloneConfig(config)
           mutate(next)
           config = next
           return next

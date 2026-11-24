@@ -1,6 +1,6 @@
 export * as Plugin from "./service.js"
 
-// The service tag lives apart from the layer so Session entry points can wait on activation without
+// The service tag lives apart from the layer so one-shot embedders can wait on activation without
 // importing the plugin host, which itself depends on Session.
 import { Plugin } from "@opencode/schema/plugin"
 import type { Plugin as PluginDefinition } from "@opencode/plugin/effect/plugin"
@@ -37,8 +37,7 @@ export type Generation = PluginDefinition & {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
 
 /**
- * Session entry points wait here before reading plugin-provided state such as commands, skills, hooks,
- * and the model catalog. A cold Location activates its plugins asynchronously, so without the wait an
- * early request observes an empty registry and admits or fails work the plugins would have shaped.
+ * Wait for announced updates and activation to settle. Shared server paths never call this; one-shot
+ * embedders may use it with a deadline before reading plugin-provided state.
  */
 export const awaitActivation = Service.use((plugins) => plugins.awaitActivation)

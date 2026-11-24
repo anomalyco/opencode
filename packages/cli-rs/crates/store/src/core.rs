@@ -424,6 +424,7 @@ impl State {
             V2Event::SessionInboxDeliveryChanged(event) => self.on_inbox_delivery_changed(&event.data),
             V2Event::SessionInboxCancelled(event) => self.on_inbox_cancelled(&event.data),
             V2Event::SessionInboxEnqueued(event) => self.on_inbox_enqueued(event),
+            V2Event::SessionInboxEnriched(event) => self.on_inbox_enriched(event),
             V2Event::SessionInstructionsUpdated(event) => {
                 // The initial baseline and empty deltas carry no text and project no message.
                 if let Some(text) = &event.data.text {

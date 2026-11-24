@@ -374,6 +374,14 @@ impl Prompt {
                     });
                 }
             }
+            V2Event::SessionInboxEnriched(enriched) => {
+                let id = enriched.data.inbox_id.as_str();
+                if let Some(queued) = state.queued.iter_mut().find(|queued| queued.id == id) {
+                    queued.delivery = delivery(&enriched.data.delivery);
+                    queued.prompt =
+                        RunPrompt::from_message(&serde_json::to_value(&enriched.data.payload).unwrap_or_default());
+                }
+            }
             V2Event::SessionInboxDeliveryChanged(changed) => {
                 let id = changed.data.inbox_id.as_str();
                 if let Some(queued) = state.queued.iter_mut().find(|queued| queued.id == id) {

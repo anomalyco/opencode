@@ -258,6 +258,12 @@ describe("SessionProjector", () => {
         inboxID: SessionMessage.ID.make("msg_first"),
         item: { type: "user", payload: { text: "first" }, delivery: "steer" },
       })
+      yield* bus.publish(SessionEvent.InboxEnriched, {
+        sessionID,
+        inboxID: SessionMessage.ID.make("msg_first"),
+        payload: { text: "first enriched" },
+        delivery: "steer",
+      })
       yield* bus.publish(
         SessionEvent.InboxDelivered,
         {
@@ -282,7 +288,9 @@ describe("SessionProjector", () => {
 
       const sessions = yield* Session.Service
       const firstPage = yield* sessions.messages({ sessionID, limit: 1, order: "asc" })
-      expect(firstPage.map((message) => (message.type === "user" ? message.text : message.type))).toEqual(["first"])
+      expect(firstPage.map((message) => (message.type === "user" ? message.text : message.type))).toEqual([
+        "first enriched",
+      ])
       const secondPage = yield* sessions.messages({
         sessionID,
         limit: 1,
@@ -297,10 +305,10 @@ describe("SessionProjector", () => {
           order: "asc",
           cursor: { id: secondPage[0]!.id, direction: "previous" },
         })).map((message) => (message.type === "user" ? message.text : message.type)),
-      ).toEqual(["first"])
+      ).toEqual(["first enriched"])
       expect(
         (yield* sessions.context(sessionID)).map((message) => (message.type === "user" ? message.text : message.type)),
-      ).toEqual(["first", "second"])
+      ).toEqual(["first enriched", "second"])
     }).pipe(Effect.provide(sessionsLayer)),
   )
 

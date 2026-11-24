@@ -108,9 +108,9 @@ function expectFooter(actual: RunTheme, theme: ResolvedTheme) {
     formfieldFocusedBg: theme.background.formfield.focused,
     formfieldFocusedText: theme.text.formfield.focused,
     selection: theme.text.formfield.selected,
-    running: theme.hue.interactive[400],
-    question: theme.hue.accent[400],
-    permission: theme.hue.accent[400],
+    running: theme.text.action.primary.selected,
+    question: theme.text.feedback.info.base,
+    permission: theme.text.feedback.warning.base,
     success: theme.text.feedback.success.base,
     link: theme.markdown.link,
     shade: theme.background.raised.base,
@@ -205,63 +205,56 @@ test.each(["light", "dark"] as const)("shares the %s system scheme while retaini
   }
 })
 
-test.each(["light", "dark"] as const)(
-  "loads complete %s custom theme files",
-  async (mode) => {
-    const base = selectTheme(getOpenCodeTheme(), mode)
-    const definition = {
-      ...base,
-      text: {
-        ...base.text,
-        base: "#123456",
-        action: {
-          ...base.text.action,
-          primary: { ...base.text.action.primary, $focused: "#56789a" },
-        },
-        formfield: {
-          ...base.text.formfield,
-          base: "#234567",
-          $selected: "#345678",
-          $focused: "#6789ab",
-        },
-        feedback: {
-          ...base.text.feedback,
-          warning: { ...base.text.feedback.warning, base: "#456789" },
-        },
+test.each(["light", "dark"] as const)("loads complete %s custom theme files", async (mode) => {
+  const base = selectTheme(getOpenCodeTheme(), mode)
+  const definition = {
+    ...base,
+    text: {
+      ...base.text,
+      base: "#123456",
+      action: {
+        ...base.text.action,
+        primary: { ...base.text.action.primary, $focused: "#56789a" },
       },
-      background: {
-        ...base.background,
-        action: {
-          ...base.background.action,
-          primary: { ...base.background.action.primary, $focused: "#789abc" },
-        },
-        formfield: { ...base.background.formfield, $focused: "#89abcd" },
+      formfield: {
+        ...base.text.formfield,
+        base: "#234567",
+        $selected: "#345678",
+        $focused: "#6789ab",
       },
-    }
-    const { hue, ...tokens } = definition
-    const source = {
-      base: tokens,
-      [mode]: { hue },
-    }
-    await Bun.write(path.join(tmp.path, "themes", "mini-custom.json"), JSON.stringify(source))
-    const theme = await resolveRunTheme(renderer({ colors: terminalColors({}, mode) }), { name: "mini-custom", mode })
-    try {
-      expectFooter(theme, resolveThemeDocument(parseTheme(source), mode))
-    } finally {
-      theme.block.syntax?.destroy()
-    }
-  },
-)
+      feedback: {
+        ...base.text.feedback,
+        warning: { ...base.text.feedback.warning, base: "#456789" },
+      },
+    },
+    background: {
+      ...base.background,
+      action: {
+        ...base.background.action,
+        primary: { ...base.background.action.primary, $focused: "#789abc" },
+      },
+      formfield: { ...base.background.formfield, $focused: "#89abcd" },
+    },
+  }
+  const { hue, ...tokens } = definition
+  const source = {
+    base: tokens,
+    [mode]: { hue },
+  }
+  await Bun.write(path.join(tmp.path, "themes", "mini-custom.json"), JSON.stringify(source))
+  const theme = await resolveRunTheme(renderer({ colors: terminalColors({}, mode) }), { name: "mini-custom", mode })
+  try {
+    expectFooter(theme, resolveThemeDocument(parseTheme(source), mode))
+  } finally {
+    theme.block.syntax?.destroy()
+  }
+})
 
 test.each(["light", "dark"] as const)(
   "falls back to shared %s defaults for unknown or invalid themes",
   async (mode) => {
     const expected = resolveThemeDocument(getOpenCodeTheme(), mode)
-    for (const source of [
-      { [mode]: { categorical: [] } },
-      { [mode]: { text: { base: "$missing" } } },
-      undefined,
-    ]) {
+    for (const source of [{ [mode]: { categorical: [] } }, { [mode]: { text: { base: "$missing" } } }, undefined]) {
       if (source) await Bun.write(path.join(tmp.path, "themes", "mini-invalid.json"), JSON.stringify(source))
       const theme = await resolveRunTheme(renderer({ colors: terminalColors({}, mode) }), {
         name: source ? "mini-invalid" : "mini-unknown",

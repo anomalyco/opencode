@@ -654,6 +654,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       if (event.data.item.type === "user") child.prompts.set(event.data.inboxID, event.data.item.payload)
       return
     }
+    if (event.type === "session.inbox.enriched") {
+      child.prompts.set(event.data.inboxID, event.data.payload)
+      return
+    }
     if (event.type === "session.inbox.delivered") {
       const prompt = child.prompts.get(event.data.inboxID)
       if (prompt === undefined) return

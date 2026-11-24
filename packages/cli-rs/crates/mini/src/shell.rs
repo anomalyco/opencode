@@ -926,6 +926,7 @@ impl Mini {
             if matches!(
                 event,
                 V2Event::SessionInboxEnqueued(_)
+                    | V2Event::SessionInboxEnriched(_)
                     | V2Event::SessionInboxDelivered(_)
                     | V2Event::SessionInboxCancelled(_)
                     | V2Event::SessionInboxDeliveryChanged(_)

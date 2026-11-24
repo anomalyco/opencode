@@ -1,6 +1,7 @@
 export * as Session from "./session.js"
 
-import { DateTime, Effect, Fiber, Scope } from "effect"
+import { DateTime, Cause, Effect, Fiber, Scope } from "effect"
+import { isDeepStrictEqual } from "node:util"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Permission } from "@opencode/schema/permission"
@@ -9,9 +10,17 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
+import type { FileSystem } from "../filesystem.js"
 import { ShellResult } from "../shell/result.js"
 import type { Skill } from "../skill.js"
-import { BusyError, CompactionConflictError, InboxConflictError, NotFoundError, PromptConflictError } from "./error.js"
+import {
+  AttachmentError,
+  BusyError,
+  CompactionConflictError,
+  InboxConflictError,
+  NotFoundError,
+  PromptConflictError,
+} from "./error.js"
 import { SessionEvent } from "./event.js"
 import { SessionExecution } from "./execution.js"
 import { SessionInbox } from "./inbox.js"
@@ -97,7 +106,8 @@ export const make = Effect.fn("Session.make")(function* () {
     const session = yield* get(sessionID)
     // Without a stored agent the Session runs as its Location's default, which its last step records.
     const current =
-      session.agent ?? (yield* store.lastAssistantAfter({ sessionID }).pipe(Effect.orElseSucceed(() => undefined)))?.agent
+      session.agent ??
+      (yield* store.lastAssistantAfter({ sessionID }).pipe(Effect.orElseSucceed(() => undefined)))?.agent
     if (current === input.agent) return
     yield* bus.publish(SessionEvent.AgentSelected, { sessionID, agent: input.agent, previous: session.agent })
   })
@@ -151,7 +161,14 @@ export const make = Effect.fn("Session.make")(function* () {
     Effect.uninterruptible,
   )
   const prompt = Effect.fn("Session.prompt")(
-    (sessionID: SessionSchema.ID, input: PromptRequest, onAccepted?: Effect.Effect<void>) =>
+    (
+      sessionID: SessionSchema.ID,
+      input: PromptRequest,
+      onAccepted?: Effect.Effect<void>,
+    ): Effect.Effect<
+      SessionInbox.User,
+      NotFoundError | PromptConflictError | AttachmentError | FileSystem.DirectoryNotFoundError
+    > =>
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const session = yield* get(sessionID)
@@ -164,17 +181,35 @@ export const make = Effect.fn("Session.make")(function* () {
               delivery: input.delivery ?? "steer",
             })
             if (existing) return existing
-            // Preparation, the staged revert commit and admission share one acquisition of the session's location
-            // services, so projections see its config whoever called prompt.
+            // Minimal preparation, the staged revert commit and durable admission share one acquisition of the
+            // session's Location services. Plugin enrichment runs only after the inbox row commits.
             return yield* Effect.gen(function* () {
-              const item = yield* restore(SessionPrompt.prepare({ session, messageID, input }))
+              const minimal = yield* restore(SessionPrompt.prepareMinimal({ session, messageID, input }))
               // Commit a staged revert only after preparation succeeds, before admitting new work.
               if (session.revert) yield* SessionRevert.commit(bus, session)
-              return yield* admission.admit({
+              const admitted = yield* admission.admit({
                 id: messageID,
                 sessionID: session.id,
-                item,
+                item: minimal,
               })
+              const enriched = yield* restore(SessionPrompt.enrich({ session, messageID, input, minimal })).pipe(
+                Effect.catchCauseIf(
+                  (cause) => !Cause.hasInterrupts(cause),
+                  (cause) =>
+                    Effect.logWarning("prompt enrichment failed", { sessionID, cause }).pipe(Effect.as(minimal)),
+                ),
+                Effect.onInterrupt(() => (input.resume === false ? Effect.void : execution.wake(sessionID))),
+              )
+              if (!isDeepStrictEqual(minimal, enriched))
+                yield* admission
+                  .enrich({
+                    id: admitted.id,
+                    sessionID: admitted.sessionID,
+                    payload: enriched.payload,
+                    delivery: enriched.delivery,
+                  })
+                  .pipe(Effect.catchTag("SessionInbox.LifecycleConflict", () => Effect.void))
+              return { ...admitted, payload: enriched.payload, delivery: enriched.delivery }
             }).pipe(
               instances.provide(session),
               Effect.provideService(Database.Service, database),
@@ -184,7 +219,7 @@ export const make = Effect.fn("Session.make")(function* () {
             Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
           )
           if (input.resume !== false) yield* execution.wake(sessionID)
-          // Checkpoint an accepted handoff before observing cancellation. Prompt preparation above stays interruptible.
+          // Checkpoint an accepted handoff only after durable admission and wake, in the same interruption mask.
           if (onAccepted) yield* onAccepted
           return admitted
         }),

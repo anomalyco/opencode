@@ -3292,7 +3292,7 @@ describe("SessionRunnerLLM", () => {
     }
   }
 
-  scenario("waits for plugin activation before each step and tool call", function* (s) {
+  scenario("does not wait for plugin activation before each step or tool call", function* (s) {
     const waits: Array<[number, number]> = []
     s.activationHook = Effect.sync(() => {
       waits.push([s.requests.length, s.executions.length])
@@ -3303,13 +3303,7 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.runPrompt("Question")
 
-    // Model requests and tool executions seen at each wait: drain entry, step 1, the tool call, step 2.
-    expect(waits).toEqual([
-      [0, 0],
-      [0, 0],
-      [1, 0],
-      [1, 1],
-    ])
+    expect(waits).toEqual([])
   })
 
   scenario("restarts compaction drafts after transient failures and unsuccessful finishes", function* (s) {

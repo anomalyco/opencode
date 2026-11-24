@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { and, eq } from "drizzle-orm"
-import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect"
+import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/schema/agent"
 import { Event } from "@opencode/schema/event"
 import { Model } from "@opencode/schema/model"
@@ -237,8 +238,12 @@ describe("Session-owned handles", () => {
 
       const calls: string[] = []
       yield* fixture.hooks.register("session", "prompt", (event) =>
-        Effect.sync(() => {
-          expect(fixture.activationWaits).toEqual([source])
+        Effect.gen(function* () {
+          expect(fixture.activationWaits).toEqual([])
+          expect(yield* SessionInbox.find(fixture.db, event.messageID)).toMatchObject({
+            type: "user",
+            payload: { text: "Original" },
+          })
           calls.push(event.prompt.text)
           event.prompt.text += " prepared"
         }),
@@ -263,12 +268,25 @@ describe("Session-owned handles", () => {
       )
       expect(calls).toEqual(["Original"])
       expect(fixture.locations).toEqual([source])
-      expect(fixture.activationWaits).toEqual([source])
+      expect(fixture.activationWaits).toEqual([])
       expect(fixture.wakes).toEqual([
         { sessionID, pending: [synthetic.id, first.id], enqueued: 2 },
         { sessionID, pending: [synthetic.id, first.id], enqueued: 2 },
       ])
       expect(yield* SessionInbox.find(fixture.db, first.id)).toEqual(first)
+      const enriched = yield* fixture.db
+        .select()
+        .from(EventTable)
+        .where(
+          and(
+            eq(EventTable.aggregate_id, sessionID),
+            eq(EventTable.type, Bus.versionedType(SessionEvent.InboxEnriched.type, 1)),
+          ),
+        )
+        .all()
+        .pipe(Effect.orDie)
+      expect(enriched).toHaveLength(1)
+      expect(enriched[0]?.data).toMatchObject({ inboxID: first.id, payload: { text: "Original prepared" } })
       expect(yield* fixture.store.context(sessionID)).toEqual([])
     }),
   )
@@ -349,7 +367,7 @@ describe("Session-owned handles", () => {
       expect(fixture.locations).toEqual([source])
       yield* prompt
       expect(fixture.locations).toEqual([source, destination])
-      expect(fixture.activationWaits).toEqual([source, destination])
+      expect(fixture.activationWaits).toEqual([])
       expect((yield* fixture.sessions.forSession(otherID).get()).location).toEqual(source)
     }),
   )
@@ -394,7 +412,7 @@ describe("Session-owned handles", () => {
       expect(
         events.filter((event) => event.type === SessionEvent.Skill.Activated.type).map((event) => event.location),
       ).toEqual([undefined, undefined, source])
-      expect(fixture.activationWaits).toEqual([source, destination, destination])
+      expect(fixture.activationWaits).toEqual([])
       expect(fixture.resumes).toEqual([])
       expect(fixture.wakes).toEqual([])
     }),
@@ -428,7 +446,7 @@ describe("Session-owned handles", () => {
       expect(yield* handle.get()).toEqual(before)
       expect(yield* handle.inbox()).toEqual([])
       expect(yield* fixture.store.context(sessionID)).toEqual([])
-      expect(fixture.activationWaits).toEqual([source])
+      expect(fixture.activationWaits).toEqual([])
       expect(fixture.resumes).toEqual([])
       expect(fixture.wakes).toEqual([])
     }),
@@ -668,7 +686,7 @@ describe("Session-owned handles", () => {
     }),
   )
 
-  it.live("keeps preparation interruptible without admitting input or committing a staged revert", () =>
+  it.effect("keeps durable admission when a client times out waiting for plugin enrichment", () =>
     Effect.gen(function* () {
       const fixture = yield* setup({
         snapshot: () => Layer.mock(Snapshot.Service, { capture: () => Effect.undefined }),
@@ -682,26 +700,20 @@ describe("Session-owned handles", () => {
         Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
       )
 
-      const submission = yield* handle.prompt({ text: "Cancelled before admission" }).pipe(Effect.forkScoped)
+      const submission = yield* handle
+        .prompt({ text: "Timed out during enrichment" })
+        .pipe(Effect.timeoutOption("1 second"), Effect.forkScoped)
       yield* Deferred.await(entered)
-      yield* Fiber.interrupt(submission)
+      expect(yield* handle.inbox()).toMatchObject([{ type: "user", payload: { text: "Timed out during enrichment" } }])
+      yield* TestClock.adjust("1 second")
 
-      const cancelled = yield* Fiber.await(submission)
-      expect(Exit.isFailure(cancelled) && Cause.hasInterruptsOnly(cancelled.cause)).toBe(true)
-      expect(yield* handle.inbox()).toEqual([])
-      expect((yield* handle.get()).revert?.messageID).toBe(boundary.id)
-      expect(yield* fixture.store.context(sessionID)).toMatchObject([{ id: boundary.id }])
-      expect(fixture.wakes).toEqual([])
-      yield* hook.dispose
-      yield* handle.revert.clear()
-      expect((yield* handle.get()).revert).toBeUndefined()
-      expect(yield* fixture.store.context(sessionID)).toMatchObject([{ id: boundary.id }])
-      yield* handle.revert.stage({ messageID: boundary.id, files: false })
-      const acquisitions = fixture.locations.length
-      yield* fixture.sessions.forSession(sessionID).revert.commit()
+      const result = yield* Fiber.await(submission)
+      expect(Exit.isSuccess(result) && Option.isNone(result.value)).toBe(true)
+      expect(yield* handle.inbox()).toMatchObject([{ type: "user", payload: { text: "Timed out during enrichment" } }])
       expect((yield* handle.get()).revert).toBeUndefined()
       expect(yield* fixture.store.context(sessionID)).toEqual([])
-      expect(fixture.locations).toHaveLength(acquisitions)
+      expect(fixture.wakes).toEqual([{ sessionID, pending: [expect.any(String)], enqueued: 2 }])
+      yield* hook.dispose
     }),
   )
 

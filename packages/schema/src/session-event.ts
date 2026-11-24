@@ -234,6 +234,17 @@ export const InboxCancelled = Event.durable({
 })
 export type InboxCancelled = typeof InboxCancelled.Type
 
+export const InboxEnriched = Event.durable({
+  type: "session.inbox.enriched",
+  ...options,
+  schema: {
+    ...InboxRef,
+    payload: SessionInbox.UserPayload,
+    delivery: SessionInbox.Delivery,
+  },
+})
+export type InboxEnriched = typeof InboxEnriched.Type
+
 export const InboxDeliveryChanged = Event.durable({
   type: "session.inbox.delivery.changed",
   ...options,
@@ -679,6 +690,7 @@ export const Definitions = Event.inventory(
   InboxDelivered,
   InboxEnqueued,
   InboxCancelled,
+  InboxEnriched,
   InboxDeliveryChanged,
   Execution.Started,
   Execution.Succeeded,

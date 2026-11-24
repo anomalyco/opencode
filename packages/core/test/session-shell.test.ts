@@ -6,7 +6,6 @@ import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
-import { Plugin } from "@opencode/core/plugin"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -19,7 +18,7 @@ import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-// Every test boots a real Location, so shell start waits for cold plugin activation before spawning.
+// Every test boots a real Location; shell start uses the currently loaded services without waiting for activation.
 setDefaultTimeout(30_000)
 
 class ExecutionControl extends Context.Service<
@@ -70,12 +69,7 @@ const setup = Effect.gen(function* () {
   const session = yield* Session.Service
   const created = yield* session.create({ location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }) })
   const locations = yield* LocationServiceMap.Service
-  // Session.shell waits for plugin activation before spawning. Settle the cold activation here, under the test
-  // timeout, so the 5-second waits below cover only the shell itself.
-  const shell = yield* Plugin.awaitActivation.pipe(
-    Effect.andThen(Shell.Service),
-    Effect.provide(locations.get(created.location)),
-  )
+  const shell = yield* Shell.Service.pipe(Effect.provide(locations.get(created.location)))
   const control = yield* ExecutionControl
   const execution = yield* SessionExecution.Service
   return { tmp, session, created, shell, control, execution }

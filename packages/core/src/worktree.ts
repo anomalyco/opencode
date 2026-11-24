@@ -92,7 +92,7 @@ type Transaction = Parameters<Parameters<DatabaseClient["transaction"]>[0]>[0]
 
 export interface Interface {
   readonly list: (input: { projectID: Project.ID }) => Effect.Effect<List, Project.NotFoundError>
-  // The plugin bridge supplies its registry so canonical-project setup can use registrations made so far.
+  // The plugin bridge supplies its current registry so canonical-project setup can use registrations made so far.
   readonly create: (input: CreateInput, current?: WorktreeStrategies.Interface) => Effect.Effect<Info, Error>
   readonly remove: (input: RemoveInput, current?: WorktreeStrategies.Interface) => Effect.Effect<void, Error>
   readonly refresh: (
@@ -121,9 +121,7 @@ const layer = Layer.effect(
     const load = Effect.fnUntraced(function* (directory: AbsolutePath, current?: WorktreeStrategies.Interface) {
       if (!(yield* fs.isDir(directory))) return yield* new DirectoryUnavailableError({ directory })
       if (current?.directory === directory) return current.get()
-      const { Plugin } = yield* Effect.promise(() => import("./plugin.js"))
       const context = yield* locations.contextEffect(Location.Ref.make({ directory }))
-      yield* Context.get(context, Plugin.Service).awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
       return Context.get(context, WorktreeStrategies.Service).get()
     })
 

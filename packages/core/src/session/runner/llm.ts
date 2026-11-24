@@ -35,7 +35,6 @@ import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
 import { PersistentPty } from "../../persistent-pty/index.js"
 import { ToolOutput } from "../../tool-output.js"
-import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
@@ -54,7 +53,6 @@ const layer = Layer.effect(
     const modelTransport = yield* SessionModelTransport.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
-    const plugins = yield* Plugin.Service
     const hooks = yield* PluginHooks.Service
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
@@ -79,7 +77,6 @@ const layer = Layer.effect(
         const control = pending.type === "compaction" || pending.type === "move"
         if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
       }
-      yield* plugins.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
       yield* settleStaleCompactions(sessionID)
       yield* settleStaleToolCalls(sessionID)
 
@@ -134,7 +131,6 @@ const layer = Layer.effect(
               if (pending?.type === "compaction") {
                 const compacted = yield* restore(
                   Effect.gen(function* () {
-                    yield* plugins.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
                     const selected = yield* context.select(sessionID)
                     const model = yield* context.resolveModel(selected.session, {
                       kind: "compaction",
@@ -230,8 +226,7 @@ const layer = Layer.effect(
     })
 
     const prepareContext = Effect.fn("SessionRunner.prepareContext")(function* (sessionID: SessionSchema.ID) {
-      // Plugins can reload mid-turn; each step and retry must read the settled agents, models and skills.
-      yield* plugins.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
+      // Plugins can reload mid-turn; each step and retry reads the currently loaded agents, models and skills.
       const selected = yield* context.select(sessionID)
       // A blocked initial instruction baseline must leave admitted input pending.
       yield* InstructionState.prepare(db, bus, selected.instructions, sessionID)
@@ -307,17 +302,7 @@ const layer = Layer.effect(
             assistantMessageID,
             agent: loaded.agent.id,
             model: loaded.model,
-            prepared: {
-              ...prepared,
-              // A tool call can arrive during a reload; its permission check reads the session's agent.
-              // Bounded activation: degrade to loaded plugins, never block the tool call on activation.
-              executeTool: (call) =>
-                plugins.awaitActivation.pipe(
-                  Effect.timeoutOption("1 second"),
-                  Effect.asVoid,
-                  Effect.andThen(prepared.executeTool(call)),
-                ),
-            },
+            prepared,
             retryAttempt,
             retry: (cause, error, proposed) =>
               retry.decide({
@@ -475,7 +460,6 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
-    Plugin.node,
     PluginHooks.node,
     Job.node,
     SessionTitle.node,

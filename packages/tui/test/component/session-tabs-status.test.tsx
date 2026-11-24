@@ -25,6 +25,7 @@ import { ThemeProvider, useTheme } from "../../src/context/theme"
 import { DialogProvider } from "../../src/ui/dialog"
 import { ToastProvider } from "../../src/ui/toast"
 import { emptyThemeSource, tmpdir } from "../fixture/fixture"
+import { cloneConfig } from "../fixture/config"
 import { createApi, createEventStream, createFetch } from "../fixture/tui-client"
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
@@ -35,7 +36,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     const [status, setStatus] = createSignal<SessionTabsStatus>(EMPTY_SESSION_TAB_STATUS)
     const [active, setActive] = createSignal("second")
     const [newTab, setNewTab] = createSignal(false)
-    const settings: Info = { tabs: { mode: "on" } }
+    let settings: Info = { tabs: { mode: "on" } }
     const copied: string[] = []
     const reopened: string[] = []
     const [closed, setClosed] = createSignal([
@@ -86,7 +87,9 @@ for (const orientation of ["horizontal", "vertical"] as const) {
                 service={{
                   get: async () => settings,
                   update: async (update) => {
-                    update(settings)
+                    const draft = cloneConfig(settings)
+                    update(draft)
+                    settings = draft
                     return settings
                   },
                 }}
@@ -156,7 +159,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
             .captureSpans()
             .lines.flatMap((line) => line.spans)
             .find((span) => span.text.trim() === (attention === "question" ? "?" : "!"))?.fg
-        expect(indicatorColor()?.toInts()).toEqual(theme.hue.accent[200].toInts())
+        expect(indicatorColor()?.toInts()).toEqual(theme.text.feedback.warning.base.toInts())
         const glow = () => {
           const colors = app
             .captureSpans()
@@ -173,7 +176,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         expect(full).toBeGreaterThan(0)
         setActive("first")
         await app.renderOnce()
-        expect(indicatorColor()?.toInts()).toEqual(theme.hue.accent[200].toInts())
+        expect(indicatorColor()?.toInts()).toEqual(theme.text.feedback.warning.base.toInts())
         const dim = glow()
         expect(dim).toBeGreaterThan(0)
         expect(dim).toBeLessThan(full)
@@ -189,7 +192,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
           .lines.flatMap((line) => line.spans)
           .find((span) => span.text.trim() === glyph)?.fg
         expect(color?.toInts()).toEqual(
-          (unread === "error" ? theme.text.feedback.error.base : theme.hue.accent[200]).toInts(),
+          (unread === "error" ? theme.text.feedback.error.base : theme.text.feedback.info.base).toInts(),
         )
         await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
         await app.renderOnce()
@@ -202,10 +205,12 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
 
       await config.update((draft) => {
+        draft.tabs ??= {}
         draft.tabs.indicators = "numbers"
       })
       await app.waitForFrame((frame) => frame.includes("1 First") && frame.includes("2 Second"))
       await config.update((draft) => {
+        draft.tabs ??= {}
         draft.tabs.indicators = "status"
       })
       await app.waitForFrame((frame) => frame.includes(`${SPINNER_FRAMES[0]} First`))

@@ -72,7 +72,7 @@ export function ModelDetail(props: {
       <For each={items}>
         {(fact, index) => (
           <>
-            {index() > 0 && <span style={{ fg: theme.hue.neutral[400] }}> · </span>}
+            {index() > 0 && <span style={{ fg: theme.text.muted }}> · </span>}
             {fact}
           </>
         )}

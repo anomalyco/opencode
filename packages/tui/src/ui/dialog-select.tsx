@@ -872,7 +872,7 @@ function DialogSelectCategory(props: { title: string; first: boolean }) {
   const newDesigns = useNewDesigns()
   return (
     <box paddingTop={props.first ? 0 : 1} paddingLeft={DIALOG_LIST_INSET - (newDesigns() ? 0 : 1)}>
-      <text fg={newDesigns() ? theme.text.muted : theme.text.badge} attributes={TextAttributes.BOLD}>
+      <text fg={newDesigns() ? theme.text.muted : theme.text.badge.base} attributes={TextAttributes.BOLD}>
         {props.title}
       </text>
     </box>

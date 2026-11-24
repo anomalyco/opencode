@@ -258,7 +258,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
               Object.assign(draft.mini, verbosityPreset(change.value))
               return
             }
-            draft.mini[change.key] = change.value
+            Object.assign(draft.mini, { [change.key]: change.value })
           })
           configState.current = resolveMiniSettings(info)
           return configState.current
@@ -275,7 +275,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     onFormReply: async (next) => {
       if (state.demo?.formReply(next)) return
       try {
-        await state.sdk.session.form.reply(next, formRequestOptions(next.sessionID === "global" ? next.location : undefined))
+        await state.sdk.session.form.reply(
+          next,
+          formRequestOptions(next.sessionID === "global" ? next.location : undefined),
+        )
       } catch (error) {
         if (!formAlreadySettled(error)) throw error
       }
@@ -284,7 +287,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     onFormCancel: async (next) => {
       if (state.demo?.formCancel(next)) return
       try {
-        await state.sdk.session.form.cancel(next, formRequestOptions(next.sessionID === "global" ? next.location : undefined))
+        await state.sdk.session.form.cancel(
+          next,
+          formRequestOptions(next.sessionID === "global" ? next.location : undefined),
+        )
       } catch (error) {
         if (!formAlreadySettled(error)) throw error
       }

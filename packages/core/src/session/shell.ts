@@ -3,7 +3,6 @@ export * as SessionShell from "./shell.js"
 import type { Session } from "@opencode/schema/session"
 import { Effect } from "effect"
 import { Instance } from "../instance/service.js"
-import { Plugin } from "../plugin/service.js"
 import { Shell } from "../shell.js"
 import { ShellResult } from "../shell/result.js"
 import { SessionCwd } from "./cwd.js"
@@ -11,7 +10,6 @@ import { SessionCwd } from "./cwd.js"
 export const start = Effect.fn("SessionShell.start")(function* (input: { session: Session.Info; command: string }) {
   const instances = yield* Instance.Service
   const context = yield* Effect.gen(function* () {
-    yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
     return {
       cwd: yield* SessionCwd.current(input.session.id),
       shell: yield* Shell.Service,

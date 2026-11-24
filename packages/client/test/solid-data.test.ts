@@ -488,7 +488,13 @@ test("restores dropped tool files from the server once they are shown again", as
 test("restoring dropped tool files keeps live progress made while the server read was in flight", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const screenshot = `data:image/png;base64,${"A".repeat(4096)}`
-  const tool = (id: string, state: object) => ({ type: "tool", id, name: "execute", time: { created: 1, ran: 1 }, state })
+  const tool = (id: string, state: object) => ({
+    type: "tool",
+    id,
+    name: "execute",
+    time: { created: 1, ran: 1 },
+    state,
+  })
   const running = { status: "running", input: {}, metadata: {} }
   const assistant = (content: object[]) => ({
     id: "msg_assistant",
@@ -547,7 +553,11 @@ test("restoring dropped tool files keeps live progress made while the server rea
     read.resolve(
       Response.json({
         data: assistant([
-          tool("call_shot", { status: "completed", input: {}, content: [{ type: "file", uri: screenshot, mime: "image/png" }] }),
+          tool("call_shot", {
+            status: "completed",
+            input: {},
+            content: [{ type: "file", uri: screenshot, mime: "image/png" }],
+          }),
           tool("call_work", running),
         ]),
       }),
@@ -1730,6 +1740,47 @@ test("projects background user shell metadata from durable shell data", () => {
     expect(setup.data.session.message.list("ses_refresh")).toMatchObject([
       { type: "shell", shellID: "sh_user", status: "running", metadata: { background: true } },
     ])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("updates an admitted prompt when plugin enrichment arrives", () => {
+  const setup = activityFixture(() => Response.json({ data: {} }))
+  try {
+    setup.emit({
+      id: "evt_enqueued",
+      created: 1,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        inboxID: "msg_enriched",
+        item: { type: "user", payload: { text: "Original" }, delivery: "steer" },
+      },
+    })
+    expect(setup.data.session.pending.list("ses_refresh")).toMatchObject([{ payload: { text: "Original" } }])
+
+    setup.emit({
+      id: "evt_enriched",
+      created: 2,
+      type: "session.inbox.enriched",
+      durable: { aggregateID: "ses_refresh", seq: 2, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        inboxID: "msg_enriched",
+        payload: { text: "Enriched" },
+        delivery: "queue",
+      },
+    })
+    expect(setup.data.session.pending.list("ses_refresh")).toMatchObject([
+      { payload: { text: "Enriched" }, delivery: "queue", time: { created: 1 } },
+    ])
+    expect(setup.data.session.message.get("ses_refresh", "msg_enriched")).toMatchObject({
+      type: "user",
+      text: "Enriched",
+      time: { created: 1 },
+    })
   } finally {
     setup.dispose()
   }

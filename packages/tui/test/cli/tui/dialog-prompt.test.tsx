@@ -6,6 +6,7 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { onCleanup } from "solid-js"
 import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
+import { cloneConfig } from "../../fixture/config"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import type { Config } from "../../../src/config"
 import type { TuiKeybind } from "../../../src/config/keybind"
@@ -202,7 +203,7 @@ test("dialog prompt renders block cursor and survives cursor hot reloads", async
   const service: Config.Interface = {
     get: async () => current,
     update: async (fn) => {
-      const next = structuredClone(current)
+      const next = cloneConfig(current)
       fn(next)
       current = next
       return current

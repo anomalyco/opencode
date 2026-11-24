@@ -6,7 +6,6 @@ import { Agent } from "../agent.js"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { Permission } from "../permission.js"
-import { Plugin } from "../plugin/service.js"
 import type { SessionSchema } from "../session/schema.js"
 import { Shell } from "../shell.js"
 import { ShellPermissions } from "../shell/permissions.js"
@@ -65,7 +64,6 @@ export const start = Effect.fnUntraced(function* (
   action: Automation.ShellAction,
   directory: string,
 ) {
-  yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("1 second"), Effect.asVoid)
   const shell = yield* Shell.Service
   const select = yield* ShellSelect.Service
   const program = yield* select.resolve({ priority: "compat" })

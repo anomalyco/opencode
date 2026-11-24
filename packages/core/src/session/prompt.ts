@@ -12,7 +12,6 @@ import { fileURLToPath } from "url"
 import { Database } from "../database/database.js"
 import { Image } from "../image.js"
 import { Mime } from "../mime.js"
-import { Plugin } from "../plugin/service.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { Skill } from "../skill.js"
 import { SessionBlob } from "./blob.js"
@@ -57,55 +56,59 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
   messageID: SessionMessage.ID
   input: Input
 }) {
-  const fs = yield* FSUtil.Service
-  // Minimal durable admission never waits for plugins: hooks enrich async with a
-  // timeout fallback so slow activation never becomes a 503.
   const minimal = yield* prepareMinimal(request)
-  const enriched = yield* Effect.gen(function* () {
-    // Bounded wait for activation; on timeout fall back to the minimal item.
-    yield* Plugin.awaitActivation.pipe(Effect.timeoutOption("500 millis"), Effect.ignore)
+  return yield* enrich({ ...request, minimal })
+})
+
+export const enrich = Effect.fn("SessionPrompt.enrich")(function* (request: {
+  session: Session.Info
+  messageID: SessionMessage.ID
+  input: Input
+  minimal: Extract<SessionInbox.Item, { readonly type: "user" }>
+}) {
+  const fs = yield* FSUtil.Service
+  const fallback = { item: request.minimal, skills: request.input.skills }
+  const hooked = yield* Effect.gen(function* () {
     const hooksOpt = yield* Effect.serviceOption(PluginHooks.Service)
-    if (Option.isNone(hooksOpt)) return minimal
-    const hooks = hooksOpt.value
-    const eventOpt = yield* hooks
-      .trigger("session", "prompt", {
-        sessionID: request.session.id,
-        messageID: request.messageID,
-        prompt: structuredClone({
-          text: minimal.payload.text,
-          files: request.input.files?.slice(),
-          agents: request.input.agents?.slice(),
-          skills: request.input.skills?.slice(),
-        }),
-        metadata: structuredClone(request.input.metadata),
-        delivery: minimal.delivery,
-      })
-      .pipe(Effect.timeoutOption("2 seconds"))
-    if (Option.isNone(eventOpt)) return minimal
-    const event = eventOpt.value
+    if (Option.isNone(hooksOpt)) return fallback
+    const event = yield* hooksOpt.value.trigger("session", "prompt", {
+      sessionID: request.session.id,
+      messageID: request.messageID,
+      prompt: structuredClone({
+        text: request.minimal.payload.text,
+        files: request.input.files?.slice(),
+        agents: request.input.agents?.slice(),
+        skills: request.input.skills?.slice(),
+      }),
+      metadata: structuredClone(request.input.metadata),
+      delivery: request.minimal.delivery,
+    })
     const input = event.prompt
     const files = input.files
       ? yield* Effect.forEach(input.files, materializeAttachment, { concurrency: 8 })
       : undefined
     return {
-      type: "user",
-      payload: SessionInbox.UserPayload.make({
-        text: input.text,
-        agents: input.agents,
-        files,
-        skills: undefined,
-        metadata: event.metadata,
-      }),
-      delivery: event.delivery,
-    } satisfies SessionInbox.Item
-  }).pipe(Effect.orElseSucceed(() => minimal))
-  // Skills resolve best-effort after hooks; missing skills no longer block admission.
-  const requested = request.input.skills
-  if (!requested?.length) return enriched
-  const selected = yield* Effect.gen(function* () {
+      item: {
+        type: "user",
+        payload: SessionInbox.UserPayload.make({
+          text: input.text,
+          agents: input.agents,
+          files,
+          skills: undefined,
+          metadata: event.metadata,
+        }),
+        delivery: event.delivery,
+      } satisfies SessionInbox.Item,
+      skills: input.skills,
+    }
+  }).pipe(Effect.orElseSucceed(() => fallback))
+  // Skills resolve best-effort from the current registry; missing skills do not rewrite admitted input.
+  const requested = hooked.skills
+  if (!requested?.length) return hooked.item
+  return yield* Effect.gen(function* () {
     const skillService = yield* Skill.Service
     const prepared = new Map<Skill.ID, Skill.Name>()
-    return yield* Effect.forEach(requested, (attachment) =>
+    const skills = yield* Effect.forEach(requested, (attachment) =>
       Effect.gen(function* () {
         const name = prepared.get(attachment.id)
         if (name !== undefined) return { id: attachment.id, name, mention: attachment.mention }
@@ -121,18 +124,11 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
         }
       }),
     )
-  }).pipe(
-    Effect.map((skills) =>
-      skills?.length
-        ? {
-            ...enriched,
-            payload: SessionInbox.UserPayload.make({ ...enriched.payload, skills }),
-          }
-        : enriched,
-    ),
-    Effect.orElseSucceed(() => enriched),
-  )
-  return selected
+    return {
+      ...hooked.item,
+      payload: SessionInbox.UserPayload.make({ ...hooked.item.payload, skills }),
+    }
+  }).pipe(Effect.orElseSucceed(() => hooked.item))
 })
 
 const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(function* (

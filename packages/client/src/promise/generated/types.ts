@@ -2439,6 +2439,8 @@ export type SessionInfo = {
   metadata?: SessionMetadata
   permissions?: PermissionRuleset
   revert?: SessionRevert
+  resumeAttempts?: number
+  suspended?: number
   location: LocationPublicRef
 }
 
@@ -2718,6 +2720,21 @@ export type SessionInboxUser = {
   delivery: SessionInboxDelivery
 }
 
+export type SessionInboxEnriched = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.inbox.enriched"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: SessionID
+    inboxID: SessionMessageID
+    payload: SessionInboxUserPayload1
+    delivery: SessionInboxDelivery
+  }
+}
+
 export type SessionMessageAssistantTool = {
   type: "tool"
   id: string
@@ -2950,6 +2967,7 @@ export type SessionEventDurable =
   | SessionInboxDelivered
   | SessionInboxEnqueued
   | SessionInboxCancelled
+  | SessionInboxEnriched
   | SessionInboxDeliveryChanged
   | SessionExecutionStarted
   | SessionExecutionSucceeded
@@ -3009,6 +3027,7 @@ export type V2Event =
   | SessionInboxDelivered
   | SessionInboxEnqueued
   | SessionInboxCancelled
+  | SessionInboxEnriched
   | SessionInboxDeliveryChanged
   | SessionExecutionStarted
   | SessionExecutionSucceeded
@@ -4015,6 +4034,8 @@ export type ExperimentalSessionImportInput = {
         readonly more?: true
       }>
     }
+    readonly resumeAttempts?: number
+    readonly suspended?: number
     readonly location: { readonly directory: string }
   }
   readonly messages: ReadonlyArray<JsonValue>
@@ -4553,6 +4574,7 @@ export type EventSubscribeInput = {
         | "session.inbox.delivered"
         | "session.inbox.enqueued"
         | "session.inbox.cancelled"
+        | "session.inbox.enriched"
         | "session.inbox.delivery.changed"
         | "session.execution.started"
         | "session.execution.succeeded"

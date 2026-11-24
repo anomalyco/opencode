@@ -110,12 +110,7 @@ function nearestIndexed(indexed: RGBA[], color: RGBA): RGBA {
   return RGBA.clone(hit.item)
 }
 
-function map(
-  theme: ResolvedTheme,
-  indexed: RGBA[],
-  syntax?: SyntaxStyle,
-  system = false,
-): RunTheme {
+function map(theme: ResolvedTheme, indexed: RGBA[], syntax?: SyntaxStyle, system = false): RunTheme {
   // V1 system migration serializes colors; restore terminal defaults before quantizing scrollback.
   const exact = (color: RGBA) => {
     if (system && color.equals(theme.text.base)) return RGBA.defaultForeground(color)
@@ -144,9 +139,9 @@ function map(
       formfieldFocusedBg: exact(theme.background.formfield.focused),
       formfieldFocusedText: exact(theme.text.formfield.focused),
       selection: exact(theme.text.formfield.selected),
-      running: exact(theme.hue.interactive[400]),
-      question: exact(theme.hue.accent[400]),
-      permission: exact(theme.hue.accent[400]),
+      running: exact(theme.text.action.primary.selected),
+      question: exact(theme.text.feedback.info.base),
+      permission: exact(theme.text.feedback.warning.base),
       success: exact(theme.text.feedback.success.base),
       link: exact(theme.markdown.link),
       categorical: dedupeWith(
@@ -195,14 +190,8 @@ function map(
   }
 }
 
-export const RUN_THEME_FALLBACK = map(
-  resolveThemeDocument(parseTheme(getOpenCodeTheme()), "dark"),
-  ansiPalette,
-)
-export const RUN_THEME_FALLBACK_LIGHT = map(
-  resolveThemeDocument(parseTheme(getOpenCodeTheme()), "light"),
-  ansiPalette,
-)
+export const RUN_THEME_FALLBACK = map(resolveThemeDocument(parseTheme(getOpenCodeTheme()), "dark"), ansiPalette)
+export const RUN_THEME_FALLBACK_LIGHT = map(resolveThemeDocument(parseTheme(getOpenCodeTheme()), "light"), ansiPalette)
 
 function monoTheme(mode: "dark" | "light"): RunTheme {
   const foreground = RGBA.defaultForeground(mode === "light" ? "#000000" : "#ffffff")

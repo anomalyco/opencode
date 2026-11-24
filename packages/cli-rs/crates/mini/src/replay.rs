@@ -1045,6 +1045,17 @@ impl Transcript {
                 output.footer.push(event.clone());
                 output
             }
+            V2Event::SessionInboxEnriched(enriched) => {
+                let payload = &enriched.data.payload;
+                let mut output = self.admitted(
+                    enriched.data.inbox_id.as_str(),
+                    &payload.text,
+                    payload.files.as_deref().unwrap_or_default(),
+                    payload.skills.as_deref().unwrap_or_default(),
+                );
+                output.footer.push(event.clone());
+                output
+            }
             V2Event::SessionInboxDelivered(delivered) => {
                 let id = delivered.data.inbox_id.as_str();
                 self.promote_wait(true, Some(id));
@@ -1431,6 +1442,7 @@ pub(crate) fn session_of(event: &V2Event) -> Option<&str> {
     Some(match event {
         V2Event::SessionRenamed(event) => event.data.session_id.as_str(),
         V2Event::SessionInboxEnqueued(event) => event.data.session_id.as_str(),
+        V2Event::SessionInboxEnriched(event) => event.data.session_id.as_str(),
         V2Event::SessionInboxDelivered(event) => event.data.session_id.as_str(),
         V2Event::SessionInboxCancelled(event) => event.data.session_id.as_str(),
         V2Event::SessionInboxDeliveryChanged(event) => event.data.session_id.as_str(),

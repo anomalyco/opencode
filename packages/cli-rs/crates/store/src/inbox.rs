@@ -218,6 +218,23 @@ impl State {
         }
     }
 
+    pub(crate) fn on_inbox_enriched(&mut self, event: &SessionInboxEnriched) {
+        let data = &event.data;
+        let session = &data.session_id;
+        self.outbox.remove(data.inbox_id.as_str());
+        let created = self
+            .pending(session)
+            .iter()
+            .find(|item| item.id() == data.inbox_id.as_str())
+            .map(InboxExt::created)
+            .unwrap_or(event.created);
+        let Some(item) = enriched_item(event, created) else { return };
+        if let Some((_, updates)) = self.sessions.get_mut(session).and_then(|session| session.pending_read.as_mut()) {
+            updates.insert(item.id().to_owned(), PendingUpdate::Item(Box::new(item.clone())));
+        }
+        self.admit_local(item);
+    }
+
     pub(crate) fn on_inbox_delivered(&mut self, event: &SessionInboxDelivered, effects: &mut Vec<Effect>) {
         let data = &event.data;
         let session = &data.session_id;
@@ -295,6 +312,17 @@ fn inbox_item(event: &SessionInboxEnqueued) -> Option<SessionInboxInfo> {
     object.insert("id".into(), event.data.inbox_id.as_str().into());
     object.insert("sessionID".into(), event.data.session_id.as_str().into());
     object.insert("time".into(), serde_json::json!({ "created": event.created }));
+    serde_json::from_value(value).ok()
+}
+
+fn enriched_item(event: &SessionInboxEnriched, created: f64) -> Option<SessionInboxInfo> {
+    let mut value = serde_json::to_value(&event.data.payload).ok()?;
+    let object = value.as_object_mut()?;
+    object.insert("id".into(), event.data.inbox_id.as_str().into());
+    object.insert("sessionID".into(), event.data.session_id.as_str().into());
+    object.insert("type".into(), "user".into());
+    object.insert("delivery".into(), event.data.delivery.as_str().into());
+    object.insert("time".into(), serde_json::json!({ "created" }));
     serde_json::from_value(value).ok()
 }
 

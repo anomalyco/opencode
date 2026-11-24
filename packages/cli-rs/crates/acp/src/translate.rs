@@ -563,6 +563,7 @@ fn session_of(event: &V2Event) -> Option<&str> {
     session!(
         PermissionAsked,
         SessionInboxEnqueued,
+        SessionInboxEnriched,
         SessionInboxDelivered,
         SessionInboxCancelled,
         SessionStepStarted,

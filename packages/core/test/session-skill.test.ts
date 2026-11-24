@@ -56,24 +56,17 @@ const locations = makeGlobalNode({
             }),
           ).pipe(
             Layer.provideMerge(
-              LayerNode.compile(
-                LayerNode.group([PluginHooks.node, Image.node, Skill.node, Config.node]),
-                {
-                  replacements: [
-                    Config.node.replace(
-                      Config.testLayer(
-                        ref.directory === blocked.directory
-                          ? [
-                              organizationPolicy([
-                                { action: "skill.use", resource: "effect", effect: "deny" },
-                              ]),
-                            ]
-                          : [],
-                      ),
+              LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node, Skill.node, Config.node]), {
+                replacements: [
+                  Config.node.replace(
+                    Config.testLayer(
+                      ref.directory === blocked.directory
+                        ? [organizationPolicy([{ action: "skill.use", resource: "effect", effect: "deny" }])]
+                        : [],
                     ),
-                  ],
-                },
-              ),
+                  ),
+                ],
+              }),
             ),
           ),
           Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
@@ -102,25 +95,22 @@ const it = testEffect(
 )
 
 describe("Session.skill", () => {
-  it.effect("refuses blocked skill mentions and standalone activation without writing their content", () =>
+  it.effect("refuses standalone blocked skills but durably admits prompts without their content", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const session = yield* sessions.create({ location: blocked })
       expect(
         yield* sessions.skill({ sessionID: session.id, skill: info.id, resume: false }).pipe(Effect.flip),
       ).toMatchObject({ _tag: "Session.SkillNotFoundError", skill: info.id })
-      expect(
-        yield* sessions
-          .prompt({
-            sessionID: session.id,
-            text: "@effect",
-            skills: [{ id: info.id, mention: { start: 0, end: 7, text: "@effect" } }],
-            resume: false,
-          })
-          .pipe(Effect.flip),
-      ).toMatchObject({ _tag: "Session.SkillNotFoundError", skill: info.id })
+      const admitted = yield* sessions.prompt({
+        sessionID: session.id,
+        text: "@effect",
+        skills: [{ id: info.id, mention: { start: 0, end: 7, text: "@effect" } }],
+        resume: false,
+      })
+      expect(admitted.payload.skills).toBeUndefined()
       expect(yield* sessions.messages({ sessionID: session.id })).toEqual([])
-      expect(yield* sessions.inbox(session.id)).toEqual([])
+      expect(yield* sessions.inbox(session.id)).toEqual([admitted])
     }),
   )
 

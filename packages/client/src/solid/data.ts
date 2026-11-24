@@ -1026,6 +1026,20 @@ export function createData(config: CreateDataInput) {
         }
         return
       }
+      case "session.inbox.enriched": {
+        const current = store.session.pending[event.data.sessionID]?.find((item) => item.id === event.data.inboxID)
+        const item = {
+          id: event.data.inboxID,
+          sessionID: event.data.sessionID,
+          time: current?.time ?? { created: event.created },
+          type: "user" as const,
+          payload: event.data.payload,
+          delivery: event.data.delivery,
+        }
+        pendingUpdates.get(item.sessionID)?.set(item.id, item)
+        admitLocal(item)
+        return
+      }
       case "session.instructions.updated":
         // Mirror the projector: the initial baseline and empty-rendering deltas carry no text
         // and produce no transcript message.
@@ -1223,8 +1237,7 @@ export function createData(config: CreateDataInput) {
             error: event.data.error,
             input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
-            content:
-              omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
+            content: omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }

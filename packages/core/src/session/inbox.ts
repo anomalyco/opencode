@@ -249,6 +249,23 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     )
   })
 
+  const enrich = Effect.fn("SessionInbox.enrich")(function* (input: {
+    readonly id: SessionMessage.ID
+    readonly sessionID: SessionSchema.ID
+    readonly payload: UserPayload
+    readonly delivery: Delivery
+  }) {
+    yield* publishMutation(
+      input,
+      bus.publish(SessionEvent.InboxEnriched, {
+        sessionID: input.sessionID,
+        inboxID: input.id,
+        payload: input.payload,
+        delivery: input.delivery,
+      }),
+    )
+  })
+
   const cancel = Effect.fn("SessionInbox.cancel")((input: PendingRef) =>
     publishMutation(
       input,
@@ -286,6 +303,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     reconcile,
     admit,
     admitCompaction,
+    enrich,
     cancel,
     steer,
     queue,
@@ -340,6 +358,32 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
   yield* SessionBlob.recordRefs(
     db,
     { sessionID: request.sessionID, messageID: request.id, seq: request.enqueuedSeq },
+    payload,
+  )
+})
+
+export const projectEnriched = Effect.fn("SessionInbox.projectEnriched")(function* (
+  db: DatabaseService,
+  input: PendingRef & { readonly payload: UserPayload; readonly delivery: Delivery },
+) {
+  const payload = encodeStoredUser(yield* SessionBlob.externalizePayload(db, input.payload))
+  const updated = yield* db
+    .update(SessionInboxTable)
+    .set({ payload, delivery: input.delivery })
+    .where(
+      and(
+        eq(SessionInboxTable.id, input.id),
+        eq(SessionInboxTable.session_id, input.sessionID),
+        eq(SessionInboxTable.type, "user"),
+      ),
+    )
+    .returning({ enqueuedSeq: SessionInboxTable.enqueued_seq })
+    .get()
+    .pipe(Effect.orDie)
+  if (!updated) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  yield* SessionBlob.syncRefs(
+    db,
+    { sessionID: input.sessionID, messageID: input.id, seq: updated.enqueuedSeq },
     payload,
   )
 })

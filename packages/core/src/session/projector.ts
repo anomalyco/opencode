@@ -35,7 +35,7 @@ import { ProjectTable } from "../project/sql.js"
 type DatabaseService = Database.Interface["db"]
 type MessageEvent = Exclude<
   SessionEvent.DurableEvent,
-  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type
+  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type | typeof SessionEvent.InboxEnriched.Type
 >
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
@@ -84,7 +84,7 @@ function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usa
   })
 }
 
-function touch(db: DatabaseService, event: MessageEvent) {
+function touch(db: DatabaseService, event: SessionEvent.DurableEvent) {
   return setSession(db, event.data.sessionID, { time_updated: event.created })
 }
 
@@ -1053,6 +1053,17 @@ const layer = Layer.effectDiscard(
           sessionID: event.data.sessionID,
           item: event.data.item,
           timeCreated: event.created,
+        })
+        yield* touch(db, event)
+      }),
+    )
+    yield* bus.project(SessionEvent.InboxEnriched, (event) =>
+      Effect.gen(function* () {
+        yield* SessionInbox.projectEnriched(db, {
+          id: event.data.inboxID,
+          sessionID: event.data.sessionID,
+          payload: event.data.payload,
+          delivery: event.data.delivery,
         })
         yield* touch(db, event)
       }),

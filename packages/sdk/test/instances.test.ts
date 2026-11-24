@@ -359,6 +359,15 @@ test("a throwing fork hook still returns the saved fork", async () => {
   })
   const parent = await host.sessions.create({ location: { directory: directory.path } })
   await host.sessions.switchAgent({ sessionID: parent.id, agent: "plan" })
+  const deadline = Date.now() + 3_000
+  while (Date.now() < deadline) {
+    const plugins = await host.plugin.list({ location: parent.location })
+    if (plugins.data.some((plugin) => plugin.id === "broken-fork-hook")) break
+    await Bun.sleep(10)
+  }
+  expect(
+    (await host.plugin.list({ location: parent.location })).data.some((plugin) => plugin.id === "broken-fork-hook"),
+  ).toBe(true)
   const fork = await host.sessions.fork({ sessionID: parent.id })
   expect(seen).toEqual([fork.id])
   expect(await host.sessions.get({ sessionID: fork.id })).toMatchObject({ id: fork.id, fork: { sessionID: parent.id } })

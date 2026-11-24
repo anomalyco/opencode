@@ -1,11 +1,13 @@
 import { describe, expect, setDefaultTimeout } from "bun:test"
-import { Effect } from "effect"
+import { Context, Effect, Schedule } from "effect"
 import path from "path"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { Plugin } from "@opencode/core/plugin"
+import { Command } from "@opencode/core/command"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
@@ -53,22 +55,33 @@ const project = Effect.gen(function* () {
   return tmp
 })
 
-describe("Session waits for plugin activation", () => {
-  it.live("runs prompt hooks from a cold Location before admitting a prompt", () =>
+const waitFor = <A, E, R>(read: Effect.Effect<A, E, R>, ready: (value: A) => boolean) =>
+  read.pipe(Effect.repeat({ until: ready, schedule: Schedule.spaced("10 millis") }), Effect.timeout("5 seconds"))
+
+describe("Session callers bound plugin readiness waits", () => {
+  it.live("runs prompt hooks after a cold Location's plugin inventory is ready", () =>
     Effect.gen(function* () {
       const tmp = yield* project
       const sessions = yield* Session.Service
+      const locations = yield* LocationServiceMap.Service
       const session = yield* sessions.create({ location: { directory: AbsolutePath.make(tmp.path) } })
+      const context = yield* locations.contextEffect(session.location)
+      const plugins = Context.get(context, Plugin.Service)
+      yield* waitFor(plugins.list(), (items) => items.some((plugin) => plugin.id === "prompt-readiness"))
       const admitted = yield* sessions.prompt({ sessionID: session.id, text: "Original", resume: false })
       expect(admitted.payload.text).toBe("Prepared by plugin")
     }),
   )
 
-  it.live("resolves plugin commands from a cold Location", () =>
+  it.live("resolves plugin commands after a cold Location's command catalog is ready", () =>
     Effect.gen(function* () {
       const tmp = yield* project
       const sessions = yield* Session.Service
+      const locations = yield* LocationServiceMap.Service
       const session = yield* sessions.create({ location: { directory: AbsolutePath.make(tmp.path) } })
+      const context = yield* locations.contextEffect(session.location)
+      const commands = Context.get(context, Command.Service)
+      yield* waitFor(commands.list(), (items) => items.some((command) => command.name === "ready"))
       yield* sessions.command({ sessionID: session.id, command: "ready", text: "now" })
     }),
   )

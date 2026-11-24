@@ -289,7 +289,7 @@ Returns: `{ data: Permission.Request }`
 - `Session.Inbox.SyntheticPayload`: `{ text: string; description?: string; metadata?: Record<string, unknown> }`
 - `Session.Inbox.User`: `{ id: string; sessionID: string; time: { created }; type: "user"; payload: Session.Inbox.UserPayload; delivery: "steer" | "queue" }`
 - `Session.Inbox.UserPayload`: `{ text: string; files?: Prompt.FileAttachment[]; agents?: Prompt.AgentAttachment[]; skills?: Prompt.SkillAttachment[]; metadata?: Record<string, unknown> }`
-- `Session.Info`: `{ id, parentID, fork, projectID, agent, model, cost, tokens, outcome, time, title, subpath, metadata, permissions, revert, location }`
+- `Session.Info`: `{ id, parentID, fork, projectID, agent, model, cost, tokens, outcome, time, title, subpath, metadata, permissions, revert, resumeAttempts, suspended, location }`
 - `Session.Message.AgentSelected`: `{ id: string; metadata?: Record<string, unknown>; time: { created }; type: "agent-switched"; agent: string; previous?: string }`
 - `Session.Message.Assistant`: `{ id, metadata, time, type, agent, model, content, snapshot, finish, rawFinish, native, cost, tokens, error, retry }`
 - `Session.Message.Compaction`: `Session.Message.Compaction.Running | Session.Message.Compaction.Completed | Session.Message.Compaction.Failed`

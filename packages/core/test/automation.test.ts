@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { FileSystem } from "@opencode/core/filesystem"
-import { Clock, DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Stream } from "effect"
+import { Clock, DateTime, Effect, Fiber, Layer, LayerMap, Queue, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { eq } from "drizzle-orm"
 import { Agent } from "@opencode/core/agent"
@@ -103,7 +103,6 @@ const toggled = Layer.succeed(
 const folders = { missingNow: false }
 const slack = { replies: 0, reads: 0, posts: [] as string[], failing: false, messageIDs: [] as SessionMessage.ID[] }
 let agentRules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
-let activationGate: Effect.Effect<void> = Effect.void
 let helperGone = false
 
 const configureAgent = Layer.effectDiscard(
@@ -249,9 +248,7 @@ const locations = makeGlobalNode({
               ),
             ),
             Layer.mock(McpTool.Service, { flush: Effect.void }),
-            Layer.mock(Plugin.Service, {
-              awaitActivation: Effect.suspend(() => activationGate),
-            }),
+            Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
           ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>
         },
       )
@@ -307,7 +304,6 @@ const setup = (directory = enabledDirectory) =>
     slack.posts = []
     slack.failing = false
     agentRules = [{ action: "*", resource: "*", effect: "allow" }]
-    activationGate = Effect.void
     helperGone = false
     return yield* Automation.Service
   })
@@ -1046,10 +1042,9 @@ describe("Automation", () => {
     }),
   )
 
-  it.effect("does not start queued timers that were paused, deleted or rescheduled", () =>
+  it.effect("does not start timers paused, deleted or rescheduled before they are due", () =>
     Effect.gen(function* () {
       const automations = yield* setup()
-      // Four earlier actions occupy the workers after the tick has selected every due timer.
       const first = yield* Effect.forEach([1, 2, 3, 4], (n) =>
         automations.create({
           sessionID,
@@ -1062,22 +1057,16 @@ describe("Automation", () => {
         automations.create({
           sessionID,
           name,
-          trigger: every("1 minute"),
+          trigger: name === "rescheduled" ? { type: "at", at: "in 1 hour" } : every("1 minute"),
           action: code(`await tools.slack.post({ text: "${name}" })`),
         }),
       )
-      const entered = yield* Latch.make()
-      const release = yield* Latch.make()
-      activationGate = entered.open.pipe(Effect.andThen(release.await))
-      yield* TestClock.adjust("1 minute")
-      const ticking = yield* Effect.forkChild(automations.tick, { startImmediately: true })
-      yield* entered.await.pipe(Effect.timeout("5 seconds"), TestClock.withLive)
       yield* automations.pause(paused.id)
       yield* automations.remove(deleted.id)
       yield* automations.pause(rescheduled.id)
       yield* automations.resume(rescheduled.id)
-      yield* release.open
-      yield* Fiber.join(ticking)
+      yield* TestClock.adjust("1 minute")
+      yield* automations.tick
 
       expect(slack.posts).toEqual([])
       expect((yield* automations.get(paused.id)).runCount).toBe(0)
@@ -1916,34 +1905,21 @@ describe("Automation", () => {
       }),
     )
 
-    it.effect("waits for plugins when authorizing, but counts activation against the run timeout", () =>
+    it.effect("does not wait for plugin activation when authorizing or running code", () =>
       Effect.gen(function* () {
         const automations = yield* setup()
-        const gate = yield* Latch.make()
-        activationGate = gate.await
-        const creating = yield* Effect.forkChild(
-          automations.create({
-            sessionID,
-            name: "thread",
-            trigger: every("1 minute"),
-            action: code(`await tools.slack.read_thread({})`),
-          }),
-        )
-        yield* Effect.repeat(Effect.yieldNow, { times: 5 })
-        expect(yield* automations.list()).toEqual([])
-        yield* gate.open
-        const automation = yield* Fiber.join(creating)
+        const automation = yield* automations.create({
+          sessionID,
+          name: "thread",
+          trigger: every("1 minute"),
+          action: code(`await tools.slack.read_thread({}); return`),
+        })
         expect(automation.status).toBe("active")
 
-        yield* gate.close
         yield* TestClock.adjust("1 minute")
-        const running = yield* Effect.forkChild(automations.tick, { startImmediately: true })
-        yield* TestClock.adjust("30 seconds")
-        yield* Fiber.join(running)
-        expect(yield* automations.get(automation.id)).toMatchObject({
-          runCount: 0,
-          lastOutput: "Timed out after 30000ms",
-        })
+        yield* automations.tick
+        expect(yield* automations.get(automation.id)).toMatchObject({ runCount: 1, lastOutcome: "fired" })
+        expect(slack.reads).toBe(1)
       }),
     )
   })

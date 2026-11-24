@@ -492,7 +492,7 @@ for (const pause of ["local", "reconciled"]) {
   )
 }
 
-it.effect("pause cancels a prompt still preparing without waiting for its hook or admitting it on resume", () =>
+it.effect("pause preserves an admitted prompt while its enrichment is interrupted", () =>
   Effect.gen(function* () {
     const f = yield* setup()
     const a = yield* f.create({ action: { type: "prompt", prompt: "Review." } })
@@ -506,13 +506,16 @@ it.effect("pause cancels a prompt still preparing without waiting for its hook o
     yield* f.notify("active", stream.id, { cursor: "before", heartbeatMs: 30_000 })
     yield* f.event(stream.id, "first", "pending")
     yield* entered.await.pipe(Effect.timeout("5 seconds"), TestClock.withLive)
+    expect(yield* f.sessions.inbox(sessionID)).toHaveLength(1)
     const pausing = yield* Effect.forkChild(f.automations.pause(a.id), { startImmediately: true })
     expect(
       yield* f.cancelled.pipe(Effect.timeout("5 seconds"), TestClock.withLive, Effect.ensuring(release.open)),
     ).toBe(stream.id)
     expect(yield* Fiber.join(pausing)).toMatchObject({ status: "paused", runCount: 0 })
-    expect(yield* f.sessions.inbox(sessionID)).toEqual([])
-    expect(wakes).toEqual([])
+    expect(yield* f.sessions.inbox(sessionID)).toMatchObject([
+      { payload: { text: expect.stringContaining("Review.") } },
+    ])
+    expect(wakes).toEqual([sessionID])
 
     yield* hook.dispose
     yield* f.automations.resume(a.id)
@@ -521,9 +524,9 @@ it.effect("pause cancels a prompt still preparing without waiting for its hook o
     yield* f.event(next.id, "second", "success")
     yield* f.settled(a.id, (row) => row.runCount === 1)
     expect(yield* f.sessions.inbox(sessionID)).toMatchObject([
-      { payload: { text: expect.stringContaining('"id":"second"') } },
+      { payload: { text: expect.stringContaining("Review.") } },
     ])
-    expect(wakes).toEqual([sessionID])
+    expect(wakes).toEqual([sessionID, sessionID])
   }),
 )
 

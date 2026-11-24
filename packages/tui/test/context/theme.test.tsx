@@ -7,6 +7,7 @@ import { ConfigProvider, useConfig, type Info } from "../../src/config"
 import { ThemeProvider, useTheme, useThemes } from "../../src/context/theme"
 import { getOpenCodeTheme, getOpenCodeClassicTheme } from "../../src/theme"
 import { emptyThemeSource, tmpdir } from "../fixture/fixture"
+import { cloneConfig } from "../fixture/config"
 import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
@@ -60,7 +61,7 @@ test("the system theme follows a palette reply that arrives after the query", as
 
 test("names the new theme opencode and the previous one opencode-classic", async () => {
   await using temporary = await tmpdir()
-  const settings: Info = { theme: { name: "opencode" } }
+  let settings: Info = { theme: { name: "opencode" } }
   let config!: ReturnType<typeof useConfig>
   let themes!: ReturnType<typeof useThemes>
   let theme!: ReturnType<typeof useTheme>
@@ -77,7 +78,9 @@ test("names the new theme opencode and the previous one opencode-classic", async
         service={{
           get: async () => settings,
           update: async (update) => {
-            update(settings)
+            const draft = cloneConfig(settings)
+            update(draft)
+            settings = draft
             return settings
           },
         }}
@@ -131,7 +134,7 @@ test("removing theme or theme.name from config reverts to opencode", async () =>
           service={{
             get: async () => structuredClone(settings),
             update: async (update) => {
-              const next = structuredClone(settings)
+              const next = cloneConfig(settings)
               update(next)
               settings = next
               return structuredClone(settings)

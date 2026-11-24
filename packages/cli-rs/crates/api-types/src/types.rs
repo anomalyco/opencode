@@ -755,6 +755,10 @@ pub struct SessionInfo {
     pub permissions: Option<PermissionRuleset>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revert: Option<SessionRevert>,
+    #[serde(rename = "resumeAttempts", default, skip_serializing_if = "Option::is_none")]
+    pub resume_attempts: Option<i64>,
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
+    pub suspended: Option<f64>,
     pub location: LocationPublicRef,
 }
 
@@ -3592,6 +3596,30 @@ pub struct SessionInboxCancelled {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionInboxEnrichedData {
+    #[serde(rename = "sessionID")]
+    pub session_id: SessionID,
+    #[serde(rename = "inboxID")]
+    pub inbox_id: SessionMessageID,
+    pub payload: SessionInboxUserPayload,
+    pub delivery: SessionInboxDelivery,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionInboxEnriched {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::SessionInboxEnriched,
+    pub durable: SessionCreatedDurable,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: SessionInboxEnrichedData,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionInboxDeliveryChangedData {
     #[serde(rename = "sessionID")]
     pub session_id: SessionID,
@@ -4485,6 +4513,7 @@ pub enum SessionEventDurable {
     SessionInboxDelivered(SessionInboxDelivered),
     SessionInboxEnqueued(SessionInboxEnqueued),
     SessionInboxCancelled(SessionInboxCancelled),
+    SessionInboxEnriched(SessionInboxEnriched),
     SessionInboxDeliveryChanged(SessionInboxDeliveryChanged),
     SessionExecutionStarted(SessionExecutionStarted),
     SessionExecutionSucceeded(SessionExecutionSucceeded),
@@ -4546,6 +4575,7 @@ impl SessionEventDurable {
             Some("session.inbox.delivered") => raw.variant().map(Self::SessionInboxDelivered),
             Some("session.inbox.enqueued") => raw.variant().map(Self::SessionInboxEnqueued),
             Some("session.inbox.cancelled") => raw.variant().map(Self::SessionInboxCancelled),
+            Some("session.inbox.enriched") => raw.variant().map(Self::SessionInboxEnriched),
             Some("session.inbox.delivery.changed") => raw.variant().map(Self::SessionInboxDeliveryChanged),
             Some("session.execution.started") => raw.variant().map(Self::SessionExecutionStarted),
             Some("session.execution.succeeded") => raw.variant().map(Self::SessionExecutionSucceeded),
@@ -4603,6 +4633,7 @@ impl SessionEventDurable {
             Self::SessionInboxDelivered(value) => value.r#type.as_str(),
             Self::SessionInboxEnqueued(value) => value.r#type.as_str(),
             Self::SessionInboxCancelled(value) => value.r#type.as_str(),
+            Self::SessionInboxEnriched(value) => value.r#type.as_str(),
             Self::SessionInboxDeliveryChanged(value) => value.r#type.as_str(),
             Self::SessionExecutionStarted(value) => value.r#type.as_str(),
             Self::SessionExecutionSucceeded(value) => value.r#type.as_str(),
@@ -4658,6 +4689,7 @@ impl SessionEventDurable {
             Self::SessionInboxDelivered(value) => value.id.as_str(),
             Self::SessionInboxEnqueued(value) => value.id.as_str(),
             Self::SessionInboxCancelled(value) => value.id.as_str(),
+            Self::SessionInboxEnriched(value) => value.id.as_str(),
             Self::SessionInboxDeliveryChanged(value) => value.id.as_str(),
             Self::SessionExecutionStarted(value) => value.id.as_str(),
             Self::SessionExecutionSucceeded(value) => value.id.as_str(),
@@ -4713,6 +4745,7 @@ impl SessionEventDurable {
             Self::SessionInboxDelivered(value) => value.created,
             Self::SessionInboxEnqueued(value) => value.created,
             Self::SessionInboxCancelled(value) => value.created,
+            Self::SessionInboxEnriched(value) => value.created,
             Self::SessionInboxDeliveryChanged(value) => value.created,
             Self::SessionExecutionStarted(value) => value.created,
             Self::SessionExecutionSucceeded(value) => value.created,
@@ -4768,6 +4801,7 @@ impl SessionEventDurable {
             Self::SessionInboxDelivered(value) => value.metadata.as_ref(),
             Self::SessionInboxEnqueued(value) => value.metadata.as_ref(),
             Self::SessionInboxCancelled(value) => value.metadata.as_ref(),
+            Self::SessionInboxEnriched(value) => value.metadata.as_ref(),
             Self::SessionInboxDeliveryChanged(value) => value.metadata.as_ref(),
             Self::SessionExecutionStarted(value) => value.metadata.as_ref(),
             Self::SessionExecutionSucceeded(value) => value.metadata.as_ref(),
@@ -4823,6 +4857,7 @@ impl SessionEventDurable {
             Self::SessionInboxDelivered(value) => value.durable.aggregate_id.as_str(),
             Self::SessionInboxEnqueued(value) => value.durable.aggregate_id.as_str(),
             Self::SessionInboxCancelled(value) => value.durable.aggregate_id.as_str(),
+            Self::SessionInboxEnriched(value) => value.durable.aggregate_id.as_str(),
             Self::SessionInboxDeliveryChanged(value) => value.durable.aggregate_id.as_str(),
             Self::SessionExecutionStarted(value) => value.durable.aggregate_id.as_str(),
             Self::SessionExecutionSucceeded(value) => value.durable.aggregate_id.as_str(),
@@ -4880,6 +4915,7 @@ impl SessionEventDurable {
             Self::SessionInboxDelivered(value) => value.durable.seq,
             Self::SessionInboxEnqueued(value) => value.durable.seq,
             Self::SessionInboxCancelled(value) => value.durable.seq,
+            Self::SessionInboxEnriched(value) => value.durable.seq,
             Self::SessionInboxDeliveryChanged(value) => value.durable.seq,
             Self::SessionExecutionStarted(value) => value.durable.seq,
             Self::SessionExecutionSucceeded(value) => value.durable.seq,
@@ -4937,6 +4973,7 @@ impl SessionEventDurable {
             Self::SessionInboxDelivered(value) => value.durable.version,
             Self::SessionInboxEnqueued(value) => value.durable.version,
             Self::SessionInboxCancelled(value) => value.durable.version,
+            Self::SessionInboxEnriched(value) => value.durable.version,
             Self::SessionInboxDeliveryChanged(value) => value.durable.version,
             Self::SessionExecutionStarted(value) => value.durable.version,
             Self::SessionExecutionSucceeded(value) => value.durable.version,
@@ -4994,6 +5031,7 @@ impl SessionEventDurable {
             Self::SessionInboxDelivered(value) => value.location.as_ref(),
             Self::SessionInboxEnqueued(value) => value.location.as_ref(),
             Self::SessionInboxCancelled(value) => value.location.as_ref(),
+            Self::SessionInboxEnriched(value) => value.location.as_ref(),
             Self::SessionInboxDeliveryChanged(value) => value.location.as_ref(),
             Self::SessionExecutionStarted(value) => value.location.as_ref(),
             Self::SessionExecutionSucceeded(value) => value.location.as_ref(),
@@ -5049,6 +5087,7 @@ impl SessionEventDurable {
             Self::SessionInboxDelivered(value) => value.data.session_id.as_str(),
             Self::SessionInboxEnqueued(value) => value.data.session_id.as_str(),
             Self::SessionInboxCancelled(value) => value.data.session_id.as_str(),
+            Self::SessionInboxEnriched(value) => value.data.session_id.as_str(),
             Self::SessionInboxDeliveryChanged(value) => value.data.session_id.as_str(),
             Self::SessionExecutionStarted(value) => value.data.session_id.as_str(),
             Self::SessionExecutionSucceeded(value) => value.data.session_id.as_str(),
@@ -5132,6 +5171,7 @@ impl SessionLogItem {
             | Some("session.inbox.delivered")
             | Some("session.inbox.enqueued")
             | Some("session.inbox.cancelled")
+            | Some("session.inbox.enriched")
             | Some("session.inbox.delivery.changed")
             | Some("session.execution.started")
             | Some("session.execution.succeeded")
@@ -9085,6 +9125,7 @@ pub enum V2Event {
     SessionInboxDelivered(SessionInboxDelivered),
     SessionInboxEnqueued(SessionInboxEnqueued),
     SessionInboxCancelled(SessionInboxCancelled),
+    SessionInboxEnriched(SessionInboxEnriched),
     SessionInboxDeliveryChanged(SessionInboxDeliveryChanged),
     SessionExecutionStarted(SessionExecutionStarted),
     SessionExecutionSucceeded(SessionExecutionSucceeded),
@@ -9199,6 +9240,7 @@ impl V2Event {
             Some("session.inbox.delivered") => raw.variant().map(Self::SessionInboxDelivered),
             Some("session.inbox.enqueued") => raw.variant().map(Self::SessionInboxEnqueued),
             Some("session.inbox.cancelled") => raw.variant().map(Self::SessionInboxCancelled),
+            Some("session.inbox.enriched") => raw.variant().map(Self::SessionInboxEnriched),
             Some("session.inbox.delivery.changed") => raw.variant().map(Self::SessionInboxDeliveryChanged),
             Some("session.execution.started") => raw.variant().map(Self::SessionExecutionStarted),
             Some("session.execution.succeeded") => raw.variant().map(Self::SessionExecutionSucceeded),
@@ -9309,6 +9351,7 @@ impl V2Event {
             Self::SessionInboxDelivered(value) => value.r#type.as_str(),
             Self::SessionInboxEnqueued(value) => value.r#type.as_str(),
             Self::SessionInboxCancelled(value) => value.r#type.as_str(),
+            Self::SessionInboxEnriched(value) => value.r#type.as_str(),
             Self::SessionInboxDeliveryChanged(value) => value.r#type.as_str(),
             Self::SessionExecutionStarted(value) => value.r#type.as_str(),
             Self::SessionExecutionSucceeded(value) => value.r#type.as_str(),
@@ -9417,6 +9460,7 @@ impl V2Event {
             Self::SessionInboxDelivered(value) => value.id.as_str(),
             Self::SessionInboxEnqueued(value) => value.id.as_str(),
             Self::SessionInboxCancelled(value) => value.id.as_str(),
+            Self::SessionInboxEnriched(value) => value.id.as_str(),
             Self::SessionInboxDeliveryChanged(value) => value.id.as_str(),
             Self::SessionExecutionStarted(value) => value.id.as_str(),
             Self::SessionExecutionSucceeded(value) => value.id.as_str(),
@@ -9525,6 +9569,7 @@ impl V2Event {
             Self::SessionInboxDelivered(value) => Some(value.created),
             Self::SessionInboxEnqueued(value) => Some(value.created),
             Self::SessionInboxCancelled(value) => Some(value.created),
+            Self::SessionInboxEnriched(value) => Some(value.created),
             Self::SessionInboxDeliveryChanged(value) => Some(value.created),
             Self::SessionExecutionStarted(value) => Some(value.created),
             Self::SessionExecutionSucceeded(value) => Some(value.created),
@@ -9632,6 +9677,7 @@ impl V2Event {
             Self::SessionInboxDelivered(value) => value.metadata.as_ref(),
             Self::SessionInboxEnqueued(value) => value.metadata.as_ref(),
             Self::SessionInboxCancelled(value) => value.metadata.as_ref(),
+            Self::SessionInboxEnriched(value) => value.metadata.as_ref(),
             Self::SessionInboxDeliveryChanged(value) => value.metadata.as_ref(),
             Self::SessionExecutionStarted(value) => value.metadata.as_ref(),
             Self::SessionExecutionSucceeded(value) => value.metadata.as_ref(),
@@ -9731,6 +9777,7 @@ impl V2Event {
             Self::SessionInboxDelivered(value) => Some(value.durable.aggregate_id.as_str()),
             Self::SessionInboxEnqueued(value) => Some(value.durable.aggregate_id.as_str()),
             Self::SessionInboxCancelled(value) => Some(value.durable.aggregate_id.as_str()),
+            Self::SessionInboxEnriched(value) => Some(value.durable.aggregate_id.as_str()),
             Self::SessionInboxDeliveryChanged(value) => Some(value.durable.aggregate_id.as_str()),
             Self::SessionExecutionStarted(value) => Some(value.durable.aggregate_id.as_str()),
             Self::SessionExecutionSucceeded(value) => Some(value.durable.aggregate_id.as_str()),
@@ -9839,6 +9886,7 @@ impl V2Event {
             Self::SessionInboxDelivered(value) => Some(value.durable.seq),
             Self::SessionInboxEnqueued(value) => Some(value.durable.seq),
             Self::SessionInboxCancelled(value) => Some(value.durable.seq),
+            Self::SessionInboxEnriched(value) => Some(value.durable.seq),
             Self::SessionInboxDeliveryChanged(value) => Some(value.durable.seq),
             Self::SessionExecutionStarted(value) => Some(value.durable.seq),
             Self::SessionExecutionSucceeded(value) => Some(value.durable.seq),
@@ -9947,6 +9995,7 @@ impl V2Event {
             Self::SessionInboxDelivered(value) => Some(value.durable.version),
             Self::SessionInboxEnqueued(value) => Some(value.durable.version),
             Self::SessionInboxCancelled(value) => Some(value.durable.version),
+            Self::SessionInboxEnriched(value) => Some(value.durable.version),
             Self::SessionInboxDeliveryChanged(value) => Some(value.durable.version),
             Self::SessionExecutionStarted(value) => Some(value.durable.version),
             Self::SessionExecutionSucceeded(value) => Some(value.durable.version),
@@ -10066,6 +10115,7 @@ pub enum EventKind {
     SessionInboxDelivered,
     SessionInboxEnqueued,
     SessionInboxCancelled,
+    SessionInboxEnriched,
     SessionInboxDeliveryChanged,
     SessionExecutionStarted,
     SessionExecutionSucceeded,
@@ -10148,7 +10198,7 @@ pub enum EventKind {
 
 impl EventKind {
     /// How many kinds there are, `Unknown` included.
-    pub const COUNT: usize = 102;
+    pub const COUNT: usize = 103;
 
     /// The kind an event whose `type` is `tag` decodes to.
     pub fn from_tag(tag: &str) -> Self {
@@ -10177,6 +10227,7 @@ impl EventKind {
             "session.inbox.delivered" => Self::SessionInboxDelivered,
             "session.inbox.enqueued" => Self::SessionInboxEnqueued,
             "session.inbox.cancelled" => Self::SessionInboxCancelled,
+            "session.inbox.enriched" => Self::SessionInboxEnriched,
             "session.inbox.delivery.changed" => Self::SessionInboxDeliveryChanged,
             "session.execution.started" => Self::SessionExecutionStarted,
             "session.execution.succeeded" => Self::SessionExecutionSucceeded,
@@ -10292,6 +10343,7 @@ impl V2Event {
             Self::SessionInboxDelivered(_) => EventKind::SessionInboxDelivered,
             Self::SessionInboxEnqueued(_) => EventKind::SessionInboxEnqueued,
             Self::SessionInboxCancelled(_) => EventKind::SessionInboxCancelled,
+            Self::SessionInboxEnriched(_) => EventKind::SessionInboxEnriched,
             Self::SessionInboxDeliveryChanged(_) => EventKind::SessionInboxDeliveryChanged,
             Self::SessionExecutionStarted(_) => EventKind::SessionExecutionStarted,
             Self::SessionExecutionSucceeded(_) => EventKind::SessionExecutionSucceeded,
@@ -13599,7 +13651,7 @@ pub mod tag {
         SessionIdle = "session.idle", SessionInboxCancelled = "session.inbox.cancelled",
         SessionInboxDelivered = "session.inbox.delivered",
         SessionInboxDeliveryChanged = "session.inbox.delivery.changed", SessionInboxEnqueued = "session.inbox.enqueued",
-        SessionInstructionsUpdated = "session.instructions.updated",
+        SessionInboxEnriched = "session.inbox.enriched", SessionInstructionsUpdated = "session.instructions.updated",
         SessionMessageContentUpdated = "session.message.content.updated",
         SessionMetadataUpdated = "session.metadata.updated", SessionModelSelected = "session.model.selected",
         SessionMoved = "session.moved", SessionPermissions = "session.permissions",

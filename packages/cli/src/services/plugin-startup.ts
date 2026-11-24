@@ -7,7 +7,8 @@ export const waitForPlugins = (client: OpenCodeClient, directory: string) =>
   Effect.tryPromise((signal) => client.plugin.list({ location: { directory } }, { signal })).pipe(
     Effect.repeat({
       until: (plugins) => plugins.data.length > 0,
-      schedule: Schedule.spaced("25 millis").pipe(Schedule.upTo({ duration: "5 seconds" })),
+      schedule: Schedule.spaced("25 millis"),
     }),
+    Effect.timeout("5 seconds"),
     Effect.ignore,
   )
