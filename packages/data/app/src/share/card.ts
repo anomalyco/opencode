@@ -1096,7 +1096,8 @@ function drawSlide(
   const captionY = numberY - number * 0.78 - 32
   const providerY = captionY - 24 - 64
   const name = Math.min(96, fit(ctx, entry.label, room, 96, 700))
-  const nameY = providerY - 40 - 28
+  // Room under the name for its descenders before the provider.
+  const nameY = providerY - 40 - 56
   rise(ctx, since, 0.04, box.y + inset + place * 0.78, place, () => {
     ctx.font = `400 ${place}px ${font}`
     ctx.fillStyle = colors.mark
