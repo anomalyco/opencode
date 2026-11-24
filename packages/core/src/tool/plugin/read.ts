@@ -80,7 +80,7 @@ export const Plugin = {
                 const skill = yield* skills.get(id)
                 if (!skill || !Skill.isUri(skill.path))
                   return yield* new ToolFailure({ message: `File not found: ${input.path}` })
-                const extra = yield* skills.files(id)
+                const files = ["SKILL.md", ...((yield* skills.files(id)) ?? [])]
                 yield* permission.assert({
                   action: "skill",
                   resources: [skill.id],
@@ -95,10 +95,26 @@ export const Plugin = {
                 })
                 const virtualFs = Environment.makeFiles(Environment.makeMemoryDriver())
                 const encoder = new TextEncoder()
-                yield* virtualFs.write(AbsolutePath.make("/SKILL.md"), encoder.encode(skill.content))
+                // Only the requested file is loaded. The rest stay empty, which is enough for directory listings.
+                const load = (file: string) => {
+                  if (file !== parsed.target.slice(1)) return Effect.succeed("")
+                  if (file === "SKILL.md") return skills.content(id)
+                  return skills.file(id, file).pipe(Effect.map((value) => value ?? ""))
+                }
                 yield* Effect.forEach(
-                  extra ? Array.from(extra) : [],
-                  ([rel, text]) => virtualFs.write(AbsolutePath.make(`/${rel}`), encoder.encode(text)),
+                  files,
+                  (file) =>
+                    load(file).pipe(
+                      Effect.mapError(
+                        (error) => new ToolFailure({ message: `Unable to read ${input.path}: ${error.message}` }),
+                      ),
+                      Effect.flatMap((value) =>
+                        virtualFs.write(
+                          AbsolutePath.make(`/${file}`),
+                          typeof value === "string" ? encoder.encode(value) : value,
+                        ),
+                      ),
+                    ),
                   { discard: true },
                 )
                 const output = yield* ReadToolFileSystem.read(virtualFs, AbsolutePath.make(parsed.target), input.path, {

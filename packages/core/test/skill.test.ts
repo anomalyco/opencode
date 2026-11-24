@@ -210,6 +210,28 @@ describe("Skill", () => {
     }),
   )
 
+  it.effect("lists a lazy skill with empty content and loads only what is asked for", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      const loaded: string[] = []
+      const load = <A>(name: string, value: A) => Effect.sync(() => (loaded.push(name), value))
+      yield* skill.transform((editor) =>
+        editor.add(
+          { ...info("remote", "Remote"), content: load("SKILL.md", "# remote") },
+          { "references/a.md": load("references/a.md", "A"), "references/b.md": "B" },
+        ),
+      )
+      const id = Skill.ID.make("remote")
+
+      expect((yield* skill.list()).map((item) => item.content)).toEqual([""])
+      expect(yield* skill.files(id)).toEqual(["references/a.md", "references/b.md"])
+      expect(loaded).toEqual([])
+      expect(yield* skill.content(id)).toBe("# remote")
+      expect(yield* skill.file(id, "references/a.md")).toBe("A")
+      expect(loaded).toEqual(["SKILL.md", "references/a.md"])
+    }),
+  )
+
   it.effect("filters values by agent permissions", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
@@ -242,10 +264,8 @@ describe("Skill", () => {
         })
 
         const files = yield* skill.files(Skill.ID.make("review"))
-        expect(Array.from(files ?? [])).toEqual([
-          ["references/a.md", "A"],
-          ["references/b.md", "B"],
-        ])
+        expect(files).toEqual(["references/a.md", "references/b.md"])
+        expect(yield* skill.file(Skill.ID.make("review"), "references/a.md")).toBe("A")
         const fs = yield* FSUtil.Service
         const prepared = yield* Skill.prepare(
           { ...fs, scan: () => Effect.die(new Error("unexpected disk scan")) },
