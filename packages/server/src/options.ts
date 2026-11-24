@@ -57,5 +57,10 @@ export const ServerOptions = Schema.Struct({
       fff: Schema.optional(Schema.Boolean),
     }),
   ),
+  /**
+   * For a process that exists to serve, as `opencode serve` does: lets the server raise the priority class of that
+   * process while the `server_priority` flag is on. A host that shares its process with the server leaves it unset.
+   */
+  priority: Schema.optional(Schema.Boolean),
 })
 export type ServerOptions = typeof ServerOptions.Type

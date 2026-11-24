@@ -17887,6 +17887,9 @@
               "opencode_api": {
                 "type": "boolean"
               },
+              "server_priority": {
+                "type": "boolean"
+              },
               "sqlite_fts": {
                 "type": "boolean"
               },
