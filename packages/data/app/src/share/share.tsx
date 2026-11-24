@@ -174,6 +174,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setDay(undefined)
     setLead("top")
   })
+  // A bar chart over its range drawn as bars, or as a race of the leaders overtaking each other (card.ts drawRace).
+  const [chartStyle, setChartStyle] = createSignal<"bars" | "race">("bars")
+  const raceable = () => starts().length > 1 && day() === undefined
   const leads = createMemo(() => request()?.id === "top-models" && !!request()?.variant)
   // The first days of the columns the date picker can choose from: a bar chart's, when its section can make a card
   // for one.
@@ -193,7 +196,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     if (!value) return undefined
     const focus = { day: day(), lead: lead() }
     const chosen = focus.day === undefined && focus.lead === "top" ? value : (value.variant?.(focus) ?? value)
-    return { ...chosen, variant: undefined, updatedAt: props.updatedAt, url: props.url }
+    const chart =
+      chartStyle() === "race" && chosen.chart.kind === "stacked" && chosen.chart.day === undefined
+        ? { ...chosen.chart, race: true }
+        : chosen.chart
+    return { ...chosen, chart, variant: undefined, updatedAt: props.updatedAt, url: props.url }
   })
   // The card's provider logos (the leaderboard and comparison cards); the preview redraws once they've loaded.
   const [logos, setLogos] = createSignal(0)
@@ -388,6 +395,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       // Never an explicit track: those are for choosing on purpose.
       setTrack(pick(shareTracks.filter((item) => !item.explicit)).id)
       setLead(pick(["top", "total"] as const))
+      setChartStyle(pick(["bars", "race"] as const))
       setPlaying(true)
     })
 
@@ -399,6 +407,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       format: format(),
       day: day(),
       lead: lead(),
+      chart: chartStyle(),
       layout: options().layout,
       size: options().size,
       theme: options().theme,
@@ -434,6 +443,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       setFormat(target.format)
       setDay(target.day)
       setLead(target.lead)
+      setChartStyle(target.chart)
       setShareOption("layout", target.layout)
       setShareOption("size", target.size)
       setShareOption("theme", target.theme)
@@ -673,6 +683,22 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                       { value: "total" as const, label: "Total", icon: <LeadGlyph lead="total" /> },
                     ]}
                     onSelect={setLead}
+                  />
+                </Show>
+                <Show when={raceable()}>
+                  <Dropdown
+                    id="chart"
+                    label="Chart"
+                    roll={rolls()}
+                    rollDelay={45}
+                    open={menu()}
+                    onOpen={setMenu}
+                    value={chartStyle()}
+                    options={[
+                      { value: "bars" as const, label: "Bars", icon: <ChartGlyph style="bars" /> },
+                      { value: "race" as const, label: "Race", icon: <ChartGlyph style="race" /> },
+                    ]}
+                    onSelect={setChartStyle}
                   />
                 </Show>
                 <Dropdown
@@ -1336,6 +1362,20 @@ function AspectGlyph(props: { size: ShareOptions["size"] }) {
         stroke="currentColor"
         stroke-width="1.5"
       />
+    </svg>
+  )
+}
+
+// The chart's style: columns rising for bars, rows of different lengths for a race.
+function ChartGlyph(props: { style: "bars" | "race" }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <Show
+        when={props.style === "race"}
+        fallback={<path d="M3.25 13.5V8M8 13.5V3M12.75 13.5V6" fill="none" stroke="currentColor" stroke-width="1.5" />}
+      >
+        <path d="M2.5 3.75h11M2.5 8h7M2.5 12.25h9" fill="none" stroke="currentColor" stroke-width="1.5" />
+      </Show>
     </svg>
   )
 }

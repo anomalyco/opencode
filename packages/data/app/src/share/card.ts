@@ -21,6 +21,8 @@ export type ShareChart =
       // A card about one column (a day or a week): its index. The other columns go grey, and the series values, the
       // total and the leader are that column's.
       day?: number
+      // Drawn as a race instead of bars: the series as horizontal bars overtaking each other day by day (drawRace).
+      race?: boolean
     }
   | {
       kind: "ranked"
@@ -261,7 +263,20 @@ export function shareDuration(card: ShareCard, options: ShareOptions, timing = f
 // only this part.
 export function mainLength(card: ShareCard, options: ShareOptions, timing = freeTiming) {
   const intro = introSlides(card, options, timing)?.end ?? 0
-  return timing.length ?? intro + timing.start + turns(card, options, timing).length * timing.step + hold
+  const play = isRace(card) ? raceLength(card, timing) : turns(card, options, timing).length * timing.step
+  return timing.length ?? intro + timing.start + play + hold
+}
+
+// A race: a stacked chart over its whole range, drawn as bars overtaking each other day by day.
+function isRace(card: ShareCard) {
+  return card.chart.kind === "stacked" && !!card.chart.race && card.chart.day === undefined
+}
+
+// How long the race runs: about a tenth of a second a day, within the track when there's music.
+function raceLength(card: ShareCard, timing: ShareTiming) {
+  const days = card.chart.kind === "stacked" ? card.chart.columns.length : 0
+  const own = Math.min(9, Math.max(4, days * 0.12))
+  return timing.length ? Math.max(2, Math.min(own, timing.length - timing.start - hold)) : own
 }
 
 // The slides the leaderboard and comparison open with: the headline until the first cut, then a slide a place (the top
@@ -328,14 +343,16 @@ export function drawShareCard(
   // The footer's baseline sits as far from the bottom as its text from the side; the rule is 56px above its type.
   const footer = height - pad
   const rule = footer - 26 - 56
-  const legend = card.chart.kind === "stacked" ? legendLayout(card.chart.series, width, height) : undefined
+  // A race names its own rows, so it needs no legend under it.
+  const race = isRace(card)
+  const legend = card.chart.kind === "stacked" && !race ? legendLayout(card.chart.series, width, height) : undefined
   // A stacked chart keeps one line under it (the total, then each series in turn) while it builds and highlights;
   // once the highlights are done it eases shorter to make room for the full legend. The still is that last state.
   const reveal = legend ? settle(time, highlightsEnd(card, options, timing), 0.8) : 0
   const below = legend ? 96 + (legend.height + 40 - 96) * reveal : 0
   const chartBottom = rule - 64 - below
   // The dots are gone by the x axis: a stacked chart's baseline sits its axis labels above the chart's bottom.
-  const baseline = card.chart.kind === "stacked" ? chartBottom - axisHeight : chartBottom
+  const baseline = card.chart.kind === "stacked" && !race ? chartBottom - axisHeight : chartBottom
   drawBackground(
     ctx,
     options.background,
@@ -374,7 +391,17 @@ export function drawShareCard(
   const top = drawIntro(ctx, card, options, colors, width, pad + 88 + 48 * logo, time)
   const progress = Math.min(1, time / timing.build)
 
-  if (card.chart.kind === "stacked") {
+  if (card.chart.kind === "stacked" && race)
+    drawRace(
+      ctx,
+      card.chart,
+      colors,
+      { x: pad, y: top, width: width - pad * 2, height: chartBottom - top },
+      time,
+      timing,
+      raceLength(card, timing),
+    )
+  if (card.chart.kind === "stacked" && !race) {
     drawStacked(
       ctx,
       card.chart,
@@ -494,6 +521,7 @@ function focusAt(card: ShareCard, options: ShareOptions, time: number, timing: S
 
 // When the last highlight lets go: the build alone when there are no highlights.
 function highlightsEnd(card: ShareCard, options: ShareOptions, timing: ShareTiming) {
+  if (isRace(card)) return timing.start + raceLength(card, timing)
   const count = turns(card, options, timing).length
   return count > 0 ? timing.start + count * timing.step : timing.build
 }
@@ -501,6 +529,7 @@ function highlightsEnd(card: ShareCard, options: ShareOptions, timing: ShareTimi
 // The highlights in turn: each bar of the chart once, first to last. With music the video ends with the track, so a long
 // list stops where the rest would run past it, leaving the legend its moment.
 function turns(card: ShareCard, options: ShareOptions, timing: ShareTiming) {
+  if (isRace(card)) return []
   const all = highlights(card, options)
   if (!timing.length) return all
   return all.slice(0, Math.max(0, Math.floor((timing.length - timing.start - hold) / timing.step)))
@@ -933,6 +962,93 @@ function drawDay(
     ctx.fillStyle = mix(colors.text, colors.muted, bar.series === focus.index ? 0 : Math.max(0.6, bar.muted))
     const value = item?.value ?? ""
     ctx.fillText(value, center - ctx.measureText(value).width / 2, y - 16)
+    ctx.restore()
+  })
+}
+
+// The race: the leading series as horizontal bars, each with its rank, name and share of the day over it, growing,
+// shrinking and overtaking each other as the days run from the first to the last, the date ticking along large and faint
+// behind them. Between days the values and the places ease, so an overtake is a smooth swap of rows; a series leaving
+// the top six fades out as it drops. Every frame is the data of its moment.
+function drawRace(
+  ctx: CanvasRenderingContext2D,
+  chart: Extract<ShareChart, { kind: "stacked" }>,
+  colors: Palette,
+  box: Box,
+  time: number,
+  timing: ShareTiming,
+  length: number,
+) {
+  const named = chart.series.map((_, index) => index).filter((index) => chart.series[index]?.key !== "other")
+  const days = chart.columns.length
+  if (days === 0 || named.length === 0) return
+  const at = Math.max(0, Math.min(1, (time - timing.start) / length)) * (days - 1)
+  const from = Math.floor(at)
+  const to = Math.min(days - 1, from + 1)
+  const step = at - from
+  const swap = step * step * (3 - 2 * step)
+  const value = (day: number, series: number) => chart.columns[day]?.values[series] ?? 0
+  const total = (day: number) => chart.columns[day]?.values.reduce((sum, item) => sum + item, 0) ?? 0
+  const now = (series: number) => value(from, series) + (value(to, series) - value(from, series)) * step
+  const whole = total(from) + (total(to) - total(from)) * step
+  const order = (day: number) => named.toSorted((a, b) => value(day, b) - value(day, a))
+  const ranks = { from: order(from), to: order(to) }
+  const rows = Math.min(6, named.length)
+  const row = Math.min(170, box.height / (rows + 0.35))
+  const top = box.y + row * 0.15
+  const max = Math.max(1e-9, ...named.map(now))
+  // The bars grow in from nothing while the intro rises, before the days start to run.
+  const grow = ease(Math.min(1, time / Math.max(0.01, timing.start)))
+  const name = Math.round(row * 0.25)
+  const bar = Math.round(row * 0.4)
+
+  // The day, large and faint, in the lower right; it counts on with the race.
+  ctx.save()
+  ctx.textBaseline = "alphabetic"
+  ctx.font = `400 ${Math.round(row * 0.9)}px ${font}`
+  ctx.fillStyle = colors.faint
+  ctx.globalAlpha *= 0.35
+  const date = chart.columns[Math.round(at)]?.label ?? ""
+  ctx.fillText(date, box.x + box.width - ctx.measureText(date).width, box.y + box.height)
+  ctx.restore()
+
+  named.forEach((series) => {
+    const was = ranks.from.indexOf(series)
+    const will = ranks.to.indexOf(series)
+    const place = was + (will - was) * swap
+    const shown = Math.max(0, Math.min(1, rows - place))
+    if (shown <= 0) return
+    const y = top + place * row
+    const item = chart.series[series]
+    const share = whole > 0 ? now(series) / whole : 0
+    const width = Math.max(bar * 0.2, (now(series) / max) * box.width * grow)
+    ctx.save()
+    ctx.globalAlpha *= shown
+    ctx.textBaseline = "alphabetic"
+    ctx.font = `400 ${Math.round(name * 0.85)}px ${font}`
+    ctx.fillStyle = colors.faint
+    const rank = String(Math.round(place) + 1).padStart(2, "0")
+    ctx.fillText(rank, box.x, y + name)
+    const indent = ctx.measureText("00").width + name * 0.8
+    ctx.font = `${Math.round(place) === 0 ? 700 : 400} ${name}px ${font}`
+    ctx.fillStyle = colors.text
+    ctx.fillText(truncate(ctx, item?.label ?? "", box.width - indent), box.x + indent, y + name)
+    const length = Math.max(0, Math.min(width, box.width - indent))
+    const barTop = y + name * 1.4
+    ctx.fillStyle = item?.color ?? colors.idle
+    ctx.fillRect(box.x + indent, barTop, length, bar)
+    // The share rides at the end of its bar, or just inside it when the bar runs to the edge.
+    const percent = `${(share * 100).toFixed(share >= 0.1 ? 0 : 1)}%`
+    ctx.font = `400 ${Math.round(bar * 0.62)}px ${font}`
+    const percentWidth = ctx.measureText(percent).width
+    const outside = box.x + indent + length + bar * 0.3
+    const inside = outside + percentWidth > box.x + box.width
+    ctx.fillStyle = inside ? colors.background : colors.muted
+    ctx.fillText(
+      percent,
+      inside ? box.x + indent + length - percentWidth - bar * 0.3 : outside,
+      barTop + bar / 2 + bar * 0.22,
+    )
     ctx.restore()
   })
 }
