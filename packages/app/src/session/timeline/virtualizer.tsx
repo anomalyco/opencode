@@ -29,6 +29,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { filterVirtualIndexes } from "./virtual-items"
+import { RowLayer } from "./row-layer"
 import {
   ACTIVATED,
   CHECK_REQUESTED,
@@ -1250,8 +1251,8 @@ export function createTimelineVirtualizer(input: Input) {
               visibility: coldHidden() ? "hidden" : undefined,
             }}
           >
-            <div
-              ref={rowLayer}
+            <RowLayer
+              ref={(element) => (rowLayer = element)}
               class="absolute inset-y-0"
               style={{
                 left: "calc((100% - var(--panel-hold-width, 100%)) / 2)",
@@ -1261,7 +1262,7 @@ export function createTimelineVirtualizer(input: Input) {
               <Key each={mountedRows()} by={(mounted) => mounted.key}>
                 {(mounted) => <VirtualRow mounted={mounted} />}
               </Key>
-            </div>
+            </RowLayer>
             <div
               data-timeline-row="bottom-spacer"
               class="absolute top-0 left-0 w-full"
