@@ -267,10 +267,9 @@ test.describe("timeline history", () => {
     const scroller = timelineScroller(page)
     await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
     expect(await scroller.evaluate((element) => element.scrollHeight / element.clientHeight)).toBeGreaterThan(2)
-    // The check on the measured rows runs in the frame after they show.
-    await scroller.evaluate(
-      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
-    )
+    // The check on the measured rows runs in a frame after they show. Run it without a real-time wait.
+    await page.clock.install()
+    await page.clock.runFor(1_000)
     expect(requests).toEqual([undefined])
   })
 
