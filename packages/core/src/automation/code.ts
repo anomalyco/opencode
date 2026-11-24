@@ -86,24 +86,33 @@ function scanProgram(code: string): Result.Result<ProgramScan, string> {
 }
 
 /**
- * The Location of the plugin making a create, if a plugin is making it. Code and subagent targets in that Location are
- * checked against what is loaded now instead of waiting for its plugin activation, which may be running that plugin's
- * setup and so would never finish. Targets in other Locations still wait for their plugins.
+ * The Location of the plugin making a create, if a plugin is making it. Code, shell and subagent targets in that Location
+ * cannot wait for its plugin activation, which may be running that plugin's setup and so would never finish. Targets in
+ * other Locations still wait for their plugins.
  */
 export const FromPlugin = Context.Reference<Location.Ref | undefined>("@opencode/AutomationCode/FromPlugin", {
   defaultValue: () => undefined,
 })
 
-/** Waits for the current Location's plugins, unless the create comes from one of them. */
+/**
+ * Waits for the current Location's plugins. A create from one of them while they are still activating is refused instead:
+ * configured permissions are applied by plugins that load later, so it would be authorized against incomplete permissions.
+ */
 export const awaitPlugins = Effect.gen(function* () {
+  const plugins = yield* Plugin.Service
   const from = yield* FromPlugin
   if (from !== undefined) {
     const location = yield* Location.Service
     const current = LocationServiceMap.canonical({ directory: location.directory, workspaceID: location.workspaceID })
     const own = LocationServiceMap.canonical(from)
-    if (current.directory === own.directory && current.workspaceID === own.workspaceID) return
+    if (current.directory === own.directory && current.workspaceID === own.workspaceID) {
+      if (yield* plugins.activated) return
+      return yield* Effect.fail(
+        "Plugins in this location are still loading, so configured permissions are not applied yet. Create this automation after plugin setup, for example from an event handler.",
+      )
+    }
   }
-  yield* Plugin.awaitActivation
+  yield* plugins.awaitActivation
 })
 
 /**

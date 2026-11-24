@@ -272,7 +272,7 @@ const layer = Layer.effect(
      */
     const subagent = (owner: SessionSchema.Info, id: Agent.ID, invocation?: Invocation) =>
       Effect.gen(function* () {
-        yield* AutomationCode.awaitPlugins
+        yield* AutomationCode.awaitPlugins.pipe(Effect.mapError((reason) => new InvalidError({ reason })))
         const location = yield* Location.Service
         if (location.project.id !== owner.projectID)
           return yield* new InvalidError({ reason: "The creating session's location is no longer in its project" })
