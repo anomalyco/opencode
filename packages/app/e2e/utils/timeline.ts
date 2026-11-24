@@ -377,6 +377,14 @@ export function compactionFailed(data: Extract<OpenCodeEvent, { type: "session.c
   return makeEvent("session.compaction.failed", data)
 }
 
+export function revertStaged(data: Extract<OpenCodeEvent, { type: "session.revert.staged" }>["data"]) {
+  return makeEvent("session.revert.staged", data)
+}
+
+export function revertCleared(data: Extract<OpenCodeEvent, { type: "session.revert.cleared" }>["data"]) {
+  return makeEvent("session.revert.cleared", data)
+}
+
 export function toolInputStarted(data: Extract<OpenCodeEvent, { type: "session.tool.input.started" }>["data"]) {
   return makeEvent("session.tool.input.started", data)
 }

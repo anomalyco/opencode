@@ -8,6 +8,11 @@ import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/s
 import {
   assistantMessage,
   historyMessages,
+  partDelta,
+  revertCleared,
+  revertStaged,
+  session,
+  sessionID,
   setupTimeline,
   textPart,
   timelineRowTops,
@@ -20,6 +25,8 @@ import { mockWorkspace } from "../utils/workspace"
 test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" })
 
 type Reveal = { pending: number; clipped: string[]; bottomError: number; tables: number; codeBlocks: number }
+
+const otherSessionID = "ses_place_other"
 
 for (const width of [1440, 390]) {
   test(`reveals a cold timeline at the tail only after Markdown is measured at ${width}px`, async ({ page }) => {
@@ -643,7 +650,7 @@ test("returns a reader to the rows they left under an older page that landed whi
   page,
 }) => {
   const older = Promise.withResolvers<void>()
-  const timeline = await openHistory(page, older.promise)
+  const timeline = await openHistory(page, { older: older.promise })
 
   try {
     // The start of the loaded history asks for the older page, which is held back.
@@ -681,37 +688,143 @@ test("returns a reader to the rows they left when the window narrows onto anothe
   await expectRowsInPlace(page, timeline.scroller, rows)
 })
 
-// A transcript that loads in pages of 16 messages, on a narrow screen. `older` holds each older page back.
-async function openHistory(page: Page, older: Promise<void> = Promise.resolve()) {
+test("returns a reader to the rows they left from another session's tab", async ({ page }) => {
+  const timeline = await openHistory(page)
+  await page.setViewportSize({ width: 1056, height: 844 })
+  const rows = await readHistory(page, timeline.scroller, 700)
+
+  await tab(page, otherSessionID).click()
+  await expect(page.getByText("Other session prompt", { exact: true })).toBeVisible()
+  await tab(page, sessionID).click()
+  await expectRowsInPlace(page, timeline.scroller, rows)
+})
+
+test("returns a reader to the rows they left from Home, in a view that is built again", async ({ page }) => {
+  const timeline = await openHistory(page)
+  await page.setViewportSize({ width: 1056, height: 844 })
+  const rows = await readHistory(page, timeline.scroller, 700)
+
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expect(timeline.content).toHaveCount(0)
+  await page.goBack()
+  await expectRowsInPlace(page, timeline.scroller, rows)
+})
+
+// The place is kept apart from the 16 views and the 16 sets of row sizes, which the 34 sessions push out. A session
+// opened by its tab keeps the views, and one opened by a route change builds the session screen again.
+test("returns a reader to the rows they left after 34 other sessions were opened", async ({ page }) => {
+  // 34 sessions are opened one after another.
+  test.setTimeout(180_000)
+  const others = Array.from({ length: 34 }, (_, index) => `ses_place_${String(index).padStart(2, "0")}`)
+  const timeline = await openHistory(page, { others })
+  await page.setViewportSize({ width: 1056, height: 844 })
+  const rows = await readHistory(page, timeline.scroller, 700)
+  const left = (await timeline.content.elementHandle())!
+
+  for (const [index, id] of others.entries()) {
+    if (index < 17) await tab(page, id).click()
+
+    if (index >= 17) await route(page, id)
+    await expect(page.getByText(`Prompt of ${id}`, { exact: true })).toBeVisible()
+  }
+
+  await route(page, sessionID)
+  await expectRowsInPlace(page, timeline.scroller, rows)
+  // The view on screen was built again, without the row sizes of the one the reader left.
+  expect(await left.evaluate((element) => element.isConnected)).toBe(false)
+})
+
+test("returns a reader whose passage was removed meanwhile to the end, which they follow from then on", async ({
+  page,
+}) => {
+  const timeline = await openHistory(page, { streaming: true })
+  await page.setViewportSize({ width: 1056, height: 844 })
+  await readHistory(page, timeline.scroller, 700)
+
+  await tab(page, otherSessionID).click()
+  await expect(page.getByText("Other session prompt", { exact: true })).toBeVisible()
+  // A revert hides the rows the reader was on, and every row after them.
+  await timeline.revert("msg_00034_history_a_user")
+  await tab(page, sessionID).click()
+  await expect(timeline.scroller.getByText(/^Historical response 33\. /)).toBeInViewport()
+  await expect(timeline.scroller.getByText(/^Historical response 34\. /)).toHaveCount(0)
+
+  // The rows come back and the reply goes on: the reader is at the end of each.
+  await timeline.revert(undefined)
+  await expect(timeline.scroller.getByText("Checking the route", { exact: true })).toBeInViewport()
+  await timeline.send(partDelta("prt_place_tail", `\n\n${"Arrived after the undo.\n\n".repeat(30)}The new end.`))
+  await expect(timeline.scroller.getByText("The new end.", { exact: true })).toBeInViewport()
+})
+
+test("returns a reader who followed to the new end of a session that grew meanwhile", async ({ page }) => {
+  const timeline = await openHistory(page, { streaming: true })
+  await page.setViewportSize({ width: 1056, height: 844 })
+  await expect(timeline.scroller.getByText("Checking the route", { exact: true })).toBeInViewport()
+
+  await tab(page, otherSessionID).click()
+  await expect(page.getByText("Other session prompt", { exact: true })).toBeVisible()
+  await timeline.send(partDelta("prt_place_tail", `\n\n${"Arrived while away.\n\n".repeat(30)}The new end.`))
+  await tab(page, sessionID).click()
+  await expect(timeline.scroller.getByText("The new end.", { exact: true })).toBeInViewport()
+})
+
+// A transcript that loads in pages of 16 messages, on a narrow screen, with another session open in a tab. `older`
+// holds each older page back. `streaming`: its last reply is still under way. `others`: more sessions open in tabs.
+async function openHistory(page: Page, input: { older?: Promise<void>; streaming?: boolean; others?: string[] } = {}) {
   const transcript = validateTimelineMessages([
     ...historyMessages(40),
     userMessage(),
-    assistantMessage([textPart("prt_place_tail", "Checking the route")]),
+    assistantMessage([textPart("prt_place_tail", "Checking the route")], { completed: !input.streaming }),
   ])
 
   const asked = Promise.withResolvers<void>()
-  await setupTimeline(page, {
+  const reader = session()
+
+  const timeline = await setupTimeline(page, {
+    sessions: [
+      reader,
+      session({ id: otherSessionID, title: "Other session" }),
+      ...(input.others ?? []).map((id) => session({ id, title: `Other ${id}` })),
+    ],
+    tabs: [sessionID, otherSessionID, ...(input.others ?? [])],
     sessionMessages: transcript,
     viewport: { width: 390, height: 844 },
-    pageMessages: (_, limit, before) => {
+    pageMessages: (id, limit, before) => {
+      if (id === otherSessionID)
+        return {
+          items: [userMessage([textPart("prt_place_other", "Other session prompt")], { id: "msg_place_other" })],
+        }
+
+      if (id !== sessionID)
+        return { items: [userMessage([textPart(`prt_${id}`, `Prompt of ${id}`)], { id: `msg_${id}` })] }
       const end = before ? transcript.findIndex((message) => message.id === before) : transcript.length
       const start = Math.max(0, end - Math.min(16, limit))
 
       return { items: transcript.slice(start, end), cursor: start ? transcript[start]!.id : undefined }
     },
-    beforeMessagesResponse: ({ before }) => (before ? older : Promise.resolve()),
+    beforeMessagesResponse: ({ before }) => (before ? input.older : undefined) ?? Promise.resolve(),
     onMessages: (request) => {
       if (request.before) asked.resolve()
     },
   })
+
   const content = page.locator("[data-timeline-virtual-content]")
 
   return {
+    send: timeline.send,
     content,
     scroller: page.locator(".scroll-view__viewport", { has: content }),
     views: page.getByRole("tablist", { name: "Session view", exact: true }),
     /** An older page was asked for. */
     asked: asked.promise,
+    /** Reverts the session to before a message, or undoes that, as the server reports it and answers from then on. */
+    revert: (messageID: string | undefined) => {
+      reader.revert = messageID ? { messageID } : undefined
+
+      return timeline.send(
+        messageID ? revertStaged({ sessionID, revert: { messageID } }) : revertCleared({ sessionID }),
+      )
+    },
   }
 }
 
@@ -759,6 +872,14 @@ function textEnded(sessionID: string, directory: string): OpenCodeEvent {
 
 function tab(page: Page, sessionID: string) {
   return page.locator(`[data-titlebar-tab-link][href="${sessionHref(sessionID)}"]`)
+}
+
+// Opens a session by its route alone, as a link outside the tabs does.
+function route(page: Page, sessionID: string) {
+  return page.evaluate((path) => {
+    history.pushState({}, "", path)
+    dispatchEvent(new PopStateEvent("popstate"))
+  }, sessionHref(sessionID))
 }
 
 // The source and target sessions open as titlebar tabs of one expanded project.

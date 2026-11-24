@@ -29,6 +29,18 @@ import { Key } from "@solid-primitives/keyed"
 import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
+import { keepPlace, PLACE_NEIGHBOURS, placeOf, resolvePlace, takePlace, type Place } from "./place"
+import {
+  createPlaceReturnState,
+  PLACE_LEFT_EVENT,
+  PLACE_RENDERED_EVENT,
+  PLACE_RETURN_TIMEOUT,
+  PLACE_TAKEN_EVENT,
+  returningPlace,
+  transitionPlaceReturn,
+  type PlaceReturnEffect,
+  type PlaceReturnEvent,
+} from "./place-machine"
 import { RECONNECT_OFFSET_EPSILON } from "./reconnect-machine"
 import { filterVirtualIndexes, isAboveFold } from "./virtual-items"
 import {
@@ -177,6 +189,16 @@ export function createTimelineVirtualizer(input: Input) {
   const entry = cache.get(ownerSessionKey)
   const cached = entry?.presentationKey === input.presentationKey?.() ? entry : undefined
   const initialMeasurements = cached?.measurements
+  // The session whose reader's place this view keeps as it goes away, and comes back to.
+  const placeSession = input.follow.session()
+  // Where that reader was when the session's view last went away with them off its end. This view starts near it.
+  const arrival = placeOf(placeSession)
+
+  // The follow state belongs to the session on screen. A view that is not shown keeps what its own reader last had.
+  const follows = createMemo<boolean>(
+    (previous) => (active() ? input.follow.following() : previous),
+    input.follow.following(),
+  )
 
   const [coldMount, setColdMount] = createSignal(
     createColdMountState(!initialMeasurements?.length && input.follow.following()),
@@ -355,6 +377,8 @@ export function createTimelineVirtualizer(input: Input) {
   const intentEvent = { type: "scroll.intent" as const, upward: false, overflow: false }
   const touchDragEvent = { type: "touch.drag" as const, overflow: false }
   let reportOffset: ((offset: number, scrolling: boolean) => void) | undefined
+  // The space above the first row when the view's offset was last reported.
+  let reportedMargin = 0
   let reportRect: ((rect: { width: number; height: number }) => void) | undefined
   // TanStack corrects the scroll position once for every row it resizes above the view, and each native write forces a
   // layout. While a batch of sizes is applied, a request replaces the one before it, and the last is written once.
@@ -394,6 +418,7 @@ export function createTimelineVirtualizer(input: Input) {
     observeElementOffset: (instance, callback) => {
       reportOffset = (offset, scrolling) => {
         if (!active()) return
+        reportedMargin = instance.options.scrollMargin
         // Rows and the sizer use the opposite translation while native touch
         // scrolling keeps its own offset. Range selection uses the logical offset.
         batch(() => {
@@ -443,7 +468,19 @@ export function createTimelineVirtualizer(input: Input) {
         dispatchCold(CHECK_REQUESTED)
       })
     },
-    initialOffset: () => (input.follow.following() ? Number.MAX_SAFE_INTEGER : 0),
+    // Near where the reader was, so that the first rows to mount are the ones they come back to.
+    initialOffset: () => {
+      if (input.follow.following()) return Number.MAX_SAFE_INTEGER
+
+      if (!arrival) return 0
+      const keys = untrack(rowKeys)
+      const target = resolvePlace(arrival, keys)
+
+      if (target.type === "end") return Number.MAX_SAFE_INTEGER
+      const start = initialMeasurements?.find((item) => item.key === keys[target.row])?.start
+
+      return (start ?? target.row * fallbackItemSize) + target.offset
+    },
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => fallbackItemSize,
     // A newly observed element gets a real ResizeObserver box before paint. Reuse
@@ -514,10 +551,10 @@ export function createTimelineVirtualizer(input: Input) {
       return getItemKey()
     },
     get anchorTo() {
-      return input.follow.following() ? "end" : "start"
+      return follows() ? "end" : "start"
     },
     get followOnAppend() {
-      return input.follow.following()
+      return follows()
     },
     scrollEndThreshold: 80,
     get scrollMargin() {
@@ -694,6 +731,7 @@ export function createTimelineVirtualizer(input: Input) {
       })
       dispatchCold(SIZES_FLUSHED)
       pinAnchor()
+      dispatchPlace(PLACE_RENDERED_EVENT)
 
       if (untrack(coldHidden)) pinColdBottom()
       dispatchCold(CHECK_REQUESTED)
@@ -1041,6 +1079,7 @@ export function createTimelineVirtualizer(input: Input) {
 
   function prepareNavigation() {
     input.follow.dispatch({ type: "release" })
+    dispatchPlace(PLACE_TAKEN_EVENT)
     flushTouchAdjustment()
   }
 
@@ -1055,6 +1094,103 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (Math.abs(root.scrollTop - offset) <= RECONNECT_OFFSET_EPSILON) return
     virtualizer.options.scrollToFn(offset, {}, virtualizer)
+  }
+
+  // A reader's return to where they were. The machine decides; this only runs what it asks for. Its state is set
+  // before any effect runs, so the result of a look finds the return it belongs to.
+  let placeReturn = createPlaceReturnState()
+  let placeFrame: number | undefined
+  let placeTimer: ReturnType<typeof setTimeout> | undefined
+
+  function dispatchPlace(event: PlaceReturnEvent) {
+    const next = transitionPlaceReturn(placeReturn, event)
+    placeReturn = next.state
+    next.effects.forEach(runPlaceEffect)
+  }
+
+  function runPlaceEffect(effect: PlaceReturnEffect) {
+    if (effect.type === "look")
+      return dispatchPlace({ type: "looked", attempt: effect.attempt, end: putBack(effect.place) })
+
+    if (effect.type === "timer.start") {
+      clearTimeout(placeTimer)
+      placeTimer = setTimeout(() => dispatchPlace({ type: "timeout", attempt: effect.attempt }), PLACE_RETURN_TIMEOUT)
+
+      return
+    }
+
+    if (placeFrame !== undefined) cancelAnimationFrame(placeFrame)
+    placeFrame = undefined
+
+    if (effect.type === "cancel") return clearTimeout(placeTimer)
+    placeFrame = requestAnimationFrame(() => {
+      placeFrame = undefined
+      dispatchPlace(PLACE_RENDERED_EVENT)
+    })
+  }
+
+  // Keeps where the reader is as the view goes away. A return that had not ended keeps the place it was going to. A
+  // reader who follows the end keeps none: they come back to the end.
+  function depart() {
+    keepPlace(placeSession, returningPlace(placeReturn) ?? here())
+    dispatchPlace(PLACE_LEFT_EVENT)
+  }
+
+  // Where a reader who has left the end is: the row at the top of the view and how far into it the view begins, with
+  // the rows around it. Read from what the list holds, because a view that goes away is out of the page by then.
+  function here(): Place | undefined {
+    const offset = virtualizer.scrollOffset
+
+    if (untrack(follows) || offset === null) return
+    // The list's rows begin after the space above the first row. A window that crosses a breakpoint changes that
+    // space before the view leaves the page, and the offset still counts from the old one.
+    const top = offset + virtualizer.options.scrollMargin - reportedMargin
+    const item = virtualizer.getVirtualItemForOffset(top)
+
+    if (!item) return
+    const keys = untrack(rowKeys)
+
+    return {
+      key: String(item.key),
+      offset: top - item.start,
+      after: keys.slice(item.index + 1, item.index + 1 + PLACE_NEIGHBOURS),
+      before: keys.slice(Math.max(0, item.index - PLACE_NEIGHBOURS), item.index).toReversed(),
+    }
+  }
+
+  // Puts a returning reader back where they were, as far as the rows have rendered. True when the passage is gone
+  // from the session and the view went to the end instead.
+  function putBack(place: Place) {
+    const root = listRoot()
+
+    if (!root?.isConnected || !active()) return false
+    const keys = rowKeys()
+    const target = resolvePlace(place, keys)
+
+    if (target.type === "end") {
+      // What is left of the session ends before the place. Its reader follows the end, as one who never left it.
+      input.follow.dispatch({ type: "follow" })
+      virtualizer.scrollToEnd()
+
+      return true
+    }
+
+    const item = virtualizer.measurementsCache[target.row]
+    const row = virtualizer.elementsCache.get(keys[target.row]!)
+
+    // As drawn: the row begins as far above the top of the view as it did. A row that is not in the page has only
+    // its place in the list, an estimate until the rows before it have their sizes. The view goes there, so that
+    // the row mounts.
+    const wanted = row?.isConnected
+      ? root.scrollTop + row.getBoundingClientRect().top - root.getBoundingClientRect().top + target.offset
+      : item && item.start + target.offset
+
+    if (wanted === undefined || Math.abs(root.scrollTop - Math.max(0, wanted)) <= 0.5) return false
+    // One of the timeline's own writes. The list is told at once, so that the rows there mount in this frame.
+    virtualizer.options.scrollToFn(Math.max(0, wanted), {}, virtualizer)
+    reportOffset?.(root.scrollTop, false)
+
+    return false
   }
 
   function flushTouchAdjustment() {
@@ -1159,6 +1295,10 @@ export function createTimelineVirtualizer(input: Input) {
       if (reveal) input.reveal?.consume(reveal.entryKey)
 
       if (!revealed && input.follow.following()) virtualizer.scrollToEnd()
+      // A reader who had left the end comes back to where they were. The place is handed over once. A tool call the
+      // route opens the session on takes its place.
+      const place = takePlace(placeSession)
+      dispatchPlace({ type: "returned", place: revealed ? undefined : place })
 
       reportOffset?.(root.scrollTop, false)
       dispatchCold(CHECK_REQUESTED)
@@ -1187,6 +1327,7 @@ export function createTimelineVirtualizer(input: Input) {
 
       if (!active() || !root?.isConnected) return
       flushTouchAdjustment()
+      dispatchPlace(PLACE_TAKEN_EVENT)
       input.follow.dispatch({ type: "follow" })
 
       if (behavior === "smooth") return glide(root)
@@ -1425,6 +1566,7 @@ export function createTimelineVirtualizer(input: Input) {
         origin = undefined
 
         if (value) return
+        depart()
         // A view that goes inactive mid-touch never sees its finger lift; its translation would outlive the gesture.
         clearTouchTarget()
         flushTouchAdjustment()
@@ -1490,6 +1632,8 @@ export function createTimelineVirtualizer(input: Input) {
     intentEvent.upward = upward
     intentEvent.overflow = upward && !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
     input.follow.dispatch(intentEvent)
+    // The reader moves the view themselves. That wins over a place the view has not reached yet.
+    dispatchPlace(PLACE_TAKEN_EVENT)
 
     if (!input.follow.following()) stopScroll()
   }
@@ -1519,6 +1663,7 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (!active() || !touch) return
     input.onUserScroll(event.target)
+    dispatchPlace(PLACE_TAKEN_EVENT)
     lastTouchY = touch.clientY
     const root = listRoot()
     const nested = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-scrollable]") : null
@@ -1586,6 +1731,7 @@ export function createTimelineVirtualizer(input: Input) {
     if (!active() || event.button === 2) return
     input.onUserScroll(event.target)
     input.follow.dispatch(pointerDownEvent)
+    dispatchPlace(PLACE_TAKEN_EVENT)
   }
 
   // A release only ends a pointer gesture, so every view may report it, including one that went inactive mid-press.
@@ -1951,6 +2097,7 @@ export function createTimelineVirtualizer(input: Input) {
     dispatchCold(DISPOSED)
 
     if (active()) {
+      depart()
       input.setScrollRef(undefined)
       input.setRevealMessage?.(() => {})
       input.setScrollToEnd?.(() => {})

@@ -365,8 +365,9 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     on(
       () => session.identity.params.id,
       (id, previous) => {
-        // A switch resets the cursor, so only a `#message-<id>` or other hash can hold the new session elsewhere.
-        if (!id || !previous || id === previous || location.hash) return
+        // A switch resets the cursor, so only a `#message-<id>` or other hash can hold the new session elsewhere, or
+        // the place a reader had scrolled up to when they were last in it.
+        if (!id || !previous || id === previous || location.hash || !follow.following()) return
         follow.dispatch({ type: "follow" })
         scrollToEnd()
       },

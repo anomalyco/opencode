@@ -25,11 +25,12 @@ const changed = (hash: string, viewReady = true): TimelineCursorEvent => ({
   viewReady,
 })
 
-const applied = (state: TimelineCursorState, hash: string, reveal = false): TimelineCursorEvent => ({
+const applied = (state: TimelineCursorState, hash: string, reveal = false, placed = false): TimelineCursorEvent => ({
   type: "hash.applied",
   attempt: state.attempt,
   hash: hash.slice(1),
   reveal,
+  placed,
 })
 
 const jump = (messageID: string, hash = "", viewReady = true): TimelineCursorEvent => ({
@@ -76,11 +77,11 @@ function expectIgnored(state: TimelineCursorState, event: TimelineCursorEvent) {
   expect(next.effects).toEqual([])
 }
 
-// The session opened on `hash` once its timeline is on screen.
-const open = (hash: string, reveal = false) => {
+// The session opened on `hash` once its timeline is on screen. `placed`: its reader had scrolled up in it before.
+const open = (hash: string, reveal = false, placed = false) => {
   const scheduled = replay([VIEW_READY_EVENT])
 
-  return transitionTimelineCursor(scheduled, applied(scheduled, hash, reveal))
+  return transitionTimelineCursor(scheduled, applied(scheduled, hash, reveal, placed))
 }
 
 // The route hash changed after the session opened.
@@ -374,6 +375,18 @@ describe("cursor machine", () => {
     expect(open("").effects).toEqual([{ type: "follow.end" }])
     expect(open("", true).effects).toEqual([])
     expect(open("#message-msg_1", true).state).toMatchObject({ status: "pending", endOnMiss: false })
+  })
+
+  test("a session opened without a hash leaves a reader who had scrolled up in it where they were", () => {
+    expect(open("", false, true).effects).toEqual([])
+    // A message link still wins over the place.
+    expect(open("#message-msg_1", false, true).effects).toEqual([{ type: "follow.detach" }])
+
+    // Leaving a hash later, as browser Back does, still returns to the end.
+    const scheduled = replay([changed("")], open("#section", false, true).state)
+    expect(transitionTimelineCursor(scheduled, applied(scheduled, "", false, true)).effects).toEqual([
+      { type: "follow.end" },
+    ])
   })
 
   test("a newer prompt clears the selection but keeps a pending target", () => {

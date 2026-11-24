@@ -1,16 +1,21 @@
 import { createMemo, createSignal, untrack, type Accessor } from "solid-js"
 import { createFollowState, followAnchor, isFollowing, transitionFollow, type FollowEvent } from "./machine"
+import { placeOf } from "./place"
 
-// Each session gets a fresh machine. Reading the state recomputes it for a changed key, so a view that mounts for the
-// new session starts out following, whatever order the flush runs its computations in.
+// A reader who scrolled up, as the machine has it. They come back in this state to a session they had left the end of.
+const away = transitionFollow(createFollowState(), { type: "scroll.intent", upward: true, overflow: true })
+
+// Each session has its own machine. A session whose reader left its end starts out where they were, and any other
+// starts out following. Reading the state recomputes it for a changed key, so a view that mounts for a session starts
+// from that session's state, whatever order the flush runs its computations in.
 export function createTimelineFollow(sessionKey: Accessor<string>) {
   const machine = createMemo(() => {
-    sessionKey()
+    const key = sessionKey()
 
-    return createSignal(createFollowState())
+    return { key, signal: createSignal(placeOf(key) ? away : createFollowState()) }
   })
 
-  const state = () => machine()[0]()
+  const state = () => machine().signal[0]()
   const peek = () => untrack(state)
   const following = createMemo(() => isFollowing(state()))
   const anchor = createMemo(() => followAnchor(state()))
@@ -18,7 +23,7 @@ export function createTimelineFollow(sessionKey: Accessor<string>) {
 
   // The signal skips an unchanged state, which the transition returns as the same object.
   const dispatch = (event: FollowEvent) => {
-    untrack(machine)[1](transitionFollow(peek(), event))
+    untrack(machine).signal[1](transitionFollow(peek(), event))
   }
 
   return {
@@ -34,6 +39,8 @@ export function createTimelineFollow(sessionKey: Accessor<string>) {
 
       return attempts
     },
+    /** The session this state is for. A view reads it when it is built, and keeps its reader's place under it. */
+    session: () => untrack(machine).key,
   }
 }
 
