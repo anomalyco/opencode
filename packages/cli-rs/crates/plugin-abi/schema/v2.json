@@ -5612,6 +5612,9 @@
               "type": "null"
             }
           ]
+        },
+        "fit_screen": {
+          "type": "boolean"
         }
       },
       "required": ["key", "title", "body"],

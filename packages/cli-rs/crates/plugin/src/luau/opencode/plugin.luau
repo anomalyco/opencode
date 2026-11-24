@@ -1034,6 +1034,7 @@ export type Panel = {
     bare: boolean?,
     close: string?,
     height: number?,
+    fit_screen: boolean?,
 }
 
 --- A footer action of a panel.

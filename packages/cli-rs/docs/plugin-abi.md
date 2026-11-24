@@ -198,7 +198,9 @@ the terminal, runs the program, waits, and sets the terminal up again.
   `key` it is a [rich select](#rich-selects).
 - **`Panel { key, size, title, subtitle, body, actions, binds, bleed, centered, bare }`**: changes in place while its
   key is open and keeps its scroll. `size` is `medium`, `large` or `xlarge`; `bare` is only the frame around the
-  body; `close` labels the header's close; a `height` with no actions has no footer row. `Close { key }` closes it.
+  body; `close` labels the header's close; a `height` with no actions has no footer row; `fit_screen` keeps the
+  body above the screen's bottom (at least 3 rows) instead of the default 60% of the screen (at least 8).
+  `Close { key }` closes it.
 - **`Confirm { title, message, label, action }`**: Confirm runs the action with `true`, Cancel and escape with
   `false`; a dialog that replaces it runs nothing.
 - **`Alert { title, message, action }`**: the action runs once after it closes, by enter, escape or another dialog.

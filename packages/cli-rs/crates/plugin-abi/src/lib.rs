@@ -2550,6 +2550,10 @@ pub struct Panel {
     /// footer row (TS `DialogLayout` without a footer).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<u16>,
+    /// The body also stops where the screen ends under a dialog a quarter down it, and is at least 3 rows high
+    /// (TS `GoalDialog`'s `maxHeight`); otherwise it is at most 60% of the screen and at least 8 rows.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fit_screen: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
