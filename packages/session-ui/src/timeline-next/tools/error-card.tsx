@@ -136,7 +136,11 @@ export function ErrorCard(props: ErrorCardProps) {
         <Collapsible.Content>
           <div data-slot="tool-error-card-content">
             <Show when={state.clipped && split.subtitle}>
-              {(text) => <p data-slot="tool-error-card-subtitle">{text()}</p>}
+              {(text) => (
+                <p data-slot="tool-error-card-subtitle" data-scrollable>
+                  {text()}
+                </p>
+              )}
             </Show>
             <CardDescription>{split.error.replace(/^Error:\s*/, "").trim()}</CardDescription>
           </div>

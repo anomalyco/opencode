@@ -1041,7 +1041,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
           </div>
         </Show>
         <Show when={error()}>
-          <Card variant="error" class="error-card">
+          <Card variant="error" class="error-card" data-scrollable>
             <LinkedText text={error()} />
           </Card>
         </Show>

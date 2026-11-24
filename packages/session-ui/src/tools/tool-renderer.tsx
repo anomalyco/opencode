@@ -2387,7 +2387,7 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
       </div>
       <Show when={open()}>
         <Show when={input().length > 0}>
-          <dl data-slot="execute-tool-call-input" dir="ltr">
+          <dl data-slot="execute-tool-call-input" data-scrollable dir="ltr">
             <For each={input()}>
               {([key, value]) => (
                 <div data-slot="execute-tool-call-input-entry">
@@ -2400,7 +2400,7 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
         </Show>
         <Show when={props.error}>
           {(error) => (
-            <div data-slot="execute-tool-error" dir="ltr">
+            <div data-slot="execute-tool-error" data-scrollable dir="ltr">
               <LinkedText text={error()} />
             </div>
           )}

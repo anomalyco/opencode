@@ -62,7 +62,7 @@ export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {
   return (
     <Show when={retry() && (props.show ?? true)}>
       <div data-slot="session-turn-retry" class="w-full min-w-0">
-        <Card variant="error" class="error-card" data-kind="session-retry-card">
+        <Card variant="error" class="error-card" data-kind="session-retry-card" data-scrollable>
           <div class="flex w-full items-start gap-2">
             <Icon name="outline-hexagonal-warning" class="shrink-0 text-v2-state-fg-danger" />
             <div class="min-w-0 flex-1">

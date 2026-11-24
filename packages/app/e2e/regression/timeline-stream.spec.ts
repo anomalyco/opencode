@@ -1293,6 +1293,116 @@ test("goes on following the reply after a long prompt folds from its toggle", as
   await expect.poll(fromEnd).toBeLessThanOrEqual(1)
 })
 
+for (const next of [false, true]) {
+  for (const wheel of ["inside", "that runs past the top of", "at the top of"] as const) {
+    const leaves = wheel === "at the top of"
+
+    test(`${leaves ? "leaves the end with" : "goes on following the reply after"} a wheel up ${wheel} a shell's output${next ? " in the New timeline" : ""}`, async ({
+      page,
+    }) => {
+      // A wheel over a shell's output scrolls the output while it has room, and the timeline does not move. The
+      // timeline took every upward wheel for the reader leaving the end, so the reply that streamed next stayed out of
+      // view. At the top of the output the browser scrolls the timeline, and then the reader has left the end. It does
+      // not when the wheel gesture began lower in the output: the rest of that gesture scrolls nothing.
+      const timeline = await setupTimeline(page, {
+        settings: { shellToolPartsExpanded: true, newTimeline: next },
+        messages: [
+          userMessage(),
+          assistantMessage(
+            [
+              textPart("prt_inner_earlier", notes("Earlier", 40)),
+              shell(
+                "prt_inner_shell",
+                "completed",
+                Array.from({ length: 80 }, (_, index) => `Output line ${index + 1}.`).join("\n"),
+              ),
+              textPart("prt_inner_tail", "Streaming."),
+            ],
+            { completed: false },
+          ),
+        ],
+      })
+
+      const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+      const output = page.locator('[data-slot="bash-scroll"]')
+      const earlier = page.locator(`[data-timeline-part-id="${renderedPartID("prt_inner_earlier")}"]`)
+
+      const fromEnd = () =>
+        scroller.evaluate((element) => Math.round(element.scrollHeight - element.clientHeight - element.scrollTop))
+
+      const inner = () => output.evaluate((element) => element.scrollTop)
+      const top = () => earlier.evaluate((element) => element.getBoundingClientRect().y)
+
+      await expect(page.getByText("Streaming.", { exact: true })).toBeInViewport()
+      // Before the rows have their real sizes the timeline has nowhere to scroll, and the wheel would do nothing.
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      // The timeline follows: a streamed line comes into view.
+      await timeline.send(partDelta("prt_inner_tail", "\n\nFollowed."))
+      await expect(page.getByText("Followed.", { exact: true })).toBeInViewport()
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      await expect
+        .poll(() => output.evaluate((element) => element.scrollHeight - element.clientHeight))
+        .toBeGreaterThan(400)
+      const box = (await output.boundingBox())!
+      const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      await page.mouse.move(point.x, point.y)
+
+      // Down into the output, or already at its end.
+      await page.mouse.wheel(0, 200)
+      await expect.poll(inner).toBeGreaterThanOrEqual(200)
+
+      if (wheel === "inside") {
+        const before = await inner()
+        await page.mouse.wheel(0, -100)
+        await expect.poll(inner).toBe(before - 100)
+      }
+
+      if (wheel === "that runs past the top of") {
+        // The browser's own wheel gesture. Each wheel event that a test sends begins a gesture of its own.
+        const devtools = await page.context().newCDPSession(page)
+        await devtools.send("Input.synthesizeScrollGesture", {
+          x: point.x,
+          y: point.y,
+          yDistance: 800,
+          speed: 2400,
+          gestureSourceType: "mouse",
+        })
+        await expect.poll(inner).toBe(0)
+      }
+
+      if (leaves) {
+        // One wheel event takes the output to its top, however far that is.
+        await page.mouse.wheel(0, -4000)
+        await expect.poll(inner).toBe(0)
+      }
+
+      // Only the output has moved so far.
+      expect(await fromEnd()).toBeLessThanOrEqual(1)
+
+      if (leaves) {
+        await page.mouse.wheel(0, -120)
+        await expect.poll(fromEnd).toBe(120)
+      }
+
+      const place = await top()
+      const height = await scroller.evaluate((element) => element.scrollHeight)
+      await timeline.send(partDelta("prt_inner_tail", `\n\n${notes("Streamed", 12)}`))
+      // The streamed lines are measured, which is when a timeline that follows scrolls to its end.
+      await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+
+      if (leaves) {
+        expect(await top()).toBe(place)
+
+        return
+      }
+
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      await expect(page.getByText("Streamed note 12.", { exact: true })).toBeInViewport()
+    })
+  }
+}
+
 test.describe("background work", () => {
   test("does not offer a running subagent to the background", async ({ page }) => {
     await setupTimeline(page, {

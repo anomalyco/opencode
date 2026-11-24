@@ -118,7 +118,7 @@ export function CompactionMessage(props: { message: SessionMessageCompaction; er
           <Separator label={label()} />
         </Show>
         <Show when={error()}>
-          <Card variant="error" class="error-card">
+          <Card variant="error" class="error-card" data-scrollable>
             <LinkedText text={error()} />
           </Card>
         </Show>

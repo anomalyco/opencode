@@ -1107,10 +1107,12 @@ export function createTimelineVirtualizer(input: Input) {
   // Upward input is the one intent geometry cannot recover: nudging up while still a pixel from
   // the end must stop following, even though the resulting position still looks like the end.
   // Only an upward intent reads the scroll range, as content that does not overflow cannot move.
-  function dispatchIntent(upward: boolean) {
+  // `passedOn`: a wheel at the limit of a scroller in a row. Whether it scrolls the timeline is the browser's choice, so
+  // it does not stop following by itself: the scroll that it makes does (`handleListScroll`).
+  function dispatchIntent(upward: boolean, passedOn = false) {
     const root = listRoot()
     intentEvent.upward = upward
-    intentEvent.overflow = upward && !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
+    intentEvent.overflow = upward && !passedOn && !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
     input.follow.dispatch(intentEvent)
 
     if (!input.follow.following()) stopScroll()
@@ -1130,8 +1132,24 @@ export function createTimelineVirtualizer(input: Input) {
     // A wheel with no vertical distance moves nothing in the timeline: a sideways one, over a code block for example.
     // It is not the reader scrolling, so it ends no seek and says nothing about where the reader is headed.
     if (!active() || !event.deltaY) return
+    const upward = event.deltaY < 0
+    const root = listRoot()
+    const marked = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-scrollable]") : null
+
+    // The scroller in a row that the wheel is over, such as a shell's output, when its content overflows.
+    const inner =
+      marked && marked !== root && root?.contains(marked) && marked.scrollHeight > marked.clientHeight
+        ? marked
+        : undefined
+
+    // While that scroller has room in the wheel's direction it takes the wheel, and the timeline does not move. That
+    // is not the reader scrolling the timeline either: a wheel up inside a shell's output stopped the timeline from
+    // following, and the reply that streamed next stayed out of view.
+    if (inner && (upward ? inner.scrollTop > 0 : inner.scrollHeight - inner.clientHeight - inner.scrollTop > 1)) return
     input.onUserScroll(event.target)
-    dispatchIntent(event.deltaY < 0)
+    // At its limit the browser passes the wheel on to the timeline, but not when the wheel gesture began while the
+    // scroller had room: the rest of that gesture stays with the scroller and scrolls nothing.
+    dispatchIntent(upward, !!inner)
   }
 
   const handleListTouchStart = (event: TouchEvent) => {
