@@ -10,6 +10,7 @@ import { route, type Locale } from "~/lib/language"
 import { legalMarkdown } from "~/lib/legal"
 import { legalHubMarkdown } from "~/lib/legal-documents"
 import { privacyPolicy } from "~/lib/legal/privacy-policy"
+import { refundPolicy } from "~/lib/legal/refund-policy"
 import { termsOfService } from "~/lib/legal/terms-of-service"
 import { markdownDocument, type MarkdownContext } from "~/lib/markdown"
 import { pressMarkdown } from "~/lib/press-content"
@@ -95,6 +96,12 @@ export const pageMarkdown: Record<string, PageMarkdown> = {
     title: privacyPolicy.title,
     description: "How OpenCode collects, uses and shares personal data",
     markdown: (context) => legalMarkdown(privacyPolicy, context),
+    englishOnly: true,
+  },
+  [refundPolicy.path]: {
+    title: refundPolicy.title,
+    description: "When OpenCode refunds Go subscriptions and Models credits",
+    markdown: (context) => legalMarkdown(refundPolicy, context),
     englishOnly: true,
   },
   [termsOfService.path]: {
