@@ -54,4 +54,24 @@ describe("shell env", () => {
       }
     },
   )
+
+  // A slow interactive rc file must not cost the login profile's PATH: the fake shell never answers `-il`.
+  test.skipIf(process.platform === "win32")(
+    "loadShellEnv falls back to -l when -il times out",
+    async () => {
+      const root = mkdtempSync(path.join(tmpdir(), "opencode-shell-env-"))
+      const shell = path.join(root, "shell")
+
+      try {
+        writeFileSync(shell, `#!/bin/sh\n[ "$1" = "-il" ] && exec sleep 30\nFAKE_SHELL_ENV=1 exec /bin/sh -c "$3"\n`)
+        chmodSync(shell, 0o755)
+        const env = await Effect.runPromise(loadShellEnv(shell).pipe(Effect.provide(NodePath.layer)))
+
+        expect(env?.FAKE_SHELL_ENV).toBe("1")
+      } finally {
+        rmSync(root, { recursive: true, force: true })
+      }
+    },
+    15_000,
+  )
 })
