@@ -129,6 +129,12 @@ This section is the single source for what may move or restyle the session timel
 - Keeper: "a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled" in `e2e/regression/session-timeline-accessibility.spec.ts`.
 - To check by hand: click a tool header, a link and a notice in the timeline, then scroll up and down with the wheel. The timeline must follow the wheel.
 
+### Scroll writes
+
+- A native scroll write (`scrollTo`, `scrollTop =`) forces a layout when anything is dirty. TanStack corrects the scroll position once for each row it resizes above the view, so a batch of measured rows forced one layout for each row.
+- `scrollToFn` in `src/session/timeline/virtualizer.tsx` holds the corrections made while a batch of sizes is applied and writes the last one once. Keep scroll writes for size changes on that path, and call `flushHeldScroll` before code inside the batch reads the native offset.
+- Keeper: "corrects the scroll position once for each batch of rows an older page measures" in `e2e/regression/timeline-history.spec.ts`.
+
 ### `:has()` selectors
 
 - Chromium rechecks an element's `:has()` when focus moves, an attribute changes, or an element is added or removed near it. In and around the timeline, that happens many times a second during a scroll.
