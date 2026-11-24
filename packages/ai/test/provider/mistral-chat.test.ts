@@ -642,6 +642,31 @@ describe("Mistral Chat", () => {
     }),
   )
 
+  it.effect("maps reasoning token usage", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              chunk({}, "stop", {
+                prompt_tokens: 5,
+                completion_tokens: 12,
+                total_tokens: 17,
+                completion_tokens_details: { reasoning_tokens: 9 },
+              }),
+            ),
+          ),
+        ),
+      )
+      expect(response.usage).toMatchObject({
+        outputTokens: 12,
+        reasoningTokens: 9,
+        visibleOutputTokens: 3,
+        totalTokens: 17,
+      })
+    }),
+  )
+
   it.effect("maps finish reasons and does not finalize truncated tool calls", () =>
     Effect.gen(function* () {
       for (const [raw, normalized] of [
