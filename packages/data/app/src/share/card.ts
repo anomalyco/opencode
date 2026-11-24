@@ -506,6 +506,11 @@ function highlights(card: ShareCard, options: ShareOptions) {
   const count =
     chart.kind === "stacked" ? chart.series.filter((item) => item.key !== "other").length : chart.rows.length
   const most = chart.kind === "stacked" ? 5 : 3
+  // A one-day chart goes along its bars, left to right.
+  if (chart.kind === "stacked" && chart.day !== undefined)
+    return dayOrder(chart)
+      .filter((series) => chart.series[series]?.key !== "other")
+      .slice(0, most)
   return Array.from({ length: Math.min(most, count) }, (_, index) => index)
 }
 

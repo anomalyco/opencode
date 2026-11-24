@@ -28,7 +28,8 @@ async function measure(url: string): Promise<Spectrum> {
   const audio = await context.decodeAudioData(await (await fetch(url)).arrayBuffer())
   const samples = mono(audio)
   const rate = audio.sampleRate
-  const edges = Array.from({ length: bands + 1 }, (_, index) => 45 * (14000 / 45) ** (index / bands))
+  // From 80 Hz: below it these tracks have next to nothing, and the bass columns would stand dark.
+  const edges = Array.from({ length: bands + 1 }, (_, index) => 80 * (14000 / 80) ** (index / bands))
   const window = Float32Array.from({ length: size }, (_, index) => 0.5 - 0.5 * Math.cos((2 * Math.PI * index) / size))
   const raw = Array.from({ length: Math.floor((samples.length / rate) * fps) }, (_, frame) => {
     const start = Math.floor((frame / fps) * rate) - size / 2
