@@ -48,6 +48,7 @@
     "./document-surface.css": "./src/components/document-surface.css",
     "./field": "./src/forms/field/field.tsx",
     "./file-tree.css": "./src/styles/file-tree.css",
+    "./hold-scroll": "./src/components/hold-scroll.ts",
     "./icon": "./src/icons/icon/icon.tsx",
     "./icons/catalog": "./src/icons/catalog.ts",
     "./icons/registry": "./src/icons/registry.ts",
