@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { and, eq, isNull } from "drizzle-orm"
-import { Cause, Context, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -291,6 +291,37 @@ describe("Worktree", () => {
         directory: target,
         strategy: "git",
       })
+    }),
+  )
+
+  it.live("cancels a hanging custom strategy even when it replaces the git strategy", () =>
+    Effect.gen(function* () {
+      const worktrees = yield* fixtureWorktree()
+      const pending = yield* Deferred.make<{ signal: AbortSignal; release: () => void }>()
+      yield* worktrees.transform((editor) =>
+        editor.add({
+          id: Worktree.StrategyID.make("git"),
+          create: () =>
+            Effect.callback<never, Error>((resume, signal) => {
+              Deferred.doneUnsafe(
+                pending,
+                Effect.succeed({ signal, release: () => resume(Effect.fail(new Error("test cleanup"))) }),
+              )
+            }),
+          remove: () => Effect.void,
+          list: () => Effect.succeed([]),
+        }),
+      )
+      const controller = new AbortController()
+      const fiber = Effect.runFork(worktrees.create({ name: "cancelled" }), { signal: controller.signal })
+      const strategy = yield* Deferred.await(pending)
+      yield* Effect.addFinalizer(() => Effect.sync(strategy.release))
+      yield* Effect.yieldNow
+
+      controller.abort()
+      expect(strategy.signal.aborted).toBe(true)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
     }),
   )
 
