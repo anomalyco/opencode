@@ -34,7 +34,12 @@ const layer = Layer.effect(
         const config = yield* Config.Service
         const entries = yield* config.entries()
         const extra = Config.latest(entries, "push")?.relays ?? []
-        const relays = [defaultRelay, ...extra.map((relay) => URL.parse(relay)?.origin ?? relay)]
+        const relays = [defaultRelay]
+        for (const relay of extra) {
+          const url = URL.parse(relay)
+          if (url?.protocol !== "https:" || relays.includes(url.origin)) continue
+          relays.push(url.origin)
+        }
         return { enabled, relays } satisfies Options
       }).pipe(
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))),

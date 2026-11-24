@@ -28,12 +28,10 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
             hostname: hostname() || undefined,
             urls: info.urls(),
             paths: info.paths,
-            capabilities: push.enabled
-              ? {
-                  persistentPty: PersistentPty.available,
-                  push: { version: 1 as const, relays: push.relays, levels: Push.levels },
-                }
-              : { persistentPty: PersistentPty.available },
+            capabilities: {
+              persistentPty: PersistentPty.available,
+              ...(push.enabled ? { push: { version: 1 as const, relays: push.relays, levels: Push.levels } } : {}),
+            },
           }
         }),
       )
