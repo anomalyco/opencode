@@ -93,6 +93,14 @@ function collectRanges(
   return { hits, active }
 }
 
+// The active match alone. A seek probes on every one of its frames, so the probe reads the match's own part and not
+// the text of every mounted row.
+function activeRange(root: HTMLElement, query: string, partID: string, occurrence: number) {
+  const part = root.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(partID)}"]`)
+
+  return part ? collectRanges(part, query, partID, occurrence).active[0] : undefined
+}
+
 function applyHighlights(
   root: HTMLElement,
   query: string,
@@ -285,7 +293,7 @@ export function createTranscriptSearch(
     const root = input.scrollRef()
 
     if (!root) return { type: "seek.missing", attempt: effect.attempt }
-    const range = collectRanges(root, effect.query, effect.partID, effect.occurrence).active[0]
+    const range = activeRange(root, effect.query, effect.partID, effect.occurrence)
 
     if (!range) return { type: "seek.missing", attempt: effect.attempt }
     const rect = range.getBoundingClientRect()
