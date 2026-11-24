@@ -31,6 +31,7 @@ export interface Editor {
 export interface Interface extends State.Transformable<Editor> {
   readonly directory: AbsolutePath
   readonly get: () => {
+    readonly builtinGit: Strategy
     readonly directory: AbsolutePath
     readonly strategies: ReadonlyMap<Worktree.StrategyID, Strategy>
     readonly selected: Worktree.StrategyID
@@ -48,6 +49,7 @@ const layer = Layer.effect(
     const state = State.create({
       name: "worktree",
       initial: () => ({
+        builtinGit: git,
         directory: AbsolutePath.make(path.join(global.data, "worktree", location.project.id.slice(0, 6))),
         strategies: new Map<Worktree.StrategyID, Strategy>([[git.id, git]]),
         selected: git.id,

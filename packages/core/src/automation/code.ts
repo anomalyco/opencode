@@ -5,8 +5,6 @@ import { Automation } from "@opencode/schema/automation"
 import { Array, Context, Effect, Option, Result, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { CodeModeTool } from "../codemode/tool.js"
-import { Location } from "../location.js"
-import { LocationServiceMap } from "../location-service-map.js"
 import { Permission } from "../permission.js"
 import { Plugin } from "../plugin/service.js"
 import type { SessionMessage } from "../session/message.js"
@@ -85,34 +83,22 @@ function scanProgram(code: string): Result.Result<ProgramScan, string> {
   return Result.succeed({ tools: scanned.success.tools, actions: extensionActions(scanned.success) })
 }
 
-/**
- * The Location of the plugin making a create, if a plugin is making it. Code, shell and subagent targets in that Location
- * cannot wait for its plugin activation, which may be running that plugin's setup and so would never finish. Targets in
- * other Locations still wait for their plugins.
- */
-export const FromPlugin = Context.Reference<Location.Ref | undefined>("@opencode/AutomationCode/FromPlugin", {
+/** The calling plugin's registry. SDK instances and the host can have separate registries at the same Location. */
+export const FromPlugin = Context.Reference<Plugin.Interface | undefined>("@opencode/AutomationCode/FromPlugin", {
   defaultValue: () => undefined,
 })
 
 /**
- * Waits for the current Location's plugins. A create from one of them while they are still activating is refused instead:
- * configured permissions are applied by plugins that load later, so it would be authorized against incomplete permissions.
+ * Waits for this registry's plugins. A create from a plugin in this same registry is refused instead while it activates:
+ * its activation may be waiting on that plugin's setup, and configured permissions are applied by plugins that load later.
  */
 export const awaitPlugins = Effect.gen(function* () {
   const plugins = yield* Plugin.Service
-  const from = yield* FromPlugin
-  if (from !== undefined) {
-    const location = yield* Location.Service
-    const current = LocationServiceMap.canonical({ directory: location.directory, workspaceID: location.workspaceID })
-    const own = LocationServiceMap.canonical(from)
-    if (current.directory === own.directory && current.workspaceID === own.workspaceID) {
-      if (yield* plugins.activated) return
-      return yield* Effect.fail(
-        "Plugins in this location are still loading, so configured permissions are not applied yet. Create this automation after plugin setup, for example from an event handler.",
-      )
-    }
-  }
-  yield* plugins.awaitActivation
+  if ((yield* FromPlugin) !== plugins) return yield* plugins.awaitActivation
+  if (yield* plugins.activated) return
+  return yield* Effect.fail(
+    "Plugins in this location are still loading, so configured permissions are not applied yet. Create this automation after plugin setup, for example from an event handler.",
+  )
 })
 
 /**

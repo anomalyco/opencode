@@ -76,7 +76,7 @@ const layer = Layer.effect(
           release: holdUnsafe(),
         })
       })
-      const host = yield* PluginHost.make({ list }, plugin.id).pipe(Effect.provideContext(hostContext))
+      const host = yield* PluginHost.make(service, plugin.id).pipe(Effect.provideContext(hostContext))
       const exit = yield* Effect.suspend(() => plugin.effect(host)).pipe(
         grouped,
         inherit,
@@ -265,7 +265,7 @@ const layer = Layer.effect(
       )
     yield* Effect.addFinalizer(close)
 
-    return Service.of({
+    const service = Service.of({
       activate,
       close,
       awaitActivation: ready.await,
@@ -274,6 +274,7 @@ const layer = Layer.effect(
       list,
       gui,
     })
+    return service
   }),
 )
 

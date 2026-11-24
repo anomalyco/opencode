@@ -24,7 +24,8 @@ it.live("Effect plugins can create, list and delete automations", () =>
     const session = yield* context.session.create({ title: "Effect automation target" })
 
     const created = yield* context.experimental.automation.create({
-      directory: context.location.directory,
+      sessionID: session.id,
+      directory: undefined,
       name: "effect inbox",
       trigger: { type: "cron", cron: "0 * * * *", tz: "Europe/Madrid" },
       action: { type: "prompt", prompt: "Clean up the inboxes now.", to: { session: session.id } },
@@ -303,5 +304,22 @@ it.live("Promise plugin calls aborted mid-call reject with the signal's reason",
     expect(reasons).toHaveLength(1)
     expect(reasons[0]).toBeInstanceOf(DOMException)
     expect((reasons[0] as DOMException).name).toBe("AbortError")
+  }),
+)
+
+it.live("a late abort preserves a completed Promise plugin call's error", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const context = yield* PluginHost.make(plugins, "test")
+
+    yield* PluginPromise.fromPromise({
+      id: "test.late-abort",
+      async setup(ctx) {
+        const controller = new AbortController()
+        const agent = ctx.agent.get({ agentID: "missing" }, { signal: controller.signal })
+        controller.abort(new Error("late abort"))
+        await expect(agent).rejects.toThrow("Agent not found: missing")
+      },
+    }).effect(context)
   }),
 )
