@@ -175,6 +175,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     // Stepping to another section keeps the editor open, its music and its options.
     if (dialog?.open) return
     setTrack("none")
+    // Closing paused it; each opening plays from the start again.
+    setPlaying(true)
     dialog?.showModal()
     void loadShareFonts().then(() => setReady(true))
   })

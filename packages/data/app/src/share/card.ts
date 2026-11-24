@@ -1070,8 +1070,9 @@ function drawSlide(
   if (logo) {
     const size = Math.min(box.height * 0.95, box.width * 0.9)
     ctx.save()
-    ctx.globalAlpha = (dark ? 0.08 : 0.07) * settle(since, 0, 0.5)
-    ctx.drawImage(logo, width - size * 0.72, box.y + (box.height - size) / 2, size, size)
+    // Fainter than the type by far, and high in the space, clear of the number at the foot.
+    ctx.globalAlpha = (dark ? 0.05 : 0.045) * settle(since, 0, 0.5)
+    ctx.drawImage(logo, width - size * 0.72, box.y - size * 0.12, size, size)
     ctx.restore()
   }
   ctx.save()
@@ -1176,7 +1177,7 @@ function drawPodium(
     const logo = shareLogo(entry.logo, dark)
     if (logo) {
       const size = tile.height * 1.15
-      ctx.globalAlpha = amount * (dark ? 0.07 : 0.06)
+      ctx.globalAlpha = amount * (dark ? 0.05 : 0.045)
       ctx.drawImage(logo, x + tile.width - size * 0.78, y + (tile.height - size) / 2, size, size)
       ctx.globalAlpha = amount
     }
