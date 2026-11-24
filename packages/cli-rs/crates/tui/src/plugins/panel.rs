@@ -973,6 +973,7 @@ impl Body {
     /// The frame in the build `cx`: the mount the first time, the same mount in the new theme after.
     fn build(self: &Rc<Self>, tui: &Rc<Tui>, cx: &Rc<DialogCx>) -> View {
         *self.cx.borrow_mut() = Some(cx.clone());
+        cx.configure_scroll(&self.scroll);
         self.draw_header();
         // Restore focus to the same body node after a theme rebuild.
         let frame = self.frame.id();
@@ -1151,7 +1152,7 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
         },
     );
     let set = |app: &App, height: u16| u32::from(height).min(u32::from(app.size().1).saturating_sub(6)).max(1);
-    let scroll = ScrollBox::new(app).scrollbars(false).height(panel.height.map_or(1, |height| set(app, height)));
+    let scroll = cx.scroll_box().scrollbars(false).height(panel.height.map_or(1, |height| set(app, height)));
     let content = View::new(app).shrink(0.0);
     // A bare panel supplies its own body sizing and scrolling.
     let fitted = !panel.bare;

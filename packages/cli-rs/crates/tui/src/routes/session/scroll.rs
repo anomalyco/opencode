@@ -1,10 +1,7 @@
 //! Scroll commands, history loading, and the jump-to-latest hint.
 
-use std::time::Instant;
-
 use opencode_local::cli_config::{Grouping, Info, SubmitScroll, Verbosity};
 use opentui::input::MouseEventKind;
-use opentui::widget::{MacOsScroll, ScrollAcceleration};
 
 use super::grouping::DEFAULT_VERBOSITY;
 use super::messages::list::{ScrollAnchor, Transcript};
@@ -229,13 +226,7 @@ impl Inner {
         let padding = u16::from(scrollbar);
         scroll.content_view().padding_edge(Edge::Right, padding);
         scroll.wrapper_view().padding_edge(Edge::Right, padding);
-        let speed = info.scroll.as_ref();
-        if speed.and_then(|scroll| scroll.acceleration) == Some(true) {
-            scroll.scroll_acceleration(MacOsScroll::default());
-        } else {
-            let speed = speed.and_then(|scroll| scroll.speed).map_or(3.0, |speed| speed.0);
-            scroll.scroll_acceleration(Speed(speed));
-        }
+        opencode_ui::scroll::apply(scroll, crate::dialogs::scroll_config(info));
     }
 
     /// Register scroll commands with their focus and mode restrictions.
@@ -530,14 +521,4 @@ pub(super) fn after_layout(app: &App, continuation: impl FnOnce() + 'static) {
         }
         false
     });
-}
-
-struct Speed(f64);
-
-impl ScrollAcceleration for Speed {
-    fn tick(&mut self, _now: Instant) -> f64 {
-        self.0
-    }
-
-    fn reset(&mut self) {}
 }
