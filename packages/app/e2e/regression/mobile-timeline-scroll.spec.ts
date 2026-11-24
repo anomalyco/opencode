@@ -345,6 +345,72 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       })
     }
 
+    test("a sideways drag across a code block goes on following streamed output", async ({ page }) => {
+      // The finger drifts down a few pixels while it scrolls a code block sideways. The timeline took that drift for
+      // a drag of its own content and stopped following, though the browser moved only the code block.
+      const wide = Array.from({ length: 12 }, (_, index) => `const value${index} = "${"x".repeat(300)}"`).join("\n")
+
+      const timeline = await setupTimeline(page, {
+        messages: [
+          userMessage(),
+          assistantMessage(
+            [
+              textPart("prt_sideways_code", `Earlier output.\n\n\`\`\`ts\n${wide}\n\`\`\``),
+              textPart("prt_sideways_tail", "Latest output."),
+            ],
+            { completed: false },
+          ),
+        ],
+        seedHistory: true,
+        viewport: { width: 390, height: 844 },
+      })
+
+      const scroller = page
+        .locator('[data-slot="session-timeline-scroll"]')
+        .getByRole("region", { name: "scrollable content", exact: true })
+
+      const code = page.locator(`[data-timeline-part-id="${renderedPartID("prt_sideways_code")}"] pre`)
+      const tail = page.getByText("Latest output.", { exact: true })
+
+      const fromEnd = () =>
+        scroller.evaluate((element) => Math.round(element.scrollHeight - element.clientHeight - element.scrollTop))
+
+      await expect(scroller.locator("[data-timeline-virtual-content]")).toBeVisible()
+      await expect(tail).toBeInViewport()
+      await expect
+        .poll(() => code.evaluate((element) => element.scrollWidth - element.clientWidth))
+        .toBeGreaterThan(300)
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      const before = await tail.evaluate((element) => element.getBoundingClientRect().top)
+      const bounds = (await code.boundingBox())!
+      const x = bounds.x + bounds.width * 0.75
+      const y = bounds.y + bounds.height / 2
+      const devtools = await page.context().newCDPSession(page)
+      await devtools.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] })
+
+      // Each step goes sideways, and then a pixel straight down.
+      for (let step = 1; step <= 12; step++)
+        for (const drift of [step - 1, step])
+          await devtools.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x: x - step * 12, y: y + drift }],
+          })
+      await expect.poll(() => code.evaluate((element) => element.scrollLeft)).toBeGreaterThan(100)
+      await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+      // Only the code block moved.
+      expect(await tail.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(before, 0)
+      const height = await scroller.evaluate((element) => element.scrollHeight)
+      await timeline.send(
+        partUpdated(
+          textPart("prt_sideways_tail", `Latest output.\n\n${"Additional line.\n\n".repeat(30)}Latest stream end.`),
+        ),
+      )
+      // The streamed lines are measured, which is when a timeline that follows scrolls to its end.
+      await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      await expect(page.getByText("Latest stream end.", { exact: true })).toBeInViewport()
+    })
+
     for (const [width, release] of [
       [390, "touchEnd"],
       [1000, "touchCancel"],

@@ -265,6 +265,8 @@ export function createTimelineVirtualizer(input: Input) {
   const measuredElements = new WeakSet<Element>()
   // The finger's last position, a measurement only: whether it is down is the follow machine's `isTouchHeld`.
   let lastTouchY = 0
+  // Where the finger went down, a measurement only: which way its drag has gone since.
+  const touchStart = { x: 0, y: 0 }
   let touchTarget: EventTarget | null = null
   // Size compensation deferred during one resize delivery, committed or dropped before the delivery ends.
   let touchAdjustment = 0
@@ -1160,6 +1162,8 @@ export function createTimelineVirtualizer(input: Input) {
     if (!active() || !touch) return
     input.onUserScroll(event.target)
     lastTouchY = touch.clientY
+    touchStart.x = touch.clientX
+    touchStart.y = touch.clientY
     const root = listRoot()
     const nested = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-scrollable]") : null
 
@@ -1180,18 +1184,23 @@ export function createTimelineVirtualizer(input: Input) {
 
   const handleListTouchMove = (event: Event) => {
     if (!(event instanceof TouchEvent)) return
-    const current = event.touches[0]?.clientY
+    const touch = event.touches[0]
 
-    if (current === undefined) return
+    if (!touch) return
     const previous = lastTouchY
-    lastTouchY = current
+    lastTouchY = touch.clientY
 
     // A retained target can outlive its whole session view. Only the active timeline may change the shared follow
     // state, and only while the finger it started with is still down; release still cleans up below.
     if (!active() || !isTouchHeld(input.follow.peek())) return
 
     // Dragging the content downward reveals earlier messages.
-    if (current <= previous) return
+    if (touch.clientY <= previous) return
+
+    // A drag that has gone further sideways than up or down scrolls a code block or a table sideways, and the finger
+    // drifts a few pixels down on the way. That drift stopped the timeline from following, though only the block
+    // moved. If such a drag does move the timeline, its scroll under the held finger tells.
+    if (Math.abs(touch.clientY - touchStart.y) <= Math.abs(touch.clientX - touchStart.x)) return
     const root = listRoot()
     touchDragEvent.overflow = !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
     input.follow.dispatch(touchDragEvent)
