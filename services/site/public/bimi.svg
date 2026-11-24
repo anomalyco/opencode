@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>OpenCode</title>
+  <rect width="512" height="512" fill="#131010"/>
+  <path d="M320 224V352H192V224H320Z" fill="#5A5858"/>
+  <path fill-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="#FFFFFF"/>
+</svg>
