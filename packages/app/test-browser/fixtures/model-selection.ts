@@ -296,21 +296,34 @@ test("new-session drafts remember each agent's model and hand off inactive choic
   expect(local.model.current()?.id).toBe("c")
 })
 
-test("a variant saved for a speed before speeds shared their model's variant still applies in a draft", () => {
+test("a draft speed switch uses the target's legacy variant instead of its sibling's", () => {
   const f = fixture()
   f.set("route", "id", undefined)
   f.set("models", (models) => [
     ...models,
     { ...models[0], id: "a-fast", modelID: "a-fast", experimental: { speed: { base: "a", id: "fast", faster: true } } },
+    {
+      ...models[0],
+      id: "a-ultrafast",
+      modelID: "a-ultrafast",
+      experimental: { speed: { base: "a", id: "ultrafast", faster: true } },
+    },
   ])
-  f.setPreferences("variant", "provider/a-fast", "high")
+  f.setPreferences("variant", "provider/a-fast", "low")
+  f.setPreferences("variant", "provider/a-ultrafast", "high")
   const { composer } = f.mount(true)
 
   if (!composer) throw new Error("missing draft composer")
-  composer.set(key("a"))
-  composer.speed.set("fast")
-  expect(composer.current()?.id).toBe("a-fast")
+  expect(composer.current()?.id).toBe("a")
+  expect(composer.variant.current()).toBe("low")
+  composer.speed.set("ultrafast")
+  expect(composer.current()?.id).toBe("a-ultrafast")
   expect(composer.variant.current()).toBe("high")
+
+  composer.variant.set(undefined)
+  f.setPreferences("variant", "provider/a", "high")
+  composer.speed.set("fast")
+  expect(composer.variant.current()).toBeUndefined()
 })
 
 test("a promoted draft leaves the next draft empty even when its Session is never opened", () => {
