@@ -70,6 +70,8 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
 
   let stopReveal = () => {}
 
+  let scrollTo = (_top: number, _behavior: ScrollBehavior) => {}
+
   let scrollToEnd = (_behavior?: ScrollBehavior) => {}
 
   let page = (_direction: 1 | -1) => {}
@@ -169,6 +171,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     anchor,
     revealMessage: (id) => revealMessage(id),
     stopReveal: () => stopReveal(),
+    scrollTo: (top, behavior) => scrollTo(top, behavior),
     detach,
     toEnd: () => {
       follow.dispatch({ type: "follow" })
@@ -435,6 +438,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
         revealMessage(id, partID)
       },
       stopReveal: () => stopReveal(),
+      scrollTo: (top: number, behavior: ScrollBehavior) => scrollTo(top, behavior),
       resume,
       setActiveMessage,
     },
@@ -476,6 +480,9 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
           setRevealState((current) => transitionRouteReveal(current, { type: "reveal.attempted", entryKey })),
       },
       setScrollRef,
+      setScrollTo: (scroll: (top: number, behavior: ScrollBehavior) => void) => {
+        scrollTo = scroll
+      },
       setScrollToEnd: (scroll: (behavior?: ScrollBehavior) => void) => {
         scrollToEnd = scroll
       },

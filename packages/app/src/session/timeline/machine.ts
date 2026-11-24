@@ -41,13 +41,15 @@ export type FollowState =
    * Stays where the reader is. `endPending`: a scroll landed within the zoom slack of the end and may have reached it.
    * `by`: what put the view here, while that decides how it returns to the end. `"navigation"`: navigation or a
    * selection did, and the reader has not scrolled on since. `"toward-end"`: the reader's last wheel or scroll key
-   * was toward the end.
+   * was toward the end. `away`: how far the reader has moved a view that navigation sent somewhere, while that is
+   * still too little to tell from the rounding of a zoomed scroll range.
    */
   | {
       readonly type: "detached"
       readonly gesture?: FollowGesture
       readonly endPending: boolean
       readonly by?: DetachedBy
+      readonly away?: number
     }
   /** Holds a revealed tool call in place. */
   | { readonly type: "anchored"; readonly anchor: FollowAnchor }
@@ -148,7 +150,9 @@ export function transitionFollow(state: FollowState, event: FollowEvent): Follow
     return state.type === "following" && state.gliding ? following(state.gesture, state.away) : state
 
   if (event.type === "detach")
-    return state.type === "detached" && state.by === "navigation" ? state : detached(state.gesture, false, "navigation")
+    return state.type === "detached" && state.by === "navigation" && !state.away
+      ? state
+      : detached(state.gesture, false, "navigation")
 
   // A programmatic scroll takes the view somewhere else, so the reader is no longer on the way to the end.
   if (event.type === "release")
@@ -259,7 +263,9 @@ export function needsEndProbe(state: FollowState) {
 
 // Only the reader's own input lets an anchored tool go.
 function releaseAnchor(state: FollowState, event: FollowEvent): FollowState {
-  if (event.type === "release") return DETACHED
+  // A programmatic scroll takes the view somewhere else: a message link or Find, whose own `detach` the held tool
+  // did not hear. The view is then where navigation sent it, as it is without a held tool.
+  if (event.type === "release") return detached(undefined, false, "navigation")
 
   if (event.type === "scroll.intent") return detached(undefined, false, event.upward ? undefined : "toward-end")
 
@@ -274,18 +280,18 @@ function releaseAnchor(state: FollowState, event: FollowEvent): FollowState {
 // was already there. Merely resting near the end is not enough, otherwise a later scroll would overwrite an upward
 // intent expressed a pixel short of the bottom.
 function scrolled(state: Unanchored, event: Extract<FollowEvent, { type: "scroll" }>): FollowState {
-  // A scroll range that shrinks to where the view is lowers the offset by itself: the browser clamps it to the new
-  // end. A view that navigation sent somewhere has not arrived at the end that way. Its target is where it stays.
-  const shrank = event.maxScroll < event.previousMaxScroll && !(state.type === "detached" && state.by === "navigation")
+  // A view that navigation sent somewhere stays at its target until the reader's own scroll takes it to the end. A
+  // scroll range that shrinks to where the view is, or to nothing, lowers the offset by itself: the browser clamps it.
+  // That is not an arrival for such a view.
+  const navigated = state.type === "detached" && state.by === "navigation"
+  const shrank = event.maxScroll < event.previousMaxScroll && !navigated
+  const fits = event.maxScroll <= MIN_OVERFLOW && event.previousMaxScroll > MIN_OVERFLOW && !navigated
   const movedDown = event.scrollTop > event.previousTop + END_EPSILON
   // A reader who left the end is back at it by a scroll of the reader's own. A scroll of the timeline's own that ends
   // there is not the reader's return: its scroll event can arrive after the wheel that left the end.
   const arrived = (state.type === "detached" ? event.reader > END_EPSILON : movedDown) || shrank
   const movedUp = event.scrollTop < event.previousTop - END_EPSILON
-
-  const atEnd =
-    (event.maxScroll <= MIN_OVERFLOW && event.previousMaxScroll > MIN_OVERFLOW) ||
-    (arrived && event.maxScroll - event.scrollTop <= END_EPSILON)
+  const atEnd = fits || (arrived && event.maxScroll - event.scrollTop <= END_EPSILON)
 
   // Upward input is the one intent geometry cannot recover: a held pointer or touch moving the view up is the
   // reader's, while an upward shift without one is the virtualizer compensating a size change.
@@ -318,10 +324,14 @@ function scrolled(state: Unanchored, event: Extract<FollowEvent, { type: "scroll
         ? false
         : state.endPending
 
-  // A view that moves under a held pointer or touch is the reader scrolling on from where navigation sent it.
-  const by = state.gesture && (movedUp || movedDown) ? undefined : state.by
+  // The reader scrolls on from where navigation sent the view, with any device. The view is the reader's own again
+  // once that movement adds up past what a zoomed scroll range rounds.
+  const away = state.by === "navigation" ? (state.away ?? 0) + event.reader : 0
+  const by = Math.abs(away) > ZOOM_SLACK ? undefined : state.by
 
-  return endPending === state.endPending && by === state.by ? state : detached(state.gesture, endPending, by)
+  return endPending === state.endPending && by === state.by && away === (state.away ?? 0)
+    ? state
+    : detached(state.gesture, endPending, by, by ? away : 0)
 }
 
 function settled(state: Unanchored, atReachableEnd: boolean): FollowState {
@@ -332,7 +342,7 @@ function settled(state: Unanchored, atReachableEnd: boolean): FollowState {
 
   if (state.type !== "detached" || !state.endPending) return withGesture(state, gesture)
 
-  return atReachableEnd ? following(gesture) : detached(gesture, false, state.by)
+  return atReachableEnd ? following(gesture) : detached(gesture, false, state.by, state.away)
 }
 
 function following(gesture: FollowGesture | undefined, away = 0, gliding = false): FollowState {
@@ -343,12 +353,12 @@ function following(gesture: FollowGesture | undefined, away = 0, gliding = false
   return gesture ? { type: "following", gesture } : FOLLOWING
 }
 
-function detached(gesture: FollowGesture | undefined, endPending: boolean, by?: DetachedBy): FollowState {
+function detached(gesture: FollowGesture | undefined, endPending: boolean, by?: DetachedBy, away = 0): FollowState {
   if (!by) return gesture || endPending ? { type: "detached", gesture, endPending } : DETACHED
 
   if (by === "toward-end" && !gesture && !endPending) return DETACHED_TOWARD_END
 
-  return { type: "detached", gesture, endPending, by }
+  return away ? { type: "detached", gesture, endPending, by, away } : { type: "detached", gesture, endPending, by }
 }
 
 function withGesture(state: Unanchored, gesture: FollowGesture | undefined): FollowState {
@@ -356,7 +366,7 @@ function withGesture(state: Unanchored, gesture: FollowGesture | undefined): Fol
 
   if (state.type === "following") return following(gesture, state.away, state.gliding)
 
-  if (state.type === "detached") return detached(gesture, state.endPending, state.by)
+  if (state.type === "detached") return detached(gesture, state.endPending, state.by, state.away)
 
   return { ...state, gesture }
 }

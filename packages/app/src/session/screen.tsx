@@ -137,6 +137,7 @@ function SessionScreenContent(props: {
     scrollRef: timeline.scroller,
     revealMessage: timeline.actions.revealMessage,
     stopReveal: timeline.actions.stopReveal,
+    scrollTo: timeline.actions.scrollTo,
     pauseAutoScroll: () => timeline.follow.dispatch({ type: "detach" }),
     registerSeek: timeline.view.setSearchSeek,
   })
@@ -347,6 +348,7 @@ function SessionScreenContent(props: {
             setRevealMessage={timeline.view.setRevealMessage}
             reveal={timeline.view.reveal}
             setScrollToEnd={timeline.view.setScrollToEnd}
+            setScrollTo={timeline.view.setScrollTo}
             setPage={timeline.view.setPage}
             search={
               <Show when={active()}>

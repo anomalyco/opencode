@@ -55,6 +55,7 @@ function FindStory(props: Args) {
     scrollRef: scroll,
     revealMessage() {},
     stopReveal() {},
+    scrollTo() {},
     pauseAutoScroll() {},
     registerSeek() {},
   })

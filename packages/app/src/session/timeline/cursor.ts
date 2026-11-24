@@ -34,6 +34,8 @@ export function createTimelineCursor(input: {
   revealMessage: (id: string) => void
   /** Ends the scroll `revealMessage` started. */
   stopReveal: () => void
+  /** Scrolls the timeline as one of its own writes, so the scroll does not count as the reader's. */
+  scrollTo: (top: number, behavior: ScrollBehavior) => void
   detach: () => void
   toEnd: () => void
   seekHistory: () => void
@@ -132,10 +134,7 @@ export function createTimelineCursor(input: {
     if (!root) return false
     // Where the virtualizer's reveal and the router's own scroll to the hash put a prompt. A write that lands
     // anywhere else is undone by one of them or stays, whichever runs last.
-    root.scrollTo({
-      top: Math.max(0, root.scrollTop + element.getBoundingClientRect().top - scrollPort(root).top),
-      behavior,
-    })
+    input.scrollTo(Math.max(0, root.scrollTop + element.getBoundingClientRect().top - scrollPort(root).top), behavior)
 
     return true
   }

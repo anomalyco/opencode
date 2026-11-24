@@ -31,6 +31,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { filterVirtualIndexes, isAboveFold } from "./virtual-items"
+import { stopVirtualScroll, virtualScroll } from "./virtual-scroll"
 import {
   ACTIVATED,
   CHECK_REQUESTED,
@@ -138,6 +139,8 @@ type Input = {
   /** Registers the reveal of a message's row, and the call that ends the scroll a reveal started. */
   setRevealMessage?: (fn: (id: string, partID?: string) => void, stop: () => void) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
+  /** Registers the scroll that navigation asks for: the cursor's seek to a prompt, Find's scroll to a match. */
+  setScrollTo?: (fn: (top: number, behavior: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
   reveal?: TimelineRouteReveal
@@ -293,9 +296,11 @@ export function createTimelineVirtualizer(input: Input) {
   )
   let scrollTop = 0
   // The offset and range the timeline last read, and how far the reader has moved the offset since the last scroll
-  // event. `lost`: the view left the document, which drops its offset, so the next read starts over. Measurements
-  // only: whether the reader left the end is the follow machine's to decide.
-  const seen = { top: 0, max: 0, reader: 0, lost: false }
+  // event. `lost`: the view left the document, which drops its offset, so the next read starts over. `bound`: where
+  // a smooth scroll that navigation asked for is going, or -1. `linked`: the browser is going to a link's fragment,
+  // so what moves the view before the next read is that. Measurements only: whether the reader left the end is the
+  // follow machine's to decide.
+  const seen = { top: 0, max: 0, reader: 0, lost: false, bound: -1, linked: false }
 
   // Reused for every scroll: the transition only reads it, so a scroll allocates nothing.
   const scrollEvent = {
@@ -358,6 +363,8 @@ export function createTimelineVirtualizer(input: Input) {
             flushTouchAdjustment()
 
           if (scrolling) return
+          // A smooth scroll that has come to rest is over, wherever it stopped.
+          seen.bound = -1
 
           if (!isTouchHeld(input.follow.peek())) flushTouchAdjustment()
           input.follow.dispatch(
@@ -681,11 +688,11 @@ export function createTimelineVirtualizer(input: Input) {
 
   // The row a message reveal scrolls to, and TanStack's scroll to it. TanStack names the row by its index for as long
   // as that scroll lasts, up to five seconds.
-  let revealed: { key: string; index: number; align: "start" | "center"; scroll: unknown } | undefined
+  let revealed: { key: string; index: number; align: "start" | "center"; scroll: object | null } | undefined
 
   function revealRow(index: number, align: "start" | "center") {
     virtualizer.scrollToIndex(index, { align })
-    revealed = { key: rowKeys()[index], index, align, scroll: virtualizer["scrollState"] }
+    revealed = { key: rowKeys()[index], index, align, scroll: virtualScroll(virtualizer) }
   }
 
   // A page of history that arrives above gives the index to another row, and TanStack then scrolls to that one. The
@@ -694,7 +701,7 @@ export function createTimelineVirtualizer(input: Input) {
     on(
       rowKeys,
       (keys) => {
-        if (!revealed || !revealed.scroll || revealed.scroll !== virtualizer["scrollState"]) return
+        if (!revealed || !revealed.scroll || revealed.scroll !== virtualScroll(virtualizer)) return
         const index = keys.indexOf(revealed.key)
 
         if (index < 0) return stopScroll()
@@ -839,6 +846,9 @@ export function createTimelineVirtualizer(input: Input) {
         partIndex >= 0 ? partIndex : promptIndex >= 0 ? promptIndex : input.projection.messageRowIndex().get(id)
 
       if (index === undefined) return
+      const root = listRoot()
+
+      if (root) startNavigation(root)
       prepareNavigation()
       revealRow(index, partIndex >= 0 ? "center" : "start")
     }, stopScroll)
@@ -851,6 +861,21 @@ export function createTimelineVirtualizer(input: Input) {
 
       if (behavior === "smooth") return glide(root)
       virtualizer.scrollToEnd({ behavior })
+    })
+    // The cursor and Find put their target in place with a scroll of their own. Made here, it is one of the
+    // timeline's writes, so the follow machine does not take a navigation that ends at the end for the reader's
+    // return to it.
+    input.setScrollTo?.((top, behavior) => {
+      const root = listRoot()
+
+      if (!active() || !root?.isConnected) return
+      startNavigation(root)
+      root.scrollTo({ top, behavior })
+      syncScroll(root)
+      const bound = Math.min(Math.max(0, top), seen.max)
+
+      // A smooth scroll has only begun. The frames it takes to arrive are its own too.
+      if (behavior === "smooth" && Math.abs(bound - seen.top) > END_EPSILON) seen.bound = bound
     })
     input.setPage?.((direction) => {
       const root = listRoot()
@@ -916,13 +941,35 @@ export function createTimelineVirtualizer(input: Input) {
     // A scroll range that shrinks takes a view at its end up with it: the browser's clamp, not the reader.
     const clamped = top < seen.top && max < seen.max && max - top <= ZOOM_SLACK
 
-    if (!clamped) seen.reader += top - seen.top
+    // A smooth scroll that navigation asked for arrives over many frames. Movement toward where it is bound, and not
+    // past it, is that scroll. Any other movement is the reader's, who has the scroll from then on.
+    const onCourse =
+      seen.bound >= 0 &&
+      (top - seen.top) * (seen.bound - seen.top) > 0 &&
+      Math.abs(top - seen.top) <= Math.abs(seen.bound - seen.top)
+
+    if (top !== seen.top && (!onCourse || Math.abs(seen.bound - top) <= END_EPSILON)) seen.bound = -1
+
+    if (!clamped && !onCourse && !seen.linked) seen.reader += top - seen.top
+    seen.linked = false
     seen.top = top
     seen.max = max
   }
 
-  /** Takes the offset and range as they are now, after a write of the timeline's own or a reset by the browser. */
+  // What moved the view just before navigation scrolls it belongs to that navigation: the router scrolls to the
+  // hash it has just set, before the cursor does. It is not the reader's return to the end either.
+  function startNavigation(root: HTMLDivElement) {
+    seen.reader = 0
+    syncScroll(root)
+  }
+
+  /**
+   * Takes the offset and range as they are now, after a write of the timeline's own or a reset by the browser. Either
+   * ends a smooth scroll that was on its way.
+   */
   function syncScroll(root: HTMLDivElement) {
+    seen.bound = -1
+    seen.linked = false
     seen.lost = !root.isConnected
     seen.max = root.scrollHeight - root.clientHeight
     seen.top = Math.min(Math.max(0, root.scrollTop), seen.max)
@@ -1147,6 +1194,8 @@ export function createTimelineVirtualizer(input: Input) {
   // Only an upward intent reads the scroll range, as content that does not overflow cannot move.
   function dispatchIntent(upward: boolean) {
     const root = listRoot()
+    // The reader's wheel or key takes the scroll from a smooth one that navigation asked for.
+    seen.bound = -1
     intentEvent.upward = upward
     intentEvent.overflow = upward && !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
     input.follow.dispatch(intentEvent)
@@ -1156,10 +1205,8 @@ export function createTimelineVirtualizer(input: Input) {
 
   // Ends TanStack's scroll to a target, which it writes again whenever a measurement moves the target, so that the
   // reader's input wins over it. Callers leave a scroll to the end running while the timeline still follows the end.
-  // TanStack has no call for this. Its declaration names the field, so a rename fails the type check rather than
-  // leaving the scroll running.
   function stopScroll() {
-    virtualizer["scrollState"] = null
+    stopVirtualScroll(virtualizer)
   }
 
   // Heard on the whole view: a wheel over the session header or the jump button, which lie over the timeline, scrolls
@@ -1183,6 +1230,8 @@ export function createTimelineVirtualizer(input: Input) {
     const root = listRoot()
     const nested = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-scrollable]") : null
 
+    // A finger on the timeline takes the scroll from a smooth one that navigation asked for.
+    seen.bound = -1
     input.follow.dispatch(
       nested && nested !== root && nested.scrollHeight > nested.clientHeight ? nestedTouchStartEvent : touchStartEvent,
     )
@@ -1266,17 +1315,36 @@ export function createTimelineVirtualizer(input: Input) {
     if (document.visibilityState === "hidden") loseContact()
   }
 
+  // The browser goes to a link's fragment itself when a mounted row has that id, and its scroll event arrives before
+  // the route changes, so before the cursor has detached the view for the link. The scroll would count as the
+  // reader's, and one that ends at the end as the reader's return to it. This runs before the browser scrolls.
+  // Browsers without the Navigation API skip it.
+  const handleNavigate = (event: NavigateEvent) => {
+    const root = listRoot()
+
+    if (!event.hashChange || !active() || !root?.isConnected) return
+    const target = document.getElementById(new URL(event.destination.url).hash.slice(1))
+
+    // A hash with nothing mounted to go to scrolls nothing here: the cursor pages to the message or goes to the end.
+    if (!target || !root.contains(target)) return
+    readScroll(root)
+    seen.linked = true
+    input.follow.dispatch({ type: "detach" })
+  }
+
   onMount(() => {
     window.addEventListener("pointerup", releasePointer)
     window.addEventListener("pointercancel", releasePointer)
     window.addEventListener("blur", loseContact)
     document.addEventListener("visibilitychange", loseHiddenContact)
+    window.navigation?.addEventListener("navigate", handleNavigate)
   })
   onCleanup(() => {
     window.removeEventListener("pointerup", releasePointer)
     window.removeEventListener("pointercancel", releasePointer)
     window.removeEventListener("blur", loseContact)
     document.removeEventListener("visibilitychange", loseHiddenContact)
+    window.navigation?.removeEventListener("navigate", handleNavigate)
   })
 
   const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
@@ -1532,6 +1600,7 @@ export function createTimelineVirtualizer(input: Input) {
         () => {},
       )
       input.setScrollToEnd?.(() => {})
+      input.setScrollTo?.(() => {})
       input.setPage?.(() => {})
     }
   })
