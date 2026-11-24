@@ -230,8 +230,9 @@
     align-items: center;
     gap: 16px;
     min-height: 0;
-    /* Room on the right for the panel and its inset. */
-    padding: 56px calc(var(--editor-inspector) + var(--editor-inset) * 2 + 24px) 20px 48px;
+    /* The same 48px either side of the card's area: from the stage's left edge, and from the panel's (its width, its
+       1px borders and its inset). The section arrows sit in those margins. */
+    padding: 56px calc(var(--editor-inspector) + 2px + var(--editor-inset) + 48px) 20px 48px;
     background-color: var(--stats-layer-2);
     background-image: radial-gradient(var(--stats-line-strong) 1px, transparent 1px);
     background-size: 16px 16px;
@@ -245,8 +246,8 @@
     justify-content: center;
     width: 100%;
     min-height: 0;
-    /* Room either side for the section arrows. */
-    padding-inline: 56px;
+    /* 16px clear of the section arrows. */
+    padding-inline: 20px;
   }
 
   /* The arrows either side of the card: step to the previous or next section on the page, round and round. */
