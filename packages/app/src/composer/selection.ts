@@ -294,32 +294,33 @@ export function createComposerModelSelection(input: {
     setVisibility: models.setVisibility,
     variant: {
       configured(model = current()) {
-        const item = input.agent()
+        if (!model) return
 
-        if (!item || !model) return
+        const key = { providerID: model.provider.id, modelID: model.id }
+        const target = { ...key, baseModelID: models.standard(key).modelID, variants: model.variants }
         const global = configuredModel()
 
         return (
-          getConfiguredAgentVariant({
-            agent: { model: item.model, variant: item.variant },
-            model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
-          }) ??
-          getConfiguredAgentVariant({
-            agent: { model: global, variant: global?.variant },
-            model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
-          })
+          getConfiguredAgentVariant({ agent: input.agent(), model: target }) ??
+          getConfiguredAgentVariant({ agent: { model: global, variant: global?.variant }, model: target })
         )
       },
       current(item?: ModelKey) {
         const model = item ? models.find(item) : current()
         const same = !item || (current()?.provider.id === item.providerID && current()?.id === item.modelID)
         const prompted = prompt.model.current()
+        const configured = this.configured(model)
 
         return resolveModelVariant({
           variants: Object.keys(model?.variants ?? {}),
           selected: same && prompted && valid(prompted) ? variantSelectionFrom(prompted.variant) : INHERIT_VARIANT,
-          configured: this.configured(model),
-          preferred: model ? models.variant.get({ providerID: model.provider.id, modelID: model.id }) : undefined,
+          configured,
+          preferred: model
+            ? models.variant.get(
+                { providerID: model.provider.id, modelID: model.id },
+                { siblingFallback: configured === undefined },
+              )
+            : undefined,
         })
       },
       list() {

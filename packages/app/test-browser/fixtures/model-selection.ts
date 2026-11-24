@@ -326,6 +326,36 @@ test("a draft speed switch uses the target's legacy variant instead of its sibli
   expect(composer.variant.current()).toBeUndefined()
 })
 
+test.each([
+  { source: "agent", input: { agents: [agent("build", key("a"), "high")] } },
+  { source: "global", input: { config: { providerID: "provider", model: "a", variant: "high" } } },
+])("a draft speed switch falls back to the $source-configured variant", ({ input }) => {
+  const f = fixture(input)
+  f.set("route", "id", undefined)
+  f.set("models", (models) => [
+    ...models,
+    ...["fast", "ultrafast"].map((id) => ({
+      ...models[0],
+      id: `a-${id}`,
+      modelID: `a-${id}`,
+      experimental: { speed: { base: "a", id, faster: true } },
+    })),
+  ])
+  const { composer } = f.mount(true)
+
+  if (!composer) throw new Error("missing draft composer")
+  expect(composer.current()?.id).toBe("a")
+  expect(composer.variant.current()).toBe("high")
+  composer.speed.set("fast")
+  expect(composer.current()?.id).toBe("a-fast")
+  expect(composer.variant.current()).toBe("high")
+
+  f.setPreferences("variant", "provider/a-ultrafast", "low")
+  expect(composer.variant.current()).toBe("high")
+  f.setPreferences("variant", "provider/a-fast", "low")
+  expect(composer.variant.current()).toBe("low")
+})
+
 test("a promoted draft leaves the next draft empty even when its Session is never opened", () => {
   const f = fixture()
   f.set("route", "id", undefined)
