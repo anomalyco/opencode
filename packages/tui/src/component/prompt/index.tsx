@@ -171,16 +171,17 @@ function formatEditorContext(selection: EditorSelection) {
   return `<system-update>${ranges.join("\n")} This may or may not be relevant to the current task.</system-update>\n`
 }
 
-function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
+export function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
   const head = parseSlashHead(input, /\s/)
   if (!head) return
   const command = commands.find(
     (command) =>
       command.slash &&
-      (command.slash.name === head.name || command.slash.aliases?.includes(head.name) === true),
+      (command.slash.name === head.name || command.slash.aliases?.includes(head.name) === true) &&
+      (command.slash.arguments || head.arguments === ""),
   )
   if (!command) return
-  return { command, input: head.arguments }
+  return { command, input: command.slash?.arguments ? head.arguments : undefined }
 }
 
 export function Prompt(props: PromptProps) {
