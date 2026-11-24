@@ -16,12 +16,17 @@ The Promise root remains structural and has no Core or Effect runtime dependency
 Effect consumers construct canonical decoded inputs:
 
 ```ts
-import { AbsolutePath, Location, OpenCode, Prompt } from "@opencode/client/effect"
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
 
-const client = yield * OpenCode.make({ baseUrl: "https://opencode.example" })
-yield *
-  client.sessions.create({
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "https://opencode.example" })
+  const session = yield* client.session.create({
     location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
   })
-yield * client.sessions.prompt({ sessionID, prompt: Prompt.make({ text: "Hello" }) })
+  return yield* client.session.prompt({ sessionID: session.id, text: "Hello" })
+})
+
+await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
 ```
