@@ -130,11 +130,11 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
     openWorktrees({
       project: { ...current, worktree: current.canonical, worktrees: server.ctx.sync.worktrees.cached(current.id) },
       omit: props.directory,
-      onSelect: (value) =>
-        dispatch({
-          type: "move.worktree",
-          directory: value === "create" ? undefined : value === "main" ? current.canonical : value,
-        }),
+      onSelect: (value) => {
+        // "create" moves into a new worktree; "main" is the project's own checkout.
+        if (value === "create") return dispatch({ type: "move.worktree" })
+        dispatch({ type: "move.worktree", directory: value === "main" ? current.canonical : value })
+      },
     })
   }
 
