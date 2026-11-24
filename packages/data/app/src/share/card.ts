@@ -501,8 +501,8 @@ function drawLegend(
     ctx.fillRect(x, middle - 18, 36, 36)
     ctx.font = `700 52px ${font}`
     const value = ctx.measureText(focused.value).width
-    // The amount in its series' colour, as the legend's square.
-    ctx.fillStyle = focused.color
+    // The amount in the legend's lighter grey, as its values are.
+    ctx.fillStyle = colors.muted
     ctx.fillText(focused.value, x + layout.column * layout.columns - value, middle + 2)
     ctx.fillStyle = colors.text
     ctx.fillText(
