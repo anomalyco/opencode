@@ -23,7 +23,8 @@ export type ShareChart =
       day?: number
       // Drawn as an animation over the days instead of bars: a race of horizontal bars overtaking each other
       // (drawRace), or a spinning galaxy of dots shared out by the day's shares (drawGalaxy).
-      style?: "race" | "galaxy"
+      // A one-day chart (day set) may instead be a ranked list or a dot matrix (drawDay).
+      style?: "race" | "galaxy" | "list" | "dots"
     }
   | {
       kind: "ranked"
@@ -946,6 +947,8 @@ function drawDay(
   focus: Focus,
   litDots: (clip: Path2D) => void,
 ) {
+  if (chart.style === "list") return drawDayList(ctx, chart, colors, box, progress, focus)
+  if (chart.style === "dots") return drawDayDots(ctx, chart, colors, box, progress, focus)
   const values = chart.columns[chart.day ?? 0]?.values ?? []
   const order = dayOrder(chart)
   // Room over the bars for their values.
@@ -1020,12 +1023,12 @@ function drawRace(
   // The bars grow in from nothing while the intro rises, before the days start to run.
   const grow = ease(Math.min(1, time / Math.max(0.01, timing.start)))
   const bar = Math.round(row * 0.72)
-  const size = Math.round(bar * 0.46)
+  const size = Math.round(bar * 0.34)
 
   // The day, large and faint, in the lower right; it counts on with the race.
   ctx.save()
   ctx.textBaseline = "alphabetic"
-  ctx.font = `400 ${Math.round(row * 0.42)}px ${font}`
+  ctx.font = `400 ${Math.round(row * 0.32)}px ${font}`
   ctx.fillStyle = colors.faint
   ctx.globalAlpha *= 0.6
   // A clock runs before the date, through each day as the race crosses it, so something is always moving; it marks
@@ -1061,10 +1064,9 @@ function drawRace(
     ctx.fillRect(box.x + indent, y, Math.min(length, span), bar)
     // One line a row: the name and share inside the bar when it's long enough, otherwise just past its end.
     // The label stays put at the left of its row while the bar races under it: drawn in the text colour, then again,
-    // clipped to the bar, in dark or white for contrast where the bar has reached. The leader's name is bold, the
-    // shares regular and a little faded.
+    // clipped to the bar, in dark or white for contrast where the bar has reached. The shares are a little faded.
     const percent = `  ${(share * 100).toFixed(share >= 0.1 ? 0 : 1)}%`
-    const bold = `${Math.round(place) === 0 ? 700 : 400} ${size}px ${font}`
+    const bold = `400 ${size}px ${font}`
     const regular = `400 ${size}px ${font}`
     const x = box.x + indent + size * 0.6
     ctx.font = regular
@@ -1204,6 +1206,96 @@ function drawGalaxy(
 function luminance(color: string) {
   const [r, g, b] = rgb(color)
   return (0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (b ?? 0)) / 255
+}
+
+// A one-day chart as a ranked list: a row a series, most first and Other last, its name and value on one line and a
+// bar under them, true to scale on a long axis, so the numbers carry the small ones. Rows rise and bars grow in turn.
+function drawDayList(
+  ctx: CanvasRenderingContext2D,
+  chart: Extract<ShareChart, { kind: "stacked" }>,
+  colors: Palette,
+  box: Box,
+  progress: number,
+  focus: Focus,
+) {
+  const values = chart.columns[chart.day ?? 0]?.values ?? []
+  const order = dayOrder(chart)
+  const max = Math.max(0, ...order.map((series) => values[series] ?? 0)) || 1
+  const row = Math.min(96, box.height / Math.max(1, order.length))
+  const size = Math.round(Math.min(30, row * 0.34))
+  const bar = Math.max(6, Math.round(row * 0.16))
+  ctx.save()
+  ctx.textBaseline = "alphabetic"
+  order.forEach((series, position) => {
+    const y = box.y + position * row
+    const delay = (position / Math.max(1, order.length - 1)) * 0.45
+    const grow = ease(Math.max(0, Math.min(1, (progress - delay) / 0.55)))
+    if (grow <= 0) return
+    const item = chart.series[series]
+    const muted = series === focus.index ? 0 : item?.key === "other" ? 1 : focus.amount
+    ctx.globalAlpha = grow
+    ctx.font = `${series === focus.index && focus.amount > 0.5 ? 700 : 400} ${size}px ${font}`
+    ctx.fillStyle = mix(colors.text, colors.muted, muted * 0.6)
+    const value = item?.value ?? ""
+    const valueWidth = ctx.measureText(value).width
+    ctx.fillText(truncate(ctx, item?.label ?? "", box.width - valueWidth - size), box.x, y + size)
+    ctx.fillStyle = colors.muted
+    ctx.fillText(value, box.x + box.width - valueWidth, y + size)
+    const top = y + size + row * 0.18
+    ctx.fillStyle = colors.line
+    ctx.fillRect(box.x, top, box.width, bar)
+    ctx.fillStyle = item?.key === "other" ? colors.other : (item?.color ?? colors.idle)
+    ctx.globalAlpha = grow * (1 - muted * 0.6)
+    ctx.fillRect(box.x, top, Math.max(2, ((values[series] ?? 0) / max) * box.width * grow), bar)
+  })
+  ctx.restore()
+}
+
+// A one-day chart as a dot matrix: two hundred square dots, each half a percent of the day, coloured by series in rank
+// order (Other last), so even a sliver earns whole, countable dots. The dots fill in left to right, top to bottom.
+function drawDayDots(
+  ctx: CanvasRenderingContext2D,
+  chart: Extract<ShareChart, { kind: "stacked" }>,
+  colors: Palette,
+  box: Box,
+  progress: number,
+  focus: Focus,
+) {
+  const values = chart.columns[chart.day ?? 0]?.values ?? []
+  const order = dayOrder(chart)
+  const total = order.reduce((sum, series) => sum + (values[series] ?? 0), 0) || 1
+  const cells = 200
+  const cell = Math.sqrt((box.width * box.height) / cells)
+  const columns = Math.max(1, Math.floor(box.width / cell))
+  const rows = Math.ceil(cells / columns)
+  const size = Math.min(box.width / columns, box.height / rows)
+  // Each series' dots by largest remainder, so they add up to every dot; anything above zero earns at least one.
+  const exact = order.map((series) => ((values[series] ?? 0) / total) * cells)
+  const counts = exact.map((value) => (value > 0 ? Math.max(1, Math.floor(value)) : 0))
+  const spare = cells - counts.reduce((sum, value) => sum + value, 0)
+  exact
+    .map((value, index) => ({ index, rest: value - Math.floor(value) }))
+    .toSorted((a, b) => b.rest - a.rest)
+    .slice(0, Math.max(0, spare))
+    .forEach((entry) => (counts[entry.index] = (counts[entry.index] ?? 0) + 1))
+  const owners = order.flatMap((series, index) => Array.from({ length: counts[index] ?? 0 }, () => series))
+  const shown = Math.floor(ease(Math.min(1, progress)) * cells)
+  const gap = Math.max(2, size * 0.22)
+  ctx.save()
+  for (let index = 0; index < cells; index++) {
+    const x = box.x + (index % columns) * size
+    const y = box.y + Math.floor(index / columns) * size
+    const series = owners[index]
+    const item = series === undefined ? undefined : chart.series[series]
+    if (index >= shown || !item) {
+      ctx.fillStyle = colors.line
+    } else {
+      const muted = series === focus.index ? 0 : item.key === "other" ? 1 : focus.amount
+      ctx.fillStyle = item.key === "other" ? colors.other : mix(item.color, colors.idle, muted * 0.7)
+    }
+    ctx.fillRect(x + gap / 2, y + gap / 2, size - gap, size - gap)
+  }
+  ctx.restore()
 }
 
 // A one-day chart's bars on the dot grid, edge to edge across `width`: each an odd number of dot pitches wide round the
