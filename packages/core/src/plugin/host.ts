@@ -83,7 +83,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const locations = yield* LocationServiceMap.Service
   const worktrees = yield* Worktree.Service
   const worktreeStrategies = yield* WorktreeStrategies.Service
-  const currentWorktreeStrategies = environment.hostsServer ? worktreeStrategies : undefined
+  const currentWorktreeStrategies = environment.local ? worktreeStrategies : undefined
   const locationInfo = (current: Location.Interface = location) =>
     new Location.Info({
       directory: current.directory,

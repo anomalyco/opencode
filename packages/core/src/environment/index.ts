@@ -24,6 +24,7 @@ export {
   localID,
   make,
   node,
+  type Options,
   Place,
   Service,
   unavailable,

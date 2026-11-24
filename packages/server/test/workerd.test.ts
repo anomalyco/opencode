@@ -49,12 +49,12 @@ it.effect("fails Npm.add with a clear workerd error instead of running the insta
   ),
 )
 
-it.effect("leaves hostsServer and searchable unset on the workerd environment", () =>
+it.effect("marks the workerd environment non-local and omits rg", () =>
   Effect.gen(function* () {
     const environment = yield* Environment.Service
     expect(environment.id).toBe(Environment.localID)
-    expect(environment.hostsServer).toBeUndefined()
-    expect(environment.searchable).toBeUndefined()
+    expect(environment.local).toBe(false)
+    expect(environment.rg).toBeUndefined()
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(Environment.node, [
