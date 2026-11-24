@@ -3,8 +3,9 @@ import path from "path"
 
 const home = os.homedir()
 
+// path.relative compares case-insensitively on Windows, where `c:\Users\Name` is the same home.
 export function isHome(directory: string) {
-  return path.resolve(directory) === path.resolve(home)
+  return path.relative(home, directory) === ""
 }
 
 const DARWIN_HOME = [

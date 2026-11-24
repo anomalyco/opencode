@@ -59,6 +59,8 @@ const ripgrepLayer = Layer.effect(
     const scope = yield* Scope.Scope
     const clock = yield* Clock.Clock
     const home = Protected.isHome(location.directory)
+    // A repository rooted at home says nothing about the size of a folder inside it.
+    const bounded = !location.vcs || home || Protected.isHome(location.project.directory)
     let index = emptyIndex()
     let initialized = false
     let settledAt = Number.NEGATIVE_INFINITY
@@ -72,7 +74,7 @@ const ripgrepLayer = Layer.effect(
         cwd: location.directory,
         pattern: "*",
         hidden: true,
-        limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
+        limit: bounded ? 100_000 : Number.MAX_SAFE_INTEGER,
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
         onEntry: (entry) =>
           Effect.sync(() => {
@@ -235,7 +237,9 @@ const layer = (options?: Options) =>
       if (options?.fff === false || (options?.fff === undefined && process.platform === "win32") || !Fff.available())
         return ripgrepLayer
       // Non-VCS locations can contain many repositories, so avoid eagerly content-indexing the entire aggregate tree.
-      return location.vcs && !Protected.isHome(location.directory) ? fffLayer : ripgrepLayer
+      return location.vcs && !Protected.isHome(location.directory) && !Protected.isHome(location.project.directory)
+        ? fffLayer
+        : ripgrepLayer
     }),
   )
 
