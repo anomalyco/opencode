@@ -14,6 +14,7 @@ import {
   setupTimeline,
   status,
   textPart,
+  toolPart,
   userID,
   userMessage,
   validateTimelineMessages,
@@ -123,6 +124,63 @@ test.describe("timeline history", () => {
     await expect(page.getByRole("option", { name: /Use the loading dock/ })).toBeVisible()
     await search.press("Enter")
     await expect(timelineScroller(page).getByText(target.text, { exact: true })).toBeInViewport()
+    expect(oldest).toBeGreaterThan(0)
+  })
+
+  test("a shell notice opens its call from an older page, paging back only as far as the call", async ({ page }) => {
+    const history = historyMessages(120)
+
+    // IDs ascend with creation, as the server makes them: the call's message, the shell it starts, then later turns.
+    const call = assistantMessage(
+      [
+        toolPart(
+          "prt_older_call",
+          "shell",
+          "completed",
+          { command: "bun serve.ts", background: true },
+          { output: "listening", metadata: { shellID: "sh_00079_history_d_shell", status: "running" } },
+        ),
+      ],
+      { id: "msg_00079_history_c_call", parentID: "msg_00079_history_a_user", created: 1690000792000 },
+    )
+
+    const messages: SessionMessageInfo[] = [
+      ...history.slice(0, 160),
+      call,
+      ...history.slice(160),
+      {
+        id: "msg_00120_shell_finished",
+        type: "synthetic",
+        text: '<shell id="sh_00079_history_d_shell" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+        description: "bun serve.ts",
+        metadata: { source: "shell", shellID: "sh_00079_history_d_shell", state: "completed" },
+        time: { created: 1690001200000 },
+      },
+    ]
+
+    let oldest = messages.length
+
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(16, limit))
+        oldest = Math.min(oldest, start)
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+    })
+
+    const scroller = timelineScroller(page)
+    const notice = scroller.getByRole("button", { name: /^Shell finished/ })
+    const trigger = scroller.locator('[data-timeline-part-id="prt_older_call"] [data-slot="collapsible-trigger"]')
+
+    await expect(notice).toBeInViewport()
+    await expect(trigger).toHaveCount(0)
+    await notice.click()
+
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    await expect(trigger).toBeInViewport()
     expect(oldest).toBeGreaterThan(0)
   })
 

@@ -128,6 +128,10 @@ This section is the single source for what may move or restyle the session timel
 - A virtualized list therefore gives focus to its own viewport, without scrolling, before a row that holds focus unmounts. `VirtualRow`'s `onCleanup` in `src/session/timeline/virtualizer.tsx` does this. Keep it when you change how rows mount, and do the same in a new virtualized list.
 - Keeper: "a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled" in `e2e/regression/session-timeline-accessibility.spec.ts`.
 - To check by hand: click a tool header, a link and a notice in the timeline, then scroll up and down with the wheel. The timeline must follow the wheel.
+- A link can name content that is older than the loaded messages, such as the call of a shell whose notice the reader clicks. The timeline pages history toward it and moves once, when it loads (`src/session/timeline/reveal-machine.ts`).
+  - Page toward a target only while something says where it can be. A shell's call is older than the shell, and IDs ascend with creation, so the search ends once an assistant message older than the shell is loaded. Without that bound a target that does not exist loads the whole session: a shell that a Code Mode script started has no call, which was the case for 40 of 265 shell notices in four real sessions.
+  - The reader's scroll or press in the timeline ends the search. A move that lands after the reader has gone elsewhere is one they did not ask for.
+  - Keeper: "a shell notice opens its call from an older page, paging back only as far as the call" in `e2e/regression/timeline-history.spec.ts`.
 
 ### Scroll writes
 
