@@ -44,9 +44,12 @@ const ExecuteCall = Schema.Struct({
 
 type ExecuteCall = typeof ExecuteCall.Type
 
+const TOOL_CALL_TRACE_LIMIT = 128
+
 const ExecuteOutput = Schema.Struct({
   output: Schema.String,
   toolCalls: Schema.Array(ExecuteCall),
+  toolCallsOmitted: Schema.optionalKey(Schema.Number),
   error: Schema.optionalKey(Schema.Literal(true)),
   files: Schema.Array(ExecuteFile),
 })
@@ -165,7 +168,7 @@ export const create = (
       Effect.gen(function* () {
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
-        const calls = yield* Ref.make<Array<ExecuteCall>>([])
+        const trace = toolCallTrace()
         const lock = Semaphore.makeUnsafe(1)
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
@@ -177,14 +180,14 @@ export const create = (
           yield* Ref.set(publishedAt, yield* Clock.currentTimeMillis)
           const changed = diffs.files()
           yield* context.progress({
-            toolCalls: yield* Ref.get(calls),
+            ...trace.metadata(),
             ...(changed.length > 0 ? { files: changed } : {}),
           })
         })
-        const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
+        const record = (update?: () => void) =>
           lock.withPermit(
             Effect.gen(function* () {
-              yield* Ref.update(calls, update)
+              update?.()
               if (yield* Ref.get(trailing)) return
               const wait = (yield* Ref.get(publishedAt)) + 100 - (yield* Clock.currentTimeMillis)
               if (wait <= 0) return yield* publish
@@ -194,7 +197,7 @@ export const create = (
           )
         // The files the program changes, shown under the call as it runs and when it ends in the foreground. A failed
         // or stopped one keeps them too, since they really changed.
-        const diffs = CodeModeDiffs.make(record((items) => items))
+        const diffs = CodeModeDiffs.make(record())
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
             extensions: runExtensions(services !== undefined),
@@ -228,7 +231,7 @@ export const create = (
                     yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
                   return resultValue(executed)
                 }),
-              hooks: progressHooks(record),
+              hooks: progressHooks(trace, record),
             }),
             // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
             Effect.onError(() =>
@@ -238,14 +241,14 @@ export const create = (
             Effect.provide(yield* executionServices(context, permission, services, api)),
             Effect.provideService(CodeModeDiffs.Service, diffs),
           )
-        const toolCalls = yield* Ref.get(calls)
+        const traceMetadata = trace.metadata()
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
         const output = formatResult(result)
         const value: typeof ExecuteOutput.Type = {
           output,
-          toolCalls,
+          ...traceMetadata,
           files: collected,
           ...(result.ok ? {} : { error: true }),
         }
@@ -260,7 +263,7 @@ export const create = (
         ]
         const changed = diffs.files()
         const metadata: Metadata = {
-          toolCalls: value.toolCalls,
+          ...traceMetadata,
           ...(value.error ? { error: true } : {}),
           ...(changed.length > 0 ? { files: changed } : {}),
         }
@@ -273,23 +276,48 @@ export const create = (
   } satisfies Info
 }
 
-// Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
-function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>) {
-  const rows = new WeakMap<object, number>()
-  const start = (call: object, entry: ExecuteCall) =>
-    record((items) => {
-      rows.set(call, items.length)
-      return [...items, entry]
-    })
-  const settle = (call: object, result: CodeMode.CallResult) => {
-    const index = rows.get(call)
-    if (index === undefined) return Effect.void
-    return record((items) => {
-      const next = [...items]
-      next[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
-      return next
-    })
+// Bound finished rows without dropping calls that are still running.
+function toolCallTrace() {
+  const recent = new Map<object, ExecuteCall>()
+  let finished = 0
+  let total = 0
+  let earlierError: ExecuteCall | undefined
+  return {
+    start(call: object, entry: ExecuteCall) {
+      recent.set(call, entry)
+      total++
+    },
+    settle(call: object, result: CodeMode.CallResult) {
+      const entry = recent.get(call)
+      if (entry?.status !== "running") return
+      recent.set(call, { ...entry, status: result.status === "success" ? "completed" : "error" })
+      finished++
+      if (finished <= TOOL_CALL_TRACE_LIMIT) return
+
+      for (const [key, row] of recent) {
+        if (row.status === "running") continue
+        if (row.status === "error") earlierError ??= row
+        recent.delete(key)
+        finished--
+        break
+      }
+    },
+    metadata() {
+      const toolCalls = Array.from(recent.values())
+      // Keep an earlier failure without displacing a row from the recent trace.
+      if (earlierError) toolCalls.unshift(earlierError)
+      const omitted = total - toolCalls.length
+      return { toolCalls, ...(omitted > 0 ? { toolCallsOmitted: omitted } : {}) }
+    },
   }
+}
+
+function progressHooks(
+  trace: ReturnType<typeof toolCallTrace>,
+  record: (update: () => void) => Effect.Effect<unknown>,
+) {
+  const start = (call: object, entry: ExecuteCall) => record(() => trace.start(call, entry))
+  const settle = (call: object, result: CodeMode.CallResult) => record(() => trace.settle(call, result))
   return {
     "tool.before": (call) => {
       const shown = displayInput(call.input)

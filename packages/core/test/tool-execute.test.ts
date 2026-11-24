@@ -1014,6 +1014,76 @@ const progressCodeMode = (started: Deferred.Deferred<void>, wait: Effect.Effect<
 
 const row = (tool: string, status: string) => ({ tool, status })
 
+test("execute retains bounded progress and final metadata without limiting execution", async () => {
+  const input = Schema.Struct({ index: Schema.Number })
+  const seen: number[] = []
+  const step = {
+    name: "step",
+    description: "Record an index",
+    input,
+    output: Schema.Number,
+    execute: ({ index }) =>
+      Effect.gen(function* () {
+        seen.push(index)
+        if (index === 0) return yield* new Tool.Error({ message: "First call failed" })
+        return { output: index }
+      }),
+  } satisfies Info<typeof input, typeof Schema.Number>
+  const updates: Tool.Metadata[] = []
+  const result = await Effect.runPromise(
+    createCodeMode(new Map([["step", step]])).execute(
+      {
+        code: "try { await tools.step({ index: 0 }) } catch {} for (let index = 1; index < 260; index++) await tools.step({ index }); return 260",
+      },
+      { ...context, progress: (update) => Effect.sync(() => updates.push(update)) },
+    ),
+  )
+  const metadata = result.metadata
+  expect(seen).toEqual(Array.from({ length: 260 }, (_, index) => index))
+  expect(result.output.output).toBe("260")
+  expect(result.output.toolCalls).toHaveLength(129)
+  expect(result.output.toolCalls[0]).toEqual({ tool: "step", status: "error", input: { index: 0 } })
+  expect(result.output.toolCalls.at(-1)).toEqual({ tool: "step", status: "completed", input: { index: 259 } })
+  expect(result.output.toolCalls[1]).toEqual({ tool: "step", status: "completed", input: { index: 132 } })
+  expect(result.output.toolCallsOmitted).toBe(131)
+  expect(metadata).toMatchObject({ toolCalls: result.output.toolCalls, toolCallsOmitted: 131 })
+  expect(updates.length).toBeGreaterThan(0)
+  expect(updates.every((update) => Array.isArray(update.toolCalls) && update.toolCalls.length <= 130)).toBe(true)
+})
+
+it.effect("execute keeps a pending call while trimming finished rows", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const trimmed = yield* Deferred.make<Tool.Metadata>()
+    const fiber = yield* progressCodeMode(started, Deferred.await(release))
+      .execute(
+        {
+          code: "const pending = tools.wait({}); for (let index = 0; index < 140; index++) await tools.step({}); await pending",
+        },
+        {
+          ...context,
+          progress: (update) =>
+            typeof update.toolCallsOmitted === "number" && update.toolCallsOmitted >= 12
+              ? Deferred.succeed(trimmed, update)
+              : Effect.void,
+        },
+      )
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(started)
+    yield* TestClock.adjust("1 second")
+    const update = yield* Deferred.await(trimmed)
+    expect(update.toolCalls).toEqual([
+      row("wait", "running"),
+      ...Array.from({ length: 128 }, () => row("step", "completed")),
+    ])
+    yield* Deferred.succeed(release, undefined)
+    const result = yield* Fiber.join(fiber)
+    expect(result.metadata?.toolCallsOmitted).toBe(13)
+    expect(result.output.toolCalls).toHaveLength(128)
+  }),
+)
+
 it.effect("execute sends at most one progress update per 100 ms with the latest rows", () =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>()

@@ -32,6 +32,10 @@ export function executeCalls(value: unknown): ExecuteCall[] {
   })
 }
 
+export function executeCallsOmitted(value: unknown) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 0
+}
+
 export function executeCallSummary(call: ExecuteCall) {
   const args = primitiveInputSummary(call.input ?? {}).replace(/\s+/g, " ")
   return `${call.tool}${args ? ` ${args}` : ""}`

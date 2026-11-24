@@ -197,7 +197,10 @@ test("running work is active but not counted, and failed tools are counted", () 
   expect(summary).toEqual({ label: "1 read, 1 tool", active: true })
 })
 
-test("execute counts its finished nested calls instead of itself", () => {
+test.each([
+  [undefined, "2 reads, 1 tool"],
+  [3000, "2 reads, 3001 tools"],
+])("execute counts finished nested calls with %s omitted", (omitted, label) => {
   const message = assistant("a", [])
   const execute: SessionMessageAssistantTool = {
     ...tool("x", "execute"),
@@ -206,6 +209,7 @@ test("execute counts its finished nested calls instead of itself", () => {
       input: {},
       content: [{ type: "text", text: "done" }],
       metadata: {
+        ...(omitted === undefined ? {} : { toolCallsOmitted: omitted }),
         toolCalls: [
           { tool: "read", status: "completed" },
           { tool: "read", status: "completed" },
@@ -216,7 +220,7 @@ test("execute counts its finished nested calls instead of itself", () => {
     },
   }
   expect(activitySummary([{ message, part: execute }], 0)).toEqual({
-    label: "2 reads, 1 tool",
+    label,
     active: false,
   })
 })
