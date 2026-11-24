@@ -127,6 +127,12 @@ export const SessionPartTable = sqliteTable(
   ],
 )
 
+/** Single-row identity of this service's database (see service-instance.ts). */
+export const ServiceInstanceTable = sqliteTable("service_instance", {
+  key: text().primaryKey(),
+  value: text().notNull(),
+})
+
 /**
  * Fence for an inbox ID: once recorded, that ID can never be admitted (again). Written by an explicit fenced cancel,
  * so a caller can prove a possibly-in-flight submission will not take effect. Plain cancel keeps allowing re-admission.

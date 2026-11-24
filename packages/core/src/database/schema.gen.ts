@@ -216,6 +216,12 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`service_instance\` (
+          \`key\` text PRIMARY KEY,
+          \`value\` text NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`session_inbox_fence\` (
           \`id\` text NOT NULL,
           \`session_id\` text NOT NULL,

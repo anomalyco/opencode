@@ -9,6 +9,8 @@ export const ServerInfo = Schema.Struct({
   // The machine's name, absent where the runtime has none (e.g. workerd).
   hostname: Schema.optional(Schema.String),
   urls: Schema.Array(Schema.String),
+  // Stable identity of this service's database; absent on servers that predate it.
+  instanceID: Schema.optional(Schema.String),
   paths: Schema.Struct({
     tmp: Schema.String,
   }),

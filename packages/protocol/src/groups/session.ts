@@ -380,6 +380,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.prompt", "/api/session/:sessionID/prompt", {
         params: { sessionID: Session.ID },
+        query: { expectedInstance: Schema.String.pipe(Schema.optional) },
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional).annotate({
             description:
@@ -626,15 +627,15 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.delete("session.inbox.cancel", "/api/session/:sessionID/inbox/:inboxID", {
         params: { sessionID: Session.ID, inboxID: SessionMessage.ID },
-        query: { fence: BooleanFromString.pipe(Schema.optional) },
+        query: { fence: BooleanFromString.pipe(Schema.optional), expectedInstance: Schema.String.pipe(Schema.optional) },
         success: HttpApiSchema.NoContent,
-        error: SessionNotFoundError,
+        error: [ConflictError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.inbox.cancel",
           summary: "Cancel inbox input",
           description:
-            "Cancel an inbox item that has not yet been delivered. Unavailable items are a no-op. With fence=true the inbox ID is also fenced first: it can never be admitted again, even by a submission still in flight, so after this returns the input is either delivered (visible as a message) or will never be delivered.",
+            "Cancel an inbox item that has not yet been delivered. Unavailable items are a no-op. With expectedInstance=<id> the request is rejected (409, no effect) if this is not that service database. With fence=true the inbox ID is also fenced first: it can never be admitted again, even by a submission still in flight, so after this returns the input is either delivered (visible as a message) or will never be delivered.",
         }),
       ),
     )
@@ -790,8 +791,9 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.get("session.message", "/api/session/:sessionID/message/:messageID", {
         params: { sessionID: Session.ID, messageID: SessionMessage.ID },
+        query: { expectedInstance: Schema.String.pipe(Schema.optional) },
         success: Schema.Struct({ data: PublicSessionMessage }),
-        error: [SessionNotFoundError, MessageNotFoundError],
+        error: [ConflictError, SessionNotFoundError, MessageNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.message.get",

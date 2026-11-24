@@ -5,6 +5,7 @@ export type ServerInfo = {
   pid: number
   hostname?: string | undefined
   urls: Array<string>
+  instanceID?: string | undefined
   paths: { tmp: string }
   capabilities?: { persistentPty?: boolean | undefined } | undefined
 }
@@ -3556,6 +3557,7 @@ export type SessionMoveOutput = void
 
 export type SessionPromptInput = {
   readonly sessionID: string
+  readonly expectedInstance?: string | undefined
   readonly id?: string | null | undefined
   readonly text: string
   readonly files?:
@@ -3681,6 +3683,7 @@ export type SessionInboxCancelInput = {
   readonly sessionID: string
   readonly inboxID: string
   readonly fence?: boolean | undefined
+  readonly expectedInstance?: string | undefined
 }
 
 export type SessionInboxCancelOutput = void
@@ -3705,7 +3708,11 @@ export type SessionBackgroundInput = { readonly sessionID: string }
 
 export type SessionBackgroundOutput = void
 
-export type SessionMessageGetInput = { readonly sessionID: string; readonly messageID: string }
+export type SessionMessageGetInput = {
+  readonly sessionID: string
+  readonly messageID: string
+  readonly expectedInstance?: string | undefined
+}
 
 export type SessionMessageGetOutput = { data: SessionMessageInfo }["data"]
 

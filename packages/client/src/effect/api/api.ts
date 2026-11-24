@@ -52,6 +52,7 @@ export type ServerInfoOutput = {
   readonly pid: number
   readonly hostname?: string | undefined
   readonly urls: ReadonlyArray<string>
+  readonly instanceID?: string | undefined
   readonly paths: { readonly tmp: string }
   readonly capabilities?: { readonly persistentPty?: boolean | undefined } | undefined
 }
@@ -210,6 +211,7 @@ export type SessionMoveOperation<E = never> = (input: SessionMoveInput) => Effec
 
 export type SessionPromptInput = {
   readonly sessionID: Session.ID
+  readonly expectedInstance?: string | undefined
   readonly id?: SessionMessage.ID | undefined
   readonly text: string
   readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
@@ -309,6 +311,7 @@ export type SessionInboxCancelInput = {
   readonly sessionID: Session.ID
   readonly inboxID: SessionMessage.ID
   readonly fence?: boolean | undefined
+  readonly expectedInstance?: string | undefined
 }
 export type SessionInboxCancelOutput = void
 export type SessionInboxCancelOperation<E = never> = (
@@ -352,7 +355,11 @@ export type SessionBackgroundOperation<E = never> = (
   input: SessionBackgroundInput,
 ) => Effect.Effect<SessionBackgroundOutput, E>
 
-export type SessionMessageGetInput = { readonly sessionID: Session.ID; readonly messageID: SessionMessage.ID }
+export type SessionMessageGetInput = {
+  readonly sessionID: Session.ID
+  readonly messageID: SessionMessage.ID
+  readonly expectedInstance?: string | undefined
+}
 export type SessionMessageGetOutput = SessionMessage.Info
 export type SessionMessageGetOperation<E = never> = (
   input: SessionMessageGetInput,

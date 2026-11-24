@@ -3,6 +3,7 @@ import { Duration, Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { PersistentPty } from "@opencode/core/persistent-pty"
+import { ServiceInstance } from "@opencode/core/service-instance"
 import { UnauthorizedError } from "@opencode/protocol/errors"
 import { Api } from "../api"
 import { ServerAuth } from "../auth"
@@ -18,7 +19,9 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
       .handle("server.info", () =>
         Effect.gen(function* () {
           const info = yield* ServerInfo.Service
+          const instanceID = yield* ServiceInstance.id()
           return {
+            instanceID,
             version: info.app.version ?? "unknown",
             pid: process.pid ?? 0,
             hostname: hostname() || undefined,

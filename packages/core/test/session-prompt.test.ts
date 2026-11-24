@@ -24,6 +24,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionInbox } from "@opencode/core/session/inbox"
+import { ServiceInstance } from "@opencode/core/service-instance"
 import {
   BlobRefTable,
   BlobTable,
@@ -1632,6 +1633,20 @@ describe("Session.inbox", () => {
       yield* session.cancelInbox({ sessionID, inboxID: shared, fence: true }).pipe(Effect.catchTag("Session.InboxConflictError", () => Effect.void))
       expect(yield* session.prompt({ id: shared, sessionID: other, text: "elsewhere", delivery: "queue", resume: false })).toMatchObject({ id: shared })
       expect(yield* session.prompt({ id: shared, sessionID, text: "here", delivery: "queue", resume: false }).pipe(Effect.flip)).toMatchObject({ _tag: "Session.PromptConflictError" })
+    }),
+  )
+
+  it.effect("the service has a stable instance identity (so a proof can name the database that took the send)", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const first = yield* ServiceInstance.id()
+      const second = yield* ServiceInstance.id()
+      expect(first).toMatch(/^svc_[0-9a-f]{32}$/)
+      expect(second).toBe(first)
+      // Enforced per request: the right instance (or none named) passes; any other is a mismatch with no side effect.
+      yield* ServiceInstance.require(first)
+      yield* ServiceInstance.require(undefined)
+      expect(yield* ServiceInstance.require("svc_" + "0".repeat(32)).pipe(Effect.flip)).toMatchObject({ _tag: "ServiceInstance.MismatchError", expected: "svc_" + "0".repeat(32), actual: first })
     }),
   )
 
