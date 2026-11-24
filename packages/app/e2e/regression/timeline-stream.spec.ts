@@ -1136,6 +1136,65 @@ for (const input of [
   })
 }
 
+for (const input of ["a streamed line", "the reader's wheel"] as const) {
+  test(`the glide to the latest message ${input === "a streamed line" ? "outlasts" : "yields to"} ${input}`, async ({
+    page,
+  }) => {
+    // The glide was the browser's smooth scroll to where the end was. A streamed line measured during it jumped the
+    // view the rest of the way, and after a wheel away it still carried the view to the latest message.
+    const timeline = await setupTimeline(page, {
+      messages: [userMessage(), assistantMessage([textPart("prt_glide", notes("Line", 240))], { completed: false })],
+    })
+
+    const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+
+    const fromEnd = () =>
+      scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+
+    const height = () => scroller.evaluate((element) => element.scrollHeight)
+
+    await expect(page.getByText("Line note 240.", { exact: true })).toBeInViewport()
+    // Before the rows have their real sizes the timeline has nowhere to scroll, and the wheel would do nothing.
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+    await scroller.hover()
+    await page.mouse.wheel(0, -4000)
+    const screen = await scroller.evaluate((element) => element.clientHeight)
+    await expect.poll(fromEnd).toBeGreaterThan(screen * 2)
+    // The glide runs on frames, so the test steps them. See "tab preview opens cold" in tabs.spec.ts for the pause.
+    const start = Date.now()
+    await page.clock.install({ time: start })
+    await page.clock.pauseAt(start + 10_000)
+    await page.getByRole("button", { name: "Jump to latest", exact: true }).click()
+    await scroller.hover()
+    await page.clock.runFor(100)
+    // The view jumped to the last screen, where the glide starts.
+    expect(await fromEnd()).toBeLessThanOrEqual(screen)
+
+    if (input === "the reader's wheel") {
+      await page.mouse.wheel(0, -2000)
+      await page.clock.runFor(100)
+    }
+
+    const before = await height()
+    await timeline.send(partDelta("prt_glide", `\n\n${notes("Streamed", 8)}`))
+    await page.clock.runFor(32)
+    await expect.poll(height).toBeGreaterThan(before)
+
+    if (input === "a streamed line") {
+      // Measuring the line has not ended the glide: a good part of the screen is still to go.
+      expect(await fromEnd()).toBeGreaterThan(screen / 4)
+      await page.clock.runFor(2_000)
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      await expect(page.getByText("Streamed note 8.", { exact: true })).toBeInViewport()
+
+      return
+    }
+
+    await page.clock.runFor(2_000)
+    expect(await fromEnd()).toBeGreaterThan(screen)
+  })
+}
+
 test("goes on following the reply after a group collapses from its stuck header", async ({ page }) => {
   // The group scrolls its header back into place before it collapses. At the end that scroll is not the reader
   // leaving: the shorter content takes the view to the new end, where the reply still streams.
