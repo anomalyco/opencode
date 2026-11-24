@@ -35,6 +35,11 @@ story("keeps focus in the worktree search while the pointer sweeps the rows", as
     "opencode-search",
   ])
 
+  await page.keyboard.press("Backspace")
+  await page.keyboard.press("Backspace")
+  await expect(page.getByRole("option", { name: "New worktree", exact: true })).toHaveAttribute("aria-selected", "true")
+  await page.keyboard.type("se")
+
   await page.keyboard.press("ArrowDown")
   await page.keyboard.press("Enter")
   await expect(page.getByText("Session moved to /Users/alex/work/opencode-composer", { exact: true })).toBeVisible()

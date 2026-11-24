@@ -171,8 +171,8 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
 
   const search = (value: string) => {
     dispatch({ type: "search.changed", search: value })
-    // A query highlights its first match rather than "New worktree", so Enter after typing picks a match.
-    typeahead.setActive(view().visibleWorktrees[0]?.directory)
+    // A query highlights its first match so Enter after typing picks a match; an empty one falls back to "New worktree".
+    typeahead.setActive(value.trim() ? view().visibleWorktrees[0]?.directory : undefined)
   }
 
   const row = (directory: string) => (
