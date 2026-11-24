@@ -158,8 +158,14 @@ const layer = Layer.effect(
       if (id === environment.id) {
         const written = parsed?.path ?? text
         const origin = parsed ? location.directory : from.absolute
+        // A sandboxed Location's environment has its own (POSIX) path rules: resolving its paths with the host's
+        // rules would turn `/workspace` into `C:\workspace` on a Windows server.
         return {
-          absolute: AbsolutePath.make(resolvePath(origin, written)),
+          absolute: AbsolutePath.make(
+            environment.path && !environment.hostsServer
+              ? environment.path.resolve(origin, written)
+              : resolvePath(origin, written),
+          ),
           environment: { id },
         } satisfies Environment.Place
       }
