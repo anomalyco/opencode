@@ -3513,6 +3513,10 @@ export type PushDevice = {
 --- A lowercase canonical UUID chosen by the phone
 export type PushDeviceID = string
 
+export type PushDevicePatch = {
+    paused: boolean,
+}
+
 export type PushDeviceSettings = {
     default: PushLevel,
 }
@@ -5350,8 +5354,41 @@ export type Client = {
                 remove: (input: {
                     id: string,
                 }) -> (nil, string?),
+                session: {
+                    remove: (input: {
+                        id: string,
+                        sessionID: string,
+                    }) -> (nil, string?),
+                    set: (input: {
+                        id: string,
+                        sessionID: string,
+                        level: PushLevel,
+                        ["until"]: number?,
+                    }) -> (PushBell?, string?),
+                },
+                update: (input: {
+                    id: string,
+                    paused: boolean,
+                }) -> (PushDevicePatch?, string?),
             },
             get: (input: {}?) -> (PushInfo?, string?),
+            session: {
+                remove: (input: {
+                    sessionID: string,
+                }) -> (nil, string?),
+                set: (input: {
+                    sessionID: string,
+                    level: PushLevel,
+                    ["until"]: number?,
+                }) -> (PushBell?, string?),
+            },
+            settings: {
+                get: (input: {}?) -> (PushSettings?, string?),
+                set: (input: {
+                    paused: boolean,
+                    ["until"]: number?,
+                }) -> (PushSettings?, string?),
+            },
         },
         session: {
             export: (input: {

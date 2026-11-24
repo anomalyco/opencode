@@ -369,6 +369,8 @@ export type PushPlatform = "android" | "ios"
 
 export type PushRegistered = { publicKey: string }
 
+export type PushDevicePatch = { paused: boolean }
+
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
 export type VcsBranch = { current?: string; default?: string }
@@ -4954,6 +4956,41 @@ export type ExperimentalPushDeviceRegisterOutput = PushRegistered
 export type ExperimentalPushDeviceRemoveInput = { readonly id: string }
 
 export type ExperimentalPushDeviceRemoveOutput = void
+
+export type ExperimentalPushDeviceUpdateInput = { readonly id: string; readonly paused: boolean }
+
+export type ExperimentalPushDeviceUpdateOutput = PushDevicePatch
+
+export type ExperimentalPushDeviceSessionSetInput = {
+  readonly id: string
+  readonly sessionID: string
+  readonly level: "all" | "attention" | "none"
+  readonly until?: number | undefined
+}
+
+export type ExperimentalPushDeviceSessionSetOutput = PushBell
+
+export type ExperimentalPushDeviceSessionRemoveInput = { readonly id: string; readonly sessionID: string }
+
+export type ExperimentalPushDeviceSessionRemoveOutput = void
+
+export type ExperimentalPushSessionSetInput = {
+  readonly sessionID: string
+  readonly level: "all" | "attention" | "none"
+  readonly until?: number | undefined
+}
+
+export type ExperimentalPushSessionSetOutput = PushBell
+
+export type ExperimentalPushSessionRemoveInput = { readonly sessionID: string }
+
+export type ExperimentalPushSessionRemoveOutput = void
+
+export type ExperimentalPushSettingsGetOutput = PushSettings
+
+export type ExperimentalPushSettingsSetInput = { readonly paused: boolean; readonly until?: number | undefined }
+
+export type ExperimentalPushSettingsSetOutput = PushSettings
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

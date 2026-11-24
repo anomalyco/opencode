@@ -1,17 +1,22 @@
 import { describe, expect } from "bun:test"
 import { createECDH } from "node:crypto"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, Stream } from "effect"
 import { TestClock } from "effect/testing"
+import { Bus } from "@opencode/core/bus"
 import { KV } from "@opencode/core/kv"
 import { PushList } from "@opencode/core/push/list"
 import { PushOptions } from "@opencode/core/push/options"
 import { Push } from "@opencode/schema/push"
+import { Session } from "@opencode/schema/session"
+import { SessionEvent } from "@opencode/schema/session-event"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { testEffect } from "./lib/effect"
+import { waitUntil } from "./lib/eventually"
 
-const it = testEffect(LayerNode.compile(LayerNode.group([PushList.node, KV.node])))
+const it = testEffect(LayerNode.compile(LayerNode.group([PushList.node, KV.node, Bus.node])))
 
 const id = Push.DeviceID.make("12345678-1234-1234-1234-123456789abc")
+const sessionID = Session.ID.make("ses_push_bells")
 const relays = [PushOptions.defaultRelay]
 const callbackURL = `${PushOptions.defaultRelay}/v2/notify/sealed-ref`
 
@@ -115,6 +120,84 @@ describe("PushList", () => {
       yield* list.remove(id)
       yield* list.remove(id)
       expect((yield* list.info()).devices).toEqual([])
+    }),
+  )
+
+  it.effect("keeps a phone's pause and bells when it registers again", () =>
+    Effect.gen(function* () {
+      const list = yield* PushList.Service
+      yield* list.register(id, input(phoneKey()), relays)
+      expect(yield* list.pause(id, true)).toEqual({ paused: true })
+      expect(yield* list.setDeviceBell(id, sessionID, { level: "none", until: 5_000 })).toEqual({
+        level: "none",
+        until: 5_000,
+      })
+      yield* list.register(id, input(phoneKey()), relays)
+
+      const [device] = (yield* list.info()).devices
+      expect(device.paused).toBe(true)
+      expect(device.sessions).toEqual({ [sessionID]: { level: "none", until: 5_000 } })
+
+      yield* TestClock.adjust(5_000)
+      expect((yield* list.info()).devices[0].sessions).toEqual({})
+    }),
+  )
+
+  it.effect("answers not found for an unknown phone and rejects a past until", () =>
+    Effect.gen(function* () {
+      const list = yield* PushList.Service
+      const pause = yield* list.pause(id, true).pipe(Effect.flip)
+      expect(pause._tag).toBe("PushList.NotFoundError")
+      const bell = yield* list.setDeviceBell(id, sessionID, { level: "all" }).pipe(Effect.flip)
+      expect(bell._tag).toBe("PushList.NotFoundError")
+      const clear = yield* list.removeDeviceBell(id, sessionID).pipe(Effect.flip)
+      expect(clear._tag).toBe("PushList.NotFoundError")
+
+      yield* TestClock.adjust(1_000)
+      const past = yield* list.setSessionBell(sessionID, { level: "none", until: 1_000 }).pipe(Effect.flip)
+      expect(past._tag).toBe("PushList.InvalidError")
+      const pastPause = yield* list.setSettings({ paused: true, until: 500 }).pipe(Effect.flip)
+      expect(pastPause._tag).toBe("PushList.InvalidError")
+    }),
+  )
+
+  it.effect("pauses everything until a time", () =>
+    Effect.gen(function* () {
+      const list = yield* PushList.Service
+      expect(yield* list.settings()).toEqual({ paused: false })
+      expect(yield* list.setSettings({ paused: true, until: 2_000 })).toEqual({ paused: true, until: 2_000 })
+      expect((yield* list.info()).settings).toEqual({ paused: true, until: 2_000 })
+      yield* TestClock.adjust(2_000)
+      expect(yield* list.settings()).toEqual({ paused: false })
+      expect(yield* list.setSettings({ paused: false, until: 9_000 })).toEqual({ paused: false })
+    }),
+  )
+
+  it.effect("drops a deleted session's bells and tells clients about every change", () =>
+    Effect.gen(function* () {
+      const list = yield* PushList.Service
+      const bus = yield* Bus.Service
+      let updates = 0
+      yield* bus.subscribe(Push.Event.Updated).pipe(
+        Stream.runForEach(() => Effect.sync(() => updates++)),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* list.register(id, input(phoneKey()), relays)
+      yield* list.setDeviceBell(id, sessionID, { level: "attention" })
+      yield* list.setSessionBell(sessionID, { level: "none" })
+      expect((yield* list.info()).sessions).toEqual({ [sessionID]: { level: "none" } })
+      yield* waitUntil(Effect.sync(() => updates === 3))
+
+      yield* bus.publish(SessionEvent.Deleted, { sessionID })
+      yield* waitUntil(Effect.sync(() => updates === 4))
+      const info = yield* list.info()
+      expect(info.sessions).toEqual({})
+      expect(info.devices[0].sessions).toEqual({})
+
+      yield* list.removeSessionBell(sessionID)
+      yield* list.removeDeviceBell(id, sessionID)
+      yield* list.remove(id)
+      yield* waitUntil(Effect.sync(() => updates === 5))
     }),
   )
 })

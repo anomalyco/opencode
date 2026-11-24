@@ -285,6 +285,19 @@ import type {
   ExperimentalPushDeviceRegisterOutput,
   ExperimentalPushDeviceRemoveInput,
   ExperimentalPushDeviceRemoveOutput,
+  ExperimentalPushDeviceUpdateInput,
+  ExperimentalPushDeviceUpdateOutput,
+  ExperimentalPushDeviceSessionSetInput,
+  ExperimentalPushDeviceSessionSetOutput,
+  ExperimentalPushDeviceSessionRemoveInput,
+  ExperimentalPushDeviceSessionRemoveOutput,
+  ExperimentalPushSessionSetInput,
+  ExperimentalPushSessionSetOutput,
+  ExperimentalPushSessionRemoveInput,
+  ExperimentalPushSessionRemoveOutput,
+  ExperimentalPushSettingsGetOutput,
+  ExperimentalPushSettingsSetInput,
+  ExperimentalPushSettingsSetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1816,6 +1829,59 @@ const EndpointExperimentalPushDeviceRemove =
       raw["push.device.remove"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
     )
 
+const EndpointExperimentalPushDeviceUpdate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceUpdateInput) =>
+    preserveEffect<ExperimentalPushDeviceUpdateOutput>()(
+      raw["push.device.update"]({ params: { id: input["id"] }, payload: { paused: input["paused"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalPushDeviceSessionSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceSessionSetInput) =>
+    preserveEffect<ExperimentalPushDeviceSessionSetOutput>()(
+      raw["push.device.session.set"]({
+        params: { id: input["id"], sessionID: input["sessionID"] },
+        payload: { level: input["level"], until: input["until"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushDeviceSessionRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceSessionRemoveInput) =>
+    preserveEffect<ExperimentalPushDeviceSessionRemoveOutput>()(
+      raw["push.device.session.remove"]({ params: { id: input["id"], sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalPushSessionSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSessionSetInput) =>
+    preserveEffect<ExperimentalPushSessionSetOutput>()(
+      raw["push.session.set"]({
+        params: { sessionID: input["sessionID"] },
+        payload: { level: input["level"], until: input["until"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushSessionRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSessionRemoveInput) =>
+    preserveEffect<ExperimentalPushSessionRemoveOutput>()(
+      raw["push.session.remove"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushSettingsGet = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalPushSettingsGetOutput>()(
+    raw["push.settings.get"]({}).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalPushSettingsSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSettingsSetInput) =>
+    preserveEffect<ExperimentalPushSettingsSetOutput>()(
+      raw["push.settings.set"]({ payload: { paused: input["paused"], until: input["until"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1856,7 +1922,14 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     device: {
       register: EndpointExperimentalPushDeviceRegister(raw),
       remove: EndpointExperimentalPushDeviceRemove(raw),
+      update: EndpointExperimentalPushDeviceUpdate(raw),
+      session: {
+        set: EndpointExperimentalPushDeviceSessionSet(raw),
+        remove: EndpointExperimentalPushDeviceSessionRemove(raw),
+      },
     },
+    session: { set: EndpointExperimentalPushSessionSet(raw), remove: EndpointExperimentalPushSessionRemove(raw) },
+    settings: { get: EndpointExperimentalPushSettingsGet(raw), set: EndpointExperimentalPushSettingsSet(raw) },
   },
 })
 

@@ -2650,6 +2650,60 @@ export type ExperimentalPushDeviceRemoveOperation<E = never> = (
   input: ExperimentalPushDeviceRemoveInput,
 ) => Effect.Effect<ExperimentalPushDeviceRemoveOutput, E>
 
+export type ExperimentalPushDeviceUpdateInput = { readonly id: string; readonly paused: boolean }
+export type ExperimentalPushDeviceUpdateOutput = { readonly paused: boolean }
+export type ExperimentalPushDeviceUpdateOperation<E = never> = (
+  input: ExperimentalPushDeviceUpdateInput,
+) => Effect.Effect<ExperimentalPushDeviceUpdateOutput, E>
+
+export type ExperimentalPushDeviceSessionSetInput = {
+  readonly id: string
+  readonly sessionID: Session.ID
+  readonly level: "all" | "attention" | "none"
+  readonly until?: number | undefined
+}
+export type ExperimentalPushDeviceSessionSetOutput = {
+  readonly level: "all" | "attention" | "none"
+  readonly until?: number | undefined
+}
+export type ExperimentalPushDeviceSessionSetOperation<E = never> = (
+  input: ExperimentalPushDeviceSessionSetInput,
+) => Effect.Effect<ExperimentalPushDeviceSessionSetOutput, E>
+
+export type ExperimentalPushDeviceSessionRemoveInput = { readonly id: string; readonly sessionID: Session.ID }
+export type ExperimentalPushDeviceSessionRemoveOutput = void
+export type ExperimentalPushDeviceSessionRemoveOperation<E = never> = (
+  input: ExperimentalPushDeviceSessionRemoveInput,
+) => Effect.Effect<ExperimentalPushDeviceSessionRemoveOutput, E>
+
+export type ExperimentalPushSessionSetInput = {
+  readonly sessionID: Session.ID
+  readonly level: "all" | "attention" | "none"
+  readonly until?: number | undefined
+}
+export type ExperimentalPushSessionSetOutput = {
+  readonly level: "all" | "attention" | "none"
+  readonly until?: number | undefined
+}
+export type ExperimentalPushSessionSetOperation<E = never> = (
+  input: ExperimentalPushSessionSetInput,
+) => Effect.Effect<ExperimentalPushSessionSetOutput, E>
+
+export type ExperimentalPushSessionRemoveInput = { readonly sessionID: Session.ID }
+export type ExperimentalPushSessionRemoveOutput = void
+export type ExperimentalPushSessionRemoveOperation<E = never> = (
+  input: ExperimentalPushSessionRemoveInput,
+) => Effect.Effect<ExperimentalPushSessionRemoveOutput, E>
+
+export type ExperimentalPushSettingsGetOutput = { readonly paused: boolean; readonly until?: number | undefined }
+export type ExperimentalPushSettingsGetOperation<E = never> = () => Effect.Effect<ExperimentalPushSettingsGetOutput, E>
+
+export type ExperimentalPushSettingsSetInput = { readonly paused: boolean; readonly until?: number | undefined }
+export type ExperimentalPushSettingsSetOutput = { readonly paused: boolean; readonly until?: number | undefined }
+export type ExperimentalPushSettingsSetOperation<E = never> = (
+  input: ExperimentalPushSettingsSetInput,
+) => Effect.Effect<ExperimentalPushSettingsSetOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2690,6 +2744,19 @@ export interface ExperimentalApi<E = never> {
     readonly device: {
       readonly register: ExperimentalPushDeviceRegisterOperation<E>
       readonly remove: ExperimentalPushDeviceRemoveOperation<E>
+      readonly update: ExperimentalPushDeviceUpdateOperation<E>
+      readonly session: {
+        readonly set: ExperimentalPushDeviceSessionSetOperation<E>
+        readonly remove: ExperimentalPushDeviceSessionRemoveOperation<E>
+      }
+    }
+    readonly session: {
+      readonly set: ExperimentalPushSessionSetOperation<E>
+      readonly remove: ExperimentalPushSessionRemoveOperation<E>
+    }
+    readonly settings: {
+      readonly get: ExperimentalPushSettingsGetOperation<E>
+      readonly set: ExperimentalPushSettingsSetOperation<E>
     }
   }
 }

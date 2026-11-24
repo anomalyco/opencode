@@ -291,6 +291,19 @@ import type {
   ExperimentalPushDeviceRegisterOutput,
   ExperimentalPushDeviceRemoveInput,
   ExperimentalPushDeviceRemoveOutput,
+  ExperimentalPushDeviceUpdateInput,
+  ExperimentalPushDeviceUpdateOutput,
+  ExperimentalPushDeviceSessionSetInput,
+  ExperimentalPushDeviceSessionSetOutput,
+  ExperimentalPushDeviceSessionRemoveInput,
+  ExperimentalPushDeviceSessionRemoveOutput,
+  ExperimentalPushSessionSetInput,
+  ExperimentalPushSessionSetOutput,
+  ExperimentalPushSessionRemoveInput,
+  ExperimentalPushSessionRemoveOutput,
+  ExperimentalPushSettingsGetOutput,
+  ExperimentalPushSettingsSetInput,
+  ExperimentalPushSettingsSetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1872,6 +1885,93 @@ export function make(options: ClientOptions) {
                 successStatus: 204,
                 declaredStatuses: [400, 401, 404],
                 empty: true,
+              },
+              requestOptions,
+            ),
+          update: (input: ExperimentalPushDeviceUpdateInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalPushDeviceUpdateOutput>(
+              {
+                method: "PATCH",
+                path: `/api/experimental/push/device/${encodeURIComponent(input.id)}`,
+                body: { paused: input["paused"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+          session: {
+            set: (input: ExperimentalPushDeviceSessionSetInput, requestOptions?: RequestOptions) =>
+              request<ExperimentalPushDeviceSessionSetOutput>(
+                {
+                  method: "PUT",
+                  path: `/api/experimental/push/device/${encodeURIComponent(input.id)}/session/${encodeURIComponent(input.sessionID)}`,
+                  body: { level: input["level"], until: input["until"] },
+                  successStatus: 200,
+                  declaredStatuses: [400, 401, 404],
+                  empty: false,
+                },
+                requestOptions,
+              ),
+            remove: (input: ExperimentalPushDeviceSessionRemoveInput, requestOptions?: RequestOptions) =>
+              request<ExperimentalPushDeviceSessionRemoveOutput>(
+                {
+                  method: "DELETE",
+                  path: `/api/experimental/push/device/${encodeURIComponent(input.id)}/session/${encodeURIComponent(input.sessionID)}`,
+                  successStatus: 204,
+                  declaredStatuses: [400, 401, 404],
+                  empty: true,
+                },
+                requestOptions,
+              ),
+          },
+        },
+        session: {
+          set: (input: ExperimentalPushSessionSetInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalPushSessionSetOutput>(
+              {
+                method: "PUT",
+                path: `/api/experimental/push/session/${encodeURIComponent(input.sessionID)}`,
+                body: { level: input["level"], until: input["until"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+          remove: (input: ExperimentalPushSessionRemoveInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalPushSessionRemoveOutput>(
+              {
+                method: "DELETE",
+                path: `/api/experimental/push/session/${encodeURIComponent(input.sessionID)}`,
+                successStatus: 204,
+                declaredStatuses: [400, 401, 404],
+                empty: true,
+              },
+              requestOptions,
+            ),
+        },
+        settings: {
+          get: (requestOptions?: RequestOptions) =>
+            request<ExperimentalPushSettingsGetOutput>(
+              {
+                method: "GET",
+                path: `/api/experimental/push/settings`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+          set: (input: ExperimentalPushSettingsSetInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalPushSettingsSetOutput>(
+              {
+                method: "PUT",
+                path: `/api/experimental/push/settings`,
+                body: { paused: input["paused"], until: input["until"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
               },
               requestOptions,
             ),

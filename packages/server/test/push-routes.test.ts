@@ -98,3 +98,59 @@ it.live("registers, lists and removes a phone", () =>
     expect((yield* request("/api/experimental/push")).body.devices).toEqual([])
   }),
 )
+
+it.live("pauses phones and sets session bells", () =>
+  Effect.gen(function* () {
+    const request = yield* start(true)
+    const device = `/api/experimental/push/device/${id}`
+    const until = Date.now() + 3_600_000
+
+    expect((yield* request(device, { method: "PATCH", body: JSON.stringify({ paused: true }) })).status).toBe(404)
+    expect(
+      (yield* request(`${device}/session/ses_push`, { method: "PUT", body: JSON.stringify({ level: "none" }) })).status,
+    ).toBe(404)
+
+    yield* request(device, { method: "PUT", body: register(phoneKey()) })
+    const paused = yield* request(device, { method: "PATCH", body: JSON.stringify({ paused: true }) })
+    expect(paused.body).toEqual({ paused: true })
+    const bell = yield* request(`${device}/session/ses_push`, {
+      method: "PUT",
+      body: JSON.stringify({ level: "attention", until }),
+    })
+    expect(bell.body).toEqual({ level: "attention", until })
+    const shared = yield* request("/api/experimental/push/session/ses_push", {
+      method: "PUT",
+      body: JSON.stringify({ level: "none" }),
+    })
+    expect(shared.body).toEqual({ level: "none" })
+    const all = yield* request("/api/experimental/push/settings", {
+      method: "PUT",
+      body: JSON.stringify({ paused: true, until }),
+    })
+    expect(all.body).toEqual({ paused: true, until })
+    expect((yield* request("/api/experimental/push/settings")).body).toEqual({ paused: true, until })
+
+    const listed = yield* request("/api/experimental/push")
+    expect(listed.body.settings).toEqual({ paused: true, until })
+    expect(listed.body.sessions).toEqual({ ses_push: { level: "none" } })
+    expect(listed.body.devices[0].paused).toBe(true)
+    expect(listed.body.devices[0].sessions).toEqual({ ses_push: { level: "attention", until } })
+
+    const badLevel = yield* request("/api/experimental/push/session/ses_push", {
+      method: "PUT",
+      body: JSON.stringify({ level: "loud" }),
+    })
+    expect(badLevel.status).toBe(400)
+    const pastUntil = yield* request("/api/experimental/push/session/ses_push", {
+      method: "PUT",
+      body: JSON.stringify({ level: "none", until: 1_000 }),
+    })
+    expect(pastUntil.status).toBe(400)
+
+    expect((yield* request(`${device}/session/ses_push`, { method: "DELETE" })).status).toBe(204)
+    expect((yield* request("/api/experimental/push/session/ses_push", { method: "DELETE" })).status).toBe(204)
+    const cleared = yield* request("/api/experimental/push")
+    expect(cleared.body.sessions).toEqual({})
+    expect(cleared.body.devices[0].sessions).toEqual({})
+  }),
+)

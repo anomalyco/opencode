@@ -1814,6 +1814,79 @@ pub fn experimental_push_device_remove(input: &ExperimentalPushDeviceRemoveInput
     call
 }
 
+/// `PATCH /api/experimental/push/device/:id` (`push.device.update`)
+pub fn experimental_push_device_update(
+    input: &ExperimentalPushDeviceUpdateInput,
+) -> Call<ExperimentalPushDeviceUpdateOutput> {
+    let mut call = Call::new("PATCH", String::new(), Reply::Json, 200, &[400, 401, 404]);
+    call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
+    call.object();
+    call.field("paused", &input.paused);
+    call
+}
+
+/// `PUT /api/experimental/push/device/:id/session/:sessionID` (`push.device.session.set`)
+pub fn experimental_push_device_session_set(
+    input: &ExperimentalPushDeviceSessionSetInput,
+) -> Call<ExperimentalPushDeviceSessionSetOutput> {
+    let mut call = Call::new("PUT", String::new(), Reply::Json, 200, &[400, 401, 404]);
+    call.path =
+        format!("/api/experimental/push/device/{}/session/{}", call.param(&input.id), call.param(&input.session_id));
+    call.object();
+    call.field("level", &input.level);
+    if let Some(value) = &input.until {
+        call.field("until", value);
+    }
+    call
+}
+
+/// `DELETE /api/experimental/push/device/:id/session/:sessionID` (`push.device.session.remove`)
+pub fn experimental_push_device_session_remove(input: &ExperimentalPushDeviceSessionRemoveInput) -> Call<()> {
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 404]);
+    call.path =
+        format!("/api/experimental/push/device/{}/session/{}", call.param(&input.id), call.param(&input.session_id));
+    call
+}
+
+/// `PUT /api/experimental/push/session/:sessionID` (`push.session.set`)
+pub fn experimental_push_session_set(
+    input: &ExperimentalPushSessionSetInput,
+) -> Call<ExperimentalPushSessionSetOutput> {
+    let mut call = Call::new("PUT", String::new(), Reply::Json, 200, &[400, 401, 404]);
+    call.path = format!("/api/experimental/push/session/{}", call.param(&input.session_id));
+    call.object();
+    call.field("level", &input.level);
+    if let Some(value) = &input.until {
+        call.field("until", value);
+    }
+    call
+}
+
+/// `DELETE /api/experimental/push/session/:sessionID` (`push.session.remove`)
+pub fn experimental_push_session_remove(input: &ExperimentalPushSessionRemoveInput) -> Call<()> {
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 404]);
+    call.path = format!("/api/experimental/push/session/{}", call.param(&input.session_id));
+    call
+}
+
+/// `GET /api/experimental/push/settings` (`push.settings.get`)
+pub fn experimental_push_settings_get() -> Call<ExperimentalPushSettingsGetOutput> {
+    Call::new("GET", "/api/experimental/push/settings".to_owned(), Reply::Json, 200, &[400, 401, 404])
+}
+
+/// `PUT /api/experimental/push/settings` (`push.settings.set`)
+pub fn experimental_push_settings_set(
+    input: &ExperimentalPushSettingsSetInput,
+) -> Call<ExperimentalPushSettingsSetOutput> {
+    let mut call = Call::new("PUT", "/api/experimental/push/settings".to_owned(), Reply::Json, 200, &[400, 401, 404]);
+    call.object();
+    call.field("paused", &input.paused);
+    if let Some(value) = &input.until {
+        call.field("until", value);
+    }
+    call
+}
+
 /// `GET /api/shell` (`list`)
 pub fn shell_list(input: &ShellListInput) -> Call<ShellListOutput> {
     let mut call = Call::new("GET", "/api/shell".to_owned(), Reply::Json, 200, &[400, 401, 404]);
@@ -3027,6 +3100,51 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         })()),
         "experimental.push.device.remove" => Some((|| {
             Ok(experimental_push_device_remove(&ExperimentalPushDeviceRemoveInput { id: field(input, "id")? }).cast())
+        })()),
+        "experimental.push.device.update" => Some((|| {
+            Ok(experimental_push_device_update(&ExperimentalPushDeviceUpdateInput {
+                id: field(input, "id")?,
+                paused: field(input, "paused")?,
+            })
+            .cast())
+        })()),
+        "experimental.push.device.session.set" => Some((|| {
+            Ok(experimental_push_device_session_set(&ExperimentalPushDeviceSessionSetInput {
+                id: field(input, "id")?,
+                session_id: field(input, "sessionID")?,
+                level: field(input, "level")?,
+                until: field(input, "until")?,
+            })
+            .cast())
+        })()),
+        "experimental.push.device.session.remove" => Some((|| {
+            Ok(experimental_push_device_session_remove(&ExperimentalPushDeviceSessionRemoveInput {
+                id: field(input, "id")?,
+                session_id: field(input, "sessionID")?,
+            })
+            .cast())
+        })()),
+        "experimental.push.session.set" => Some((|| {
+            Ok(experimental_push_session_set(&ExperimentalPushSessionSetInput {
+                session_id: field(input, "sessionID")?,
+                level: field(input, "level")?,
+                until: field(input, "until")?,
+            })
+            .cast())
+        })()),
+        "experimental.push.session.remove" => Some((|| {
+            Ok(experimental_push_session_remove(&ExperimentalPushSessionRemoveInput {
+                session_id: field(input, "sessionID")?,
+            })
+            .cast())
+        })()),
+        "experimental.push.settings.get" => Some((|| Ok(experimental_push_settings_get().cast()))()),
+        "experimental.push.settings.set" => Some((|| {
+            Ok(experimental_push_settings_set(&ExperimentalPushSettingsSetInput {
+                paused: field(input, "paused")?,
+                until: field(input, "until")?,
+            })
+            .cast())
         })()),
         "shell.list" => Some((|| Ok(shell_list(&ShellListInput { location: field(input, "location")? }).cast()))()),
         "shell.create" => Some((|| {

@@ -200,6 +200,19 @@ impl Client {
     );
     endpoint!(" `PUT /api/experimental/push/device/:id` (`push.device.register`)", experimental_push_device_register, experimental_push_device_register_call, json, ExperimentalPushDeviceRegisterOutput, input: ExperimentalPushDeviceRegisterInput);
     endpoint!(" `DELETE /api/experimental/push/device/:id` (`push.device.remove`)", experimental_push_device_remove, experimental_push_device_remove_call, empty, (), input: ExperimentalPushDeviceRemoveInput);
+    endpoint!(" `PATCH /api/experimental/push/device/:id` (`push.device.update`)", experimental_push_device_update, experimental_push_device_update_call, json, ExperimentalPushDeviceUpdateOutput, input: ExperimentalPushDeviceUpdateInput);
+    endpoint!(" `PUT /api/experimental/push/device/:id/session/:sessionID` (`push.device.session.set`)", experimental_push_device_session_set, experimental_push_device_session_set_call, json, ExperimentalPushDeviceSessionSetOutput, input: ExperimentalPushDeviceSessionSetInput);
+    endpoint!(" `DELETE /api/experimental/push/device/:id/session/:sessionID` (`push.device.session.remove`)", experimental_push_device_session_remove, experimental_push_device_session_remove_call, empty, (), input: ExperimentalPushDeviceSessionRemoveInput);
+    endpoint!(" `PUT /api/experimental/push/session/:sessionID` (`push.session.set`)", experimental_push_session_set, experimental_push_session_set_call, json, ExperimentalPushSessionSetOutput, input: ExperimentalPushSessionSetInput);
+    endpoint!(" `DELETE /api/experimental/push/session/:sessionID` (`push.session.remove`)", experimental_push_session_remove, experimental_push_session_remove_call, empty, (), input: ExperimentalPushSessionRemoveInput);
+    endpoint!(
+        " `GET /api/experimental/push/settings` (`push.settings.get`)",
+        experimental_push_settings_get,
+        experimental_push_settings_get_call,
+        json,
+        ExperimentalPushSettingsGetOutput
+    );
+    endpoint!(" `PUT /api/experimental/push/settings` (`push.settings.set`)", experimental_push_settings_set, experimental_push_settings_set_call, json, ExperimentalPushSettingsSetOutput, input: ExperimentalPushSettingsSetInput);
     endpoint!(" `GET /api/shell` (`list`)", shell_list, shell_list_call, json, ShellListOutput, input: ShellListInput);
     endpoint!(" `POST /api/shell` (`create`)", shell_create, shell_create_call, json, ShellCreateOutput, input: ShellCreateInput);
     endpoint!(" `GET /api/shell/:id` (`get`)", shell_get, shell_get_call, json, ShellGetOutput, input: ShellGetInput);

@@ -11383,6 +11383,70 @@ pub struct ExperimentalPushDeviceRemoveInput {
     pub id: PushDeviceID,
 }
 
+/// Input of `Client::experimental_push_device_update`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushDeviceUpdateInput {
+    pub id: PushDeviceID,
+    pub paused: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushDevicePatch {
+    pub paused: bool,
+}
+
+/// Output of `Client::experimental_push_device_update`.
+pub type ExperimentalPushDeviceUpdateOutput = PushDevicePatch;
+
+/// Input of `Client::experimental_push_device_session_set`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentalPushDeviceSessionSetInput {
+    pub id: PushDeviceID,
+    pub session_id: SessionID,
+    pub level: PushLevel,
+    pub until: Option<i64>,
+}
+
+/// Output of `Client::experimental_push_device_session_set`.
+pub type ExperimentalPushDeviceSessionSetOutput = PushBell;
+
+/// Input of `Client::experimental_push_device_session_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushDeviceSessionRemoveInput {
+    pub id: PushDeviceID,
+    pub session_id: SessionID,
+}
+
+/// Input of `Client::experimental_push_session_set`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentalPushSessionSetInput {
+    pub session_id: SessionID,
+    pub level: PushLevel,
+    pub until: Option<i64>,
+}
+
+/// Output of `Client::experimental_push_session_set`.
+pub type ExperimentalPushSessionSetOutput = PushBell;
+
+/// Input of `Client::experimental_push_session_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushSessionRemoveInput {
+    pub session_id: SessionID,
+}
+
+/// Output of `Client::experimental_push_settings_get`.
+pub type ExperimentalPushSettingsGetOutput = PushSettings;
+
+/// Input of `Client::experimental_push_settings_set`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushSettingsSetInput {
+    pub paused: bool,
+    pub until: Option<i64>,
+}
+
+/// Output of `Client::experimental_push_settings_set`.
+pub type ExperimentalPushSettingsSetOutput = PushSettings;
+
 /// Input of `Client::shell_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShellListInput {

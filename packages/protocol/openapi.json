@@ -14483,6 +14483,449 @@
         },
         "description": "Stop sending notifications to a phone. Behind the push flag. Experimental: may change without compatibility guarantees.",
         "summary": "Remove a phone"
+      },
+      "patch": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Push.DevicePatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Push.DevicePatch"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pause or resume notifications to one phone. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Pause a phone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.DevicePatch"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/push/device/{id}/session/{sessionID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.session.set",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Push.Bell",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Push.Bell"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Choose what one phone gets for one session. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Set a phone's session bell",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Bell"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.session.remove",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Let one phone follow the shared bell or its default for one session again. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Clear a phone's session bell"
+      }
+    },
+    "/api/experimental/push/session/{sessionID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.session.set",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Push.Bell",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Push.Bell"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Choose what every phone gets for one session. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Set a session bell",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Bell"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.session.remove",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Let every phone follow its default for one session again. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Clear a session bell"
+      }
+    },
+    "/api/experimental/push/settings": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.settings.get",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Push.Settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Push.Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read whether all notifications are paused. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Get the push pause"
+      },
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.settings.set",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Push.Settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Push.Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pause or resume notifications to every phone. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Pause all notifications",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Settings"
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/shell": {
@@ -24280,6 +24723,16 @@
       "Push.DeviceID": {
         "type": "string",
         "description": "A lowercase canonical UUID chosen by the phone"
+      },
+      "Push.DevicePatch": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          }
+        },
+        "required": ["paused"],
+        "additionalProperties": false
       },
       "Push.DeviceSettings": {
         "type": "object",

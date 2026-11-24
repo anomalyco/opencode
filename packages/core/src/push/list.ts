@@ -1,8 +1,11 @@
 export * as PushList from "./list.js"
 
-import { Clock, Context, Effect, Layer, Option, Schema, Semaphore } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema, Semaphore, Stream } from "effect"
 import { Push } from "@opencode/schema/push"
+import type { Session } from "@opencode/schema/session"
+import { SessionEvent } from "@opencode/schema/session-event"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Bus } from "../bus.js"
 import { KV } from "../kv.js"
 import { PushCrypto } from "./crypto.js"
 
@@ -31,6 +34,14 @@ export class InvalidError extends Schema.TaggedError<InvalidError>()("PushList.I
   }
 }
 
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("PushList.NotFoundError", {
+  id: Push.DeviceID,
+}) {
+  override get message() {
+    return `No phone registered with ID ${this.id}.`
+  }
+}
+
 export interface Interface {
   readonly register: (
     id: Push.DeviceID,
@@ -38,6 +49,17 @@ export interface Interface {
     relays: readonly string[],
   ) => Effect.Effect<Push.Registered, InvalidError>
   readonly remove: (id: Push.DeviceID) => Effect.Effect<void>
+  readonly pause: (id: Push.DeviceID, paused: boolean) => Effect.Effect<Push.DevicePatch, NotFoundError>
+  readonly setDeviceBell: (
+    id: Push.DeviceID,
+    sessionID: Session.ID,
+    bell: Push.Bell,
+  ) => Effect.Effect<Push.Bell, InvalidError | NotFoundError>
+  readonly removeDeviceBell: (id: Push.DeviceID, sessionID: Session.ID) => Effect.Effect<void, NotFoundError>
+  readonly setSessionBell: (sessionID: Session.ID, bell: Push.Bell) => Effect.Effect<Push.Bell, InvalidError>
+  readonly removeSessionBell: (sessionID: Session.ID) => Effect.Effect<void>
+  readonly settings: () => Effect.Effect<Push.Settings>
+  readonly setSettings: (settings: Push.Settings) => Effect.Effect<Push.Settings, InvalidError>
   readonly info: () => Effect.Effect<Push.Info>
 }
 
@@ -46,6 +68,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pu
 const deviceKey = (id: string) => `push:device:${id}`
 const devicePrefix = "push:device:"
 const settingsKey = "push:settings"
+const sessionKey = (sessionID: string) => `push:session:${sessionID}`
 const sessionPrefix = "push:session:"
 
 const decodeStored = Schema.decodeUnknownOption(Stored)
@@ -87,7 +110,10 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const kv = yield* KV.Service
+    const bus = yield* Bus.Service
     const lock = Semaphore.makeUnsafe(1)
+
+    const changed = bus.publish(Push.Event.Updated, {}, { global: true }).pipe(Effect.asVoid)
 
     const scan = Effect.fn("PushList.scan")(function* (prefix: string) {
       const entries: KV.Entry[] = []
@@ -170,6 +196,7 @@ const layer = Layer.effect(
           updatedAt: now,
         })
         yield* readDevices(now)
+        yield* changed
         return { publicKey: existing.value.serverKey }
       }
 
@@ -193,12 +220,106 @@ const layer = Layer.effect(
       }
       yield* kv.set(deviceKey(id), stored)
       yield* readDevices(now)
+      yield* changed
       return { publicKey: stored.serverKey }
     })
 
     const remove = Effect.fn("PushList.remove")(function* (id: Push.DeviceID) {
+      if (Option.isNone(yield* readDevice(id))) return
       yield* kv.remove(deviceKey(id))
+      yield* changed
     })
+
+    const requireDevice = Effect.fn("PushList.requireDevice")(function* (id: Push.DeviceID) {
+      const now = yield* Clock.currentTimeMillis
+      const stored = yield* readDevice(id)
+      if (Option.isNone(stored) || stored.value.expiresAt <= now) return yield* new NotFoundError({ id })
+      return stored.value
+    })
+
+    const checkBell = Effect.fn("PushList.checkBell")(function* (bell: Push.Bell) {
+      const now = yield* Clock.currentTimeMillis
+      if (bell.until !== undefined && bell.until <= now)
+        return yield* new InvalidError({ reason: "until must be in the future" })
+      return bell
+    })
+
+    const pause = Effect.fn("PushList.pause")(function* (id: Push.DeviceID, paused: boolean) {
+      const stored = yield* requireDevice(id)
+      const now = yield* Clock.currentTimeMillis
+      yield* kv.set(deviceKey(id), { ...stored, paused, updatedAt: now })
+      yield* changed
+      return { paused }
+    })
+
+    const setDeviceBell = Effect.fn("PushList.setDeviceBell")(function* (
+      id: Push.DeviceID,
+      sessionID: Session.ID,
+      bell: Push.Bell,
+    ) {
+      const stored = yield* requireDevice(id)
+      const saved = yield* checkBell(bell)
+      const now = yield* Clock.currentTimeMillis
+      yield* kv.set(deviceKey(id), { ...stored, sessions: { ...stored.sessions, [sessionID]: saved }, updatedAt: now })
+      yield* changed
+      return saved
+    })
+
+    const removeDeviceBell = Effect.fn("PushList.removeDeviceBell")(function* (
+      id: Push.DeviceID,
+      sessionID: Session.ID,
+    ) {
+      const stored = yield* requireDevice(id)
+      if (!(sessionID in stored.sessions)) return
+      const { [sessionID]: _, ...sessions } = stored.sessions
+      const now = yield* Clock.currentTimeMillis
+      yield* kv.set(deviceKey(id), { ...stored, sessions, updatedAt: now })
+      yield* changed
+    })
+
+    const setSessionBell = Effect.fn("PushList.setSessionBell")(function* (sessionID: Session.ID, bell: Push.Bell) {
+      const saved = yield* checkBell(bell)
+      yield* kv.set(sessionKey(sessionID), saved)
+      yield* changed
+      return saved
+    })
+
+    const removeSessionBell = Effect.fn("PushList.removeSessionBell")(function* (sessionID: string) {
+      if ((yield* kv.get(sessionKey(sessionID))) === undefined) return
+      yield* kv.remove(sessionKey(sessionID))
+      yield* changed
+    })
+
+    const settings = Effect.fn("PushList.settings")(function* () {
+      return yield* readSettings(yield* Clock.currentTimeMillis)
+    })
+
+    const setSettings = Effect.fn("PushList.setSettings")(function* (input: Push.Settings) {
+      const now = yield* Clock.currentTimeMillis
+      if (input.until !== undefined && input.until <= now)
+        return yield* new InvalidError({ reason: "until must be in the future" })
+      const saved: Push.Settings = input.paused ? input : { paused: false }
+      yield* kv.set(settingsKey, saved)
+      yield* changed
+      return saved
+    })
+
+    const forgetSession = Effect.fn("PushList.forgetSession")(function* (sessionID: string) {
+      let found = (yield* kv.get(sessionKey(sessionID))) !== undefined
+      yield* kv.remove(sessionKey(sessionID))
+      for (const stored of yield* readDevices(yield* Clock.currentTimeMillis)) {
+        if (!(sessionID in stored.sessions)) continue
+        const { [sessionID]: _, ...sessions } = stored.sessions
+        yield* kv.set(deviceKey(stored.id), { ...stored, sessions })
+        found = true
+      }
+      if (found) yield* changed
+    })
+
+    yield* bus.subscribe([SessionEvent.Deleted]).pipe(
+      Stream.runForEach((event) => lock.withPermit(forgetSession(event.data.sessionID))),
+      Effect.forkScoped({ startImmediately: true }),
+    )
 
     const info = Effect.fn("PushList.info")(function* () {
       const now = yield* Clock.currentTimeMillis
@@ -212,9 +333,16 @@ const layer = Layer.effect(
     return Service.of({
       register: (id, input, relays) => lock.withPermit(register(id, input, relays)),
       remove: (id) => lock.withPermit(remove(id)),
+      pause: (id, paused) => lock.withPermit(pause(id, paused)),
+      setDeviceBell: (id, sessionID, bell) => lock.withPermit(setDeviceBell(id, sessionID, bell)),
+      removeDeviceBell: (id, sessionID) => lock.withPermit(removeDeviceBell(id, sessionID)),
+      setSessionBell: (sessionID, bell) => lock.withPermit(setSessionBell(sessionID, bell)),
+      removeSessionBell: (sessionID) => lock.withPermit(removeSessionBell(sessionID)),
+      settings: () => lock.withPermit(settings()),
+      setSettings: (input) => lock.withPermit(setSettings(input)),
       info: () => lock.withPermit(info()),
     })
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [KV.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Bus.node, KV.node] })
