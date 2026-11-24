@@ -118,7 +118,11 @@ type TimelineSearchInput = {
   sessionID: () => string | undefined
   scrollRef: () => HTMLDivElement | undefined
   revealMessage: (id: string, partID?: string) => void
+  /** Ends the scroll `revealMessage` started. */
+  stopReveal: () => void
   pauseAutoScroll: () => void
+  /** Hands the timeline Find's seek, which the reader's scroll ends: it calls `stop` while a seek is `active`. */
+  registerSeek: (seek: { readonly active: () => boolean; readonly stop: () => void }) => void
 }
 
 export function createTimelineSearchController(input: TimelineSearchInput) {
@@ -216,6 +220,10 @@ export function createTranscriptSearch(
     })
   })
 
+  input.registerSeek({
+    active: () => state.status === "seeking",
+    stop: () => dispatch({ type: "reader.scrolled" }),
+  })
   onCleanup(() => dispatch({ type: "disposed" }))
 
   function open() {
@@ -261,6 +269,12 @@ export function createTranscriptSearch(
       return
     }
 
+    if (effect.type === "reveal.stop") {
+      input.stopReveal()
+
+      return
+    }
+
     if (effect.type === "seek.schedule") {
       cancelSeekFrame()
       seekFrame = requestAnimationFrame(() => {
@@ -281,6 +295,9 @@ export function createTranscriptSearch(
     }
 
     if (effect.type === "scroll") {
+      // The reveal scrolls to the middle of the match's row and keeps at it for up to five seconds. Find goes to the
+      // match itself, so that scroll would only move the view away again.
+      input.stopReveal()
       input.scrollRef()?.scrollTo({ top: effect.top, behavior: "auto" })
 
       return
@@ -296,10 +313,10 @@ export function createTranscriptSearch(
   function probeSeek(effect: Extract<TimelineSearchEffect, { type: "seek.schedule" }>): TimelineSearchEvent {
     const root = input.scrollRef()
 
-    if (!root) return { type: "seek.missing", attempt: effect.attempt }
+    if (!root) return { type: "seek.missing", attempt: effect.attempt, at: undefined }
     const range = activeRange(root, effect.query, effect.partID, effect.occurrence)
 
-    if (!range) return { type: "seek.missing", attempt: effect.attempt }
+    if (!range) return { type: "seek.missing", attempt: effect.attempt, at: root.scrollTop }
     const rect = range.getBoundingClientRect()
 
     // A match in or past a folded message's fading last lines opens the message, then scrolls to it.
@@ -317,9 +334,16 @@ export function createTranscriptSearch(
 
     // Centred between the header and the composer region, not in the viewport that runs on under both.
     const port = scrollPort(root)
-    const top = root.scrollTop + rect.top - port.top - (port.bottom - port.top - rect.height) / 2
+    const at = root.scrollTop
+    const top = at + rect.top - port.top - (port.bottom - port.top - rect.height) / 2
 
-    return { type: "seek.ready", attempt: effect.attempt, top: Math.max(0, top) }
+    // Kept inside the scroll range, so the offset Find scrolls to is the offset the next probe finds the view at.
+    return {
+      type: "seek.ready",
+      attempt: effect.attempt,
+      top: Math.min(Math.max(0, top), root.scrollHeight - root.clientHeight),
+      at,
+    }
   }
 
   function cancelFocusFrame() {

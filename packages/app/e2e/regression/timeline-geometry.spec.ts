@@ -994,6 +994,149 @@ test("shows the match Find moves to between the session header and a tall draft"
   ).toBe("shown")
 })
 
+// Find holds its match in place for the rest of twelve frames after it scrolls there, and brings the match's row back
+// when a late row pushes it out of the mounted rows. A reader who scrolled away in that time unmounted the row too,
+// and Find took the view back: End reached the latest message and the view returned to a match 2,659 to 4,882px up.
+// Ctrl+Home, a page key on a control in a row and the scrollbar send the timeline no input event.
+// Before Find's own scroll, the timeline is still scrolling to the match's row, and that scroll took the view back
+// too. An input the timeline hears of ends it with the seek.
+for (const { input, seek } of [
+  { input: "End", seek: "holds its match" },
+  { input: "Ctrl+Home", seek: "holds its match" },
+  { input: "PageUp on a control in a row", seek: "holds its match" },
+  { input: "the scrollbar", seek: "holds its match" },
+  { input: "the wheel", seek: "holds its match" },
+  { input: "End", seek: "brings its match in" },
+  { input: "the wheel", seek: "brings its match in" },
+] as const) {
+  test(`leaves the view where ${input} takes it while Find ${seek}`, async ({ page }) => {
+    const history = historyMessages(40)
+    const prompt = "msg_00009_seek_a_user"
+    await page.clock.install({ time: 1_700_000_000_000 })
+    await setupTimeline(page, {
+      sessionMessages: validateTimelineMessages([
+        ...history.slice(0, 20),
+        userMessage([userText("The needle rests in this prompt.", { id: "prt_reader_seek" })], {
+          id: prompt,
+          created: 1690000095000,
+        }),
+        assistantMessage(
+          [shell("prt_reader_seek_shell", "completed", "done"), textPart("prt_reader_seek_reply", "A short reply.")],
+          { id: "msg_00009_seek_b_assistant", parentID: prompt, created: 1690000096000 },
+        ),
+        ...history.slice(20),
+        userMessage(),
+        assistantMessage([textPart("prt_reader_tail", "The newest answer.")]),
+      ]),
+    })
+    await expect(page.getByText("The newest answer.", { exact: true })).toBeVisible()
+
+    const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+    const top = () => scroller.evaluate((element) => element.scrollTop)
+
+    // How far the active match is from the middle of what the timeline shows.
+    const offCentre = () =>
+      page.evaluate(() => {
+        const match = [...(CSS.highlights.get("timeline-search-hit-active") ?? [])][0]
+
+        if (!(match instanceof Range)) return Number.POSITIVE_INFINITY
+        const rect = match.getBoundingClientRect()
+        const header = document.querySelector("[data-session-title]")!.getBoundingClientRect()
+        const visible = document.querySelector('[data-slot="session-timeline-visible"]')!.getBoundingClientRect()
+
+        return rect.height ? Math.abs((rect.top + rect.bottom - header.bottom - visible.bottom) / 2) : Number.POSITIVE_INFINITY
+      })
+
+    await page.keyboard.press("ControlOrMeta+f")
+    const search = page.locator('[data-component="timeline-search-bar"] input')
+    await expect(search).toBeFocused()
+
+    // The frames are the test's from here. A seek probes once a frame, and it must be under way when the reader scrolls.
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000)
+    await search.fill("needle rests")
+
+    if (seek === "holds its match") {
+      let frames = 0
+      await expect
+        .poll(
+          async () => {
+            await page.clock.runFor(16)
+            frames += 1
+
+            return offCentre()
+          },
+          { intervals: [100] },
+        )
+        .toBeLessThanOrEqual(16)
+      // Find scrolled to its match, and its seek has frames left.
+      expect(frames).toBeLessThan(10)
+    }
+
+    const held = await top()
+
+    const scrolled = {
+      End: () => scroller.press("End"),
+      "Ctrl+Home": () => scroller.press("Control+Home"),
+      "PageUp on a control in a row": () =>
+        scroller.getByRole("button", { name: "Used 1 Shell", exact: true }).press("PageUp"),
+      "the scrollbar": async () => {
+        const thumb = page.locator('[data-slot="session-timeline-visible"] [data-orientation="vertical"]')
+        await thumb.hover()
+        const grip = (await thumb.boundingBox())!
+        await page.mouse.down()
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + 160, { steps: 4 })
+        await page.mouse.up()
+      },
+      "the wheel": async () => {
+        await scroller.hover()
+        await page.mouse.wheel(0, 1600)
+      },
+    }[input]
+
+    // The browser scrolls without a frame of the app's, so none of Find's probes runs before the view rests.
+    await scrolled()
+    await expect.poll(top).not.toBe(held)
+    let last = Number.NaN
+    await expect
+      .poll(async () => {
+        const now = await top()
+        const rests = now === last
+        last = now
+
+        return rests
+      })
+      .toBe(true)
+
+    const reader = await scroller.evaluate((element) => {
+      const box = element.getBoundingClientRect()
+      const middle = (box.top + box.bottom) / 2
+
+      const row = [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find((item) => {
+        const rect = item.getBoundingClientRect()
+
+        return rect.top <= middle && rect.bottom > middle
+      })
+
+      return row && { key: row.dataset.timelineKey!, y: row.getBoundingClientRect().top, top: element.scrollTop }
+    })
+    expect(reader, "a row is mounted where the reader scrolled to").toBeDefined()
+
+    // The rest of the seek's frames, and more.
+    await page.clock.runFor(16 * 24)
+
+    // How far the row the reader scrolled to moved on screen, or the scroll offset once that row is no longer mounted.
+    expect(
+      await scroller.evaluate((element, reader) => {
+        const row = element.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(reader.key)}"]`)
+
+        return Math.abs(row ? row.getBoundingClientRect().top - reader.y : element.scrollTop - reader.top)
+      }, reader!),
+    ).toBeLessThanOrEqual(1)
+    // The match and the count stay.
+    await expect(page.locator('[data-slot="timeline-search-count"]')).toHaveText("1/1")
+  })
+}
+
 test("groups consecutive sent prompts under the last one's meta line, with each bubble's actions beside it", async ({
   page,
 }) => {
