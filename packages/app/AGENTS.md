@@ -157,7 +157,7 @@ This section is the single source for what may move or restyle the session timel
 ### History paging
 
 - A reader who scrolls up must not reach the top of the loaded messages and wait there. A scroll toward the top with less than a runway of loaded history above the view asks for the next older page: 2,400 px, or two screens in a taller window (`historyRunway` in `src/session/timeline/history-machine.ts`). With the old 200 px, up to 5 of 17 wheel bursts stopped at the top when a page took 150 to 300 ms.
-- Paging follows the reader and never runs ahead by itself. After a page lands, the next one loads only if the reader scrolled toward the top while it loaded, or is within 200 px of the top.
+- Paging follows the reader and never runs ahead by itself. After a page lands, the next one loads only if the reader scrolled toward the top while it loaded and still has less than the runway above, or is within 200 px of the top.
   - Do not page until a distance is filled. Rows can be far shorter than the messages they hold (a run of tool calls is one row), and a row that is not measured yet counts 60 px, so that loop can load a whole session after one wheel notch.
   - A page that lands moves the scroll offset down the list. That scroll is not the reader's: only a lower offset counts as moving toward the top.
 - Keeper: "loads the next older page while the reader is two screens from the top, then waits for the reader" in `e2e/regression/timeline-history.spec.ts`.
