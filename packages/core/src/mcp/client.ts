@@ -71,6 +71,9 @@ const TERMINATE_TIMEOUT = 1_000
 const PROBE_TIMEOUT = 5_000
 // SEP-2243 HeaderMismatch; the SDK does not export the constant.
 const HEADER_MISMATCH = -32020
+// 400 bodies a legacy server sends when it no longer knows the Mcp-Session-Id. The first is the SDK's
+// own wording, the second comes from servers such as FastMCP and the Python SDK.
+const SESSION_EXPIRED_BODIES = ["Bad Request: Server not initialized", "No valid session ID"]
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 
 // HTTP statuses and network error codes live on error properties and are lost once flattened to a message.
@@ -505,9 +508,9 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   })
 
   // Legacy era only: the transport holds the Mcp-Session-Id the server minted, and the server answering
-  // it with 404, or with the 400 a freshly restarted single-session server emits, means it no longer
-  // knows this connection. Modern connections never carry a session id, so a modern 404 for an unknown
-  // method is not mistaken for expiry. Other 400s pass through untouched.
+  // it with 404, or with a 400 that names the missing session, means it no longer knows this connection.
+  // Modern connections never carry a session id, so a modern 404 for an unknown method is not mistaken
+  // for expiry. Other 400s pass through untouched.
   const session: { transport?: StreamableHTTPClientTransport; expired?: () => void; reported: boolean } = {
     reported: false,
   }
@@ -523,12 +526,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     )
       return new NeedsAuthError({ server, message: describe(error) })
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
+    const text = error.data.text
     // Some servers answer a method they don't implement with a 404 that carries a JSON-RPC method-not-found error.
     const expired =
-      (error.status === 404 && !methodNotFound(error.data.text)) ||
-      (error.status === 400 &&
-        typeof error.data.text === "string" &&
-        error.data.text.includes("Bad Request: Server not initialized"))
+      (error.status === 404 && !methodNotFound(text)) ||
+      (error.status === 400 && typeof text === "string" && SESSION_EXPIRED_BODIES.some((body) => text.includes(body)))
     if (!expired) return new Error(explain(error))
     if (!session.reported) {
       session.reported = true

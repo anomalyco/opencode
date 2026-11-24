@@ -1230,6 +1230,47 @@ test("keeps the session when a method the server lacks answers 404 with method-n
   )
 })
 
+test("reconnects and retries a tool call when a legacy server answers an expired session with 400", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        // The server forgets a session id, then answers requests that still carry it with 400.
+        const forgotten = new Set<string>()
+        const server = yield* resourceServer({
+          respond: (request) => {
+            const session = request.headers.get("mcp-session-id")
+            if (session === null || !forgotten.has(session)) return undefined
+            return Response.json(
+              {
+                jsonrpc: "2.0",
+                id: null,
+                error: { code: -32000, message: "Bad Request: No valid session ID provided" },
+              },
+              { status: 400 },
+            )
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+          expect(server.state.initializations).toBe(1)
+
+          yield* Effect.promise(server.restart)
+          const session = server.state.sessions[0]
+          if (session === undefined) throw new Error("the server saw no session id")
+          forgotten.add(session)
+          const result = yield* service.callTool({ server: "resources", name: "echo", args: { n: 2 } })
+
+          expect(result.isError).toBe(false)
+          expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ n: 1 }, { n: 2 }])
+          expect(server.state.initializations).toBe(2)
+          expect(server.state.sessions).toHaveLength(2)
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
 // A signed-in credential with no refresh token: a 401 can only end in a new login.
 const signedInLayer = (url: string) => {
   const credential = (integrationID: Integration.ID) =>
