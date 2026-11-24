@@ -1266,6 +1266,10 @@
     width: 24px;
     height: 24px;
     overflow: hidden;
+    /* On the dark page a faint light edge, drawn over the cover, so dark covers keep their shape. */
+    outline: 1px solid light-dark(transparent, rgb(255 255 255 / 0.12));
+    outline-offset: -1px;
+
     img {
       width: 100%;
       height: 100%;
