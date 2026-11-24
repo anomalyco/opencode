@@ -11,7 +11,7 @@ function fixture() {
     baseUrl: "http://opencode.local",
     fetch: async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init)
-      return request.method === "GET" ? Response.json({ data: [] }) : Response.json({ data: {} })
+      return request.method === "GET" ? Response.json({ data: [], cursor: {} }) : Response.json({ data: {} })
     },
   })
   let seq = 0
@@ -57,6 +57,8 @@ function fixture() {
       move: (id: string, delivery: "steer" | "queue") =>
         emit("session.inbox.delivery.changed", { inboxID: id, delivery }),
       status: (id: string) => data.session.pending.status(sessionID, id),
+      // The session is on screen: a status is read against its transcript, which only an opened session stores.
+      open: () => data.session.message.sync(sessionID),
     }
   })
 }
@@ -82,9 +84,10 @@ test("an idle send is starting from optimistic admission until delivery", async 
   }
 })
 
-test("a steer sent after the execution delivered input is steering, and follows delivery changes", () => {
+test("a steer sent after the execution delivered input is steering, and follows delivery changes", async () => {
   const setup = fixture()
   try {
+    await setup.open()
     setup.enqueue("msg_first")
     setup.started()
     setup.deliver("msg_first")
@@ -101,9 +104,10 @@ test("a steer sent after the execution delivered input is steering, and follows 
   }
 })
 
-test("rapid follow-ups join the starting execution until it delivers without them", () => {
+test("rapid follow-ups join the starting execution until it delivers without them", async () => {
   const setup = fixture()
   try {
+    await setup.open()
     setup.enqueue("msg_first")
     setup.started()
     setup.enqueue("msg_second")
@@ -118,9 +122,10 @@ test("rapid follow-ups join the starting execution until it delivers without the
   }
 })
 
-test.each(["failed", "interrupted"] as const)("an undelivered steer is stranded after execution %s", (outcome) => {
+test.each(["failed", "interrupted"] as const)("an undelivered steer is stranded after execution %s", async (outcome) => {
   const setup = fixture()
   try {
+    await setup.open()
     setup.enqueue("msg_first")
     setup.started()
     expect(setup.status("msg_first")).toBe("starting")

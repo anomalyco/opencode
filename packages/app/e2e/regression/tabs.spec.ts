@@ -166,6 +166,34 @@ test("recently closed fills remaining slots in Home order without open or duplic
   await expect(items).toHaveText(["OOther session 9"])
 })
 
+// Only a session that was opened stores its transcript, so a tab nobody looked at has no user message to go by. Its
+// record says that it ran.
+test("a tab that was never looked at is offered again after it closes", async ({ page }) => {
+  const seen = { id: "ses_unseen_a", title: "Seen session" }
+
+  const unseen = {
+    id: "ses_unseen_b",
+    title: "Unseen session",
+    time: { created: T0, updated: T0 + 2_000, busy: T0 + 1_000, idle: T0 + 2_000 },
+  }
+
+  await mockWorkspace(page, {
+    name: "UnseenTab",
+    sessions: [seen, unseen],
+    seed: { servers: [SERVER], tabs: [seen.id, unseen.id] },
+  })
+  await page.goto(sessionHref(seen.id))
+  const tab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(unseen.id)}"])`)
+  // The title comes from the session's record, which the tab remembers with it.
+  await expect(tab.locator("[data-titlebar-tab-title]")).toHaveText("Unseen session")
+  await tab.getByRole("button", { name: "Close tab", exact: true }).click()
+  await expect(tab).toHaveCount(0)
+  await page.getByRole("button", { name: "New session", exact: true }).click({ button: "right" })
+  await expect(
+    page.getByRole("menu").getByRole("group", { name: "Recently closed", exact: true }).getByRole("menuitem"),
+  ).toHaveText(["UUnseen session"])
+})
+
 test("tab strip keeps draft tabs as wide as session tabs and navigates on mouse down", async ({ page }) => {
   const workspace = await mockWorkspace(page, {
     name: "Tabs",

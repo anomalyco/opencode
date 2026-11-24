@@ -41,7 +41,8 @@ test("evicts a whole family while preserving metadata and attention", async () =
       durable: { aggregateID: "ses_parent", seq: 1, version: 1 },
       data: { sessionID: "ses_parent", agent: "build" },
     })
-    expect(setup.data.session.message.list("ses_parent")).toMatchObject([{ type: "agent-switched" }])
+    // An evicted session is no longer open, so its events are not stored again.
+    expect(setup.data.session.message.list("ses_parent")).toEqual([])
     await setup.data.session.message.sync("ses_parent")
     expect(setup.data.session.message.list("ses_parent").map((item) => item.id)).toEqual(["msg_page"])
     await setup.data.session.message.sync("ses_grandchild")

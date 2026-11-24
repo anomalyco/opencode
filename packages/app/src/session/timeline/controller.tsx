@@ -408,7 +408,9 @@ export function createTimelineController(input: {
     on(
       () => [input.session.data.parentID(), childTaskDescription()] as const,
       ([id, description]) => {
-        if (!id || description || data.session.message.list(id).length > 0) return
+        // A parent nobody opened holds at most the step it runs now, which may not be the one that made this child.
+        // A transcript that is already read costs no request here.
+        if (!id || description) return
         void Promise.all([data.session.sync(id), data.session.message.sync(id)])
       },
       { defer: true },
