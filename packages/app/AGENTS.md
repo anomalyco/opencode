@@ -135,13 +135,6 @@ This section is the single source for what may move or restyle the session timel
 - `scrollToFn` in `src/session/timeline/virtualizer.tsx` holds the corrections made while a batch of sizes is applied and writes the last one once. Keep scroll writes for size changes on that path, and call `flushHeldScroll` before code inside the batch reads the native offset.
 - Keeper: "corrects the scroll position once for each batch of rows an older page measures" in `e2e/regression/timeline-history.spec.ts`.
 
-### Mounted rows
-
-- A row that stays in the mounted range stays in the document. A row that is removed and inserted again, even within one task, loses focus, a text selection, the offset of anything scrolled inside it and its running animations, and is laid out again.
-- Solid's placement of a list does that when new nodes come before a run of kept nodes that is no longer than they are, and the node after the run changed too: it replaces each kept node with a new one and inserts it again. A step up through history that mounts at least as many rows as it keeps has that shape, and so does a landing page of history that regroups the turn at its boundary.
-- `RowLayer` in `src/session/timeline/row-layer.tsx` therefore places the rows itself (`placeRows`). Keep the rows inside it, and in a new virtualized list do not hand a keyed list of rows to an element for Solid to place.
-- Keepers: "a row that stays mounted is not taken out of the page while an older page lands" and "a row that stays mounted is not taken out of the page by a step up through history" in `e2e/regression/timeline-history.spec.ts`.
-
 ### `:has()` selectors
 
 - Chromium rechecks an element's `:has()` when focus moves, an attribute changes, or an element is added or removed near it. In and around the timeline, that happens many times a second during a scroll.
@@ -151,6 +144,13 @@ This section is the single source for what may move or restyle the session timel
 - On a small component (a row, a tab, a card, a menu), the selector may continue after `:has()`. A recheck costs the size of that component.
 - Never select on `style` inside `:has()`. Every inline style write then rechecks the `:has()` of the element's ancestors, and the virtualizer writes inline styles while the reader scrolls. Set a `data-` attribute when the element is built, and select on that.
 - To check: record a Chrome trace of the `devtools.timeline` category while you scroll through history that has not been visited, click in the timeline and press a scroll key. Read `elementCount` on each `UpdateLayoutTree` event; DevTools shows it as Recalculate Style, Elements Affected. A pass that affects about as many elements as the timeline contains is this regression.
+
+### Mounted rows
+
+- A row that stays in the mounted range stays in the document. A row that is removed and inserted again, even within one task, loses focus, a text selection, the offset of anything scrolled inside it and its running animations, and is laid out again.
+- Solid's placement of a list does that when new nodes come before a run of kept nodes that is no longer than they are, and the node after the run changed too: it replaces each kept node with a new one and inserts it again. A step up through history that mounts at least as many rows as it keeps has that shape, and so does a landing page of history that regroups the turn at its boundary.
+- `RowLayer` in `src/session/timeline/row-layer.tsx` therefore places the rows itself (`placeRows`). Keep the rows inside it, and in a new virtualized list do not hand a keyed list of rows to an element for Solid to place.
+- Keepers: "a row that stays mounted is not taken out of the page while an older page lands" and "a row that stays mounted is not taken out of the page by a page up through history" in `e2e/regression/timeline-history.spec.ts`.
 
 ## Localization
 

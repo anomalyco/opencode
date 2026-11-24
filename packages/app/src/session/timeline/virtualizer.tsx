@@ -25,11 +25,11 @@ import {
 } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { Key } from "@solid-primitives/keyed"
+import { RowLayer } from "./row-layer"
 import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { filterVirtualIndexes } from "./virtual-items"
-import { RowLayer } from "./row-layer"
 import {
   ACTIVATED,
   CHECK_REQUESTED,
