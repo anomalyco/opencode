@@ -523,16 +523,20 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                           <button
                             type="button"
                             data-slot="chip"
-                            data-variant="described"
+                            data-variant="text"
                             aria-pressed={fixed() === item}
                             onClick={() => setFixed(item)}
                           >
                             <span>{item ? "Fixed" : "Live"}</span>
-                            <small>{item ? "Keeps today's numbers" : "Always the latest data"}</small>
                           </button>
                         )}
                       </For>
                     </Row>
+                    <p data-slot="row-note">
+                      {fixed()
+                        ? "Keeps today's numbers, even as the data changes."
+                        : "Always shows the latest data when it loads."}
+                    </p>
                     <Row label="Code" variant="fill">
                       <div data-slot="embed-code">
                         <code>
