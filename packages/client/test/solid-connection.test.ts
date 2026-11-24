@@ -5,8 +5,9 @@ import { OpenCode, type OpenCodeEvent } from "../src/promise"
 
 const connected = { id: "evt_connected", created: 1, type: "server.connected", data: {} }
 
-// One fake server whose event streams stay open until the test writes to them or the client aborts.
-function server() {
+// One fake server whose event streams stay open until the test writes to them or the client aborts. With
+// `answerAfter`, each stream sends the handshake that many milliseconds after it opens, as a server under load does.
+function server(answerAfter?: number) {
   const encoder = new TextEncoder()
   const streams: {
     headers: Headers
@@ -40,19 +41,26 @@ function server() {
         controller.error(request.signal.reason)
       })
       streams.push(entry)
+
+      if (answerAfter !== undefined)
+        setTimeout(() => {
+          if (!entry.aborted) entry.write(`data: ${JSON.stringify(connected)}\n\n`)
+        }, answerAfter)
+
       return new Response(body, { headers: { "content-type": "text/event-stream" } })
     },
   })
   return { api, streams }
 }
 
-function setup(input: ReturnType<typeof server>, idleTimeout: number) {
+function setup(input: ReturnType<typeof server>, idleTimeout: number, connectTimeout?: number) {
   const events: OpenCodeEvent[] = []
   return createRoot((dispose) => ({
     events,
     dispose,
     connection: createClientConnection(input.api, {
       idleTimeout,
+      connectTimeout,
       flushInterval: 0,
       onEvent: (event) => events.push(event),
     }),
@@ -86,6 +94,24 @@ test("a stream that goes silent past the idle timeout is replaced", async () => 
     fake.streams[1].write(`data: ${JSON.stringify({ ...connected, id: "evt_connected_2" })}\n\n`)
     await until(() => ctx.connection.status() === "connected" && ctx.events.length === 2)
     expect(ctx.connection.error()).toBeUndefined()
+  } finally {
+    ctx.dispose()
+  }
+})
+
+// A server under load sends its handshake late. Cut off at the same limit every time, the client never reached it.
+test("an attempt after an unanswered one waits twice as long for the handshake", async () => {
+  const fake = server(150)
+  const ctx = setup(fake, 10_000, 100)
+  try {
+    await until(() => ctx.connection.status() === "connected" || fake.streams.length === 3, 4_000)
+    expect(fake.streams.map((stream) => stream.aborted)).toEqual([true, false])
+    expect(ctx.connection.status()).toBe("connected")
+    expect(ctx.connection.internal.history().map((item) => item.data)).toContainEqual({
+      status: "disconnected",
+      attempt: 1,
+      error: "Timed out connecting to server",
+    })
   } finally {
     ctx.dispose()
   }

@@ -23,13 +23,20 @@ export type ClientConnectionOptions = {
    * comment every 15 seconds, so a quiet but healthy stream never trips this.
    */
   readonly idleTimeout?: number
+  /**
+   * How long the first attempt waits for the server's handshake. Each attempt that ends without one doubles the
+   * wait of the next, so a server that answers late under load is reached instead of cut off again and again.
+   */
+  readonly connectTimeout?: number
   readonly log?: {
     readonly debug?: (message: string, data?: Readonly<Record<string, unknown>>) => void
     readonly info?: (message: string, data?: Readonly<Record<string, unknown>>) => void
   }
 }
 
-const connectTimeout = 2_000
+const defaultConnectTimeout = 2_000
+// The longest an attempt waits for the handshake, however many attempts before it went unanswered.
+const connectTimeoutLimit = 30_000
 const reconnectDelay = 1_000
 const connectionHistoryLimit = 50
 export const defaultIdleTimeout = 45_000
@@ -41,6 +48,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
   const abort = new AbortController()
   const history: ClientConnectionEvent[] = []
   const idleTimeout = options.idleTimeout ?? defaultIdleTimeout
+  const connectTimeout = options.connectTimeout ?? defaultConnectTimeout
   const [connection, setConnection] = createStore<{
     status: ClientConnectionStatus
     attempt: number
@@ -73,12 +81,12 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
     }, options.flushInterval ?? 10)
   }
 
-  async function connect(signal: AbortSignal, attempt: number) {
+  async function connect(signal: AbortSignal, attempt: number, limit: number) {
     let connectedAt: number | undefined
     const request = new AbortController()
     current = request
     const cancel = () => request.abort(signal.reason)
-    const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), connectTimeout)
+    const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), limit)
     signal.addEventListener("abort", cancel, { once: true })
 
     // Any received bytes, including keepalive comments, push the stall deadline out. A timer whose
@@ -146,15 +154,22 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
 
   async function runStream(active: number) {
     let attempt = 0
+    // Attempts in a row that ended without the server's handshake.
+    let unanswered = 0
     while (!abort.signal.aborted && started && generation === active) {
       setConnection({ status: attempt === 0 ? "connecting" : "reconnecting", attempt })
       const controller = new AbortController()
       stream = controller
       const cancel = () => controller.abort(abort.signal.reason)
       abort.signal.addEventListener("abort", cancel)
-      const result = await connect(controller.signal, attempt)
+      const result = await connect(
+        controller.signal,
+        attempt,
+        Math.min(connectTimeout * 2 ** unanswered, connectTimeoutLimit),
+      )
       abort.signal.removeEventListener("abort", cancel)
       if (abort.signal.aborted || !started || generation !== active) return
+      unanswered = result.connectedAt === undefined ? unanswered + 1 : 0
       if (result.connectedAt !== undefined && Date.now() - result.connectedAt >= reconnectDelay) attempt = 0
       attempt += 1
       const message = errorMessage(result.error)
