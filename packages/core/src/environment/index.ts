@@ -1,6 +1,6 @@
 export * as Environment from "./index.js"
 
-export { type Driver } from "./driver.js"
+export { type Driver, EnvironmentDriver } from "./driver.js"
 export {
   type DirEntry,
   exists,

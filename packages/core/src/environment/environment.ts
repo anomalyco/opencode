@@ -1,11 +1,11 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
-import { Context, Effect, Layer, PlatformError, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { posix, type PlatformPath } from "node:path"
-import type { Driver } from "./driver.js"
-import { Failed, type Files } from "./files.js"
+import { type Driver, EnvironmentDriver } from "./driver.js"
+import type { Files } from "./files.js"
 import { makeFiles } from "./exec-defaults.js"
 import { makeLocalDriver } from "./local.js"
 import { EnvironmentUnavailable } from "./unavailable.js"
@@ -58,8 +58,10 @@ export interface Interface extends Options {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Environment") {}
 
 export const make = (id: ID, driver: Driver, options?: Options): Interface => ({
+  ...driver.options,
   ...options,
   id,
+  // `local` is owned exclusively by the explicit `options` argument so a remote driver can never claim host privileges.
   local: options?.local === true,
   files: makeFiles(driver),
   spawner: driver.spawner,
@@ -78,43 +80,26 @@ export const local = (spawner: ChildProcessSpawner.ChildProcessSpawner["Service"
 
 /** A workspace sandbox environment; runs ripgrep through its own spawner and uses POSIX path rules. */
 export const workspace = (id: Workspace.ID, driver: Driver) =>
-  make(ID.make(id), driver, { path: posix, rg: Effect.succeed("rg") })
+  make(ID.make(id), driver, {
+    path: posix,
+    rg: Effect.succeed("rg"),
+    ...driver.options,
+    local: false,
+  })
 
 /**
  * A total environment handle that fails every file and command operation loudly with `cause` instead of
  * silently falling back to the server host.
  */
-export const unavailable = (id: ID, cause: Error): Interface => {
-  const spawner = ChildProcessSpawner.make(() =>
-    Effect.fail(
-      PlatformError.systemError({
-        _tag: "Unknown",
-        module: "Environment",
-        method: "spawn",
-        description: cause.message,
-        cause,
-      }),
-    ),
-  )
-  const fail = (path: string) => Effect.fail(new Failed({ path, cause }))
-  return make(
+export const unavailable = (id: ID, cause: Error): Interface =>
+  make(
     id,
-    {
-      spawner,
-      overrides: {
-        read: (path) => fail(path),
-        write: (path) => fail(path),
-        stat: (path) => fail(path),
-        list: (path) => fail(path),
-        remove: (path) => fail(path),
-        move: (from) => fail(from),
-        mkdir: (path) => fail(path),
-        append: (path) => fail(path),
-      },
-    },
+    EnvironmentDriver.lazy(Effect.fail(cause), {
+      module: "Environment",
+      spawnDescription: cause.message,
+    }),
     { path: posix, shell: "sh" },
   )
-}
 
 /**
  * A session's own working directory, bound to its environment, provided by the runner around a step.
