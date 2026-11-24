@@ -1,12 +1,13 @@
+import { Popover } from "@kobalte/core/popover"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { createOverlayFocus } from "@opencode/ui/context/overlay-focus"
 import { DockShell, DockTray } from "@opencode/ui/dock-surface"
 import { Icon } from "@opencode/ui/icon"
 import { Loader } from "@opencode/ui/loader"
-import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
+import { createTypeahead } from "@opencode/ui/typeahead"
 import { getFilename } from "@opencode/util/path"
-import { makeEventListener } from "@solid-primitives/event-listener"
 import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, Show, untrack } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData, useServer } from "@/runtime/server/current"
@@ -22,6 +23,7 @@ import {
   type LocationMissingEffect,
   type LocationMissingEvent,
 } from "./location-missing-machine"
+import "@/shell/palette-menu.css"
 import "./location-missing.css"
 
 export function SessionLocationMissing(props: { sessionID: string; projectID: string; directory: string }) {
@@ -37,9 +39,12 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
   )
 
   const view = createMemo(() => selectLocationMissingView(machine(), props.directory))
+  const overlayFocus = createOverlayFocus()
   let timer: ReturnType<typeof setTimeout> | undefined
   let button: HTMLButtonElement | undefined
+  let trigger: HTMLButtonElement | undefined
   let searchInput: HTMLInputElement | undefined
+  let listbox: HTMLDivElement | undefined
 
   const dispatch = (event: LocationMissingEvent) => {
     const next = transitionLocationMissing(untrack(machine), event)
@@ -150,6 +155,72 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
 
   const id = createUniqueId()
 
+  // "New worktree" is the empty directory; each worktree row moves the session to its directory.
+  const entries = createMemo(() => ["", ...view().visibleWorktrees.map((worktree) => worktree.directory)])
+
+  const choose = (directory: string) => dispatch({ type: "move.worktree", directory: directory || undefined })
+
+  // Focus stays in the search field, or on the list without one, while arrow keys and the pointer move the highlight.
+  const typeahead = createTypeahead({ items: entries, key: (directory) => directory, onSelect: choose })
+
+  const revealActive = () => {
+    const active = typeahead.activeID()
+
+    if (active) document.getElementById(active)?.scrollIntoView({ block: "nearest" })
+  }
+
+  const search = (value: string) => {
+    dispatch({ type: "search.changed", search: value })
+    // A query highlights its first match rather than "New worktree", so Enter after typing picks a match.
+    typeahead.setActive(view().visibleWorktrees[0]?.directory)
+  }
+
+  const row = (directory: string) => (
+    <div
+      id={typeahead.optionID(directory)}
+      role="option"
+      class="palette-menu-row"
+      data-size="compact"
+      title={directory || undefined}
+      aria-selected={typeahead.activeItem() === directory}
+      aria-disabled={view().disabled}
+      data-active={typeahead.activeItem() === directory ? "" : undefined}
+      onMouseMove={(event) => {
+        // A static cursor must not steal the highlight while the keyboard scrolls the list.
+        if (event.movementX !== 0 || event.movementY !== 0) typeahead.setActive(directory)
+      }}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => choose(directory)}
+    >
+      <Icon name={directory ? "outline-worktree" : "plus"} class="shrink-0" />
+      <span class="min-w-0 flex-1 truncate">{directory ? getFilename(directory) : language.t("workspace.new")}</span>
+    </div>
+  )
+
+  const onListKeyDown = (event: KeyboardEvent) => {
+    const items = entries()
+
+    // The list is one stop: Tab closes it and moves on from the trigger, as the browser would from there.
+    if (event.key === "Tab") {
+      trigger?.focus({ preventScroll: true })
+
+      return dispatch({ type: "menu.toggled", open: false })
+    }
+
+    if (!searchInput?.isConnected && (event.key === "Home" || event.key === "End" || event.key === " ")) {
+      event.preventDefault()
+
+      if (event.key === " ") return choose(typeahead.activeItem() ?? "")
+      typeahead.setActive(items[event.key === "Home" ? 0 : items.length - 1])
+
+      return revealActive()
+    }
+
+    typeahead.onKeyDown(event)
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") revealActive()
+  }
+
   return (
     <div data-component="session-location-missing">
       <DockShell data-slot="location-body">
@@ -175,12 +246,18 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
       </DockShell>
       <DockTray data-slot="location-footer">
         <Show when={project()?.vcs === "git"}>
-          <Menu
+          <Popover
             placement="top-end"
+            gutter={4}
             open={view().menuOpen}
-            onOpenChange={(open) => dispatch({ type: "menu.toggled", open })}
+            onOpenChange={(open) => {
+              overlayFocus.openChanged(open)
+              typeahead.setActive(undefined)
+              dispatch({ type: "menu.toggled", open })
+            }}
           >
-            <Menu.Trigger
+            <Popover.Trigger
+              ref={trigger}
               as={Button}
               variant={view().pendingWorktree ? "loading" : "neutral"}
               size="large"
@@ -193,91 +270,75 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
               <Show when={!view().pendingWorktree}>
                 <Icon name="chevron-down" />
               </Show>
-            </Menu.Trigger>
-            <Menu.Portal>
-              <Menu.Content
-                ref={(element: HTMLElement) =>
-                  // Hovering an item moves focus to it, so send typing back to the search field before type-ahead runs.
-                  makeEventListener(
-                    element,
-                    "keydown",
-                    (event) => {
-                      if (!searchInput || event.target === searchInput) return
-
-                      if (event.ctrlKey || event.metaKey || event.altKey) return
-
-                      if (event.key.length !== 1 && event.key !== "Backspace") return
-
-                      if (event.key === " " && !view().search) return
-                      event.stopPropagation()
-                      searchInput.focus({ preventScroll: true })
-                    },
-                    { capture: true },
-                  )
-                }
-                class="max-h-[66.667dvh] w-[200px] !p-0"
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                aria-label={language.t("session.location.worktree")}
+                class="z-50 flex max-h-[min(66.667dvh,var(--kb-popper-content-available-height))] w-[200px] flex-col overflow-hidden rounded-md bg-v2-background-bg-layer-01 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-base shadow-[var(--v2-elevation-floating)] outline-none"
+                onOpenAutoFocus={(event) => {
+                  event.preventDefault()
+                  ;(searchInput?.isConnected ? searchInput : listbox)?.focus({ preventScroll: true })
+                }}
+                onCloseAutoFocus={(event) => overlayFocus.restore(event, trigger)}
               >
-                <MenuScroll viewportClass="p-0.5">
-                  <Menu.Item onSelect={() => dispatch({ type: "move.worktree" })} disabled={view().disabled}>
-                    <Icon name="plus" />
-                    <span class="min-w-0 flex-1 truncate">{language.t("workspace.new")}</span>
-                  </Menu.Item>
-                  <Show when={view().hasMenuSeparator}>
-                    <Menu.Separator class="h-[0.5px]" />
-                  </Show>
+                <Show when={view().searchable}>
+                  <div class="flex h-8 shrink-0 items-center gap-2 ps-3 pe-2 text-v2-icon-icon-muted">
+                    <Icon name="magnifying-glass" class="shrink-0" />
+                    <input
+                      // Worktrees can load after the list opens, so the field takes focus from the list when it mounts.
+                      ref={(element) => {
+                        searchInput = element
+                        requestAnimationFrame(() => {
+                          if (document.activeElement === listbox) element.focus({ preventScroll: true })
+                        })
+                      }}
+                      value={view().search}
+                      placeholder={language.t("session.new.workspace.search.placeholder")}
+                      aria-label={language.t("session.new.workspace.search.placeholder")}
+                      autocomplete="off"
+                      spellcheck={false}
+                      role="combobox"
+                      aria-expanded="true"
+                      aria-autocomplete="list"
+                      aria-controls={typeahead.listID}
+                      aria-activedescendant={typeahead.activeID()}
+                      class="h-8 min-w-0 flex-1 border-0 bg-transparent text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
+                      onInput={(event) => search(event.currentTarget.value)}
+                      onKeyDown={onListKeyDown}
+                    />
+                  </div>
+                  <div aria-hidden="true" class="h-[0.5px] shrink-0 bg-v2-border-border-base" />
+                </Show>
+                <MenuScroll class="min-h-0 flex-1" viewportClass="p-0.5">
+                  <div
+                    ref={listbox}
+                    id={typeahead.listID}
+                    role="listbox"
+                    aria-label={language.t("session.location.worktree")}
+                    // With a search field, the field holds focus and names the active option instead.
+                    tabIndex={view().searchable ? -1 : 0}
+                    aria-activedescendant={view().searchable ? undefined : typeahead.activeID()}
+                    class="outline-none"
+                    onKeyDown={onListKeyDown}
+                  >
+                    {row("")}
+                    <Show when={view().hasMenuSeparator}>
+                      <div aria-hidden="true" class="mx-1 my-0.5 h-[0.5px] bg-v2-border-border-base" />
+                    </Show>
+                    <For each={view().visibleWorktrees}>{(worktree) => row(worktree.directory)}</For>
+                  </div>
                   <Show when={view().menuLoading}>
-                    <Menu.Item disabled>{language.t("common.loading")}</Menu.Item>
-                  </Show>
-                  <Show when={view().searchable}>
-                    <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
-                      <Icon name="magnifying-glass" class="shrink-0" />
-                      <input
-                        // Worktrees load after the menu opens, so focus the field once it mounts.
-                        ref={(element) => {
-                          searchInput = element
-                          requestAnimationFrame(() =>
-                            requestAnimationFrame(() => element.focus({ preventScroll: true })),
-                          )
-                        }}
-                        value={view().search}
-                        placeholder={language.t("session.new.workspace.search.placeholder")}
-                        aria-label={language.t("session.new.workspace.search.placeholder")}
-                        class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                        onInput={(event) => dispatch({ type: "search.changed", search: event.currentTarget.value })}
-                        onKeyDown={(event) => {
-                          if (
-                            event.key === "Escape" ||
-                            event.key === "ArrowDown" ||
-                            event.key === "ArrowUp" ||
-                            event.key === "Enter"
-                          )
-                            return
-                          event.stopPropagation()
-                        }}
-                      />
-                    </div>
+                    <div class="flex h-7 items-center px-2 text-v2-text-text-faint">{language.t("common.loading")}</div>
                   </Show>
                   <Show when={view().emptySearch}>
-                    <div class="px-3 py-4 text-center text-[13px] font-[440] leading-5 text-v2-text-text-muted">
+                    <div class="px-3 py-4 text-center text-v2-text-text-muted">
                       {language.t("session.new.workspace.search.empty")}
                     </div>
                   </Show>
-                  <For each={view().visibleWorktrees}>
-                    {(worktree) => (
-                      <Menu.Item
-                        title={worktree.directory}
-                        onSelect={() => dispatch({ type: "move.worktree", directory: worktree.directory })}
-                        disabled={view().disabled}
-                      >
-                        <Icon name="outline-worktree" />
-                        <span class="min-w-0 flex-1 truncate">{getFilename(worktree.directory)}</span>
-                      </Menu.Item>
-                    )}
-                  </For>
                 </MenuScroll>
-              </Menu.Content>
-            </Menu.Portal>
-          </Menu>
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover>
         </Show>
         <Button
           ref={button}
