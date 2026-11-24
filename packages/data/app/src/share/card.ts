@@ -82,6 +82,9 @@ const palettes = {
     spotlight: "",
     // The "Other" series: the same muted grey a dimmed series takes, so it sits back the whole time.
     other: "#262626",
+    // The muted grey as a see-through veil, so the equaliser shows through a muted bar; over the plain card it reads
+    // as `idle`.
+    veil: "rgb(255 255 255 / 0.1)",
   },
   light: {
     background: "#fbfbfb",
@@ -99,6 +102,7 @@ const palettes = {
     highlight: "#161616",
     spotlight: "",
     other: "#e2e2e2",
+    veil: "rgb(0 0 0 / 0.1)",
   },
 }
 
@@ -687,11 +691,23 @@ function drawStacked(
       const value = column.values[series] ?? 0
       if (value <= 0 || total <= 0) return y
       const size = (value / total) * height
-      ctx.fillStyle =
-        series === focus.index
-          ? spotlit(chart.series[series]?.color ?? colors.idle, series, focus.amount, colors)
-          : mix(chart.series[series]?.color ?? colors.idle, colors.idle, focus.amount)
-      ctx.fillRect(x, y - size, width, Math.max(0, size - (size > 3 ? 1 : 0)))
+      const own = chart.series[series]?.color ?? colors.idle
+      // How far the bar has gone to the muted grey: "Other" always, the rest as another series takes the focus. The
+      // muted grey is the translucent veil, cross-faded in over the bar's own colour.
+      const muted = series === focus.index ? 0 : own === colors.other ? 1 : focus.amount
+      const alpha = ctx.globalAlpha
+      const rect = [x, y - size, width, Math.max(0, size - (size > 3 ? 1 : 0))] as const
+      if (muted < 1) {
+        ctx.globalAlpha = alpha * (1 - muted)
+        ctx.fillStyle = series === focus.index ? spotlit(own, series, focus.amount, colors) : own
+        ctx.fillRect(...rect)
+      }
+      if (muted > 0) {
+        ctx.globalAlpha = alpha * muted
+        ctx.fillStyle = colors.veil
+        ctx.fillRect(...rect)
+      }
+      ctx.globalAlpha = alpha
       return y - size
     }, base)
   })
