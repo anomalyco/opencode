@@ -266,11 +266,22 @@ describe("MCP skills", () => {
         },
       ])
       const skills = yield* Skill.Service
-      // Lists with content, such as GET /api/skill, never include skills that load lazily.
+      // Lists that need the body leave lazy skills out; the public listing (GET /api/skill) shows them with no content.
       expect(yield* skills.list()).toEqual([])
+      expect(yield* skills.list({ content: "eager" })).toEqual([
+        {
+          id: Skill.ID.make("team:deploy"),
+          name: Skill.Name.make("team:deploy"),
+          description: "Deploy the app",
+          path: AbsolutePath.make("skill://team:deploy/SKILL.md"),
+          content: "",
+        },
+      ])
       expect(yield* skills.files(Skill.ID.make("team:deploy"))).toEqual(["references/guide.md", "scripts/run.sh"])
       const instructions = yield* SkillInstructions.Service
-      expect((yield* instructions.load(PermissionPolicy.empty).pipe(Effect.flatMap(readInitial))).text).toContain("<id>team:deploy</id>")
+      expect((yield* instructions.load(PermissionPolicy.empty).pipe(Effect.flatMap(readInitial))).text).toContain(
+        "<id>team:deploy</id>",
+      )
       expect(reads).toEqual([])
     }),
   )

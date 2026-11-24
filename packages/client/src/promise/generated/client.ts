@@ -211,6 +211,8 @@ import type {
   CommandListOutput,
   SkillListInput,
   SkillListOutput,
+  ExperimentalSkillContentInput,
+  ExperimentalSkillContentOutput,
   RpcCallInput,
   RpcCallOutput,
   EventSubscribeInput,
@@ -1412,6 +1414,20 @@ export function make(options: ClientOptions) {
               successStatus: 204,
               declaredStatuses: [400, 401, 404],
               empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      skill: {
+        content: (input: ExperimentalSkillContentInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSkillContentOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/skill/${encodeURIComponent(input.skillID)}/content`,
+              query: { location: input["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 502],
+              empty: false,
             },
             requestOptions,
           ),

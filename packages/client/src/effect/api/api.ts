@@ -2080,6 +2080,22 @@ export interface SkillApi<E = never> {
   readonly list: SkillListOperation<E>
 }
 
+export type ExperimentalSkillContentInput = {
+  readonly skillID: Skill.ID
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+export type ExperimentalSkillContentOutput = {
+  readonly location: Location.PublicRef
+  readonly data: { readonly content: string }
+}
+export type ExperimentalSkillContentOperation<E = never> = (
+  input: ExperimentalSkillContentInput,
+) => Effect.Effect<ExperimentalSkillContentOutput, E>
+
+export interface ExperimentalSkillApi<E = never> {
+  readonly content: ExperimentalSkillContentOperation<E>
+}
+
 export type RpcCallInput = {
   readonly rpcID: string
   readonly method: string
@@ -3138,6 +3154,7 @@ export interface AppApi<E = never> {
     readonly integration: ExperimentalIntegrationApi<E>
     readonly mcp: ExperimentalMcpApi<E>
     readonly file: ExperimentalFileApi<E>
+    readonly skill: ExperimentalSkillApi<E>
     readonly migration: ExperimentalMigrationApi<E>
     readonly usage: ExperimentalUsageApi<E>
     readonly config: ExperimentalConfigApi<E>

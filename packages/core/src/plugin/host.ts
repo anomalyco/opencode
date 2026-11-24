@@ -498,7 +498,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
         }),
     },
     skill: {
-      list: () => response(skill.list()),
+      list: () => response(skill.list({ content: "eager" })),
       reload: skill.reload,
       transform: (callback) =>
         skill.transform((editor) => {

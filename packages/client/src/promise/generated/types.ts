@@ -304,6 +304,8 @@ export type PermissionSavedID = string
 
 export type CommandInfo = { name: string; description?: string }
 
+export type SkillContent = { content: string }
+
 export type RpcOutput = { output?: any }
 
 export type PermissionReply = "once" | "always" | "reject"
@@ -2676,6 +2678,7 @@ export type ConfigEntry =
           project_overlay?: boolean
           opencode_api?: boolean
           sqlite_fts?: boolean
+          mcp_skills?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
@@ -3346,6 +3349,10 @@ export const isPermissionNotFoundError = (value: unknown): value is PermissionNo
 export type FileNotFoundError = { readonly _tag: "FileNotFoundError"; readonly path: string; readonly message: string }
 export const isFileNotFoundError = (value: unknown): value is FileNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FileNotFoundError"
+
+export type SkillLoadError = { readonly _tag: "SkillLoadError"; readonly skill: string; readonly message: string }
+export const isSkillLoadError = (value: unknown): value is SkillLoadError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillLoadError"
 
 export type RpcError = {
   readonly _tag: "RpcError"
@@ -4516,6 +4523,13 @@ export type CommandListOutput = { location: LocationPublicRef; data: Array<Comma
 export type SkillListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type SkillListOutput = { location: LocationPublicRef; data: Array<SkillInfo> }
+
+export type ExperimentalSkillContentInput = {
+  readonly skillID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalSkillContentOutput = { location: LocationPublicRef; data: SkillContent }
 
 export type RpcCallInput = {
   readonly rpcID: string

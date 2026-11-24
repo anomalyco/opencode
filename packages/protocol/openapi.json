@@ -10236,6 +10236,119 @@
         "summary": "List skills"
       }
     },
+    "/api/experimental/skill/{skillID}/content": {
+      "get": {
+        "tags": ["skill"],
+        "operationId": "experimental.skill.content",
+        "parameters": [
+          {
+            "name": "skillID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Skill.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Absolute path of the directory."
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Skill.Content"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SkillNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read a skill's SKILL.md body, loading it first when it loads on demand, such as an MCP skill fetched from its server. Fails with 502 when it can't be loaded. Experimental: may change without compatibility guarantees.",
+        "summary": "Get skill content"
+      }
+    },
     "/api/rpc/{rpcID}/{method}": {
       "post": {
         "tags": ["rpc"],
@@ -17888,6 +18001,9 @@
                 "type": "boolean"
               },
               "sqlite_fts": {
+                "type": "boolean"
+              },
+              "mcp_skills": {
                 "type": "boolean"
               },
               "video_generate": {
@@ -26227,6 +26343,17 @@
         "required": ["_tag", "id", "message"],
         "additionalProperties": false
       },
+      "Skill.Content": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "The skill's SKILL.md body, without its frontmatter."
+          }
+        },
+        "required": ["content"],
+        "additionalProperties": false
+      },
       "Skill.ID": {
         "type": "string"
       },
@@ -26249,7 +26376,9 @@
             "$ref": "#/components/schemas/AbsolutePath"
           },
           "content": {
-            "type": "string"
+            "type": "string",
+            "description": "Deprecated: empty for a skill whose body loads on demand, such as an MCP skill. Read the body from GET /api/experimental/skill/{skillID}/content instead.",
+            "deprecated": true
           }
         },
         "required": ["id", "name", "path", "content"],
@@ -26257,6 +26386,23 @@
       },
       "Skill.Name": {
         "type": "string"
+      },
+      "SkillLoadErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SkillLoadError"]
+          },
+          "skill": {
+            "$ref": "#/components/schemas/Skill.ID"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "skill", "message"],
+        "additionalProperties": false
       },
       "SkillNotFoundErrorEncoded": {
         "type": "object",

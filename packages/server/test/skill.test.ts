@@ -37,6 +37,42 @@ it.live("lists configured skills", () =>
   }),
 )
 
+it.live("reads a skill's content and reports an unknown skill", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-skill-content-endpoint-")))
+    yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "skills", "demo"), { recursive: true }))
+    yield* Effect.promise(() =>
+      fs.writeFile(
+        path.join(tmp.path, "skills", "demo", "SKILL.md"),
+        "---\nname: demo\ndescription: Demo skill\n---\nbody\n",
+      ),
+    )
+    yield* Effect.promise(() =>
+      fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ skills: [path.join(tmp.path, "skills")] })),
+    )
+    const server = yield* serveRoutes({
+      database: { path: ":memory:" },
+      config: { directory: tmp.path },
+      fs: { filewatcher: false },
+      models: { fetch: false },
+    })
+    yield* server.pluginsLoaded(tmp.path)
+    const content = (id: string) => {
+      const url = new URL(`/api/experimental/skill/${id}/content`, "http://opencode.local")
+      url.searchParams.set("location[directory]", tmp.path)
+      return Effect.promise(() => server.fetch(url))
+    }
+
+    const found = yield* content("demo")
+    expect(found.status).toBe(200)
+    expect(yield* Effect.promise(() => found.json())).toMatchObject({ data: { content: "body\n" } })
+
+    const missing = yield* content("missing")
+    expect(missing.status).toBe(404)
+    expect(yield* Effect.promise(() => missing.json())).toMatchObject({ _tag: "SkillNotFoundError", skill: "missing" })
+  }),
+)
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }

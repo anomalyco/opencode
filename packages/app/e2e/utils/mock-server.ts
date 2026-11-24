@@ -909,6 +909,19 @@ function mockHandlers(
             data: resolve(config.commands ?? []),
           })),
         skill: () => Effect.sync(() => ({ location: location(config), data: resolve(config.skills ?? []) })),
+        skillContent: (ctx) =>
+          Effect.suspend(() => {
+            const skill = resolve(config.skills ?? []).find(
+              (item): item is { id: string; content: string } =>
+                Predicate.isObject(item) &&
+                Predicate.hasProperty(item, "id") &&
+                item.id === ctx.params.skillID &&
+                Predicate.hasProperty(item, "content") &&
+                typeof item.content === "string",
+            )
+            if (!skill) return Effect.fail(new MockNotFound({ message: `Skill not found: ${ctx.params.skillID}` }))
+            return Effect.succeed({ location: location(config), data: { content: skill.content } })
+          }),
         plugin: () => Effect.sync(() => ({ location: location(config), data: resolve(config.plugins ?? []) })),
         mcp: (ctx) =>
           Effect.sync(() => {

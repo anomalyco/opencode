@@ -53,9 +53,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
     delivery: request.input.delivery ?? "steer",
   })
   const input = event.prompt
-  const files = input.files
-    ? yield* Effect.forEach(input.files, materializeAttachment, { concurrency: 8 })
-    : undefined
+  const files = input.files ? yield* Effect.forEach(input.files, materializeAttachment, { concurrency: 8 }) : undefined
   const requested = input.skills
   const selected = yield* Effect.gen(function* () {
     if (!requested?.length) return undefined

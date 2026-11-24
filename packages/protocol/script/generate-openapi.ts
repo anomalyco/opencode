@@ -6,7 +6,13 @@ import { liftParameterDescriptions } from "./openapi-parameters.js"
 import { stabilizeOpenApi } from "./openapi-stabilize.js"
 
 const document = await format(
-  JSON.stringify(liftParameterDescriptions(stabilizeOpenApi(OpenApi.fromApi(ClientApi))), null, 2),
+  JSON.stringify(
+    liftParameterDescriptions(
+      stabilizeOpenApi(OpenApi.fromApi(ClientApi, { includeAnnotationKey: (key) => key === "deprecated" })),
+    ),
+    null,
+    2,
+  ),
   {
     parser: "json",
     printWidth: 120,

@@ -120,6 +120,7 @@ export type Data = {
 
 type ContentOption = { readonly content?: true }
 type SummaryOption = { readonly content: false }
+type ListingOption = { readonly content: "eager" }
 
 export type Editor = {
   /** Skills whose content is inline; `{ content: false }` lists every skill. */
@@ -151,10 +152,14 @@ export interface Interface extends State.Transformable<Editor> {
     (id: ID): Effect.Effect<ReadonlyArray<string> | undefined>
     (id: ID, path: string): Effect.Effect<Uint8Array | undefined, LoadError>
   }
-  /** Skills whose content is inline; `{ content: false }` lists every skill and loads nothing. */
+  /**
+   * Skills whose content is inline; `{ content: false }` lists every skill and loads nothing. `{ content: "eager" }`
+   * lists every skill for the public listing, with an empty `content` for a skill whose content loads on demand.
+   */
   readonly list: {
     (options?: ContentOption): Effect.Effect<Info[]>
     (options: SummaryOption): Effect.Effect<Summary[]>
+    (options: ListingOption): Effect.Effect<Info[]>
   }
 }
 
@@ -167,6 +172,13 @@ const inline = (skill: Draft): skill is Types.DeepMutable<Info> => typeof skill.
 const summarize = (skill: Entry): Summary => {
   const { content: _, ...summary } = skill
   return summary
+}
+
+// The public listing's shape: a lazy skill's content stays unloaded and `server` is internal.
+const listing = (skill: Draft): Info => {
+  if (inline(skill)) return skill
+  const { content: _, server: __, ...info } = skill
+  return { ...info, content: "" }
 }
 
 const failed = (skill: ID, path?: string) => (error: unknown) =>
@@ -305,10 +317,13 @@ const layer = Layer.effect(
 
     function list(options?: ContentOption): Effect.Effect<Info[]>
     function list(options: SummaryOption): Effect.Effect<Summary[]>
-    function list(options?: ContentOption | SummaryOption) {
+    function list(options: ListingOption): Effect.Effect<Info[]>
+    function list(options?: ContentOption | SummaryOption | ListingOption) {
       return Effect.sync(() => {
         const skills = Array.from(state.get().skills.values())
-        return options?.content === false ? skills.map(summarize) : skills.filter(inline)
+        if (options?.content === false) return skills.map(summarize)
+        if (options?.content === "eager") return skills.map(listing)
+        return skills.filter(inline)
       })
     }
 

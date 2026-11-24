@@ -241,7 +241,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       )
     }
 
-    // Built-in and virtual skills register `skill://` (or legacy `/builtin/`) paths whose content is inline in `/api/skill`.
+    // Built-in and virtual skills register `skill://` (or legacy `/builtin/`) paths; their content comes from the skill content endpoint.
     const isVirtualSkill = (file: string) => file.startsWith("skill://") || file.startsWith("/builtin/")
 
     const builtinSkill = async (file: string, directory: string) => {
@@ -254,7 +254,11 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const readBuiltin = (file: string, directory: string): Promise<FileContent | undefined> =>
       builtinSkill(file, directory).then((skill) =>
-        skill ? { type: "text", content: skill.content, mimeType: artifactMime(file) } : undefined,
+        skill
+          ? serverSDK.api.experimental.skill
+              .content({ skillID: skill.id, location: { directory } })
+              .then((result) => ({ type: "text", content: result.data.content, mimeType: artifactMime(file) }))
+          : undefined,
       )
 
     const load = (input: string, options?: { force?: boolean; silent?: boolean }) => {

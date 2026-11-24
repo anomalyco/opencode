@@ -54,12 +54,7 @@ export const key = (input: {
   readonly mcpSkills?: boolean
 }) => {
   const config = input.config
-  const common = [
-    config.protocol,
-    config.timeout ?? null,
-    input.clientInfo ?? null,
-    input.mcpSkills === true,
-  ]
+  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null, input.mcpSkills === true]
   if (config.type === "remote")
     return JSON.stringify([
       "remote",
@@ -128,10 +123,7 @@ export const layer = Layer.effect(
     const unfixed = new Set<string>()
 
     // Takes only data from the Location that opens it: the connection outlives that Location's claim.
-    const open = (
-      key: string,
-      input: Pick<Input, "name" | "config" | "directory" | "clientInfo" | "mcpSkills">,
-    ) => {
+    const open = (key: string, input: Pick<Input, "name" | "config" | "directory" | "clientInfo" | "mcpSkills">) => {
       const slot: Slot = {
         holders: new Set(),
         lock: Semaphore.makeUnsafe(1),

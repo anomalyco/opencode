@@ -196,6 +196,13 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(HttpApiEndpoint.get("command", "/api/command", { success: Json }))
   .add(HttpApiEndpoint.get("skill", "/api/skill", { success: Json }))
+  .add(
+    HttpApiEndpoint.get("skillContent", "/api/experimental/skill/:skillID/content", {
+      params: { skillID: Schema.String },
+      success: Json,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
   .add(HttpApiEndpoint.get("plugin", "/api/plugin", { success: Json }))
   .add(HttpApiEndpoint.get("mcp", "/api/mcp", { success: Json }))
   .add(

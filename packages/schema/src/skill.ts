@@ -30,7 +30,11 @@ export const Info = Schema.Struct({
   description: Schema.String.pipe(optional),
   autoinvoke: Schema.Boolean.pipe(optional),
   path: AbsolutePath,
-  content: Schema.String,
+  content: Schema.String.annotate({
+    description:
+      "Deprecated: empty for a skill whose body loads on demand, such as an MCP skill. Read the body from GET /api/experimental/skill/{skillID}/content instead.",
+    deprecated: true,
+  }),
 }).annotate({ identifier: "Skill.Info" })
 
 const Updated = ephemeral({ type: "skill.updated", schema: {} })
