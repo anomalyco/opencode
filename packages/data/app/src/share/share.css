@@ -1387,10 +1387,9 @@
       opacity: 0.45;
     }
 
-    /* The days the chart covers: on a light wash, in the text colour. */
+    /* The days the chart covers: in the text colour; the rest stay grey. */
     &[data-range] {
       color: var(--stats-text);
-      background: var(--editor-control);
     }
 
     &:disabled {
