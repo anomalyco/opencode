@@ -1766,7 +1766,7 @@ describe("ShellTool", () => {
         code,
         tools: ["shell"],
         bindings: {},
-        permissions: [{ action: "*", resource: "*", effect: "allow" }],
+        policy: Permission.Policy.fromRules([{ action: "*", resource: "*", effect: "allow" }]),
         limits: { timeoutMs: 30_000, maxOutputBytes: 32 * 1024 },
         context: {
           sessionID,

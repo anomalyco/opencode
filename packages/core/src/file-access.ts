@@ -5,16 +5,18 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Array, Context, Effect, Layer, Schema } from "effect"
 import path from "path"
+import { Environments } from "./environment/environments.js"
 import { Environment } from "./environment/index.js"
+import { EnvironmentPath } from "./environment/path.js"
 import { Flag } from "./flag.js"
 import { Location } from "./location.js"
 import { Machines } from "./machine/machines.js"
-import { MachinePath } from "./machine/path.js"
 import { Permission } from "./permission.js"
 import { Project } from "./project.js"
 import { AbsolutePath } from "./schema.js"
 import type { SessionErrors } from "./session/error.js"
 import type { Tool } from "./tool.js"
+import { Workspace } from "./workspace.js"
 
 export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type
@@ -73,7 +75,7 @@ export const key = (target: { readonly absolute: string; readonly environment: {
   `${target.environment.id.length}:${target.environment.id}:${target.absolute}`
 
 /** The rule "always" saves for a file action: every file on the target's machine. */
-export const always = (target: Target) => (target.machine ? MachinePath.format(target.machine, "*") : "*")
+export const always = (target: Target) => (target.machine ? EnvironmentPath.format(target.machine, "*") : "*")
 
 export type Invocation = Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id">
 
@@ -131,6 +133,7 @@ const layer = Layer.effect(
     const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
     const permission = yield* Permission.Service
     const flags = yield* Flag.Service
+    const environments = yield* Environments.Service
     const machines = yield* Machines.Service
 
     // The flag and the working directory are read once per operation by `locate` and `resolve`, which both call this.
@@ -140,40 +143,51 @@ const layer = Layer.effect(
       enabled: boolean,
       workingDirectory: Environment.Place,
     ) {
-      // Only text the model typed can name a machine: text derived from a target is a plain path on that target's
-      // machine, and a shell there does not understand `gpu:`.
-      const machine =
-        !base && enabled
-          ? yield* MachinePath.typed(text, machines).pipe(
+      // Only text the model typed on the server's own Location can address another environment: a sandboxed workspace
+      // Location stays confined to its own environment and cannot escape to `local:/...`, paired machines, or other
+      // sandboxes. Text derived from a target is always a plain path in that target's environment.
+      const crossEnvironment = enabled && environment.id === Environment.localID
+      const parsed =
+        !base && crossEnvironment
+          ? yield* EnvironmentPath.typed(text, machines).pipe(
               Effect.mapError((cause) => new Environment.Failed({ path: text, cause })),
             )
           : undefined
       const from = base ?? workingDirectory
-      const id = machine?.machine ?? from.environment.id
-      if (!machine && id === environment.id)
+      const id = parsed?.environment ?? from.environment.id
+      if (id === environment.id) {
+        const written = parsed?.path ?? text
+        const origin = parsed ? location.directory : from.absolute
         return {
-          absolute: AbsolutePath.make(resolvePath(from.absolute, text)),
+          absolute: AbsolutePath.make(resolvePath(origin, written)),
           environment: { id },
         } satisfies Environment.Place
-      // Another environment's paths follow its own path rules (falling back to POSIX when unknown), and `~` there is
-      // that machine's home, never this server's. Only `~` and `~/` are read: another user's home or a shell's `~+` is
-      // not known here. With the flag off no home is asked for, so a base on another machine refuses every `~`.
-      const target = enabled
-        ? yield* machines.get(id).pipe(Effect.catchTag("Machines.NotFound", () => Effect.undefined))
+      }
+      // Another environment's paths follow its own path rules (falling back to POSIX when unknown). Only `~` and `~/`
+      // are expanded: paired machines report their home in hello, while sandboxes do not expose a home directory.
+      // With the flag off no home is asked for, so a base on another machine refuses every `~`.
+      const target = crossEnvironment
+        ? yield* environments.lookup(id).pipe(
+            Effect.catchTags({
+              "Machines.NotFound": () => Effect.undefined,
+              "Workspace.NotFound": () => Effect.undefined,
+            }),
+          )
         : undefined
       const rules = target ? (target.path ?? path) : path.posix
-      const written = machine?.path ?? text
+      const written = parsed?.path ?? text
+      const isHome = written === "~" || written.startsWith("~/")
       const rooted =
-        enabled && (written === "~" || written.startsWith("~/"))
+        crossEnvironment && isHome && !Workspace.isID(id)
           ? rules.join(
               yield* machines.home(id).pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause }))),
               written.slice(1),
             )
           : written
       if (rooted.startsWith("~"))
-        return yield* new Environment.Failed({ path: text, cause: new MachinePath.NotAbsolute({ machine: id }) })
+        return yield* new Environment.Failed({ path: text, cause: new EnvironmentPath.NotAbsolute({ machine: id }) })
       // A relative text is relative to the directory it was written in, which is the base when there is one and
-      // otherwise the working directory itself: a session cwd on another machine is still a directory there.
+      // otherwise the working directory itself: a session cwd in another environment is still a directory there.
       return {
         absolute: AbsolutePath.make(rules.resolve(from.absolute, rooted)),
         environment: { id },
@@ -217,8 +231,8 @@ const layer = Layer.effect(
         const relative = slash(path.relative(base, absolute) || ".")
         return {
           absolute,
-          // With machines on, a local folder can be named like a machine path, and its permission name stays its own.
-          resource: enabled ? MachinePath.local(relative) : relative,
+          // With cross-environment prefixes on, a local folder can be named like an environment path, so keep it local.
+          resource: enabled && environment.id === Environment.localID ? EnvironmentPath.local(relative) : relative,
           environment,
         } satisfies Target
       }
@@ -249,24 +263,36 @@ const layer = Layer.effect(
       kind: Kind | undefined,
       insideWorkingDirectory: boolean,
     ) {
-      const machineEnvironment = yield* machines
-        .get(place.environment.id)
+      const targetEnvironment = yield* environments
+        .lookup(place.environment.id)
         .pipe(Effect.mapError((cause) => new Environment.Failed({ path: place.absolute, cause })))
-      const rules = machineEnvironment.path ?? path
+      const rules = targetEnvironment.path ?? path
+      // Never wake a cold/lazy sandbox just to stat the approval boundary before permission is granted.
+      const ready = yield* environments.ready(place.environment.id)
       const type =
         kind ??
-        (yield* Environment.typeFollowing(machineEnvironment.files, place.absolute).pipe(
-          Effect.catchTag("Environment.NotFound", () => Effect.undefined),
-        ))
-      const directory = AbsolutePath.make(type === "directory" ? place.absolute : rules.dirname(place.absolute))
-      const contents = MachinePath.format(place.environment.id, rules.join(directory, "*"))
+        (ready
+          ? yield* Environment.typeFollowing(targetEnvironment.files, place.absolute).pipe(
+              Effect.catchTag("Environment.NotFound", () => Effect.undefined),
+            )
+          : undefined)
+      // When a cold sandbox's target type is unknown, narrow the boundary to the path itself rather than widening
+      // to its parent directory (which would save a wider rule such as `wrk_...:*` on "always").
+      const narrowCold = !ready && type === undefined
+      const directory = AbsolutePath.make(
+        type === "directory" || narrowCold ? place.absolute : rules.dirname(place.absolute),
+      )
+      const contents = EnvironmentPath.format(
+        place.environment.id,
+        narrowCold ? place.absolute : rules.join(directory, "*"),
+      )
       return {
         absolute: place.absolute,
-        resource: MachinePath.format(place.environment.id, place.absolute),
+        resource: EnvironmentPath.format(place.environment.id, place.absolute),
         ...(insideWorkingDirectory
           ? {}
           : { externalDirectory: { action: "external_directory", directory, resource: contents, save: contents } }),
-        environment: machineEnvironment,
+        environment: targetEnvironment,
         machine: place.environment.id,
       } satisfies Target
     })
@@ -324,5 +350,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Environment.node, Flag.node, Location.node, Machines.node, Permission.node],
+  deps: [Environment.node, Environments.node, Flag.node, Location.node, Machines.node, Permission.node],
 })

@@ -7,6 +7,7 @@ import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
+import { Environments } from "@opencode/core/environment/environments"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import { FileMutation } from "@opencode/core/file-mutation"
@@ -207,6 +208,7 @@ const graph = (fixture: Fixture, realPermissions = false) =>
       Tool.node,
       toolPlugins,
       Environment.node,
+      Environments.node,
       FileAccess.node,
       FileMutation.node,
       Flag.node,

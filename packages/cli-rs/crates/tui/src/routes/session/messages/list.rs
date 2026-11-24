@@ -11,6 +11,7 @@
 use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Range;
+use std::sync::Arc;
 
 use opencode_api::generated::{
     AgentInfo, ModelInfo, ModelRef, SessionInboxInfo, SessionInfo, SessionMessageAssistant,
@@ -260,8 +261,8 @@ impl Switch {
 
 struct Paint {
     theme: Theme,
-    syntax: SyntaxTheme,
-    thinking_syntax: SyntaxTheme,
+    syntax: Arc<SyntaxTheme>,
+    thinking_syntax: Arc<SyntaxTheme>,
     /// The categorical colors at step 400, each once: an agent without a color of its own takes one by position.
     palette: Vec<Color>,
 }
@@ -275,7 +276,7 @@ impl Paint {
                 palette.push(color);
             }
         }
-        Self { thinking_syntax: thinking_syntax(&syntax, theme.text.muted), syntax, theme, palette }
+        Self { thinking_syntax: Arc::new(thinking_syntax(&syntax, theme.text.muted)), syntax, theme, palette }
     }
 }
 
@@ -1619,9 +1620,9 @@ pub struct Context<'a> {
     pub session: &'a SessionID,
     pub app: &'a App,
     pub theme: &'a Theme,
-    pub syntax: &'a SyntaxTheme,
+    pub syntax: &'a Arc<SyntaxTheme>,
     /// Syntax theme for reasoning text, with all tokens muted.
-    pub thinking_syntax: &'a SyntaxTheme,
+    pub thinking_syntax: &'a Arc<SyntaxTheme>,
     /// The categorical colors agents take by position.
     pub palette: &'a [Color],
     pub renderers: &'a CodeBlockRenderers,

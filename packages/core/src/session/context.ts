@@ -17,10 +17,11 @@ import { Flag } from "../flag.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
+import { AgentInstructions } from "../instructions/agent.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
 import { MachineInstructions } from "../machine/instructions.js"
-import { Machines } from "../machine/machines.js"
+import { Environments } from "../environment/environments.js"
 import { McpInstructions } from "../mcp/instructions.js"
 import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
@@ -164,7 +165,7 @@ const layer = Layer.effect(
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
-      const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
+      const policy = Permission.Policy.fromRules(agent.info.permissions, session.permissions ?? [])
       const [selected, hasWebSearch, fullCodeMode, opencodeApi] = yield* Effect.all(
         [
           models.select(session, model.available).pipe(Effect.orElseSucceed(() => undefined)),
@@ -176,7 +177,7 @@ const layer = Layer.effect(
       )
       const fallbackRef = session.model ?? agent.info.model
       const policyModel = selected?.info ?? (fallbackRef && Model.Info.default(fallbackRef.providerID, fallbackRef.id))
-      const tools = yield* registry.snapshot(permissions, {
+      const tools = yield* registry.snapshot(policy, {
         services,
         api: Context.make(CodeModeApi.Service, opencodeApi ? api : CodeModeApi.disabled).pipe(
           Context.add(Location.Service, location),
@@ -185,7 +186,7 @@ const layer = Layer.effect(
         tools: modelTools({
           model: policyModel,
           websearch: hasWebSearch,
-          fullCodeMode: fullCodeMode && Tool.codeModeAvailable(permissions),
+          fullCodeMode: fullCodeMode && Tool.codeModeAvailable(policy),
         }),
       })
       const cwd = yield* sessionCwd.current(session.id)
@@ -194,7 +195,7 @@ const layer = Layer.effect(
           builtins: builtins.load({ cwd: cwd && SessionCwd.describe(cwd, environment.id) }),
           cwd: cwdInstructions.load(cwd, session.id),
           discovery: discovery.load(),
-          skills: skillInstructions.load(permissions),
+          skills: skillInstructions.load(policy),
           references: referenceInstructions.load(),
           mcp: mcpInstructions.load(tools),
           machines: machineInstructions.load(),
@@ -218,6 +219,8 @@ const layer = Layer.effect(
           loaded.builtins,
           loaded.cwd,
           loaded.entries,
+          // Last: it changes whenever the user switches agents, so the sources above stay cached.
+          AgentInstructions.make(agent.info),
         ]),
         tools,
       }
@@ -278,7 +281,7 @@ export const node = makeLocationNode({
     InstructionEntry.node,
     Location.node,
     MachineInstructions.node,
-    Machines.node,
+    Environments.node,
     McpInstructions.node,
     McpTool.node,
     ReferenceInstructions.node,

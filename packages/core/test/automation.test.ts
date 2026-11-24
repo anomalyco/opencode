@@ -18,6 +18,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -31,6 +32,7 @@ import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
+import { AutomationTools } from "@opencode/core/tool/plugin/automation"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
@@ -40,6 +42,7 @@ import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
+import { registerToolPlugin } from "./lib/tool"
 
 const enabledDirectory = "/enabled"
 const disabledDirectory = "/disabled"
@@ -914,6 +917,66 @@ describe("Automation", () => {
       toggle.on = true
       yield* automations.remove(id)
       expect(yield* automations.list()).toEqual([])
+    }),
+  )
+
+  it.effect("tools treat another project's automation as missing even while its location has automations off", () =>
+    Effect.gen(function* () {
+      const automations = yield* setup(toggleDirectory)
+      toggle.on = true
+      const { id } = yield* automations.create({
+        sessionID,
+        name: "poll",
+        trigger: every("1 hour"),
+        action: prompt("x"),
+      })
+      toggle.on = false
+
+      // The caller lives in another project whose location has automations on.
+      yield* insertSession(otherID, enabledDirectory)
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.make("prj_elsewhere"), worktree: AbsolutePath.make("/elsewhere"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .update(SessionTable)
+        .set({ project_id: Project.ID.make("prj_elsewhere") })
+        .where(eq(SessionTable.id, otherID))
+        .run()
+        .pipe(Effect.orDie)
+
+      const map = yield* LocationServiceMap.Service
+      const errors = yield* Effect.gen(function* () {
+        yield* registerToolPlugin(AutomationTools.Plugin, {
+          event: { subscribe: () => Stream.never },
+          command: {
+            list: () => Effect.die("unused command.list"),
+            reload: () => Effect.void,
+            transform: () => Effect.succeed({ dispose: Effect.void }),
+          },
+        })
+        const registry = yield* Tool.Service
+        const tools = yield* registry.snapshot(
+          PermissionPolicy.fromRules([{ action: "execute", resource: "*", effect: "deny" }]),
+        )
+        return yield* Effect.forEach(["automation_pause", "automation_resume", "automation_delete"], (name) =>
+          tools
+            .execute({
+              sessionID: otherID,
+              agent: Agent.defaultID,
+              messageID: SessionMessage.ID.make("msg_other"),
+              call: { type: "tool-call", id: `call-${name}`, name, input: { id } },
+            })
+            .pipe(
+              Effect.flip,
+              Effect.map((error) => error.message),
+            ),
+        )
+      }).pipe(Effect.provide(map.get(Location.Ref.make({ directory: AbsolutePath.make(enabledDirectory) }))))
+
+      expect(errors).toEqual([0, 1, 2].map(() => `Automation not found: ${id}`))
     }),
   )
 

@@ -7,6 +7,8 @@ export function HomeProjects(props: {
   scroll?: HomeScrollController
   dropdown?: boolean
   scope?: boolean
+  /** Runs after a project or server is picked, or a project is added (which selects it). */
+  onPick?: () => void
 }) {
   return (
     <HomeProjectsView
@@ -23,8 +25,14 @@ export function HomeProjects(props: {
       canRevealProject={props.projects.project.canReveal}
       hasUnread={props.projects.project.hasUnread}
       onWheel={(event) => props.scroll?.viewport.containWheel(event)}
-      onChooseProject={props.projects.project.choose}
-      onFocusServer={props.projects.server.focus}
+      onChooseProject={(server) => {
+        props.projects.project.choose(server)
+        props.onPick?.()
+      }}
+      onFocusServer={(server) => {
+        props.projects.server.focus(server)
+        props.onPick?.()
+      }}
       onAuthenticateServer={props.projects.server.authenticate}
       onToggleCollapsed={props.projects.server.toggleCollapsed}
       onEditServer={props.projects.server.edit}
@@ -32,7 +40,10 @@ export function HomeProjects(props: {
       onRemoveServer={props.projects.server.remove}
       canHideServer={props.projects.server.canHide}
       onHideServer={props.projects.server.hide}
-      onSelectProject={props.projects.project.select}
+      onSelectProject={(server, directory) => {
+        props.projects.project.select(server, directory)
+        props.onPick?.()
+      }}
       onOpenProjectNewSession={props.projects.project.openNewSession}
       canImportSession={props.projects.project.canImportSession}
       importingSession={props.projects.project.importingSession()}

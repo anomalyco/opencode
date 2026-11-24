@@ -271,8 +271,9 @@ export function createComposerModelSelection(input: {
         // A model runs at the speed last used with it.
         const item = picked && models.speed.remembered(picked)
         const previous = currentKey()
+        const prompted = prompt.model.current()
 
-        // Another speed of the same model keeps its variant.
+        // Keep explicit choices across speeds, but resolve inherited variants for the target.
         const same =
           item &&
           previous &&
@@ -280,7 +281,7 @@ export function createComposerModelSelection(input: {
           previous.providerID === item.providerID
 
         prompt.model.set(
-          item ? { ...item, variant: same ? (selection.variant.current() ?? null) : undefined } : undefined,
+          item ? { ...item, variant: same && prompted && valid(prompted) ? prompted.variant : undefined } : undefined,
         )
 
         if (!item) return
@@ -293,32 +294,33 @@ export function createComposerModelSelection(input: {
     setVisibility: models.setVisibility,
     variant: {
       configured(model = current()) {
-        const item = input.agent()
+        if (!model) return
 
-        if (!item || !model) return
+        const key = { providerID: model.provider.id, modelID: model.id }
+        const target = { ...key, baseModelID: models.standard(key).modelID, variants: model.variants }
         const global = configuredModel()
 
         return (
-          getConfiguredAgentVariant({
-            agent: { model: item.model, variant: item.variant },
-            model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
-          }) ??
-          getConfiguredAgentVariant({
-            agent: { model: global, variant: global?.variant },
-            model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
-          })
+          getConfiguredAgentVariant({ agent: input.agent(), model: target }) ??
+          getConfiguredAgentVariant({ agent: { model: global, variant: global?.variant }, model: target })
         )
       },
       current(item?: ModelKey) {
         const model = item ? models.find(item) : current()
         const same = !item || (current()?.provider.id === item.providerID && current()?.id === item.modelID)
         const prompted = prompt.model.current()
+        const configured = this.configured(model)
 
         return resolveModelVariant({
           variants: Object.keys(model?.variants ?? {}),
           selected: same && prompted && valid(prompted) ? variantSelectionFrom(prompted.variant) : INHERIT_VARIANT,
-          configured: this.configured(model),
-          preferred: model ? models.variant.get({ providerID: model.provider.id, modelID: model.id }) : undefined,
+          configured,
+          preferred: model
+            ? models.variant.get(
+                { providerID: model.provider.id, modelID: model.id },
+                { siblingFallback: configured === undefined },
+              )
+            : undefined,
         })
       },
       list() {
