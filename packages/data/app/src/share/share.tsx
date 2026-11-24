@@ -423,7 +423,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   disabled={rendering() !== undefined}
                   onClick={exportFile}
                 >
-                  {rendering() === undefined ? "Export" : "Rendering video…"}
+                  {rendering() !== undefined
+                    ? "Rendering video…"
+                    : format() === "image"
+                      ? "Export image"
+                      : "Export video"}
                 </button>
               </div>
             </aside>
