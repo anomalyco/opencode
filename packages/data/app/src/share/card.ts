@@ -63,6 +63,7 @@ const palettes = {
     faint: "#8f8f8f",
     line: "#ffffff1f",
     dot: "#2f2f2f",
+    meter: "#5e5e5e",
     idle: "#2e2e2e",
     track: "#242424",
     accent: "#8190ff",
@@ -75,6 +76,7 @@ const palettes = {
     faint: "#6b6b6b",
     line: "#0000001a",
     dot: "#e4e4e4",
+    meter: "#b4b4b4",
     idle: "#e2e2e2",
     track: "#eeeeee",
     accent: "#3b5cf6",
@@ -90,14 +92,17 @@ const hold = 1.6
 // The space under a stacked chart for its date labels.
 const axisHeight = 44
 
-// When the chart builds, when the highlights start and how long each takes. Without music it runs at its own pace;
-// with a soundtrack it follows the track's bars (barTiming).
-export type ShareTiming = { build: number; start: number; step: number; length?: number }
-const freeTiming: ShareTiming = { build: 1.2, start: 1.2, step: 1.1 }
+// When the chart builds, when the highlights start, how long each takes and how many times they go round. Without
+// music it runs at its own pace; with a soundtrack it follows the track (barTiming) and `beat` drives the dot meter.
+export type ShareTiming = { build: number; start: number; step: number; rounds: number; beat?: number; length?: number }
+const freeTiming: ShareTiming = { build: 1.2, start: 1.2, step: 1.1, rounds: 1 }
 
-/** The chart builds over the first bar, each highlight takes one bar from the verse, and the video ends with the track. */
+/**
+ * The chart builds over the first bar; from the verse each highlight takes half a bar and the leaders go round twice;
+ * the dots pulse on every beat; the video ends with the track.
+ */
 export function barTiming(bar: number, verse: number, length: number): ShareTiming {
-  return { build: bar, start: verse, step: bar, length }
+  return { build: bar, start: verse, step: bar / 2, rounds: 2, beat: bar / 4, length }
 }
 
 /** Waits for the card's font, so the first frame isn't drawn in the fallback. */
@@ -107,7 +112,7 @@ export async function loadShareFonts() {
 
 /** The video's length in seconds: the chart builds, each leading series takes a turn, then the still holds. */
 export function shareDuration(card: ShareCard, options: ShareOptions, timing = freeTiming) {
-  return timing.length ?? timing.start + highlights(card, options).length * timing.step + hold
+  return timing.length ?? timing.start + highlights(card, options).length * timing.rounds * timing.step + hold
 }
 
 export function drawShareCard(
@@ -130,7 +135,17 @@ export function drawShareCard(
   const chartBottom = rule - 64 - (legend ? legend.height + 40 : 0)
   // The dots are gone by the x axis: a stacked chart's baseline sits its axis labels above the chart's bottom.
   const baseline = card.chart.kind === "stacked" ? chartBottom - axisHeight : chartBottom
-  drawBackground(ctx, options.background, colors, width, height, dotGrid(card.chart, width), baseline * 0.4, baseline)
+  drawBackground(
+    ctx,
+    options.background,
+    colors,
+    width,
+    height,
+    dotGrid(card.chart, width),
+    baseline * 0.4,
+    baseline,
+    timing.beat && time < (timing.length ?? Infinity) ? meter(time, timing.beat) : undefined,
+  )
   drawLogo(ctx, options.logo, colors, pad, pad)
 
   const focus = focusAt(card, options, time, timing)
@@ -165,7 +180,8 @@ export function drawShareCard(
 
 // The highlight's state at `time`: which series (or row) leads and how far the others have dimmed.
 function focusAt(card: ShareCard, options: ShareOptions, time: number, timing: ShareTiming) {
-  const order = highlights(card, options)
+  const once = highlights(card, options)
+  const order = Array.from({ length: timing.rounds }, () => once).flat()
   const step = timing.step
   const local = time - timing.start
   if (local < 0 || local >= order.length * step) return { index: -1, amount: 0 }
@@ -195,6 +211,7 @@ function drawBackground(
   grid: { center: number; pitch: number },
   fadeStart: number,
   fadeEnd: number,
+  level?: (column: number) => number,
 ) {
   if (kind === "plain") return
   // The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells, at full strength from the
@@ -208,15 +225,35 @@ function drawBackground(
     { length: Math.floor((width - inset - dot) / grid.pitch) + 1 },
     (_, index) => inset + index * grid.pitch,
   )
-  ctx.fillStyle = colors.dot
-  for (let y = inset; y < end; y += grid.pitch) {
+  // With music, each column is also a level meter hanging from the top: its lit dots reach further down on the beat.
+  const reach = Math.floor((end - inset) / grid.pitch / 2)
+  const lit = columns.map((_, index) => (level ? Math.round(level(index) * reach) : 0))
+  for (let y = inset, row = 0; y < end; y += grid.pitch, row++) {
     ctx.globalAlpha =
       kind === "band" ? Math.max(0, 1 - y / end) : Math.min(1, Math.max(0, (end - y) / (end - fadeStart)))
-    columns.forEach((x) => ctx.fillRect(x, y, dot, dot))
+    columns.forEach((x, index) => {
+      ctx.fillStyle = row < (lit[index] ?? 0) ? colors.meter : colors.dot
+      ctx.fillRect(x, y, dot, dot)
+    })
   }
   ctx.globalAlpha = 1
+  ctx.fillStyle = colors.dot
   if (kind !== "band") return
   columns.forEach((x) => ctx.fillRect(x, height - inset - dot, dot, dot))
+}
+
+// The meter's level for each dot column at `time`: it jumps on every beat and falls away before the next, higher on the
+// first beat of a bar. A rolling wave across the columns, roughened per beat, so neighbours move together like an
+// equaliser. Deterministic, so the preview and the export match frame for frame.
+function meter(time: number, beat: number) {
+  const count = Math.floor(time / beat)
+  const fall = (1 - (time / beat - count)) ** 2.2
+  const accent = count % 4 === 0 ? 1 : 0.72
+  return (column: number) => {
+    const wave = 0.5 + 0.5 * Math.sin(column * 0.42 + count * 1.9)
+    const grain = (Math.sin(column * 12.9898 + count * 78.233) * 43758.5453) % 1
+    return Math.max(0, Math.min(1, (0.35 + 0.65 * wave) * (0.75 + 0.25 * Math.abs(grain)) * accent * fall))
+  }
 }
 
 // A column of dots over every bar of a stacked chart (every second or third when the bars are narrow), lined up
