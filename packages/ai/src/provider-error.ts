@@ -195,6 +195,32 @@ const decodeMessage = Schema.decodeUnknownOption(
 
 export const providerErrorMessage = (body: string) => Option.getOrUndefined(decodeMessage(body))
 
+const decodeGoogleDetails = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      error: Schema.Struct({
+        details: Schema.Array(
+          Schema.Struct({
+            retryDelay: Schema.optional(Schema.String),
+            violations: Schema.optional(Schema.Array(Schema.Struct({ quotaId: Schema.optional(Schema.String) }))),
+          }),
+        ),
+      }),
+    }),
+  ),
+)
+
+// Google words its per-minute throttles as "Quota exceeded" and schedules the retry in a `google.rpc.RetryInfo`
+// detail instead of a Retry-After header. A `google.rpc.QuotaFailure` naming a per-day quota is an account cap
+// even when it carries one.
+const googleRetryDelayMs = (body: string) => {
+  const details = Option.getOrUndefined(decodeGoogleDetails(body))?.error.details ?? []
+  if (details.some((detail) => detail.violations?.some((violation) => /PerDay|Daily/.test(violation.quotaId ?? ""))))
+    return undefined
+  const seconds = details.flatMap((detail) => /^(\d+(?:\.\d+)?)s$/.exec(detail.retryDelay ?? "")?.[1] ?? [])[0]
+  return seconds === undefined ? undefined : Math.ceil(Number(seconds) * 1000)
+}
+
 export interface ProviderFailure {
   readonly message: string
   readonly status?: number | undefined
@@ -229,6 +255,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   // (e.g. overflow phrases nested in a JSON error body) still classify.
   const text = [input.message, body].filter((value) => value.length > 0).join("\n")
   const clientScoped = input.status === undefined || (input.status >= 400 && input.status < 500)
+  const scheduledRetryMs = input.status === 429 ? googleRetryDelayMs(body) : undefined
 
   if (
     clientScoped &&
@@ -247,7 +274,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   if (
     input.status === 402 ||
     codes.some((code) => QUOTA_CODES.has(code)) ||
-    (input.status === 429 && QUOTA_TEXT.test(text))
+    (input.status === 429 && scheduledRetryMs === undefined && QUOTA_TEXT.test(text))
   )
     return new QuotaExceededError({ ...details, retryAfterMs: input.retryAfterMs })
   if (
@@ -266,7 +293,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   )
     return new RateLimitError({
       ...details,
-      retryAfterMs: input.retryAfterMs,
+      retryAfterMs: input.retryAfterMs ?? scheduledRetryMs,
       rateLimit: input.rateLimit,
     })
   if (
