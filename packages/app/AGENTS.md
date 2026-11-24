@@ -152,6 +152,9 @@ This section is the single source for what may move or restyle the session timel
   - Do not page until a distance is filled. Rows can be far shorter than the messages they hold (a run of tool calls is one row), and a row that is not measured yet counts 60 px, so that loop can load a whole session after one wheel notch.
   - A page that lands moves the scroll offset down the list. That scroll is not the reader's: only a lower offset counts as moving toward the top.
 - Keeper: "loads the next older page while the reader is two screens from the top, then waits for the reader" in `e2e/regression/timeline-history.spec.ts`.
+- A view that follows the end loads older pages while its content leaves it short. It decides that on measured rows only. A row counts 60 px until it is measured, so a newest page of a few tall rows looked short: opening such a session loaded one to four pages that the view did not need.
+  - The virtualizer says through `setMeasuring` while the rows are hidden for their first measurement, and reports the content once more when that ends, because the measurement can end without a change of height.
+  - Keeper: "opening on a newest page that fills the view loads no older page" in `e2e/regression/timeline-history.spec.ts`.
 
 ## Localization
 

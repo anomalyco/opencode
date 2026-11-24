@@ -131,6 +131,8 @@ type Input = {
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
+  /** Registers whether the rows are still hidden for their first measurement. Until it ends, their heights are estimates. */
+  setMeasuring?: (fn: () => boolean) => void
   reveal?: TimelineRouteReveal
 }
 
@@ -716,6 +718,7 @@ export function createTimelineVirtualizer(input: Input) {
         virtualizer.scrollToOffset(Math.max(root.scrollTop, root.scrollHeight - root.clientHeight * 2))
       virtualizer.scrollToEnd({ behavior })
     })
+    input.setMeasuring?.(() => untrack(coldHidden))
     input.setPage?.((direction) => {
       const root = listRoot()
 
@@ -748,6 +751,16 @@ export function createTimelineVirtualizer(input: Input) {
     on([active, () => virtualizer.getTotalSize() - rendering.scrollAdjustment], () => {
       if (active()) input.onContentResize()
     }),
+  )
+  // The first measurement can end without a change of height. Whatever waited for measured rows checks them now.
+  createEffect(
+    on(
+      coldHidden,
+      (hidden) => {
+        if (!hidden && active()) input.onContentResize()
+      },
+      { defer: true },
+    ),
   )
 
   // Only the viewport carries the inset as a variable, for its fade and scroll padding. The variable does not inherit
@@ -1302,6 +1315,7 @@ export function createTimelineVirtualizer(input: Input) {
       input.setRevealMessage?.(() => {})
       input.setScrollToEnd?.(() => {})
       input.setPage?.(() => {})
+      input.setMeasuring?.(() => false)
     }
   })
 

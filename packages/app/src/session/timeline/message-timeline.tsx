@@ -100,6 +100,7 @@ type MessageTimelineProps = {
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   setPage?: (fn: (direction: 1 | -1) => void) => void
+  setMeasuring?: (fn: () => boolean) => void
   reveal?: TimelineRouteReveal
   search?: JSX.Element
 }
@@ -282,6 +283,7 @@ function MessageTimelineView(
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
     setPage: props.setPage,
+    setMeasuring: props.setMeasuring,
     reveal: props.reveal,
   })
 

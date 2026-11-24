@@ -234,6 +234,46 @@ test.describe("timeline history", () => {
     expect(requests).toEqual([undefined, messages[8]!.id])
   })
 
+  // A row counts 60 px until it is measured, so a few tall rows looked like a transcript that leaves the view short.
+  test("opening on a newest page that fills the view loads no older page", async ({ page }) => {
+    // Long enough that the reply renders after its row mounts.
+    const text = Array.from({ length: 60 }, (_, index) => `Paragraph ${index} of a reply that fills the view.`).join(
+      "\n\n",
+    )
+
+    const messages = Array.from({ length: 4 }, (_, turn) => [
+      userMessage([textPart(`prt_tall_${turn}_prompt`, `Prompt ${turn}`)], {
+        id: `msg_tall_${turn}_a_user`,
+        created: turn * 2 + 1,
+      }),
+      assistantMessage([textPart(`prt_tall_${turn}_reply`, text)], {
+        id: `msg_tall_${turn}_b_assistant`,
+        parentID: `msg_tall_${turn}_a_user`,
+        created: turn * 2 + 2,
+      }),
+    ]).flat()
+
+    const requests: (string | undefined)[] = []
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        requests.push(before)
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(4, limit))
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+    })
+    const scroller = timelineScroller(page)
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    expect(await scroller.evaluate((element) => element.scrollHeight / element.clientHeight)).toBeGreaterThan(2)
+    // The check on the measured rows runs in the frame after they show.
+    await scroller.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    )
+    expect(requests).toEqual([undefined])
+  })
+
   test("keeps visible rows fixed while an older page prepends", async ({ page }) => {
     const older = Promise.withResolvers<void>()
     const requests: { before?: string; phase: "start" | "end" }[] = []

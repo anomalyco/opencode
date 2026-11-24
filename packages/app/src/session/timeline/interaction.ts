@@ -74,6 +74,9 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
 
   let page = (_direction: 1 | -1) => {}
 
+  // Whether the active timeline's rows are still hidden for their first measurement.
+  let measuring = () => false
+
   let scrollStateFrame: (() => void) | undefined
   let scrollStateTarget: HTMLDivElement | undefined
   const [historyState, setHistoryState] = createSignal(createTimelineHistoryState())
@@ -281,7 +284,8 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
           load =
             !!scroller &&
             (effect.probe === "fill"
-              ? follow.following() && scroller.scrollHeight <= scroller.clientHeight + 1
+              ? // Rows count 60 px each until they are measured, so content that looks short then may fill the view.
+                follow.following() && !measuring() && scroller.scrollHeight <= scroller.clientHeight + 1
               : !follow.following() &&
                 scroller.scrollTop <
                   (effect.probe === "runway" ? historyRunway(scroller.clientHeight) : HISTORY_SCROLL_THRESHOLD))
@@ -474,6 +478,9 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       },
       setPage: (scroll: (direction: 1 | -1) => void) => {
         page = scroll
+      },
+      setMeasuring: (fn: () => boolean) => {
+        measuring = fn
       },
     },
   }
