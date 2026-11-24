@@ -89,11 +89,16 @@
     border: none;
     box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
 
-    background:
-      linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+    background: var(--v2-background-bg-base);
     transition:
       background 170ms ease-out,
+      box-shadow 170ms ease-out,
       opacity 170ms ease-out;
+  }
+
+  /* No more specific than the hover, selected and invalid rules below, so they still apply on this surface. */
+  :where([data-component="radio-v2"][data-surface="layer-1"]) & [data-slot="radio-v2-item-control"] {
+    background: var(--v2-background-bg-layer-01);
   }
 
   &:where(:not([data-readonly]))
@@ -106,9 +111,9 @@
 
   &:where(:hover):where(:not([data-disabled], [data-readonly])):where(:not([data-checked]))
     [data-slot="radio-v2-item-control"] {
-    background:
-      linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
-      linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+    box-shadow:
+      inset 0 0 0 0.5px var(--v2-border-border-strong),
+      inset 0 0 0 100vmax var(--v2-overlay-simple-overlay-hover);
   }
 
   &:where([data-disabled]) [data-slot="radio-v2-item-control"] {
@@ -122,18 +127,14 @@
 
   &:where([data-checked]):where(:hover):where(:not([data-disabled], [data-readonly]))
     [data-slot="radio-v2-item-control"] {
-    background:
-      linear-gradient(
-        0deg,
-        var(--v2-overlay-simple-overlay-contrast-hover),
-        var(--v2-overlay-simple-overlay-contrast-hover)
-      ),
-      linear-gradient(180deg, var(--v2-alpha-light-20) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-accent);
+    box-shadow:
+      inset 0 0 0 0.5px var(--v2-border-border-strong),
+      inset 0 0 0 100vmax var(--v2-overlay-simple-overlay-contrast-hover);
   }
 
   &:where([data-invalid]):where(:not([data-checked])) [data-slot="radio-v2-item-control"] {
     background: var(--v2-state-bg-danger);
-    box-shadow: inset 0 0 0 0.5px var(--v2-state-border-danger);
+    box-shadow: inset 0 0 0 0.5px var(--v2-state-fg-danger);
   }
 
   [data-slot="radio-v2-item-indicator"] {
@@ -145,11 +146,17 @@
     top: calc(50% - 6px / 2);
     border-radius: 9999px;
 
-    background: var(--v2-grey-300);
+    background:
+      linear-gradient(
+        180deg,
+        var(--v2-overlay-gradient-depth-overlay-depth-top) 0%,
+        var(--v2-overlay-gradient-depth-overlay-depth-bot) 100%
+      ),
+      var(--v2-grey-300);
     border: none;
     box-shadow:
-      inset 0 0 0 0.5px var(--v2-overlay-gradient-depth-overlay-depth-top),
-      0px 0.5px 0.5px rgba(0, 0, 0, 0.4);
+      inset 0 0 0 0.5px var(--v2-icon-icon-contrast),
+      var(--v2-elevation-elements);
   }
 
   [data-slot="radio-v2-item-text"] {

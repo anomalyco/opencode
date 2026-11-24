@@ -104,6 +104,7 @@ test("execute describes invariant Code Mode behavior", () => {
     [
       "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
       "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
+      "Each call is a fresh program; nothing carries over from earlier calls.",
       "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
       "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
@@ -119,6 +120,9 @@ test("with full_codemode, execute names Bun's file APIs instead of ruling out fi
     "`fetch` is available for HTTP requests, and Bun's file APIs (`Bun.file`, `Bun.write`, `Bun.Glob`) for files, in place of Node's `fs`. Imports and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
   )
   expect(description).not.toContain("direct filesystem access")
+  expect(description.split("\n")[0]).toBe(
+    "Run JavaScript in a confined Code Mode runtime to work with files and data, script tool calls and HTTP requests, and compose their results.",
+  )
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
@@ -672,7 +676,7 @@ describe("fetch permissions", () => {
       {
         action: "webfetch",
         resources: [url],
-        save: ["*"],
+        save: [server.url.origin, `${server.url.origin}/*`],
         metadata: { method: "POST", url },
         sessionID: context.sessionID,
         agent: context.agent,
@@ -816,6 +820,36 @@ describe("Code Mode opencode:// fetch", () => {
         body: "",
       },
     ])
+  })
+
+  test("asks as the opencode api command that would make the same call", async () => {
+    const asked: Array<{ action: string; resources: ReadonlyArray<string>; save?: ReadonlyArray<string> }> = []
+    const sent: Array<string> = []
+    const handle = api((request) => Effect.sync(() => (sent.push(request.url), Response.json({ ok: true }))))
+    const run = (permission: Permission.Interface) =>
+      Effect.runPromise(
+        createCodeMode(new Map(), permission, undefined, handle).execute(
+          {
+            code: `try { await fetch("opencode:///api/session/current/prompt", { method: "POST", body: "{}" }); return "sent" } catch (e) { return e.message }`,
+          },
+          context,
+        ),
+      ).then((result) => result.output.output)
+
+    expect(await run(permissionService({ assert: (input) => Effect.sync(() => void asked.push(input)) }))).toBe("sent")
+    expect(asked).toEqual([
+      expect.objectContaining({
+        action: "shell",
+        resources: [`opencode api post /api/session/${context.sessionID}/prompt`],
+        save: ["opencode *"],
+      }),
+    ])
+    const denied = permissionService({
+      assert: (input) =>
+        Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
+    })
+    expect(await run(denied)).toContain("Permission denied: shell")
+    expect(sent).toHaveLength(1)
   })
 
   test("accepts only opencode:///api/... URLs, reports a disabled API, and fails without one", async () => {

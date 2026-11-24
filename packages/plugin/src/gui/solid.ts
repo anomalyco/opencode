@@ -66,6 +66,18 @@ export interface PanelSidebar {
   resize(width: number): void
   /** Opens or closes the inner sidebar. */
   toggle(): void
+  /**
+   * The edge of the panel the inner sidebar sits on. Reactive. Defaults to `start`.
+   * - `start`: the inline start, left in a left-to-right layout.
+   * - `end`: the inline end, right in a left-to-right layout.
+   */
+  side(): "start" | "end"
+  /**
+   * Stores the edge the inner sidebar sits on, for every side panel.
+   *
+   * @param side - `start` or `end`, as `side` reads it.
+   */
+  move(side: "start" | "end"): void
 }
 
 /** Where a panel render is shown. Read it with `usePanel`. */

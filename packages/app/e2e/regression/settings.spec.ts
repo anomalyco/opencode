@@ -6,6 +6,7 @@ import { mockRemoteServer, mockWorkspace, openSession, openSettings, type Worksp
 import { CONSOLE_URL, consoleGateway, consoleSignIn } from "../utils/console"
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
+import { APP_READY_TIMEOUT } from "../utils/waits"
 import { dict as ar } from "../../src/runtime/i18n/ar"
 import { dict as en } from "../../src/runtime/i18n/en"
 
@@ -2768,6 +2769,36 @@ test("the Side tabs interface mode switches to vertical tabs and survives reload
   await expect(layout.getByRole("radio", { name: "Side tabs", exact: true })).toBeChecked()
   await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
+})
+
+test("settings lines its sidebar and content up with Home's columns", async ({ page }) => {
+  await mockWorkspace(page, { name: "SettingsAlign", sessions: [] })
+  await page.goto("/")
+
+  const entry = page
+    .getByRole("complementary", { name: "Projects" })
+    .getByRole("button", { name: "Settings", exact: true })
+
+  await expect(entry).toBeVisible()
+  const field = await page.locator('[data-slot="home-session-search-field"]').boundingBox()
+  const item = await entry.boundingBox()
+  await entry.click()
+  const settings = page.getByTestId("settings-screen")
+  await expect(settings).toBeFocused({ timeout: APP_READY_TIMEOUT })
+
+  const tab = await settings.getByRole("tab", { name: "Preferences", exact: true }).boundingBox()
+
+  // The panel keeps 4px on each side for card shadows; its content box is what lines up with the search field.
+  const content = await settings.locator(".settings-content > .settings-panel:visible").evaluate((panel) => {
+    const box = panel.getBoundingClientRect()
+    const style = getComputedStyle(panel)
+    const start = parseFloat(style.paddingLeft)
+
+    return { x: box.x + start, width: box.width - start - parseFloat(style.paddingRight) }
+  })
+
+  expect({ x: tab?.x, width: tab?.width }).toEqual({ x: item?.x, width: item?.width })
+  expect(content).toEqual({ x: field?.x, width: field?.width })
 })
 
 for (const viewport of [
