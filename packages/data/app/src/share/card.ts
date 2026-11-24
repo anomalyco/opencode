@@ -87,6 +87,8 @@ type Palette = (typeof palettes)["dark"]
 const font = '"OpenTUI Mono", ui-monospace, monospace'
 const pad = 80
 const hold = 1.6
+// The space under a stacked chart for its date labels.
+const axisHeight = 44
 
 // When the chart builds, when the highlights start and how long each takes. Without music it runs at its own pace;
 // with a soundtrack it follows the track's bars (barTiming).
@@ -126,7 +128,9 @@ export function drawShareCard(
   const rule = footer - 26 - 56
   const legend = card.chart.kind === "stacked" ? legendLayout(card.chart.series, width) : undefined
   const chartBottom = rule - 64 - (legend ? legend.height + 40 : 0)
-  drawBackground(ctx, options.background, colors, width, height, dotGrid(card.chart, width), chartBottom, rule)
+  // The dots are gone by the x axis: a stacked chart's baseline sits its axis labels above the chart's bottom.
+  const baseline = card.chart.kind === "stacked" ? chartBottom - axisHeight : chartBottom
+  drawBackground(ctx, options.background, colors, width, height, dotGrid(card.chart, width), baseline * 0.4, baseline)
   drawLogo(ctx, options.logo, colors, pad, pad)
 
   const focus = focusAt(card, options, time, timing)
@@ -193,8 +197,9 @@ function drawBackground(
   fadeEnd: number,
 ) {
   if (kind === "plain") return
-  // The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells, at full strength down
-  // to the chart's baseline, then fading out by the footer's rule. The first row sits as far from the top as the first column from the side.
+  // The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells, at full strength from the
+  // top, then fading out from fadeStart to nothing at fadeEnd (the x axis). The first row sits as far from the top as
+  // the first column from the side.
   const dot = Math.min(8, Math.max(4, Math.round(grid.pitch * 0.36)))
   const first = grid.center - Math.floor(grid.center / grid.pitch) * grid.pitch
   const inset = Math.max(0, first - dot / 2)
@@ -346,10 +351,9 @@ function drawStacked(
   progress: number,
   focus: Focus,
 ) {
-  const axis = 44
   // Room above the bars for the focused series' label.
   const headroom = 72
-  const plot = { ...box, y: box.y + headroom, height: box.height - axis - headroom }
+  const plot = { ...box, y: box.y + headroom, height: box.height - axisHeight - headroom }
   const count = chart.columns.length
   const totals = chart.columns.map((column) => column.values.reduce((sum, value) => sum + value, 0))
   const max = Math.max(1, ...totals)
@@ -409,7 +413,7 @@ function drawStacked(
     const measured = ctx.measureText(label).width
     const x =
       position === 0 ? plot.x : position === ticks.length - 1 ? plot.x + plot.width - measured : center - measured / 2
-    ctx.fillText(label, x, base + axis - 6)
+    ctx.fillText(label, x, base + axisHeight - 6)
   })
 }
 
