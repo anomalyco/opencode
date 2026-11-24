@@ -78,8 +78,8 @@ export function ShareButton(props: { card: () => ShareDraft | undefined; label: 
     >
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
         <g fill="none" stroke="currentColor" stroke-width="1.5">
-          {/* The iOS share sign: an arrow rising out of an open box. */}
-          <path d="M8 1.75v8.25M5.25 4.5 8 1.75l2.75 2.75M5.75 6.75h-2v7.5h8.5v-7.5h-2" />
+          {/* The share sign: an arrow rising out of a tray. */}
+          <path d="M8 1.75v8.5M5.25 4.5 8 1.75l2.75 2.75M2.75 9v4.25h10.5V9" />
         </g>
       </svg>
       <span>Share</span>
