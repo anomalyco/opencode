@@ -102,7 +102,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   // With a soundtrack, the animation follows its bars and the video ends with it.
   const timing = createMemo(() => {
     const sound = music()
-    return sound ? barTiming(sound.bar, sound.verse, sound.length, spectrum()) : undefined
+    return sound ? barTiming(sound.bar, sound.verse, sound.length, sound.beat, spectrum()) : undefined
   })
   let video: { key: string; file: Promise<File> } | undefined
   let closing: ReturnType<typeof setTimeout> | undefined

@@ -11,6 +11,8 @@ export type ShareTrack = {
   bpm: number
   explicit: boolean
   bar: number
+  // Where a strong beat (1 or 3) falls in the file, in seconds, measured from its kick drum; the cuts land on these.
+  beat: number
   verse: number
   length: number
   url: string
@@ -18,14 +20,14 @@ export type ShareTrack = {
 }
 
 export const shareTracks: ShareTrack[] = [
-  { id: "market", name: "Hold the Block", mood: "Piano stabs and baritone sax" },
-  { id: "models", name: "Rank and File", mood: "Tremolo guitar and horns" },
-  { id: "usage", name: "Come Back", mood: "Vibraphone and muted trumpet" },
-  { id: "cache", name: "Cache Hit", mood: "Cold piano and organ" },
-  { id: "newblood", name: "New Blood", mood: "Soul vocal and horn stab" },
-  { id: "cheapshot", name: "Cheap Shot", mood: "Warped Rhodes and bowed bass" },
-  { id: "burn", name: "Burn Through", mood: "Distorted organ and fuzz bass", explicit: true },
-  { id: "worldwide", name: "Worldwide", mood: "Warped strings and sub bass", explicit: true },
+  { id: "market", name: "Hold the Block", mood: "Piano stabs and baritone sax", beat: 0.035 },
+  { id: "models", name: "Rank and File", mood: "Tremolo guitar and horns", beat: 0.15 },
+  { id: "usage", name: "Come Back", mood: "Vibraphone and muted trumpet", beat: 0.03 },
+  { id: "cache", name: "Cache Hit", mood: "Cold piano and organ", beat: 0.005 },
+  { id: "newblood", name: "New Blood", mood: "Soul vocal and horn stab", beat: 0.344 },
+  { id: "cheapshot", name: "Cheap Shot", mood: "Warped Rhodes and bowed bass", beat: 0.324 },
+  { id: "burn", name: "Burn Through", mood: "Distorted organ and fuzz bass", explicit: true, beat: 1.169 },
+  { id: "worldwide", name: "Worldwide", mood: "Warped strings and sub bass", explicit: true, beat: 0.015 },
 ].map((track) => ({
   explicit: false,
   ...track,
