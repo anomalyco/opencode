@@ -303,8 +303,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       setFormat("video")
       shuffle()
       setTrack("none")
-      setMuted(false)
     }
+    // Never playing on opening: a remembered track waits, muted, until it's unmuted or chosen again.
+    setMuted(true)
     // The card it opens on is where undo stops; changes from here on are remembered.
     queueMicrotask(() => {
       opening = false
