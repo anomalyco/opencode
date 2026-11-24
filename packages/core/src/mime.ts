@@ -39,7 +39,8 @@ export function detectMedia(bytes: Uint8Array) {
     if (brand === "M4A ") return "audio/mp4"
     return "video/mp4"
   }
-  if (/%PDF-\d\.\d/.test(ascii(bytes, 0, 1024)) && !isText(bytes)) return "application/pdf"
+  const pdf = ascii(bytes, 0, 1024).search(/%PDF-\d\.\d\s*%[\x80-\xff]{4}/)
+  if (pdf > 0 && isText(bytes.subarray(0, pdf)) && !isText(bytes)) return "application/pdf"
   return undefined
 }
 

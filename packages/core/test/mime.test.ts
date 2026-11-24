@@ -40,11 +40,31 @@ describe("Mime.detect", () => {
     expect(Mime.detect(pdf("\r\n"))).toBe("application/pdf")
     expect(Mime.detect(pdf("x".repeat(1000)))).toBe("application/pdf")
     expect(Mime.detect(pdf("x".repeat(2000)))).toBe("application/octet-stream")
+    expect(Mime.detect(pdf("\uFEFF"))).toBe("application/pdf")
+  })
+
+  test("leaves containers with a PDF member to the binary fallback", () => {
+    const pdf = Buffer.concat([Buffer.from("%PDF-1.7\n%"), Buffer.from([0xe2, 0xe3, 0xcf, 0xd3]), Buffer.from("\n")])
+    const tar = Buffer.alloc(512)
+    tar.write("doc.pdf")
+    tar.write("0000644\0", 100)
+    tar.write("ustar\0", 257)
+    const zip = Buffer.concat([
+      Buffer.from("504b03040a0000000000" + "00".repeat(16) + "07000000", "hex"),
+      Buffer.from("doc.pdf"),
+    ])
+    for (const bytes of [tar, zip]) expect(Mime.detect(Buffer.concat([bytes, pdf]))).toBe("application/octet-stream")
   })
 
   test("keeps text mentioning a PDF header as text", () => {
     for (const text of ["Every PDF starts with %PDF-1.7 on its first line.\n", "header:\n%PDF-2.0\n"])
       expect(Mime.detect(Buffer.from(text))).toBe("text/plain")
+    for (const text of [
+      "Café notes: %PDF-1.4 header\n",
+      "Notes: %PDF-1.4 header, café\n",
+      "header:\n%PDF-1.4\nrésumé\n",
+    ])
+      expect(Mime.detectMedia(Buffer.from(text, "latin1"))).toBeUndefined()
   })
 
   test("tells ISO-BMFF brands apart", () => {
