@@ -12,7 +12,7 @@ import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
 import { isMachineLinkUpgrade } from "@opencode/protocol/groups/machine"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
 import { Global } from "@opencode/util/global"
-import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { NetAddress } from "effect/net"
 import { createServer } from "node:http"
@@ -63,6 +63,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   const port = Option.fromNullishOr(options.port)
   const shutdown = yield* Latch.make()
   const status = yield* Status.make()
+  // `status.ready` mutates the status; listeners need an effect that waits until boot actually built the routes.
+  const booted = yield* Deferred.make<void>()
   const bound = yield* listen({ hostname, port })
   const localURLs = () => {
     const address = bound.server.address()
@@ -95,7 +97,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     )
     .pipe(Effect.provide(NodeHttpServer.layerHttpServices), withoutParentSpan)
   if (lifecycle)
-    yield* lifecycle.onListen(bound.http.address, shutdown.open.pipe(Effect.asVoid), status.ready).pipe(
+    yield* lifecycle.onListen(bound.http.address, shutdown.open.pipe(Effect.asVoid), Deferred.await(booted)).pipe(
       Effect.flatMap((cleanup) =>
         Effect.addFinalizer(() => Scope.close(bound.scope, Exit.void).pipe(Effect.andThen(cleanup))),
       ),
@@ -136,6 +138,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     yield* Ref.set(machinesFlag, yield* machinesEnabled.pipe(Effect.provide(context)))
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
+    // Only advertise readiness to listeners after the routes are installed and /api/info reports 200.
+    yield* Deferred.succeed(booted, undefined)
     const bus = Context.get(context, Bus.Service)
     return {
       address: bound.http.address,
@@ -146,20 +150,26 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     }
   }).pipe(
     withoutParentSpan,
-    Effect.catchCause((cause) => {
-      if (!lifecycle || Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
-      return status.fail.pipe(
-        Effect.andThen(
-          Scope.close(applicationScope, Exit.failCause(cause)).pipe(
-            Effect.catchCause((cleanupCause) =>
-              Effect.logError("failed to clean up background service boot", { cause: cleanupCause }),
+    Effect.catchCause((cause) =>
+      // A failed boot must never satisfy a listener waiting to advertise `ready`. The readiness
+      // channel is failure-free, so the boot cause is parked as a defect that listeners only ignore.
+      Deferred.failCause(booted, Cause.die(cause)).pipe(
+        Effect.andThen(() => {
+          if (!lifecycle || Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
+          return status.fail.pipe(
+            Effect.andThen(
+              Scope.close(applicationScope, Exit.failCause(cause)).pipe(
+                Effect.catchCause((cleanupCause) =>
+                  Effect.logError("failed to clean up background service boot", { cause: cleanupCause }),
+                ),
+              ),
             ),
-          ),
-        ),
-        Effect.andThen(Effect.logError("background service boot failed", { cause })),
-        Effect.andThen(Effect.never),
-      )
-    }),
+            Effect.andThen(Effect.logError("background service boot failed", { cause })),
+            Effect.andThen(Effect.never),
+          )
+        }),
+      ),
+    ),
   )
   if (!lifecycle) return yield* boot
   return yield* Effect.raceFirst(boot, shutdown.await.pipe(Effect.andThen(Effect.interrupt)))

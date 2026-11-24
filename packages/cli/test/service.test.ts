@@ -398,6 +398,41 @@ it.effect("replacing a managed service registration stops its owner and preserve
   }),
 )
 
+it.effect("a managed service advertises ready only after its readiness effect succeeds", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const directory = yield* fs.makeTempDirectoryScoped()
+    const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
+    const register = (name: string, ready: Effect.Effect<void>) =>
+      Effect.gen(function* () {
+        const file = path.join(directory, name)
+        const cleanup = yield* ServiceRegistration.register({
+          address: NetAddress.inetAddressFromIpStringUnsafe("127.0.0.1", 4321),
+          password: "secret",
+          id: name,
+          file,
+          shutdown: Effect.never,
+          ready,
+        })
+        const state = () => fs.readFileString(file).pipe(Effect.flatMap(decode), Effect.map((info) => info.state))
+        return { cleanup, state }
+      })
+    const pending = yield* Deferred.make<void>()
+    const good = yield* register("good.json", Deferred.await(pending))
+    const bad = yield* register("bad.json", Effect.die("boot failed"))
+    expect(yield* good.state()).toBe("starting")
+    expect(yield* bad.state()).toBe("starting")
+    // Registration writes happen on forked fibers; file I/O needs live time even under the test clock.
+    yield* TestClock.withLive(Effect.sleep("20 millis"))
+    expect(yield* bad.state()).toBe("starting")
+    yield* Deferred.succeed(pending, undefined)
+    yield* TestClock.withLive(Effect.sleep("20 millis"))
+    expect(yield* good.state()).toBe("ready")
+    yield* good.cleanup
+    yield* bad.cleanup
+  }),
+)
+
 // Real process: a server whose boot failed must still be watching its registration.
 test("deleting a failed service registration stops its owner", async () => {
   const service = await startManagedService("opencode-service-failed-delete-", true)

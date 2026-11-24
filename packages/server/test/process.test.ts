@@ -1,5 +1,8 @@
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { Deferred, Effect, Exit, Fiber } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
@@ -257,5 +260,88 @@ it.live("server info lists remote URLs alongside local addresses while they are 
     expect((yield* info()).urls).toEqual([base, "https://example.opentunnel.xyz"])
     remote.urls = []
     expect((yield* info()).urls).toEqual([base])
+  }),
+)
+
+it.live("a listener's readiness waits for boot before /api/info reports ready", () =>
+  Effect.gen(function* () {
+    const release = yield* Deferred.make<void>()
+    const base = yield* Deferred.make<string>()
+    const ready = yield* Deferred.make<Effect.Effect<void>>()
+    const fiber = yield* Effect.forkChild(
+      ServerProcess.start<never, never>(
+        { hostname: "127.0.0.1", port: 0, password: "secret", database: { path: ":memory:" } },
+        {
+          onListen: (address, _shutdown, readyEffect) =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(base, HttpServer.formatAddress(address))
+              yield* Deferred.succeed(ready, readyEffect)
+              yield* Deferred.await(release)
+              return Effect.void
+            }),
+        },
+      ),
+    )
+    const url = yield* Deferred.await(base)
+    const readyEffect = yield* Deferred.await(ready)
+    const infoStatus = () =>
+      Effect.promise(() =>
+        fetch(new URL("/api/info", url), { headers: { authorization: `Basic ${btoa("opencode:secret")}` } }).then(
+          (response) => response.status,
+        ),
+      )
+
+    // Boot is gated, so the effect handed to the listener must still be pending and the health
+    // endpoint must stay unavailable. With `status.ready` passed directly this flipped the status.
+    const completion = yield* Deferred.make<void>()
+    yield* Effect.forkChild(readyEffect.pipe(Effect.andThen(Deferred.succeed(completion, undefined))))
+    yield* Effect.yieldNow
+    expect(yield* Deferred.isDone(completion)).toBe(false)
+    expect(yield* infoStatus()).toBe(503)
+
+    yield* Deferred.succeed(release, undefined)
+    yield* readyEffect
+    expect(yield* Deferred.isDone(completion)).toBe(true)
+    expect(yield* infoStatus()).toBe(200)
+    yield* Fiber.join(fiber)
+  }),
+)
+
+it.live("a failed boot fails readiness and keeps /api/info reporting failure", () =>
+  Effect.gen(function* () {
+    const database = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-server-boot-")))
+    const release = yield* Deferred.make<void>()
+    const base = yield* Deferred.make<string>()
+    const ready = yield* Deferred.make<Effect.Effect<void>>()
+    yield* Effect.forkChild(
+      ServerProcess.start<never, never>(
+        { hostname: "127.0.0.1", port: 0, password: "secret", database: { path: database } },
+        {
+          onListen: (address, _shutdown, readyEffect) =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(base, HttpServer.formatAddress(address))
+              yield* Deferred.succeed(ready, readyEffect)
+              yield* Deferred.await(release)
+              return Effect.void
+            }),
+        },
+      ),
+    )
+    const url = yield* Deferred.await(base)
+    const readyEffect = yield* Deferred.await(ready)
+    const infoStatus = () =>
+      Effect.promise(() =>
+        fetch(new URL("/api/info", url), { headers: { authorization: `Basic ${btoa("opencode:secret")}` } }).then(
+          (response) => response.status,
+        ),
+      )
+    expect(yield* infoStatus()).toBe(503)
+
+    yield* Deferred.succeed(release, undefined)
+    // A failed boot never advertises readiness: a client waiting on this effect sees the failure
+    // instead of a success that would hand out an endpoint whose routes were never built.
+    expect(Exit.isFailure(yield* Effect.exit(readyEffect))).toBe(true)
+    expect(yield* infoStatus()).toBe(500)
+    yield* Effect.promise(() => fs.rm(database, { recursive: true, force: true }))
   }),
 )
