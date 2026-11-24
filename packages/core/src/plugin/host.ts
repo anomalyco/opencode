@@ -326,11 +326,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, p
       },
       automation: {
         // A plugin has no UI listener to answer an interactive ask, so asks settle unattended, as they do over HTTP.
-        // A JavaScript plugin can pass any shape, so decode it as HTTP does before the service stores it.
+        // A JavaScript plugin can pass any shape, so validate it against the type-side schema before storing it.
         // Its own registry may be waiting on this setup, so use what's loaded there now. The instance's selector
         // can serve its own Sessions while booting. Other registries still have to finish activating.
         create: (input) =>
-          Schema.decodeUnknownEffect(Automation.CreateInput)(input).pipe(
+          Schema.decodeUnknownEffect(Schema.toType(Automation.CreateInput))(input).pipe(
             Effect.mapError((error) => new Automation.InvalidError({ reason: error.message })),
             Effect.flatMap((decoded) => automations.create(decoded)),
             Effect.provideService(Permission.Unattended, []),
