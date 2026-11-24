@@ -342,6 +342,8 @@ export const OpenAIChatEvent = Schema.StructWithRest(
   Schema.Struct({
     choices: optionalNull(Schema.Array(OpenAIChatChoice)),
     usage: optionalNull(OpenAIChatUsage),
+    // The tier the endpoint served the request on, which can differ from the one asked for.
+    service_tier: optionalNull(Schema.String),
     error: optionalNull(OpenAIChatError),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
@@ -366,6 +368,7 @@ export interface ParserState {
   readonly pendingTools: Partial<Record<number, PendingToolDelta>>
   readonly toolCallEvents: ReadonlyArray<LLMEvent>
   readonly usage?: Usage
+  readonly serviceTier?: string
   readonly finishReason?: FinishReasonDetails
   readonly lifecycle: Lifecycle.State
   readonly reasoningField?: string
@@ -1303,6 +1306,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         pendingTools,
         toolCallEvents: finished?.events ?? state.toolCallEvents,
         usage,
+        serviceTier: event.service_tier ?? state.serviceTier,
         finishReason: state.finishReason ?? finishReason,
         lifecycle,
         reasoningField,
@@ -1372,7 +1376,13 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
   const ended = Lifecycle.reasoningEnd(started, events, "reasoning-0", metadata)
   const lifecycle = toolCallEvents.length ? Lifecycle.stepStart(ended, events) : ended
   events.push(...toolCallEvents)
-  Lifecycle.finish(lifecycle, events, { reason, usage: state.usage })
+  Lifecycle.finish(lifecycle, events, {
+    reason,
+    usage: state.usage,
+    providerMetadata: state.serviceTier
+      ? { [state.providerMetadataKey]: { serviceTier: state.serviceTier } }
+      : undefined,
+  })
   return events
 })
 

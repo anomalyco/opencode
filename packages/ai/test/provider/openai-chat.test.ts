@@ -1158,6 +1158,21 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("finishes the step with the service tier the endpoint served it on", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { ...deltaChunk({ role: "assistant", content: "Hi" }), service_tier: "flex" },
+        { ...deltaChunk({}, "stop"), service_tier: "flex" },
+        usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.find((event) => event.type === "step-finish")).toMatchObject({
+        providerMetadata: { openai: { serviceTier: "flex" } },
+      })
+    }),
+  )
+
   it.effect("finishes at the done sentinel without waiting for response EOF", () =>
     Effect.gen(function* () {
       const stream = new ReadableStream<Uint8Array>({

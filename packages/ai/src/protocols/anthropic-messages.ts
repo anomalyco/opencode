@@ -552,6 +552,14 @@ const cacheControl = (breakpoints: Cache.Breakpoints, cache: CacheHint | undefin
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
 
+// The tier Anthropic served the response on arrives inside `usage`; the step finish carries it as `serviceTier`, as
+// the Responses protocol does, so it is not lost with the raw usage.
+const withServiceTier = (metadata: ProviderMetadata | undefined, usage: Usage | undefined, key: string) => {
+  const tier = usage?.providerMetadata?.[key]?.service_tier
+  if (typeof tier !== "string") return metadata
+  return providerMetadata(key, { ...metadata?.[key], serviceTier: tier })
+}
+
 const signatureFromMetadata = (metadata: ProviderMetadata | undefined, key: string): string | undefined => {
   const provider = metadata?.[key]
   if (!provider) return undefined
@@ -1456,7 +1464,7 @@ const onMessageStop = Effect.fnUntraced(function* (state: ParserState) {
       raw: undefined,
     },
     usage: state.usage,
-    providerMetadata: state.pendingFinish?.providerMetadata,
+    providerMetadata: withServiceTier(state.pendingFinish?.providerMetadata, state.usage, state.providerMetadataKey),
   })
   return [{ ...state, lifecycle: finished, tools: result.tools }, events] satisfies StepResult
 })
