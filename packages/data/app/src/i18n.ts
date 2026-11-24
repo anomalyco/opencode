@@ -1,4 +1,4 @@
-import { type Locale } from "./lib/language"
+import { tag, type Locale } from "./lib/language"
 import { dict as ar } from "./i18n/ar"
 import { dict as br } from "./i18n/br"
 import { dict as da } from "./i18n/da"
@@ -301,9 +301,22 @@ export function dict(locale: Locale) {
 export function translate(locale: Locale, key: Key, params?: Record<string, string | number>) {
   const text = dictionaries[locale][key]
   if (!params) return text
-  return text.replace(/\{\{(\w+)\}\}/g, (raw, key) => {
-    const value = params[key]
-    if (value === undefined || value === null) return raw
-    return String(value)
-  })
+  return (
+    text
+      // A word that agrees with a count, in the forms the locale's plural rules ask for, other being the fallback:
+      // {{count|one:day|other:days}}.
+      .replace(/\{\{(\w+)\|([^}]*)\}\}/g, (raw, key: string, forms: string) => {
+        const value = params[key]
+        if (typeof value !== "number") return raw
+        const choices = new Map(
+          forms.split("|").map((form) => [form.slice(0, form.indexOf(":")), form.slice(form.indexOf(":") + 1)]),
+        )
+        return choices.get(new Intl.PluralRules(tag(locale)).select(value)) ?? choices.get("other") ?? raw
+      })
+      .replace(/\{\{(\w+)\}\}/g, (raw, key) => {
+        const value = params[key]
+        if (value === undefined || value === null) return raw
+        return String(value)
+      })
+  )
 }
