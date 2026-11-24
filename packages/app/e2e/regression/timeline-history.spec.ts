@@ -1,6 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
-import { sessionHref } from "../utils/app"
+import { holdRoute, sessionHref } from "../utils/app"
 import { trackPageErrors } from "../utils/errors"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
 import {
@@ -1080,6 +1080,122 @@ test.describe("timeline history", () => {
     await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
     expect(await top()).toBe(place)
     expect(await page.evaluate(() => location.hash)).toBe(`#message-${userID}`)
+  })
+
+  // A session that opens on a link waits for two things: its rows, and the link's prompt under the view. With a short
+  // newest reply the rows were ready first, and the timeline showed the session's end for about 60 ms before it went
+  // to the prompt.
+  test("a link that opens the session shows its prompt in place from the first frame", async ({ page }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(20),
+      userMessage(),
+      assistantMessage([textPart("prt_first_frame_tail", "Latest answer")]),
+    ])
+
+    const prompt = messages.filter((message) => message.type === "user")[5]!.id
+    const selector = `[data-timeline-row="UserMessage"][data-message-id="${prompt}"]`
+
+    // Where the prompt is against the header's lower edge, in each frame from the first one that shows the timeline.
+    await page.addInitScript((selector) => {
+      if (!sessionStorage.getItem("first-frames")) return
+      const frames: (number | null)[] = []
+      Object.assign(window, { firstFrames: frames })
+
+      const sample = () => {
+        const content = document.querySelector("[data-timeline-virtual-content]")
+
+        if (content && getComputedStyle(content).visibility === "visible") {
+          const row = document.querySelector(selector)
+          const title = document.querySelector("[data-session-title]")
+          frames.push(
+            row && title ? Math.round(row.getBoundingClientRect().top - title.getBoundingClientRect().bottom) : null,
+          )
+        }
+
+        if (frames.length < 12) requestAnimationFrame(sample)
+      }
+
+      requestAnimationFrame(sample)
+    }, selector)
+    await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
+
+    // The same session again from a link, with nothing measured.
+    await page.evaluate((id) => {
+      sessionStorage.setItem("first-frames", "1")
+      location.hash = `#message-${id}`
+    }, prompt)
+    await page.reload()
+    const frames = () => page.evaluate(() => (window as unknown as { firstFrames?: (number | null)[] }).firstFrames)
+    await expect.poll(async () => (await frames())?.length).toBe(12)
+    expect(await frames()).toEqual(Array.from({ length: 12 }, () => 0))
+  })
+
+  // The viewport scrolls while its rows are still hidden. A wheel then ended the timeline's scroll to the link's
+  // prompt, and the timeline made the reveal again when it showed: the view went 735 to 771px back to the prompt.
+  test("a wheel before the timeline shows keeps the view where the reader took it from a link's prompt", async ({
+    page,
+  }) => {
+    const history = historyMessages(30)
+    const prompt = "msg_00014_linked_a_user"
+    // Long enough to need the Markdown worker. The timeline stays hidden while a mounted reply waits for it.
+    const long = (name: string) => Array.from({ length: 60 }, (_, index) => `${name} paragraph ${index}.`).join("\n\n")
+
+    const messages = validateTimelineMessages([
+      ...history.slice(0, 30),
+      userMessage(undefined, { id: prompt, created: 1690000145000 }),
+      assistantMessage([textPart("prt_hidden_wheel_reply", long("Linked"))], {
+        id: "msg_00014_linked_b_assistant",
+        parentID: prompt,
+        created: 1690000146000,
+      }),
+      ...history.slice(30),
+      userMessage(),
+      assistantMessage([textPart("prt_hidden_wheel_tail", long("Latest"))]),
+    ])
+
+    const selector = `[data-timeline-row="UserMessage"][data-message-id="${prompt}"]`
+    const content = page.locator("[data-timeline-virtual-content]")
+
+    const belowHeader = () =>
+      page.evaluate((selector) => {
+        const row = document.querySelector(selector)
+
+        return (
+          row &&
+          Math.round(
+            row.getBoundingClientRect().top -
+              document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom,
+          )
+        )
+      }, selector)
+
+    await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Latest paragraph 59.", { exact: true })).toBeInViewport()
+
+    // The same session again from a link, with nothing measured, and with the Markdown worker held.
+    const worker = await holdRoute(page, /markdown\.worker(?:-[^/?]+\.js|\.ts)(?:\?.*)?$/)
+
+    try {
+      await page.evaluate((id) => (location.hash = `#message-${id}`), prompt)
+      await page.reload()
+      await worker.arrived
+      // The link's prompt is in its place, in rows that do not show yet.
+      await expect.poll(belowHeader).toBe(0)
+      await expect(content).toHaveCSS("visibility", "hidden")
+      await timelineScroller(page).hover()
+      await page.mouse.wheel(0, -520)
+      // The wheel took the view 520px up, so the prompt is that far below its place.
+      await expect.poll(belowHeader).toBeGreaterThan(400)
+      await expect(content).toHaveCSS("visibility", "hidden")
+      worker.release()
+      await expect(content).toHaveCSS("visibility", "visible")
+      await waitForVisualSettle(page, [selector], 6)
+      // It still is, now that the timeline shows.
+      expect(await belowHeader()).toBeGreaterThan(400)
+    } finally {
+      worker.release()
+    }
   })
 
   // The timeline scrolls to a row by its index, for up to five seconds. A page of history that arrived above in that

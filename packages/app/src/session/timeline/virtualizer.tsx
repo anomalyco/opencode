@@ -144,6 +144,8 @@ type Input = {
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
   reveal?: TimelineRouteReveal
+  /** A link or a jump still has its place to put under the view. The cold mount stays hidden until it has. */
+  landing?: () => boolean
 }
 
 /** A tool call the route asks this timeline to open on; `consume` marks its history entry attempted. */
@@ -715,6 +717,9 @@ export function createTimelineVirtualizer(input: Input) {
   // A reveal made while the cold mount is hidden works with rows that have no sizes yet. The scroll range can be too
   // short to bring the row to its place, and nothing scrolls again when the range grows. The rows have their sizes
   // when the cold mount shows, so the reveal is made again then, before the first paint.
+  // A seek that lands ends TanStack's scroll and keeps the reveal for this: the link still needs its last alignment.
+  // The reader's own input drops it (`takeOver`, and `prepareNavigation` for a drag of the scrollbar): the viewport
+  // scrolls while its rows are hidden, and a wheel of 520px then was undone when the timeline showed.
   function repeatReveal() {
     const target = revealed
 
@@ -723,6 +728,23 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (index >= 0) revealRow(index, target.align)
   }
+
+  // The reader's wheel, scroll key or finger has the view from here: a reveal is not made again for them.
+  function takeOver() {
+    revealed = undefined
+  }
+
+  // The cold mount waits for the place a link or a jump asked for (`sampleColdMount`), and looks again once it is
+  // under the view, or once the cursor has given up on it.
+  createEffect(
+    on(
+      () => input.landing?.() ?? false,
+      (landing) => {
+        if (!landing) dispatchCold(CHECK_REQUESTED)
+      },
+      { defer: true },
+    ),
+  )
 
   function flushTouchAdjustment() {
     touchAdjustment = 0
@@ -1119,6 +1141,12 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (pendingSizes.size || pendingMeasurements() || virtualContent.querySelector(pendingMarkdown)) return "pinned"
 
+    // A link that opens the session has not put its prompt under the view yet. With a short newest reply the rows
+    // were ready first, and the timeline showed the session's end for about 60 ms before it went to the prompt. Only
+    // the reveal waits: the range still grows from the tail, so that the prompt's row can mount. The cold mount's own
+    // timeout shows the timeline when the place never comes, such as a prompt far back in history that is still loading.
+    if (untrack(() => !coldTailOnly() && !!input.landing?.())) return "waiting"
+
     return "settled"
   }
 
@@ -1196,6 +1224,7 @@ export function createTimelineVirtualizer(input: Input) {
     const root = listRoot()
     // The reader's wheel or key takes the scroll from a smooth one that navigation asked for.
     seen.bound = -1
+    takeOver()
     intentEvent.upward = upward
     intentEvent.overflow = upward && !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
     input.follow.dispatch(intentEvent)
@@ -1232,6 +1261,7 @@ export function createTimelineVirtualizer(input: Input) {
 
     // A finger on the timeline takes the scroll from a smooth one that navigation asked for.
     seen.bound = -1
+    takeOver()
     input.follow.dispatch(
       nested && nested !== root && nested.scrollHeight > nested.clientHeight ? nestedTouchStartEvent : touchStartEvent,
     )

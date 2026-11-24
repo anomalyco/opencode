@@ -3,6 +3,7 @@ import {
   CLEAR_WITHOUT_HASH_EVENT,
   createTimelineCursorState,
   CURSOR_SEEK_LIMIT,
+  cursorLanding,
   cursorMessageID,
   DISPOSED_CURSOR_EVENT,
   freshCursorMessageID,
@@ -342,6 +343,34 @@ describe("cursor machine", () => {
       status: "pending",
       endOnMiss: true,
     })
+  })
+
+  // The timeline stays hidden on a cold open while the cursor still has a place to put under it. A session that
+  // opened on a link showed its end for about 60 ms first.
+  test("the cursor has a place to land from a link's hash until its seek lands, gives up or is taken over", () => {
+    const opening = createTimelineCursorState()
+    expect(cursorLanding(opening, "message-msg_5")).toBe(true)
+    // A session opened without a link has nothing to wait for.
+    expect(cursorLanding(opening, "")).toBe(false)
+
+    const seeking = replay([jump("msg_5")], idle())
+    expect(cursorLanding(seeking, "message-msg_5")).toBe(true)
+
+    const landed = transitionTimelineCursor(seeking, { type: "seek.landed", attempt: seeking.attempt }).state
+    expect(cursorLanding(landed, "message-msg_5")).toBe(false)
+
+    const taken = transitionTimelineCursor(seeking, SCROLL_MOVED_EVENT).state
+    expect(cursorLanding(taken, "message-msg_5")).toBe(false)
+
+    // A timeline that is not on screen probes nothing, so nothing waits for it.
+    const away = transitionTimelineCursor(seeking, VIEW_UNREADY_EVENT).state
+    expect(cursorLanding(away, "message-msg_5")).toBe(false)
+
+    const gaveUp = Array.from({ length: CURSOR_SEEK_LIMIT + 1 }).reduce<TimelineCursorState>(
+      (state) => transitionTimelineCursor(state, { type: "seek.missing", attempt: state.attempt }).state,
+      seeking,
+    )
+    expect(cursorLanding(gaveUp, "message-msg_5")).toBe(false)
   })
 
   // The virtualizer went on scrolling to the prompt's row for up to five seconds after the cursor had put the prompt

@@ -102,6 +102,7 @@ type MessageTimelineProps = {
   setScrollTo?: (fn: (top: number, behavior: ScrollBehavior) => void) => void
   setPage?: (fn: (direction: 1 | -1) => void) => void
   reveal?: TimelineRouteReveal
+  landing?: () => boolean
   search?: JSX.Element
 }
 
@@ -285,6 +286,7 @@ function MessageTimelineView(
     setScrollTo: props.setScrollTo,
     setPage: props.setPage,
     reveal: props.reveal,
+    landing: props.landing,
   })
 
   const VirtualizedTimeline = virtualized.View

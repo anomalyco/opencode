@@ -1,10 +1,11 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { scrollPort } from "@opencode/ui/scroll-port"
-import { createEffect, createSignal, on, onCleanup, onMount, untrack, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import {
   CLEAR_WITHOUT_HASH_EVENT,
   createTimelineCursorState,
+  cursorLanding,
   DISPOSED_CURSOR_EVENT,
   LATEST_ADVANCED_EVENT,
   pendingCursorMessageID,
@@ -199,6 +200,8 @@ export function createTimelineCursor(input: {
 
   return {
     state: cursorState,
+    /** The route's link, or a jump, still has its place to put under the view. */
+    landing: createMemo(() => cursorLanding(cursorState(), location.hash.slice(1))),
     dispatch,
     clear,
     jump: (messageID: string, behavior: ScrollBehavior) =>
