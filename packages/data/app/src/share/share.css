@@ -614,43 +614,6 @@
       font-size: 13px;
     }
 
-    /* A quick label above icon-only choices; the button's aria-label says the same. */
-    &[data-tip] {
-      position: relative;
-
-      &::after {
-        content: attr(data-tip);
-        position: absolute;
-        bottom: calc(100% + 6px);
-        left: 50%;
-        z-index: 2;
-        padding: 4px 6px;
-        font-size: 11px;
-        line-height: 1;
-        white-space: nowrap;
-        color: var(--stats-bg);
-        background: var(--stats-text);
-        opacity: 0;
-        pointer-events: none;
-        translate: -50% 2px;
-        transition:
-          opacity 120ms ease-out,
-          translate 120ms ease-out;
-      }
-
-      @media (hover: hover) and (pointer: fine) {
-        &:hover::after {
-          opacity: 1;
-          translate: -50% 0;
-        }
-      }
-
-      &:focus-visible::after {
-        opacity: 1;
-        translate: -50% 0;
-      }
-    }
-
     small {
       font-size: 10px;
       line-height: 1;

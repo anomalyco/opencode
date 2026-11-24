@@ -456,7 +456,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                           type="button"
                           data-slot="chip"
                           aria-label={`${item.label} ${item.value}`}
-                          data-tip={item.label}
                           aria-pressed={options().size === item.value}
                           onClick={() => setShareOption("size", item.value)}
                         >
