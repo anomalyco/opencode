@@ -19,7 +19,7 @@ import { DEFAULT_PERIOD, PeriodToggle, type Period } from "../component/period-t
 import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { formatPeriodDate } from "../lib/format"
-import { baseUrl, jsonUrl, localizedUrl, markdownUrl } from "../lib/language"
+import { baseUrl, jsonUrl, localizedUrl, markdownUrl, type Locale } from "../lib/language"
 import { providerIconId } from "../lib/provider-icon"
 import { dismissChartTooltipOnExit } from "../lib/chart-tooltip"
 import { dataFlag } from "../lib/flag"
@@ -191,7 +191,7 @@ export default function StatsHome() {
                 <GeoBreakdownSection data={stats().country} />
                 <MethodologySection />
                 <ComparisonCardsSection
-                  share={() => comparisonCard(stats(), stats().catalogLabs)}
+                  share={(locale) => comparisonCard(locale, stats(), stats().catalogLabs)}
                   pairs={homeComparisonPairs(stats().leaderboard.weekly, stats().catalogLabs)}
                   title="Model Comparisons"
                   description="Popular model pairs from the leaderboard."
@@ -368,7 +368,7 @@ function SectionTitle(props: {
   title: string
   description?: string
   action?: JSX.Element
-  share?: () => ShareDraft | undefined
+  share?: (locale: Locale) => ShareDraft | undefined
 }) {
   const share = props.share
   return (
@@ -448,8 +448,11 @@ function TopModelsSection(props: {
         share={
           <ShareButton
             label={`Share ${i18n.t("nav.topModels")}`}
-            card={() =>
-              topModelsCard(props.data[chartPeriod()], leaderboard(), { period: chartPeriod(), leaderboard: period() })
+            card={(locale) =>
+              topModelsCard(locale, props.data[chartPeriod()], leaderboard(), {
+                period: chartPeriod(),
+                leaderboard: period(),
+              })
             }
           />
         }
@@ -492,7 +495,7 @@ function TopModelsSection(props: {
         </div>
         <ShareButton
           label={`Share ${i18n.t("nav.leaderboard")}`}
-          card={() => leaderboardCard(leaderboard(), period(), props.catalogLabs)}
+          card={(locale) => leaderboardCard(locale, leaderboard(), period(), props.catalogLabs)}
         />
       </div>
       <Show
@@ -739,7 +742,7 @@ function UniqueUsersSection(props: { data: HomePageData["users"]; names: Map<str
         title={i18n.t("home.uniqueUsersTitle")}
         description={i18n.t("home.uniqueUsersDescription")}
         action={<PeriodToggle value={period()} onChange={setPeriod} label={i18n.t("home.uniqueUsersTitle")} />}
-        share={() => uniqueUsersCard(props.data[period()], period(), props.names)}
+        share={(locale) => uniqueUsersCard(locale, props.data[period()], period(), props.names)}
       />
       <Show
         when={props.data[period()].some((item) => usageTotal(item) > 0)}
@@ -770,7 +773,7 @@ function RetentionSection(props: { data: HomeRetentionEntry[] }) {
         id="retention"
         title="Weekly Retention"
         description="Weekly users returning the next week."
-        share={() => retentionCard(props.data)}
+        share={(locale) => retentionCard(locale, props.data)}
       />
       <Show
         when={props.data.length > 0}
@@ -1091,7 +1094,7 @@ function MarketShareSection(props: { data: HomePageData["market"]; labPaths: Hom
         title={i18n.t("home.marketShareTitle")}
         description={i18n.t("home.marketShareDescription")}
         action={<PeriodToggle value={period()} onChange={setPeriod} label={i18n.t("home.marketShareTitle")} />}
-        share={() => marketShareCard(data(), period())}
+        share={(locale) => marketShareCard(locale, data(), period())}
       />
       <Show
         when={today()}
@@ -1397,7 +1400,7 @@ function GeoBreakdownSection(props: { data: CountryEntry[] }) {
       <SectionTitle
         id="geo-breakdown"
         title={i18n.t("home.geoTitle")}
-        share={() => geoCard(topCountries(), i18n.t("home.unknown"))}
+        share={(locale) => geoCard(locale, topCountries())}
       />
       <Show
         when={props.data.length > 0}
@@ -1524,7 +1527,7 @@ function TokenCostSection(props: { data: TokenCostEntry[]; names: Map<string, st
         id="token-cost"
         title={i18n.t("home.tokenCostTitle")}
         description={i18n.t("home.tokenCostDescription")}
-        share={() => tokenCostCard(visible(), props.names)}
+        share={(locale) => tokenCostCard(locale, visible(), props.names)}
       />
       <Show
         when={visible().length > 0}
@@ -1599,7 +1602,7 @@ function CacheRatioSection(props: { data: CacheRatioEntry[]; names: Map<string, 
         id="cache-ratio"
         title={i18n.t("home.cacheRatioTitle")}
         description={i18n.t("home.cacheRatioDescription")}
-        share={() => cacheRatioCard(visible(), props.names)}
+        share={(locale) => cacheRatioCard(locale, visible(), props.names)}
       />
       <Show
         when={visible().length > 0}
@@ -1709,7 +1712,7 @@ function SessionCostSection(props: { data: SessionCostEntry[]; names: Map<string
         id="session-cost"
         title={i18n.t("home.sessionCostTitle")}
         description={i18n.t("home.sessionCostDescription")}
-        share={() => sessionCostCard(visible(), props.names)}
+        share={(locale) => sessionCostCard(locale, visible(), props.names)}
       />
       <Show
         when={visible().length > 0}

@@ -2,6 +2,8 @@
 // every frame of the video come from the same code. drawShareCard(ctx, card, options, time) draws the card as it
 // looks `time` seconds into its animation; time past shareDuration() is the still, which is also the PNG.
 
+import { translate } from "../i18n"
+import { dir, tag, type Locale } from "../lib/language"
 import { shareLogo } from "./logos"
 import { spectrumLevel, type Spectrum } from "./spectrum"
 
@@ -57,6 +59,8 @@ export type Tone = "up" | "down" | "new" | "flat"
 
 export type ShareCard = {
   id: string
+  // The language of the card's words, including those the card draws itself (the footer, the closing line).
+  locale: Locale
   // The winner's name as the headline writes it, which the Leader style sets in the winner's colour.
   highlight?: string
   title: string
@@ -305,8 +309,6 @@ function introSlides(card: ShareCard, options: ShareOptions, timing: ShareTiming
 // that's 6.25 s. Without music they keep 96 BPM's beat.
 const outroBeats = 10
 const freeBeat = 0.625
-// The line on two lines, broken after "inference".
-const outroLine = ["The largest inference", "in the world"]
 const outroAddress = "opencode.ai"
 
 export function drawShareCard(
@@ -321,6 +323,9 @@ export function drawShareCard(
   const colors = look.colors
   const card = look.card
   ctx.save()
+  // Every x is a left edge, in either direction; a right-to-left card orders the words within each line.
+  ctx.direction = dir(card.locale)
+  ctx.textAlign = "left"
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = colors.background
   ctx.fillRect(0, 0, width, height)
@@ -332,7 +337,7 @@ export function drawShareCard(
       ? scaled(meter(at, timing.beat, timing.spectrum), settle(at, timing.build, timing.beat))
       : undefined
   if (at >= main && at < total) {
-    drawOutro(ctx, options, colors, width, height, at - main, timing.beat ?? freeBeat, level)
+    drawOutro(ctx, card.locale, options, colors, width, height, at - main, timing.beat ?? freeBeat, level)
     ctx.restore()
     return
   }
@@ -445,7 +450,7 @@ export function drawShareCard(
 
   const box = { x: pad, y: top, width: width - pad * 2, height: chartBottom - top }
   if (card.chart.kind === "podium") drawPodium(ctx, card.chart, colors, box, focus, time)
-  if (card.chart.kind === "versus") drawVersus(ctx, card.chart, colors, box, progress, focus, time)
+  if (card.chart.kind === "versus") drawVersus(ctx, card.locale, card.chart, colors, box, progress, focus, time)
 
   drawFooter(ctx, card, colors, width, footer, rule)
   veilIn(ctx, colors, width, height, at)
@@ -467,6 +472,7 @@ function veilIn(ctx: CanvasRenderingContext2D, colors: Palette, width: number, h
 // track's drop), then the line, then the address. The dot grid fills the card and the equaliser keeps playing.
 function drawOutro(
   ctx: CanvasRenderingContext2D,
+  locale: Locale,
   options: ShareOptions,
   colors: Palette,
   width: number,
@@ -501,8 +507,12 @@ function drawOutro(
     drawLogo(ctx, options.logo, colors, -total / 2, -24 * zoom, zoom)
   }
   if (slide > 0) {
-    // The line and the address share one size, regular weight: the largest at which the line's longer half fits.
-    const size = fit(ctx, outroLine[0]!, width - pad * 3.5, 80, 400)
+    // The line (on two lines, where the translation breaks it) and the address share one size, regular weight: the
+    // largest at which the line's longer half fits.
+    const outroLine = translate(locale, "share.card.outro").split("\n")
+    ctx.font = `400 80px ${font}`
+    const longest = outroLine.reduce((a, b) => (ctx.measureText(b).width > ctx.measureText(a).width ? b : a))
+    const size = fit(ctx, longest, width - pad * 3.5, 80, 400)
     ctx.font = `400 ${size}px ${font}`
     const lines = slide === 1 ? outroLine : [outroAddress]
     const leading = size * 1.2
@@ -692,7 +702,9 @@ function drawIntro(
 ) {
   const max = width - pad * 2
   ctx.textBaseline = "alphabetic"
-  const eyebrow = options.layout === "chart" ? card.range.toUpperCase() : `${card.title} · ${card.range}`.toUpperCase()
+  const eyebrow = (options.layout === "chart" ? card.range : `${card.title} · ${card.range}`).toLocaleUpperCase(
+    tag(card.locale),
+  )
   rise(ctx, time, 0.05, y + 32, 32, () => {
     ctx.fillStyle = colors.faint
     ctx.font = `400 32px ${font}`
@@ -712,7 +724,7 @@ function drawIntro(
     odometer(ctx, card.stat.value, pad - size * 0.04, y + gap + size * 0.8, size, time)
     ctx.font = `400 ${label}px ${font}`
     // A sentence of its own under the number, so it starts with a capital.
-    const caption = card.stat.label.charAt(0).toUpperCase() + card.stat.label.slice(1)
+    const caption = card.stat.label.charAt(0).toLocaleUpperCase(tag(card.locale)) + card.stat.label.slice(1)
     const lines = balance(ctx, caption, max).slice(0, 2)
     // A comma's tail hangs below the number, so the caption moves down to clear it.
     const tail = /[,;]/.test(card.stat.value) ? size * 0.18 : 0
@@ -756,11 +768,17 @@ function drawIntro(
       const start = Math.max(0, from - offset)
       const end = Math.min(line.length, to - offset)
       const parts = from >= 0 && end > start ? [line.slice(0, start), line.slice(start, end), line.slice(end)] : [line]
-      parts.reduce((x, part, slot) => {
-        ctx.fillStyle = parts.length === 3 && slot === 1 ? colors.highlight : colors.text
-        ctx.fillText(part, x, y + 56 + size * 0.8 + index * leading)
-        return x + ctx.measureText(part).width
-      }, pad - 2)
+      // Right to left, the line's first part is set at its right end and the rest follow leftwards.
+      const rtl = ctx.direction === "rtl"
+      parts.reduce(
+        (x, part, slot) => {
+          const width = ctx.measureText(part).width
+          ctx.fillStyle = parts.length === 3 && slot === 1 ? colors.highlight : colors.text
+          ctx.fillText(part, rtl ? x - width : x, y + 56 + size * 0.8 + index * leading)
+          return rtl ? x - width : x + width
+        },
+        rtl ? pad - 2 + ctx.measureText(line).width : pad - 2,
+      )
     })
   })
   return y + 56 + lines.length * leading + room(ctx)
@@ -1449,7 +1467,7 @@ function drawSlide(
     rise(ctx, since, 0.05, top + 22, 28, () => {
       ctx.font = `400 28px ${font}`
       ctx.fillStyle = colors.faint
-      spaced(ctx, `${card.title} · ${card.range}`.toUpperCase(), pad, top + 22, 28 * 0.12)
+      spaced(ctx, `${card.title} · ${card.range}`.toLocaleUpperCase(tag(card.locale)), pad, top + 22, 28 * 0.12)
     })
     lines.forEach((line, row) =>
       rise(ctx, since, 0.15 + row * 0.08, top + 44 + size * 0.8 + row * leading, size, () => {
@@ -1461,8 +1479,8 @@ function drawSlide(
     return
   }
   if (chart.kind === "versus") {
-    if (index === 0) drawHeadToHead(ctx, chart, colors, box, width, since)
-    if (index === 1) drawRadar(ctx, chart, colors, box, since)
+    if (index === 0) drawHeadToHead(ctx, card.locale, chart, colors, box, width, since)
+    if (index === 1) drawRadar(ctx, card.locale, chart, colors, box, since)
     return
   }
   const entry = chart.kind === "podium" ? chart.entries[index] : undefined
@@ -1524,7 +1542,13 @@ function drawSlide(
   rise(ctx, since, 0.24, captionY, 24, () => {
     ctx.font = `400 24px ${font}`
     ctx.fillStyle = colors.faint
-    spaced(ctx, `TOKENS · ${card.range}`.toUpperCase(), left, captionY, 24 * 0.14)
+    spaced(
+      ctx,
+      `${translate(card.locale, "share.card.tokens")} · ${card.range}`.toLocaleUpperCase(tag(card.locale)),
+      left,
+      captionY,
+      24 * 0.14,
+    )
   })
   rise(ctx, since, 0.3, numberY, number, () => {
     ctx.font = `400 ${number}px ${font}`
@@ -1626,6 +1650,7 @@ function drawPodium(
 // a big "vs" between them.
 function drawHeadToHead(
   ctx: CanvasRenderingContext2D,
+  locale: Locale,
   chart: Extract<ShareChart, { kind: "versus" }>,
   colors: Palette,
   box: Box,
@@ -1677,8 +1702,9 @@ function drawHeadToHead(
   rise(ctx, since, 0.3, across ? box.y + box.height / 2 + 28 : middle + 28, 80, () => {
     ctx.font = `400 80px ${font}`
     ctx.fillStyle = colors.faint
-    const x = across ? middle - ctx.measureText("vs").width / 2 : box.x
-    ctx.fillText("vs", x, across ? box.y + box.height / 2 + 28 : middle + 28)
+    const versus = translate(locale, "share.card.versus")
+    const x = across ? middle - ctx.measureText(versus).width / 2 : box.x
+    ctx.fillText(versus, x, across ? box.y + box.height / 2 + 28 : middle + 28)
   })
 }
 
@@ -1686,6 +1712,7 @@ function drawHeadToHead(
 // middle; each axis named at its tip with both values under the name.
 function drawRadar(
   ctx: CanvasRenderingContext2D,
+  locale: Locale,
   chart: Extract<ShareChart, { kind: "versus" }>,
   colors: Palette,
   box: Box,
@@ -1765,7 +1792,7 @@ function drawRadar(
     ctx.textAlign = align
     ctx.font = `400 20px ${font}`
     ctx.fillStyle = colors.faint
-    ctx.fillText(row.label.toUpperCase(), x, y)
+    ctx.fillText(row.label.toLocaleUpperCase(tag(locale)), x, y)
     ctx.font = `700 26px ${font}`
     const [a, b] = row.values
     const gap = "  "
@@ -1784,6 +1811,7 @@ function drawRadar(
 // name in the middle and each model's bar growing out from it, the one the metric favours in colour.
 function drawVersus(
   ctx: CanvasRenderingContext2D,
+  locale: Locale,
   chart: Extract<ShareChart, { kind: "versus" }>,
   colors: Palette,
   box: Box,
@@ -1838,7 +1866,8 @@ function drawVersus(
   ctx.font = `400 26px ${font}`
   ctx.fillStyle = colors.faint
   ctx.globalAlpha = settle(time, 0.2, 0.6)
-  ctx.fillText("vs", middle - ctx.measureText("vs").width / 2, box.y + head * 0.5)
+  const versus = translate(locale, "share.card.versus")
+  ctx.fillText(versus, middle - ctx.measureText(versus).width / 2, box.y + head * 0.5)
   ctx.globalAlpha = 1
 
   const top = box.y + head + 24
@@ -1861,7 +1890,7 @@ function drawVersus(
     const thick = Math.max(5, Math.round(10 * scale))
     ctx.font = `400 ${caption}px ${font}`
     ctx.fillStyle = mix(colors.faint, colors.mark, dim)
-    const label = item.label.toUpperCase()
+    const label = item.label.toLocaleUpperCase(tag(locale))
     spaced(ctx, label, middle - (ctx.measureText(label).width + label.length * 2) / 2, baseline, 2)
     const reach = half - 8
     item.values.forEach((value, side) => {
@@ -1915,22 +1944,29 @@ function footerDate(card: ShareCard) {
   if (chart.kind === "stacked" && column?.start) {
     const starts = chart.columns.map((item) => Date.parse(`${item.start}T00:00:00Z`))
     const weekly = (starts[1] ?? 0) - (starts[0] ?? 0) >= 6 * 86_400_000
-    const date = formatUpdated(`${column.start}T00:00:00Z`)
-    return weekly ? `Week of ${date}` : date
+    const date = formatUpdated(card.locale, `${column.start}T00:00:00Z`)
+    return weekly ? translate(card.locale, "share.range.weekOf", { date }) : date
   }
-  return card.updatedAt ? `Updated ${formatUpdated(card.updatedAt)}` : undefined
+  return card.updatedAt
+    ? translate(card.locale, "share.card.updated", { date: formatUpdated(card.locale, card.updatedAt) })
+    : undefined
 }
 
-function formatUpdated(value: string) {
+function formatUpdated(locale: Locale, value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(
-    date,
-  )
+  return new Intl.DateTimeFormat(tag(locale), {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date)
 }
 
-// Draws text with tracking one character at a time, since canvas letterSpacing isn't in every browser.
+// Draws text with tracking one character at a time, since canvas letterSpacing isn't in every browser. Scripts whose
+// letters join or stack (Hebrew, Arabic, Thai) only shape when drawn whole, so they go untracked.
 function spaced(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, tracking: number) {
+  if (/[\u0590-\u08ff\u0e00-\u0e7f\ufb1d-\ufefc]/.test(text)) return ctx.fillText(text, x, y)
   ;[...text].reduce((left, char) => {
     ctx.fillText(char, left, y)
     return left + ctx.measureText(char).width + tracking
@@ -1950,14 +1986,28 @@ function balance(ctx: CanvasRenderingContext2D, text: string, max: number) {
   return wrap(ctx, text, search(max / count, max))
 }
 
+// Lines break at spaces and, in scripts written without them (Chinese, Japanese, Thai), between the words
+// Intl.Segmenter finds, punctuation staying with the word before it.
 function wrap(ctx: CanvasRenderingContext2D, text: string, max: number) {
-  return text.split(/\s+/).reduce<string[]>((lines, word) => {
+  const pieces = text.split(/\s+/).flatMap((word) => {
+    if (!unspaced.test(word)) return [{ text: word, space: true }]
+    return [...words.segment(word)].reduce<{ text: string; space: boolean }[]>((all, part, index) => {
+      const last = all.at(-1)
+      if (last && !part.isWordLike) return [...all.slice(0, -1), { ...last, text: last.text + part.segment }]
+      return [...all, { text: part.segment, space: index === 0 }]
+    }, [])
+  })
+  return pieces.reduce<string[]>((lines, piece) => {
     const last = lines.at(-1)
-    if (last !== undefined && ctx.measureText(`${last} ${word}`).width <= max)
-      return [...lines.slice(0, -1), `${last} ${word}`]
-    return [...lines, word]
+    const joined = `${last}${piece.space ? " " : ""}${piece.text}`
+    if (last !== undefined && ctx.measureText(joined).width <= max) return [...lines.slice(0, -1), joined]
+    return [...lines, piece.text]
   }, [])
 }
+
+const unspaced =
+  /[\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/
+const words = new Intl.Segmenter(undefined, { granularity: "word" })
 
 function truncate(ctx: CanvasRenderingContext2D, text: string, max: number) {
   if (ctx.measureText(text).width <= max) return text

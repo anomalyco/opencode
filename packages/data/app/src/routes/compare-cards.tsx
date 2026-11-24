@@ -1,6 +1,7 @@
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { For, Show } from "solid-js"
 import { providerIconId } from "../lib/provider-icon"
+import type { Locale } from "../lib/language"
 import { ShareButton, type ShareDraft } from "../share/share"
 import { catalogSlug, formatCatalogLabName, type ModelCatalogEntry } from "./model-catalog"
 
@@ -59,7 +60,7 @@ export function ComparisonCardsSection(props: {
   compact?: boolean
   variant?: "panel" | "featured"
   // The home page's comparisons share the top pair (share/sections.ts).
-  share?: () => ShareDraft | undefined
+  share?: (locale: Locale) => ShareDraft | undefined
 }) {
   const featured = () => props.variant === "featured"
   const pairs = () => (featured() ? props.pairs.slice(0, 4) : props.pairs)

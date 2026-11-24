@@ -4,6 +4,8 @@
 // reaches the server, so its length doesn't matter there.
 import { defaultShareOptions, shareSizes, type ShareCard, type ShareOptions } from "./card"
 import type { Period } from "../component/period-toggle"
+import { translate, type Key } from "../i18n"
+import { parseLocale, type Locale } from "../lib/language"
 
 export const shareSections = [
   "top-models",
@@ -23,17 +25,21 @@ export type ShareSection = (typeof shareSections)[number]
 // What a section's card depends on besides its data: the range its chart shows and, for Top Models, the leaderboard's.
 export type ShareView = { period: Period; leaderboard: Period }
 
-export const shareTitles: Record<ShareSection, string> = {
-  "top-models": "Top Models",
-  leaderboard: "Leaderboard",
-  "unique-users": "Unique Users",
-  retention: "Weekly Retention",
-  "session-cost": "Session Cost",
-  "token-cost": "Token Cost",
-  "cache-ratio": "Cache Ratio",
-  "market-share": "Market Share",
-  "geo-breakdown": "Geographic Breakdown",
-  comparison: "Model Comparison",
+const shareTitles: Record<ShareSection, Key> = {
+  "top-models": "nav.topModels",
+  leaderboard: "nav.leaderboard",
+  "unique-users": "nav.uniqueUsers",
+  retention: "share.title.retention",
+  "session-cost": "nav.sessionCost",
+  "token-cost": "nav.tokenCost",
+  "cache-ratio": "nav.cacheRatio",
+  "market-share": "nav.marketShare",
+  "geo-breakdown": "home.geoTitle",
+  comparison: "share.title.comparison",
+}
+
+export function shareTitle(locale: Locale, section: ShareSection) {
+  return translate(locale, shareTitles[section])
 }
 
 const layouts = ["headline", "number", "chart"] as const
@@ -98,5 +104,7 @@ export async function unpackCard(packed: string) {
   const binary = atob(packed.replaceAll("-", "+").replaceAll("_", "/"))
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"))
-  return JSON.parse(await new Response(stream).text()) as ShareCard
+  const card = JSON.parse(await new Response(stream).text()) as ShareCard
+  // The card draws its own words in its language, so one it can't read is drawn in English.
+  return { ...card, locale: parseLocale(card.locale) ?? "en" } satisfies ShareCard
 }

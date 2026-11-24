@@ -1,7 +1,7 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { dataFlag } from "../lib/flag"
-import { baseUrl } from "../lib/language"
-import { embedSize, embedSnippet, readEmbed, shareTitles } from "../share/embed"
+import { baseUrl, fromPathname, route } from "../lib/language"
+import { embedSize, embedSnippet, readEmbed, shareTitle } from "../share/embed"
 
 /**
  * oEmbed (oembed.com) for OpenCode Data, so a link pasted into Notion, WordPress, Ghost or Medium turns into the card.
@@ -18,9 +18,10 @@ export function GET(event: APIEvent) {
   if (!embed.section) return Response.json({ error: "Not an OpenCode Data section" }, { status: 404 })
   const maxWidth = Number(query.get("maxwidth")) || undefined
   const size = embedSize(embed.options.size, maxWidth)
-  const src = new URL(`/data/embed/${embed.section}`, baseUrl)
+  // In the language of the URL, which a localized page or embed names in its path.
+  const src = new URL(route(target.locale, `/data/embed/${embed.section}`), baseUrl)
   src.search = target.params.toString()
-  const title = shareTitles[embed.section]
+  const title = shareTitle(target.locale, embed.section)
   return Response.json(
     {
       version: "1.0",
@@ -40,8 +41,9 @@ function parseTarget(value: string | null) {
   if (!value || !URL.canParse(value)) return undefined
   const url = new URL(value)
   if (url.hostname !== new URL(baseUrl).hostname && url.hostname !== "localhost") return undefined
+  const locale = fromPathname(url.pathname) ?? "en"
   const embed = /\/data\/embed\/([\w-]+)\/?$/.exec(url.pathname)
-  if (embed) return { section: embed[1]!, params: url.searchParams }
+  if (embed) return { section: embed[1]!, params: url.searchParams, locale }
   if (!/\/data\/?$/.test(url.pathname)) return undefined
-  return { section: url.hash.slice(1) || "top-models", params: url.searchParams }
+  return { section: url.hash.slice(1) || "top-models", params: url.searchParams, locale }
 }

@@ -2,11 +2,13 @@ import { Link, Meta, Title } from "@solidjs/meta"
 import { createAsync, query, useLocation, useParams } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
+import { useI18n } from "../../context/i18n"
+import { useLanguage } from "../../context/language"
 import { dataFlag } from "../../lib/flag"
 import { baseUrl } from "../../lib/language"
 import { loadHomePage } from "../../lib/page-data"
 import { drawShareCard, loadShareFonts, mainLength, shareSizes, type ShareCard } from "../../share/card"
-import { readEmbed, shareTitles, unpackCard } from "../../share/embed"
+import { readEmbed, shareTitle, unpackCard } from "../../share/embed"
 import { cardLogos, loadShareLogos } from "../../share/logos"
 import { homeShareCard } from "../../share/sections"
 import { setStatsPageCacheHeaders } from "../stats-cache"
@@ -25,6 +27,8 @@ const getData = query(async () => {
 export default function Embed() {
   const params = useParams()
   const location = useLocation()
+  const i18n = useI18n()
+  const language = useLanguage()
   const event = getRequestEvent()
   if (event) {
     setStatsPageCacheHeaders(event.response.headers)
@@ -53,10 +57,10 @@ export default function Embed() {
     const section = embed().section
     const value = data()
     if (!section || !value) return undefined
-    const draft = homeShareCard(section, value, embed().view)
+    const draft = homeShareCard(language.locale(), section, value, embed().view)
     return draft && { ...draft, updatedAt: value.updatedAt, url: "opencode.ai/data" }
   })
-  const title = () => shareTitles[embed().section ?? "top-models"]
+  const title = () => shareTitle(language.locale(), embed().section ?? "top-models")
   const oembed = () =>
     `${baseUrl}/data/oembed?format=json&url=${encodeURIComponent(`${baseUrl}${location.pathname}${location.search}`)}`
 
@@ -108,13 +112,13 @@ export default function Embed() {
       <Title>{`${title()} · OpenCode Data`}</Title>
       <Meta name="robots" content="noindex" />
       <Link rel="alternate" type="application/json+oembed" href={oembed()} title={title()} />
-      <Show when={embed().section} fallback={<p data-slot="embed-missing">This embed doesn't exist.</p>}>
+      <Show when={embed().section} fallback={<p data-slot="embed-missing">{i18n.t("share.embed.missing")}</p>}>
         {(section) => (
           <a
             href={`${baseUrl}/data/#${section()}`}
             target="_blank"
             rel="noopener"
-            aria-label={`${title()} on OpenCode Data`}
+            aria-label={i18n.t("share.embed.open", { title: title() })}
           >
             <canvas
               ref={canvas}

@@ -10,47 +10,53 @@ import type {
   UsagePoint,
 } from "@opencode/data-core/domain/home"
 import type { Period } from "../component/period-toggle"
+import { translate } from "../i18n"
+import { tag, type Locale } from "../lib/language"
 import type { HomePageData } from "../lib/page-data"
 import { providerIconId } from "../lib/provider-icon"
 import { formatCatalogLabName, isKnownCatalogLab } from "../routes/model-catalog"
 import type { ShareChart, ShareSeries } from "./card"
-import { shareTitles, type ShareSection, type ShareView } from "./embed"
+import { shareTitle, type ShareSection, type ShareView } from "./embed"
 import type { ShareDraft, ShareFocus } from "./share"
 
 /** A section's card from the whole page's data, as its share button would make it with `view`. */
-export function homeShareCard(section: ShareSection, data: HomePageData, view: ShareView) {
+export function homeShareCard(locale: Locale, section: ShareSection, data: HomePageData, view: ShareView) {
   const names = modelNames(data)
-  if (section === "top-models") return topModelsCard(data.usage[view.period], data.leaderboard[view.leaderboard], view)
-  if (section === "unique-users") return uniqueUsersCard(data.users[view.period], view.period, names)
-  if (section === "retention") return retentionCard(data.retention)
-  if (section === "session-cost") return sessionCostCard(data.sessionCost.slice(0, 16), names)
-  if (section === "token-cost") return tokenCostCard(data.tokenCost.slice(0, 13), names)
-  if (section === "cache-ratio") return cacheRatioCard(data.cacheRatio.slice(0, 16), names)
-  if (section === "market-share") return marketShareCard(data.market[view.period], view.period)
+  if (section === "top-models")
+    return topModelsCard(locale, data.usage[view.period], data.leaderboard[view.leaderboard], view)
+  if (section === "unique-users") return uniqueUsersCard(locale, data.users[view.period], view.period, names)
+  if (section === "retention") return retentionCard(locale, data.retention)
+  if (section === "session-cost") return sessionCostCard(locale, data.sessionCost.slice(0, 16), names)
+  if (section === "token-cost") return tokenCostCard(locale, data.tokenCost.slice(0, 13), names)
+  if (section === "cache-ratio") return cacheRatioCard(locale, data.cacheRatio.slice(0, 16), names)
+  if (section === "market-share") return marketShareCard(locale, data.market[view.period], view.period)
   if (section === "leaderboard")
-    return leaderboardCard(data.leaderboard[view.leaderboard], view.leaderboard, data.catalogLabs)
-  if (section === "comparison") return comparisonCard(data, data.catalogLabs)
-  return geoCard(data.country.slice(0, 15), "Unknown")
+    return leaderboardCard(locale, data.leaderboard[view.leaderboard], view.leaderboard, data.catalogLabs)
+  if (section === "comparison") return comparisonCard(locale, data, data.catalogLabs)
+  return geoCard(locale, data.country.slice(0, 15))
 }
 
 type LeaderboardEntry = HomePageData["leaderboard"]["weekly"][number]
 
 // The leaderboard's top three, as its featured cards show them.
 export function leaderboardCard(
+  locale: Locale,
   entries: LeaderboardEntry[],
   period: Period,
   catalogLabs: readonly string[],
 ): ShareDraft | undefined {
   const leader = entries[0]
   if (!leader) return undefined
-  const when = period === "weekly" ? "in the past 7 days" : "yesterday"
+  const when = translate(locale, period === "weekly" ? "share.when.past7Days" : "share.when.yesterday")
+  const led = { name: leader.name, when, value: formatBillions(leader.tokens) }
   return {
     id: "leaderboard",
-    title: shareTitles.leaderboard,
-    range: period === "weekly" ? "Past 7 days" : "Yesterday",
+    locale,
+    title: shareTitle(locale, "leaderboard"),
+    range: translate(locale, period === "weekly" ? "share.range.past7Days" : "share.range.yesterday"),
     highlight: leader.name,
-    headline: `${leader.name} led OpenCode usage ${when}, with ${formatBillions(leader.tokens)} tokens`,
-    stat: { value: formatBillions(leader.tokens), label: `tokens for ${leader.name}, ${when}` },
+    headline: translate(locale, "share.led.headline", led),
+    stat: { value: led.value, label: translate(locale, "share.led.stat", led) },
     chart: {
       kind: "podium",
       entries: entries.slice(0, 3).map((entry) => {
@@ -60,7 +66,12 @@ export function leaderboardCard(
           label: entry.model,
           provider: known ? formatCatalogLabName(entry.provider) : "",
           value: formatBillions(entry.tokens),
-          change: entry.change === null ? "New" : entry.change > 0 ? `+${entry.change}%` : `${entry.change}%`,
+          change:
+            entry.change === null
+              ? translate(locale, "share.new")
+              : entry.change > 0
+                ? `+${entry.change}%`
+                : `${entry.change}%`,
           tone: entry.change === null ? "new" : entry.change > 0 ? "up" : entry.change < 0 ? "down" : "flat",
           logo: known ? providerIconId(entry.author) : "synthetic",
         }
@@ -71,7 +82,11 @@ export function leaderboardCard(
 }
 
 // The top two models of the past week, head to head on every measure the page has for both.
-export function comparisonCard(data: HomePageData, catalogLabs: readonly string[]): ShareDraft | undefined {
+export function comparisonCard(
+  locale: Locale,
+  data: HomePageData,
+  catalogLabs: readonly string[],
+): ShareDraft | undefined {
   const [first, second] = data.leaderboard.weekly
   if (!first || !second) return undefined
   const pair = [first, second]
@@ -83,34 +98,34 @@ export function comparisonCard(data: HomePageData, catalogLabs: readonly string[
     lower?: boolean
   }[] = [
     {
-      label: "Tokens, past 7 days",
+      label: translate(locale, "share.comparison.tokens"),
       read: (model) => pair.find((item) => item.model === model)?.tokens,
       format: formatBillions,
     },
     {
-      label: "Daily users",
+      label: translate(locale, "share.comparison.dailyUsers"),
       read: (model) => latest?.segments.find((item) => item.model === model)?.value,
       format: formatUsers,
     },
     {
-      label: "Weekly retention",
+      label: translate(locale, "share.comparison.retention"),
       read: (model) => data.retention.find((item) => item.model === model)?.rate,
       format: formatRetentionRate,
     },
     {
-      label: "Cost per session",
+      label: translate(locale, "share.comparison.sessionCost"),
       read: (model) => data.sessionCost.find((item) => item.model === model)?.cost,
       format: formatSessionCost,
       lower: true,
     },
     {
-      label: "Output, per 1M tokens",
+      label: translate(locale, "share.comparison.outputPrice"),
       read: (model) => data.tokenCost.find((item) => item.model === model)?.total,
       format: formatDollars,
       lower: true,
     },
     {
-      label: "Input from cache",
+      label: translate(locale, "share.comparison.cache"),
       read: (model) => data.cacheRatio.find((item) => item.model === model)?.ratio,
       format: formatRatio,
     },
@@ -128,13 +143,15 @@ export function comparisonCard(data: HomePageData, catalogLabs: readonly string[
     ]
   })
   const ratio = first.tokens / Math.max(1, second.tokens)
+  const served = { first: first.name, second: second.name, ratio: `${ratio.toFixed(ratio >= 10 ? 0 : 1)}x` }
   return {
     id: "comparison",
-    title: shareTitles.comparison,
-    range: "Past 7 days",
+    locale,
+    title: shareTitle(locale, "comparison"),
+    range: translate(locale, "share.range.past7Days"),
     highlight: first.name,
-    headline: `${first.name} served ${ratio.toFixed(ratio >= 10 ? 0 : 1)}x the tokens of ${second.name} on OpenCode in the past 7 days`,
-    stat: { value: `${ratio.toFixed(ratio >= 10 ? 0 : 1)}x`, label: `the tokens of ${second.name}, for ${first.name}` },
+    headline: translate(locale, "share.comparison.headline", served),
+    stat: { value: served.ratio, label: translate(locale, "share.comparison.stat", served) },
     chart: {
       kind: "versus",
       models: pair.map((entry) => {
@@ -154,6 +171,7 @@ export function comparisonCard(data: HomePageData, catalogLabs: readonly string[
 // day broken down. `focus.lead` leads the card with the top model or with all tokens. A card's `variant` makes it
 // again for another focus, for the editor's Date and Lead with rows.
 export function topModelsCard(
+  locale: Locale,
   usage: UsagePoint[],
   leaderboard: HomePageData["leaderboard"]["weekly"],
   view: ShareView,
@@ -161,9 +179,15 @@ export function topModelsCard(
 ): ShareDraft | undefined {
   const leader = leaderboard[0]
   const day = focus.day
-  const chart = usageShareChart(usage, (value) => formatTokens(value), "All models", day)
+  const chart = usageShareChart(
+    locale,
+    usage,
+    (value) => formatTokens(value),
+    translate(locale, "share.total.allModels"),
+    day,
+  )
   if (!chart || !leader) return undefined
-  const variant = (next: ShareFocus) => topModelsCard(usage, leaderboard, view, next)
+  const variant = (next: ShareFocus) => topModelsCard(locale, usage, leaderboard, view, next)
   if (focus.lead === "total") {
     const sum =
       day === undefined
@@ -171,22 +195,31 @@ export function topModelsCard(
         : chart.total.value
     const when =
       day === undefined
-        ? `in the past ${chart.columns.length} ${view.period === "weekly" ? "weeks" : "days"}`
-        : shareWhen(chart, view.period)
+        ? translate(locale, view.period === "weekly" ? "share.when.pastWeeks" : "share.when.pastDays", {
+            count: chart.columns.length,
+          })
+        : shareWhen(locale, chart, view.period)
     // Over the whole range the legend and the line under the chart add up the range too, to match the number.
     const ranged = (series: number) => chart.columns.reduce((all, column) => all + (column.values[series] ?? 0), 0)
     return {
       id: "top-models",
-      title: shareTitles["top-models"],
-      range: day === undefined ? shareRange(chart, view.period) : shareDate(chart, view.period),
-      headline: `OpenCode handled ${sum} tokens ${when}`,
-      stat: { value: sum, label: `tokens on OpenCode, ${when}` },
+      locale,
+      title: shareTitle(locale, "top-models"),
+      range: day === undefined ? shareRange(locale, chart, view.period) : shareDate(locale, chart, view.period),
+      headline: translate(locale, "share.total.headline", { value: sum, when }),
+      stat: { value: sum, label: translate(locale, "share.total.stat", { when }) },
       chart:
         day === undefined
           ? {
               ...chart,
               series: chart.series.map((item, index) => ({ ...item, value: formatTotalTokens(ranged(index)) })),
-              total: { label: `All models, ${shareRange(chart, view.period).toLowerCase()}`, value: sum },
+              total: {
+                label: translate(locale, view.period === "weekly" ? "share.total.pastWeeks" : "share.total.pastDays", {
+                  label: translate(locale, "share.total.allModels"),
+                  count: chart.columns.length,
+                }),
+                value: sum,
+              },
             }
           : chart,
       view,
@@ -197,27 +230,33 @@ export function topModelsCard(
     const top = leadingSeries(chart)
     if (!top) return undefined
     const name = leaderboard.find((entry) => entry.model === top.key)?.name ?? top.label
-    const when = shareWhen(chart, view.period)
+    const led = { name, when: shareWhen(locale, chart, view.period), value: top.value }
     return {
       id: "top-models",
-      title: shareTitles["top-models"],
-      range: shareDate(chart, view.period),
+      locale,
+      title: shareTitle(locale, "top-models"),
+      range: shareDate(locale, chart, view.period),
       highlight: name,
-      headline: `${name} led OpenCode usage ${when}, with ${top.value} tokens`,
-      stat: { value: top.value, label: `tokens for ${name}, ${when}` },
+      headline: translate(locale, "share.led.headline", led),
+      stat: { value: top.value, label: translate(locale, "share.led.stat", led) },
       chart,
       view,
       variant,
     }
   }
-  const when = view.leaderboard === "weekly" ? "in the past 7 days" : "yesterday"
+  const led = {
+    name: leader.name,
+    when: translate(locale, view.leaderboard === "weekly" ? "share.when.past7Days" : "share.when.yesterday"),
+    value: formatBillions(leader.tokens),
+  }
   return {
     id: "top-models",
-    title: shareTitles["top-models"],
-    range: shareRange(chart, view.period),
+    locale,
+    title: shareTitle(locale, "top-models"),
+    range: shareRange(locale, chart, view.period),
     highlight: leader.name,
-    headline: `${leader.name} led OpenCode usage ${when}, with ${formatBillions(leader.tokens)} tokens`,
-    stat: { value: formatBillions(leader.tokens), label: `tokens for ${leader.name}, ${when}` },
+    headline: translate(locale, "share.led.headline", led),
+    stat: { value: led.value, label: translate(locale, "share.led.stat", led) },
     chart,
     view,
     variant,
@@ -225,131 +264,161 @@ export function topModelsCard(
 }
 
 export function uniqueUsersCard(
+  locale: Locale,
   users: UsagePoint[],
   period: Period,
   names: Map<string, string>,
   focus: ShareFocus = {},
 ): ShareDraft | undefined {
   const day = focus.day
-  const chart = usageShareChart(users, formatUsers, "All models", day)
+  const chart = usageShareChart(locale, users, formatUsers, translate(locale, "share.total.allModels"), day)
   const top = chart && leadingSeries(chart)
   if (!chart || !top) return undefined
-  const when = shareWhen(chart, period)
   const name = names.get(top.key) ?? top.label
+  const had = { name, when: shareWhen(locale, chart, period), value: top.value }
   return {
     id: "unique-users",
-    title: shareTitles["unique-users"],
-    range: day === undefined ? shareRange(chart, period) : shareDate(chart, period),
+    locale,
+    title: shareTitle(locale, "unique-users"),
+    range: day === undefined ? shareRange(locale, chart, period) : shareDate(locale, chart, period),
     highlight: name,
-    headline: `${name} had the most OpenCode users ${when}, with ${top.value}`,
-    stat: { value: top.value, label: `OpenCode users on ${name}, ${when}` },
+    headline: translate(locale, "share.users.headline", had),
+    stat: { value: top.value, label: translate(locale, "share.users.stat", had) },
     chart,
     view: { period, leaderboard: "weekly" },
     // No Total: a person who used several models is in each of their rows, so the rows don't add up to people.
-    variant: (next) => uniqueUsersCard(users, period, names, { day: next.day }),
+    variant: (next) => uniqueUsersCard(locale, users, period, names, { day: next.day }),
   }
 }
 
-export function retentionCard(retention: HomePageData["retention"]): ShareDraft | undefined {
+export function retentionCard(locale: Locale, retention: HomePageData["retention"]): ShareDraft | undefined {
   const top = retention[0]
   if (!top) return undefined
+  const kept = { name: top.name, rate: formatRetentionRate(top.rate) }
   return {
     id: "retention",
-    title: shareTitles.retention,
-    range: "Week over week",
+    locale,
+    title: shareTitle(locale, "retention"),
+    range: translate(locale, "share.range.weekOverWeek"),
     highlight: top.name,
-    headline: `${top.name} kept ${formatRetentionRate(top.rate)} of its OpenCode users from one week to the next`,
-    stat: { value: formatRetentionRate(top.rate), label: `of ${top.name} users came back the next week` },
+    headline: translate(locale, "share.retention.headline", kept),
+    stat: { value: kept.rate, label: translate(locale, "share.retention.stat", kept) },
     chart: rankedShareChart(
       retention.map((item) => ({ label: item.model, value: formatRetentionRate(item.rate), fill: item.rate / 100 })),
     ),
   }
 }
 
-export function sessionCostCard(items: SessionCostEntry[], names: Map<string, string>): ShareDraft | undefined {
+export function sessionCostCard(
+  locale: Locale,
+  items: SessionCostEntry[],
+  names: Map<string, string>,
+): ShareDraft | undefined {
   const top = items[0]
   const max = Math.max(0, ...items.map((item) => item.cost)) || 1
   if (!top) return undefined
   const name = names.get(top.model) ?? top.model
+  const costs = { name, cost: formatSessionCost(top.cost) }
   return {
     id: "session-cost",
-    title: shareTitles["session-cost"],
-    range: "Average per session",
+    locale,
+    title: shareTitle(locale, "session-cost"),
+    range: translate(locale, "share.range.perSession"),
     highlight: name,
-    headline: `An OpenCode session with ${name} costs ${formatSessionCost(top.cost)} on average`,
-    stat: { value: formatSessionCost(top.cost), label: `average cost of an OpenCode session with ${name}` },
+    headline: translate(locale, "share.sessionCost.headline", costs),
+    stat: { value: costs.cost, label: translate(locale, "share.sessionCost.stat", costs) },
     chart: rankedShareChart(
       items.map((item) => ({ label: item.model, value: formatSessionCost(item.cost), fill: item.cost / max })),
     ),
   }
 }
 
-export function tokenCostCard(items: TokenCostEntry[], names: Map<string, string>): ShareDraft | undefined {
+export function tokenCostCard(
+  locale: Locale,
+  items: TokenCostEntry[],
+  names: Map<string, string>,
+): ShareDraft | undefined {
   const top = items.find((item) => item.total > 0) ?? items[0]
   const max = Math.max(0, ...items.map((item) => item.total)) || 1
   if (!top) return undefined
   const name = names.get(top.model) ?? top.model
+  const price = { name, price: formatDollars(top.total) }
   return {
     id: "token-cost",
-    title: shareTitles["token-cost"],
-    range: "USD per 1M output tokens",
+    locale,
+    title: shareTitle(locale, "token-cost"),
+    range: translate(locale, "share.range.outputPrice"),
     highlight: name,
-    headline: `${name} has the lowest output price on OpenCode, at ${formatDollars(top.total)} per 1M tokens`,
-    stat: { value: formatDollars(top.total), label: `per 1M output tokens for ${name}` },
+    headline: translate(locale, "share.tokenCost.headline", price),
+    stat: { value: price.price, label: translate(locale, "share.tokenCost.stat", price) },
     chart: rankedShareChart(
       items.map((item) => ({ label: item.model, value: formatDollars(item.total), fill: item.total / max })),
     ),
   }
 }
 
-export function cacheRatioCard(items: CacheRatioEntry[], names: Map<string, string>): ShareDraft | undefined {
+export function cacheRatioCard(
+  locale: Locale,
+  items: CacheRatioEntry[],
+  names: Map<string, string>,
+): ShareDraft | undefined {
   const top = items[0]
   if (!top) return undefined
   const name = names.get(top.model) ?? top.model
+  const served = { name, ratio: formatRatio(top.ratio) }
   return {
     id: "cache-ratio",
-    title: shareTitles["cache-ratio"],
-    range: "Share of input tokens",
+    locale,
+    title: shareTitle(locale, "cache-ratio"),
+    range: translate(locale, "share.range.inputShare"),
     highlight: name,
-    headline: `${name} served ${formatRatio(top.ratio)} of its input tokens from cache`,
-    stat: { value: formatRatio(top.ratio), label: `of ${name} input tokens came from cache` },
+    headline: translate(locale, "share.cache.headline", served),
+    stat: { value: served.ratio, label: translate(locale, "share.cache.stat", served) },
     chart: rankedShareChart(
       items.map((item) => ({ label: item.model, value: formatRatio(item.ratio), fill: item.ratio / 100 })),
     ),
   }
 }
 
-export function marketShareCard(days: MarketDay[], period: Period, focus: ShareFocus = {}): ShareDraft | undefined {
+export function marketShareCard(
+  locale: Locale,
+  days: MarketDay[],
+  period: Period,
+  focus: ShareFocus = {},
+): ShareDraft | undefined {
   const day = focus.day
-  const chart = marketShareChart(days, getMarketAuthorOrder(days), day)
+  const chart = marketShareChart(locale, days, getMarketAuthorOrder(days), day)
   const top = chart && leadingSeries(chart)
   if (!chart || !top) return undefined
-  const when = shareWhen(chart, period)
+  const served = { lab: top.label, share: top.value, when: shareWhen(locale, chart, period) }
   return {
     id: "market-share",
-    title: shareTitles["market-share"],
-    range: day === undefined ? shareRange(chart, period) : shareDate(chart, period),
+    locale,
+    title: shareTitle(locale, "market-share"),
+    range: day === undefined ? shareRange(locale, chart, period) : shareDate(locale, chart, period),
     highlight: top.label,
-    headline: `${top.label} served ${top.value} of OpenCode tokens ${when}`,
-    stat: { value: top.value, label: `of OpenCode tokens went to ${top.label} models, ${when}` },
+    headline: translate(locale, "share.market.headline", served),
+    stat: { value: top.value, label: translate(locale, "share.market.stat", served) },
     chart,
     view: { period, leaderboard: "weekly" },
-    variant: (next) => marketShareCard(days, period, { day: next.day }),
+    variant: (next) => marketShareCard(locale, days, period, { day: next.day }),
   }
 }
 
-export function geoCard(countries: CountryEntry[], unknown: string): ShareDraft | undefined {
+export function geoCard(locale: Locale, countries: CountryEntry[]): ShareDraft | undefined {
   const top = countries[0]
   if (!top) return undefined
   const max = Math.max(0, ...countries.map((country) => country.tokens)) || 1
-  const name = (country: string) => formatCountryName(country, "en", unknown)
+  const name = (country: string) => formatCountryName(country, tag(locale), translate(locale, "home.unknown"))
+  const sent = { country: name(top.country), share: formatGeoShare(top.share) }
   return {
     id: "geo-breakdown",
-    title: shareTitles["geo-breakdown"],
-    range: "Past 2 months",
-    highlight: name(top.country),
-    headline: `${name(top.country)} sent the most OpenCode tokens in the past 2 months, ${formatGeoShare(top.share)} of the total`,
-    stat: { value: formatGeoShare(top.share), label: `of OpenCode tokens came from ${name(top.country)}` },
+    locale,
+    title: shareTitle(locale, "geo-breakdown"),
+    range: translate(locale, "share.range.past2Months"),
+    highlight: sent.country,
+    headline: translate(locale, "share.geo.headline", sent),
+    stat: { value: sent.share, label: translate(locale, "share.geo.stat", sent) },
     chart: rankedShareChart(
       countries.map((item) => ({
         label: name(item.country),
@@ -512,13 +581,20 @@ export const shareSeriesLimit = 6
 
 export const shareOtherColor = "#6b6b6b"
 
-export function usageShareChart(data: UsagePoint[], format: (value: number) => string, total: string, day?: number) {
+export function usageShareChart(
+  locale: Locale,
+  data: UsagePoint[],
+  format: (value: number) => string,
+  total: string,
+  day?: number,
+) {
   const points = data.length > 1 ? data.slice(0, -1) : data
   const order = getTopModelsSegmentOrder(points)
   const keys = [...order.keys()].filter((key) => key !== "Other").slice(0, shareSeriesLimit)
   return stackedShareChart(
+    locale,
     points.map((point) => ({
-      label: formatTopModelsMobileDate(point.date),
+      label: shareDay(locale, point.start),
       start: point.start,
       values: new Map(point.segments.map((segment) => [segment.model, segment.value])),
     })),
@@ -530,12 +606,13 @@ export function usageShareChart(data: UsagePoint[], format: (value: number) => s
   )
 }
 
-export function marketShareChart(data: MarketDay[], order: Map<string, number>, day?: number) {
+export function marketShareChart(locale: Locale, data: MarketDay[], order: Map<string, number>, day?: number) {
   const days = data.length > 1 ? data.slice(0, -1) : data
   const keys = [...order.keys()].filter((key) => key !== "Other").slice(0, shareSeriesLimit)
   return stackedShareChart(
+    locale,
     days.map((day) => ({
-      label: marketDateParts(day.date).start,
+      label: shareDay(locale, day.start),
       start: day.start,
       values: new Map(day.authors.map((author) => [author.author, author.share])),
     })),
@@ -546,12 +623,13 @@ export function marketShareChart(data: MarketDay[], order: Map<string, number>, 
     })),
     (value) => `${value.toFixed(1)}%`,
     true,
-    "All labs",
+    translate(locale, "share.total.allLabs"),
     day,
   )
 }
 
 export function stackedShareChart(
+  locale: Locale,
   columns: { label: string; start?: string; values: Map<string, number> }[],
   named: Omit<ShareSeries, "value">[],
   format: (value: number) => string,
@@ -577,10 +655,10 @@ export function stackedShareChart(
     day,
     // That column's whole: its sum, or 100% when the columns are shares.
     total: {
-      label: `${total}, ${at?.label ?? ""}`,
+      label: translate(locale, "share.total.date", { label: total, date: at?.label ?? "" }),
       value: normalized ? "100%" : format(last.reduce((sum, value) => sum + value, 0)),
     },
-    series: [...named, { key: "other", label: "Other", color: shareOtherColor }]
+    series: [...named, { key: "other", label: translate(locale, "share.other"), color: shareOtherColor }]
       .map((item, index) => ({ ...item, value: format(last[index] ?? 0) }))
       .filter((item, index) => item.key !== "other" || (last[index] ?? 0) > 0),
   }
@@ -612,17 +690,26 @@ export function leadingSeries(chart: Extract<ShareChart, { kind: "stacked" }>) {
     .toSorted((a, b) => b.value - a.value)[0]?.item
 }
 
-export function shareRange(chart: Extract<ShareChart, { kind: "stacked" }>, period: Period) {
-  return period === "weekly" ? `Past ${chart.columns.length} weeks` : `Past ${chart.columns.length} days`
+export function shareRange(locale: Locale, chart: Extract<ShareChart, { kind: "stacked" }>, period: Period) {
+  return translate(locale, period === "weekly" ? "share.range.pastWeeks" : "share.range.pastDays", {
+    count: chart.columns.length,
+  })
 }
 
-export function shareWhen(chart: Extract<ShareChart, { kind: "stacked" }>, period: Period) {
-  const label = chart.columns.at(chart.day ?? -1)?.label ?? ""
-  return period === "weekly" ? `in the week of ${label}` : `on ${label}`
+export function shareWhen(locale: Locale, chart: Extract<ShareChart, { kind: "stacked" }>, period: Period) {
+  const date = chart.columns.at(chart.day ?? -1)?.label ?? ""
+  return translate(locale, period === "weekly" ? "share.when.week" : "share.when.day", { date })
 }
 
 // The eyebrow of a card about one column: its date.
-export function shareDate(chart: Extract<ShareChart, { kind: "stacked" }>, period: Period) {
-  const label = chart.columns.at(chart.day ?? -1)?.label ?? ""
-  return period === "weekly" ? `Week of ${label}` : label
+export function shareDate(locale: Locale, chart: Extract<ShareChart, { kind: "stacked" }>, period: Period) {
+  const date = chart.columns.at(chart.day ?? -1)?.label ?? ""
+  return period === "weekly" ? translate(locale, "share.range.weekOf", { date }) : date
+}
+
+// A column's first day (YYYY-MM-DD) as its axis label, as in Nov 23.
+function shareDay(locale: Locale, start: string) {
+  return new Intl.DateTimeFormat(tag(locale), { month: "short", day: "numeric", timeZone: "UTC" }).format(
+    Date.parse(`${start}T00:00:00Z`),
+  )
 }

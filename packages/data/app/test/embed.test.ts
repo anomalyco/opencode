@@ -4,6 +4,7 @@ import { embedSize, embedSnippet, embedUrl, packCard, readEmbed, unpackCard } fr
 
 const card: ShareCard & { view: { period: "daily"; leaderboard: "weekly" } } = {
   id: "top-models",
+  locale: "en",
   title: "Top Models",
   range: "Past 55 days",
   highlight: "DeepSeek V4.1 Flash",

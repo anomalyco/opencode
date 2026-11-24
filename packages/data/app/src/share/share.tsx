@@ -13,7 +13,9 @@ import {
   type ShareTiming,
 } from "./card"
 import { embedSnippet, embedUrl, packCard } from "./embed"
+import { useLanguage } from "../context/language"
 import { dataFlag } from "../lib/flag"
+import type { Locale } from "../lib/language"
 import { cardLogos, loadShareLogos } from "./logos"
 import { cycleShareOption, designMode, designOnly, setShareOption, shareControls, shareOptions } from "./design"
 import { shareTracks, type ShareTrack } from "./music"
@@ -50,13 +52,17 @@ function step(direction: 1 | -1) {
   setRequest(next.card())
 }
 
-/** The share icon in a section's heading. `card` reads the section's current view when it's pressed. */
-export function ShareButton(props: { card: () => ShareDraft | undefined; label: string }) {
+/**
+ * The share icon in a section's heading. `card` reads the section's current view when it's pressed, in the page's
+ * language.
+ */
+export function ShareButton(props: { card: (locale: Locale) => ShareDraft | undefined; label: string }) {
   if (!dataFlag("share")) return null
+  const language = useLanguage()
   let element: HTMLButtonElement | undefined
   onMount(() => {
     if (!element) return
-    const entry = { element, card: () => props.card() }
+    const entry = { element, card: () => props.card(language.locale()) }
     sections.add(entry)
     onCleanup(() => sections.delete(entry))
   })
@@ -68,9 +74,9 @@ export function ShareButton(props: { card: () => ShareDraft | undefined; label: 
       aria-label={props.label}
       title={props.label}
       aria-haspopup="dialog"
-      aria-expanded={request() !== undefined && request()?.id === props.card()?.id ? "true" : "false"}
+      aria-expanded={request() !== undefined && request()?.id === props.card(language.locale())?.id ? "true" : "false"}
       onClick={(event) => {
-        const card = props.card()
+        const card = props.card(language.locale())
         if (!card) return
         opener = event.currentTarget
         setRequest(card)
