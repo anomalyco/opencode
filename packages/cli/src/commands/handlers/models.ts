@@ -1,6 +1,7 @@
 import { OpenCode } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
-import { Effect } from "effect"
+import { Copilot } from "@opencode/schema/copilot"
+import { Effect, Schedule } from "effect"
 import { EOL } from "node:os"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -15,8 +16,16 @@ export default Runtime.handler(
       baseUrl: server.endpoint.url,
       headers: Service.headers(server.endpoint),
     })
-    yield* waitForPlugins(client, process.cwd())
-    const response = yield* Effect.promise(() => client.model.list({ location: { directory: process.cwd() } }))
+    const location = { directory: process.cwd() }
+    yield* waitForPlugins(client, location.directory)
+    // The Copilot catalog is fetched in the background, even after plugins are active.
+    const copilot = client.rpc(Copilot.Definition)
+    yield* Effect.tryPromise((signal) => copilot.catalogReady(undefined, { location, signal })).pipe(
+      Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced("100 millis") }),
+      Effect.timeout("10 seconds"),
+      Effect.ignore,
+    )
+    const response = yield* Effect.promise(() => client.model.list({ location }))
     const models = response.data
       .map((model) => `${model.providerID}/${model.id}`)
       .toSorted((a, b) => a.localeCompare(b))

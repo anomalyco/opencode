@@ -51,19 +51,27 @@ export const start = Effect.fnUntraced(function* <A>(input: {
   readonly active: Effect.Effect<Connection>
   readonly load: (current: A, options: Options) => Effect.Effect<{ readonly connection: Connection; readonly value: A }>
   readonly reload: Effect.Effect<void>
-}): Effect.fn.Return<{ readonly current: A }, never, Bus.Service | Scope.Scope> {
+}): Effect.fn.Return<
+  { readonly current: A; readonly ready: Effect.Effect<boolean> },
+  never,
+  Bus.Service | Scope.Scope
+> {
   const interval = input.interval ?? SharedCache.interval
   const lock = Semaphore.makeUnsafe(1)
   const loading = yield* FiberHandle.make<void, never>()
   const state = { current: input.initial }
+  let applied: string | undefined
   const apply = (next: { readonly connection: Connection; readonly value: A }) =>
     lock
       .withPermit(
         Effect.gen(function* () {
-          if (IntegrationConnection.key(next.connection) !== IntegrationConnection.key(yield* input.active)) return
-          if (Equal.equals(next.value, state.current)) return
-          state.current = next.value
-          yield* input.reload
+          const key = IntegrationConnection.key(next.connection)
+          if (key !== IntegrationConnection.key(yield* input.active)) return
+          if (!Equal.equals(next.value, state.current)) {
+            state.current = next.value
+            yield* input.reload
+          }
+          applied = key
         }),
       )
       .pipe(Effect.uninterruptible)
@@ -76,5 +84,9 @@ export const start = Effect.fnUntraced(function* <A>(input: {
     Effect.forever,
     Effect.forkScoped,
   )
-  return state
+  return Object.assign(state, {
+    ready: input.active.pipe(
+      Effect.map((connection) => !connection || IntegrationConnection.key(connection) === applied),
+    ),
+  })
 })

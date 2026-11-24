@@ -1,5 +1,6 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
+import { Copilot } from "@opencode/schema/copilot"
 import { isRecord } from "@opencode/util/record"
 import { Clock, Effect, Option, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
@@ -250,6 +251,8 @@ export const GithubCopilotPlugin = define({
         return { connection, value: { baseURL: url, token: credential.refresh, models, connection } }
       }),
     })
+
+    yield* ctx.rpc.register(Copilot.Definition, { catalogReady: () => discovered.ready }).pipe(Effect.orDie)
 
     yield* ctx.integration.transform((editor) => {
       editor.method.remove("github-copilot", { type: "key" })

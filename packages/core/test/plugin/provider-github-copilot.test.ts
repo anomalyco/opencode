@@ -1,9 +1,10 @@
 import { App } from "@opencode/core/app"
 import { Agent } from "@opencode/schema/agent"
+import { Copilot } from "@opencode/schema/copilot"
 import { Session } from "@opencode/core/session"
 import { Location } from "@opencode/core/location"
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Deferred, Effect } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { Model } from "@opencode/core/model"
@@ -19,6 +20,7 @@ import {
 } from "@opencode/core/plugin/provider/github-copilot"
 import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
+import { Rpc } from "@opencode/core/rpc"
 import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
 import { advance, drain } from "../lib/clock"
@@ -662,6 +664,7 @@ describe("GithubCopilotPlugin", () => {
   it.effect("routes Auto through Copilot's router and keeps the pick until compaction", () =>
     Effect.gen(function* () {
       const picks: unknown[] = []
+      const catalog = yield* Deferred.make<void>()
       const state = { pick: "routed", available: true, listed: false, auth: "" }
       const remote = (id: string, extra: Record<string, unknown> = {}) => ({
         model_picker_enabled: false,
@@ -682,6 +685,7 @@ describe("GithubCopilotPlugin", () => {
             return HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))
           if (request.url.endsWith("/models")) {
             state.listed = true
+            yield* Deferred.await(catalog)
             return HttpClientResponse.fromWeb(
               request,
               Response.json({
@@ -711,8 +715,12 @@ describe("GithubCopilotPlugin", () => {
       yield* connect({ apiEndpoint: "https://copilot.test" })
       yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, api))
       const models = yield* Model.Service
+      const rpc = yield* Rpc.Service
       yield* advance(() => state.listed)
+      expect(yield* rpc.call(Copilot.Definition.id, "catalogReady", undefined)).toBe(false)
+      yield* Deferred.succeed(catalog, undefined)
       yield* drain
+      expect(yield* rpc.call(Copilot.Definition.id, "catalogReady", undefined)).toBe(true)
       // Free plans hide every model from the picker; Auto is the one they can select.
       expect(
         (yield* models.available()).filter((model) => model.providerID === Provider.ID.githubCopilot).map((m) => m.id),
