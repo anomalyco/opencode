@@ -525,7 +525,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                         )}
                       </For>
                     </Row>
-                    <Row label="Code" variant="list">
+                    <Row label="Code" variant="fill">
                       <div data-slot="embed-code">
                         <code>
                           <For each={tokens(snippet())}>
@@ -579,7 +579,7 @@ function tokens(code: string) {
   })
 }
 
-function Row(props: { label: string; variant?: "list"; children: JSX.Element }) {
+function Row(props: { label: string; variant?: "list" | "fill"; children: JSX.Element }) {
   return (
     <div data-slot="row" data-variant={props.variant} role="group" aria-label={props.label}>
       <span data-slot="row-label">{props.label}</span>

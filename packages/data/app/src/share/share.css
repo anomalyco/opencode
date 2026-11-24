@@ -384,7 +384,9 @@
   }
 
   [data-slot="inspector-scroll"] {
+    display: flex;
     flex: 1;
+    flex-direction: column;
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -415,9 +417,11 @@
   }
 
   /* The option rows: each label on the left, its choices inline on the right, so the music sits high in the panel. */
+  /* The rows shrink to the panel only as far as a fill row (the embed code) lets them; otherwise the panel scrolls. */
   [data-slot="rows"] {
     display: flex;
-    flex: none;
+    flex: 0 1 auto;
+    min-height: 0;
     flex-direction: column;
     gap: 10px;
     padding: 16px 20px;
@@ -443,9 +447,30 @@
     }
   }
 
+  /* As tall as its content until the panel runs out, then down to the rows' foot, 16px above the footer's line, and
+     its content scrolls. */
+  [data-slot="row"][data-variant="fill"] {
+    flex: 0 1 auto;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    min-height: 0;
+
+    [data-slot="row-label"] {
+      padding-top: 10px;
+    }
+
+    [data-slot="row-options"] {
+      flex-direction: column;
+      min-height: 0;
+    }
+  }
+
   /* The code to paste: the whole snippet, wrapped, as tall as it needs, on the option buttons' fill and highlighted. */
   [data-slot="embed-code"] {
+    min-height: 0;
     padding: 10px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--stats-layer);
     border: 1px solid var(--stats-line-strong);
 
