@@ -88,7 +88,7 @@ const palettes = {
 
 type Palette = (typeof palettes)["dark"]
 
-const font = '"OpenTUI Mono", ui-monospace, monospace'
+const font = '"OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", ui-monospace, monospace'
 const pad = 80
 const hold = 1.6
 // The space under a stacked chart for its date labels.
@@ -117,7 +117,8 @@ export function barTiming(bar: number, verse: number, length: number, spectrum?:
 
 /** Waits for the card's font, so the first frame isn't drawn in the fallback. */
 export async function loadShareFonts() {
-  await Promise.all([document.fonts.load(`400 40px ${font}`), document.fonts.load(`700 40px ${font}`)])
+  // OpenMono alone: loading the stand-ins too would reject where a system font such as Consolas is missing.
+  await Promise.all([document.fonts.load(`400 40px "OpenMono"`), document.fonts.load(`700 40px "OpenMono"`)])
 }
 
 /** The video's length in seconds: the chart builds, each leading series takes a turn, then the still holds. */
@@ -494,13 +495,16 @@ function drawLegend(
     ctx.globalAlpha = focus.amount
     ctx.translate(0, (1 - focus.amount) * 16)
     ctx.textBaseline = "middle"
-    const middle = y + 36
+    // Set well clear of the chart's date labels.
+    const middle = y + 72
     ctx.fillStyle = focused.color
     ctx.fillRect(x, middle - 18, 36, 36)
     ctx.font = `700 52px ${font}`
     const value = ctx.measureText(focused.value).width
-    ctx.fillStyle = colors.text
+    // The amount in its series' colour, as the legend's square.
+    ctx.fillStyle = focused.color
     ctx.fillText(focused.value, x + layout.column * layout.columns - value, middle + 2)
+    ctx.fillStyle = colors.text
     ctx.fillText(
       truncate(ctx, focused.label, layout.column * layout.columns - value - 36 - 24 - 40),
       x + 36 + 24,

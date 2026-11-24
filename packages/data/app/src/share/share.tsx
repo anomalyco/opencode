@@ -397,6 +397,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                             <TrackOption
                               name={item.name}
                               explicit={item.explicit}
+                              cover={item.cover}
                               selected={track() === item.id}
                               playing={playing()}
                               onSelect={() => chooseTrack(item.id)}
@@ -442,6 +443,7 @@ function TrackOption(props: {
   selected: boolean
   playing?: boolean
   explicit?: boolean
+  cover?: string
   onSelect: () => void
 }) {
   return (
@@ -457,13 +459,16 @@ function TrackOption(props: {
       data-slot="track"
       onClick={props.onSelect}
     >
-      <i data-slot="track-icon" aria-hidden="true">
+      <i data-slot="track-icon" data-cover={props.cover ? "" : undefined} aria-hidden="true">
+        <Show when={props.cover}>{(cover) => <img src={cover()} alt="" width="24" height="24" />}</Show>
         <Show
           when={props.selected && props.playing !== undefined}
           fallback={
-            <svg width="16" height="16" viewBox="0 0 16 16">
-              <path d="M6 3.5v6.6a2 2 0 1 0 1.5 1.9V6h4V3.5H6Z" fill="currentColor" />
-            </svg>
+            <Show when={!props.cover}>
+              <svg width="16" height="16" viewBox="0 0 16 16">
+                <path d="M6 3.5v6.6a2 2 0 1 0 1.5 1.9V6h4V3.5H6Z" fill="currentColor" />
+              </svg>
+            </Show>
           }
         >
           <Show

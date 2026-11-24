@@ -14,6 +14,7 @@ export type ShareTrack = {
   verse: number
   length: number
   url: string
+  cover: string
 }
 
 export const shareTracks: ShareTrack[] = [
@@ -33,4 +34,5 @@ export const shareTracks: ShareTrack[] = [
   verse: 5,
   length: 20,
   url: `${import.meta.env.BASE_URL}share-music/${track.id}.mp3`,
+  cover: `${import.meta.env.BASE_URL}share-music/${track.id}.jpg`,
 }))

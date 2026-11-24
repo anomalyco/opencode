@@ -671,6 +671,35 @@
     background: var(--stats-accent);
   }
 
+  /* A track's single cover fills its square; on the chosen track the play state sits over a darkened cover. */
+  [data-slot="track-icon"][data-cover] {
+    position: relative;
+    overflow: hidden;
+    background: var(--stats-layer-2);
+
+    img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    > :not(img) {
+      position: relative;
+      color: #fff;
+    }
+  }
+
+  [data-slot="track"][aria-checked="true"] [data-slot="track-icon"][data-cover] {
+    color: #fff;
+    background: var(--stats-layer-2);
+
+    img {
+      filter: brightness(0.5);
+    }
+  }
+
   /* A small equaliser on the chosen track. */
   [data-slot="eq"] {
     display: flex;
