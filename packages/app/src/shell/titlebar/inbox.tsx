@@ -336,6 +336,7 @@ export function SidebarInbox() {
       get label() {
         return language.t("sidebar.inbox.section.recent")
       },
+      unlabeled: true,
       get count() {
         return sections().recent.length
       },
@@ -441,6 +442,8 @@ export function InboxSessionList(props: {
     count: number
     rows: () => JSX.Element
     more?: () => JSX.Element
+    /** Named for assistive tech only, without a visible header. */
+    unlabeled?: boolean
     expanded?: boolean
     onToggle?: () => void
   }[]
@@ -550,13 +553,20 @@ export function InboxSessionList(props: {
             <For each={props.sections}>
               {(section) => (
                 <Show when={section.count > 0}>
-                  <div role="group" aria-labelledby={`${id}-${section.id}`} class="flex shrink-0 flex-col gap-2 pb-2.5">
-                    <SectionHeader
-                      id={`${id}-${section.id}`}
-                      label={section.label}
-                      expanded={section.expanded}
-                      onToggle={section.onToggle}
-                    />
+                  <div
+                    role="group"
+                    aria-label={section.unlabeled ? section.label : undefined}
+                    aria-labelledby={section.unlabeled ? undefined : `${id}-${section.id}`}
+                    class="flex shrink-0 flex-col gap-2 pb-2.5"
+                  >
+                    <Show when={!section.unlabeled}>
+                      <SectionHeader
+                        id={`${id}-${section.id}`}
+                        label={section.label}
+                        expanded={section.expanded}
+                        onToggle={section.onToggle}
+                      />
+                    </Show>
                     <Show when={section.expanded !== false}>
                       <div class="flex flex-col gap-0.5">{section.rows()}</div>
                       {section.more?.()}
