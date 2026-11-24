@@ -304,7 +304,8 @@ download_with_progress() {
     # Read the size with ls because busybox wc -c reads the whole file.
     # Bash opens both files so a confined curl (e.g. snap) with a private /tmp can still write them.
     # npm's CDN omits content-length on HEAD, so read it from this request's headers.
-    curl -fsL -D /dev/stderr "$url" > "$output" 2> "$headers" &
+    # Clear any .curlrc write-out template before redirecting stdout into the archive.
+    curl -fsL --write-out '' -D /dev/stderr "$url" > "$output" 2> "$headers" &
     download_curl_pid=$!
 
     local length bytes
@@ -341,7 +342,7 @@ download_and_install() {
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
         local ret=0
         # Redirect in bash instead of passing -o to curl so confined builds (e.g. snap) don't need host /tmp access.
-        curl -f -# -L "$url" > "$tmp_dir/$filename" || ret=$?
+        curl -f -# -L --write-out '' "$url" > "$tmp_dir/$filename" || ret=$?
         # curl exits 23 when it cannot write the file, usually because the temporary directory is full.
         if [ "$ret" -eq 23 ]; then
             print_message error "Could not write the download to $tmp_dir. Make sure it has enough free space, or set TMPDIR to another directory, then try again." >&2
