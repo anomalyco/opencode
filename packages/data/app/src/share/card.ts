@@ -2,6 +2,7 @@
 // every frame of the video come from the same code. drawShareCard(ctx, card, options, time) draws the card as it
 // looks `time` seconds into its animation; time past shareDuration() is the still, which is also the PNG.
 
+import { shareLogo } from "./logos"
 import { spectrumLevel, type Spectrum } from "./spectrum"
 
 export type ShareSeries = { key: string; label: string; color: string; value: string }
@@ -21,6 +22,29 @@ export type ShareChart =
       kind: "ranked"
       rows: { rank: string; label: string; value: string; fill: number }[]
     }
+  | {
+      // The leaderboard's top three: each with its place, model, provider, tokens and change, and its provider's logo
+      // (a ProviderIcon id, share/logos.ts) large and faint behind it.
+      kind: "podium"
+      entries: {
+        place: string
+        label: string
+        provider: string
+        value: string
+        change: string
+        tone: Tone
+        logo: string
+      }[]
+    }
+  | {
+      // Two models side by side: their names and logos, then a row a metric, each model's value and bar; `lead` is the
+      // model the metric favours (higher usage, lower cost), or -1 for a tie.
+      kind: "versus"
+      models: { label: string; provider: string; logo: string }[]
+      rows: { label: string; values: string[]; fills: number[]; lead: number }[]
+    }
+
+export type Tone = "up" | "down" | "new" | "flat"
 
 export type ShareCard = {
   id: string
@@ -85,6 +109,8 @@ const palettes = {
     // The muted grey as a see-through veil, so the equaliser shows through a muted bar; over the plain card it reads
     // as `idle`.
     veil: "rgb(255 255 255 / 0.1)",
+    up: "#3fb950",
+    down: "#f85149",
   },
   light: {
     background: "#fbfbfb",
@@ -103,6 +129,8 @@ const palettes = {
     spotlight: "",
     other: "#e2e2e2",
     veil: "rgb(0 0 0 / 0.1)",
+    up: "#1a7f37",
+    down: "#cf222e",
   },
 }
 
@@ -263,7 +291,7 @@ export function drawShareCard(
     dotGrid(card.chart, width),
     baseline * 0.4,
     baseline,
-    card.chart.kind === "ranked" ? undefined : level,
+    card.chart.kind === "stacked" ? level : undefined,
   )
   // The equaliser's lit dots inside `clip`, for the muted bars to show; the rest of the grid stays hidden behind them.
   const litDots = (clip: Path2D) => {
@@ -325,6 +353,10 @@ export function drawShareCard(
       focus,
       time,
     )
+
+  const box = { x: pad, y: top, width: width - pad * 2, height: chartBottom - top }
+  if (card.chart.kind === "podium") drawPodium(ctx, card.chart, colors, box, focus, time)
+  if (card.chart.kind === "versus") drawVersus(ctx, card.chart, colors, box, progress, focus, time)
 
   drawFooter(ctx, card, colors, width, footer, rule)
   ctx.restore()
@@ -406,11 +438,15 @@ function highlightsEnd(card: ShareCard, options: ShareOptions, timing: ShareTimi
 
 function highlights(card: ShareCard, options: ShareOptions) {
   if (options.motion === "build") return []
+  const chart = card.chart
   const count =
-    card.chart.kind === "stacked"
-      ? card.chart.series.filter((item) => item.key !== "other").length
-      : card.chart.rows.length
-  return Array.from({ length: Math.min(card.chart.kind === "stacked" ? 5 : 3, count) }, (_, index) => index)
+    chart.kind === "stacked"
+      ? chart.series.filter((item) => item.key !== "other").length
+      : chart.kind === "podium"
+        ? chart.entries.length
+        : chart.rows.length
+  const most = chart.kind === "stacked" || chart.kind === "versus" ? 5 : 3
+  return Array.from({ length: Math.min(most, count) }, (_, index) => index)
 }
 
 function drawBackground(
@@ -929,6 +965,171 @@ function drawRanked(
 }
 
 // How many rows fit, how tall each is and the type size.
+// The top three as tiles: stacked on the tall cards, side by side on the wide one. Each rises in in turn, its
+// provider's logo large and faint, cropped by the tile's right edge; a highlighted tile keeps its colour while the
+// others fade back.
+function drawPodium(
+  ctx: CanvasRenderingContext2D,
+  chart: Extract<ShareChart, { kind: "podium" }>,
+  colors: Palette,
+  box: Box,
+  focus: Focus,
+  time: number,
+) {
+  const gap = 20
+  const across = box.width > box.height * 1.6
+  const count = chart.entries.length
+  const tile = across
+    ? { width: (box.width - gap * (count - 1)) / count, height: Math.min(box.height, 340) }
+    : { width: box.width, height: Math.min(260, (box.height - gap * (count - 1)) / count) }
+  const dark = colors.background !== palettes.light.background
+  chart.entries.forEach((entry, index) => {
+    const x = box.x + (across ? index * (tile.width + gap) : 0)
+    const y = box.y + (across ? 0 : index * (tile.height + gap))
+    const amount = settle(time, 0.15 + index * 0.12, 0.7)
+    if (amount <= 0) return
+    const dim = index === focus.index ? 0 : focus.amount
+    ctx.save()
+    ctx.globalAlpha = amount
+    ctx.translate(0, (1 - amount) * 24)
+    ctx.fillStyle = colors.track
+    ctx.globalAlpha = amount * 0.55
+    ctx.fillRect(x, y, tile.width, tile.height)
+    ctx.globalAlpha = amount
+    ctx.strokeStyle =
+      index === focus.index && focus.amount > 0 ? mix(colors.line, colors.faint, focus.amount) : colors.line
+    ctx.lineWidth = 2
+    ctx.strokeRect(x + 1, y + 1, tile.width - 2, tile.height - 2)
+    ctx.beginPath()
+    ctx.rect(x, y, tile.width, tile.height)
+    ctx.clip()
+    const logo = shareLogo(entry.logo, dark)
+    if (logo) {
+      const size = tile.height * 1.15
+      ctx.globalAlpha = amount * (dark ? 0.07 : 0.06)
+      ctx.drawImage(logo, x + tile.width - size * 0.78, y + (tile.height - size) / 2, size, size)
+      ctx.globalAlpha = amount
+    }
+    const inset = across ? 32 : 36
+    const size = across ? 34 : Math.min(44, tile.height * 0.19)
+    const small = Math.round(size * 0.72)
+    ctx.textBaseline = "alphabetic"
+    ctx.font = `400 ${small}px ${font}`
+    ctx.fillStyle = colors.faint
+    ctx.fillText(entry.place, x + inset, y + inset + small * 0.8)
+    // The name and provider at the foot on the left; the tokens and change at the foot on the right.
+    const foot = y + tile.height - inset
+    ctx.font = `400 ${small}px ${font}`
+    const value = ctx.measureText(entry.value).width
+    const change = ctx.measureText(entry.change).width
+    const right = x + tile.width - inset
+    ctx.fillStyle = mix(colors.text, colors.faint, dim)
+    ctx.fillText(entry.value, right - value, foot - size * 1.25)
+    ctx.fillStyle = mix(
+      entry.tone === "down" ? colors.down : entry.tone === "flat" ? colors.faint : colors.up,
+      colors.faint,
+      dim,
+    )
+    ctx.fillText(entry.change, right - change, foot)
+    ctx.fillStyle = mix(colors.muted, colors.faint, dim)
+    ctx.fillText(truncate(ctx, entry.provider, tile.width - inset * 2 - change - 24), x + inset, foot)
+    ctx.font = `700 ${size}px ${font}`
+    ctx.fillStyle = mix(colors.text, colors.faint, dim)
+    ctx.fillText(truncate(ctx, entry.label, tile.width - inset * 2 - value - 24), x + inset, foot - size * 1.25)
+    ctx.restore()
+  })
+}
+
+// Two models head to head: their names over their logos, large and faint, one each side; then a row a metric, its
+// name in the middle and each model's bar growing out from it, the one the metric favours in colour.
+function drawVersus(
+  ctx: CanvasRenderingContext2D,
+  chart: Extract<ShareChart, { kind: "versus" }>,
+  colors: Palette,
+  box: Box,
+  progress: number,
+  focus: Focus,
+  time: number,
+) {
+  const dark = colors.background !== palettes.light.background
+  const middle = box.x + box.width / 2
+  const half = box.width / 2
+  const head = Math.min(150, box.height * 0.26)
+  const name = Math.min(
+    40,
+    fit(ctx, chart.models.reduce((a, b) => (a.label.length > b.label.length ? a : b)).label, half - 40, 40, 700),
+  )
+  chart.models.forEach((model, side) => {
+    const amount = settle(time, 0.1 + side * 0.1, 0.7)
+    if (amount <= 0) return
+    const logo = shareLogo(model.logo, dark)
+    ctx.save()
+    ctx.globalAlpha = amount
+    if (logo) {
+      const size = head * 1.7
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(side === 0 ? 0 : middle, box.y - 40, side === 0 ? middle : ctx.canvas.width - middle, head + 80)
+      ctx.clip()
+      ctx.globalAlpha = amount * (dark ? 0.07 : 0.06)
+      ctx.drawImage(
+        logo,
+        side === 0 ? box.x - size * 0.2 : box.x + box.width - size * 0.8,
+        box.y + head / 2 - size / 2,
+        size,
+        size,
+      )
+      ctx.restore()
+    }
+    ctx.textBaseline = "alphabetic"
+    const align = (text: string) => (side === 0 ? box.x : box.x + box.width - ctx.measureText(text).width)
+    ctx.font = `700 ${name}px ${font}`
+    ctx.fillStyle = colors.text
+    const label = truncate(ctx, model.label, half - 40)
+    ctx.translate(0, (1 - amount) * 20)
+    ctx.fillText(label, align(label), box.y + head * 0.5)
+    ctx.font = `400 ${Math.round(name * 0.72)}px ${font}`
+    ctx.fillStyle = colors.muted
+    ctx.fillText(model.provider, align(model.provider), box.y + head * 0.5 + name * 1.2)
+    ctx.restore()
+  })
+  ctx.font = `400 26px ${font}`
+  ctx.fillStyle = colors.faint
+  ctx.globalAlpha = settle(time, 0.2, 0.6)
+  ctx.fillText("vs", middle - ctx.measureText("vs").width / 2, box.y + head * 0.5)
+  ctx.globalAlpha = 1
+
+  const top = box.y + head + 24
+  const row = Math.min(120, (box.y + box.height - top) / Math.max(1, chart.rows.length))
+  const grow = ease(Math.min(1, progress))
+  chart.rows.forEach((item, index) => {
+    const y = top + index * row
+    const dim = index === focus.index ? 0 : focus.amount
+    const amount = settle(time, 0.25 + index * 0.06, 0.6)
+    if (amount <= 0) return
+    ctx.save()
+    ctx.globalAlpha = amount
+    ctx.font = `400 22px ${font}`
+    ctx.fillStyle = mix(colors.faint, colors.mark, dim)
+    const label = item.label.toUpperCase()
+    spaced(ctx, label, middle - (ctx.measureText(label).width + label.length * 2) / 2, y + 22, 2)
+    const bar = y + 52
+    const reach = half - 8
+    item.values.forEach((value, side) => {
+      const lead = item.lead === side
+      const fill = Math.max(0.02, Math.min(1, item.fills[side] ?? 0)) * reach * grow
+      ctx.fillStyle = colors.track
+      ctx.fillRect(side === 0 ? middle - 4 - reach : middle + 4, bar, reach, 10)
+      ctx.fillStyle = mix(lead ? colors.lead : colors.idle, colors.idle, dim)
+      ctx.fillRect(side === 0 ? middle - 4 - fill : middle + 4, bar, fill, 10)
+      ctx.font = `${lead ? 700 : 400} 30px ${font}`
+      ctx.fillStyle = mix(lead ? colors.text : colors.muted, colors.faint, dim)
+      ctx.fillText(value, side === 0 ? box.x : box.x + box.width - ctx.measureText(value).width, y + 24)
+    })
+    ctx.restore()
+  })
+}
+
 function rankedRows(chart: Extract<ShareChart, { kind: "ranked" }>, box: Box) {
   const rows = chart.rows.slice(0, Math.max(1, Math.floor(box.height / 72)))
   const row = Math.min(112, box.height / Math.max(1, rows.length))

@@ -1,6 +1,7 @@
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { For, Show } from "solid-js"
 import { providerIconId } from "../lib/provider-icon"
+import { ShareButton, type ShareDraft } from "../share/share"
 import { catalogSlug, formatCatalogLabName, type ModelCatalogEntry } from "./model-catalog"
 
 export type ComparisonModelRef = {
@@ -57,6 +58,8 @@ export function ComparisonCardsSection(props: {
   description?: string
   compact?: boolean
   variant?: "panel" | "featured"
+  // The home page's comparisons share the top pair (share/sections.ts).
+  share?: () => ShareDraft | undefined
 }) {
   const featured = () => props.variant === "featured"
   const pairs = () => (featured() ? props.pairs.slice(0, 4) : props.pairs)
@@ -68,10 +71,19 @@ export function ComparisonCardsSection(props: {
         data-section={featured() ? "compare-home-related" : "model-panel"}
         data-variant={!featured() && props.compact ? "compact" : undefined}
       >
-        <h2 data-slot="section-title">
-          <strong>{props.title ?? "Model Comparisons"}.</strong>{" "}
-          <span>{props.description ?? "Compare usage, cost, limits, and features."}</span>
-        </h2>
+        <div data-slot="section-heading-row">
+          <h2 data-slot="section-title">
+            <strong>{props.title ?? "Model Comparisons"}.</strong>{" "}
+            <span>{props.description ?? "Compare usage, cost, limits, and features."}</span>
+          </h2>
+          <Show when={props.share}>
+            {(share) => (
+              <div data-slot="section-actions">
+                <ShareButton label={`Share ${props.title ?? "Model Comparisons"}`} card={share()} />
+              </div>
+            )}
+          </Show>
+        </div>
         <div data-component={featured() ? "compare-home-card-grid" : "comparison-card-grid"}>
           <For each={pairs()}>
             {(pair) => (featured() ? <FeaturedComparisonCard pair={pair} /> : <ComparisonPanelCard pair={pair} />)}

@@ -7,6 +7,7 @@ import type { Period } from "../component/period-toggle"
 
 export const shareSections = [
   "top-models",
+  "leaderboard",
   "unique-users",
   "retention",
   "session-cost",
@@ -14,6 +15,7 @@ export const shareSections = [
   "cache-ratio",
   "market-share",
   "geo-breakdown",
+  "comparison",
 ] as const
 
 export type ShareSection = (typeof shareSections)[number]
@@ -23,6 +25,7 @@ export type ShareView = { period: Period; leaderboard: Period }
 
 export const shareTitles: Record<ShareSection, string> = {
   "top-models": "Top Models",
+  leaderboard: "Leaderboard",
   "unique-users": "Unique Users",
   retention: "Weekly Retention",
   "session-cost": "Session Cost",
@@ -30,6 +33,7 @@ export const shareTitles: Record<ShareSection, string> = {
   "cache-ratio": "Cache Ratio",
   "market-share": "Market Share",
   "geo-breakdown": "Geographic Breakdown",
+  comparison: "Model Comparison",
 }
 
 const layouts = ["headline", "number", "chart"] as const
@@ -45,7 +49,8 @@ export function embedUrl(base: string, card: ShareCard & { view?: ShareView }, o
   url.searchParams.set("size", options.size)
   url.searchParams.set("style", options.theme)
   if (card.view) url.searchParams.set("period", card.view.period)
-  if (card.view && card.id === "top-models") url.searchParams.set("leaderboard", card.view.leaderboard)
+  if (card.view && (card.id === "top-models" || card.id === "leaderboard"))
+    url.searchParams.set("leaderboard", card.view.leaderboard)
   return url
 }
 

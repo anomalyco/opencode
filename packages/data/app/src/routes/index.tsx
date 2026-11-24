@@ -54,7 +54,9 @@ import {
 } from "../share/sections"
 import {
   cacheRatioCard,
+  comparisonCard,
   geoCard,
+  leaderboardCard,
   marketShareCard,
   retentionCard,
   sessionCostCard,
@@ -184,6 +186,7 @@ export default function StatsHome() {
                 <GeoBreakdownSection data={stats().country} />
                 <MethodologySection />
                 <ComparisonCardsSection
+                  share={() => comparisonCard(stats(), stats().catalogLabs)}
                   pairs={homeComparisonPairs(stats().leaderboard.weekly, stats().catalogLabs)}
                   title="Model Comparisons"
                   description="Popular model pairs from the leaderboard."
@@ -482,6 +485,10 @@ function TopModelsSection(props: {
             {i18n.t("chart.daily")}
           </button>
         </div>
+        <ShareButton
+          label={`Share ${i18n.t("nav.leaderboard")}`}
+          card={() => leaderboardCard(leaderboard(), period(), props.catalogLabs)}
+        />
       </div>
       <Show
         when={leaderboard().length > 0}

@@ -12,9 +12,9 @@
   margin-top: 0;
 }
 
-/* A neutral button, as tall as the Daily and Weekly toggle beside it. Scoped to the heading's actions so it outranks
-   the page's reset for buttons in [data-component="content"] (routes/index.css). */
-[data-page="stats"] [data-slot="section-actions"] [data-component="share-button"] {
+/* A neutral button, as tall as the Daily and Weekly toggle beside it. Scoped to a section heading's actions or the
+   leaderboard's toolbar so it outranks the page's reset for buttons in [data-component="content"] (routes/index.css). */
+[data-page="stats"] :is([data-slot="section-actions"], [data-slot="leaderboard-period"]) [data-component="share-button"] {
   position: relative;
   display: flex;
   align-items: center;
@@ -244,7 +244,7 @@
 
     /* A light card would sit pale on the light stage; the stage darkens a step under it. */
     &[data-card-theme="light"] {
-      background-color: light-dark(#e2e2e2, #151515);
+      background-color: light-dark(#d6d6d6, #151515);
     }
     background-image: radial-gradient(light-dark(var(--stats-line-strong), var(--stats-line)) 1px, transparent 1px);
     background-size: 16px 16px;

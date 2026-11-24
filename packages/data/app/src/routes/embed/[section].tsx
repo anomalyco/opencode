@@ -5,8 +5,8 @@ import { getRequestEvent } from "solid-js/web"
 import { baseUrl } from "../../lib/language"
 import { loadHomePage } from "../../lib/page-data"
 import { drawShareCard, loadShareFonts, mainLength, shareSizes, type ShareCard } from "../../share/card"
-import { readEmbed, unpackCard } from "../../share/embed"
-import { shareTitles } from "../../share/embed"
+import { readEmbed, shareTitles, unpackCard } from "../../share/embed"
+import { cardLogos, loadShareLogos } from "../../share/logos"
 import { homeShareCard } from "../../share/sections"
 import { setStatsPageCacheHeaders } from "../stats-cache"
 import "./embed.css"
@@ -74,7 +74,7 @@ export default function Embed() {
       cancelled = true
       cancelAnimationFrame(frame)
     })
-    void loadShareFonts().then(() => {
+    void Promise.all([loadShareFonts(), loadShareLogos(cardLogos(value.chart))]).then(() => {
       if (cancelled) return
       still()
       if (matchMedia("(prefers-reduced-motion: reduce)").matches) return

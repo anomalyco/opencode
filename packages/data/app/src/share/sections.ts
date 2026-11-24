@@ -11,7 +11,8 @@ import type {
 } from "@opencode/data-core/domain/home"
 import type { Period } from "../component/period-toggle"
 import type { HomePageData } from "../lib/page-data"
-import { formatCatalogLabName } from "../routes/model-catalog"
+import { providerIconId } from "../lib/provider-icon"
+import { formatCatalogLabName, isKnownCatalogLab } from "../routes/model-catalog"
 import type { ShareChart, ShareSeries } from "./card"
 import { shareTitles, type ShareSection, type ShareView } from "./embed"
 import type { ShareDraft } from "./share"
@@ -26,7 +27,123 @@ export function homeShareCard(section: ShareSection, data: HomePageData, view: S
   if (section === "token-cost") return tokenCostCard(data.tokenCost.slice(0, 13), names)
   if (section === "cache-ratio") return cacheRatioCard(data.cacheRatio.slice(0, 16), names)
   if (section === "market-share") return marketShareCard(data.market[view.period], view.period)
+  if (section === "leaderboard")
+    return leaderboardCard(data.leaderboard[view.leaderboard], view.leaderboard, data.catalogLabs)
+  if (section === "comparison") return comparisonCard(data, data.catalogLabs)
   return geoCard(data.country.slice(0, 15), "Unknown")
+}
+
+type LeaderboardEntry = HomePageData["leaderboard"]["weekly"][number]
+
+// The leaderboard's top three, as its featured cards show them.
+export function leaderboardCard(
+  entries: LeaderboardEntry[],
+  period: Period,
+  catalogLabs: readonly string[],
+): ShareDraft | undefined {
+  const leader = entries[0]
+  if (!leader) return undefined
+  const when = period === "weekly" ? "in the past 7 days" : "yesterday"
+  return {
+    id: "leaderboard",
+    title: shareTitles.leaderboard,
+    range: period === "weekly" ? "Past 7 days" : "Yesterday",
+    highlight: leader.name,
+    headline: `${leader.name} led OpenCode usage ${when}, with ${formatBillions(leader.tokens)} tokens`,
+    stat: { value: formatBillions(leader.tokens), label: `tokens for ${leader.name}, ${when}` },
+    chart: {
+      kind: "podium",
+      entries: entries.slice(0, 3).map((entry) => {
+        const known = isKnownCatalogLab(entry.provider, catalogLabs)
+        return {
+          place: String(entry.rank).padStart(2, "0"),
+          label: entry.model,
+          provider: known ? formatCatalogLabName(entry.provider) : "",
+          value: formatBillions(entry.tokens),
+          change: entry.change === null ? "New" : entry.change > 0 ? `+${entry.change}%` : `${entry.change}%`,
+          tone: entry.change === null ? "new" : entry.change > 0 ? "up" : entry.change < 0 ? "down" : "flat",
+          logo: known ? providerIconId(entry.author) : "synthetic",
+        }
+      }),
+    },
+    view: { period, leaderboard: period },
+  }
+}
+
+// The top two models of the past week, head to head on every measure the page has for both.
+export function comparisonCard(data: HomePageData, catalogLabs: readonly string[]): ShareDraft | undefined {
+  const [first, second] = data.leaderboard.weekly
+  if (!first || !second) return undefined
+  const pair = [first, second]
+  const latest = data.users.daily.at(-2) ?? data.users.daily.at(-1)
+  const measures: {
+    label: string
+    read: (model: string) => number | undefined
+    format: (value: number) => string
+    lower?: boolean
+  }[] = [
+    {
+      label: "Tokens, past 7 days",
+      read: (model) => pair.find((item) => item.model === model)?.tokens,
+      format: formatBillions,
+    },
+    {
+      label: "Daily users",
+      read: (model) => latest?.segments.find((item) => item.model === model)?.value,
+      format: formatUsers,
+    },
+    {
+      label: "Weekly retention",
+      read: (model) => data.retention.find((item) => item.model === model)?.rate,
+      format: formatRetentionRate,
+    },
+    {
+      label: "Cost per session",
+      read: (model) => data.sessionCost.find((item) => item.model === model)?.cost,
+      format: formatSessionCost,
+      lower: true,
+    },
+    {
+      label: "Output, per 1M tokens",
+      read: (model) => data.tokenCost.find((item) => item.model === model)?.total,
+      format: formatDollars,
+      lower: true,
+    },
+    {
+      label: "Input from cache",
+      read: (model) => data.cacheRatio.find((item) => item.model === model)?.ratio,
+      format: formatRatio,
+    },
+  ]
+  const rows = measures.flatMap((measure) => {
+    const values = pair.map((item) => measure.read(item.model))
+    if (values.some((value) => value === undefined)) return []
+    const [a, b] = values as [number, number]
+    const max = Math.max(a, b) || 1
+    const lead = a === b ? -1 : a < b === Boolean(measure.lower) ? 0 : 1
+    return [{ label: measure.label, values: [measure.format(a), measure.format(b)], fills: [a / max, b / max], lead }]
+  })
+  const ratio = first.tokens / Math.max(1, second.tokens)
+  return {
+    id: "comparison",
+    title: shareTitles.comparison,
+    range: "Past 7 days",
+    highlight: first.name,
+    headline: `${first.name} served ${ratio.toFixed(ratio >= 10 ? 0 : 1)}x the tokens of ${second.name} on OpenCode in the past 7 days`,
+    stat: { value: `${ratio.toFixed(ratio >= 10 ? 0 : 1)}x`, label: `the tokens of ${second.name}, for ${first.name}` },
+    chart: {
+      kind: "versus",
+      models: pair.map((entry) => {
+        const known = isKnownCatalogLab(entry.provider, catalogLabs)
+        return {
+          label: entry.model,
+          provider: known ? formatCatalogLabName(entry.provider) : "",
+          logo: known ? providerIconId(entry.author) : "synthetic",
+        }
+      }),
+      rows,
+    },
+  }
 }
 
 export function topModelsCard(

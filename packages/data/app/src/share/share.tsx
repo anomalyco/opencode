@@ -13,6 +13,7 @@ import {
   type ShareTiming,
 } from "./card"
 import { embedSnippet, embedUrl, packCard } from "./embed"
+import { cardLogos, loadShareLogos } from "./logos"
 import { cycleShareOption, designMode, designOnly, setShareOption, shareControls, shareOptions } from "./design"
 import { shareTracks, type ShareTrack } from "./music"
 import type { ShareView } from "./embed"
@@ -115,6 +116,14 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     if (!value) return undefined
     return { ...value, updatedAt: props.updatedAt, url: props.url }
   })
+  // The card's provider logos (the leaderboard and comparison cards); the preview redraws once they've loaded.
+  const [logos, setLogos] = createSignal(0)
+  createEffect(() => {
+    const value = card()
+    if (!value) return
+    const ids = cardLogos(value.chart)
+    if (ids.length > 0) void loadShareLogos(ids).then(() => setLogos((count) => count + 1))
+  })
   // A copy of the options, so reading them tracks every field.
   const options = createMemo<ShareOptions>(() => ({ ...shareOptions }))
   const size = createMemo(() => shareSizes[options().size])
@@ -186,6 +195,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     const value = card()
     const opts = options()
     const sound = music()
+    logos()
     if (!value || !preview || !ready()) return
     const ctx = preview.getContext("2d")
     if (!ctx) return
@@ -242,9 +252,10 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 
   const close = () => dialog?.close()
 
-  const file = (kind: "image" | "video") => {
+  const file = async (kind: "image" | "video") => {
     const value = card()
-    if (!value) return Promise.reject(new Error("Nothing to share"))
+    if (!value) throw new Error("Nothing to share")
+    await loadShareLogos(cardLogos(value.chart))
     if (kind === "image") return renderImage(value, options())
     const key = JSON.stringify([value, options(), track()])
     if (video?.key !== key) {
