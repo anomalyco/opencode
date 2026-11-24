@@ -70,7 +70,7 @@ const palettes = {
     faint: "#8f8f8f",
     line: "#ffffff1f",
     dot: "#1e1e1e",
-    meter: "#5e5e5e",
+    meter: "#8c8c8c",
     idle: "#262626",
     track: "#1c1c1c",
     accent: "#8190ff",
@@ -80,6 +80,8 @@ const palettes = {
     highlight: "#ffffff",
     // A highlighted series lights up in this colour instead of its own (the Top style's white); empty keeps its own.
     spotlight: "",
+    // The "Other" series: a mid grey on dark, a light one on the light card so it doesn't weigh down every column.
+    other: "#6b6b6b",
   },
   light: {
     background: "#fbfbfb",
@@ -96,6 +98,7 @@ const palettes = {
     lead: "#3b5cf6",
     highlight: "#161616",
     spotlight: "",
+    other: "#d0d0d0",
   },
 }
 
@@ -109,6 +112,13 @@ export function leaderColor(card: Pick<ShareCard, "chart">) {
 // The Leader style: the dark card, where only the winner keeps its colour. The other series turn to greys, the dot
 // grid takes a faint tint of the winner's colour, the equaliser plays in it, and the headline sets the winner's name
 // and the big number in it.
+// A dark or light card: the "Other" series takes the palette's grey.
+function themed(card: ShareCard, colors: Palette) {
+  if (card.chart.kind !== "stacked") return { colors, card }
+  const series = card.chart.series.map((item) => (item.key === "other" ? { ...item, color: colors.other } : item))
+  return { colors, card: { ...card, chart: { ...card.chart, series } } }
+}
+
 function leaderLook(card: ShareCard): { colors: Palette; card: ShareCard } {
   const color = leaderColor(card)
   const base = palettes.dark
@@ -191,7 +201,7 @@ export function drawShareCard(
   timing = freeTiming,
 ) {
   const [width, height] = shareSizes[options.size]
-  const look = options.theme === "leader" ? leaderLook(input) : { colors: palettes[options.theme], card: input }
+  const look = options.theme === "leader" ? leaderLook(input) : themed(input, palettes[options.theme])
   const colors = look.colors
   const card = look.card
   ctx.save()
