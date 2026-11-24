@@ -488,13 +488,26 @@
   }
 
   /* The code to paste: the whole snippet, wrapped, as tall as it needs, on the option buttons' fill and highlighted. */
+  /* An embed's code under the card: a few wrapped lines at most, scrolling past that, on the controls' fill. */
   [data-slot="embed-code"] {
-    min-height: 0;
-    padding: 10px;
+    flex: none;
+    width: min(640px, 100%);
+    max-height: 88px;
+    padding: 10px 12px;
     overflow-y: auto;
     overscroll-behavior: contain;
-    background: var(--editor-control);
-    border: 1px solid var(--editor-control-line);
+    text-align: left;
+    cursor: copy;
+    background: var(--stats-bg);
+    border: 1px solid var(--stats-line-strong);
+    border-radius: 0;
+    transition: background-color 120ms ease;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--stats-layer-2);
+      }
+    }
 
     code {
       display: block;
@@ -502,7 +515,6 @@
       color: var(--stats-text);
       white-space: pre-wrap;
       word-break: break-all;
-      user-select: all;
     }
 
     [data-token="tag"] {
@@ -972,8 +984,8 @@
   /* Fixed widths, so the bar never shifts as the choices change: an icon and its chevron, a size's value, the date
      (its longest label, a week), and the music. */
   [data-component="dropdown"][data-show="icon"] [data-slot="dropdown-trigger"] {
-    justify-content: space-between;
-    width: 56px;
+    gap: 4px;
+    width: 52px;
   }
 
   [data-component="dropdown"][data-show="value"] [data-slot="dropdown-trigger"] {

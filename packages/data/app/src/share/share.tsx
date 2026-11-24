@@ -699,7 +699,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                         ? `${Math.round((rendering() ?? 0) * 100)}%`
                         : copied()
                           ? "Copied"
-                          : "Export"}
+                          : format() === "embed"
+                            ? "Copy embed code"
+                            : "Export"}
                     </span>
                   </Show>
                 </button>
@@ -750,6 +752,14 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   style={{ "aspect-ratio": `${size()[0]} / ${size()[1]}` }}
                 />
               </div>
+              {/* An embed's code under the card, highlighted, as it will be copied; pressing it copies it too. */}
+              <Show when={format() === "embed" && snippet()}>
+                <button type="button" data-slot="embed-code" aria-label="Copy embed code" onClick={exportFile}>
+                  <code>
+                    <For each={tokens(snippet())}>{(token) => <span data-token={token.kind}>{token.text}</span>}</For>
+                  </code>
+                </button>
+              </Show>
               {/* Under the card, the section's name between arrows that step to the previous and next section; a saved or
                   copied notice takes the name's place for a moment. */}
               <div data-slot="editor-toolbar">
@@ -785,6 +795,24 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       </Show>
     </dialog>
   )
+}
+
+// The embed code split for highlighting: the tag's name, each attribute's name and quoted value, and the brackets.
+function tokens(code: string) {
+  return [...code.matchAll(/(<\/?)([\w-]+)|([\w-]+)(=)("[^"]*")|(>)|(\s+)/g)].flatMap((match) => {
+    if (match[2])
+      return [
+        { kind: "punctuation", text: match[1]! },
+        { kind: "tag", text: match[2] },
+      ]
+    if (match[3])
+      return [
+        { kind: "attribute", text: match[3] },
+        { kind: "punctuation", text: match[4]! },
+        { kind: "string", text: match[5]! },
+      ]
+    return [{ kind: match[6] ? "punctuation" : "space", text: match[0] }]
+  })
 }
 
 function pick<T>(items: readonly T[]) {
