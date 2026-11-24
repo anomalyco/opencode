@@ -113,6 +113,10 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   worktree: ConfigWorktree.Info.pipe(optional).annotate({
     description: "Directory defaults for local worktree creation",
   }),
+  auto_background: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Move a running session's blocking work to the background whenever a new message steers it (default: false)",
+  }),
   warming: ConfigWarming.Warming.pipe(optional).annotate({
     description: "Keep recently active sessions warm with transient model requests (default: false)",
   }),

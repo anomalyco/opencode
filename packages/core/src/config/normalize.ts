@@ -236,6 +236,7 @@ export function normalize(input: unknown): Result {
     websearch: Info.fields.websearch,
     worktree: Info.fields.worktree,
     warming: Info.fields.warming,
+    auto_background: Info.fields.auto_background,
   }
   Object.entries(nativeAtomic).forEach(([key, schema]) => {
     if (!own(input, key)) return

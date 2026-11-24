@@ -415,6 +415,18 @@ A provider's or model's `settings.cache.warming` overrides it, and
 [warming guide](/warming) for request behavior, customization, and cost
 considerations, and [cache lifetime](/models#cache-lifetime) for `cache.ttl`.
 
+### Auto background
+
+Move a running session's blocking tools to the background whenever a new
+message steers it, so the agent reads the message at its next step. Queued
+messages leave blocking tools in place. Disabled by default.
+
+```jsonc
+{
+  "auto_background": true,
+}
+```
+
 ### Skills
 
 Add directories or URLs that OpenCode should search for agent skills.

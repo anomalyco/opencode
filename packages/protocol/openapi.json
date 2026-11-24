@@ -17826,6 +17826,9 @@
           "worktree": {
             "$ref": "#/components/schemas/Config.Worktree"
           },
+          "auto_background": {
+            "type": "boolean"
+          },
           "warming": {
             "anyOf": [
               {
