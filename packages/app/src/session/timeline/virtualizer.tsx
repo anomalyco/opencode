@@ -28,6 +28,7 @@ import { Key } from "@solid-primitives/keyed"
 import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
+import { RECONNECT_OFFSET_EPSILON } from "./reconnect-machine"
 import { filterVirtualIndexes } from "./virtual-items"
 import {
   ACTIVATED,
@@ -346,11 +347,13 @@ export function createTimelineVirtualizer(input: Input) {
         dispatchCold(CHECK_REQUESTED)
       }
 
-      return observeElementOffsetReconnectAware(instance, reportOffset, () => {
+      return observeElementOffsetReconnectAware(instance, reportOffset, (returning) => {
         if (!active()) return
         virtualContent?.querySelectorAll<HTMLDivElement>("[data-index]").forEach(virtualizer.measureElement)
 
         if (input.follow.following()) virtualizer.scrollToEnd()
+
+        if (returning) restoreOffset()
         dispatchCold(CHECK_REQUESTED)
       })
     },
@@ -630,6 +633,19 @@ export function createTimelineVirtualizer(input: Input) {
   function prepareNavigation() {
     input.follow.dispatch({ type: "release" })
     flushTouchAdjustment()
+  }
+
+  // A view that is not shown leaves the document, and its element comes back at offset 0. The virtualizer still holds
+  // the offset the element had: where the reader was, which TanStack moves with the row there when rows arrive above
+  // it. Writing that offset back keeps the reader's place. A view that follows goes to its end instead.
+  function restoreOffset() {
+    const root = listRoot()
+    const offset = virtualizer.scrollOffset
+
+    if (!root || offset === null || input.follow.following()) return
+
+    if (Math.abs(root.scrollTop - offset) <= RECONNECT_OFFSET_EPSILON) return
+    virtualizer.options.scrollToFn(offset, {}, virtualizer)
   }
 
   function flushTouchAdjustment() {

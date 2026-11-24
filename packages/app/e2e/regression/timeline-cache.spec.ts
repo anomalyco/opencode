@@ -5,6 +5,14 @@ import { expected, messages } from "../utils/markdown-sessions"
 import { expectPath, holdRoute, seed, sessionHref, type SeedInput } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
+import {
+  assistantMessage,
+  historyMessages,
+  setupTimeline,
+  textPart,
+  userMessage,
+  validateTimelineMessages,
+} from "../utils/timeline"
 import { mockWorkspace } from "../utils/workspace"
 
 test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" })
@@ -615,6 +623,130 @@ for (const grouped of [true, false]) {
       .toBe(true)
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", "false")
+  })
+}
+
+// A view that is not shown leaves the document, and its scroll element comes back at offset 0.
+for (const way of [
+  { name: "from another narrow-screen view", landing: false, resize: false },
+  { name: "from another narrow-screen view, under an older page that landed meanwhile", landing: true, resize: false },
+  { name: "when the window narrows onto another view and widens again", landing: false, resize: true },
+]) {
+  test(`returns a reader to the rows they left ${way.name}`, async ({ page }) => {
+    const transcript = validateTimelineMessages([
+      ...historyMessages(40),
+      userMessage(),
+      assistantMessage([textPart("prt_place_tail", "Checking the route")]),
+    ])
+
+    const asked = Promise.withResolvers<void>()
+    const older = Promise.withResolvers<void>()
+
+    await setupTimeline(page, {
+      sessionMessages: transcript,
+      viewport: { width: 390, height: 844 },
+      pageMessages: (_, limit, before) => {
+        const end = before ? transcript.findIndex((message) => message.id === before) : transcript.length
+        const start = Math.max(0, end - Math.min(16, limit))
+
+        return { items: transcript.slice(start, end), cursor: start ? transcript[start]!.id : undefined }
+      },
+      beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+      onMessages: (request) => {
+        if (request.before) asked.resolve()
+      },
+    })
+
+    try {
+      const content = page.locator("[data-timeline-virtual-content]")
+      const scroller = page.locator(".scroll-view__viewport", { has: content })
+      const views = page.getByRole("tablist", { name: "Session view", exact: true })
+      const review = page.locator('[data-component="session-review"]')
+
+      // How far below the top of the timeline each of these rows is drawn; without keys, each row in view.
+      const rows = (keys?: string[]) =>
+        scroller.evaluate((element, keys) => {
+          const view = element.getBoundingClientRect()
+          const mounted = [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")]
+
+          const place = (row: HTMLElement) =>
+            `${row.dataset.timelineKey} at ${Math.round(row.getBoundingClientRect().top - view.top)}`
+
+          if (keys)
+            return keys.map((key) => {
+              const row = mounted.find((row) => row.dataset.timelineKey === key)
+
+              return row ? place(row) : `${key} is not mounted`
+            })
+
+          return mounted
+            .filter((row) => {
+              const rect = row.getBoundingClientRect()
+
+              return rect.bottom > view.top && rect.top < view.bottom
+            })
+            .map(place)
+        }, keys)
+
+      // Rows that a scroll or an older page mounts are measured once it comes to rest.
+      const settled = async (keys?: string[]) => {
+        const seen = { rows: "" }
+        await expect
+          .poll(async () => {
+            const previous = seen.rows
+            seen.rows = JSON.stringify(await rows(keys))
+
+            return seen.rows === previous
+          })
+          .toBe(true)
+
+        return rows(keys)
+      }
+
+      if (way.resize) {
+        // A narrow window that last showed Changes remembers that view while it is wide.
+        await views.getByRole("tab", { name: "Changes", exact: true }).click()
+        await expect(review).toBeVisible()
+        await page.setViewportSize({ width: 1056, height: 844 })
+      }
+
+      await expect(scroller.getByText("Checking the route", { exact: true })).toBeInViewport()
+      await scroller.hover()
+      // Up to the start of the loaded history, which asks for the older page, or only part of the way there.
+      await page.mouse.wheel(0, way.landing ? -100_000 : -700)
+
+      if (way.landing) await asked.promise
+      const before = await settled()
+      const keys = before.map((row) => row.slice(0, row.lastIndexOf(" at ")))
+      expect(keys.length).toBeGreaterThan(1)
+      const original = (await content.elementHandle())!
+      const height = await original.evaluate((element) => parseFloat(element.style.height))
+
+      // Away by the Changes tab, or without a click: the window narrows onto the view it remembers.
+      if (way.resize) await page.setViewportSize({ width: 700, height: 844 })
+
+      if (!way.resize) await views.getByRole("tab", { name: "Changes", exact: true }).click()
+      await expect(review).toBeVisible()
+      expect(await original.evaluate((element) => element.isConnected)).toBe(false)
+
+      if (way.landing) {
+        older.resolve()
+        // The page lands in the view that is not shown: its rows are in the list, above the reader's.
+        await expect
+          .poll(() => original.evaluate((element) => parseFloat(element.style.height)))
+          .toBeGreaterThan(height)
+      }
+
+      if (way.resize) await page.setViewportSize({ width: 1056, height: 844 })
+
+      if (!way.resize) await views.getByRole("tab", { name: "Session", exact: true }).click()
+      await expect(content).toBeVisible()
+      expect(await original.evaluate((element) => element.isConnected)).toBe(true)
+      await expect.poll(() => rows(keys)).toEqual(before)
+      expect(await settled(keys)).toEqual(before)
+    } finally {
+      older.resolve()
+    }
   })
 }
 

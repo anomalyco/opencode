@@ -9,7 +9,8 @@ export const RECONNECT_OFFSET_EPSILON = 1
  */
 export type ReconnectState =
   | { readonly status: "attached"; readonly attempt: number }
-  | { readonly status: "detached"; readonly attempt: number }
+  /** `returning`: the element was in the document before, so it had an offset there, which leaving dropped. */
+  | { readonly status: "detached"; readonly attempt: number; readonly returning: boolean }
   | {
       readonly status: "checking"
       readonly attempt: number
@@ -40,7 +41,8 @@ export type ReconnectEvent =
   | { readonly type: "disposed" }
 
 export type ReconnectEffect =
-  | { readonly type: "reconnected" }
+  /** `returning`: the element is back in the document, not in it for the first time. */
+  | { readonly type: "reconnected"; readonly returning: boolean }
   | { readonly type: "frame.schedule"; readonly attempt: number }
   | { readonly type: "frame.cancel" }
   | { readonly type: "offset.deliver"; readonly offset: number }
@@ -58,13 +60,15 @@ const NO_EFFECTS: readonly ReconnectEffect[] = Object.freeze([])
 
 const FRAME_CANCEL: readonly ReconnectEffect[] = Object.freeze([{ type: "frame.cancel" }])
 
-const RECONNECTED: ReconnectEffect = Object.freeze({ type: "reconnected" })
+const CONNECTED: ReconnectEffect = Object.freeze({ type: "reconnected", returning: false })
+
+const RETURNED: ReconnectEffect = Object.freeze({ type: "reconnected", returning: true })
 
 const FRAME_CANCEL_EFFECT: ReconnectEffect = Object.freeze({ type: "frame.cancel" })
 
 // Cached views can be constructed before their first attachment to the page.
 export function createReconnectState(connected: boolean): ReconnectState {
-  return connected ? { status: "attached", attempt: 0 } : { status: "detached", attempt: 0 }
+  return connected ? { status: "attached", attempt: 0 } : { status: "detached", attempt: 0, returning: false }
 }
 
 export function transitionReconnect(state: ReconnectState, event: ReconnectEvent): ReconnectTransition {
@@ -79,7 +83,7 @@ export function transitionReconnect(state: ReconnectState, event: ReconnectEvent
       if (state.status === "detached") return unchanged(state)
 
       return {
-        state: { status: "detached", attempt: state.attempt + 1 },
+        state: { status: "detached", attempt: state.attempt + 1, returning: true },
         effects: state.status === "checking" ? FRAME_CANCEL : NO_EFFECTS,
       }
     }
@@ -91,7 +95,8 @@ export function transitionReconnect(state: ReconnectState, event: ReconnectEvent
       state: { status: "checking", attempt, deadline: event.deadline, framesAfterDeadline: 0 },
       effects: [
         ...(state.status === "checking" ? [FRAME_CANCEL_EFFECT] : NO_EFFECTS),
-        RECONNECTED,
+        // A move within the page takes the element out of the document and back in one batch.
+        state.status === "detached" && !state.returning ? CONNECTED : RETURNED,
         { type: "frame.schedule", attempt },
       ],
     }
