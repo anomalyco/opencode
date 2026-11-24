@@ -12,6 +12,7 @@ import {
   session,
   sessionID,
   setupTimeline,
+  shell,
   status,
   textPart,
   userID,
@@ -293,6 +294,80 @@ test.describe("timeline history", () => {
     const writes = await page.evaluate(() => window.__scrollWrites ?? [])
     expect(writes.length).toBeGreaterThan(0)
     expect(Math.max(...writes)).toBe(1)
+  })
+
+  // The New timeline spaces rows by what the row before each one is. A page lands above a row the reader is looking
+  // at, in the middle of a turn or at a prompt, and that row must not take the space on top of what it shows.
+  test("keeps the New timeline's rows fixed while older pages land in a turn and above a prompt", async ({ page }) => {
+    const reply = (name: string) => Array.from({ length: 40 }, (_, index) => `${name} paragraph ${index}.`).join("\n\n")
+
+    const messages = [
+      userMessage([textPart("prt_gap_0", "Oldest prompt")], { id: "msg_gap_0", created: 1 }),
+      assistantMessage([textPart("prt_gap_1", "Oldest reply.")], {
+        id: "msg_gap_1",
+        parentID: "msg_gap_0",
+        created: 2,
+      }),
+      userMessage([textPart("prt_gap_2", "Middle prompt")], { id: "msg_gap_2", created: 3 }),
+      assistantMessage([shell("prt_gap_3", "completed", "ok")], { id: "msg_gap_3", parentID: "msg_gap_2", created: 4 }),
+      assistantMessage([textPart("prt_gap_4", reply("Middle"))], {
+        id: "msg_gap_4",
+        parentID: "msg_gap_2",
+        created: 5,
+      }),
+      userMessage([textPart("prt_gap_5", "Latest prompt")], { id: "msg_gap_5", created: 6 }),
+      assistantMessage([textPart("prt_gap_6", reply("Latest"))], {
+        id: "msg_gap_6",
+        parentID: "msg_gap_5",
+        created: 7,
+      }),
+    ]
+
+    const held = { turn: Promise.withResolvers<void>(), prompt: Promise.withResolvers<void>() }
+    const requests: { before?: string; phase: "start" | "end" }[] = []
+    await setupTimeline(page, {
+      settings: { newTimeline: true },
+      sessionMessages: messages,
+      // The newest page starts inside the middle turn, at its reply; the page before it starts at that turn's prompt.
+      pageMessages: (_, _limit, before) => {
+        if (before === "prompt") return { items: messages.slice(0, 2) }
+
+        if (before === "turn") return { items: messages.slice(2, 4), cursor: "prompt" }
+
+        return { items: messages.slice(4), cursor: "turn" }
+      },
+      beforeMessagesResponse: ({ before }) =>
+        before === "turn" || before === "prompt" ? held[before].promise : Promise.resolve(),
+      onMessages: (request) => requests.push(request),
+    })
+    const scroller = timelineScroller(page)
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+
+    const lands = async (before: "turn" | "prompt", older: string, visible: string[]) => {
+      // One upward gesture to the top of what is loaded, where the row the page lands above is in view.
+      await scroller.evaluate((element) => {
+        element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+        element.scrollTop = 0
+      })
+      await expect.poll(() => requests.some((request) => request.before === before)).toBe(true)
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0)
+      const rows = visible.map((text) => scroller.getByText(text, { exact: true }))
+      await Promise.all(rows.map((row) => expect(row).toBeInViewport()))
+
+      const positions = async () =>
+        (await Promise.all(rows.map((row) => row.boundingBox()))).map((box) => box && Math.round(box.y))
+
+      const settled = await positions()
+      expect(requests.some((request) => request.before === before && request.phase === "end")).toBe(false)
+
+      held[before].resolve()
+      // The older page has landed above the visible rows.
+      await expect(scroller.getByText(older, { exact: true })).toBeAttached()
+      await expect.poll(positions).toEqual(settled)
+    }
+
+    await lands("turn", "Middle prompt", ["Middle paragraph 0.", "Middle paragraph 4."])
+    await lands("prompt", "Oldest reply.", ["Middle prompt", "Middle paragraph 0."])
   })
 
   test("mounts every part once and in order while paging to the start", async ({ page }) => {
