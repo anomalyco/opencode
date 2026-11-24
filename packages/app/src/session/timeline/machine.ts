@@ -279,11 +279,12 @@ function releaseAnchor(state: Extract<FollowState, { type: "anchored" }>, event:
   if (event.type === "touch.start") return detached(event.nested ? "nested-touch" : "touch", false)
 
   // A scroll key the browser handles, an autoscroll or momentum shows only as movement the timeline did not make.
-  // Holding the tool against it would pull the reader back at the next measurement.
+  // Holding the tool against it would pull the reader back at the next measurement. The movement adds up with its
+  // sign, so a view that goes back and forth by a pixel stays held.
   if (event.type !== "scroll" || !event.reader) return state
-  const away = (state.away ?? 0) + Math.abs(event.reader)
+  const away = (state.away ?? 0) + event.reader
 
-  return away > ZOOM_SLACK ? DETACHED : { type: "anchored", anchor: state.anchor, away }
+  return Math.abs(away) > ZOOM_SLACK ? DETACHED : { type: "anchored", anchor: state.anchor, away }
 }
 
 // Following resumes by arriving at the end, either by scrolling there or by content shrinking under a viewport that

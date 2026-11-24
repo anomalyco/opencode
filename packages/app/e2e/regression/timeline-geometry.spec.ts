@@ -350,6 +350,50 @@ async function restingAtEnd(page: Page, scroller: Locator) {
   await expect.poll(() => fromEnd(scroller)).toBeLessThanOrEqual(1)
 }
 
+// Where the reading line is on the screen: 40% of the way down from the session header to the composer region.
+const readingLine = (scroller: Locator) =>
+  scroller.evaluate((element) => {
+    const view = element.getBoundingClientRect()
+    const style = getComputedStyle(element)
+    const top = view.top + (parseFloat(style.scrollPaddingTop) || 0)
+
+    return top + (view.bottom - (parseFloat(style.scrollPaddingBottom) || 0) - top) * 0.4
+  })
+
+// Where a marked word is on the screen: the top of the box of a DOM Range around it, or of the image that has the
+// word as its text. A file view keeps its text in a shadow root.
+const wordTop = (scroller: Locator, word: string) =>
+  scroller.evaluate((element, word) => {
+    const find = (root: Node): number | undefined => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT)
+
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const inside = node instanceof Element && node.shadowRoot ? find(node.shadowRoot) : undefined
+
+        if (inside !== undefined) return inside
+
+        if (node instanceof HTMLImageElement && node.alt === word) return node.getBoundingClientRect().top
+        const at = node instanceof Text ? node.data.indexOf(word) : -1
+
+        if (at < 0) continue
+        const range = document.createRange()
+        range.setStart(node, at)
+        range.setEnd(node, at + word.length)
+        const box = range.getBoundingClientRect()
+
+        if (box.height > 0) return box.top
+      }
+    }
+
+    return find(element)
+  }, word)
+
+// The rows have the sizes and the places they keep.
+const rowsSettled = (page: Page) => waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
+
+const waitingContent =
+  '[data-disclosure-pending], [data-component="file"]:not([data-file-ready]), [data-component="markdown"]:not([data-markdown-ready])'
+
 // The virtualizer has applied the row's content height.
 const unmeasured = (row: Locator) =>
   row.evaluate((element) => {
@@ -420,12 +464,32 @@ test("keeps the rows in view still while a file diff the reader scrolled up to r
     }
   }, later)
 
+  // The lowest the diff's row gets while its diff is still to come.
+  const waiting = await page.evaluateHandle((selector) => {
+    const state = { height: Number.POSITIVE_INFINITY }
+
+    const sample = () => {
+      const row = document.querySelector(selector)?.closest<HTMLElement>("[data-timeline-key]")
+
+      if (row?.querySelector('[data-disclosure-pending], [data-component="file"]:not([data-file-ready])'))
+        state.height = Math.min(state.height, row.getBoundingClientRect().height)
+      requestAnimationFrame(sample)
+    }
+
+    requestAnimationFrame(sample)
+
+    return state
+  }, `[data-timeline-part-id="${id}"]`)
+
   // One wheel puts the diff's row 150px into the view, above the watched row, before it has rendered anything.
   const distance = Math.round(watched.top + 150 - watched.y + 60 * (watched.index + 1))
   await scroller.hover()
   await page.mouse.wheel(0, -distance)
   await expect(patch.locator('[data-component="apply-patch-file-diff"]')).toBeVisible()
   await expect.poll(() => unmeasured(page.locator("[data-timeline-key]", { has: patch }))).toBeLessThanOrEqual(1)
+  // Its header alone is shorter than the 60px the list had for the row. The row does not shrink to it first.
+  expect(await waiting.evaluate((state) => state.height)).toBeGreaterThanOrEqual(60)
+  await waiting.dispose()
 
   // The watched row moved as far as the wheel did: the rows that rendered above it grew away from it.
   await expect(page.locator(later[watched.index]!)).toBeInViewport()
@@ -463,7 +527,23 @@ test("leaves the rows a reader rests on in place while a patch that arrives unde
   await page.mouse.wheel(0, -30)
   await waitForVisualSettle(page, [last])
   expect(Math.abs((await fromEnd(scroller)) - 30)).toBeLessThanOrEqual(1)
-  const resting = await scroller.evaluate((element) => element.scrollTop)
+
+  // Where the rows in view are on the screen.
+  const rows = () =>
+    scroller.evaluate((element) => {
+      const view = element.getBoundingClientRect()
+
+      return [...element.querySelectorAll<HTMLElement>("[data-timeline-part-id]")].flatMap((row) => {
+        const box = row.getBoundingClientRect()
+
+        return box.bottom > view.top && box.top < view.bottom
+          ? [[row.dataset.timelinePartId!, Math.round(box.y)] as const]
+          : []
+      })
+    })
+
+  const resting = await rows()
+  expect(resting.length).toBeGreaterThan(1)
 
   // A finished patch and the text after it arrive together, so the text is under the patch while its diff renders.
   await timeline.send([
@@ -473,8 +553,8 @@ test("leaves the rows a reader rests on in place while a patch that arrives unde
   await expect(patch.locator('[data-component="apply-patch-file-diff"]')).toBeVisible()
   await expect.poll(() => unmeasured(page.locator("[data-timeline-key]", { has: patch }))).toBeLessThanOrEqual(1)
 
-  expect(Math.abs((await scroller.evaluate((element) => element.scrollTop)) - resting)).toBeLessThanOrEqual(1)
-  await expect(page.locator(last)).toBeInViewport()
+  // Every row that was in view is where it was.
+  expect((await rows()).filter(([id]) => resting.some(([seen]) => seen === id))).toEqual(resting)
 })
 
 test("keeps the start of the session in view after Home while its rows render", async ({ page }) => {
@@ -512,64 +592,312 @@ test("keeps the start of the session in view after Home while its rows render", 
     .poll(() => unmeasured(page.locator("[data-timeline-key]", { has: page.getByText("First step 0.") })))
     .toBeLessThanOrEqual(1)
 
-  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0)
+  // The first row sits right under the header's inset, and the inset at the top of the view: the start of the session
+  // is where Home put it.
+  const start = await scroller.evaluate((element) => {
+    const inset = element.querySelector('[data-slot="session-header-inset"]')!.getBoundingClientRect()
+    const first = element.querySelector('[data-index="0"]')!.getBoundingClientRect()
+
+    return { inset: inset.top - element.getBoundingClientRect().top, row: first.top - inset.bottom }
+  })
+
+  expect(start.inset).toBe(0)
+  expect(Math.abs(start.row)).toBeLessThanOrEqual(1)
   await expect(prompt).toBeInViewport()
 })
 
-test("keeps the text a reader is on in place when the review panel narrows the timeline", async ({ page }) => {
+const fence = "```"
+
+const wraps = "Longer text follows that wraps again at another width. "
+
+const shortLines = (word: string, count: number) =>
+  Array.from({ length: count }, (_, index) => `${word}${index} fixed short line`)
+
+const wrapping = (word: string, count: number) =>
+  Array.from({ length: count }, (_, index) => `${word}${index} ${wraps.repeat(6)}`).join("\n\n")
+
+const chart = `data:image/svg+xml;base64,${Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="gray"/></svg>',
+).toString("base64")}`
+
+// What the reader is on, and how far it may move. Lines that do not wrap stay to the pixel. Words in text that wraps
+// again can end up a line away from the letter the timeline holds. `lead`: how far under the top of what is marked
+// the reading line is.
+for (const marked of [
+  {
+    content: "a code line above prose",
+    word: "CodeAbove40 ",
+    within: 2,
+    part: () =>
+      textPart(
+        "prt_words_marked",
+        [`${fence}text`, ...shortLines("CodeAbove", 60), fence, "", wrapping("AfterCode", 10)].join("\n"),
+      ),
+  },
+  {
+    content: "a code line under prose",
+    word: "CodeBelow20 ",
+    within: 2,
+    part: () =>
+      textPart(
+        "prt_words_marked",
+        [wrapping("BeforeCode", 10), "", `${fence}text`, ...shortLines("CodeBelow", 60), fence].join("\n"),
+      ),
+  },
+  {
+    content: "a table row",
+    word: "TableCell7",
+    within: 24,
+    part: () =>
+      textPart(
+        "prt_words_marked",
+        [
+          "| Name | Notes |",
+          "| --- | --- |",
+          ...Array.from({ length: 14 }, (_, index) => `| TableCell${index} | ${wraps.repeat(3)} |`),
+        ].join("\n"),
+      ),
+  },
+  {
+    content: "a list item",
+    word: "ListItem7 ",
+    within: 24,
+    part: () =>
+      textPart(
+        "prt_words_marked",
+        Array.from({ length: 14 }, (_, index) => `- ListItem${index} ${wraps.repeat(3)}`).join("\n"),
+      ),
+  },
+  {
+    content: "a line of tool output",
+    word: "ShellLine6 ",
+    within: 2,
+    part: () => shell("prt_words_marked", "completed", shortLines("ShellLine", 12).join("\n")),
+  },
+  {
+    content: "a line of a diff",
+    word: "value40 ",
+    within: 2,
+    part: () => lateDiff("prt_words_marked", "src/words.ts"),
+  },
+  {
+    // No letter is near the line: the timeline holds the image by its top.
+    content: "an image under prose",
+    word: "MarkedChart",
+    lead: 100,
+    within: 2,
+    part: () =>
+      textPart(
+        "prt_words_marked",
+        [
+          wrapping("BeforeImage", 10),
+          "",
+          `<img alt="MarkedChart" width="400" height="300" src="${chart}">`,
+          "",
+          wrapping("AfterImage", 4),
+        ].join("\n"),
+      ),
+  },
+  {
+    content: "a paragraph",
+    word: "PlainWord5 ",
+    within: 24,
+    part: () => textPart("prt_words_marked", wrapping("PlainWord", 10)),
+  },
+]) {
+  test(`keeps ${marked.content} a reader is on where it is when the review panel narrows the timeline`, async ({
+    page,
+  }) => {
+    await setupTimeline(page, {
+      settings: { timelineDetail: timelinePresets[0].value },
+      messages: [
+        userMessage(),
+        assistantMessage([
+          textPart("prt_words_before", wrapping("EarlierWord", 8)),
+          marked.part(),
+          textPart("prt_words_after", wrapping("LaterWord", 10)),
+        ]),
+      ],
+      viewport: { width: 1400, height: 800 },
+    })
+
+    const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+    const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+    const panel = page.locator("#review-panel")
+    await expect(page.getByText("LaterWord9", { exact: false })).toBeInViewport()
+    await restingAtEnd(page, scroller)
+    // Over the edge of the timeline: a wheel over tool output scrolls the output.
+    const view = (await scroller.boundingBox())!
+    await page.mouse.move(view.x + 8, view.y + view.height / 2)
+
+    // The reader wheels up to the marked word and puts it on the reading line.
+    while ((await wordTop(scroller, marked.word)) === undefined) {
+      await page.mouse.wheel(0, -400)
+      await rowsSettled(page)
+    }
+
+    await expect(scroller.locator(waitingContent)).toHaveCount(0)
+    await rowsSettled(page)
+    const lead = marked.lead ?? 0
+    await page.mouse.wheel(
+      0,
+      Math.round((await wordTop(scroller, marked.word))! + lead - (await readingLine(scroller))),
+    )
+    await expect(scroller.locator(waitingContent)).toHaveCount(0)
+    await rowsSettled(page)
+    const before = (await wordTop(scroller, marked.word))!
+    expect(Math.abs(before + lead - (await readingLine(scroller)))).toBeLessThanOrEqual(4)
+
+    await toggle.click()
+    await expect(panel).toHaveAttribute("aria-hidden", "false")
+    await rowsSettled(page)
+    expect(Math.abs((await wordTop(scroller, marked.word))! - before)).toBeLessThanOrEqual(marked.within)
+
+    await toggle.click()
+    await expect(panel).toHaveAttribute("aria-hidden", "true")
+    await rowsSettled(page)
+    expect(Math.abs((await wordTop(scroller, marked.word))! - before)).toBeLessThanOrEqual(marked.within)
+  })
+}
+
+// The timeline looks for what the reader is on with a document hit test. This counts them.
+const countHitTests = (page: Page) =>
+  page.addInitScript(() => {
+    const hitTest = Document.prototype.elementsFromPoint
+
+    Document.prototype.elementsFromPoint = function (this: Document, x: number, y: number) {
+      document.documentElement.dataset.hitTests = String(Number(document.documentElement.dataset.hitTests ?? 0) + 1)
+
+      return hitTest.call(this, x, y)
+    }
+  })
+
+const hitTests = (page: Page) => page.evaluate(() => Number(document.documentElement.dataset.hitTests ?? 0))
+
+test("does not look for what the reader is on while they type", async ({ page }) => {
+  // Each key made three hit tests while there was nothing to find: ten letters, thirty hit tests.
+  await countHitTests(page)
+  await setupTimeline(page)
+  const editor = page.locator('[data-component="composer-editor"]')
+  await expect(page.locator("[data-timeline-row]").first()).toBeVisible()
+  await editor.click()
+  await expect(editor).toBeFocused()
+  const before = await hitTests(page)
+
+  await editor.pressSequentially("ten letters")
+  await expect(editor).toHaveText("ten letters")
+  expect((await hitTests(page)) - before).toBe(0)
+})
+
+test("looks for what the reader is on once for each rest after a scroll key", async ({ page }) => {
+  // Each key made three hit tests when it was pressed and three more when its scroll came to rest.
+  await countHitTests(page)
   await setupTimeline(page, {
     messages: [
       userMessage(),
       assistantMessage(
-        Array.from({ length: 14 }, (_, index) => textPart(`prt_reflow_${index}`, paragraph(`Step ${index}`))),
+        Array.from({ length: 40 }, (_, index) => textPart(`prt_rest_${index}`, paragraph(`Rest step ${index}`))),
       ),
     ],
-    viewport: { width: 1400, height: 700 },
   })
 
   const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
-  const part = (index: number) => `[data-timeline-part-id="${renderedPartID(`prt_reflow_${index}`)}"]`
-  await expect(page.locator(part(13))).toBeInViewport()
+  const thumb = page.locator('[data-slot="session-timeline-visible"] .scroll-view__thumb')
+  await expect(page.getByText("Rest step 39.", { exact: false })).toBeInViewport()
   await restingAtEnd(page, scroller)
 
-  // The reader scrolls up three rows and rests. The row 40% of the way down from the session header to the composer
-  // region is the one they are on.
+  // The reader leaves the end. The rest after that key is the first to leave them on something.
+  await scroller.press("ArrowUp")
+  await expect.poll(() => hitTests(page)).toBeGreaterThanOrEqual(1)
+  await expect(thumb).toHaveAttribute("data-visible", "false")
+  const before = await hitTests(page)
+
+  for (const _ of Array.from({ length: 10 })) await scroller.press("ArrowUp")
+  await expect(thumb).toHaveAttribute("data-visible", "true")
+  // The thumb fades once the scroll has rested.
+  await expect(thumb).toHaveAttribute("data-visible", "false")
+  const looks = (await hitTests(page)) - before
+  // Ten keys come to rest ten times at most, and prose has a letter where the first look goes.
+  expect(looks).toBeGreaterThanOrEqual(1)
+  expect(looks).toBeLessThanOrEqual(10)
+})
+
+test("keeps the words a reader is on in place when another font lays the rows out again", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage(
+        Array.from({ length: 40 }, (_, index) =>
+          textPart(`prt_font_${index}`, `FontWord${index} ${"More context. ".repeat(30)}`),
+        ),
+      ),
+    ],
+    // Tall enough for five rows between the session header and the reading line.
+    viewport: { width: 1400, height: 1700 },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  await expect(page.getByText("FontWord39", { exact: false })).toBeInViewport()
+  await restingAtEnd(page, scroller)
+
+  // The reader wheels up, puts the first words of a row on the reading line, and takes the pointer away.
+  await scroller.hover()
+  await page.mouse.wheel(0, -1400)
+  await rowsSettled(page)
+  await expect(scroller.locator(waitingContent)).toHaveCount(0)
+  await page.mouse.wheel(0, Math.round((await wordTop(scroller, "FontWord24 "))! - (await readingLine(scroller))))
+  await rowsSettled(page)
+  await page.mouse.move(2, 2)
+  // The thumb fades once the scroll has rested.
+  await expect(page.locator('[data-slot="session-timeline-visible"] .scroll-view__thumb')).toHaveAttribute(
+    "data-visible",
+    "false",
+  )
+  const before = (await wordTop(scroller, "FontWord24 "))!
+  const height = await scroller.evaluate((element) => element.scrollHeight)
+
+  // Settings > Appearance > UI Font sets this variable. The width stays, and wider letters wrap every row again:
+  // the rows in view above the line get taller too.
+  await page.evaluate(() => document.documentElement.style.setProperty("--font-family-sans", "monospace"))
+  await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+  await rowsSettled(page)
+
+  // The row starts with those words, and the letter the timeline holds is further along its first line.
+  expect(Math.abs((await wordTop(scroller, "FontWord24 "))! - before)).toBeLessThanOrEqual(24)
+})
+
+test("keeps the words a reader is on where they are on the screen when the window narrows to the phone layout", async ({
+  page,
+}) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage(
+        Array.from({ length: 48 }, (_, index) => textPart(`prt_layout_${index}`, `LayoutWord${index}.`)),
+      ),
+    ],
+    viewport: { width: 1000, height: 700 },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  await expect(page.getByText("LayoutWord47.", { exact: true })).toBeInViewport()
+  await restingAtEnd(page, scroller)
+
   await scroller.hover()
   await page.mouse.wheel(0, -650)
-  await expect(page.locator(part(13))).not.toBeInViewport()
-  await waitForVisualSettle(page, [part(9), part(10)])
+  await rowsSettled(page)
+  await expect(scroller.locator(waitingContent)).toHaveCount(0)
+  await page.mouse.wheel(0, Math.round((await wordTop(scroller, "LayoutWord30."))! - (await readingLine(scroller))))
+  await rowsSettled(page)
+  const before = (await wordTop(scroller, "LayoutWord30."))!
+  const top = await scroller.evaluate((element) => element.getBoundingClientRect().top)
 
-  const reading = () =>
-    scroller.evaluate((element) => {
-      const view = element.getBoundingClientRect()
-      const style = getComputedStyle(element)
-      const top = view.top + (parseFloat(style.scrollPaddingTop) || 0)
-      const line = top + (view.bottom - (parseFloat(style.scrollPaddingBottom) || 0) - top) * 0.4
-
-      const row = [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find((row) => {
-        const box = row.getBoundingClientRect()
-
-        return box.top <= line && box.bottom > line
-      })!
-
-      const box = row.getBoundingClientRect()
-
-      return { key: row.dataset.timelineKey!, into: (line - box.top) / box.height, height: box.height }
-    })
-
-  const before = await reading()
-  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
-  await expect(page.locator("#review-panel")).toHaveAttribute("aria-hidden", "false")
-  const row = page.locator(`[data-timeline-key="${before.key}"]`)
-  await expect
-    .poll(() => row.evaluate((element) => element.getBoundingClientRect().height))
-    .toBeGreaterThan(before.height)
-  await expect.poll(() => unmeasured(row)).toBeLessThanOrEqual(1)
-
-  // The words that were on that line are within two lines of it: every row wrapped, and none pushed them away.
-  const after = await reading()
-  expect(after.key).toBe(before.key)
-  expect(Math.abs(after.into - before.into) * after.height).toBeLessThanOrEqual(40)
+  // Below 768px a bar opens above the timeline, and the space above the first row gets shorter. One-line rows keep
+  // their height, so only the place where the list starts moves.
+  await page.setViewportSize({ width: 700, height: 700 })
+  await expect.poll(() => scroller.evaluate((element) => element.getBoundingClientRect().top)).not.toBe(top)
+  await rowsSettled(page)
+  expect(Math.abs((await wordTop(scroller, "LayoutWord30."))! - before)).toBeLessThanOrEqual(2)
 })
 
 for (const outline of [

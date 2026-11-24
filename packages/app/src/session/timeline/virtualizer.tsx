@@ -74,6 +74,9 @@ const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 // Content a row still waits for: a deferred body, a file view, Markdown or a diagram that has not rendered.
 const pendingContent = `[data-disclosure-pending], [data-component="file"]:not([data-file-ready]), [data-mermaid-pending], ${pendingMarkdown}`
 
+// The attributes those markers change with.
+const pendingAttributes = ["data-disclosure-pending", "data-file-ready", "data-mermaid-pending", "data-markdown-ready"]
+
 const upwardKeys = new Set(["up", "page-up", "home"])
 
 const settledEvent = { type: "scroll.settled", atReachableEnd: false } as const
@@ -214,8 +217,10 @@ export function createTimelineVirtualizer(input: Input) {
 
   const knownKeys = new Set(rowKeys())
   const addedKeys = new Set<string>()
-  // Rows measured with no content still to come, or acted on: the reader may have seen them at their real height.
+  // Rows measured with no content still to come: the reader may have seen them at their real height.
   const settled = new Set<string>()
+  // Rows the reader pressed in, until they are next resized with no content still to come.
+  const acted = new Set<string>()
 
   const getItemKey = createMemo(() => {
     const keys = rowKeys()
@@ -280,22 +285,38 @@ export function createTimelineVirtualizer(input: Input) {
   })
 
   const measuredElements = new WeakSet<Element>()
+  // The frame each row's element was first observed in. A row first observed in the frame being rendered has not
+  // been shown yet.
+  const shownFrom = new WeakMap<Element, number>()
+  // Rows that keep the room the list gave them while their content is still to come.
+  const holding = new WeakSet<Element>()
   // The finger's last position, a measurement only: whether it is down is the follow machine's `isTouchHeld`.
   let lastTouchY = 0
   let touchTarget: EventTarget | null = null
   // Size compensation deferred during one resize delivery, committed or dropped before the delivery ends.
   let touchAdjustment = 0
   // The first and last of the rows in the scroll port that hold still while the size batch being applied resizes
-  // the others: all but the unsettled rows it resizes. -1 for none. Unset outside a batch, while the view is where
-  // a jump or the end put it, and at the start of the list.
+  // the others: the rows the reader has seen at their real height that it leaves as they are. -1 for none. Unset
+  // outside a batch, while the view is where a jump or the end put it, and at the start of the list.
   let still: { first: number; last: number } | undefined
-  // The width each row was last measured at, and the last of those. Text wraps again at a new width.
+  // The width each row was last measured at. Text wraps again at a new width.
   const widths = new WeakMap<Element, number>()
-  let rowWidth = 0
   // The row measured last changed width, a measurement only: the resize that follows it reads it once.
   let wrapped = false
-  // Whether the part of a wrapped row the size batch is resizing lies above the reading line. Unset otherwise.
+  // Whether the change that the size batch is applying to a row is above what the reader is on. Unset when that is
+  // not known, or does not lead the row.
   let aboveLine: boolean | undefined
+  // Where the first row would be on the screen with the list at its start, as last reported. Unset while hidden.
+  let origin: number | undefined
+
+  // What the reader is on: the content the reading line met when the view last came to rest. A letter, or the element
+  // there when no letter is near. `lead`: how far below that content's top the line was. `at`: how far below its
+  // row's top. `y`: where on the screen. Unset while the reader scrolls.
+  let reading: { key: string; node: Node; offset: number | undefined; lead: number; at: number; y: number } | undefined
+
+  // The look at what the reader is on that waits for the next frame to render. `fresh`: it starts over at the reading
+  // line. Otherwise it follows what was taken to its new place. `again`: it may wait one more frame for a row.
+  let pendingLook: { fresh: boolean; again: boolean; cancel: () => void } | undefined
   let maxScroll = 0
   let virtualContent: HTMLDivElement | undefined
   let rowLayer: HTMLDivElement | undefined
@@ -360,6 +381,8 @@ export function createTimelineVirtualizer(input: Input) {
           )
           callback({ width: rect.width, height: Math.max(0, rect.height - bottomInset()) })
         })
+
+        if (root) keepOrigin(root, rect.height > 0)
       }
 
       return observeElementRect(instance, (rect) => {
@@ -397,7 +420,15 @@ export function createTimelineVirtualizer(input: Input) {
         dispatchCold(CHECK_REQUESTED)
       }
 
-      return observeElementOffsetReconnectAware(instance, reportOffset, () => {
+      // A scroll that has come to rest leaves the reader on something. The other reports of the offset come from the
+      // timeline's own writes, some of them while the rows hold a layout their boxes do not have yet.
+      const settle = (offset: number, scrolling: boolean) => {
+        reportOffset?.(offset, scrolling)
+
+        if (!scrolling) lookAfterRender(true)
+      }
+
+      return observeElementOffsetReconnectAware(instance, settle, () => {
         if (!active()) return
         const root = listRoot()
 
@@ -423,15 +454,13 @@ export function createTimelineVirtualizer(input: Input) {
         )
       const initial = !measuredElements.has(element)
       measuredElements.add(element)
+
+      if (entry && !shownFrom.has(element)) shownFrom.set(element, frame())
       const box = entry?.borderBoxSize[0]
 
       if (box) {
         wrapped = (widths.get(element) ?? box.inlineSize) !== box.inlineSize
         widths.set(element, box.inlineSize)
-
-        // No row has been seen at the height it has at a new width.
-        if (box.inlineSize !== rowWidth) settled.clear()
-        rowWidth = box.inlineSize
 
         return Math.round(box.blockSize)
       }
@@ -526,9 +555,24 @@ export function createTimelineVirtualizer(input: Input) {
     if (!row) return
     const key = TimelineRow.key(row)
 
-    if ((virtualizer.itemSizeCache.get(key) ?? fallbackItemSize) === size) {
+    const known = virtualizer.itemSizeCache.get(key) ?? fallbackItemSize
+
+    if (known === size) {
       pendingSizes.delete(index)
       settle(key)
+
+      return
+    }
+
+    const element = virtualizer.elementsCache.get(key)
+
+    // A placeholder is not the row's height. While its content is still to come, a row keeps the room the list has
+    // given it: shrinking to the placeholder moved the rows around it once, and the content moved them again. Only
+    // under a reader who rests where they scrolled. A view that follows the end shows a new row at the height it
+    // has: with the 60px the list gives a new row, the reply above it went up by that room and came back down.
+    if (size < known && isRoaming(input.follow.peek()) && element?.querySelector(pendingContent)) {
+      pendingSizes.delete(index)
+      holding.add(element)
 
       return
     }
@@ -554,6 +598,10 @@ export function createTimelineVirtualizer(input: Input) {
 
       // Rows that left the list shorten the scroll range. Read the clamp before these sizes grow the range again.
       if (root && input.follow.following()) readScroll(root)
+
+      // The rows can report their sizes before the viewport reports its own. What the reader is on is looked for
+      // where the rows were before the layout moved the list's start.
+      if (root) keepOrigin(root, root.clientHeight > 0)
       // The hidden pinned mount needs one bottom write after the whole batch,
       // not a layout-forcing scroll adjustment for every measured row.
       dispatchCold(SIZES_FLUSHING)
@@ -561,45 +609,54 @@ export function createTimelineVirtualizer(input: Input) {
       const offset = virtualizer.scrollOffset ?? 0
       const top = offset + virtualizer.options.scrollPaddingStart
       const range = isRoaming(input.follow.peek()) && offset > 0 ? virtualizer.range : null
-      const resizing = new Set(sizes.flatMap(([index, value]) => (settled.has(value.key) ? [] : [index])))
+      const resizing = new Set(sizes.map(([index]) => index))
 
       const held = range
         ? Array.from(
             { length: range.endIndex - range.startIndex + 1 },
             (_, offset) => range.startIndex + offset,
-          ).filter((index) => !resizing.has(index) && (virtualizer.measurementsCache[index]?.end ?? top) > top)
+          ).filter((index) => {
+            const item = virtualizer.measurementsCache[index]
+
+            return !!item && !resizing.has(index) && item.end > top && familiar(String(item.key))
+          })
         : undefined
 
       still = held && { first: held[0] ?? -1, last: held.at(-1) ?? -1 }
-      // A row that wrapped again keeps the reading line at the same fraction of its height: the size in between is
-      // the row with only the part of its change above the line.
-      const line = readingLine(offset)
+      // A layout can change a row anywhere in it: code keeps its lines where the prose under it wraps again, and
+      // content that arrives late arrives at one place. So what the reader is on says where they are: the rows
+      // before its row change above them, the rows after it below them, and its own row by as much as it moved
+      // them. It leads every row while the view rests where the reader scrolled it, and a row that wrapped again in
+      // any view. Not at the start of the list, where the start stays.
+      const words = offset > 0 && (held || sizes.some(([, value]) => value.wrapped)) ? readingPlace() : undefined
 
-      const between = new Map(
-        sizes.flatMap(([index, value]) => {
-          const item = value.wrapped ? virtualizer.measurementsCache[index] : undefined
+      // TanStack folds each correction into the offset it believes, and stops that offset at the start of the list.
+      // Near the start, rows that got shorter before others got taller ran it into that stop, and the rows in view
+      // ended too high by what the stop took. Rows that grow go first.
+      const grows = ([index, value]: (typeof sizes)[number]) =>
+        value.size > (virtualizer.itemSizeCache.get(value.key) ?? virtualizer.measurementsCache[index]?.size ?? 0)
 
-          if (!item) return []
-          const above = offset > 0 && item.size > 0 ? Math.min(1, Math.max(0, (line - item.start) / item.size)) : 0
-
-          return [[index, Math.round(item.size + (value.size - item.size) * above)] as const]
-        }),
-      )
+      const ordered = [...sizes.filter(grows), ...sizes.filter((entry) => !grows(entry))]
 
       batch(() => {
         scrollHeld = true
 
         try {
-          sizes.forEach(([index, value]) => {
+          ordered.forEach(([index, value]) => {
             const row = rows()[index]
 
             if (!row || TimelineRow.key(row) !== value.key) return
-            const split = between.get(index)
-            // TanStack compensates a resize in full or not at all, so a wrapped row resizes in two steps.
-            const steps = split === undefined ? [value.size] : [split, value.size]
+            const item = virtualizer.measurementsCache[index]
+            // A row the reader pressed in keeps its own top edge.
+            const led = words && item && (held || value.wrapped) && !acted.has(value.key) ? words : undefined
+
+            // TanStack compensates a resize in full or not at all, so the row the reader is on resizes in two steps:
+            // first by what its change moved them, then by the rest.
+            const steps =
+              led && index === led.index ? [Math.max(0, Math.round(item.size + led.moved)), value.size] : [value.size]
 
             steps.forEach((size, step) => {
-              aboveLine = split === undefined ? undefined : step === 0
+              aboveLine = !led ? undefined : index === led.index ? step === 0 : index < led.index
               resizeItem(index, size)
 
               // TanStack recalculates its range after each resize. Advance the
@@ -626,7 +683,12 @@ export function createTimelineVirtualizer(input: Input) {
       })
       aboveLine = undefined
       still = undefined
-      sizes.forEach(([, value]) => settle(value.key))
+      keepReading(words?.now)
+      sizes.forEach(([, value]) => {
+        settle(value.key)
+
+        if (!virtualizer.elementsCache.get(value.key)?.querySelector(pendingContent)) acted.delete(value.key)
+      })
       dispatchCold(SIZES_FLUSHED)
       pinAnchor()
 
@@ -650,6 +712,191 @@ export function createTimelineVirtualizer(input: Input) {
     if (element?.isConnected && !element.querySelector(pendingContent)) settled.add(key)
   }
 
+  // The frame being rendered, or the last one rendered.
+  function frame() {
+    return Number(document.timeline.currentTime ?? 0)
+  }
+
+  // The reader has seen the row at its real height: it has settled, and it was shown before this frame.
+  function familiar(key: string) {
+    const element = virtualizer.elementsCache.get(key)
+    const from = element && shownFrom.get(element)
+
+    return settled.has(key) && from !== undefined && from !== frame()
+  }
+
+  // A layout that moves the list's start on the screen moves every row with it: below 768px a bar opens above the
+  // timeline and the space above the first row gets shorter. For a reader who rests where they scrolled, the rows
+  // keep their place on the screen. A view at the end, at the start or where navigation put it keeps its place in
+  // the scroll port.
+  function keepOrigin(root: HTMLDivElement, shown: boolean) {
+    const next =
+      shown && virtualContent?.isConnected ? virtualContent.getBoundingClientRect().top + root.scrollTop : undefined
+
+    const shift = next === undefined || origin === undefined ? 0 : next - origin
+
+    // A zoomed layout places the list a fraction of a pixel off from one layout to the next.
+    if (next !== undefined && origin !== undefined && Math.abs(shift) < 1) return
+    const moved = Math.round(shift)
+    origin = next
+
+    if (!moved || !isRoaming(input.follow.peek()) || root.scrollTop <= 0) return
+    readScroll(root)
+    elementScroll(root.scrollTop + moved, {}, virtualizer)
+    syncScroll(root)
+    reportOffset?.(root.scrollTop, virtualizer.isScrolling)
+  }
+
+  // The box of a text position's character, or of an element.
+  function readingBox(node: Node, offset: number | undefined) {
+    if (offset === undefined) return node instanceof Element ? node.getBoundingClientRect() : undefined
+
+    if (!(node instanceof Text) || node.length === 0) return
+    const range = document.createRange()
+    const start = Math.min(offset, node.length - 1)
+    range.setStart(node, start)
+    range.setEnd(node, start + 1)
+
+    return range.getBoundingClientRect()
+  }
+
+  // The content of a row at a point of the screen: the letter nearest to it, or else the element there. Beside a
+  // short line and between two blocks, the nearest letter is a little above or below the point. An element is held
+  // by its top: a share of its height would be a guess at where it grew.
+  function contentAt(x: number, y: number) {
+    const hit = document.elementsFromPoint(x, y).find((element) => element !== rowLayer && rowLayer?.contains(element))
+    const row = hit?.closest<HTMLElement>("[data-index]")
+    const key = row?.parentElement?.dataset.timelineKey
+
+    if (!hit || !row || !key) return
+    const at = y - row.getBoundingClientRect().top
+    const caret = document.caretPositionFromPoint?.(x, y)
+    const text = caret && caret.offsetNode instanceof Text && row.contains(caret.offsetNode) ? caret : undefined
+    const letter = text && readingBox(text.offsetNode, text.offset)
+
+    if (text && letter && letter.height > 0 && letter.top - 32 <= y && letter.bottom + 32 >= y)
+      return { key, node: text.offsetNode, offset: text.offset, lead: y - letter.top, at, y }
+
+    return { key, node: hit, offset: undefined, lead: y - hit.getBoundingClientRect().top, at, y }
+  }
+
+  // Whether the list has applied the height a row has now. A row that changed after it was last measured has its
+  // content somewhere the reader has not seen it: the page has not painted that layout yet.
+  function applied(key: string) {
+    const row = virtualizer.elementsCache.get(key)
+
+    return (
+      !!row &&
+      Math.abs(row.getBoundingClientRect().height - (virtualizer.itemSizeCache.get(key) ?? fallbackItemSize)) < 1
+    )
+  }
+
+  // The content at the reading line now: a letter at the middle of the line, or a quarter of the way in from either
+  // side, before an element. It reads the layout and keeps nothing.
+  function atReadingLine() {
+    const root = listRoot()
+
+    if (!root?.isConnected || !rowLayer || !active()) return
+    const offset = virtualizer.scrollOffset ?? 0
+    const y = root.getBoundingClientRect().top + readingLine(offset) - offset
+    const band = rowLayer.getBoundingClientRect()
+    const at = (share: number) => contentAt(band.left + band.width * share, y)
+    const middle = at(1 / 2)
+
+    // One look finds a letter in prose. The sides are looked at only when the middle has none.
+    return middle?.offset !== undefined
+      ? middle
+      : ([at(1 / 4), at(3 / 4)].find((side) => side?.offset !== undefined) ?? middle)
+  }
+
+  // Takes what the reader is on, from a row whose height the list has applied.
+  function takeReading(again = true) {
+    reading = undefined
+    const content = atReadingLine()
+
+    if (!content) return
+
+    if (applied(content.key)) {
+      reading = content
+
+      return
+    }
+
+    // The row at the line waits for the list to apply its new height. Look once more after the next frame.
+    if (again) lookAfterRender(true, false)
+  }
+
+  // Looks for what the reader is on once the next frame has rendered. That frame's layout is done then, so the look
+  // forces none. In the task of a rest or of a size batch it would: a scroll write or a resize has just made the
+  // layout dirty.
+  function lookAfterRender(fresh: boolean, again = true) {
+    if (pendingLook) {
+      pendingLook.fresh ||= fresh
+
+      return
+    }
+
+    const look = { fresh, again, cancel: () => cancelAnimationFrame(frame) }
+
+    const frame = requestAnimationFrame(() => {
+      const timer = setTimeout(() => {
+        pendingLook = undefined
+
+        // The reader scrolled on: the rest after that scroll looks again. A view that follows returns to its end,
+        // whatever its rows do, so it needs none.
+        if (virtualizer.isScrolling || input.follow.following()) return
+
+        if (look.fresh || !followReading()) takeReading(look.again)
+      })
+
+      look.cancel = () => clearTimeout(timer)
+    })
+
+    pendingLook = look
+  }
+
+  // The row of what the reader is on, how far below the row's top it is now, and how far the layout moved it there.
+  // Only while the row's box, which has not been resized yet, still has it where it was taken.
+  function readingPlace() {
+    const target = reading
+    const row = target && virtualizer.elementsCache.get(target.key)
+
+    if (!target || !row?.isConnected || !target.node.isConnected || !row.contains(target.node)) return
+    const box = readingBox(target.node, target.offset)
+    const top = row.getBoundingClientRect().top
+
+    if (!box?.height || Math.abs(top + target.at - target.y) > 2) return
+    const now = box.top + target.lead - top
+
+    return { index: virtualizer.indexFromElement(row), moved: now - target.at, now }
+  }
+
+  // After a batch, what the reader is on has a new place in its row. Where it is on the screen is read once the rows
+  // have their new boxes.
+  function keepReading(now: number | undefined) {
+    if (!reading || now === undefined) return
+    reading = { ...reading, at: now }
+    lookAfterRender(false)
+  }
+
+  // Reads where what the reader is on is now. False when there is nothing left to follow.
+  function followReading() {
+    const target = reading
+    const row = target && virtualizer.elementsCache.get(target.key)
+
+    const box =
+      target && row?.isConnected && row.contains(target.node) ? readingBox(target.node, target.offset) : undefined
+
+    if (!target || !row || !box?.height) return false
+
+    // The row changed again after the batch. The batch that applies that change reads how far it moved them.
+    if (!applied(target.key)) return true
+    const y = box.top + target.lead
+    reading = { ...target, at: y - row.getBoundingClientRect().top, y }
+
+    return true
+  }
+
   // What the reader sees is the scroll port, from the session header's fade to the composer region. The reading line
   // is 40% of the way down it.
   function readingLine(offset: number) {
@@ -664,17 +911,19 @@ export function createTimelineVirtualizer(input: Input) {
     const below = !!still && still.last > item.index
     const above = !!still && still.first >= 0 && still.first < item.index
 
-    // What stays where it is depends on what changed.
-    // A row that wrapped again at a new width: the reading line, so the part of its change above the line is
-    // compensated.
-    // A settled row: its own top edge, so it is compensated only while the reader cannot see it. Prepended rows can
-    // resize more than once as deferred content mounts.
-    // A row that has not settled has not been seen at its real height, so in a view that rests where the reader
-    // scrolled it, the rows in the scroll port that hold still: with those on one side of it, they stay. With them on
+    // What stays where it is depends on what is known.
+    // What the reader is on, taken when their scroll came to rest: a change above it is compensated, a change below
+    // it is not. The size batch has decided that.
+    // Otherwise, in a view that is where the end or navigation put it, at the start of the list, for a row the
+    // reader pressed in and for a row they have seen at its real height: the row's own top edge, so it is
+    // compensated only while the reader cannot see it. Prepended rows can resize more than once as deferred
+    // content mounts.
+    // Otherwise the row has not been seen at its real height, in a view the reader is still scrolling or has just
+    // scrolled: the rows in the scroll port that hold still. With those on one side of it, they stay. With them on
     // both sides or on neither, the reading line stays: a row that starts above it grows upward, any other downward.
     const adjust =
       aboveLine ??
-      (!still || settled.has(key)
+      (!still || acted.has(key) || familiar(key)
         ? addedKeys.has(key)
           ? item.end <= offset + instance.options.scrollMargin
           : isAboveFold(item, instance.range?.startIndex, offset + instance.options.scrollPaddingStart)
@@ -1157,6 +1406,7 @@ export function createTimelineVirtualizer(input: Input) {
         dispatchCold(value ? ACTIVATED : DEACTIVATED)
         // A view that is not shown leaves the document, and comes back without its offset.
         seen.lost = true
+        origin = undefined
 
         if (value) return
         // A view that goes inactive mid-touch never sees its finger lift; its translation would outlive the gesture.
@@ -1340,17 +1590,50 @@ export function createTimelineVirtualizer(input: Input) {
     if (document.visibilityState === "hidden") loseContact()
   }
 
+  // A press or a key that changes the layout, such as the review panel's toggle, comes before the layout changes.
+  // When the look after the rest has not happened yet, or found a row that still waited, what the reader is on is
+  // taken here. Not in a view that follows: it returns to its end.
+  const readBeforeInput = (event: Event) => {
+    if (reading || !active() || input.follow.following()) return
+
+    if (event instanceof KeyboardEvent) {
+      const key = scrollKey(event)
+
+      // A key that scrolls: the scroll drops what was taken, and the rest after it takes it again.
+      if ((key && isScrollKeyTarget(event.target, key)) || event.key === "Home" || event.key === "End") return
+      const target = event.target instanceof HTMLElement ? event.target : undefined
+
+      // A key that types changes no layout around the timeline.
+      if (
+        target &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      )
+        return
+    }
+
+    takeReading()
+  }
+
   onMount(() => {
     window.addEventListener("pointerup", releasePointer)
     window.addEventListener("pointercancel", releasePointer)
     window.addEventListener("blur", loseContact)
     document.addEventListener("visibilitychange", loseHiddenContact)
+    window.addEventListener("pointerdown", readBeforeInput, { capture: true })
+    window.addEventListener("keydown", readBeforeInput, { capture: true })
   })
   onCleanup(() => {
     window.removeEventListener("pointerup", releasePointer)
     window.removeEventListener("pointercancel", releasePointer)
     window.removeEventListener("blur", loseContact)
     document.removeEventListener("visibilitychange", loseHiddenContact)
+    window.removeEventListener("pointerdown", readBeforeInput, { capture: true })
+    window.removeEventListener("keydown", readBeforeInput, { capture: true })
+
+    pendingLook?.cancel()
   })
 
   const handleListKeyDown = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
@@ -1376,6 +1659,9 @@ export function createTimelineVirtualizer(input: Input) {
     scrollEvent.scrollTop = scrollTop
     scrollEvent.maxScroll = maxScroll
     scrollEvent.reader = seen.reader
+
+    // The reader moved on from what they were on.
+    if (seen.reader) reading = undefined
     seen.reader = 0
     const following = input.follow.following()
     input.follow.dispatch(scrollEvent)
@@ -1401,6 +1687,8 @@ export function createTimelineVirtualizer(input: Input) {
       // Prepending history changes data-index, not the keyed element's identity.
       // Its observer reads the current index and delivers any actual size change.
       onCleanup(() => {
+        acted.delete(initial.key)
+
         if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
 
         // A row that leaves the mounted range takes its focused control with it, and Chromium then leaves focus on
@@ -1478,6 +1766,44 @@ export function createTimelineVirtualizer(input: Input) {
       )
     }
 
+    // Content can arrive without changing its row's height, and then no measurement follows. Read the row again when
+    // a marker in it changes, so the row settles and gives up the room it held for a placeholder.
+    onMount(() => {
+      if (!virtualContent) return
+      const changed = new Set<HTMLDivElement>()
+      let measureFrame: number | undefined
+
+      const observer = new MutationObserver((records) => {
+        records.forEach((record) => {
+          const row = record.target instanceof Element ? record.target.closest<HTMLDivElement>("[data-index]") : null
+          const key = row?.parentElement?.dataset.timelineKey
+
+          if (row && key && (holding.has(row) || !settled.has(key))) changed.add(row)
+        })
+
+        if (!changed.size || measureFrame !== undefined) return
+        measureFrame = requestAnimationFrame(() => {
+          measureFrame = undefined
+          const rows = [...changed]
+          changed.clear()
+
+          if (!active()) return
+          rows.forEach((row) => {
+            holding.delete(row)
+
+            if (row.isConnected) virtualizer.measureElement(row)
+          })
+        })
+      })
+
+      observer.observe(virtualContent, { subtree: true, attributes: true, attributeFilter: pendingAttributes })
+      onCleanup(() => {
+        observer.disconnect()
+
+        if (measureFrame !== undefined) cancelAnimationFrame(measureFrame)
+      })
+    })
+
     return (
       <div
         ref={setViewRoot}
@@ -1541,7 +1867,7 @@ export function createTimelineVirtualizer(input: Input) {
             // The reader acts on a row they are looking at, so what it opens grows downward from where it is.
             const key = event.target.closest<HTMLElement>("[data-timeline-key]")?.dataset.timelineKey
 
-            if (key) settled.add(key)
+            if (key) acted.add(key)
           }}
           class="relative min-w-0 w-full h-full"
           style={{ "--sticky-accordion-top": input.showHeader() ? "var(--session-header-height, 48px)" : "0px" }}

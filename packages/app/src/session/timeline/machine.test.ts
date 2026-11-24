@@ -323,6 +323,17 @@ test("a revealed tool lets go of a slow scroll once it adds up to more than a zo
   expect(nudged.type).toBe("anchored")
   expect(transitionFollow(nudged, scroll(396, 396, 1000, 1000, 0))).toBe(nudged)
   expect(transitionFollow(nudged, scroll(395, 396)).type).toBe("detached")
+
+  // The movement adds up with its sign: a view that goes back and forth by less than that stays held.
+  const wobbled = replay([
+    { type: "anchor", anchor },
+    scroll(397, 400),
+    scroll(400, 397),
+    scroll(397, 400),
+    scroll(400, 397),
+  ])
+
+  expect(wobbled.type).toBe("anchored")
 })
 
 test.each<{ name: string; events: FollowEvent[]; roaming: boolean }>([

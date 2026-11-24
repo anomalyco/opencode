@@ -10,6 +10,7 @@ import {
   shell,
   textPart,
   userMessage,
+  waitForVisualSettle,
 } from "../utils/timeline"
 import { capturePromptMotion, markPrompt, promptMotionIssues, readPromptPositions } from "../utils/prompt-motion"
 
@@ -814,7 +815,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       await page.evaluate(() => document.fonts.ready)
       await expect(timeline.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
       const bounds = (await scroller.boundingBox())!
-      const before = await tail.evaluate((element) => element.getBoundingClientRect().top)
+      const start = await tail.evaluate((element) => element.getBoundingClientRect().top)
       const devtools = await page.context().newCDPSession(page)
       await devtools.send("Input.dispatchTouchEvent", {
         type: "touchStart",
@@ -826,47 +827,38 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       })
       await expect
         .poll(() => tail.evaluate((element) => element.getBoundingClientRect().top))
-        .toBeGreaterThan(before + 50)
+        .toBeGreaterThan(start + 50)
       await expect(page.locator(`${thumbSelector}[data-visible="false"]`)).toHaveCount(1)
 
-      // The row on the reading line, 40% of the way down from the session header to the composer region, and how far
-      // into that row the line falls.
-      const reading = () =>
-        scroller.evaluate((root) => {
-          const view = root.getBoundingClientRect()
-          const style = getComputedStyle(root)
-          const top = view.top + (parseFloat(style.scrollPaddingTop) || 0)
-          const line = top + (view.bottom - (parseFloat(style.scrollPaddingBottom) || 0) - top) * 0.4
+      // The letter on the reading line, 40% of the way down from the session header to the composer region: a DOM
+      // Range around it, which stays on that letter however the text wraps.
+      const letter = await scroller.evaluateHandle((root) => {
+        const view = root.getBoundingClientRect()
+        const style = getComputedStyle(root)
+        const top = view.top + (parseFloat(style.scrollPaddingTop) || 0)
+        const line = top + (view.bottom - (parseFloat(style.scrollPaddingBottom) || 0) - top) * 0.4
+        const caret = document.caretPositionFromPoint(view.left + view.width / 2, line)!
+        const range = document.createRange()
+        range.setStart(caret.offsetNode, caret.offset)
+        range.setEnd(caret.offsetNode, caret.offset + 1)
 
-          const row = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].find((row) => {
-            const box = row.getBoundingClientRect()
+        return range
+      })
 
-            return box.top <= line && box.bottom > line
-          })!
-
-          const box = row.getBoundingClientRect()
-
-          return { key: row.dataset.timelineKey!, into: (line - box.top) / box.height, height: box.height }
-        })
-
-      // How far the words that were on the line are from it now. Every row wraps again at the new width.
-      const drift = async () => {
-        const now = await reading()
-
-        return now.key === words.key ? Math.abs(now.into - words.into) * now.height : Number.POSITIVE_INFINITY
-      }
-
-      const words = await reading()
+      const place = () => letter.evaluate((range) => range.getBoundingClientRect().top)
+      const before = await place()
+      const height = await scroller.evaluate((root) => root.scrollHeight)
       await page.setViewportSize({ width: 390, height: 844 })
-      const row = scroller.locator(`[data-timeline-key="${words.key}"]`)
-      await expect.poll(async () => (await row.boundingBox())?.height).toBeGreaterThan(words.height)
-      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+      // Every row wraps again at the new width.
+      await expect.poll(() => scroller.evaluate((root) => root.scrollHeight)).toBeGreaterThan(height)
+      await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
       await testInfo.attach("reflow-held.png", { body: await page.screenshot(), contentType: "image/png" })
-      // The words stay within two lines of the reading line: the rows above them moved the view, not them.
-      expect(await drift()).toBeLessThanOrEqual(40)
+      // The letter stays within a line of where it was: the rows above it moved the view, not it.
+      expect(Math.abs((await place()) - before)).toBeLessThanOrEqual(24)
       await devtools.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] })
       await testInfo.attach("reflow-cancelled.png", { body: await page.screenshot(), contentType: "image/png" })
-      expect(await drift()).toBeLessThanOrEqual(40)
+      expect(Math.abs((await place()) - before)).toBeLessThanOrEqual(24)
+      await letter.dispose()
     })
   })
 }
