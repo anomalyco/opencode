@@ -59,13 +59,22 @@ type FreeformField<T> = {
     : never
 }[keyof T]
 
-/** `Freeform` for exactly one required string field or unknown ones (a JSON Schema `input`), otherwise `undefined`. */
+type RequiredStringField<T> = {
+  [K in keyof T]-?: {} extends Pick<T, K> ? never : T[K] extends string ? K : never
+}[keyof T]
+
+/**
+ * `Freeform` for exactly one required string field or unknown ones (a JSON Schema `input`), `Freeform` naming its
+ * `field` for a required string field among others, otherwise `undefined`.
+ */
 export type FreeformOption<Input extends ToolInput> =
   unknown extends ToolInputType<Input>
     ? Freeform
     : [FreeformField<ToolInputType<Input>>] extends [never]
-      ? undefined
-      : Freeform
+      ? [RequiredStringField<ToolInputType<Input>>] extends [never]
+        ? undefined
+        : Freeform & { readonly field: RequiredStringField<ToolInputType<Input>> }
+      : Freeform & { readonly field?: FreeformField<ToolInputType<Input>> }
 
 /**
  * A type-safe LLM tool. Each tool bundles its own description, input
@@ -240,8 +249,12 @@ export const emptyInputJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema 
 }
 
 const definition = (input: ToolDefinitionInput) => {
-  if (input.freeform !== undefined && ToolDefinition.freeformField(input.inputSchema) === undefined)
-    throw new Error("A freeform tool needs exactly one parameter, a required string")
+  if (input.freeform !== undefined && ToolDefinition.freeformField(input.inputSchema, input.freeform) === undefined)
+    throw new Error(
+      input.freeform.field === undefined
+        ? "A freeform tool needs exactly one parameter, a required string"
+        : `A freeform tool's \`${input.freeform.field}\` parameter must be a required string`,
+    )
   return new ToolDefinition(input)
 }
 
