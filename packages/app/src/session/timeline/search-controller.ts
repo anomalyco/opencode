@@ -9,6 +9,7 @@ import {
   extractSearchableParts,
   findMatchesInParts,
   normalizeSearchQuery,
+  sameTimelineSearchView,
   timelineSearchView,
   transitionTimelineSearch,
   type SearchablePart,
@@ -143,8 +144,10 @@ export function createTranscriptSearch(
   input: TimelineSearchInput & { messages: (id: string) => readonly SessionMessageInfo[] },
 ) {
   const language = useLanguage()
-  const [searchState, setSearchState] = createSignal(createTimelineSearchState())
-  const view = createMemo(() => timelineSearchView(searchState()))
+  // Not a signal: a seek advances the state on every one of its frames, and each write would have every reader of
+  // Find check itself again. Readers follow the view, which those frames leave as it is.
+  let state = createTimelineSearchState()
+  const [view, setView] = createSignal(timelineSearchView(state), { equals: sameTimelineSearchView })
   const visible = createMemo(() => view().visible)
   const query = createMemo(() => view().query)
   const searching = createMemo(() => query() !== "")
@@ -170,12 +173,10 @@ export function createTranscriptSearch(
     on(
       corpus,
       (next) => {
-        const current = searchState()
-
-        if (current.status === "closed") return
-        const matches = findMatchesInParts(next.parts, current.query)
+        if (state.status === "closed") return
+        const matches = findMatchesInParts(next.parts, state.query)
         dispatch({
-          type: next.sessionID === current.sessionID ? "matches.synced" : "session.changed",
+          type: next.sessionID === state.sessionID ? "matches.synced" : "session.changed",
           sessionID: next.sessionID,
           matches,
         })
@@ -222,10 +223,13 @@ export function createTranscriptSearch(
   }
 
   function dispatch(event: TimelineSearchEvent) {
-    const current = untrack(searchState)
-    const next = transitionTimelineSearch(current, event)
+    const next = transitionTimelineSearch(state, event)
 
-    if (next.state !== current) setSearchState(next.state)
+    if (next.state !== state) {
+      state = next.state
+      setView(timelineSearchView(state))
+    }
+
     next.effects.forEach(run)
   }
 
@@ -329,19 +333,18 @@ export function createTranscriptSearch(
   }
 
   function setValue(value: string) {
-    const current = untrack(searchState)
-
-    if (current.status === "closed") return
+    if (state.status === "closed") return
     const next = normalizeSearchQuery(value)
 
-    if (next === current.query) {
-      dispatch({ type: "query.changed", value, matches: current.matches })
+    if (next === state.query) {
+      dispatch({ type: "query.changed", value, matches: state.matches })
 
       return
     }
 
     // The corpus holds parts only once a query exists, so the first character reads the transcript directly.
-    const parts = current.query ? untrack(corpus).parts : untrack(() => searchableParts(current.sessionID))
+    const sessionID = state.sessionID
+    const parts = state.query ? untrack(corpus).parts : untrack(() => searchableParts(sessionID))
     dispatch({ type: "query.changed", value, matches: findMatchesInParts(parts, next) })
   }
 
