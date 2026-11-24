@@ -100,6 +100,7 @@ import { SessionInterruptTool } from "../tool/plugin/session-interrupt.js"
 import { SessionSearchTools } from "../tool/plugin/session-search.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
+import { StopTool } from "../tool/plugin/stop.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
 import { TodoTool } from "../tool/plugin/todo.js"
 import { Tool } from "../tool.js"
@@ -303,6 +304,7 @@ const pre = [
   SessionSearchTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
+  StopTool.Plugin,
   SubagentTool.Plugin,
   TodoTool.Plugin,
   WebFetchTool.Plugin,

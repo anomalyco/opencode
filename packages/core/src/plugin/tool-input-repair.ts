@@ -7,6 +7,7 @@ import { toolExpression } from "@opencode/codemode"
 import { isRecord } from "@opencode/util/record"
 import { CodeModeTool } from "../codemode/tool.js"
 import { definition, normalizeContent } from "../tool/runtime.js"
+import { ShellTool } from "../tool/plugin/shell.js"
 
 // Repairs apply only when the input schema unambiguously supports them:
 // - Stringified root or nested object: '{"limit":"20"}' -> { limit: 20 }
@@ -26,6 +27,12 @@ const maxDepth = 6
 const aliases = new Map([
   ["bash", "shell"],
   ["Bash", "shell"],
+])
+
+// Code Mode tools for which dropping an unknown key can change what the call does (a shell's `background`). Given the
+// dropped keys, each returns a note to fail the call with instead of running it.
+const strict = new Map<string, (keys: ReadonlyArray<string>) => string | undefined>([
+  [ShellTool.name, ShellTool.unknownInputRepair],
 ])
 
 export const Plugin = define({
@@ -54,7 +61,13 @@ export const Plugin = define({
           const called = event.tool
           if (aliased) event.tool = aliased.id
           const schema = definition(tool, event.codemode).inputSchema
+          const given = isRecord(event.input) ? Object.keys(event.input) : []
           if (schema.type === "object") event.input = repair(event.input, schema, schema, 0)
+          const declared = Predicate.isObject(schema.properties) ? schema.properties : {}
+          const kept = isRecord(event.input) ? event.input : {}
+          const dropped = given.filter((key) => !Object.hasOwn(declared, key) && !Object.hasOwn(kept, key))
+          const note = event.codemode && dropped.length > 0 ? strict.get(event.tool)?.(dropped) : undefined
+          if (note) return yield* new ToolFailure({ message: note })
           if (!target || !isRecord(event.input)) return
           const input = { ...event.input }
           event.input = input

@@ -965,4 +965,29 @@ describe("Job", () => {
       expect(progress.filter((update) => update.files).map((update) => (update.files as unknown[]).length)).toEqual([1])
     }),
   )
+
+  it.live("a collected result is not delivered, and an interrupted collect leaves it to the notification", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const latch = yield* Deferred.make<void>()
+      const start = (id: string) => jobs.start({ id, type: "test", run: Deferred.await(latch).pipe(Effect.as(id)) })
+      yield* start("job_collected")
+      yield* start("job_interrupted")
+      const collected = yield* jobs
+        .collect(["job_collected"], jobs.wait({ id: "job_collected" }).pipe(Effect.asVoid))
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      const interrupted = yield* jobs
+        .collect(["job_interrupted"], Effect.never)
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      // Held back while collected.
+      const delivering = yield* jobs.deliver("job_collected").pipe(Effect.forkChild)
+      yield* Deferred.succeed(latch, undefined)
+      expect(yield* Fiber.join(collected)).toMatchObject([{ id: "job_collected", status: "completed" }])
+      expect(yield* Fiber.join(delivering)).toBe(false)
+      yield* jobs.wait({ id: "job_interrupted" })
+      yield* Fiber.interrupt(interrupted)
+      expect(yield* jobs.deliver("job_interrupted")).toBe(true)
+      expect(yield* jobs.deliver("job_interrupted")).toBe(false)
+    }),
+  )
 })

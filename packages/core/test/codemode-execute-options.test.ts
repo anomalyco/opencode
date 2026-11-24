@@ -14,7 +14,7 @@ import { Tool } from "@opencode/core/tool"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { Context, DateTime, Deferred, Effect, Fiber, Layer, Schema, Scope } from "effect"
+import { Context, DateTime, Deferred, type Duration, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
 
@@ -135,6 +135,47 @@ describe("execute timeout and background", () => {
       const result = yield* h.run(context("ses_fast"), script(20), { timeout: 1000 })
       expect(result.metadata?.jobID).toBeUndefined()
       expect(result.content).toEqual([{ type: "text", text: "done" }])
+    }),
+  )
+
+  it.effect("a nested call's extension keeps its script blocking while it runs, up to ten minutes", () =>
+    Effect.gen(function* () {
+      const h = yield* harness
+      const extended = (wait: Duration.Input, ms: number) => () =>
+        Effect.gen(function* () {
+          const extend = yield* CodeModeJob.Extend
+          yield* Effect.sleep(wait).pipe(extend(ms))
+          return { content: [{ type: "text" as const, text: "done" }], output: "done", metadata: {} }
+        })
+      const fiber = yield* h.run(context("ses_extend"), extended("4 minutes", 5 * 60 * 1_000)).pipe(Effect.forkChild)
+      yield* Deferred.await(h.blocking)
+      // Past the usual two minutes, the script still blocks.
+      yield* TestClock.adjust("3 minutes")
+      expect(fiber.pollUnsafe()).toBeUndefined()
+      yield* TestClock.adjust("1 minute")
+      expect((yield* Fiber.join(fiber)).metadata?.jobID).toBeUndefined()
+    }),
+  )
+
+  it.effect("a longer extension moves its script to the background at ten minutes", () =>
+    Effect.gen(function* () {
+      const h = yield* harness
+      const fiber = yield* h
+        .run(context("ses_extend_long"), () =>
+          Effect.gen(function* () {
+            const extend = yield* CodeModeJob.Extend
+            yield* Effect.never.pipe(extend(60 * 60 * 1_000))
+            return { content: [], output: "", metadata: {} }
+          }),
+        )
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(h.blocking)
+      yield* TestClock.adjust("9 minutes")
+      expect(fiber.pollUnsafe()).toBeUndefined()
+      yield* TestClock.adjust("1 minute")
+      const jobID = String((yield* Fiber.join(fiber)).metadata?.jobID)
+      expect(jobID).toStartWith("cm_")
+      yield* h.jobs.cancel(jobID)
     }),
   )
 
