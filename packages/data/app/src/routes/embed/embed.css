@@ -1,0 +1,31 @@
+/* An embed (routes/embed): the card alone, filling the iframe, letterboxed if the host frames it at another shape. */
+html:has([data-page="embed"]),
+html:has([data-page="embed"]) body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+[data-page="embed"] {
+  display: grid;
+  place-items: center;
+  /* The frame's own height: the app's wrappers between the body and this page have none to pass down. */
+  height: 100dvh;
+
+  a {
+    display: contents;
+  }
+
+  canvas {
+    display: block;
+    max-width: 100vw;
+    max-height: 100dvh;
+    cursor: pointer;
+  }
+
+  [data-slot="embed-missing"] {
+    font: 14px/1.4 var(--font-mono, monospace);
+    color: #8f8f8f;
+  }
+}

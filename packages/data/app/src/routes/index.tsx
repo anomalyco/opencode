@@ -1,4 +1,4 @@
-import { Meta, Title } from "@solidjs/meta"
+import { Link, Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { scaleSqrt } from "d3-scale"
 import {
@@ -19,7 +19,7 @@ import { DEFAULT_PERIOD, PeriodToggle, type Period } from "../component/period-t
 import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { formatPeriodDate } from "../lib/format"
-import { jsonUrl, localizedUrl, markdownUrl } from "../lib/language"
+import { baseUrl, jsonUrl, localizedUrl, markdownUrl } from "../lib/language"
 import { providerIconId } from "../lib/provider-icon"
 import { dismissChartTooltipOnExit } from "../lib/chart-tooltip"
 import { methodologyItems } from "../lib/methodology"
@@ -127,6 +127,13 @@ export default function StatsHome() {
             <Meta name="description" content={homeSummary(language.locale(), stats()) ?? i18n.t("app.description")} />
             <LocaleLinks path="/data/" />
             <FormatLinks path="/data/" />
+            {/* A pasted link to the page embeds its Top Models card (routes/oembed.ts). */}
+            <Link
+              rel="alternate"
+              type="application/json+oembed"
+              href={`${baseUrl}/data/oembed?format=json&url=${encodeURIComponent(`${baseUrl}/data/`)}`}
+              title="OpenCode Data"
+            />
             <LastModified value={stats().updatedAt} />
             <Meta property="og:type" content="website" />
             <Meta property="og:site_name" content="OpenCode" />

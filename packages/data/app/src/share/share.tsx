@@ -3,6 +3,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, 
 import {
   barTiming,
   drawShareCard,
+  mainLength,
   leaderColor,
   loadShareFonts,
   shareDuration,
@@ -11,11 +12,14 @@ import {
   type ShareOptions,
   type ShareTiming,
 } from "./card"
+import { embedSnippet, embedUrl, packCard } from "./embed"
 import { cycleShareOption, designMode, designOnly, setShareOption, shareControls, shareOptions } from "./design"
 import { shareTracks, type ShareTrack } from "./music"
+import type { ShareView } from "./embed"
 import { loadSpectrum, type Spectrum } from "./spectrum"
 
-export type ShareDraft = Omit<ShareCard, "updatedAt" | "url">
+// `view` is the range the section showed, so an embed of it can show the same.
+export type ShareDraft = Omit<ShareCard, "updatedAt" | "url"> & { view?: ShareView }
 
 const [request, setRequest] = createSignal<ShareDraft>()
 let opener: HTMLElement | undefined
@@ -96,7 +100,10 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   let dialog: HTMLDialogElement | undefined
   let preview: HTMLCanvasElement | undefined
   let audio: HTMLAudioElement | undefined
-  const [format, setFormat] = createSignal<"image" | "video">("video")
+  const [format, setFormat] = createSignal<"image" | "video" | "embed">("video")
+  // An embed shows the latest data by default; a fixed one keeps today's numbers (share/embed.ts).
+  const [fixed, setFixed] = createSignal(false)
+  const [snippet, setSnippet] = createSignal("")
   const [notice, setNotice] = createSignal<string>()
   const [rendering, setRendering] = createSignal<number>()
   const [ready, setReady] = createSignal(false)
@@ -127,6 +134,22 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const timing = createMemo(() => {
     const sound = music()
     return sound ? barTiming(sound.bar, sound.verse, sound.length, sound.beat, spectrum()) : undefined
+  })
+  // The code to paste for an embed, rebuilt as its options change; a fixed one packs the card into its fragment.
+  createEffect(() => {
+    const value = card()
+    const opts = options()
+    if (format() !== "embed" || !value) return
+    const url = embedUrl(new URL(import.meta.env.BASE_URL, location.origin).toString(), value, opts)
+    const done = (address: URL) => setSnippet(embedSnippet(address.toString(), value.title, opts.size))
+    if (!fixed()) return done(url)
+    let current = true
+    onCleanup(() => (current = false))
+    void packCard(value).then((packed) => {
+      if (!current) return
+      url.hash = `card=${packed}`
+      done(url)
+    })
   })
   let video: { key: string; file: Promise<File> } | undefined
   let closing: ReturnType<typeof setTimeout> | undefined
@@ -171,6 +194,20 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     if (still || !playing()) {
       audio?.pause()
       return drawShareCard(ctx, value, opts, Infinity, timing())
+    }
+    // An embed plays its card once, silently, and rests on it, as it will on the host page.
+    if (format() === "embed") {
+      audio?.pause()
+      const start = performance.now()
+      const length = mainLength(value, opts)
+      const tick = () => {
+        const time = (performance.now() - start) / 1000
+        drawShareCard(ctx, value, opts, time >= length ? Infinity : time)
+        if (time < length) handle = requestAnimationFrame(tick)
+      }
+      let handle = requestAnimationFrame(tick)
+      onCleanup(() => cancelAnimationFrame(handle))
+      return
     }
     const length = shareDuration(value, opts, timing()) + 0.6
     const key = [value.id, sound?.id ?? "none", format(), playing()].join(" ")
@@ -230,8 +267,13 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   // Export saves the PNG or the video. On phones, where saving a file goes nowhere useful, it opens the share sheet.
   const exportFile = () =>
     run(async () => {
+      const kind = format()
+      if (kind === "embed") {
+        await navigator.clipboard.writeText(snippet())
+        return "Embed code copied"
+      }
       const value = card()
-      const shared = await file(format())
+      const shared = await file(kind)
       if (!value) return
       const data = { files: [shared], title: value.title, text: `${value.headline} ${link(value)}` }
       if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.(data)) {
@@ -239,7 +281,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
         return undefined
       }
       download(shared)
-      return format() === "image" ? "PNG saved" : "Video saved"
+      return kind === "image" ? "PNG saved" : "Video saved"
     })
 
   // Pressing the chosen track again plays or pauses it, with the preview.
@@ -363,7 +405,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
               <div data-slot="inspector-scroll">
                 <div data-slot="rows">
                   <Row label="Type">
-                    <For each={["video", "image"] as const}>
+                    <For each={["video", "image", "embed"] as const}>
                       {(item) => (
                         <button
                           type="button"
@@ -375,7 +417,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                             setPlaying(true)
                           }}
                         >
-                          <span>{item === "image" ? "Image" : "Video"}</span>
+                          <span>{{ video: "Video", image: "Image", embed: "Embed" }[item]}</span>
                         </button>
                       )}
                     </For>
@@ -463,6 +505,40 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                       </div>
                     </Row>
                   </Show>
+                  <Show when={format() === "embed"}>
+                    <Row label="Data">
+                      <For each={[false, true]}>
+                        {(item) => (
+                          <button
+                            type="button"
+                            data-slot="chip"
+                            data-variant="text"
+                            aria-pressed={fixed() === item}
+                            onClick={() => setFixed(item)}
+                          >
+                            <span>{item ? "Fixed" : "Live"}</span>
+                          </button>
+                        )}
+                      </For>
+                    </Row>
+                    <p data-slot="embed-note">
+                      {fixed()
+                        ? `Keeps the numbers from ${value().updatedAt ? new Date(value().updatedAt!).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "today"}.`
+                        : "Shows the latest data each time it loads."}{" "}
+                      Silent, and opens this section on OpenCode Data when clicked.
+                    </p>
+                    <Row label="Code" variant="list">
+                      <textarea
+                        data-slot="embed-code"
+                        readOnly
+                        rows={4}
+                        spellcheck={false}
+                        aria-label="Embed code"
+                        value={snippet()}
+                        onFocus={(event) => event.currentTarget.select()}
+                      />
+                    </Row>
+                  </Show>
                 </div>
               </div>
               <div data-slot="inspector-footer">
@@ -475,9 +551,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 >
                   {rendering() !== undefined
                     ? "Rendering video…"
-                    : format() === "image"
-                      ? "Export image"
-                      : "Export video"}
+                    : { image: "Export image", video: "Export video", embed: "Copy embed code" }[format()]}
                 </button>
               </div>
             </aside>

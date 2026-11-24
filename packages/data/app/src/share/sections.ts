@@ -13,34 +13,8 @@ import type { Period } from "../component/period-toggle"
 import type { HomePageData } from "../lib/page-data"
 import { formatCatalogLabName } from "../routes/model-catalog"
 import type { ShareChart, ShareSeries } from "./card"
+import { shareTitles, type ShareSection, type ShareView } from "./embed"
 import type { ShareDraft } from "./share"
-
-export const shareSections = [
-  "top-models",
-  "unique-users",
-  "retention",
-  "session-cost",
-  "token-cost",
-  "cache-ratio",
-  "market-share",
-  "geo-breakdown",
-] as const
-
-export type ShareSection = (typeof shareSections)[number]
-
-// What a section's card depends on besides its data: the range its chart shows and, for Top Models, the leaderboard's.
-export type ShareView = { period: Period; leaderboard: Period }
-
-export const shareTitles: Record<ShareSection, string> = {
-  "top-models": "Top Models",
-  "unique-users": "Unique Users",
-  retention: "Weekly Retention",
-  "session-cost": "Session Cost",
-  "token-cost": "Token Cost",
-  "cache-ratio": "Cache Ratio",
-  "market-share": "Market Share",
-  "geo-breakdown": "Geographic Breakdown",
-}
 
 /** A section's card from the whole page's data, as its share button would make it with `view`. */
 export function homeShareCard(section: ShareSection, data: HomePageData, view: ShareView) {
@@ -72,6 +46,7 @@ export function topModelsCard(
     headline: `${leader.name} led OpenCode usage ${when}, with ${formatBillions(leader.tokens)} tokens`,
     stat: { value: formatBillions(leader.tokens), label: `tokens for ${leader.name}, ${when}` },
     chart,
+    view,
   }
 }
 
@@ -93,6 +68,7 @@ export function uniqueUsersCard(
     headline: `${name} had the most OpenCode users ${when}, with ${top.value}`,
     stat: { value: top.value, label: `OpenCode users on ${name}, ${when}` },
     chart,
+    view: { period, leaderboard: "weekly" },
   }
 }
 
@@ -178,6 +154,7 @@ export function marketShareCard(days: MarketDay[], period: Period): ShareDraft |
     headline: `${top.label} served ${top.value} of OpenCode tokens ${when}`,
     stat: { value: top.value, label: `of OpenCode tokens went to ${top.label} models, ${when}` },
     chart,
+    view: { period, leaderboard: "weekly" },
   }
 }
 

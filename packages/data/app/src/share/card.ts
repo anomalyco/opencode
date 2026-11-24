@@ -200,8 +200,9 @@ export function shareDuration(card: ShareCard, options: ShareOptions, timing = f
   return mainLength(card, options, timing) + outroBeats * (timing.beat ?? freeBeat)
 }
 
-// The card's own part of the video, before the closing slides: with music it runs to the track's drop.
-function mainLength(card: ShareCard, options: ShareOptions, timing: ShareTiming) {
+// The card's own part of the video, before the closing slides: with music it runs to the track's drop. Embeds play
+// only this part.
+export function mainLength(card: ShareCard, options: ShareOptions, timing = freeTiming) {
   return timing.length ?? timing.start + highlights(card, options).length * timing.rounds * timing.step + hold
 }
 
