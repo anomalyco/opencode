@@ -95,7 +95,8 @@ const palettes = {
     muted: "#c4c4c4",
     faint: "#8f8f8f",
     line: "#ffffff1f",
-    dot: "#1e1e1e",
+    // The grid, bright enough to read with its small dots.
+    dot: "#2a2a2a",
     meter: "#8c8c8c",
     idle: "#262626",
     track: "#1c1c1c",
@@ -123,7 +124,7 @@ const palettes = {
     muted: "#3a3a3a",
     faint: "#6b6b6b",
     line: "#0000001a",
-    dot: "#ececec",
+    dot: "#e0e0e0",
     meter: "#3a3a3a",
     idle: "#e2e2e2",
     track: "#eeeeee",
@@ -164,7 +165,7 @@ function leaderLook(card: ShareCard): { colors: Palette; card: ShareCard } {
   const grey = (amount: number) => hex(base.background, "#ffffff", amount)
   const colors: Palette = {
     ...base,
-    dot: hex(base.background, color, 0.14),
+    dot: hex(base.background, color, 0.2),
     meter: color,
     accent: grey(0.3),
     lead: color,
