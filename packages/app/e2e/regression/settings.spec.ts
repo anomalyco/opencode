@@ -2774,9 +2774,11 @@ test("the Side tabs interface mode switches to vertical tabs and survives reload
 test("settings lines its sidebar and content up with Home's columns", async ({ page }) => {
   await mockWorkspace(page, { name: "SettingsAlign", sessions: [] })
   await page.goto("/")
+
   const entry = page
     .getByRole("complementary", { name: "Projects" })
     .getByRole("button", { name: "Settings", exact: true })
+
   await expect(entry).toBeVisible()
   const field = await page.locator('[data-slot="home-session-search-field"]').boundingBox()
   const item = await entry.boundingBox()
@@ -2785,6 +2787,7 @@ test("settings lines its sidebar and content up with Home's columns", async ({ p
   await expect(settings).toBeFocused({ timeout: APP_READY_TIMEOUT })
 
   const tab = await settings.getByRole("tab", { name: "Preferences", exact: true }).boundingBox()
+
   // The panel keeps 4px on each side for card shadows; its content box is what lines up with the search field.
   const content = await settings.locator(".settings-content > .settings-panel:visible").evaluate((panel) => {
     const box = panel.getBoundingClientRect()
