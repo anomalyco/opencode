@@ -391,7 +391,7 @@ export function drawShareCard(
   ctx.restore()
 }
 
-// The closing slides, each cut on a beat with a small punch-in: the OpenCode DATA lockup large in the middle (on the
+// The closing slides, each a hard cut on a beat: the OpenCode DATA lockup large in the middle (on the
 // track's drop), then the line, then the address. The dot grid fills the card and the equaliser keeps playing.
 function drawOutro(
   ctx: CanvasRenderingContext2D,
@@ -415,11 +415,8 @@ function drawOutro(
     level,
   )
   const slide = time < 4 * beat ? 0 : time < 7 * beat ? 1 : 2
-  const since = time - [0, 4, 7][slide]! * beat
-  const punch = 1 + 0.05 * (1 - settle(since, 0, 0.35))
   ctx.save()
   ctx.translate(width / 2, height / 2)
-  ctx.scale(punch, punch)
   ctx.fillStyle = colors.text
   ctx.textBaseline = "middle"
   if (slide === 0) {
