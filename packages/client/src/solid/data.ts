@@ -1464,8 +1464,6 @@ export function createData(config: CreateDataInput) {
     switch (event.type) {
       case "provider.updated":
         refreshLocation("provider", result.location.provider, location)
-        if (failedCatalogs.has(`location.model:${locationKey(location)}`))
-          refresh(() => result.location.model.sync(location))
         break
       case "model.updated":
         refreshLocation("model", result.location.model, location)

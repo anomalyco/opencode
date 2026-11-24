@@ -1157,13 +1157,15 @@ test("refreshes loaded and initially failed catalogs while ignoring updates for 
     await Bun.sleep(20)
     expect(requests).toEqual([])
 
-    // A provider update can be the first sign that the server is ready again.
-    for (const type of ["provider.updated", "command.updated", "agent.updated"] as const) {
+    emit({ id: "evt_provider_loaded", created: 2, type: "provider.updated", location: loaded, data: {} })
+    await wait(() => setup.data.location.provider.list(loaded)?.[0]?.name === "v2")
+    expect(requests).toEqual([["/api/provider", "/project"]])
+
+    for (const type of ["model.updated", "command.updated", "agent.updated"] as const) {
       emit({ id: `evt_${type}_loaded`, created: 2, type, location: loaded, data: {} })
     }
     await wait(
       () =>
-        setup.data.location.provider.list(loaded)?.[0]?.name === "v2" &&
         setup.data.location.model.list(loaded)?.[0]?.name === "v2" &&
         setup.data.location.command.list(loaded)?.[0]?.name === "v2" &&
         setup.data.location.agent.list(loaded)?.[0]?.id === "v2",
