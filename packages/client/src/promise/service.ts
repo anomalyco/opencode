@@ -1,7 +1,7 @@
 import { readFile, rm } from "node:fs/promises"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
-import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
+import { defaultEnsureTiming, ensureTiming, type EnsureTiming, unresponsiveThreshold } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
@@ -61,7 +61,8 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         const count = streak === undefined ? 1 : streak.count + 1
         const start = streak?.start ?? now
         timeouts = { info: registration.info, count, start }
-        if (count >= timing.unresponsiveFailures && now - start >= timing.unresponsiveWindow) {
+        const threshold = unresponsiveThreshold(timing, registration.info.state === "starting")
+        if (count >= threshold.failures && now - start >= threshold.window) {
           const acquired = await tryBeginRestart(options.file, timing)
           if (acquired !== undefined) {
             restartToken = acquired.token
@@ -82,7 +83,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         const token = restartToken
         if (service.state === "ready" && token !== undefined) {
           restartToken = undefined
-          await completeRestart(options.file, token)
+          await completeRestart(options.file, token, timing)
         }
         pool.serviceAnswered(service.info.pid, service.state === "ready")
         const decision = decide(service, options)

@@ -34,7 +34,6 @@ export function spawnServiceContender(
   let error: Error | undefined
   let closed = false
   let ready = false
-  const startedAt = performance.now()
   let stderr = Buffer.alloc(0)
   const onStderr = (chunk: Buffer) => {
     const tail = chunk.subarray(-stderrLimit)
@@ -49,16 +48,7 @@ export function spawnServiceContender(
     forget()
     error = new Error("Failed to start server", { cause })
   })
-  child.once("exit", (code, signal) => {
-    forget()
-    console.warn("OpenCode background service contender exited", {
-      pid: child.pid,
-      exitCode: code,
-      signal,
-      ready,
-      uptimeMs: Math.round(performance.now() - startedAt),
-    })
-  })
+  child.once("exit", forget)
   child.once("close", () => {
     forget()
     closed = true

@@ -31,6 +31,7 @@ export interface Lifecycle<E = never, R = never> {
   readonly onListen: (
     address: NetAddress.SocketAddress,
     shutdown: Effect.Effect<void>,
+    ready: Effect.Effect<void>,
   ) => Effect.Effect<Effect.Effect<void>, E, R>
 }
 
@@ -94,7 +95,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     )
     .pipe(Effect.provide(NodeHttpServer.layerHttpServices), withoutParentSpan)
   if (lifecycle)
-    yield* lifecycle.onListen(bound.http.address, shutdown.open.pipe(Effect.asVoid)).pipe(
+    yield* lifecycle.onListen(bound.http.address, shutdown.open.pipe(Effect.asVoid), status.ready).pipe(
       Effect.flatMap((cleanup) =>
         Effect.addFinalizer(() => Scope.close(bound.scope, Exit.void).pipe(Effect.andThen(cleanup))),
       ),

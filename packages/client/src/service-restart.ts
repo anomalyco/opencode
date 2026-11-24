@@ -25,11 +25,11 @@ export async function tryBeginRestart(
 ): Promise<{ readonly token: string } | undefined> {
   const path = restartLockPath(file)
   try {
-    const claimed = await claim(path)
+    const claimed = await claim(path, timing)
     if (claimed !== undefined) return claimed
     const existing = await readLock(path)
     if (existing === undefined) return undefined
-    const now = Date.now()
+    const now = nowOf(timing)
     if (existing.completedAt !== undefined) {
       // A finished reboot is not in progress. Its completion starts the cooldown for everyone.
       if (now < existing.completedAt + timing.restartCooldown) return undefined
@@ -38,7 +38,7 @@ export async function tryBeginRestart(
       return undefined
     }
     await unlink(path).catch(() => undefined)
-    return await claim(path)
+    return await claim(path, timing)
   } catch {
     // The lock is best-effort; it must never break ensure().
     return undefined
@@ -46,12 +46,12 @@ export async function tryBeginRestart(
 }
 
 /** Mark the reboot held by `token` finished so other clients start their cooldown from now. */
-export async function completeRestart(file: string | undefined, token: string) {
+export async function completeRestart(file: string | undefined, token: string, timing?: EnsureTiming) {
   const path = restartLockPath(file)
   try {
     const existing = await readLock(path)
     if (existing?.token !== token) return
-    const completed = { ...existing, completedAt: Date.now() } satisfies Lock
+    const completed = { ...existing, completedAt: nowOf(timing) } satisfies Lock
     const temporary = `${path}.${token}.tmp`
     await writeFile(temporary, JSON.stringify(completed))
     await rename(temporary, path)
@@ -71,12 +71,12 @@ export async function releaseRestart(file: string | undefined, token: string) {
   }
 }
 
-async function claim(path: string) {
+async function claim(path: string, timing: EnsureTiming) {
   const token = randomUUID()
   try {
     const handle = await open(path, "wx")
     try {
-      await handle.writeFile(JSON.stringify({ token, pid: process.pid, startedAt: Date.now() } satisfies Lock))
+      await handle.writeFile(JSON.stringify({ token, pid: process.pid, startedAt: nowOf(timing) } satisfies Lock))
     } finally {
       await handle.close()
     }
@@ -106,6 +106,10 @@ function alive(pid: number) {
     // EPERM still means the process exists, just owned by another user.
     return isCode(error, "EPERM")
   }
+}
+
+function nowOf(timing: EnsureTiming | undefined) {
+  return timing?.now?.() ?? Date.now()
 }
 
 function isCode(error: unknown, code: string) {

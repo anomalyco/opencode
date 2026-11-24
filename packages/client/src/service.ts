@@ -52,6 +52,8 @@ export type Info = {
   readonly url: string
   /** Operating system process identifier. */
   readonly pid: number
+  /** Readiness advertised while the service boots; absent on registrations from older servers. */
+  readonly state?: "starting" | "ready"
   /** Private service password, when authentication is enabled. */
   readonly password?: string
 }

@@ -17,6 +17,8 @@ export const register = Effect.fnUntraced(function* (options: {
   readonly id: string
   readonly file: string
   readonly shutdown: Effect.Effect<void>
+  /** Completes when the server finishes booting, so clients can tell a hung boot from a hung owner. */
+  readonly ready?: Effect.Effect<void>
 }) {
   const fs = yield* FileSystem.FileSystem
   const temp = options.file + "." + options.id + ".tmp"
@@ -26,8 +28,9 @@ export const register = Effect.fnUntraced(function* (options: {
     version: OPENCODE_VERSION,
     url: HttpServer.formatAddress(options.address),
     pid: process.pid,
+    state: "starting",
     password: options.password,
-  }
+  } satisfies Info
   const encoded = yield* encodeInfo(info)
   const current = fs.readFileString(options.file).pipe(Effect.flatMap(decodeInfo))
   const owns = (found: Info) =>
@@ -72,6 +75,21 @@ export const register = Effect.fnUntraced(function* (options: {
     Effect.andThen(options.shutdown),
     Effect.forkScoped,
   )
+  if (options.ready !== undefined)
+    yield* options.ready.pipe(
+      Effect.andThen(() => current),
+      Effect.filterOrFail(owns),
+      Effect.andThen(
+        encodeInfo({ ...info, state: "ready" }).pipe(
+          Effect.andThen((ready) => fs.writeFileString(temp, ready, { mode: 0o600 })),
+          Effect.andThen(
+            fs.rename(temp, options.file).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") })),
+          ),
+        ),
+      ),
+      Effect.ignore,
+      Effect.forkScoped,
+    )
   return current.pipe(
     Effect.flatMap((found) => (owns(found) ? fs.remove(options.file) : Effect.void)),
     Effect.ignore,

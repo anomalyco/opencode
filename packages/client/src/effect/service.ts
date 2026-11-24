@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import type { DiscoverOptions, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
-import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
+import { defaultEnsureTiming, ensureTiming, type EnsureTiming, unresponsiveThreshold } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
@@ -81,7 +81,8 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       const count = streak === undefined ? 1 : streak.count + 1
       const start = streak?.start ?? now
       timeouts = { info, count, start }
-      if (count >= timing.unresponsiveFailures && now - start >= timing.unresponsiveWindow) {
+      const threshold = unresponsiveThreshold(timing, info.state === "starting")
+      if (count >= threshold.failures && now - start >= threshold.window) {
         const acquired = yield* Effect.tryPromise(() => tryBeginRestart(options.file, timing))
         if (acquired !== undefined) {
           restartToken = acquired.token
@@ -100,7 +101,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       const token = restartToken
       if (service.state === "ready" && token !== undefined) {
         restartToken = undefined
-        yield* Effect.tryPromise(() => completeRestart(options.file, token))
+        yield* Effect.tryPromise(() => completeRestart(options.file, token, timing))
       }
       pool.serviceAnswered(service.info.pid, service.state === "ready")
       const decision = decide(service, options)
@@ -167,6 +168,7 @@ export const Info = Schema.Struct({
   version: Schema.optional(Schema.String),
   url: Schema.String,
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
+  state: Schema.optional(Schema.Union([Schema.Literal("starting"), Schema.Literal("ready")])),
   password: Schema.optional(Schema.String),
 })
 
