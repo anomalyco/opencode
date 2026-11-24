@@ -138,6 +138,58 @@ test("lists every provider of the integration just connected", async () => {
   expect(frame).not.toContain("Local Model")
 })
 
+test("connected check uses the session location, not the launch directory", async () => {
+  const sub = `${directory}/packages/b`
+
+  await using setup = await renderLocal({
+    config: { experimental: { "new-designs": true } },
+    fetch: (url) => {
+      const loc = url.searchParams.get("location[directory]") ?? directory
+      const at = (data: unknown) => json({ location: { directory: loc }, data })
+
+      if (url.pathname === "/api/location")
+        return json({ directory: loc, project: { id: "proj_test", directory, canonical: directory } })
+
+      if (url.pathname === "/api/integration")
+        return at(
+          loc === sub
+            ? [
+                {
+                  id: "x",
+                  name: "X",
+                  methods: [{ type: "key" }],
+                  connections: [{ type: "credential", method: "key", id: "c1", label: "Work" }],
+                },
+              ]
+            : [],
+        )
+
+      if (url.pathname === "/api/provider")
+        return at(loc === sub ? [{ id: "x", name: "X", activation: "enabled", package: "openai-compatible" }] : [])
+
+      if (url.pathname === "/api/model")
+        return at(
+          loc === sub
+            ? [
+                { ...model("sub-paid"), providerID: "x", name: "Sub Paid" },
+                { ...model("sub-free"), providerID: "opencode", name: "Free Model", cost: [freeCost] },
+              ]
+            : [model("launch")],
+        )
+    },
+  })
+
+  setup.location.set({ directory: sub })
+  await setup.data.location.sync({ directory: sub })
+
+  setup.dialog.replace(() => <DialogModel />)
+  await setup.renderOnce()
+
+  const frame = setup.captureCharFrame()
+  expect(frame).not.toContain("Free models")
+  expect(frame).toContain("Sub Paid")
+})
+
 const freeCost = {
   input: 0,
   output: 0,
