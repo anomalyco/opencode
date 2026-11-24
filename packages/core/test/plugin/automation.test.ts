@@ -24,7 +24,8 @@ it.live("Effect plugins can create, list and delete automations", () =>
     const session = yield* context.session.create({ title: "Effect automation target" })
 
     const created = yield* context.experimental.automation.create({
-      directory: context.location.directory,
+      sessionID: session.id,
+      directory: undefined,
       name: "effect inbox",
       trigger: { type: "cron", cron: "0 * * * *", tz: "Europe/Madrid" },
       action: { type: "prompt", prompt: "Clean up the inboxes now.", to: { session: session.id } },
