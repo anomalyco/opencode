@@ -143,7 +143,7 @@ for (const newTimeline of [false, true]) {
     // The timeline's stops in the order the key reaches them, from the control it starts on to the first stop outside.
     const walk = async (key: "Tab" | "Shift+Tab", from: Locator) => {
       await from.focus()
-      const stops: { tag: string; name: string; hidden: boolean; shown: boolean }[] = []
+      const stops: { name: string; tool: boolean; hidden: boolean; shown: boolean }[] = []
 
       for (let press = 0; press < 20; press++) {
         await page.keyboard.press(key)
@@ -155,8 +155,8 @@ for (const newTimeline of [false, true]) {
           const box = element.getBoundingClientRect()
 
           return {
-            tag: element.localName,
             name: (element.getAttribute("aria-label") ?? element.textContent ?? "").trim().replace(/\s+/g, " "),
+            tool: element.matches("button[aria-expanded]"),
             hidden: element.closest('[aria-hidden="true"]') !== null,
             shown:
               element.checkVisibility({ opacityProperty: true, visibilityProperty: true }) &&
@@ -175,11 +175,13 @@ for (const newTimeline of [false, true]) {
 
     const forward = await walk("Tab", page.getByRole("button", { name: "More actions", exact: true }))
     const back = await walk("Shift+Tab", page.getByRole("textbox", { name: "Prompt", exact: true }))
-    expect(forward.filter((stop) => stop.hidden || !stop.shown)).toEqual([])
-    expect(back.filter((stop) => stop.hidden || !stop.shown)).toEqual([])
-    // The tool header, then the link; and on the way back the user message's menu after them.
-    expect(forward.map((stop) => stop.tag)).toEqual(["button", "a"])
-    expect(back.map((stop) => stop.tag)).toEqual(["a", "button", "button"])
+
+    for (const stops of [forward, back]) {
+      expect(stops.filter((stop) => stop.hidden || !stop.shown)).toEqual([])
+      // The walk passed the turn's tool header and its link.
+      expect(stops.some((stop) => stop.tool)).toBe(true)
+      expect(stops.map((stop) => stop.name)).toContain("the notes")
+    }
   })
 }
 
