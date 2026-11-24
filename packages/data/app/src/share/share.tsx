@@ -396,7 +396,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
             {/* The bar across the top, like an editor's: Close and Shuffle, every option as a dropdown, the music with
                 arrows either side, and Export on the right. */}
             <div data-slot="editor-bar" role="toolbar" aria-label={`Share ${value().title}`}>
-              <button type="button" data-slot="icon-button" aria-label="Close" onClick={close}>
+              <button type="button" data-slot="icon-button" aria-label="Close" data-tooltip="Close" onClick={close}>
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                   <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" />
                 </svg>
@@ -425,6 +425,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     data-slot="dropdown-trigger"
                     aria-label={`Date: ${dateLabel()}`}
                     aria-haspopup="dialog"
+                    data-tooltip="Date"
                     aria-expanded={menu() === "date" ? "true" : "false"}
                     onClick={() => setMenu(menu() === "date" ? undefined : "date")}
                   >
@@ -556,7 +557,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     data-slot="icon-button"
                     aria-label="Mute music"
                     aria-pressed={muted()}
-                    title={muted() ? "Unmute" : "Mute"}
+                    data-tooltip={muted() ? "Unmute" : "Mute"}
                     onClick={() => {
                       setMuted(!muted())
                       setPlaying(true)
@@ -585,7 +586,13 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     </svg>
                   </button>
                 </Show>
-                <button type="button" data-slot="icon-button" aria-label="Shuffle" title="Shuffle" onClick={shuffle}>
+                <button
+                  type="button"
+                  data-slot="icon-button"
+                  aria-label="Shuffle"
+                  data-tooltip="Shuffle"
+                  onClick={shuffle}
+                >
                   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                     <g fill="none" stroke="currentColor" stroke-width="1.5">
                       <path d="M2 4.5h2.5c3.5 0 3.5 7 7 7H14M2 11.5h2.5c1.4 0 2.2-1.1 2.9-2.4M14 4.5h-2.5c-1.4 0-2.2 1.1-2.9 2.4" />
@@ -759,6 +766,7 @@ function Dropdown<T extends string>(props: {
         data-slot="dropdown-trigger"
         aria-label={`${props.label}: ${current()?.label ?? ""}`}
         aria-haspopup="listbox"
+        data-tooltip={props.label}
         aria-expanded={open() ? "true" : "false"}
         onClick={() => props.onOpen(open() ? undefined : props.id)}
       >

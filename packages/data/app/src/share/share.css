@@ -91,7 +91,8 @@
   color: var(--stats-text);
   background: var(--stats-bg);
   border: 0;
-  overflow: hidden;
+  /* Not clipped, so the bar's tooltips can show above it. */
+  overflow: visible;
   /* No border: a 1px ring of shadow is its edge, stacked over a contact shadow, a near one and a far, soft one. */
   box-shadow:
     0 0 0 1px light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.1)),
@@ -855,6 +856,56 @@
     height: 36px;
   }
 
+  /* The bar's tooltips: the control's name above it, after a short wait on hover, at once on keyboard focus; never
+     over an open dropdown. */
+  [data-tooltip] {
+    position: relative;
+
+    &::after {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      z-index: 4;
+      padding: 5px 8px;
+      font-size: 12px;
+      line-height: 1;
+      color: var(--stats-bg);
+      white-space: nowrap;
+      pointer-events: none;
+      content: attr(data-tooltip);
+      background: var(--stats-text);
+      opacity: 0;
+      translate: -50% 2px;
+      transition:
+        opacity 120ms ease,
+        translate 120ms ease;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:not([aria-expanded="true"])::after {
+        opacity: 1;
+        translate: -50% 0;
+        transition-delay: 400ms;
+      }
+    }
+
+    &:focus-visible:not([aria-expanded="true"])::after {
+      opacity: 1;
+      translate: -50% 0;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      &::after {
+        translate: -50% 0;
+      }
+    }
+  }
+
+  /* Close as far from the first dropdown as Shuffle is from Export: the gap and 4px more. */
+  [data-slot="editor-bar"] > [data-slot="icon-button"]:first-child {
+    margin-right: 4px;
+  }
+
   /* Mute, Shuffle and Export, together at the far end. */
   [data-slot="bar-end"] {
     display: flex;
@@ -882,11 +933,12 @@
     background: var(--stats-bg);
     border: 1px solid var(--stats-line-strong);
     border-radius: 0;
-    transition: border-color 120ms ease;
+    transition: background-color 120ms ease;
 
+    /* Hover: a light grey wash, the border unchanged. */
     @media (hover: hover) and (pointer: fine) {
       &:hover {
-        border-color: var(--stats-faint);
+        background: var(--stats-layer);
       }
     }
 
@@ -940,7 +992,7 @@
     flex-direction: column;
     min-width: 100%;
     max-height: min(420px, 60dvh);
-    padding: 4px;
+    padding: 4px 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     background: var(--stats-bg);
@@ -962,7 +1014,7 @@
     align-items: center;
     gap: 10px;
     min-height: 36px;
-    padding: 4px 8px 4px 10px;
+    padding: 4px 12px 4px 14px;
     font-size: 13px;
     color: var(--stats-text);
     text-align: left;
