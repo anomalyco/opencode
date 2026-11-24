@@ -263,8 +263,9 @@ export function shareDuration(card: ShareCard, options: ShareOptions, timing = f
 // only this part.
 export function mainLength(card: ShareCard, options: ShareOptions, timing = freeTiming) {
   const intro = introSlides(card, options, timing)?.end ?? 0
-  const play = isRace(card) ? raceLength(card, timing) : turns(card, options, timing).length * timing.step
-  return timing.length ?? intro + timing.start + play + hold
+  // A race runs to its last day just before the closing slides, so it ends on the finished order, not a long hold.
+  const play = isRace(card) ? raceLength(card, timing) + raceRest : turns(card, options, timing).length * timing.step + hold
+  return timing.length ?? intro + timing.start + play
 }
 
 // A race: a stacked chart over its whole range, drawn as bars overtaking each other day by day.
@@ -272,11 +273,13 @@ function isRace(card: ShareCard) {
   return card.chart.kind === "stacked" && !!card.chart.race && card.chart.day === undefined
 }
 
-// How long the race runs: about a tenth of a second a day, within the track when there's music.
+// How long the race runs: about a sixth of a second a day, or with music the whole track up to the closing slides,
+// so it lands on its last day just as they cut in.
+const raceRest = 0.4
 function raceLength(card: ShareCard, timing: ShareTiming) {
   const days = card.chart.kind === "stacked" ? card.chart.columns.length : 0
-  const own = Math.min(9, Math.max(4, days * 0.12))
-  return timing.length ? Math.max(2, Math.min(own, timing.length - timing.start - hold)) : own
+  if (timing.length) return Math.max(2, timing.length - timing.start - raceRest)
+  return Math.min(12, Math.max(5, days * 0.16))
 }
 
 // The slides the leaderboard and comparison open with: the headline until the first cut, then a slide a place (the top
@@ -1010,7 +1013,11 @@ function drawRace(
   ctx.font = `400 ${Math.round(row * 0.9)}px ${font}`
   ctx.fillStyle = colors.faint
   ctx.globalAlpha *= 0.35
-  const date = chart.columns[Math.round(at)]?.label ?? ""
+  // A clock runs before the date, through each day as the race crosses it, so something is always moving; it marks
+  // the race's place between two days, the data itself being daily.
+  const minutes = Math.min(24 * 60 - 1, Math.floor(step * 24 * 60))
+  const clock = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
+  const date = `${clock} ${chart.columns[from]?.label ?? ""}`
   ctx.fillText(date, box.x + box.width - ctx.measureText(date).width, box.y + box.height)
   ctx.restore()
 
