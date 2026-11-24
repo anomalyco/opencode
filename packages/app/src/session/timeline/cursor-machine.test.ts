@@ -57,13 +57,20 @@ const synced = (
     loaded: false,
     viewReady: true,
     syncing: false,
-    revertMessageID: undefined,
-    oldestMessageID: "msg_0040",
+    hidden: false,
     history: "seekable",
     hash: `message-${messageID}`,
     ...input,
   }
 }
+
+// The server's answer to the lookup that `state` waits for.
+const lookedUp = (state: TimelineCursorState, found: boolean | undefined): TimelineCursorEvent => ({
+  type: "target.looked-up",
+  attempt: state.attempt,
+  found,
+  hash: `message-${pendingCursorMessageID(state)!}`,
+})
 
 function replay(events: TimelineCursorEvent[], from = createTimelineCursorState()) {
   return events.reduce((state, event) => transitionTimelineCursor(state, event).state, from)
@@ -97,7 +104,7 @@ const landed = (state: TimelineCursorState) => replay([{ type: "seek.landed", at
 describe("cursor machine", () => {
   test("a hash target the revert hides stops at once and returns an opened session to the end", () => {
     const pending = open("#message-msg_0050").state
-    const hidden = transitionTimelineCursor(pending, synced(pending, { revertMessageID: "msg_0048" }))
+    const hidden = transitionTimelineCursor(pending, synced(pending, { hidden: true }))
 
     expect(hidden.state).toEqual({ status: "none", attempt: pending.attempt + 1, echo: true })
     expect(hidden.effects).toEqual([{ type: "follow.end" }, { type: "hash.clear" }])
@@ -107,47 +114,59 @@ describe("cursor machine", () => {
     expect(echoed.effects).toEqual([])
   })
 
-  test("a hash target at or after the oldest loaded message stops once the transcript has synced", () => {
+  test("a hash target that is not loaded asks the server once, and stops when the session does not have it", () => {
     const pending = open("#message-msg_0045").state
 
     expectIgnored(pending, synced(pending, { syncing: true }))
-    expect(transitionTimelineCursor(pending, synced(pending)).effects).toEqual([
-      { type: "follow.end" },
-      { type: "hash.clear" },
-    ])
+    const asked = transitionTimelineCursor(pending, synced(pending))
+    expect(asked.state).toMatchObject({ status: "pending", lookup: "asked", attempt: pending.attempt + 1 })
+    expect(asked.effects).toEqual([{ type: "target.lookup", attempt: asked.state.attempt, messageID: "msg_0045" }])
+    expectIgnored(asked.state, synced(asked.state))
+    // An answer to an earlier question is dropped.
+    expectIgnored(asked.state, lookedUp(pending, false))
+
+    const absent = transitionTimelineCursor(asked.state, lookedUp(asked.state, false))
+    expect(absent.state).toEqual({ status: "none", attempt: asked.state.attempt + 1, echo: true })
+    expect(absent.effects).toEqual([{ type: "follow.end" }, { type: "hash.clear" }])
 
     // A later link keeps the reader where they were.
-    const linked = navigate(idle(), "#message-zzz").state
-    expect(transitionTimelineCursor(linked, synced(linked)).effects).toEqual([{ type: "hash.clear" }])
-  })
+    const linked = replay([synced(navigate(idle(), "#message-zzz").state)], navigate(idle(), "#message-zzz").state)
+    expect(transitionTimelineCursor(linked, lookedUp(linked, false)).effects).toEqual([{ type: "hash.clear" }])
 
-  test("a hash target older than the loaded messages pages until it loads, history runs out or a page fails", () => {
-    const pending = open("#message-msg_0010").state
-    const seek = transitionTimelineCursor(pending, synced(pending))
-
-    expect(seek.state).toBe(pending)
-    expect(seek.effects).toEqual([{ type: "history.seek" }])
-    expectIgnored(pending, synced(pending, { history: "loading" }))
-
-    // An older page that passes the target without it ends the search.
-    expect(transitionTimelineCursor(pending, synced(pending, { oldestMessageID: "msg_0005" })).state.status).toBe(
-      "none",
-    )
-
-    const exhausted = transitionTimelineCursor(pending, synced(pending, { history: "exhausted" }))
-    expect(exhausted.state.status).toBe("none")
-    expect(exhausted.effects).toEqual([{ type: "follow.end" }, { type: "hash.clear" }])
-
-    // A failed page keeps the hash for a reload.
-    const failed = transitionTimelineCursor(pending, synced(pending, { history: "failed" }))
-    expect(failed.state).toEqual({ status: "none", attempt: pending.attempt + 1 })
+    // A server that could not say keeps the hash for a reload.
+    const failed = transitionTimelineCursor(asked.state, lookedUp(asked.state, undefined))
+    expect(failed.state).toEqual({ status: "none", attempt: asked.state.attempt + 1 })
     expect(failed.effects).toEqual([{ type: "follow.end" }])
-
-    // A hash that no longer names the target is left alone.
-    expect(transitionTimelineCursor(pending, synced(pending, { history: "exhausted", hash: "" })).effects).toEqual([
-      { type: "follow.end" },
-    ])
   })
+
+  test.each(["msg_0010", "msg_sch_0001"])(
+    "the hash target %s, which the session has, pages until it loads, history runs out or a page fails",
+    (messageID) => {
+      const opened = open(`#message-${messageID}`).state
+      const asked = replay([synced(opened)], opened)
+      const pending = replay([lookedUp(asked, true)], asked)
+      const seek = transitionTimelineCursor(pending, synced(pending))
+
+      expect(pending).toMatchObject({ status: "pending", lookup: "found", attempt: asked.attempt + 1 })
+      expect(seek.state).toBe(pending)
+      expect(seek.effects).toEqual([{ type: "history.seek" }])
+      expectIgnored(pending, synced(pending, { history: "loading" }))
+
+      const exhausted = transitionTimelineCursor(pending, synced(pending, { history: "exhausted" }))
+      expect(exhausted.state.status).toBe("none")
+      expect(exhausted.effects).toEqual([{ type: "follow.end" }, { type: "hash.clear" }])
+
+      // A failed page keeps the hash for a reload.
+      const failed = transitionTimelineCursor(pending, synced(pending, { history: "failed" }))
+      expect(failed.state).toEqual({ status: "none", attempt: pending.attempt + 1 })
+      expect(failed.effects).toEqual([{ type: "follow.end" }])
+
+      // A hash that no longer names the target is left alone.
+      expect(transitionTimelineCursor(pending, synced(pending, { history: "exhausted", hash: "" })).effects).toEqual([
+        { type: "follow.end" },
+      ])
+    },
+  )
 
   test("jumping back onto the prompt the hash already names writes nothing, so a later link still navigates", () => {
     const first = transitionTimelineCursor(idle(), jump("msg_5"))

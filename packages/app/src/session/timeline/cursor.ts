@@ -25,8 +25,10 @@ export function createTimelineCursor(input: {
   visibleUserMessages: Accessor<SessionMessageUser[]>
   /** The transcript's first sync is still under way. */
   syncing: Accessor<boolean>
-  revertMessageID: Accessor<string | undefined>
-  oldestMessageID: Accessor<string | undefined>
+  /** The message is among the loaded messages, shown or not. */
+  inTranscript: (messageID: string) => boolean
+  /** Whether the server has the message in this session. */
+  lookupMessage: (messageID: string) => Promise<boolean>
   historyStatus: Accessor<HistorySeekStatus>
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
@@ -59,6 +61,16 @@ export function createTimelineCursor(input: {
     if (effect.type === "follow.end") return input.toEnd()
 
     if (effect.type === "history.seek") return input.seekHistory()
+
+    if (effect.type === "target.lookup") {
+      // The machine drops an answer whose attempt is no longer current.
+      const settle = (found: boolean | undefined) =>
+        dispatch({ type: "target.looked-up", attempt: effect.attempt, found, hash: location.hash.slice(1) })
+
+      void input.lookupMessage(effect.messageID).then(settle, () => settle(undefined))
+
+      return
+    }
 
     if (effect.type === "hash.set")
       return navigate(location.pathname + location.search + `#${input.anchor(effect.messageID)}`, { replace: true })
@@ -157,14 +169,15 @@ export function createTimelineCursor(input: {
     const id = pendingCursorMessageID(cursorState())
 
     if (!id) return
+    const loaded = input.visibleUserMessages().some((message) => message.id === id)
+
     dispatch({
       type: "target.synced",
       messageID: id,
-      loaded: input.visibleUserMessages().some((message) => message.id === id),
+      loaded,
       viewReady: input.viewReady(),
       syncing: input.syncing(),
-      revertMessageID: input.revertMessageID(),
-      oldestMessageID: input.oldestMessageID(),
+      hidden: !loaded && input.inTranscript(id),
       history: input.historyStatus(),
       hash: untrack(() => location.hash.slice(1)),
     })
@@ -174,7 +187,14 @@ export function createTimelineCursor(input: {
     on(
       () => input.visibleUserMessages().at(-1)?.id,
       (lastID, previousID) => {
-        if (lastID && previousID && lastID > previousID) dispatch(LATEST_ADVANCED_EVENT)
+        // A newer prompt is one after the previous newest, which is then still shown. IDs do not sort in that order.
+        if (
+          lastID &&
+          previousID &&
+          lastID !== previousID &&
+          input.visibleUserMessages().some((message) => message.id === previousID)
+        )
+          dispatch(LATEST_ADVANCED_EVENT)
       },
     ),
   )

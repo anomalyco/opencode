@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import {
   createSessionRevertState,
   selectCursorAfterRevert,
@@ -353,6 +353,45 @@ describe("transitionSessionRevert", () => {
     expect(transitionSessionRevert(idle, rewindTo("msg_missing")).state).toBe(idle)
     expect(transitionSessionRevert(idle, { type: "redo.requested", revertMessageID: undefined }).state).toBe(idle)
     expect(transitionSessionRevert(idle, { type: "toast.undo", attempt: 0 }).state).toBe(idle)
+  })
+})
+
+describe("a transcript whose IDs do not sort in its order", () => {
+  // A scheduled prompt sorts after every other ID, and the reply is a boundary that is not a prompt.
+  const scheduled = user("msg_sch_1")
+
+  const reply: SessionMessageInfo = {
+    id: "msg_2a",
+    type: "assistant",
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    content: [],
+    time: { created: 1 },
+  }
+
+  const transcript = { messages: [scheduled, m2, reply, m3], inboxIDs: new Set<string>() }
+
+  test("undo rewinds the prompt before the boundary in the transcript", () => {
+    const step = transitionSessionRevert(createSessionRevertState(), {
+      type: "undo.requested",
+      revertMessageID: "msg_2",
+      ...transcript,
+    })
+
+    expect(step.state).toMatchObject({ status: "running", operation: { type: "rewind", message: scheduled } })
+  })
+
+  test("the boundary decides what undo and the cursor see by its place", () => {
+    const state = createSessionRevertState()
+
+    expect(viewSessionRevert(state, { messages: transcript.messages, revertMessageID: "msg_2" }).canUndo).toBe(true)
+    expect(viewSessionRevert(state, { messages: transcript.messages, revertMessageID: "msg_sch_1" }).canUndo).toBe(
+      false,
+    )
+    expect(selectCursorAfterRevert(transcript, "msg_2")).toBe("msg_sch_1")
+    expect(selectCursorAfterRevert(transcript, "msg_2a")).toBe("msg_2")
+    // A boundary that is not loaded is older than every loaded message.
+    expect(selectCursorAfterRevert(transcript, "msg_0")).toBeUndefined()
   })
 })
 

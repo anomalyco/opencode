@@ -26,14 +26,16 @@ export type TimelineCursorState =
   /** No prompt is chosen. `echo` after the cursor cleared the hash, until the router repeats the empty hash once. */
   | { readonly status: "none"; readonly attempt: number; readonly echo?: boolean }
   /**
-   * A `#message-<id>` target that is not loaded yet; history pages toward it while it can still load. `endOnMiss`: a
-   * target that never loads returns the view to the end, because the hash opened the session.
+   * A `#message-<id>` target that is not loaded yet; history pages toward it once the server says the session has it
+   * (`lookup`: asked, then found). `endOnMiss`: a target that never loads returns the view to the end, because the
+   * hash opened the session.
    */
   | {
       readonly status: "pending"
       readonly messageID: string
       readonly endOnMiss: boolean
       readonly attempt: number
+      readonly lookup?: "asked" | "found"
     }
   /**
    * The active prompt. `fresh` until the reader scrolls, after which navigation steps from the prompt in view instead.
@@ -58,7 +60,7 @@ export type TimelineCursorEvent =
   | { readonly type: "hash.changed"; readonly hash: string; readonly viewReady: boolean }
   /** The frame an apply waited for. `reveal`: the route opens the session on a tool call instead. */
   | { readonly type: "hash.applied"; readonly attempt: number; readonly hash: string; readonly reveal: boolean }
-  /** What decides whether a pending target can still load: the transcript, the revert boundary and history paging. */
+  /** What decides whether a pending target can still load: the transcript and history paging. */
   | {
       readonly type: "target.synced"
       readonly messageID: string
@@ -66,9 +68,16 @@ export type TimelineCursorEvent =
       readonly viewReady: boolean
       /** The transcript's first sync is still under way, so the loaded messages may not be the newest page yet. */
       readonly syncing: boolean
-      readonly revertMessageID: string | undefined
-      readonly oldestMessageID: string | undefined
+      /** The target is in the transcript but is not a prompt that shows: the revert hides it. */
+      readonly hidden: boolean
       readonly history: HistorySeekStatus
+      readonly hash: string
+    }
+  /** The server said whether the session has the pending target. `found` is undefined when it could not say. */
+  | {
+      readonly type: "target.looked-up"
+      readonly attempt: number
+      readonly found: boolean | undefined
       readonly hash: string
     }
   /** Previous or next message. `hash` is the route hash before the jump. */
@@ -94,6 +103,8 @@ export type TimelineCursorEffect =
   /** Apply the route hash on the next frame. */
   | { readonly type: "apply.schedule"; readonly attempt: number }
   | { readonly type: "apply.cancel" }
+  /** Ask the server whether the session has a pending target that is not loaded. */
+  | { readonly type: "target.lookup"; readonly attempt: number; readonly messageID: string }
   /** Load the next older page toward a pending target. */
   | { readonly type: "history.seek" }
   | { readonly type: "follow.detach" }
@@ -208,6 +219,19 @@ export function transitionTimelineCursor(
   if (event.type === "hash.applied") return hashApplied(state, event)
 
   if (event.type === "target.synced") return targetSynced(state, event)
+
+  if (event.type === "target.looked-up") {
+    if (state.status !== "pending" || state.lookup !== "asked" || state.attempt !== event.attempt)
+      return unchanged(state)
+
+    if (event.found) return changed({ ...state, lookup: "found", attempt: state.attempt + 1 })
+
+    // A lookup that failed keeps the hash, as a failed page does, so a reload tries the target again.
+    if (event.found === undefined)
+      return changed({ status: "none", attempt: state.attempt + 1 }, state.endOnMiss ? [FOLLOW_END] : NO_EFFECTS)
+
+    return missing(state, event.hash)
+  }
 
   if (event.type === "message.jump") {
     // Jumping back onto the prompt the route already names writes nothing, so nothing echoes.
@@ -364,15 +388,23 @@ function targetSynced(
     )
   }
 
-  // Message IDs ascend and older pages hold only older messages, so a target the revert hides, or one at or after the
-  // oldest loaded message, never loads.
-  if (event.revertMessageID !== undefined && state.messageID >= event.revertMessageID) return missing(state, event.hash)
+  // No older page changes what the revert hides.
+  if (event.hidden) return missing(state, event.hash)
 
   if (event.syncing) return unchanged(state)
 
-  if (event.oldestMessageID !== undefined && state.messageID >= event.oldestMessageID) return missing(state, event.hash)
+  if (event.history === "seekable") {
+    if (state.lookup === "found") return changed(state, HISTORY_SEEK)
 
-  if (event.history === "seekable") return changed(state, HISTORY_SEEK)
+    if (state.lookup === "asked") return unchanged(state)
+    // A message's ID does not say where it is in the transcript, and paging toward a message the session does not
+    // have would load the whole history. So the server says first whether it has the target.
+    const attempt = state.attempt + 1
+
+    return changed({ ...state, lookup: "asked", attempt }, [
+      { type: "target.lookup", attempt, messageID: state.messageID },
+    ])
+  }
 
   if (event.history === "loading") return unchanged(state)
 

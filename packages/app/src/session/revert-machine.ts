@@ -1,5 +1,7 @@
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import { beforeRevert } from "@opencode/util/session-revert"
 import type { ContextItem, Prompt } from "@/composer/state"
+import { selectSessionUserMessages, selectVisibleSessionUserMessages } from "./session-domain"
 
 // A hung wait, media pin or revert request fails, so undo and redo cannot stay disabled forever.
 export const REVERT_TIMEOUT_MS = 30_000
@@ -54,9 +56,9 @@ export type SessionRevertState =
       readonly draft: RevertDraftSnapshot
     }
 
-/** The Session's user messages when a request or result is dispatched. */
+/** The Session's transcript when a request or result is dispatched. */
 type RevertMessages = {
-  readonly messages: readonly SessionMessageUser[]
+  readonly messages: readonly SessionMessageInfo[]
   /** Messages still waiting in the inbox. */
   readonly inboxIDs: ReadonlySet<string>
 }
@@ -110,7 +112,7 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
     if (state.status === "running") return unchanged(state)
     const message = event.messages.find((item) => item.id === event.messageID)
 
-    if (!message) return unchanged(state)
+    if (message?.type !== "user") return unchanged(state)
 
     return start(
       state,
@@ -121,7 +123,7 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
   if (event.type === "undo.requested") {
     if (state.status === "running") return unchanged(state)
     const boundary = effectiveRevertMessageID(state, event.revertMessageID)
-    const message = event.messages.filter((item) => !boundary || item.id < boundary).at(-1)
+    const message = selectVisibleSessionUserMessages(event.messages, boundary).at(-1)
 
     if (!message) return unchanged(state)
 
@@ -261,14 +263,16 @@ export function effectiveRevertMessageID(state: SessionRevertState, serverRevert
 
 /** The prompt before the boundary, or the latest delivered prompt when nothing is reverted. */
 export function selectCursorAfterRevert(input: RevertMessages, boundary: string | undefined) {
-  if (boundary) return input.messages.filter((item) => item.id < boundary).at(-1)?.id
+  if (boundary) return selectVisibleSessionUserMessages(input.messages, boundary).at(-1)?.id
 
-  return input.messages.filter((item) => !input.inboxIDs.has(item.id)).at(-1)?.id
+  return selectSessionUserMessages(input.messages)
+    .filter((item) => !input.inboxIDs.has(item.id))
+    .at(-1)?.id
 }
 
 export function viewSessionRevert(
   state: SessionRevertState,
-  context: { readonly messages: readonly SessionMessageUser[]; readonly revertMessageID: string | undefined },
+  context: { readonly messages: readonly SessionMessageInfo[]; readonly revertMessageID: string | undefined },
 ) {
   const busy = state.status === "running"
   const revertMessageID = effectiveRevertMessageID(state, context.revertMessageID)
@@ -276,7 +280,7 @@ export function viewSessionRevert(
   return {
     busy,
     revertMessageID,
-    canUndo: !busy && context.messages.some((item) => !revertMessageID || item.id < revertMessageID),
+    canUndo: !busy && beforeRevert(context.messages, revertMessageID).some((item) => item.type === "user"),
     canRedo: !busy && !!revertMessageID,
   }
 }

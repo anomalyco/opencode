@@ -56,6 +56,10 @@ const allow: { case: string; field: string; deviation: string }[] = [
   // The loaded message already holds text and reasoning part 0, so the minimal start (ordinal 0) is a replay.
   { case: "session.text.started@loaded", field: "messages.ses_a", deviation: "O5-text-started-replay.md" },
   { case: "session.reasoning.started@loaded", field: "messages.ses_a", deviation: "O5-text-started-replay.md" },
+  // TypeScript reads the inbox again, and the oracle's inbox still lists the waiting input.
+  { case: "session.revert.committed@loaded", field: "messages.ses_a", deviation: "O89-revert-order.md" },
+  { case: "session.revert.committed@loaded", field: "pending.ses_a", deviation: "O89-revert-order.md" },
+  { case: "session.revert.committed@loaded", field: "requests", deviation: "O89-revert-order.md" },
 ]
 
 const SESSIONS = ["ses_a", "ses_b"]

@@ -1330,23 +1330,40 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         return
-      case "session.revert.committed":
-        if (store.session.info[event.data.sessionID]) {
-          setStore("session", "info", event.data.sessionID, "revert", undefined)
+      case "session.revert.committed": {
+        const sessionID = event.data.sessionID
+        if (store.session.info[sessionID]) setStore("session", "info", sessionID, "revert", undefined)
+        const loaded = !!store.session.message[sessionID]
+        const removed = new Set<string>()
+        // The server removes the boundary message and every message after it, by their place in the transcript. IDs
+        // do not sort in that order. A boundary that is not loaded is older than every loaded message.
+        if (loaded)
+          message.update(sessionID, (draft, index) => {
+            for (const item of draft.splice(index.get(event.data.to) ?? 0)) {
+              index.delete(item.id)
+              removed.add(item.id)
+            }
+          })
+        // The projector also deletes the inbox items enqueued at or after the boundary, without a cancel event. Their
+        // rows went with the messages. Only the server knows when an item was enqueued, so the inbox is read again.
+        const pending = store.session.pending[sessionID] ?? []
+        if (pending.length > 0) {
+          setStore(
+            "session",
+            "pending",
+            sessionID,
+            pending.filter((item) => !removed.has(item.id)),
+          )
+          sync.invalidate(`session.pending:${sessionID}`)
+          refresh(() => result.session.pending.sync(sessionID))
         }
-        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
-        setStore(
-          "session",
-          "pending",
-          event.data.sessionID,
-          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
-        )
-        message.update(event.data.sessionID, (draft, index) => {
-          const position = draft.findIndex((item) => item.id >= event.data.to)
-          if (position === -1) return
-          for (const item of draft.splice(position)) index.delete(item.id)
-        })
+        if (!loaded || store.session.message[sessionID]?.length) return
+        // Nothing loaded is left, and the cursor names a removed message, so the transcript is read again.
+        setStore("session", "messageCursor", sessionID, undefined)
+        sync.invalidate(`session.message:${sessionID}`)
+        refresh(() => result.session.message.sync(sessionID))
         return
+      }
       case "session.compaction.delta":
         if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {

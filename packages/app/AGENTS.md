@@ -145,6 +145,15 @@ This section is the single source for what may move or restyle the session timel
 - Never select on `style` inside `:has()`. Every inline style write then rechecks the `:has()` of the element's ancestors, and the virtualizer writes inline styles while the reader scrolls. Set a `data-` attribute when the element is built, and select on that.
 - To check: record a Chrome trace of the `devtools.timeline` category while you scroll through history that has not been visited, click in the timeline and press a scroll key. Read `elementCount` on each `UpdateLayoutTree` event; DevTools shows it as Recalculate Style, Elements Affected. A pass that affects about as many elements as the timeline contains is this regression.
 
+### Message order
+
+- A transcript is in the order the server gave it: by sequence, oldest first. Order comes from a message's place in that list, never from the text of its ID.
+- IDs do not sort in that order. A prompt gets its ID when it is sent and its place when it is delivered, so a prompt sent while the agent works sorts before the replies that precede it. A caller may also choose any ID: scheduled prompts (`msg_sch_…`), automations (`msg_aut_…`) and watch notices (`msg_watch_…`) sort after every other message. In 42 sessions (30,067 messages), a revert by ID text and a revert by place differed at 1,181 of 1,376 prompts.
+- It shipped as a blank timeline. A revert at a prompt that follows a scheduled prompt hid that earlier prompt when it was staged, and removed every loaded message when it was committed, until a reload.
+- A revert leaves the messages before its boundary: use `beforeRevert` (`@opencode/util/session-revert`). A boundary that is not loaded is older than every loaded message, so it leaves none of them. When a committed revert leaves nothing loaded, `packages/client/src/solid/data.ts` reads the transcript again.
+- Only the server knows whether the session has a message that is not loaded. `src/session/timeline/cursor-machine.ts` asks it (`session.message.get`) before history pages toward a `#message-<id>` target.
+- Keepers: the "revert" cases in `e2e/regression/timeline-stream.spec.ts`, `packages/client/test/solid-revert.test.ts`, and "a transcript whose IDs do not sort in its order" in `src/session/revert-machine.test.ts`.
+
 ## Localization
 
 - NEVER hardcode user-visible English strings in production code. ALWAYS use an i18n key for visible copy, placeholders, accessible labels, tooltips, menus, dialogs, toasts, empty states, and displayed errors.

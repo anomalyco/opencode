@@ -22,7 +22,6 @@ import {
   type SessionRevertOperation,
   type SessionRevertState,
 } from "./revert-machine"
-import { selectSessionUserMessages } from "./session-domain"
 
 const IDLE = createSessionRevertState()
 
@@ -48,7 +47,7 @@ export function createSessionRevert(input: {
     const sessionID = input.session.identity.params.id
 
     return viewSessionRevert((sessionID && sessions()[sessionID]) || IDLE, {
-      messages: input.session.history.userMessages(),
+      messages: input.session.history.messages(),
       revertMessageID: input.session.data.revertMessageID(),
     })
   })
@@ -90,12 +89,7 @@ export function createSessionRevert(input: {
   }
 
   const snapshot = (sessionID: string) => {
-    const messages = selectSessionUserMessages(data.session.message.list(sessionID))
-
-    return {
-      messages,
-      inboxIDs: new Set(messages.flatMap((item) => (data.session.input.has(sessionID, item.id) ? [item.id] : []))),
-    }
+    return { messages: data.session.message.list(sessionID), inboxIDs: new Set(data.session.input.list(sessionID)) }
   }
 
   // Requests act on the routed Session; a kept timeline of another Session cannot start one. The promise settles with

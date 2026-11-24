@@ -145,6 +145,34 @@ export function selectJumpHistory(state: JumpToMessageState) {
   return state.status === "ready" || state.status === "opening" ? state.history : []
 }
 
+/**
+ * The prompts the picker lists. A revert hides its boundary and every prompt after it. The history is newest first, so
+ * those come before the boundary there; message IDs do not sort in that order. The loaded transcript also places a
+ * boundary that is not a prompt: `loaded` names its messages, and `visible` holds the prompts the revert leaves.
+ */
+export function selectJumpPrompts(
+  state: JumpToMessageState,
+  transcript: {
+    readonly revertMessageID: string | undefined
+    readonly loaded: readonly string[]
+    readonly visible: readonly JumpPrompt[]
+    /** Prompts still waiting in the inbox. */
+    readonly pending: ReadonlySet<string>
+  },
+) {
+  const history = selectJumpHistory(state)
+  const boundary = transcript.revertMessageID
+
+  const all = new Map(
+    history.slice(boundary ? history.findIndex((row) => row.id === boundary) + 1 : 0).map((row) => [row.id, row]),
+  )
+
+  transcript.loaded.forEach((id) => all.delete(id))
+  transcript.visible.forEach((row) => all.set(row.id, row))
+
+  return [...all.values()].filter((row) => row.text.trim() && !transcript.pending.has(row.id))
+}
+
 export function selectJumpOpening(state: JumpToMessageState) {
   return state.status === "opening"
 }

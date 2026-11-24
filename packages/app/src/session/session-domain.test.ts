@@ -20,12 +20,16 @@ const assistant: SessionMessageAssistant = {
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
 }
 
-test("selects user history strictly before the revert boundary", () => {
-  const messages: SessionMessageInfo[] = [user("msg_a"), assistant, user("msg_b"), user("msg_c")]
-  const users = selectSessionUserMessages(messages)
+test("selects the prompts before the revert boundary by their place in the transcript", () => {
+  // A scheduled prompt sorts after every other ID, and the last prompt, sent before its turn ended, sorts before it.
+  const messages: SessionMessageInfo[] = [user("msg_sch_a"), assistant, user("msg_b"), user("msg_1")]
+  const ids = (list: SessionMessageUser[]) => list.map((message) => message.id)
 
-  expect(users.map((message) => message.id)).toEqual(["msg_a", "msg_b", "msg_c"])
-  expect(selectVisibleSessionUserMessages(users, "msg_b").map((message) => message.id)).toEqual(["msg_a"])
-  expect(selectVisibleSessionUserMessages(users.slice(2), "msg_b")).toEqual([])
-  expect(selectVisibleSessionUserMessages(users)).toBe(users)
+  expect(ids(selectSessionUserMessages(messages))).toEqual(["msg_sch_a", "msg_b", "msg_1"])
+  expect(ids(selectVisibleSessionUserMessages(messages, "msg_b"))).toEqual(["msg_sch_a"])
+  // A boundary need not be a prompt.
+  expect(ids(selectVisibleSessionUserMessages(messages, "msg_2"))).toEqual(["msg_sch_a"])
+  // A boundary that is not loaded is older than every loaded message.
+  expect(selectVisibleSessionUserMessages(messages.slice(2), "msg_2")).toEqual([])
+  expect(ids(selectVisibleSessionUserMessages(messages))).toEqual(["msg_sch_a", "msg_b", "msg_1"])
 })

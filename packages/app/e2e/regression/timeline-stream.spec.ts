@@ -20,6 +20,9 @@ import {
   partUpdated,
   reasoningPart,
   renderedPartID,
+  revertCleared,
+  revertCommitted,
+  revertStaged,
   session,
   sessionID,
   setupTimeline,
@@ -1501,6 +1504,62 @@ test.describe("background work", () => {
     await header.locator('[data-slot="session-title-parent"]').click()
     await expect(page).toHaveURL(new RegExp(`/session/${sessionID}$`))
   })
+})
+
+test.describe("revert", () => {
+  const reply = (id: string, text: string, created: number) =>
+    ({
+      id,
+      type: "assistant",
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+      content: [{ type: "text", text }],
+      time: { created, completed: created },
+    }) satisfies SessionMessageAssistant
+
+  // In transcript order. Message IDs do not sort in that order: a scheduled prompt sorts after every other ID, and
+  // the last reply, whose ID is older than the prompt before it, sorts before the boundary.
+  const messages = [
+    { id: "msg_sch_0001", type: "user", text: "Scheduled prompt", time: { created: 1 } },
+    reply("msg_0002", "Scheduled reply", 2),
+    { id: "msg_0005", type: "user", text: "Boundary prompt", time: { created: 3 } },
+    reply("msg_0004", "Boundary reply", 4),
+  ] satisfies SessionMessageInfo[]
+
+  const all = messages.map((message) => message.id)
+
+  // The messages that have a row in the timeline, in order.
+  const shown = (page: Page) =>
+    page.evaluate(() => [
+      ...new Set(
+        [...document.querySelectorAll<HTMLElement>("[data-timeline-key]")].flatMap(
+          (row) => row.dataset.timelineKey?.match(/msg_(?:sch_)?\d{4}/) ?? [],
+        ),
+      ),
+    ])
+
+  for (const newTimeline of [false, true]) {
+    const name = newTimeline ? "new" : "old"
+
+    test(`a staged revert keeps the messages before its boundary on the ${name} timeline`, async ({ page }) => {
+      const timeline = await setupTimeline(page, { sessionMessages: messages, settings: { newTimeline } })
+      await expect.poll(() => shown(page)).toEqual(all)
+
+      await timeline.send(revertStaged({ sessionID, revert: { messageID: "msg_0005" } }))
+      await expect.poll(() => shown(page)).toEqual(["msg_sch_0001", "msg_0002"])
+
+      await timeline.send(revertCleared({ sessionID }))
+      await expect.poll(() => shown(page)).toEqual(all)
+    })
+
+    test(`a committed revert leaves the messages before its boundary on the ${name} timeline`, async ({ page }) => {
+      const timeline = await setupTimeline(page, { sessionMessages: messages, settings: { newTimeline } })
+      await expect.poll(() => shown(page)).toEqual(all)
+
+      await timeline.send(revertCommitted({ sessionID, to: "msg_0005" }))
+      await expect.poll(() => shown(page)).toEqual(["msg_sch_0001", "msg_0002"])
+    })
+  }
 })
 
 test.describe("compaction", () => {

@@ -1,4 +1,5 @@
 import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
+import { beforeRevert } from "@opencode/util/session-revert"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useConfig } from "../../config"
@@ -58,20 +59,15 @@ export function createSessionRows(
   const verbosity = () => config.data.session?.verbosity ?? defaultVerbosity
 
   function reduce() {
-    const messages = data.session.message.list(sessionID())
+    // A revert leaves the messages before its boundary in the transcript. IDs do not sort in that order.
+    const messages = beforeRevert(data.session.message.list(sessionID()), revertBoundary())
     const inputs = new Set(data.session.input.list(sessionID()))
     const pending = data.session.pending.list(sessionID())
     const queued = new Set(
       pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
     )
     const visible = queued.size === 0 ? messages : messages.filter((message) => !queued.has(message.id))
-    const boundary = revertBoundary()
-    const rows = reduceSessionRows(
-      boundary ? visible.filter((message) => message.id < boundary) : visible,
-      inputs,
-      turnTokens(),
-      verbosity(),
-    )
+    const rows = reduceSessionRows(visible, inputs, turnTokens(), verbosity())
     partitionPending(rows, pendingPermissions())
     const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
     rows.splice(
