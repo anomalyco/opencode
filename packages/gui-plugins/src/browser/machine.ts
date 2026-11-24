@@ -29,8 +29,8 @@ export type Ipc =
  * - `backoff`: main closed or refused the binding; a timer registers again.
  * - `suspended`: the tabs stay without a binding. `idle`: the server evicted it, and a user or agent wakes it. `ipc`:
  *   the pane's Ipc is gone, and it registers again once the Ipc is back.
- * - `blocked`: another window took the session (`replaced`), until the person is at it here again or no desktop holds
- *   it, or the server lacks it (`missing`).
+ * - `blocked`: another window took the session (`replaced`), until the person comes to it here again or no desktop
+ *   holds it, or the server lacks it (`missing`).
  */
 export type Phase =
   | { readonly status: "idle" }
@@ -214,10 +214,13 @@ export type Event =
   | { readonly type: "session.routed"; readonly sessionKey: string | undefined }
   | { readonly type: "session.located"; readonly sessionKey: string; readonly located: boolean }
   /**
-   * A user or agent edge asks for the pane: focus, a key, the route, or a Session execution. `takes`: the person is
-   * at the session in this window, or no desktop holds its browser, so a session another window took comes back here.
+   * A user or agent edge asks for the pane: focus, a key, the route, or a Session execution. `takes`: the person came
+   * to the session in this window (its route, a prompt, opening its browser), so one another window took comes back
+   * here. Focus, a press, a key and an agent's edges do not take: they would fail the other window's commands.
    */
   | { readonly type: "session.wake"; readonly sessionKey: string; readonly takes: boolean }
+  /** No desktop holds the session's browser any more: the window that took it let it go. */
+  | { readonly type: "session.released"; readonly sessionKey: string }
   /** The person asks to open the browser again, from a pane that said it could not (`sessionUnavailable`). */
   | { readonly type: "session.retry"; readonly sessionKey: string }
   /** The server finished creating the session. */
@@ -431,14 +434,19 @@ export function sessionAttached(state: State, sessionKey: string) {
   return !!attachment && (attachment.phase.status === "ready" || attachment.browser !== null)
 }
 
+/** Another window took the session's browser. */
+export function sessionReplaced(state: State, sessionKey: string) {
+  const phase = attachmentOf(state, sessionKey)?.phase
+
+  return phase?.status === "blocked" && phase.reason === "replaced"
+}
+
 /**
  * The session's browser can be opened from this window: the desktop answered for it, or another window took it and
  * opening it here takes it back.
  */
 export function sessionOpenable(state: State, sessionKey: string) {
-  const phase = attachmentOf(state, sessionKey)?.phase
-
-  return sessionAttached(state, sessionKey) || (phase?.status === "blocked" && phase.reason === "replaced")
+  return sessionAttached(state, sessionKey) || sessionReplaced(state, sessionKey)
 }
 
 /**
@@ -793,6 +801,9 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       return located(state, key, attachment, event.located)
     case "session.wake":
       return wake(state, key, attachment, false, event.takes)
+    case "session.released":
+      // Only a session another window took: a pane the server suspended stays so until something asks for it.
+      return phase.status === "blocked" && phase.reason === "replaced" ? wake(state, key, attachment, false, true) : { state, effects: [] }
     case "session.created":
       return wake(state, key, attachment, true, false)
     case "session.command": {

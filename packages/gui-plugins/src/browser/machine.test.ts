@@ -1192,6 +1192,19 @@ describe("browser pane machine", () => {
     ])
   })
 
+  test("a session another window took registers again once that window let it go, and an evicted one does not", () => {
+    const start = ready()
+    const replaced = transition(start, paneState(start, null, "browser.pane.replaced")).state
+    expect(types(transition(replaced, { type: "session.released", sessionKey: key }).effects)).toEqual([
+      "open-registration",
+      "schedule-register-timeout",
+    ])
+
+    // Eviction revokes the grant too. A pane the server suspended must not register again by itself and reload the project.
+    const evicted = transition(start, paneState(start, inventory(tab(tabA)), "browser.pane.suspended")).state
+    expect(transition(evicted, { type: "session.released", sessionKey: key }).state).toBe(evicted)
+  })
+
   test.each(["browser.pane.missing", "browser.pane.unsupported"])("%s is neither on offer nor lifted by a wake that takes", (error) => {
     const start = replay(attach()).state
     const blocked = transition(start, paneState(start, null, error)).state

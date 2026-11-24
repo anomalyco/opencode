@@ -285,21 +285,27 @@ test("a session in a tab nobody opened attaches once it runs", async () => {
 // Another window that opens the session takes its browser, and main closes this window's binding as replaced. Nothing
 // took it back: the browser left the side panel's launchers and the agent's tools for as long as the app ran, with
 // the other window long closed.
-test("a session another window took stays on offer, and comes back once the person is at it here", async () => {
+test("a session another window took stays on offer, and comes back with the person's prompt, not with a press", async () => {
   const app = fixture()
   const session = app.sessions[0]
 
   try {
     await turns()
     app.emit(session.id, { tabs: [tab("a")], focusedTabID: tab("a").id })
+    // The grant this window's attachment wrote, which the other window's attachment keeps.
+    app.hold(session.id, true)
     const first = app.binding(session.id)
     app.send(session.id, { type: "state", state: null, error: "browser.pane.replaced" })
     await turns()
     expect(app.model.attached(session)).toBe(false)
     expect(app.model.openable(session)).toBe(true)
+
+    // A press here must not fail the commands an agent has in flight in the window that holds the session.
+    document.dispatchEvent(new Event("pointerdown"))
+    await turns()
     expect(app.binding(session.id)).toBe(first)
 
-    document.dispatchEvent(new Event("pointerdown"))
+    void app.model.ready(session, new AbortController().signal)
     await turns()
     expect(app.binding(session.id)).not.toBe(first)
   } finally {
@@ -307,20 +313,20 @@ test("a session another window took stays on offer, and comes back once the pers
   }
 })
 
-test("a running session another window took attaches again once no desktop holds it", async () => {
+test("a session another window took attaches again once that window lets it go", async () => {
   const app = fixture()
-  const session = app.sessions[1]
+  const session = app.sessions[0]
 
   try {
-    app.run(session.id)
     await turns()
-    const first = app.binding(session.id)
-    // The other window's attachment holds the grant from the moment it takes the session.
+    app.emit(session.id, { tabs: [tab("a")], focusedTabID: tab("a").id })
     app.hold(session.id, true)
+    const first = app.binding(session.id)
     app.send(session.id, { type: "state", state: null, error: "browser.pane.replaced" })
     await turns()
     expect(app.binding(session.id)).toBe(first)
 
+    // The other window closed: the server revoked the grant its attachment held.
     app.hold(session.id, false)
     await turns()
     expect(app.binding(session.id)).not.toBe(first)
