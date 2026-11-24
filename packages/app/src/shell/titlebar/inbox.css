@@ -1,0 +1,68 @@
+[data-slot="sidebar-inbox-item"] [data-slot="checkbox-v2-row"],
+[data-slot="sidebar-inbox-selection"] [data-slot="checkbox-v2-row"] {
+  gap: 0;
+}
+
+[data-slot="sidebar-inbox-item"] [data-slot="checkbox-v2-text"] {
+  display: none;
+}
+
+[data-slot="sidebar-inbox-item"][data-selectable] [data-slot="inbox-card-checkbox"] {
+  display: none;
+}
+
+[data-slot="sidebar-inbox-item"][data-selectable]:is([data-checked], [data-selecting]) [data-slot="inbox-card-avatar"] {
+  display: none;
+}
+
+[data-slot="sidebar-inbox-item"][data-selectable]:is([data-checked], [data-selecting])
+  [data-slot="inbox-card-checkbox"] {
+  display: flex;
+}
+
+@media (hover: hover) {
+  [data-slot="sidebar-inbox-item"][data-selectable]:hover [data-slot="inbox-card-avatar"] {
+    display: none;
+  }
+
+  [data-slot="sidebar-inbox-item"][data-selectable]:hover [data-slot="inbox-card-checkbox"] {
+    display: flex;
+  }
+}
+
+/* While selecting, the fill marks checked rows only; the open session keeps a fainter hover-level fill. */
+[data-slot="sidebar-inbox-item"][data-selecting][data-state="active"]:not([data-checked]) {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-slot="sidebar-inbox-selection"] {
+  box-shadow: var(--v2-elevation-floating);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot="sidebar-inbox-selection"] {
+    animation: sidebar-inbox-selection-in 120ms ease-out;
+  }
+}
+
+@keyframes sidebar-inbox-selection-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-slot="sidebar-inbox-selection"] {
+    border: 1px solid CanvasText;
+  }
+
+  [data-slot="sidebar-inbox-item"][data-checked] {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+
+  [data-slot="sidebar-inbox-item"][data-checked] * {
+    color: HighlightText;
+  }
+}

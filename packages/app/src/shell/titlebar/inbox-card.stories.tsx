@@ -13,6 +13,8 @@ const statuses = ["done", "ready", "working", "approval", "input", "failed"] as 
 function SessionCardStory(props: {
   status: InboxStatus
   selected: boolean
+  checked: boolean
+  selecting: boolean
   archived: boolean
   worktree: boolean
   remote: boolean
@@ -28,7 +30,14 @@ function SessionCardStory(props: {
 }) {
   const language = useLanguage()
 
-  const initial = () => ({ selected: props.selected, archived: props.archived, removed: false, status: props.status })
+  const initial = () => ({
+    selected: props.selected,
+    checked: props.checked,
+    selecting: props.selecting,
+    archived: props.archived,
+    removed: false,
+    status: props.status,
+  })
 
   const [state, setState] = createStore(initial())
 
@@ -45,6 +54,8 @@ function SessionCardStory(props: {
         () => props.project,
         () => props.projectKnown,
         () => props.selected,
+        () => props.checked,
+        () => props.selecting,
         () => props.archived,
         () => props.readAction,
       ],
@@ -69,7 +80,10 @@ function SessionCardStory(props: {
             title={props.title}
             status={state.status}
             selected={state.selected}
+            checked={state.checked}
+            selecting={state.selecting || state.checked}
             archived={state.archived}
+            onSelectClick={() => setState("checked", !state.checked)}
             server={props.remote ? "Build server · build.example.internal" : undefined}
             branch={props.branch || undefined}
             worktree={props.worktree}
@@ -111,6 +125,8 @@ export default {
   args: {
     status: "done",
     selected: false,
+    checked: false,
+    selecting: false,
     archived: false,
     worktree: true,
     remote: false,
@@ -195,3 +211,5 @@ export const JustStarted = { args: { status: "working", ageMinutes: 0, ageSecond
 export const UnknownAge = { args: { status: "working", timestampKnown: false } }
 
 export const MarkAsRead = { args: { readAction: true } }
+
+export const Checked = { args: { checked: true, selecting: true } }

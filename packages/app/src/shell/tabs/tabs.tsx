@@ -656,7 +656,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         if (tab.type === "session") updateClosed((stack) => pushClosedTab(stack, tab, index, info[tabKey(tab)]))
         removeTab(index)
       },
-      closeTabs(keys: string[], keep: Tab) {
+      closeTabs(keys: string[], keep?: Tab) {
         const removed = new Set(keys)
 
         const entries = store.flatMap((tab, index) => (removed.has(tabKey(tab)) ? [{ tab, index }] : []))
@@ -676,12 +676,19 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           setStore((tabs) => tabs.filter((tab) => !removed.has(tabKey(tab))))
 
           if (shown) {
-            navigateTab(keep)
+            if (keep) {
+              navigateTab(keep)
+
+              return
+            }
+
+            setRecentKey(undefined)
+            navigate("/")
 
             return
           }
 
-          if (remembered && removed.has(remembered)) setRecentKey(tabKey(keep))
+          if (remembered && removed.has(remembered)) setRecentKey(keep ? tabKey(keep) : undefined)
         })
         entries.forEach((entry) => disposeTab(entry.tab))
       },

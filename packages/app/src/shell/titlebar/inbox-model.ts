@@ -425,6 +425,8 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       time: { ...entry.session.time, updated: rawTime(entry.session), archived: archivedAt },
     }
 
+    // Keep locally loaded session state aligned with the moved index entry until the server event arrives.
+    if (entry.ctx.data.session.get(entry.session.id)) entry.ctx.data.session.remember(session)
     forget(entry.conn, entry.session.id)
     queryClient.setQueryData<SessionInfo[]>(
       [archivedAt === undefined ? "inbox-sessions" : "inbox-archived-sessions", entry.conn],
@@ -472,6 +474,22 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
       if (!entry.ctx.data.session.get(entry.session.id)) entry.ctx.data.session.remember(entry.session)
       entry.ctx.notification.session.markRead(entry.session.id)
     },
+    markUnread: (entry: InboxEntry) => {
+      if (!entry.ctx.data.session.get(entry.session.id)) entry.ctx.data.session.remember(entry.session)
+      entry.ctx.notification.session.markUnread(entry.session.id)
+    },
+    markReadMany: (list: readonly InboxEntry[]) => {
+      list.filter(inboxCanMarkRead).forEach((entry) => {
+        if (!entry.ctx.data.session.get(entry.session.id)) entry.ctx.data.session.remember(entry.session)
+        entry.ctx.notification.session.markRead(entry.session.id)
+      })
+    },
+    markUnreadMany: (list: readonly InboxEntry[]) => {
+      list.filter(inboxCanMarkUnread).forEach((entry) => {
+        if (!entry.ctx.data.session.get(entry.session.id)) entry.ctx.data.session.remember(entry.session)
+        entry.ctx.notification.session.markUnread(entry.session.id)
+      })
+    },
     rename: (entry: InboxEntry, title: string) => rename(entry.server, entry.session, title),
     archive: (entry: InboxEntry) =>
       entry.ctx.sdk.api.session
@@ -485,11 +503,70 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
           })
         })
         .catch(requestFailed),
+    archiveMany: (list: readonly InboxEntry[]) => {
+      const targets = list.filter((entry) => !inboxArchived(entry))
+
+      if (targets.length === 0) return Promise.resolve()
+
+      return Promise.allSettled(
+        targets.map((entry) =>
+          entry.ctx.sdk.api.session.update({ sessionID: entry.session.id, archived: true }).then(() => {
+            move(entry, Date.now())
+
+            return { server: entry.server, directory: entry.session.location.directory, ids: [entry.session.id] }
+          }),
+        ),
+      ).then((results) => {
+        notifyTabsRemoved(results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])))
+        const failed = results.filter((result): result is PromiseRejectedResult => result.status === "rejected")
+
+        if (failed.length === 0) return
+
+        if (failed.length === 1 && targets.length === 1) {
+          requestFailed(failed[0].reason)
+
+          return
+        }
+
+        showToast({
+          title: language.plural("sidebar.inbox.bulk.failed", failed.length, { count: failed.length }),
+          description: errorMessage(failed[0].reason, language.t("common.requestFailed")),
+        })
+      })
+    },
     unarchive: (entry: InboxEntry) =>
       entry.ctx.sdk.api.session
         .update({ sessionID: entry.session.id, archived: false })
         .then(() => move(entry, undefined))
         .catch(requestFailed),
+    unarchiveMany: (list: readonly InboxEntry[]) => {
+      const targets = list.filter(inboxArchived)
+
+      if (targets.length === 0) return Promise.resolve()
+
+      return Promise.allSettled(
+        targets.map((entry) =>
+          entry.ctx.sdk.api.session
+            .update({ sessionID: entry.session.id, archived: false })
+            .then(() => move(entry, undefined)),
+        ),
+      ).then((results) => {
+        const failed = results.filter((result): result is PromiseRejectedResult => result.status === "rejected")
+
+        if (failed.length === 0) return
+
+        if (failed.length === 1 && targets.length === 1) {
+          requestFailed(failed[0].reason)
+
+          return
+        }
+
+        showToast({
+          title: language.plural("sidebar.inbox.bulk.failed", failed.length, { count: failed.length }),
+          description: errorMessage(failed[0].reason, language.t("common.requestFailed")),
+        })
+      })
+    },
     remove: (entry: InboxEntry) => {
       const ids = sessionTreeIDs(entry.ctx.data.session.list(), entry.session.id)
 
@@ -510,6 +587,43 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
           }),
         )
     },
+    removeMany: (list: readonly InboxEntry[]) => {
+      if (list.length === 0) return Promise.resolve()
+
+      const targets = list.map((entry) => ({
+        entry,
+        ids: sessionTreeIDs(entry.ctx.data.session.list(), entry.session.id),
+      }))
+
+      return Promise.allSettled(
+        targets.map(({ entry, ids }) =>
+          entry.ctx.data.session.remove(entry.session.id).then(() => {
+            forget(entry.conn, entry.session.id)
+
+            return { server: entry.server, directory: entry.session.location.directory, ids }
+          }),
+        ),
+      ).then((results) => {
+        notifyTabsRemoved(results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])))
+        const failed = results.filter((result): result is PromiseRejectedResult => result.status === "rejected")
+
+        if (failed.length === 0) return
+
+        if (failed.length === 1 && targets.length === 1) {
+          showToast({
+            title: language.t("session.delete.failed.title"),
+            description: errorMessage(failed[0].reason, language.t("session.delete.failed.title")),
+          })
+
+          return
+        }
+
+        showToast({
+          title: language.plural("sidebar.inbox.deleteMany.failed", failed.length, { count: failed.length }),
+          description: errorMessage(failed[0].reason, language.t("session.delete.failed.title")),
+        })
+      })
+    },
   }
 }
 
@@ -519,8 +633,38 @@ export function inboxArchived(entry: InboxEntry) {
   return entry.session.time.archived !== undefined
 }
 
+export function inboxCanMarkRead(entry: InboxEntry) {
+  return entry.ctx.notification.session.ready() && (entry.status === "done" || entry.status === "failed")
+}
+
+export function inboxCanMarkUnread(entry: InboxEntry) {
+  return (
+    entry.ctx.notification.session.ready() && entry.status === "ready" && entry.session.time.idle !== undefined
+  )
+}
+
 export function inboxBusy(status: InboxStatus) {
   return status === "working" || status === "approval" || status === "input"
+}
+
+function notifyTabsRemoved(
+  items: ReadonlyArray<{ server: ServerConnection.Key; directory: string; ids: string[] }>,
+) {
+  const groups = new Map<string, { server: ServerConnection.Key; directory: string; sessionIDs: string[] }>()
+
+  items.forEach((item) => {
+    const key = `${item.server}\0${item.directory}`
+    const existing = groups.get(key)
+
+    if (existing) {
+      existing.sessionIDs.push(...item.ids)
+
+      return
+    }
+
+    groups.set(key, { server: item.server, directory: item.directory, sessionIDs: [...item.ids] })
+  })
+  groups.forEach((group) => notifySessionTabsRemoved(group))
 }
 
 function locationKey(entry: InboxEntry) {

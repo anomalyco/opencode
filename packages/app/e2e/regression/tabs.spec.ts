@@ -2730,6 +2730,151 @@ test("the inbox moves a session to Needs attention once auto-accept gives up on 
   expect(reply.attempts()).toBe(3)
 })
 
+test("inbox multi-select supports bulk mark read/unread, closing open tabs, archiving, and deleting", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "InboxMultiSelect",
+    sessions: [
+      {
+        id: "ses_ms_u1",
+        title: "Unread one",
+        outcome: "succeeded",
+        time: { created: T0, updated: T0 + 6, idle: T0 + 6 },
+      },
+      {
+        id: "ses_ms_u2",
+        title: "Unread two",
+        outcome: "failed",
+        time: { created: T0, updated: T0 + 5, idle: T0 + 5 },
+      },
+      {
+        id: "ses_ms_r1",
+        title: "Recent one",
+        time: { created: T0, updated: T0 + 4, idle: T0 + 4, viewed: T0 + 10 },
+      },
+      {
+        id: "ses_ms_r2",
+        title: "Recent two",
+        time: { created: T0, updated: T0 + 3, idle: T0 + 3, viewed: T0 + 10 },
+      },
+      {
+        id: "ses_ms_r3",
+        title: "Recent three",
+        time: { created: T0, updated: T0 + 2, idle: T0 + 2, viewed: T0 + 10 },
+      },
+      {
+        id: "ses_ms_keep",
+        title: "Kept session",
+        time: { created: T0, updated: T0 + 1, idle: T0 + 1, viewed: T0 + 10 },
+      },
+    ],
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: ["ses_ms_r1", "ses_ms_r2"],
+    },
+  })
+  await page.goto(sessionHref("ses_ms_r1"))
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+  const toolbar = inbox.getByRole("toolbar", { name: "Selection actions", exact: true })
+  const unreadGroup = inbox.getByRole("group", { name: "Unread", exact: true })
+  const recentGroup = inbox.getByRole("group", { name: "Recent", exact: true })
+  const unreadRows = unreadGroup.locator('[data-slot="sidebar-inbox-item"]')
+  const recentRows = recentGroup.locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(unreadRows).toHaveCount(2)
+  await expect(recentRows).toHaveCount(4)
+  await expect(toolbar).toHaveCount(0)
+
+  // Section Select all selects every unread session. The selection bar floats over the end of the list, so starting
+  // a selection moves no row.
+  const scroll = inbox.locator('[data-slot="sidebar-inbox-scroll"]')
+  const firstRow = unreadRows.filter({ hasText: "Unread one" })
+  const before = await firstRow.boundingBox()
+  await unreadGroup.getByRole("button", { name: "Select all", exact: true }).click()
+  await expect(toolbar).toBeVisible()
+  await expect(toolbar).toContainText("2 selected")
+  expect(await firstRow.boundingBox()).toEqual(before)
+  // The bar slides in, so poll until it settles 4px above the end of the list.
+  await expect
+    .poll(async () => {
+      const [bar, list] = await Promise.all([toolbar.boundingBox(), scroll.boundingBox()])
+
+      return bar && list && Math.round(list.y + list.height - (bar.y + bar.height))
+    })
+    .toBe(4)
+
+  // Mark as read moves both to Recent and clears selection.
+  await toolbar.getByRole("button", { name: "Mark as read", exact: true }).click()
+  await expect(toolbar).toHaveCount(0)
+  await expect(unreadRows).toHaveCount(0)
+  await expect(recentRows).toHaveCount(6)
+
+  // Checkbox hit area + Shift+click range selects a contiguous slice; Mark as unread moves them back to Unread.
+  await recentRows.filter({ hasText: "Unread one" }).locator('[data-slot="inbox-select-hit"]').click()
+  await expect(toolbar).toContainText("1 selected")
+  await recentRows.filter({ hasText: "Unread two" }).click({ modifiers: ["Shift"] })
+  await expect(toolbar).toContainText("2 selected")
+  await toolbar.getByRole("button", { name: "Mark as unread", exact: true }).click()
+  await expect(toolbar).toHaveCount(0)
+  await expect(unreadRows).toHaveCount(2)
+  await expect(recentRows).toHaveCount(4)
+
+  // Selecting sessions with open tabs offers Close open tabs in the bulk menu and navigates away when the active tab
+  // closes.
+  await recentRows.filter({ hasText: "Recent one" }).locator('[data-slot="inbox-select-hit"]').click()
+  await recentRows.filter({ hasText: "Recent two" }).locator('[data-slot="inbox-select-hit"]').click()
+  await expect(toolbar).toContainText("2 selected")
+  await recentRows.filter({ hasText: "Recent two" }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Close 2 open tabs", exact: true }).click()
+  await expect(toolbar).toHaveCount(0)
+  await expectPath(page, "/")
+
+  // Keyboard x + Shift+ArrowDown selects multiple rows; bulk right-click context menu archives them.
+  const firstUnread = unreadRows.filter({ hasText: "Unread one" })
+  await firstUnread.focus()
+  await page.keyboard.press("x")
+  await expect(toolbar).toContainText("1 selected")
+  await page.keyboard.press("Shift+ArrowDown")
+  await expect(toolbar).toContainText("2 selected")
+  await firstUnread.click({ button: "right" })
+  await expect(page.getByRole("menuitem", { name: "Archive 2 sessions", exact: true })).toBeVisible()
+  // Escape closes the bulk context menu without clearing the selection underneath.
+  await page.keyboard.press("Escape")
+  await expect(toolbar).toContainText("2 selected")
+  await firstUnread.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Archive 2 sessions", exact: true }).click()
+  await expect(toolbar).toHaveCount(0)
+  await expect(unreadRows).toHaveCount(0)
+  await expect(inbox.getByRole("button", { name: "Archived", exact: true })).toBeVisible()
+
+  // Bulk delete opens confirmation; Cancel keeps selection, Confirm removes all selected sessions.
+  await recentRows.filter({ hasText: "Recent one" }).locator('[data-slot="inbox-select-hit"]').click()
+  await recentRows.filter({ hasText: "Recent three" }).click({ modifiers: ["Shift"] })
+  await expect(toolbar).toContainText("3 selected")
+  await toolbar.getByRole("button", { name: "Delete", exact: true }).click()
+
+  const confirm = page.getByRole("dialog", { name: "Delete sessions" })
+  await expect(confirm).toContainText("Delete 3 selected sessions?")
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(confirm).toHaveCount(0)
+  await expect(toolbar).toContainText("3 selected")
+
+  await toolbar.getByRole("button", { name: "Delete", exact: true }).click()
+  await confirm.getByRole("button", { name: "Delete 3 sessions", exact: true }).click()
+  await expect(confirm).toHaveCount(0)
+  await expect(toolbar).toHaveCount(0)
+  await expect(recentRows).toHaveCount(1)
+  await expect(recentRows).toContainText("Kept session")
+
+  // Escape clears an active selection.
+  await recentRows.filter({ hasText: "Kept session" }).locator('[data-slot="inbox-select-hit"]').click()
+  await expect(toolbar).toContainText("1 selected")
+  await page.keyboard.press("Escape")
+  await expect(toolbar).toHaveCount(0)
+})
+
 // Auto-accept is on and every reply to session B's permission fails. The first reply waits for `release()`; then it
 // and both retries fail, and auto-accept gives up.
 async function mockGaveUpPermission(page: Page, tabLayout: "horizontal" | "inbox") {

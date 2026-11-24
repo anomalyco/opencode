@@ -1,8 +1,19 @@
 import { Button } from "@opencode/ui/button"
-import { createEffect, createMemo, For, Show } from "solid-js"
+import { Menu } from "@opencode/ui/menu"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { InboxSessionCard, InboxSessionList } from "./inbox"
+import { InboxSessionCard, InboxSessionList, type InboxSectionSelection, type InboxSelectionControls } from "./inbox"
 import type { InboxStatus } from "./inbox-model"
+import {
+  INITIAL_INBOX_SELECTION_STATE,
+  selectInboxAllSelected,
+  selectInboxIsSelected,
+  selectInboxSelectedCount,
+  selectInboxSelectedKeys,
+  selectInboxSelecting,
+  transitionInboxSelection,
+  type InboxSelectionEvent,
+} from "./inbox-selection-machine"
 import { useLanguage } from "@/runtime/i18n/language"
 
 const now = Date.UTC(2026, 10, 3, 12)
@@ -35,14 +46,28 @@ function SessionListStory(props: {
 }) {
   const language = useLanguage()
 
-  const [state, setState] = createStore({
+  const [state, setState] = createStore<{
+    selected: string
+    expanded: boolean
+    archived: boolean
+    removed: string[]
+    readOverride: Record<string, "read" | "unread" | undefined>
+    action: string
+    recentExpanded: boolean
+  }>({
     selected: props.selectedSession,
     expanded: props.workingExpanded,
     archived: props.archived,
-    removed: new Array<string>(),
+    removed: [],
+    readOverride: {},
     action: "",
     recentExpanded: props.recentExpanded,
   })
+
+  const [selection, setSelection] = createSignal(INITIAL_INBOX_SELECTION_STATE)
+
+  const dispatchSelection = (event: InboxSelectionEvent) =>
+    setSelection((previous) => transitionInboxSelection(previous, event))
 
   createEffect(() => setState("selected", props.selectedSession))
   createEffect(() => setState("expanded", props.workingExpanded))
@@ -51,7 +76,14 @@ function SessionListStory(props: {
 
   const sessions = (section: "current" | "needs" | "unread" | "recent" | "working", count: number) =>
     Array.from({ length: count }, (_, index) => {
+      const id = `${section}-${index}`
+      const override = state.readOverride[id]
+
       const status = (): InboxStatus => {
+        if (override === "read") return "ready"
+
+        if (override === "unread") return "done"
+
         if (section === "current") return "ready"
 
         if (section === "working") return "working"
@@ -64,7 +96,7 @@ function SessionListStory(props: {
       }
 
       return {
-        id: `${section}-${index}`,
+        id,
         index,
         status: status(),
         title:
@@ -78,23 +110,159 @@ function SessionListStory(props: {
 
   const needs = createMemo(() => sessions("needs", props.needsCount))
 
-  const recent = createMemo(() => sessions("recent", props.recentCount))
+  const allUnreadAndRecent = createMemo(() => [
+    ...sessions("unread", props.unreadCount),
+    ...sessions("recent", props.recentCount),
+  ])
 
-  const unread = createMemo(() => sessions("unread", props.unreadCount))
+  const unread = createMemo(() =>
+    allUnreadAndRecent().filter((session) => session.status === "done" || session.status === "failed"),
+  )
+
+  const recent = createMemo(() => allUnreadAndRecent().filter((session) => session.status === "ready"))
 
   const visibleRecent = createMemo(() => (state.recentExpanded ? recent() : recent().slice(0, 10)))
 
   const working = createMemo(() => sessions("working", props.workingCount))
+
+  const visibleItems = createMemo(() => [
+    ...current(),
+    ...needs(),
+    ...unread(),
+    ...visibleRecent(),
+    ...(state.expanded ? working() : []),
+  ])
+
+  const visibleKeys = createMemo(() => visibleItems().map((item) => item.id))
+
+  createEffect(() => {
+    dispatchSelection({ type: "sync.visible", visible: new Set(visibleKeys()) })
+  })
+
+  const selectedItems = createMemo(() => {
+    const keys = selectInboxSelectedKeys(selection())
+
+    return visibleItems().filter((item) => keys.has(item.id))
+  })
 
   const remove = (id: string, action: string) => {
     setState("removed", (removed) => [...removed, id])
     setState("action", action)
   }
 
+  const removeMany = (ids: string[], action: string) => {
+    setState("removed", (removed) => [...removed, ...ids])
+    setState("action", action)
+    dispatchSelection({ type: "clear" })
+  }
+
+  const markReadSelected = () => {
+    const targets = selectedItems().filter((item) => item.status === "done" || item.status === "failed")
+
+    targets.forEach((item) => setState("readOverride", item.id, "read"))
+    setState("action", `Marked ${targets.length} as read`)
+    dispatchSelection({ type: "clear" })
+  }
+
+  const markUnreadSelected = () => {
+    const targets = selectedItems().filter((item) => item.status === "ready")
+
+    targets.forEach((item) => setState("readOverride", item.id, "unread"))
+    setState("action", `Marked ${targets.length} as unread`)
+    dispatchSelection({ type: "clear" })
+  }
+
+  const archiveSelected = () => {
+    const ids = selectedItems().map((item) => item.id)
+
+    removeMany(ids, `Archived ${ids.length} sessions`)
+    setState("archived", true)
+  }
+
+  const deleteSelected = () => {
+    const ids = selectedItems().map((item) => item.id)
+
+    removeMany(ids, `Deleted ${ids.length} sessions`)
+  }
+
+  const canMarkRead = () => selectedItems().some((item) => item.status === "done" || item.status === "failed")
+
+  const canMarkUnread = () => selectedItems().some((item) => item.status === "ready")
+
+  const bulkMenu = () => (
+    <>
+      <Show when={canMarkRead()}>
+        <Menu.Item onSelect={markReadSelected}>{language.t("session.markRead")}</Menu.Item>
+      </Show>
+      <Show when={canMarkUnread()}>
+        <Menu.Item onSelect={markUnreadSelected}>{language.t("session.markUnread")}</Menu.Item>
+      </Show>
+      <Menu.Item onSelect={archiveSelected}>{language.t("common.archive")}</Menu.Item>
+      <Menu.Separator />
+      <Menu.Item onSelect={deleteSelected}>{language.t("common.delete")}…</Menu.Item>
+    </>
+  )
+
+  const sectionSelection = (keys: () => string[]): InboxSectionSelection => ({
+    get allSelected() {
+      return selectInboxAllSelected(selection(), keys())
+    },
+    get selecting() {
+      return selectInboxSelecting(selection())
+    },
+    onToggleAll: () => dispatchSelection({ type: "section.toggle", keys: keys() }),
+  })
+
+  const selectionControls: InboxSelectionControls = {
+    get count() {
+      return selectInboxSelectedCount(selection())
+    },
+    get total() {
+      return visibleKeys().length
+    },
+    get canMarkRead() {
+      return canMarkRead()
+    },
+    get canMarkUnread() {
+      return canMarkUnread()
+    },
+    get canArchive() {
+      return selectedItems().length > 0
+    },
+    get canDelete() {
+      return selectedItems().length > 0
+    },
+    onToggle: (key) => dispatchSelection({ type: "toggle", key }),
+    onRange: (target, fallbackAnchor, additive) =>
+      dispatchSelection({
+        type: "range",
+        target,
+        ordered: visibleKeys(),
+        fallbackAnchor: fallbackAnchor ?? state.selected,
+        additive,
+      }),
+    onSelectAll: () => dispatchSelection({ type: "select.all", ordered: visibleKeys() }),
+    onToggleAll: () => {
+      if (selectInboxAllSelected(selection(), visibleKeys())) {
+        dispatchSelection({ type: "clear" })
+
+        return
+      }
+
+      dispatchSelection({ type: "select.all", ordered: visibleKeys() })
+    },
+    onMarkRead: markReadSelected,
+    onMarkUnread: markUnreadSelected,
+    onArchive: archiveSelected,
+    onDelete: deleteSelected,
+    onClear: () => dispatchSelection({ type: "clear" }),
+  }
+
   const rows = (list: typeof recent) => (
     <For each={list()}>
       {(session) => (
         <InboxSessionCard
+          itemKey={session.id}
           project={{
             id: session.index % 3 === 2 ? "lab-port-ui" : "lab-opencode",
             name: session.index % 3 === 2 ? "port-ui" : "opencode",
@@ -105,13 +273,34 @@ function SessionListStory(props: {
           title={session.title}
           status={session.status}
           selected={state.selected === session.id}
+          checked={selectInboxIsSelected(selection(), session.id)}
+          selecting={selectInboxSelecting(selection())}
           archived={props.currentArchived && session.id.startsWith("current-")}
           server={session.index % 3 === 2 ? "Build server · build.example.internal" : undefined}
           branch={session.index % 4 === 3 ? undefined : "dev"}
           worktree={session.index % 2 === 0}
           now={now}
           since={now - (session.index + 1) * 7 * 60_000}
-          onOpen={() => setState("selected", session.id)}
+          onSelectClick={(action) => {
+            if (action.kind === "range") {
+              dispatchSelection({
+                type: "range",
+                target: session.id,
+                ordered: visibleKeys(),
+                fallbackAnchor: state.selected,
+                additive: action.additive,
+              })
+
+              return
+            }
+
+            dispatchSelection({ type: "toggle", key: session.id })
+          }}
+          bulkMenu={selectInboxSelectedCount(selection()) > 1 ? bulkMenu : undefined}
+          onOpen={() => {
+            dispatchSelection({ type: "clear" })
+            setState("selected", session.id)
+          }}
           onArchive={() => {
             remove(session.id, `Archived ${session.title}`)
             setState("archived", true)
@@ -132,6 +321,7 @@ function SessionListStory(props: {
       get count() {
         return needs().length
       },
+      selection: sectionSelection(() => needs().map((item) => item.id)),
       rows: () => rows(needs),
     },
     {
@@ -142,6 +332,7 @@ function SessionListStory(props: {
       get count() {
         return unread().length
       },
+      selection: sectionSelection(() => unread().map((item) => item.id)),
       rows: () => rows(unread),
     },
     {
@@ -152,6 +343,7 @@ function SessionListStory(props: {
       get count() {
         return visibleRecent().length
       },
+      selection: sectionSelection(() => visibleRecent().map((item) => item.id)),
       rows: () => rows(visibleRecent),
       more: () => (
         <Show when={recent().length > 10}>
@@ -178,6 +370,7 @@ function SessionListStory(props: {
         <InboxSessionList
           loading={props.loading}
           announcement={props.announcement}
+          selection={selectionControls}
           current={{
             get count() {
               return current().length
@@ -195,6 +388,7 @@ function SessionListStory(props: {
               return state.expanded
             },
             onToggle: () => setState("expanded", !state.expanded),
+            selection: sectionSelection(() => working().map((item) => item.id)),
           }}
           onArchived={() => setState("action", "Archived sessions requested (local story only)")}
         />
@@ -203,16 +397,18 @@ function SessionListStory(props: {
         <Button
           variant="ghost-muted"
           size="small"
-          onClick={() =>
+          onClick={() => {
+            dispatchSelection({ type: "clear" })
             setState({
               selected: props.selectedSession,
               expanded: props.workingExpanded,
               archived: props.archived,
               removed: [],
+              readOverride: {},
               action: "",
               recentExpanded: props.recentExpanded,
             })
-          }
+          }}
         >
           Reset list
         </Button>
