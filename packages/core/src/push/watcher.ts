@@ -7,21 +7,30 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
 import { Session } from "../session.js"
+import { PushList } from "./list.js"
 import { PushOptions } from "./options.js"
 import { PushSender } from "./sender.js"
 
 const bodies = {
   succeeded: "Finished",
   failed: "Failed",
-  interrupted: "Stopped",
 }
 
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const sessions = yield* Session.Service
+    const list = yield* PushList.Service
     const sender = yield* PushSender.Service
     const options = yield* PushOptions.Service
+    const stepped = new Set<Session.ID>()
+
+    // Reading the flag starts the configuration's Location, so a server with no phones never does.
+    const wanted = Effect.gen(function* () {
+      if (!(yield* list.hasDevices())) return false
+      const current = yield* options.get()
+      return current.enabled
+    })
 
     const topLevel = Effect.fn("PushWatcher.topLevel")(function* (sessionID: Session.ID) {
       let session = yield* sessions.get(sessionID)
@@ -29,18 +38,14 @@ const layer = Layer.effectDiscard(
       return session
     })
 
-    const finished = Effect.fn("PushWatcher.finished")(function* (
-      sessionID: Session.ID,
-      outcome: keyof typeof bodies,
-    ) {
-      const current = yield* options.get()
-      if (!current.enabled) return
+    const finished = Effect.fn("PushWatcher.finished")(function* (sessionID: Session.ID, outcome: keyof typeof bodies) {
+      if (!(yield* wanted)) return
       const session = yield* sessions.get(sessionID)
       if (session.parentID) return
       yield* sender.send({
         type: "session.idle",
         sessionID,
-        title: session.title ?? "OpenCode",
+        title: session.title || "OpenCode",
         body: bodies[outcome],
         data: { outcome },
         attention: false,
@@ -51,28 +56,26 @@ const layer = Layer.effectDiscard(
       if (form.metadata?.kind !== "question") return
       const sessionID = Schema.decodeUnknownOption(Session.ID)(form.sessionID)
       if (Option.isNone(sessionID)) return
-      const current = yield* options.get()
-      if (!current.enabled) return
+      if (!(yield* wanted)) return
       const session = yield* topLevel(sessionID.value)
       const field = form.fields[0]
       yield* sender.send({
         type: "question",
         sessionID: session.id,
-        title: session.title ?? "OpenCode",
-        body: field.description ?? field.title ?? form.title,
+        title: session.title || "OpenCode",
+        body: field.description || field.title || form.title,
         data: { formID: form.id },
         attention: true,
       })
     })
 
     const permission = Effect.fn("PushWatcher.permission")(function* (request: Permission.Request) {
-      const current = yield* options.get()
-      if (!current.enabled) return
+      if (!(yield* wanted)) return
       const session = yield* topLevel(request.sessionID)
       yield* sender.send({
         type: "permission",
         sessionID: session.id,
-        title: session.title ?? "OpenCode",
+        title: session.title || "OpenCode",
         body: `Needs permission: ${request.action}`,
         data: { requestID: request.id, action: request.action },
         attention: true,
@@ -81,22 +84,34 @@ const layer = Layer.effectDiscard(
 
     yield* bus.subscribe([Form.Event.Created, Permission.Event.Asked]).pipe(
       Stream.runForEach((event) => {
-        if (event.type === "form.created") return question(event.data.form).pipe(Effect.ignore)
-        return permission(event.data).pipe(Effect.ignore)
+        const notify = event.type === "form.created" ? question(event.data.form) : permission(event.data)
+        return notify.pipe(Effect.ignoreCause({ log: "Warn", message: "Failed to notify phones" }))
       }),
       Effect.forkScoped({ startImmediately: true }),
     )
 
+    // A busy period without a model step (a move, a revert, a manual compaction) is not a finished turn.
     yield* bus
-      .subscribe([SessionEvent.Execution.Succeeded, SessionEvent.Execution.Failed, SessionEvent.Execution.Interrupted])
+      .subscribe([
+        SessionEvent.Step.Started,
+        SessionEvent.Execution.Succeeded,
+        SessionEvent.Execution.Failed,
+        SessionEvent.Execution.Interrupted,
+      ])
       .pipe(
         Stream.runForEach((event) => {
-          if (event.type === "session.execution.succeeded")
-            return finished(event.data.sessionID, "succeeded").pipe(Effect.ignore)
-          if (event.type === "session.execution.failed")
-            return finished(event.data.sessionID, "failed").pipe(Effect.ignore)
-          if (event.data.reason !== "inactivity") return Effect.void
-          return finished(event.data.sessionID, "interrupted").pipe(Effect.ignore)
+          const sessionID = event.data.sessionID
+          if (event.type === "session.step.started") {
+            stepped.add(sessionID)
+            return Effect.void
+          }
+          const ran = stepped.delete(sessionID)
+          if (event.type === "session.execution.interrupted") return Effect.void
+          if (event.type === "session.execution.succeeded" && !ran) return Effect.void
+          const outcome = event.type === "session.execution.succeeded" ? "succeeded" : "failed"
+          return finished(sessionID, outcome).pipe(
+            Effect.ignoreCause({ log: "Warn", message: "Failed to notify phones" }),
+          )
         }),
         Effect.forkScoped({ startImmediately: true }),
       )
@@ -106,5 +121,5 @@ const layer = Layer.effectDiscard(
 export const node = makeGlobalNode({
   name: "push-watcher",
   layer,
-  deps: [Bus.node, PushOptions.node, PushSender.node, Session.node],
+  deps: [Bus.node, PushList.node, PushOptions.node, PushSender.node, Session.node],
 })

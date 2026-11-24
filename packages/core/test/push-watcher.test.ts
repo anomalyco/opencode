@@ -1,16 +1,20 @@
 import { beforeEach, describe, expect } from "bun:test"
 import { createECDH, createDecipheriv, hkdfSync } from "node:crypto"
 import { DateTime, Effect, Layer } from "effect"
+import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
+import { Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
+import { Provider } from "@opencode/core/provider"
 import { PushCrypto } from "@opencode/core/push/crypto"
 import { PushList } from "@opencode/core/push/list"
 import { PushOptions } from "@opencode/core/push/options"
 import { PushSender } from "@opencode/core/push/sender"
 import { PushWatcher } from "@opencode/core/push/watcher"
 import { Session } from "@opencode/core/session"
+import { SessionMessage } from "@opencode/core/session/message"
 import { Form } from "@opencode/schema/form"
 import { Money } from "@opencode/schema/money"
 import { Permission } from "@opencode/schema/permission"
@@ -109,18 +113,35 @@ const open = (key: Buffer, box: string) => {
   )
 }
 
+const step = (sessionID: Session.ID) =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    yield* bus.publish(SessionEvent.Step.Started, {
+      sessionID,
+      assistantMessageID: SessionMessage.ID.create(),
+      agent: Agent.ID.make("build"),
+      model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+      started: 0,
+    })
+  })
+
 beforeEach(() => {
   boxes = []
 })
 
 describe("PushWatcher", () => {
-  it.live("notifies when a top-level session finishes, fails or stops for inactivity", () =>
+  it.live("notifies when a top-level session finishes a model turn or fails", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const key = yield* phone()
 
+      yield* step(childID)
       yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: childID })
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
+      yield* step(parentID)
       yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID: parentID, reason: "user" })
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
+      yield* step(parentID)
       yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
       yield* waitUntil(Effect.sync(() => boxes.length === 1))
       yield* bus.publish(SessionEvent.Execution.Failed, {
@@ -128,8 +149,6 @@ describe("PushWatcher", () => {
         error: { type: "unknown", message: "x" },
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 2))
-      yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID: parentID, reason: "inactivity" })
-      yield* waitUntil(Effect.sync(() => boxes.length === 3))
 
       expect(boxes.map((box) => open(key, box))).toEqual([
         {
@@ -147,14 +166,6 @@ describe("PushWatcher", () => {
           title: "Fix the login bug",
           body: "Failed",
           data: { outcome: "failed" },
-        },
-        {
-          v: 1,
-          type: "session.idle",
-          sessionID: parentID,
-          title: "Fix the login bug",
-          body: "Stopped",
-          data: { outcome: "interrupted" },
         },
       ])
     }),
