@@ -107,7 +107,7 @@ export function PatchTool(props: ToolProps) {
                         </Switch>
                       </div>
                       <div data-slot="apply-patch-trigger-actions">
-                        <Icon name="chevron-grabber-vertical" size="small" />
+                        <Icon name="chevron-grabber-vertical" />
                       </div>
                     </div>
                   }

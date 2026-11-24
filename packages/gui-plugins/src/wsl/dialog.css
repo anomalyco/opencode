@@ -36,7 +36,6 @@
 
 [data-component="dialog-v2"].settings-wsl-not-installed-dialog [data-slot="dialog-content"] {
   align-items: stretch;
-  border-radius: 10px;
   overflow: hidden;
 }
 

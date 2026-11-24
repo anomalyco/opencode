@@ -1,5 +1,6 @@
 import { markdown } from "@opencode/ui/storybook/fixtures"
 import { createEffect, createSignal, onCleanup } from "solid-js"
+import { MarkdownProvider } from "../context/markdown"
 import { Markdown } from "./markdown"
 
 export default {
@@ -32,6 +33,47 @@ export const CompactResult = {
       <Markdown text={args.text} />
     </div>
   ),
+}
+
+const longCode = [
+  "Reproduce it with:",
+  "",
+  "```sh",
+  'NODE_OPTIONS="--max-old-space-size=4096 --enable-source-maps" bun install --frozen-lockfile --filter "@opencode/session-ui" && bun run --cwd packages/session-ui typecheck:tsc',
+  "```",
+  "",
+  "The failing line:",
+  "",
+  "```ts",
+  "export const resolveCodeBlockPreference = (settings: Settings, block: MarkdownCodeBlock, override?: boolean) => override ?? settings.general.wrapCodeBlocks()",
+  "return resolveCodeBlockPreference(settings, block)",
+  "```",
+  "",
+  "A short block never overflows, so it has no Wrap button:",
+  "",
+  "```sh",
+  "bun typecheck",
+  "```",
+].join("\n")
+
+export const LongCodeLines = {
+  render: () => {
+    const [wrap, setWrap] = createSignal(false)
+
+    return (
+      <div class="mx-auto flex max-w-[560px] flex-col gap-3">
+        <label class="flex items-center gap-2 text-13-regular">
+          <input type="checkbox" checked={wrap()} onChange={(event) => setWrap(event.currentTarget.checked)} />
+          Wrap code blocks setting
+        </label>
+        <div class="rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
+          <MarkdownProvider codeWrap={wrap()}>
+            <Markdown text={longCode} />
+          </MarkdownProvider>
+        </div>
+      </div>
+    )
+  },
 }
 
 export const Table = {

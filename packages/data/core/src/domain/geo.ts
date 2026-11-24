@@ -61,6 +61,7 @@ export declare namespace GeoStatRepo {
       hiddenModels: readonly string[],
     ) => Effect.Effect<void, DatabaseError>
     readonly deleteUnknownDimensions: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteModels: (dataset: string, models: readonly string[]) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -216,6 +217,27 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
         })
       })
 
+      // Every grain and period. An empty list deletes nothing (inArray renders it as 1 = 0).
+      const deleteModels = Effect.fn("GeoStatRepo.deleteModels")(function* (
+        dataset: string,
+        models: readonly string[],
+      ) {
+        yield* Effect.tryPromise({
+          try: () =>
+            db
+              .delete(geoStat)
+              .where(
+                and(
+                  eq(geoStat.dataset, dataset),
+                  eq(geoStat.client, "all"),
+                  eq(geoStat.source, "all"),
+                  inArray(geoStat.model, [...models]),
+                ),
+              ),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+      })
+
       const deleteUnknownDimensions = Effect.fn("GeoStatRepo.deleteUnknownDimensions")(function* (rows: GeoStatRow[]) {
         const scope = statRowScope(rows)
         if (!scope) return
@@ -262,7 +284,14 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
         )
       })
 
-      return GeoStatRepo.of({ listDaily, listByPeriod, upsert, deleteRetiredDimensions, deleteUnknownDimensions })
+      return GeoStatRepo.of({
+        listDaily,
+        listByPeriod,
+        upsert,
+        deleteRetiredDimensions,
+        deleteUnknownDimensions,
+        deleteModels,
+      })
     }),
   )
 }

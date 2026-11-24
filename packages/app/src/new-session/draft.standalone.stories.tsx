@@ -17,9 +17,16 @@ import { createPromptProjectController, type PromptProject } from "./project/sel
 import { NewSessionView } from "./view"
 import { createNewSessionWorkspaceController } from "./workspace/controller"
 
-const locations = ["main", "existing worktree", "checkout loading", "detached HEAD", "no project"] as const
+const worktrees = {
+  main: "main",
+  "new worktree": "create",
+  "existing worktree": STORY_PROJECTS[0].sandboxes[0],
+  "checkout loading": "main",
+  "detached HEAD": "main",
+  "no project": "main",
+}
 
-type DraftArgs = { location: (typeof locations)[number]; prompt: string }
+type DraftArgs = { location: keyof typeof worktrees; prompt: string }
 
 const projects = STORY_PROJECTS.map((project) => ({
   ...project,
@@ -66,7 +73,7 @@ function DraftLanding(props: DraftArgs & { directory: string; setDirectory: (dir
         setState({
           location: value,
           available: value === "no project" ? [] : projects,
-          worktree: value === "existing worktree" ? STORY_PROJECTS[0].sandboxes[0] : "main",
+          worktree: worktrees[value],
           branch: undefined,
           activity: "",
         })
@@ -184,7 +191,7 @@ export default {
   id: "app-new-session-draft",
   parameters: { layout: "fullscreen" },
   args: { location: "main", prompt: "" },
-  argTypes: { location: { control: "select", options: locations }, prompt: { control: "text" } },
+  argTypes: { location: { control: "select", options: Object.keys(worktrees) }, prompt: { control: "text" } },
   render: (args: DraftArgs) => (
     <DialogStoryRuntime>
       <DraftStory {...args} />
@@ -197,6 +204,8 @@ export const MainCheckout = {}
 export const PreparedPrompt = { args: { prompt: "Review the recent changes to session search." } }
 
 export const ExistingWorktree = { args: { location: "existing worktree" } }
+
+export const NewWorktree = { args: { location: "new worktree" } }
 
 export const CheckoutLoading = { args: { location: "checkout loading" } }
 

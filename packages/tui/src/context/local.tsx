@@ -10,6 +10,7 @@ import { RGBA } from "@opentui/core"
 import { readJson, writeJsonAtomic } from "../util/persistence"
 import {
   createModelPreferenceRepository,
+  cycleModelSpeed,
   cycleModelVariant,
   favoriteModels,
   modelPreferenceKey,
@@ -44,8 +45,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const models = () => data.location.model.list(location.ref)
     const providers = () => data.location.provider.list(location.ref)
 
+    function findModel(model: ModelPreferenceModel) {
+      return models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
+    }
+
     function isModelValid(model: ModelPreferenceModel) {
-      return !!models()?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
+      return !!findModel(model)
+    }
+
+    // A model that is another model served faster or slower ("gpt-5.5-fast") is offered as a speed of that model
+    // instead of as an entry of its own. This is the model whose entry stands for it.
+    function standardModel(model: ModelPreferenceModel): ModelPreferenceModel {
+      const base = findModel(model)?.experimental?.speed?.base
+      const standard = base && { providerID: model.providerID, modelID: base }
+      return standard && isModelValid(standard) ? standard : model
     }
 
     function getFirstValidModel(...modelFns: (() => ModelPreferenceModel | undefined)[]) {
@@ -145,6 +158,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         recent: [],
         favorite: [],
         variant: {},
+        speed: {},
       })
       const [selectionState, setSelectionState] = createStore<{
         newSessionModelByLocationAgent: Record<string, ModelPreferenceModel | undefined>
@@ -153,6 +167,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         newSessionModelByLocationAgent: {},
         selectionBySessionAgent: {},
       })
+
+      // Saved entries may name a model at any of its speeds; the lists show each model once.
+      const unique = (list: ModelPreferenceModel[]) =>
+        dedupeWith(list.map(standardModel), (a, b) => modelPreferenceKey(a) === modelPreferenceKey(b))
+      const recent = createMemo(() => unique(preferences.recent))
+      const favorite = createMemo(() => unique(preferences.favorite))
+
+      const speeds = (model: ModelPreferenceModel) =>
+        (models() ?? []).filter(
+          (item) => item.providerID === model.providerID && item.experimental?.speed?.base === model.modelID,
+        )
 
       const repository = createModelPreferenceRepository(path.join(paths.state, "model.json"))
       const pendingSelectionCommits = new Map<string, { agentID: string; selection: string }>()
@@ -164,6 +189,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setPreferences("recent", value.recent)
           setPreferences("favorite", value.favorite)
           setPreferences("variant", value.variant)
+          setPreferences("speed", value.speed)
           setPreferences("ready", true)
         })
       }
@@ -239,7 +265,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       function preferredSelection(model: ModelPreferenceModel): ModelSelection {
         const configured = agent.current()?.model
         const fallback = configuredModel()
-        const preferred = preferences.variant[modelPreferenceKey(model)]
+        // A model's speeds share its variant. Preferences saved before then may name one of its speeds instead.
+        const standard = standardModel(model)
+        const preferred = [standard, model, ...speeds(standard).map((item) => ({ providerID: item.providerID, modelID: item.id }))]
+          .map((item) => preferences.variant[modelPreferenceKey(item)])
+          .find((value) => value !== undefined)
         const variant = normalizeModelVariant(
           preferred ??
             (configured?.providerID === model.providerID && configured.id === model.modelID
@@ -249,8 +279,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               ? fallback.variant
               : undefined),
         )
-        const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
-        return { ...model, variant: info?.variants.some((item) => item.id === variant) ? variant : undefined }
+        const info = findModel(model)
+        // A model runs at the speed last used with it.
+        const speed = preferences.speed[modelPreferenceKey(model)]
+        const remembered = speed && speeds(model).find((item) => item.experimental?.speed?.id === speed)
+        return {
+          providerID: model.providerID,
+          modelID: remembered ? remembered.id : model.modelID,
+          variant: info?.variants.some((item) => item.id === variant) ? variant : undefined,
+        }
       }
 
       function durableSelection(sessionID: string): ModelSelection | undefined {
@@ -389,12 +426,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         get catalogReady() {
           return models() !== undefined
         },
-        recent() {
-          return preferences.recent
+        /** The current model at its standard speed: the entry that stands for it in a list of models. */
+        standard: createMemo(() => {
+          const model = currentModel()
+          return model && standardModel(model)
+        }),
+        /** Whether the model is offered as a speed of another model instead of as an entry of its own. */
+        isSpeed(model: ModelPreferenceModel) {
+          return modelPreferenceKey(standardModel(model)) !== modelPreferenceKey(model)
         },
-        favorite() {
-          return preferences.favorite
-        },
+        recent,
+        favorite,
         parsed: createMemo(() => {
           const value = currentSelection()
           if (!value) {
@@ -405,27 +447,29 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
           }
           const provider = providers()?.find((item) => item.id === value.providerID)
-          const info = models()?.find((item) => item.providerID === value.providerID && item.id === value.modelID)
+          const info = findModel(value)
           return {
             provider: provider?.name ?? value.providerID,
-            model: info?.name ?? `${value.modelID} (unavailable)`,
+            // The speed shows beside the name, so the name is the model's own.
+            model: findModel(standardModel(value))?.name ?? `${value.modelID} (unavailable)`,
             reasoning: (info?.variants?.length ?? 0) !== 0,
           }
         }),
         cycle(direction: 1 | -1) {
           const current = currentSelection()
           if (!current) return
-          const recent = preferences.recent.filter(isModelValid)
-          const index = recent.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
-          let next = index === -1 ? (direction === 1 ? 0 : recent.length - 1) : index + direction
-          if (next < 0) next = recent.length - 1
-          if (next >= recent.length) next = 0
-          const val = recent[next]
+          const list = recent().filter(isModelValid)
+          const key = modelPreferenceKey(standardModel(current))
+          const index = list.findIndex((item) => modelPreferenceKey(item) === key)
+          let next = index === -1 ? (direction === 1 ? 0 : list.length - 1) : index + direction
+          if (next < 0) next = list.length - 1
+          if (next >= list.length) next = 0
+          const val = list[next]
           if (!val) return
           selectModel({ ...val })
         },
         cycleFavorite(direction: 1 | -1) {
-          const favorites = preferences.favorite.filter((item) => isModelValid(item))
+          const favorites = favorite().filter((item) => isModelValid(item))
           if (!favorites.length) {
             toast.show({
               variant: "info",
@@ -437,7 +481,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const current = currentSelection()
           let index = -1
           if (current) {
-            index = favorites.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
+            const key = modelPreferenceKey(standardModel(current))
+            index = favorites.findIndex((item) => modelPreferenceKey(item) === key)
           }
           if (index === -1) {
             index = direction === 1 ? 0 : favorites.length - 1
@@ -465,11 +510,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         toggleFavorite(model: { providerID: string; modelID: string }) {
           batch(() => {
             if (!isModelValid(model)) return
-            const exists = preferences.favorite.some(
-              (x) => x.providerID === model.providerID && x.modelID === model.modelID,
-            )
-            setPreferences("favorite", favoriteModels(model, preferences.favorite, !exists))
-            void repository.setFavorite(model, !exists).catch(() => undefined)
+            // An entry saved for the model at another speed is the same favorite.
+            const key = modelPreferenceKey(standardModel(model))
+            const same = (item: ModelPreferenceModel) => modelPreferenceKey(standardModel(item)) === key
+            const exists = preferences.favorite.some(same)
+            setPreferences("favorite", favoriteModels(model, preferences.favorite, !exists, same))
+            void repository.setFavorite(model, !exists, same).catch(() => undefined)
           })
         },
         variant: {
@@ -482,8 +528,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           list() {
             const m = currentSelection()
             if (!m) return []
-            const info = models()?.find((item) => item.providerID === m.providerID && item.id === m.modelID)
-            return info?.variants?.map((variant) => variant.id) ?? []
+            return findModel(m)?.variants?.map((variant) => variant.id) ?? []
           },
           set(value: string | undefined) {
             const m = currentSelection()
@@ -491,13 +536,63 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (route.data.type === "session") {
               setSessionDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
             }
-            setPreferences("variant", modelPreferenceKey(m), value ?? "default")
-            void repository.saveVariant(m, value).catch(() => undefined)
+            // A model's speeds share its variant.
+            const standard = standardModel(m)
+            setPreferences("variant", modelPreferenceKey(standard), value ?? "default")
+            void repository.saveVariant(standard, value).catch(() => undefined)
           },
           cycle() {
             const variants = this.list()
             if (variants.length === 0) return
             this.set(cycleModelVariant(this.current(), variants))
+          },
+        },
+        speed: {
+          /** Undefined is the model's standard speed. */
+          current() {
+            const m = currentModel()
+            if (!m || modelPreferenceKey(standardModel(m)) === modelPreferenceKey(m)) return
+            return findModel(m)?.experimental?.speed?.id
+          },
+          /** The current model's other speeds, slowest first. */
+          list() {
+            const m = currentModel()
+            if (!m) return []
+            const standard = standardModel(m)
+            // Catalogs from older servers may list a model without prices.
+            const price = findModel(standard)?.cost?.[0]?.input
+            return speeds(standard).flatMap((item) => {
+              const speed = item.experimental?.speed
+              if (!speed) return []
+              return {
+                id: speed.id,
+                faster: speed.faster,
+                /** Its input price against the standard speed's, when the model has prices. */
+                price: price && item.cost?.[0] ? item.cost[0].input / price : undefined,
+              }
+            })
+          },
+          set(value: string | undefined) {
+            const m = currentSelection()
+            if (!m) return
+            const standard = standardModel(m)
+            const target = value
+              ? speeds(standard).find((item) => item.experimental?.speed?.id === value)?.id
+              : standard.modelID
+            if (!target) return
+            batch(() => {
+              setPreferences("speed", modelPreferenceKey(standard), value)
+              void repository.saveSpeed(standard, value).catch(() => undefined)
+              if (route.data.type === "session") return setSessionDraft(route.data.sessionID, { ...m, modelID: target })
+              // A new session starts on the model, which runs at the speed just saved for it.
+              const current = agent.current()
+              if (current) setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), standard)
+            })
+          },
+          cycle() {
+            const list = this.list()
+            if (list.length === 0) return
+            this.set(cycleModelSpeed(this.current(), list))
           },
         },
       }

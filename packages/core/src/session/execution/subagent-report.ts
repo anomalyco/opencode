@@ -1,5 +1,6 @@
 export * as SubagentReport from "./subagent-report.js"
 
+import { Automation } from "@opencode/schema/automation"
 import { Effect, Result } from "effect"
 import type { Job } from "../../job.js"
 import { SessionBackground } from "../background.js"
@@ -135,7 +136,8 @@ export const make = (deps: Deps) => {
     periods.delete(sessionID)
     const jobState = yield* deps.jobs.prepareSubagentReport(sessionID, period?.boundGeneration)
     const initial = yield* deps.store.get(sessionID)
-    if (!initial?.parentID && jobState.mode === "none") {
+    // An automation run's child finishes quietly; only a follow-up the parent sent through a Job reports back.
+    if ((!initial?.parentID || Automation.isRunSession(sessionID)) && jobState.mode === "none") {
       return {
         commit: () => deps.store.release(sessionID),
         deliver: Effect.void,

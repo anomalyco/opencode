@@ -141,9 +141,9 @@ export function RecentlyClosedTabsMenu(props: {
                 ref={search}
                 type="search"
                 dir="auto"
-                leadingIcon={<Icon name="magnifying-glass" size="small" />}
+                leadingIcon={<Icon name="magnifying-glass" />}
                 showClearButton
-                clearIcon="circle-xmark"
+                clearIcon="close"
                 onClearClick={() => {
                   setState("query", "")
                   search?.focus()

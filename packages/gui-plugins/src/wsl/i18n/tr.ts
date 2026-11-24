@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} komutu {{timeout}} ms sonra zaman aşımına uğradı",
   "error.failedPort": "Bağlantı noktası alınamadı",
   "menu.remove": "Kaldır",
+  "error.busy": "{{distro}} başka bir görevle meşgul. Bittiğinde tekrar deneyin.",
 }

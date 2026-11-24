@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
+import type { CompactOperation } from "../route/client.js"
 import type { LLMRequest } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalNull, ProviderShared } from "./shared.js"
@@ -93,8 +94,13 @@ export const protocol = Protocol.make({
   stream: ResponsesHostedTools.stream(adapter, HOSTED_TOOLS),
 })
 
-export const compact = ResponsesCompaction.make(adapter, (request) =>
+const compactFlat = ResponsesCompaction.make(adapter, (request) =>
   OpenResponses.lowerTools(ProviderShared.flattenTools(request.tools), adapter, OpenAIFreeform.tools(request)),
 )
+
+// /compact lowers the history itself, so flatten the whole request as `Protocol.make` does before every step's body:
+// past calls to namespaced tools then carry the same names as on those steps, and /compact reads the prefix they cached.
+export const compact: CompactOperation = (request, executor, options) =>
+  compactFlat(ProviderShared.flattenRequest(request), executor, options)
 
 export * as XAIResponses from "./xai-responses.js"

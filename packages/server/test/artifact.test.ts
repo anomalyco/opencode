@@ -217,4 +217,8 @@ export default {
       })
     })
   }),
+  // As the suite's first server boot, this test pays the process's cold load of the Location graph (built-in plugins,
+  // the models catalog, lazily imported modules). sdk's first host boot shows that cost: 0.7-4s on Windows CI against
+  // 0.25s on Linux. This test then boots three Locations and a local plugin.
+  30_000,
 )

@@ -10,6 +10,8 @@ import {
   LanguageModel,
   ProviderConfigurationError,
   type ProviderPackage,
+  VideoModel,
+  VideoModelSchema,
 } from "@opencode/ai/effect"
 import { Auth, mergeTransport } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
@@ -152,6 +154,8 @@ export interface Interface {
   readonly resolveModel: (model: Info, variant?: VariantID) => Effect.Effect<Resolved, Error>
   /** An enabled image model by ref, or undefined when no image model has that ref. */
   readonly resolveImage: (ref: Ref) => Effect.Effect<ImageModel | undefined, MediaError>
+  /** An enabled video model by ref, or undefined when no video model has that ref. */
+  readonly resolveVideo: (ref: Ref) => Effect.Effect<VideoModel | undefined, MediaError>
   /** An enabled decision model by ref, or undefined when no decision model has that ref. */
   readonly resolveDecision: (ref: Ref) => Effect.Effect<DecisionModel | undefined, MediaError>
 }
@@ -247,11 +251,13 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       const timeouts = Provider.timeouts(configured)
+      const base = resolved.compatibility
+        ? capabilities(runtime.capabilities, resolved.compatibility)
+        : runtime.capabilities
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
-        capabilities: resolved.compatibility
-          ? capabilities(runtime.capabilities, resolved.compatibility)
-          : runtime.capabilities,
+        // The catalog's freeform formats decide whether the AI package sends a tool as raw text, and with which grammar.
+        capabilities: { ...base, tools: { ...base?.tools, freeform: model.capabilities.freeform ?? [] } },
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, Struct.omit(resolved.compatibility, CAPABILITY_KEYS))
           : runtime.compatibility,
@@ -316,6 +322,7 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
   dependencies?: Dependencies,
 ) {
   const { resolved, configured, module, settings } = yield* loadCatalogPackage(model, credential, dependencies)
+  const timeouts = Provider.timeouts(configured)
   const tls = Provider.tls(configured)
   const runtime: unknown = yield* Effect.try({
     try: () => module.model(resolved.modelID ?? resolved.id, settings),
@@ -331,10 +338,14 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
         })
       : runtime
   if (!is(adapted)) return yield* unsupported(resolved)
-  if (!tls || !(adapted instanceof DecisionModel || adapted instanceof ImageModel)) return adapted
+  if (!(adapted instanceof DecisionModel || adapted instanceof ImageModel || adapted instanceof VideoModel))
+    return adapted
   // Media and decision models are plain classes with readonly fields, so copy onto the same prototype.
   const copy: Runtime = Object.assign(Object.create(Object.getPrototypeOf(adapted)), adapted, {
-    http: { ...adapted.http, tls },
+    transport: mergeTransport(adapted.transport, {
+      timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
+      http: { tls },
+    }),
   })
   return copy
 })
@@ -351,6 +362,7 @@ const constructionError = (model: RuntimeInfo, cause: unknown) =>
 
 const isImageModel = Schema.is(ImageModelSchema)
 const isDecisionModel = Schema.is(DecisionModelSchema)
+const isVideoModel = Schema.is(VideoModelSchema)
 
 function prepareRuntimeModel(model: RuntimeInfo) {
   if (model.settings?.apiKey !== "") return model
@@ -554,6 +566,9 @@ export const layer = Layer.effect(
       resolveModel: load,
       resolveImage: Effect.fn("ModelResolver.resolveImage")(function* (ref) {
         return yield* loadMedia(ref, "image", isImageModel)
+      }),
+      resolveVideo: Effect.fn("ModelResolver.resolveVideo")(function* (ref) {
+        return yield* loadMedia(ref, "video", isVideoModel)
       }),
       resolveDecision: Effect.fn("ModelResolver.resolveDecision")(function* (ref) {
         return yield* loadMedia(ref, "decision", isDecisionModel)

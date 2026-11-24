@@ -45,7 +45,7 @@ export default defineConfig(({ mode }) => {
           : [],
       // The bare host is a custom domain (it also supplies the DNS record), and cf detaches any domain
       // not listed here. docs.<host> is the old docs host: the Worker sends its URLs to the same path
-      // on the V1 docs at /v1/docs.
+      // under /docs.
       domains: [host, `docs.${host}`],
       workersDev: false,
       previewUrls: false,

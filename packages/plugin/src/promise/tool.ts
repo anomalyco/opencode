@@ -22,28 +22,37 @@ export interface ToolContext extends Omit<Tool.Context, "progress" | "cancel"> {
 export type Info<
   Input extends Tool.ValueSchema<any> = Tool.ValueSchema<any>,
   Output extends Tool.ValueSchema<any> | undefined = Tool.ValueSchema<any> | undefined,
-> = Omit<Tool.Info<Input, Output>, "execute"> & {
+  CMInput extends Tool.ValueSchema<any> = Input,
+  CMOutput extends Tool.ValueSchema<any> | undefined = Output,
+> = Omit<Tool.Info<Input, Output, CMInput, CMOutput>, "execute"> & {
   readonly execute: (
-    input: Parameters<Tool.Info<Input, Output>["execute"]>[0],
+    input: Parameters<Tool.Info<Input, Output, CMInput, CMOutput>["execute"]>[0],
     context: ToolContext,
-  ) => Promise<Tool.Result<Output>>
+  ) => Promise<Tool.Result<Output | CMOutput>>
 }
 
 export interface ToolEditor {
   list(): readonly (Info & { readonly id: string })[]
   get(id: string): (Info & { readonly id: string }) | undefined
   namespace(namespace: Tool.Namespace): void
-  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
-    tool: Info<Input, Output>,
+  add<
+    Input extends Tool.ValueSchema<any>,
+    Output extends Tool.ValueSchema<any> | undefined = undefined,
+    CMInput extends Tool.ValueSchema<any> = Input,
+    CMOutput extends Tool.ValueSchema<any> | undefined = Output,
+  >(
+    tool: Info<Input, Output, CMInput, CMOutput>,
   ): void
   /** Updates an existing tool; missing IDs are ignored. */
   update(id: string, update: (tool: Types.Mutable<Info>) => void): void
   remove(id: string): void
 }
 
-interface ToolHooks {
+export interface ToolHooks {
   readonly "execute.before": {
     tool: string
+    readonly info?: Info
+    readonly codemode: boolean
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID
@@ -52,6 +61,8 @@ interface ToolHooks {
   }
   readonly "execute.after": {
     readonly tool: string
+    readonly info?: Info
+    readonly codemode: boolean
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID

@@ -191,7 +191,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
               </Show>
               {language.t(view().pendingWorktree ? "session.location.moving" : "session.location.worktree")}
               <Show when={!view().pendingWorktree}>
-                <Icon name="chevron-down" size="small" />
+                <Icon name="chevron-down" />
               </Show>
             </Menu.Trigger>
             <Menu.Portal>
@@ -230,7 +230,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
                   </Show>
                   <Show when={view().searchable}>
                     <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
-                      <Icon name="magnifying-glass" size="small" class="shrink-0" />
+                      <Icon name="magnifying-glass" class="shrink-0" />
                       <input
                         // Worktrees load after the menu opens, so focus the field once it mounts.
                         ref={(element) => {

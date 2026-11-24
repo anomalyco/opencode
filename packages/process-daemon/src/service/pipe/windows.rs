@@ -2,7 +2,8 @@
 //!
 //! The child has no console (`CREATE_NO_WINDOW`), stdin on `NUL`, and stdout
 //! and stderr on one inheritable byte-mode named pipe that the daemon reads
-//! with overlapped I/O. The child is created inside a kill-on-close job, so
+//! with overlapped I/O. The child is created suspended and joins a
+//! kill-on-close job before it runs, so
 //! `TerminateJobObject` reaches every descendant and a daemon crash takes the
 //! tree with it. No console signals are used: every `signal` is a hard kill of
 //! the tree, and the exit reports the signal the daemon sent.
@@ -15,7 +16,7 @@ use std::io;
 use std::marker::PhantomData;
 use std::mem::{size_of, size_of_val};
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-use std::os::windows::io::{AsRawHandle, OwnedHandle};
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::Path;
 use std::ptr::{null, null_mut};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -38,30 +39,30 @@ use windows_sys::Win32::Storage::FileSystem::{
 };
 use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 use windows_sys::Win32::System::JobObjects::{
-    CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_BASIC_LIMIT_INFORMATION,
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
-    SetInformationJobObject, TerminateJobObject,
+    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    JOBOBJECT_BASIC_LIMIT_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JobObjectExtendedLimitInformation, SetInformationJobObject, TerminateJobObject,
 };
 use windows_sys::Win32::System::Pipes::{
     CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
 };
 use windows_sys::Win32::System::Threading::{
-    CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, CreateProcessW, DeleteProcThreadAttributeList,
-    EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess, GetExitCodeProcess, INFINITE,
-    InitializeProcThreadAttributeList, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-    PROC_THREAD_ATTRIBUTE_JOB_LIST, PROCESS_INFORMATION, ResetEvent, STARTF_USESTDHANDLES,
-    STARTUPINFOEXW, SetEvent, TerminateProcess, UpdateProcThreadAttribute, WaitForMultipleObjects,
-    WaitForSingleObject,
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
+    DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess,
+    GetExitCodeProcess, INFINITE, InitializeProcThreadAttributeList,
+    PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROCESS_INFORMATION, ResetEvent, ResumeThread,
+    STARTF_USESTDHANDLES, STARTUPINFOEXW, SetEvent, TerminateProcess, UpdateProcThreadAttribute,
+    WaitForMultipleObjects, WaitForSingleObject,
 };
 
-use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, Waiter, start_pipe};
+use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, exit_message, start_pipe};
 use crate::service::{CreatePipe, ProcessSignal, TerminalHandle, TerminalId};
 use crate::transport::retained::Retained;
 use crate::transport::windows::{event, owned_handle, security::PrivateSecurity, wide};
 
 /// Cancel is first so a pipe that is always readable cannot starve it.
 const CANCEL_READY: u32 = WAIT_OBJECT_0;
-/// The read event, and the process handle after it.
+/// The read event, and the exit event after it.
 const READ_READY: u32 = WAIT_OBJECT_0 + 1;
 const PROCESS_READY: u32 = WAIT_OBJECT_0 + 2;
 
@@ -81,10 +82,11 @@ impl TerminalHandle {
         // clean up; the reader is the file's only writer.
         let sink = open_output(&request.output_path)?;
         let job = Job::new(id);
-        let cancel = CancelOnDrop::new()?;
+        let cancel = SignalOnDrop::new()?;
+        let exited = SignalOnDrop::new()?;
         let process = Arc::new(spawn(id, &request, job, client)?);
         let reader_cancel = Arc::clone(&cancel.0);
-        let reader_process = Arc::clone(&process);
+        let reader_exited = Arc::clone(&exited.0);
         start_pipe(
             id,
             order,
@@ -96,12 +98,12 @@ impl TerminalHandle {
                     server,
                     OutputSink::new(sink, actor),
                     reader_cancel,
-                    reader_process,
+                    reader_exited,
                 )
             },
-            move || Waiter {
-                exit: wait_exit(process),
-                after: Box::new(()),
+            move |actor| {
+                let _ = actor.send(exit_message(wait_exit(&process)));
+                drop(exited);
             },
         )
     }
@@ -117,7 +119,7 @@ pub(in crate::service) struct Process {
 
 #[derive(Debug)]
 struct State {
-    /// Taken by `reap`, which closes both handles.
+    /// Taken by the waiter at exit, or by `reap` if startup failed.
     handles: Option<Handles>,
     /// The signal recorded by `kill`/`signal` before terminating the tree.
     killed: Option<&'static str>,
@@ -126,7 +128,7 @@ struct State {
 #[derive(Debug)]
 struct Handles {
     process: Arc<OwnedHandle>,
-    job: Option<OwnedHandle>,
+    job: Option<Job>,
 }
 
 impl Process {
@@ -138,7 +140,7 @@ impl Process {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// The process object, kept open until `reap` so its PID cannot be reused.
+    /// Borrows the process object for the wait without holding the state lock.
     fn process_handle(&self) -> Option<Arc<OwnedHandle>> {
         self.lock()
             .handles
@@ -156,8 +158,6 @@ impl Process {
     }
 
     /// Hard-kills the process tree and records the signal the client will see.
-    /// Allowed after the exit, to reach what is left of the job; refused after
-    /// `reap`.
     pub(in crate::service) fn signal(&self, signal: ProcessSignal) -> Result<()> {
         let name = match signal {
             ProcessSignal::Term => "SIGTERM",
@@ -166,33 +166,27 @@ impl Process {
         };
         let mut state = self.lock();
         let Some(handles) = record_kill(&mut state, name) else {
-            bail!("process has been reaped");
+            return Ok(());
         };
         terminate(handles).context("failed to signal process")
     }
 
-    /// Call only after the waiter has returned: closes the process and job
-    /// handles. Closing the job alone kills anything still in it.
+    /// Releases a partially started command whose waiter never started.
     pub(super) fn reap(&self) {
         self.lock().handles.take();
     }
-
-    fn take_signal(&self) -> Option<&'static str> {
-        self.lock().killed.take()
-    }
 }
 
-/// Records the signal while the process still runs, so a process that exited on
-/// its own keeps its exit code, and returns the handles, or `None` after
-/// `reap`.
+/// A process that exited on its own keeps its exit code and its waiter's
+/// cleanup policy, even if a signal races the waiter.
 fn record_kill<'a>(state: &'a mut State, name: &'static str) -> Option<&'a Handles> {
     let handles = state.handles.as_ref()?;
     // SAFETY: the state lock keeps the process handle open.
-    if !is_signalled(&handles.process) {
-        // Termination is asynchronous: the first signal that reached the
-        // running process is the one the client should see.
-        state.killed.get_or_insert(name);
+    if is_signalled(&handles.process) {
+        return None;
     }
+    // Termination is asynchronous: report the first signal.
+    state.killed.get_or_insert(name);
     Some(handles)
 }
 
@@ -201,7 +195,7 @@ fn terminate(handles: &Handles) -> io::Result<()> {
     // SAFETY: the handles stay open while they are borrowed here.
     let terminated = unsafe {
         match &handles.job {
-            Some(job) => TerminateJobObject(job.as_raw_handle(), 1),
+            Some(job) => TerminateJobObject(job.handle(), 1),
             None => TerminateProcess(handles.process.as_raw_handle(), 1),
         }
     };
@@ -224,47 +218,84 @@ fn spawn(
     job: Option<Job>,
     client: OwnedHandle,
 ) -> Result<Process> {
-    let (created, job) = match create_process(request, job.as_ref(), &client) {
-        Ok(created) => (created, job),
-        Err(error) if job.is_some() && error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) => {
-            // An outer job with UI restrictions refuses new members. Run the
-            // command anyway; only the main process can be killed then.
-            let created = create_process(request, None, &client)
-                .with_context(|| format!("failed to spawn {}", request.program))?;
-            eprintln!(
-                "pipe process {id}: cannot join the job object, killing only the main process: {error}"
-            );
-            drop(job);
-            (created, None)
-        }
-        Err(error) => return Err(error).context(format!("failed to spawn {}", request.program)),
-    };
+    let created = create_process(request, &client)
+        .with_context(|| format!("failed to spawn {}", request.program))?;
     // The daemon's copy of the child's write end: holding it open would keep
     // the pipe from ever breaking.
     drop(client);
+    // The child is still suspended, so it joins the job before it can start
+    // anything. PROC_THREAD_ATTRIBUTE_JOB_LIST would be atomic, but Windows
+    // then refuses to add a Store app (Store PowerShell 7) to its package's
+    // container job while another process of that package is running.
+    let job = job.and_then(|job| match job.assign(created.process()) {
+        Ok(()) => Some(job),
+        Err(error) => {
+            // An outer job with UI restrictions refuses new members. Run the
+            // command anyway; only the main process can be killed then.
+            eprintln!(
+                "pipe process {id}: cannot join the job object, killing only the main process: {error}"
+            );
+            None
+        }
+    });
+    let (pid, process) = created
+        .resume()
+        .with_context(|| format!("failed to start {}", request.program))?;
     Ok(Process {
-        pid: created.pid,
+        pid,
         state: Mutex::new(State {
             handles: Some(Handles {
-                process: Arc::new(created.process),
-                job: job.map(|job| job.0),
+                process: Arc::new(process),
+                job,
             }),
             killed: None,
         }),
     })
 }
 
-/// A created process, before it is registered with its job and signal state.
+/// A created, still suspended process. Dropping it before [`Self::resume`]
+/// terminates it, so an early error or unwind doesn't leave the suspended
+/// child running.
 struct Spawned {
     pid: u32,
-    process: OwnedHandle,
+    /// Taken by `resume`; `Drop` terminates the child while it is still here.
+    process: Option<OwnedHandle>,
+    thread: OwnedHandle,
 }
 
-fn create_process(
-    request: &CreatePipe,
-    job: Option<&Job>,
-    client: &OwnedHandle,
-) -> io::Result<Spawned> {
+impl Spawned {
+    fn process(&self) -> &OwnedHandle {
+        self.process
+            .as_ref()
+            .expect("process handle is live until resume")
+    }
+
+    fn resume(mut self) -> io::Result<(u32, OwnedHandle)> {
+        // SAFETY: the thread handle is live and uniquely owned.
+        if unsafe { ResumeThread(self.thread.as_raw_handle()) } == u32::MAX {
+            return Err(io::Error::last_os_error());
+        }
+        Ok((
+            self.pid,
+            self.process
+                .take()
+                .expect("process handle is live until resume"),
+        ))
+    }
+}
+
+impl Drop for Spawned {
+    fn drop(&mut self) {
+        if let Some(process) = &self.process {
+            // SAFETY: the process handle is live; the child never ran.
+            unsafe {
+                TerminateProcess(process.as_raw_handle(), 1);
+            }
+        }
+    }
+}
+
+fn create_process(request: &CreatePipe, client: &OwnedHandle) -> io::Result<Spawned> {
     let stdin = null_handle()?;
     // A child that closes one of stdout or stderr must still write to the
     // other, so stderr gets its own handle to the same pipe.
@@ -274,8 +305,7 @@ fn create_process(
         client.as_raw_handle(),
         stderr.as_raw_handle(),
     ];
-    let jobs = job.map(|job| [job.handle()]);
-    let attributes = Attributes::new(&handles, jobs.as_ref().map(|jobs| jobs.as_slice()))?;
+    let attributes = Attributes::new(&handles)?;
     let mut command = command_line(&request.program, &request.args)?;
     let environment = environment_block(&request.env)?;
     let directory = wide(request.cwd.as_os_str())?;
@@ -288,8 +318,8 @@ fn create_process(
     startup.lpAttributeList = attributes.list();
     let mut info = PROCESS_INFORMATION::default();
     // SAFETY: every buffer and handle stays live through the call. The child
-    // gets no window and shares the output pipe through the handle list; the
-    // job list puts it in the job atomically, with no breakaway flags.
+    // gets no window and shares the output pipe through the handle list; it
+    // stays suspended until the caller has put it in its job.
     let created = unsafe {
         CreateProcessW(
             null(),
@@ -297,7 +327,10 @@ fn create_process(
             null(),
             null(),
             1,
-            CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+            CREATE_NO_WINDOW
+                | CREATE_SUSPENDED
+                | CREATE_UNICODE_ENVIRONMENT
+                | EXTENDED_STARTUPINFO_PRESENT,
             environment.as_ptr().cast(),
             directory.as_ptr(),
             (&raw const startup).cast(),
@@ -307,19 +340,19 @@ fn create_process(
     if created == 0 {
         return Err(io::Error::last_os_error());
     }
-    // SAFETY: CreateProcessW returned new, uniquely owned handles; the thread
-    // handle is not needed.
-    let process = owned_handle(info.hProcess)?;
-    drop(owned_handle(info.hThread)?);
-    Ok(Spawned {
-        pid: info.dwProcessId,
-        process,
+    // SAFETY: CreateProcessW returned new, uniquely owned handles.
+    Ok(unsafe {
+        Spawned {
+            pid: info.dwProcessId,
+            process: Some(OwnedHandle::from_raw_handle(info.hProcess)),
+            thread: OwnedHandle::from_raw_handle(info.hThread),
+        }
     })
 }
 
 /// Waits for the child to exit, then reports the exit code, or the signal the
 /// daemon sent when it terminated the tree.
-fn wait_exit(process: Arc<Process>) -> io::Result<Exit> {
+fn wait_exit(process: &Process) -> io::Result<Exit> {
     let Some(handle) = process.process_handle() else {
         return Err(io::Error::other("process has been reaped"));
     };
@@ -327,27 +360,34 @@ fn wait_exit(process: Arc<Process>) -> io::Result<Exit> {
     if unsafe { WaitForSingleObject(handle.as_raw_handle(), INFINITE) } != WAIT_OBJECT_0 {
         return Err(io::Error::last_os_error());
     }
+    let mut state = process.lock();
+    let handles = state.handles.take();
     let mut code = 0;
     // SAFETY: a signalled process object has a final exit code.
     if unsafe { GetExitCodeProcess(handle.as_raw_handle(), &mut code) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok(match process.take_signal() {
+    if let Some(job) = handles.and_then(|handles| handles.job)
+        && let Err(error) = job.finish(code != 0 && state.killed.is_none())
+    {
+        eprintln!("pipe process {}: job cleanup failed: {error}", process.pid);
+    }
+    Ok(match state.killed.take() {
         Some(name) => Exit::Signal(name.to_string()),
         None => Exit::Code(code),
     })
 }
 
-/// Sets the reader's cancel event when dropped.
-struct CancelOnDrop(Arc<OwnedHandle>);
+/// Wakes the reader on shutdown or once the waiter has published the exit.
+struct SignalOnDrop(Arc<OwnedHandle>);
 
-impl CancelOnDrop {
+impl SignalOnDrop {
     fn new() -> io::Result<Self> {
         event().map(|event| Self(Arc::new(event)))
     }
 }
 
-impl Drop for CancelOnDrop {
+impl Drop for SignalOnDrop {
     fn drop(&mut self) {
         // SAFETY: the shared event stays open through the call.
         unsafe {
@@ -477,12 +517,9 @@ fn read_output(
     pipe: OwnedHandle,
     sink: OutputSink,
     cancel: Arc<OwnedHandle>,
-    process: Arc<Process>,
+    exit_event: Arc<OwnedHandle>,
 ) {
     let mut sink = sink;
-    let Some(process_object) = process.process_handle() else {
-        return;
-    };
     let mut read = match Read::new(pipe) {
         Ok(read) => read,
         Err(error) => {
@@ -491,7 +528,7 @@ fn read_output(
         }
     };
     // The process may have exited before the reader started.
-    let mut exited = is_signalled(&process_object);
+    let mut exited = is_signalled(&exit_event);
     let mut deadline = exited.then(|| Instant::now() + DRAIN_AFTER_EXIT);
     loop {
         // Cancellation and the exit win over output, so a descendant that
@@ -500,7 +537,7 @@ fn read_output(
             // Like Unix, shutdown is not an EOF the actor needs to observe.
             return;
         }
-        if !exited && is_signalled(&process_object) {
+        if !exited && is_signalled(&exit_event) {
             exited = true;
             deadline = Some(Instant::now() + DRAIN_AFTER_EXIT);
         }
@@ -524,7 +561,7 @@ fn read_output(
             let handles = [
                 cancel.as_raw_handle(),
                 read.event(),
-                process_object.as_raw_handle(),
+                exit_event.as_raw_handle(),
             ];
             // Once the exit is seen, stop waiting on its signalled handle.
             let count = if exited { 2 } else { 3 };
@@ -654,21 +691,30 @@ fn output_pipe() -> Result<OutputPipe> {
 
 /// A kill-on-close job: terminating it kills every descendant, and a crashed
 /// daemon closes it and kills them too.
+#[derive(Debug)]
 struct Job(OwnedHandle);
 
 impl Job {
     fn new(id: TerminalId) -> Option<Self> {
         // SAFETY: an unnamed job with default attributes, adopted on success.
         let job = match owned_handle(unsafe { CreateJobObjectW(null(), null()) }) {
-            Ok(job) => job,
+            Ok(job) => Self(job),
             Err(error) => {
                 warn_no_job(id, &error);
                 return None;
             }
         };
+        if let Err(error) = job.set_limits(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) {
+            warn_no_job(id, &error);
+            return None;
+        }
+        Some(job)
+    }
+
+    fn set_limits(&self, flags: u32) -> io::Result<()> {
         let limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
             BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION {
-                LimitFlags: JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                LimitFlags: flags,
                 ..Default::default()
             },
             ..Default::default()
@@ -677,21 +723,38 @@ impl Job {
         // the extended-information class.
         if unsafe {
             SetInformationJobObject(
-                job.as_raw_handle(),
+                self.handle(),
                 JobObjectExtendedLimitInformation,
                 (&raw const limits).cast(),
                 size_of_val(&limits) as u32,
             )
         } == 0
         {
-            warn_no_job(id, &io::Error::last_os_error());
-            return None;
+            return Err(io::Error::last_os_error());
         }
-        Some(Self(job))
+        Ok(())
     }
 
     fn handle(&self) -> HANDLE {
         self.0.as_raw_handle()
+    }
+
+    fn assign(&self, process: &OwnedHandle) -> io::Result<()> {
+        // SAFETY: the job and process handles stay open through the call.
+        if unsafe { AssignProcessToJobObject(self.handle(), process.as_raw_handle()) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    fn finish(self, failed: bool) -> io::Result<()> {
+        // No console and no SIGTERM grace. If termination fails, closing the
+        // still-armed job is the fallback. For a successful command disarm
+        // kill-on-close before releasing the handle.
+        if failed && unsafe { TerminateJobObject(self.handle(), 1) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        self.set_limits(0)
     }
 }
 
@@ -884,8 +947,8 @@ fn compare_keys(a: &[u16], b: &[u16]) -> Ordering {
 }
 
 /// An initialized process-attribute list and the buffer it points into, freed
-/// in the right order. The lifetime ties it to the handle and job arrays its
-/// values point into.
+/// in the right order. The lifetime ties it to the handle array its value
+/// points into.
 struct Attributes<'a> {
     // Never read: the list points into this allocation, which must stay put
     // and alive for the list's lifetime.
@@ -895,23 +958,11 @@ struct Attributes<'a> {
 }
 
 impl<'a> Attributes<'a> {
-    fn new(handles: &'a [HANDLE], jobs: Option<&'a [HANDLE]>) -> io::Result<Self> {
-        let mut entries = vec![(
-            PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
-            handles.as_ptr().cast::<c_void>(),
-            size_of_val(handles),
-        )];
-        entries.extend(jobs.map(|jobs| {
-            (
-                PROC_THREAD_ATTRIBUTE_JOB_LIST as usize,
-                jobs.as_ptr().cast::<c_void>(),
-                size_of_val(jobs),
-            )
-        }));
+    fn new(handles: &'a [HANDLE]) -> io::Result<Self> {
         let mut bytes = 0;
         // SAFETY: the first call only reports the required size.
         unsafe {
-            InitializeProcThreadAttributeList(null_mut(), entries.len() as u32, 0, &mut bytes);
+            InitializeProcThreadAttributeList(null_mut(), 1, 0, &mut bytes);
         }
         if bytes == 0 {
             return Err(io::Error::last_os_error());
@@ -920,9 +971,7 @@ impl<'a> Attributes<'a> {
         let list = buffer.as_mut_ptr().cast::<c_void>();
         // SAFETY: the buffer is at least `bytes` long, `usize`-aligned, and
         // outlives the list.
-        if unsafe { InitializeProcThreadAttributeList(list, entries.len() as u32, 0, &mut bytes) }
-            == 0
-        {
+        if unsafe { InitializeProcThreadAttributeList(list, 1, 0, &mut bytes) } == 0 {
             return Err(io::Error::last_os_error());
         }
         let this = Self {
@@ -930,23 +979,21 @@ impl<'a> Attributes<'a> {
             list,
             _attached: PhantomData,
         };
-        for &(attribute, value, length) in &entries {
-            // SAFETY: the list was initialized for exactly `entries.len()`
-            // attributes; every value outlives the list.
-            if unsafe {
-                UpdateProcThreadAttribute(
-                    this.list,
-                    0,
-                    attribute,
-                    value,
-                    length,
-                    null_mut(),
-                    null(),
-                )
-            } == 0
-            {
-                return Err(io::Error::last_os_error());
-            }
+        // SAFETY: the list was initialized for one attribute; the handle array
+        // outlives the list.
+        if unsafe {
+            UpdateProcThreadAttribute(
+                this.list,
+                0,
+                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+                handles.as_ptr().cast::<c_void>(),
+                size_of_val(handles),
+                null_mut(),
+                null(),
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
         }
         Ok(this)
     }
@@ -1071,10 +1118,10 @@ mod tests {
         assert!(!is_signalled(&process.process_handle().unwrap()));
         process.signal(ProcessSignal::Kill).unwrap();
         assert!(matches!(
-            wait_exit(Arc::clone(&process)).unwrap(),
+            wait_exit(&process).unwrap(),
             Exit::Signal(name) if name == "SIGKILL"
         ));
-        process.reap();
+        assert!(process.process_handle().is_none());
     }
 
     /// A duplicate of `job` with only query access: joining it needs
@@ -1110,7 +1157,7 @@ mod tests {
         let OutputPipe { client, .. } = output_pipe().unwrap();
         let process = Arc::new(spawn(2, &request, Some(restricted), client).unwrap());
         let mut in_job = 0;
-        // SAFETY: the process handle stays open until `reap` and the job is live.
+        // SAFETY: the process and job handles stay open through this call.
         assert_ne!(
             unsafe {
                 IsProcessInJob(
@@ -1122,10 +1169,89 @@ mod tests {
             0
         );
         assert_eq!(in_job, 0, "the restricted job must have been refused");
+        assert!(matches!(wait_exit(&process).unwrap(), Exit::Code(5)));
+        assert!(process.process_handle().is_none());
+    }
+
+    #[test]
+    fn store_powershell_joins_its_job_while_another_instance_runs() {
+        struct Guarded {
+            process: Process,
+            _server: OwnedHandle,
+        }
+        impl Drop for Guarded {
+            fn drop(&mut self) {
+                self.process.kill();
+            }
+        }
+
+        struct TempGate(std::path::PathBuf);
+        impl Drop for TempGate {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+
+        // Only where PowerShell 7 is installed from the Microsoft Store.
+        let Some(alias) = std::env::var_os("LOCALAPPDATA")
+            .map(|dir| Path::new(&dir).join(r"Microsoft\WindowsApps\pwsh.exe"))
+            .filter(|alias| alias.exists())
+        else {
+            return;
+        };
+        let alias = alias.to_str().unwrap();
+        let gate = TempGate(std::env::temp_dir().join(format!(
+            "opencode-pty-store-pwsh-gate-{:032x}",
+            rand::random::<u128>()
+        )));
+        std::fs::write(&gate.0, "").unwrap();
+        let gate_arg = gate.0.display().to_string().replace('\'', "''");
+
+        let start = |id, command: &str| {
+            let mut request = test_request(
+                alias,
+                &[
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    command,
+                ],
+            );
+            // The full environment, as OpenCode passes it to the shell.
+            request.env = std::env::vars().collect();
+            let OutputPipe { server, client } = output_pipe().unwrap();
+            Guarded {
+                process: spawn(id, &request, Job::new(id), client).unwrap(),
+                _server: server,
+            }
+        };
+        let in_job = |guarded: &Guarded| {
+            guarded
+                .process
+                .lock()
+                .handles
+                .as_ref()
+                .is_some_and(|handles| handles.job.is_some())
+        };
+
+        let running = start(3, "Start-Sleep 30");
+        let hold = format!(
+            "while ([System.IO.File]::Exists('{gate_arg}')) {{ Start-Sleep -Milliseconds 10 }}; exit 3"
+        );
+        let second = start(4, &hold);
+        assert!(in_job(&running));
+        assert!(in_job(&second), "the second instance must join its job");
+
+        // Kill the first while the second is still alive: our job must sit
+        // inside the Store container job, not the other way round.
+        running.process.kill();
         assert!(matches!(
-            wait_exit(Arc::clone(&process)).unwrap(),
-            Exit::Code(5)
+            wait_exit(&running.process).unwrap(),
+            Exit::Signal(name) if name == "SIGKILL"
         ));
-        process.reap();
+
+        std::fs::remove_file(&gate.0).unwrap();
+        assert!(matches!(wait_exit(&second.process).unwrap(), Exit::Code(3)));
     }
 }

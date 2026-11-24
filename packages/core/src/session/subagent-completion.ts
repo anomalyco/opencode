@@ -1,6 +1,7 @@
 export * as SubagentCompletion from "./subagent-completion.js"
 
 import { Effect } from "effect"
+import { BackgroundResult } from "./background-result.js"
 import type { Job } from "../job.js"
 import type { SessionBackground } from "./background.js"
 import type { SessionMessage } from "./message.js"
@@ -43,10 +44,11 @@ export function formatBody(
 ): string {
   if (!background || background.length === 0) return body
   const lines = background.map((item) => {
-    if (item.kind === "shell")
-      return `- shell (${item.shellID}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${clean(item.command)}`
-    if (item.kind === "image")
-      return `- image (${item.model}${item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""}): ${item.path}`
+    const location = item.sessionID !== childSessionID ? `, in ${item.sessionID}` : ""
+    if (item.kind === "codemode") return `- Code Mode script (${item.jobID}${location})`
+    if (item.kind === "shell") return `- shell (${item.shellID}${location}): ${clean(item.command)}`
+    if (item.kind === "image") return `- image (${item.model}${location}): ${item.path}`
+    if (item.kind === "video") return `- video (${item.path}${location})`
     return `- subagent (${item.agent}, sessionID: ${item.childSessionID}): ${clean(item.description)}`
   })
   return `${body}${STILL_RUNNING}${lines.join("\n")}`
@@ -74,7 +76,10 @@ export const deliver = Effect.fnUntraced(function* <E>(
     ...(input.notificationID ? { id: input.notificationID } : {}),
     sessionID: recovery.parentSessionID,
     description: recovery.description,
-    text: `<subagent sessionID="${recovery.childSessionID}" state="${state}" description="${recovery.description}">\n${formatted}\n</subagent>`,
+    text: BackgroundResult.render(
+      `kind="subagent" sessionID="${recovery.childSessionID}" state="${state}" description="${recovery.description}"`,
+      formatted,
+    ),
     metadata: { source: "subagent", childID: recovery.childSessionID, agent: recovery.agent, state: input.status },
   })
   if (input.notificationID) yield* jobs.completeBackground(input.notificationID)

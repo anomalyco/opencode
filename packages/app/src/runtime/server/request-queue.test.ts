@@ -8,6 +8,7 @@ function setup(input?: {
   stallMs?: number
   headersTimeoutMs?: number
   setupHeadersTimeoutMs?: number
+  prefix?: string
 }) {
   const pending: Array<{ url: string; signal: AbortSignal; resolve: () => void }> = []
   const logs: Array<{ message: string; data: RequestStallSnapshot }> = []
@@ -19,6 +20,7 @@ function setup(input?: {
     stallMs: input?.stallMs,
     headersTimeoutMs: input?.headersTimeoutMs,
     setupHeadersTimeoutMs: input?.setupHeadersTimeoutMs,
+    prefix: () => input?.prefix ?? "",
     now: () => clock,
     log: (message, data) => logs.push({ message, data }),
     fetch: Object.assign(
@@ -156,6 +158,18 @@ describe("createRequestQueue", () => {
     void input.queue.fetch("http://server/api/event")
     await input.settle()
     expect(input.pending.map((item) => new URL(item.url).pathname).toSorted()).toEqual(["/api/event", "/api/session"])
+    expect(input.queue.inflight()).toBe(1)
+  })
+
+  test("never counts the event stream of a server under a path prefix against the budget", async () => {
+    const input = setup({ limit: 1, prefix: "/opencode" })
+    void input.queue.fetch("http://server/opencode/api/session")
+    void input.queue.fetch("http://server/opencode/api/event")
+    await input.settle()
+    expect(input.pending.map((item) => new URL(item.url).pathname).toSorted()).toEqual([
+      "/opencode/api/event",
+      "/opencode/api/session",
+    ])
     expect(input.queue.inflight()).toBe(1)
   })
 

@@ -16,4 +16,18 @@ export {
 export { execDefaults, makeFiles } from "./exec-defaults.js"
 export { makeLocalDriver } from "./local.js"
 export { makeMemoryDriver, type MemoryDriver } from "./memory.js"
-export { type Interface, node, Service } from "./environment.js"
+export {
+  CurrentWorkingDirectory,
+  ID,
+  type Interface,
+  local,
+  localID,
+  make,
+  node,
+  Place,
+  Service,
+  unavailable,
+  workingDirectory,
+  workspace,
+  workingDirectoryResolver,
+} from "./environment.js"

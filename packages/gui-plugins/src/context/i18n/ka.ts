@@ -5,7 +5,6 @@ export default {
   "usage.usage": "გამოყენება",
   "usage.cost": "ღირებულება",
   "usage.view": "კონტექსტის გამოყენების ნახვა",
-  "systemPrompt.title": "სისტემის მოთხოვნა",
   "rawMessages.title": "დაუმუშავებელი შეტყობინებები",
   "export.session": "ექსპორტის სესია",
   "stats.session": "სესია",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "სესია შენახულია {{filename}}",
   "export.failed.title": "სესიის ექსპორტი ვერ მოხერხდა",
   "export.failed.description": "მოხდა შეცდომა სესიის ექსპორტის დროს",
+  "usage.toggle": "სესიის კონტექსტის გადართვა",
 }

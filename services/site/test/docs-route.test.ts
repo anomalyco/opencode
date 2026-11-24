@@ -67,7 +67,7 @@ describe("docs routes", () => {
   })
 
   test("send paths without a V2 page to the same path on the V1 docs, temporarily", () => {
-    for (const path of ["/docs/ja/", "/docs/ja/agents/", "/docs/zh-cn/config", "/docs/ide/", "/docs/sdk.md"])
+    for (const path of ["/docs/ja/", "/docs/ja/agents/", "/docs/zh-cn/config", "/docs/ide/", "/docs/lsp.md"])
       expect(route(path)).toEqual({ type: "redirect", location: `/v1/docs${path.slice("/docs".length)}`, status: 302 })
     expect(route("/docs/ide/?ref=app")).toEqual({ type: "redirect", location: "/v1/docs/ide/?ref=app", status: 302 })
   })
@@ -80,6 +80,9 @@ describe("docs routes", () => {
     })
     expect(route("/docs/go")).toEqual({ type: "redirect", location: "/docs/console/go/", status: 301 })
     expect(route("/docs/zen/")).toEqual({ type: "redirect", location: "/docs/console/models/", status: 301 })
+    expect(route("/docs/rules/")).toEqual({ type: "redirect", location: "/docs/instructions/", status: 301 })
+    expect(route("/docs/sdk")).toEqual({ type: "redirect", location: "/docs/build/sdk/", status: 301 })
+    expect(route("/docs/server/")).toEqual({ type: "redirect", location: "/docs/api", status: 301 })
   })
 
   test("leave the docs' own files to the assets, never to the V1 docs", () => {
@@ -131,13 +134,13 @@ describe("V1 docs routes", () => {
       expect(route(path)).toEqual({ type: "missing" })
   })
 
-  test("send docs.opencode.ai's addresses to the same path on the V1 docs", () => {
+  test("send docs.opencode.ai's addresses to the same path under /docs", () => {
     const host = (url: string) => docsHostRedirect(new URL(url))
-    expect(host("https://docs.opencode.ai/")).toBe("https://opencode.ai/v1/docs/")
-    expect(host("https://docs.opencode.ai/docs")).toBe("https://opencode.ai/v1/docs/")
-    expect(host("https://docs.opencode.ai/docs/ide/?x=1")).toBe("https://opencode.ai/v1/docs/ide/?x=1")
-    expect(host("https://docs.opencode.ai/s/abc")).toBe("https://opencode.ai/v1/docs/s/abc")
-    expect(host("https://docs.dev.opencode.ai/docs/ja/")).toBe("https://dev.opencode.ai/v1/docs/ja/")
+    expect(host("https://docs.opencode.ai/")).toBe("https://opencode.ai/docs/")
+    expect(host("https://docs.opencode.ai/docs")).toBe("https://opencode.ai/docs/")
+    expect(host("https://docs.opencode.ai/docs/ide/?x=1")).toBe("https://opencode.ai/docs/ide/?x=1")
+    expect(host("https://docs.opencode.ai/s/abc")).toBe("https://opencode.ai/docs/s/abc")
+    expect(host("https://docs.dev.opencode.ai/docs/ja/")).toBe("https://dev.opencode.ai/docs/ja/")
     expect(host("https://opencode.ai/docs/")).toBeUndefined()
   })
 })

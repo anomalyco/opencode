@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Uso",
   "usage.cost": "Custo",
   "usage.view": "Ver uso do contexto",
-  "systemPrompt.title": "Prompt do sistema",
   "rawMessages.title": "Mensagens brutas",
   "export.session": "Exportar sessão",
   "stats.session": "Sessão",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sessão salva em {{filename}}",
   "export.failed.title": "Falha ao exportar sessão",
   "export.failed.description": "Ocorreu um erro ao exportar a sessão",
+  "usage.toggle": "Alternar contexto da sessão",
 }

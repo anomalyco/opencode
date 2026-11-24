@@ -30,6 +30,7 @@ import { SharedCache } from "../../shared-cache.js"
 import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
+import { OpencodeArtifacts } from "./opencode-artifacts.js"
 import { OpencodeWatches } from "./opencode-watches.js"
 import { ProviderRefresh } from "./refresh.js"
 
@@ -105,7 +106,7 @@ function oauth(http: HttpClient.HttpClient) {
     method: {
       id: methodID,
       type: "oauth",
-      label: "OpenCode Console account",
+      label: "OpenCode account",
       form: [
         {
           key: "server",
@@ -220,6 +221,7 @@ export const OpencodePlugin = define<
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
     const watches = yield* OpencodeWatches.make(ctx, http)
+    const artifacts = yield* OpencodeArtifacts.make(ctx, http)
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
     const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
@@ -338,6 +340,7 @@ export const OpencodePlugin = define<
       yield* syncInstructionsAndSkills(next, allowed)
       const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
       yield* syncWatches(watching ? next.connection : undefined)
+      yield* artifacts.sync(allowed && next.remote?.artifacts === true ? next.connection : undefined, watching)
     })
     // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
     // and stops when either no longer holds.
@@ -464,7 +467,7 @@ export const OpencodePlugin = define<
 
     yield* ctx.integration.transform((editor) => {
       editor.update("opencode", (integration) => {
-        integration.name = "OpenCode Console"
+        integration.name = "OpenCode"
       })
       editor.method.update(oauth(http))
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
@@ -607,8 +610,9 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
           }
           const watches = response.headers[OpencodeWatches.header] !== undefined
           const lists = response.headers[listsHeader] !== undefined
+          const artifacts = response.headers[OpencodeArtifacts.header] !== undefined
           const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
-          return { ...(yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)), watches, lists }
+          return { ...(yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)), watches, lists, artifacts }
         }),
       ),
       Effect.scoped,

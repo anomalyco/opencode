@@ -93,7 +93,7 @@ test("a newer choice wins over a reveal still waiting on its ancestors", () => {
   for (const newer of [
     choose(`${HOME}/fast-repo`),
     { type: "tree.selected", path: "fast-repo/" } as const,
-    { type: "selection.cleared" } as const,
+    { type: "tree.selected", path: undefined } as const,
   ]) {
     const chosen = run([newer], revealing.state)
     const settled = run([{ type: "dir.loaded", dir: "work", attempt: 2, nodes: [folder("slow")] }], chosen.state)
@@ -253,4 +253,41 @@ test("disposing drops queued work and ignores later results", () => {
 
   expect(disposed.effects).toEqual([{ type: "queue.reset" }])
   expect(run([{ type: "dir.loaded", dir: "", attempt: 1, nodes: [] }], disposed.state).state).toBe(disposed.state)
+})
+
+test("a confirmed choice submits once it is selected, and never when it fails or a newer choice wins", () => {
+  const state = ready(HOME, [folder("work")])
+
+  const submit = (path: string): PickerTreeEvent => ({
+    type: "directory.chosen",
+    path,
+    home: HOME,
+    fallback: HOME,
+    located: true,
+    fromInput: true,
+    submit: true,
+  })
+
+  const inside = run([submit(`${HOME}/work/repo`)], state)
+  const listed = run([{ type: "dir.loaded", dir: "work", attempt: 2, nodes: [folder("repo")] }], inside.state)
+  const outside = run([submit("/srv/infra")], state)
+  const root = outside.state.status === "loading" ? outside.state.attempt : -1
+  const opened = run([{ type: "dir.loaded", dir: "", attempt: root, nodes: [] }], outside.state)
+  const failed = run([{ type: "dir.failed", dir: "", attempt: root }], outside.state)
+
+  const superseded = run(
+    [
+      { type: "tree.selected", path: undefined },
+      { type: "dir.loaded", dir: "work", attempt: 2, nodes: [folder("repo")] },
+    ],
+    inside.state,
+  )
+
+  expect(inside.effects).not.toContainEqual({ type: "submit" })
+  expect(listed.effects).toContainEqual({ type: "submit" })
+  expect(pickerTreeView(listed.state, policy).result).toBe(`${HOME}/work/repo`)
+  expect(opened.effects.at(-1)).toEqual({ type: "submit" })
+  expect(pickerTreeView(opened.state, policy).result).toBe("/srv/infra")
+  expect(failed.effects).not.toContainEqual({ type: "submit" })
+  expect(superseded.effects).not.toContainEqual({ type: "submit" })
 })

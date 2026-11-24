@@ -2,12 +2,16 @@ import { OpenApi } from "effect/http-api"
 import { format } from "prettier"
 import { fileURLToPath } from "url"
 import { ClientApi } from "../src/client.js"
+import { liftParameterDescriptions } from "./openapi-parameters.js"
 import { stabilizeOpenApi } from "./openapi-stabilize.js"
 
-const document = await format(JSON.stringify(stabilizeOpenApi(OpenApi.fromApi(ClientApi)), null, 2), {
-  parser: "json",
-  printWidth: 120,
-})
+const document = await format(
+  JSON.stringify(liftParameterDescriptions(stabilizeOpenApi(OpenApi.fromApi(ClientApi))), null, 2),
+  {
+    parser: "json",
+    printWidth: 120,
+  },
+)
 const target = fileURLToPath(new URL("../openapi.json", import.meta.url))
 
 if (process.argv.includes("--check")) {

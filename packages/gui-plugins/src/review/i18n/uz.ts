@@ -12,4 +12,12 @@ export default {
   noChanges: "Oʻzgarishlar yoʻq",
   "settings.wrapLines.title": "Qatorlarni o‘rash",
   "settings.wrapLines.description": "Mobil diff-larda gorizontal aylantirish o‘rniga uzun qatorlarni o‘rash",
+  "menu.count.one": "{{count}} ta fayl o‘zgardi",
+  "menu.count.other": "{{count}} ta fayl o‘zgardi",
+  "folder.more": "{{count}} · qolganlari ko‘rsatilmagan",
+  "folder.failed": "O‘zgarishlarni yuklab bo‘lmadi",
+  "command.open": "Ko‘rib chiqishni ochish",
+  "load.failed": "O‘zgarishlarni yuklab bo‘lmadi",
+  "load.timeout": "Server juda uzoq javob bermadi",
+  offline: "Bu serverga ulanib bo‘lmayapti",
 }

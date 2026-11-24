@@ -55,6 +55,8 @@ export type TurnState = {
   readonly compactions: ACPCompaction.Tracked
   readonly children: ReadonlyMap<string, Child>
   readonly openChildren: ReadonlySet<string>
+  /** Background shells that will wake their session, with the inbox ID of their notice once it is queued. */
+  readonly shells: ReadonlyMap<string, string | undefined>
   readonly asks: ReadonlySet<string>
   readonly finish?: SessionMessage.Assistant["finish"]
   readonly usage?: { readonly turn: TokenUsage.Info; readonly last: TokenUsage.Info }
@@ -91,6 +93,7 @@ export const initial: TurnState = {
   compactions: new Map(),
   children: new Map(),
   openChildren: new Set(),
+  shells: new Map(),
   asks: new Set(),
 }
 
@@ -128,22 +131,31 @@ export function fold(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): 
     return { state: { ...state, asks }, outputs: [{ _tag: "AskSettled", id: settledID }] }
   }
   if (!sessionID || (sessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
-  if (
-    sessionID === ctx.sessionID &&
-    event.type === "session.inbox.delivered" &&
-    (!ctx.start || event.data.inboxID === ctx.start.id)
-  )
-    return { state: { ...state, started: true }, outputs: [] }
-  if (
-    sessionID === ctx.sessionID &&
-    event.type === "session.inbox.delivered" &&
-    ctx.command &&
-    state.commandInbox === undefined
-  )
-    // A command admits its expanded prompt under a new inbox id. The first one is the command's.
-    return { state: { ...state, started: true, commandInbox: event.data.inboxID }, outputs: [] }
+  if (event.type === "session.inbox.enqueued") return { state: shellNoticed(state, event), outputs: [] }
+  if (event.type === "session.inbox.delivered" || event.type === "session.inbox.cancelled") {
+    const settled = noticeSettled(state, event.data.inboxID)
+    const started =
+      sessionID === ctx.sessionID &&
+      event.type === "session.inbox.delivered" &&
+      (!ctx.start || event.data.inboxID === ctx.start.id)
+    if (started) return { state: { ...settled, started: true }, outputs: [] }
+    if (
+      sessionID === ctx.sessionID &&
+      event.type === "session.inbox.delivered" &&
+      ctx.command &&
+      state.commandInbox === undefined
+    )
+      // A command admits its expanded prompt under a new inbox id. The first one is the command's.
+      return { state: { ...settled, started: true, commandInbox: event.data.inboxID }, outputs: [] }
+    return { state: settled, outputs: [] }
+  }
   if (!child && !state.started) return { state, outputs: [] }
   return child ? childEvent(state, event, ctx, child) : rootEvent(state, event, ctx)
+}
+
+/** Whether work that outlives the turn, such as a background child or shell, can still wake the session. */
+export function pending(state: TurnState) {
+  return state.openChildren.size > 0 || state.shells.size > 0
 }
 
 export function projectChild(ctx: TurnContext, child: Child) {
@@ -393,8 +405,17 @@ function sessionEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, 
     case "session.tool.success": {
       const key = toolKey(event.data.sessionID, event.data.id)
       const tool = state.tools.get(key) ?? newTool(event.data.sessionID, event.data.id)
+      // A shell moved to the background reports its end through a notice that wakes the session.
+      const shellID = event.data.metadata?.status === "running" ? event.data.metadata.shellID : undefined
       return {
-        state: { ...state, tools: without(state.tools, key) },
+        state: {
+          ...state,
+          tools: without(state.tools, key),
+          // A command that exits at once can queue its notice first; keep the notice it already has.
+          ...(typeof shellID === "string" && !state.shells.has(shellID)
+            ? { shells: new Map(state.shells).set(shellID, undefined) }
+            : {}),
+        },
         outputs: send({
           sessionUpdate: "tool_call_update",
           ...completedToolUpdate({
@@ -455,6 +476,19 @@ function childEnded(state: TurnState, ctx: TurnContext, child: ACPChild.Session,
   const openChildren = new Set(state.openChildren)
   openChildren.delete(child.id)
   return { state: { ...state, openChildren }, outputs: childStatus(ctx, child, status) }
+}
+
+// A background shell's notice wakes the session once delivered, so the shell stays pending until then. Only a job's
+// notice wakes it: a user's shell command queues one without a job ID that waits for the next prompt.
+function shellNoticed(state: TurnState, event: Extract<OpenCodeEvent, { type: "session.inbox.enqueued" }>) {
+  const metadata = event.data.item.type === "synthetic" ? event.data.item.payload.metadata : undefined
+  if (typeof metadata?.shellID !== "string" || typeof metadata.jobID !== "string") return state
+  return { ...state, shells: new Map(state.shells).set(metadata.shellID, event.data.inboxID) }
+}
+
+function noticeSettled(state: TurnState, inboxID: string) {
+  const shells = new Map([...state.shells].filter(([, notice]) => notice !== inboxID))
+  return shells.size === state.shells.size ? state : { ...state, shells }
 }
 
 function recordStep(state: TurnState, tokens: TokenUsage.Info): TurnState {

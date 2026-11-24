@@ -99,6 +99,7 @@ export const make = Effect.fnUntraced(function* (input: {
         ...ACPTranslate.initial,
         children: inherited.children,
         openChildren: inherited.openChildren,
+        shells: inherited.shells,
       })
     }
     // Parented to the service scope; the session scope may already be closed.
@@ -268,10 +269,10 @@ export const make = Effect.fnUntraced(function* (input: {
     }
   })
 
-  const followChildren = Effect.fnUntraced(function* (turn: Turn) {
+  const followBackground = Effect.fnUntraced(function* (turn: Turn) {
     while (true) {
       const folded = yield* advance(turn)
-      if (folded.terminal && folded.state.openChildren.size === 0) return yield* asksSettled(turn.subscription)
+      if (folded.terminal && !ACPTranslate.pending(folded.state)) return yield* asksSettled(turn.subscription)
     }
   })
 
@@ -370,19 +371,19 @@ export const make = Effect.fnUntraced(function* (input: {
     const close = Scope.close(turn.subscription.scope, Exit.void)
     if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) return yield* close
     const state = yield* Ref.get(turn.state)
-    if (state.openChildren.size === 0) {
+    if (!ACPTranslate.pending(state)) {
       if (state.children.size > 0) backgrounds.set(attached, { state: turn.state })
       return yield* close
     }
     const responded = yield* ACPConnection.Responded
     const nextState = yield* Ref.make({ ...state, started: false })
     const cancelled = yield* Deferred.make<void>()
-    // Children outlive a cancelled turn, so their asks and report-triggered turns still reach the client.
+    // Children and background shells outlive a cancelled turn, so their asks and the turns they wake reach the client.
     const background = Effect.withFiber((fiber) => {
       backgrounds.set(attached, { state: nextState, fiber })
       return Effect.exit(responded).pipe(
         Effect.andThen(
-          followChildren({ ...turn, ctx: { ...turn.ctx, start: undefined, command: undefined }, state: nextState, cancelled }),
+          followBackground({ ...turn, ctx: { ...turn.ctx, start: undefined, command: undefined }, state: nextState, cancelled }),
         ),
         Effect.interruptible,
       )

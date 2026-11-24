@@ -3,11 +3,13 @@ export * as ServerProcess from "./process"
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
-import { Schedule } from "@opencode/core/schedule"
+import { Automation } from "@opencode/core/automation"
+import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
 import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
+import { isMachineLinkUpgrade } from "@opencode/protocol/groups/machine"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
@@ -16,6 +18,7 @@ import { NetAddress } from "effect/net"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
 import { isAllowedCorsOrigin } from "./cors"
+import { machinesEnabled } from "./handlers/machine"
 import { authorizedRequest, unauthorizedResponse } from "./middleware/authorization"
 import { withoutParentSpan } from "./request-tracing"
 import { RequestSite } from "./request-site"
@@ -68,7 +71,17 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   }
   const urls = () => [...localURLs(), ...(remoteURLs?.() ?? [])]
   const application = yield* Ref.make(Option.none<App>())
-  const app = dispatch(password, status, application, options.app?.version ?? "unknown", urls, Global.Path.tmp)
+  // Off until the routes are up, which is when the flag can be read.
+  const machinesFlag = yield* Ref.make(Effect.succeed(false))
+  const app = dispatch(
+    password,
+    status,
+    application,
+    machinesFlag,
+    options.app?.version ?? "unknown",
+    urls,
+    Global.Path.tmp,
+  )
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
@@ -115,8 +128,11 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
         Effect.provideService(Scope.Scope, applicationScope),
       )
     }
-    // Schedules fire from any server process (`service`, `opencode serve`, or `--standalone`); the table holds all their state.
-    yield* Effect.forkIn(Context.get(context, Schedule.Service).run, applicationScope)
+    // Automations run from any server process (`service`, `opencode serve`, or `--standalone`); the table holds all their state.
+    yield* Effect.forkIn(Context.get(context, Automation.Service).run, applicationScope)
+    // Likewise the one-time session search build, once a location has sqlite_fts on.
+    yield* Effect.forkIn(Context.get(context, SessionSearchBuild.Service).run, applicationScope)
+    yield* Ref.set(machinesFlag, yield* machinesEnabled.pipe(Effect.provide(context)))
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
     const bus = Context.get(context, Bus.Service)
@@ -183,6 +199,7 @@ function dispatch(
   password: string,
   status: Status.Interface,
   application: Ref.Ref<Option.Option<App>>,
+  machinesFlag: Ref.Ref<Effect.Effect<boolean>>,
   version: string,
   urls: () => ReadonlyArray<string>,
   tmp: string,
@@ -193,6 +210,7 @@ function dispatch(
     const url = new URL(request.url, "http://localhost")
     const state = yield* status.current
     const app = yield* Ref.get(application)
+    const machines = yield* Ref.get(machinesFlag)
     const ready = state.type === "ready" && Option.isSome(app)
     if (request.method === "GET" && url.pathname === "/api/info" && !ready) {
       if (!(yield* authorizedRequest(request, auth))) return unauthorizedResponse(request)
@@ -201,7 +219,11 @@ function dispatch(
     if (
       !isPairingConnectURL(url) &&
       (!ready ||
-        (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url) && !hasMcpClientTicketURL(url))) &&
+        (!hasPtyConnectTicketURL(url) &&
+          !hasPersistentPtyConnectTicketURL(url) &&
+          !hasMcpClientTicketURL(url) &&
+          // With machines off the link's path is an unknown route, and gets this 401 like one.
+          !(isMachineLinkUpgrade(request) && (yield* machines)))) &&
       !(yield* authorizedRequest(request, auth))
     )
       return unauthorizedResponse(request)

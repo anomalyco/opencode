@@ -6,6 +6,7 @@ import { Global } from "@opencode/util/global"
 import type { SessionMessageInfo } from "@opencode/client"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
+import { waitForHighlightedFrame } from "./fixture/frame"
 
 const session = {
   id: "ses_shell_output",
@@ -80,7 +81,7 @@ test("an expanded background shell keeps its 1 MiB tail on a whole character", a
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
   )
   try {
-    await setup.waitForFrame((frame) => frame.includes("Started it"))
+    await waitForHighlightedFrame(setup, (frame) => frame.includes("Started it"))
     const row = setup
       .captureCharFrame()
       .split("\n")
