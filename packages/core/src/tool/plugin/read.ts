@@ -177,15 +177,7 @@ export const Plugin = {
               return { output: result.content, path: result.path }
             }).pipe(
               Effect.map((result) => ({
-                output:
-                  result.output.type === "media"
-                    ? {
-                        type: result.output.type,
-                        uri: result.output.uri,
-                        mime: result.output.mime,
-                        name: result.output.name,
-                      }
-                    : result.output,
+                output: toOutput(result.output),
                 content: toModelContent(result.path, input.offset, result.output),
                 metadata: { truncated: result.output.type !== "media" && result.output.next !== undefined },
               })),
@@ -356,10 +348,19 @@ function parseSkillUri(value: string) {
   return { id, target: rest === "" ? "/" : `/${rest}`, uri: Skill.uri(id, rest || undefined) }
 }
 
+const toOutput = (
+  output: ReadToolFileSystem.TextPage | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
+): ReadToolFileSystem.Output => {
+  if (output.type === "media") return { type: output.type, uri: output.uri, mime: output.mime, name: output.name }
+  if (output.type === "directory") return output
+  const { lineCount: _, ...text } = output
+  return text
+}
+
 export const toModelContent = (
   path: string,
   offset: number | undefined,
-  output: ReadToolFileSystem.TextContent | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
+  output: ReadToolFileSystem.TextPage | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
 ) => {
   if (output.type === "media")
     return [
