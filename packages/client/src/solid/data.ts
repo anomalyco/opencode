@@ -420,6 +420,9 @@ export function createData(config: CreateDataInput) {
     const pointer = store.session.info[sessionID]?.revert?.messageID
     const awaited = revertReads.get(sessionID)
     if (awaited?.status === "awaited") {
+      // A read that holds the boundary started before the server committed the revert. It still lands, and the read
+      // that the event started lands after it.
+      if (read.has(awaited.boundary)) return
       revertReads.delete(sessionID)
       if (pointer === awaited.boundary) setStore("session", "info", sessionID, "revert", undefined)
       return

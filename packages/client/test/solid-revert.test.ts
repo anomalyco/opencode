@@ -41,7 +41,13 @@ const waiting = (id: string): SessionInboxItem => ({
 // A server whose transcript and inbox a test changes between reads. Pages follow the server's rules: newest first, and
 // a cursor names the message that a page continues from.
 function fixture(messages: SessionMessageInfo[]) {
-  const server: { messages: SessionMessageInfo[]; inbox: SessionInboxItem[]; requests: string[] } = {
+  const server: {
+    messages: SessionMessageInfo[]
+    inbox: SessionInboxItem[]
+    requests: string[]
+    /** Holds back the answer to a read of the transcript. The answer is what the server had when the read came. */
+    hold?: () => Promise<void>
+  } = {
     messages,
     inbox: [],
     requests: [],
@@ -57,6 +63,7 @@ function fixture(messages: SessionMessageInfo[]) {
       const cursor = url.searchParams.get("cursor")
       const end = cursor ? server.messages.findIndex((message) => message.id === cursor) : server.messages.length
       const page = server.messages.slice(Math.max(0, end - Number(url.searchParams.get("limit"))), end).toReversed()
+      await server.hold?.()
       return Response.json({ data: page, cursor: page.length > 0 ? { next: page.at(-1)?.id } : {} })
     },
   })
@@ -153,6 +160,43 @@ test("a committed revert whose boundary may be in an older page keeps what is lo
     expect(setup.ids()).toEqual(notes(1, 9).map((message) => message.id))
     expect(setup.data.session.get(sessionID)?.revert).toBeUndefined()
     expect(setup.server.requests).toEqual(["message?limit=20&order=desc", "message?limit=20&order=desc"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a read that started before the revert was committed leaves the pointer to the read after it", async () => {
+  const setup = fixture(notes(1, 40))
+  try {
+    await setup.data.session.message.sync(sessionID)
+    // Messages that no event brought, and a revert staged at one of them.
+    setup.server.messages = notes(1, 45)
+    setup.data.session.remember(staged(id(43)))
+
+    // The server answers this read before it commits the revert, and the answer is on its way.
+    const early = Promise.withResolvers<void>()
+    setup.server.hold = () => early.promise
+    setup.data.session.message.invalidate(sessionID)
+    const stale = setup.data.session.message.sync(sessionID)
+    while (setup.server.requests.length < 2) await Bun.sleep(1)
+
+    const late = Promise.withResolvers<void>()
+    setup.server.messages = notes(1, 42)
+    setup.server.hold = () => late.promise
+    setup.emit(committed(id(43)))
+    early.resolve()
+    await stale
+
+    // The early answer holds the boundary and the messages after it. The pointer still hides them.
+    expect(setup.ids()).toEqual(notes(26, 45).map((message) => message.id))
+    expect(setup.data.session.get(sessionID)?.revert?.messageID).toBe(id(43))
+
+    late.resolve()
+    // Joins the read that the revert started.
+    await setup.data.session.message.sync(sessionID)
+    expect(setup.ids()).toEqual(notes(23, 42).map((message) => message.id))
+    expect(setup.data.session.get(sessionID)?.revert).toBeUndefined()
+    expect(setup.server.requests).toEqual(Array.from({ length: 3 }, () => "message?limit=20&order=desc"))
   } finally {
     setup.dispose()
   }
