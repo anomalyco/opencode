@@ -521,12 +521,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                         )}
                       </For>
                     </Row>
-                    <p data-slot="embed-note">
-                      {fixed()
-                        ? `Keeps the numbers from ${value().updatedAt ? new Date(value().updatedAt!).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "today"}.`
-                        : "Shows the latest data each time it loads."}{" "}
-                      Silent, and opens this section on OpenCode Data when clicked.
-                    </p>
                     <Row label="Code" variant="list">
                       <textarea
                         data-slot="embed-code"

@@ -444,15 +444,6 @@
     }
   }
 
-  /* An embed's note, under its Data row, in line with the options. */
-  [data-slot="embed-note"] {
-    margin: -2px 0 0 64px;
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--stats-faint);
-    text-wrap: pretty;
-  }
-
   /* The code to paste: the whole snippet in small mono type, selected on focus. */
   [data-slot="embed-code"] {
     display: block;
