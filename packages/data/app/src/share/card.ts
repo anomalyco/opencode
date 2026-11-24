@@ -397,10 +397,12 @@ export function drawShareCard(
   drawLogo(ctx, options.logo, colors, pad, pad, logo)
 
   const focus = focusAt(card, options, time, timing)
-  const top = drawIntro(ctx, card, options, colors, width, pad + 88 + 48 * logo, time)
+  // Live top takes the whole card between the logo and the footer, with no title over it.
+  const terminal = card.chart.kind === "stacked" && race && card.chart.style === "terminal"
+  const top = terminal ? pad + 88 + 48 * logo : drawIntro(ctx, card, options, colors, width, pad + 88 + 48 * logo, time)
   const progress = Math.min(1, time / timing.build)
 
-  if (card.chart.kind === "stacked" && race && card.chart.style === "terminal")
+  if (card.chart.kind === "stacked" && terminal)
     drawTerminal(
       ctx,
       card.chart,
@@ -1133,12 +1135,13 @@ function drawTerminal(
   const rows = Math.min(6, named.length)
   const order = named.toSorted((a, b) => now(b) - now(a)).slice(0, rows)
 
-  // A line each for the prompt, the header, a gap, the column heads, the rows, a gap and three for the graph.
-  const line = box.height / (rows + 8)
+  // A line each for the prompt, the header, a gap, the column heads, the rows and a gap, set as large as 40 columns
+  // allow; the graph takes the rest, at least three lines.
   ctx.save()
   ctx.font = `400 100px ${font}`
   const em = ctx.measureText("0").width / 100
-  const size = Math.floor(Math.min(line * 0.6, box.width / (44 * em)))
+  const size = Math.floor(Math.min((box.height / (rows + 8)) * 0.6, box.width / (40 * em)))
+  const line = Math.min(box.height / (rows + 8), size * 2.2)
   const cell = size * em
   const columns = Math.floor(box.width / cell)
   ctx.font = `400 ${size}px ${font}`
@@ -1165,27 +1168,25 @@ function drawTerminal(
   const minutes = Math.min(24 * 60 - 1, Math.floor(step * 24 * 60))
   const clock = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
   write(
-    clip(
-      `top - ${clock} ${chart.columns[from]?.label ?? ""}, day ${from + 1} of ${days}, ${named.length} models`,
-      columns,
-    ),
+    clip(`top - ${clock} ${chart.columns[from]?.label ?? ""} · day ${from + 1}/${days}`, columns),
     0,
     1,
     colors.muted,
   )
 
   const name = Math.min(
-    24,
-    columns - 18,
+    20,
+    columns - 16,
     Math.max(5, ...order.map((series) => (chart.series[series]?.label ?? "").length)),
   )
   const meter = 3 + name + 1
-  const inner = columns - meter - 2
+  // The meter runs true to scale, its share after it rather than over its bars.
+  const inner = columns - meter - 2 - 6
   ctx.fillStyle = colors.text
   ctx.fillRect(box.x, box.y + line * 3 + line * 0.08, box.width, line * 0.84)
   write(" #", 0, 3, colors.background)
   write("MODEL", 3, 3, colors.background)
-  write("SHARE OF DAY", meter + 1, 3, colors.background)
+  write("SHARE", columns - 5, 3, colors.background)
 
   order.forEach((series, index) => {
     const row = 4 + index
@@ -1198,15 +1199,16 @@ function drawTerminal(
     write(String(index + 1).padStart(2, "0"), 0, row, colors.faint)
     write(clip(item?.label ?? "", name), 3, row, colors.text)
     const percent = `${(share * 100).toFixed(1)}%`
-    const bars = Math.min(Math.round(share * inner), inner - percent.length - 1)
+    // Two bars a column, for twice the resolution of a narrow meter.
+    const bars = Math.round(share * inner * 2)
     write("[", meter, row, colors.faint)
-    write("|".repeat(Math.max(0, bars)), meter + 1, row, item?.color ?? colors.idle)
-    write(percent, meter + 1 + inner - percent.length, row, colors.muted)
+    Array.from({ length: bars }, (_, bar) => write("|", meter + 0.75 + bar / 2, row, item?.color ?? colors.idle))
+    write(percent, columns - percent.length, row, colors.muted)
     write("]", meter + 1 + inner, row, colors.faint)
   })
 
   // Each day's total so far, as columns on one scale, today's in the text colour.
-  const graph = { y: box.y + line * (rows + 5), height: line * 3 }
+  const graph = { y: box.y + line * (rows + 5), height: box.height - line * (rows + 5) }
   const max = Math.max(1e-9, ...chart.columns.map((_, day) => total(day)))
   const slot = box.width / days
   const gap = Math.max(1, slot * 0.25)
@@ -1281,10 +1283,15 @@ function drawDayDots(
   const order = dayOrder(chart)
   const total = order.reduce((sum, series) => sum + (values[series] ?? 0), 0) || 1
   const cells = 200
-  const cell = Math.sqrt((box.width * box.height) / cells)
-  const columns = Math.max(1, Math.floor(box.width / cell))
-  const rows = Math.ceil(cells / columns)
-  const size = Math.min(box.width / columns, box.height / rows)
+  // A grid that holds every dot exactly and fills the whole box: of the ways to split the dots into full rows, the
+  // one whose dots come closest to square, each stretched to a rectangle to fill the rest.
+  const squareness = (count: number) => Math.abs(Math.log((box.width * cells) / (box.height * count * count)))
+  const columns = [4, 5, 8, 10, 20, 25, 40, 50].reduce((best, count) =>
+    squareness(count) < squareness(best) ? count : best,
+  )
+  const rows = cells / columns
+  const width = box.width / columns
+  const height = box.height / rows
   // Each series' dots by largest remainder, so they add up to every dot; anything above zero earns at least one.
   const exact = order.map((series) => ((values[series] ?? 0) / total) * cells)
   const counts = exact.map((value) => (value > 0 ? Math.max(1, Math.floor(value)) : 0))
@@ -1296,11 +1303,11 @@ function drawDayDots(
     .forEach((entry) => (counts[entry.index] = (counts[entry.index] ?? 0) + 1))
   const owners = order.flatMap((series, index) => Array.from({ length: counts[index] ?? 0 }, () => series))
   const shown = Math.floor(ease(Math.min(1, progress)) * cells)
-  const gap = Math.max(2, size * 0.22)
+  const gap = Math.max(2, Math.min(width, height) * 0.22)
   ctx.save()
   for (let index = 0; index < cells; index++) {
-    const x = box.x + (index % columns) * size
-    const y = box.y + Math.floor(index / columns) * size
+    const x = box.x + (index % columns) * width
+    const y = box.y + Math.floor(index / columns) * height
     const series = owners[index]
     const item = series === undefined ? undefined : chart.series[series]
     if (index >= shown || !item) {
@@ -1309,7 +1316,7 @@ function drawDayDots(
       const muted = series === focus.index ? 0 : item.key === "other" ? 1 : focus.amount
       ctx.fillStyle = item.key === "other" ? colors.other : mix(item.color, colors.idle, muted * 0.7)
     }
-    ctx.fillRect(x + gap / 2, y + gap / 2, size - gap, size - gap)
+    ctx.fillRect(x + gap / 2, y + gap / 2, width - gap, height - gap)
   }
   ctx.restore()
 }
