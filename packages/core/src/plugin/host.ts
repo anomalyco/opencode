@@ -41,7 +41,7 @@ import { Generate } from "../generate.js"
 import { Instance } from "../instance/service.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
-import type { Interface } from "../plugin.js"
+import type { Interface } from "./service.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
@@ -54,7 +54,7 @@ const isRpcType = (type: string): type is RpcEvent["type"] => type.startsWith("r
 const isRpcEvent = (event: Event.Payload): event is RpcEvent => isRpcType(event.type)
 const isPublicEvent = (event: Event.Payload): event is EventManifest.ServerEvent | RpcEvent =>
   EventManifest.isServer(event) || isRpcEvent(event)
-export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interface, "list">, pluginID: string) {
+export const make = Effect.fn("PluginHost.make")(function* (plugin: Interface, pluginID: string) {
   const app = yield* App.Service
   const agents = yield* Agent.Service
   const artifacts = yield* Artifact.Service
@@ -327,18 +327,14 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       automation: {
         // A plugin has no UI listener to answer an interactive ask, so asks settle unattended, as they do over HTTP.
         // A JavaScript plugin can pass any shape, so decode it as HTTP does before the service stores it.
-        // Its setup may be what this Location's plugin activation, or this SDK instance's boot, is waiting on, so the
-        // create must not wait on either: checks in this Location use what is loaded now, and this instance's own
-        // selector serves its Sessions. Other Locations still wait for their plugins.
+        // Its own registry may be waiting on this setup, so use what's loaded there now. The instance's selector
+        // can serve its own Sessions while booting. Other registries still have to finish activating.
         create: (input) =>
           Schema.decodeUnknownEffect(Automation.CreateInput)(input).pipe(
             Effect.mapError((error) => new Automation.InvalidError({ reason: error.message })),
             Effect.flatMap((decoded) => automations.create(decoded)),
             Effect.provideService(Permission.Unattended, []),
-            Effect.provideService(
-              AutomationCode.FromPlugin,
-              Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
-            ),
+            Effect.provideService(AutomationCode.FromPlugin, plugin),
             Effect.provideService(Instance.Service, instances),
           ),
         list: (input) => automations.list(input),
