@@ -726,8 +726,10 @@ test.describe("timeline history", () => {
     }
 
     // A first visit measures the rows above, which moves the rows in view further. Visit them once before measuring.
-    await editor.press("PageUp")
-    await expect.poll(top).toBeLessThan(resting)
+    // The scroll offset does not say whether the page moved: the older page that this page asks for lands above the
+    // view and raises it.
+    const visited = await paged(() => editor.press("PageUp"))
+    await expect.poll(visited).toBeGreaterThan(0)
     await toEnd()
 
     const fromComposer = await paged(() => editor.press("PageUp"))
