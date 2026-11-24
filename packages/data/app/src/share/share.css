@@ -1022,6 +1022,34 @@
     display: none;
   }
 
+  /* Shuffle: the settings it changes roll like a slot machine's reels, flicking through a couple of turns before they
+     settle on their new value, one after another. */
+  [data-slot="editor-bar"][data-rolling] {
+    :is([data-id="layout"], [data-id="size"], [data-id="style"], [data-id="music"])
+      [data-slot="dropdown-trigger"]
+      :is([data-slot="tool-icon"], [data-slot="dropdown-value"], [data-slot="explicit"]) {
+      animation: share-roll 520ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    }
+
+    [data-id="size"] [data-slot="dropdown-trigger"] > * {
+      animation-delay: 60ms;
+    }
+
+    [data-id="style"] [data-slot="dropdown-trigger"] > * {
+      animation-delay: 120ms;
+    }
+
+    [data-id="music"] [data-slot="dropdown-trigger"] > * {
+      animation-delay: 180ms;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+      }
+    }
+  }
+
   /* Mute, Shuffle and Export, together at the far end. */
   [data-slot="bar-end"] {
     display: flex;
@@ -1654,6 +1682,33 @@
     [data-slot="row"][data-variant="list"] [data-slot="row-label"] {
       padding-top: 14px;
     }
+  }
+}
+
+@keyframes share-roll {
+  0% {
+    opacity: 0;
+    translate: 0 -10px;
+  }
+  22% {
+    opacity: 1;
+    translate: 0 6px;
+  }
+  23% {
+    opacity: 0;
+    translate: 0 -10px;
+  }
+  45% {
+    opacity: 1;
+    translate: 0 4px;
+  }
+  46% {
+    opacity: 0;
+    translate: 0 -8px;
+  }
+  100% {
+    opacity: 1;
+    translate: 0 0;
   }
 }
 
