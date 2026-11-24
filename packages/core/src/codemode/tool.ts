@@ -115,7 +115,9 @@ const executionServices = (
 // the runtime also has Bun's file APIs.
 const description = (full: boolean) =>
   [
-    "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+    full
+      ? "Run JavaScript in a confined Code Mode runtime to work with files and data, script tool calls and HTTP requests, and compose their results."
+      : "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
     "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
     full
       ? "`fetch` is available for HTTP requests, and Bun's file APIs (`Bun.file`, `Bun.write`, `Bun.Glob`) for files, in place of Node's `fs`. Imports and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`."
