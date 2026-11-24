@@ -1039,6 +1039,14 @@
     display: none;
   }
 
+  /* Sizes are their ratio alone in the bar and its list; on phones the sheet adds their shapes and names. */
+  [data-component="dropdown"][data-id="size"]
+    :is([data-slot="dropdown-trigger"], [data-slot="dropdown-item"])
+    [data-slot="tool-icon"],
+  [data-slot="dropdown-detail"] {
+    display: none;
+  }
+
   /* Shuffle's odometer: a changed setting shows a reel of choices in a window a row tall, scrolling up fast and
      slowing to rest on its new value. The first row is where it was, the last where it lands. */
   [data-slot="reel"] {
@@ -1651,6 +1659,28 @@
 
       [data-component="dropdown"][data-show="icon"] [data-slot="dropdown-trigger"] [data-slot="dropdown-value"] {
         display: block;
+      }
+
+      /* No outlines in the sheet: the rows read as a list, the hover and open fills still showing. */
+      [data-slot="dropdown-trigger"] {
+        border-color: transparent;
+      }
+
+      /* Sizes with their shapes, so every value lines up after an icon, and their names after the ratio. */
+      [data-component="dropdown"][data-id="size"]
+        :is([data-slot="dropdown-trigger"], [data-slot="dropdown-item"])
+        [data-slot="tool-icon"] {
+        display: grid;
+      }
+
+      [data-component="dropdown"][data-id="size"] [data-slot="dropdown-trigger"] {
+        padding-left: 8px;
+      }
+
+      [data-slot="dropdown-detail"] {
+        display: inline;
+        font-size: inherit;
+        color: var(--stats-faint);
       }
 
       /* Lists and the calendar open upwards in the sheet, over the rows above, as wide as their control. */

@@ -239,8 +239,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setMenu(undefined)
     setSheet(false)
     shuffle()
-    // Opens silent: no music until one is chosen (or Shuffle picks one).
+    // Opens silent: no music until one is chosen (or Shuffle picks one), and unmuted.
     setTrack("none")
+    setMuted(false)
     // The card it opens on is where undo stops.
     queueMicrotask(() => {
       history.past = []
@@ -324,7 +325,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 
   const close = () => dialog?.close()
 
-  // A card made at random: any layout and style, a size for a feed or a story (not Wide), and a clean track, unmuted.
+  // A card made at random: any layout and style, a size for a feed or a story (not Wide), and a clean track. Muted
+  // stays muted: the track still changes, ready for unmuting.
   // Playing from the start again, as each opening does.
   const shuffle = () =>
     batch(() => {
@@ -334,7 +336,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       // Never an explicit track: those are for choosing on purpose.
       setTrack(pick(shareTracks.filter((item) => !item.explicit)).id)
       setLead(pick(["top", "total"] as const))
-      setMuted(false)
       setPlaying(true)
     })
 
@@ -636,7 +637,12 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   onOpen={setMenu}
                   value={options().size}
                   show="value"
-                  options={sizes.map((item) => ({ value: item.value, label: item.value, detail: item.label }))}
+                  options={sizes.map((item) => ({
+                    value: item.value,
+                    label: item.value,
+                    detail: item.label,
+                    icon: <AspectGlyph size={item.value} />,
+                  }))}
                   onSelect={(item) => setShareOption("size", item)}
                 />
                 <Dropdown
@@ -1076,10 +1082,15 @@ function Dropdown<T extends string>(props: {
           when={reel()}
           fallback={
             <>
-              <Show when={show() !== "value"}>
+              <Show when={props.trigger ?? current()?.icon}>
                 <span data-slot="tool-icon">{props.trigger ?? current()?.icon}</span>
               </Show>
-              <span data-slot="dropdown-value">{current()?.label}</span>
+              <span data-slot="dropdown-value">
+                {current()?.label}
+                <Show when={current()?.detail}>
+                  <small data-slot="dropdown-detail"> {current()?.detail}</small>
+                </Show>
+              </span>
             </>
           }
         >
@@ -1221,6 +1232,28 @@ function DataGlyph(props: { fixed: boolean }) {
           <path d="M3.75 7.25h8.5v6.5h-8.5zM5.5 7.25V5a2.5 2.5 0 0 1 5 0v2.25" />
         </Show>
       </g>
+    </svg>
+  )
+}
+
+// A size's shape: its ratio as a rectangle, the longer side 12 units.
+function AspectGlyph(props: { size: ShareOptions["size"] }) {
+  const box = () => {
+    const [width, height] = shareSizes[props.size]
+    const scale = 12 / Math.max(width, height)
+    return { width: width * scale, height: height * scale }
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <rect
+        x={(16 - box().width) / 2}
+        y={(16 - box().height) / 2}
+        width={box().width}
+        height={box().height}
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+      />
     </svg>
   )
 }
