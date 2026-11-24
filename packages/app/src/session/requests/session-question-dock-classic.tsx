@@ -7,7 +7,6 @@ import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { LinkedText } from "@opencode/session-ui/linked-text"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
-import { TextInput } from "@opencode/ui/text-input"
 import { useSpring } from "@opencode/ui/motion-spring"
 import { observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
 import type { FormInfo } from "@opencode/client/promise"
@@ -17,6 +16,9 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useCommand } from "@/shell/commands/command"
 import { useServerSDK } from "@/runtime/server/client"
 import { createQuestionDock } from "./question-controller"
+import { questionEnter, type QuestionSubmitKey } from "./question-keys"
+import { fitCustomAnswer, questionSubmitShortcuts } from "./question-submit"
+import { useSettings } from "@/settings/model"
 
 const IS_MAC = /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -39,9 +41,11 @@ function Option(props: {
   description?: string
   number: number
   disabled: boolean
+  submit: QuestionSubmitKey
   ref?: (el: HTMLDivElement) => void
   onFocus?: VoidFunction
   onClick: VoidFunction
+  onCommit: VoidFunction
 }) {
   let pointer: { x: number; y: number } | undefined
 
@@ -83,12 +87,16 @@ function Option(props: {
       onKeyDown={(event) => {
         if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return
 
-        if (event.key !== " " && event.key !== "Enter") return
+        const enter = questionEnter(event, props.submit)
+
+        if (event.key !== " " && !enter) return
         event.preventDefault()
 
-        if (event.key === " " && event.repeat) return
+        if (event.repeat || props.disabled) return
 
-        if (!props.disabled) props.onClick()
+        if (enter === "submit") return props.onCommit()
+
+        props.onClick()
       }}
     >
       <Mark multi={props.multi} picked={props.picked} />
@@ -117,6 +125,8 @@ function Option(props: {
 export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit: () => void }> = (props) => {
   const language = useLanguage()
   const command = useCommand()
+  const settings = useSettings()
+  const submitKey = settings.general.questionSubmitKey
 
   const form = createQuestionDock({
     sdk: useServerSDK(),
@@ -144,7 +154,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
   let detailsRef: HTMLDivElement | undefined
   let optionsRef: HTMLDivElement | undefined
   let customRef: HTMLButtonElement | undefined
-  let customInput: HTMLInputElement | undefined
+  let customInput: HTMLTextAreaElement | undefined
   let optsRef: HTMLDivElement[] = []
   let focusFrame: number | undefined
 
@@ -284,8 +294,15 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
     if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
   })
 
+  // The custom answer's field fits its text as it is typed and when another question's answer shows in it.
+  createEffect(() => {
+    input()
+
+    if (customInput) fitCustomAnswer(customInput)
+  })
+
   const sending = form.busy
-  const submitShortcut = () => (IS_MAC ? "⌘⏎" : `${language.t("common.key.ctrl")}+⏎`)
+  const shortcuts = createMemo(() => questionSubmitShortcuts(submitKey(), IS_MAC, language.t("common.key.ctrl")))
   const backShortcut = () => (IS_MAC ? "⌘[" : `${language.t("common.key.alt")}+←`)
 
   const reject = form.dismiss
@@ -412,6 +429,27 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
   const commitCustom = () => {
     setStore("editing", false)
     focus(options().length)
+  }
+
+  // The submit key on an answer picks it first on a single-choice question; on a multiple-choice one, it moves on with
+  // the answers already marked.
+  const commit = (optIndex: number) => {
+    if (sending()) return
+
+    if (!multi()) selectOption(optIndex)
+    next()
+  }
+
+  // The submit key on the custom answer's toggle opens its field while it is still empty on a single-choice question,
+  // since there is nothing to pick yet.
+  const commitCustomToggle = () => {
+    if (sending()) return
+
+    if (multi()) return next()
+
+    if (!input().trim()) return customToggle()
+    form.selectCustom()
+    next()
   }
 
   const next = () => {
@@ -582,7 +620,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
                 value={
                   <>
                     {language.t(last() ? "ui.common.submit" : "ui.common.next")}
-                    <span style={{ opacity: 0.6 }}>{submitShortcut()}</span>
+                    <span style={{ opacity: 0.6 }}>{shortcuts().label}</span>
                   </>
                 }
               >
@@ -592,7 +630,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
                   disabled={sending()}
                   onClick={next}
                   aria-label={language.t(last() ? "ui.common.submit" : "ui.common.next")}
-                  aria-keyshortcuts="Meta+Enter Control+Enter"
+                  aria-keyshortcuts={shortcuts().aria}
                 >
                   <span data-slot="question-advance-labels" aria-hidden="true">
                     <span data-slot="question-advance-label" data-active={!last()}>
@@ -632,9 +670,11 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
                 description={opt.description}
                 number={i() + 1}
                 disabled={sending()}
+                submit={submitKey()}
                 ref={(el) => (optsRef[i()] = el)}
                 onFocus={() => setStore("focus", i())}
                 onClick={() => selectOption(i())}
+                onCommit={() => commit(i())}
               />
             )}
           </For>
@@ -664,12 +704,20 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
               disabled={sending()}
               onFocus={() => setStore("focus", options().length)}
               onClick={customToggle}
+              onKeyDown={(event) => {
+                if (event.ctrlKey || event.metaKey || questionEnter(event, submitKey()) !== "submit") return
+                event.preventDefault()
+
+                if (!event.repeat) commitCustomToggle()
+              }}
             >
               <Mark multi={multi()} picked={on()} />
             </button>
-            <TextInput
+            <textarea
               ref={(el) => (customInput = el)}
               class="question-custom-field"
+              data-slot="question-custom-input"
+              rows={1}
               dir="auto"
               aria-label={customLabel()}
               placeholder={customLabel()}
@@ -696,9 +744,11 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
 
                 if ((e.metaKey || e.ctrlKey) && !e.altKey) return
 
-                if (e.key !== "Enter") return
+                // The other Enter starts a new line, as the field does by itself.
+                if (questionEnter(e, submitKey()) !== "submit") return
                 e.preventDefault()
-                commitCustom()
+
+                if (!e.repeat) next()
               }}
               onInput={(e) => form.input(e.currentTarget.value)}
             />

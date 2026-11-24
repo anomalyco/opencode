@@ -1236,6 +1236,9 @@ export const dict = {
     "Choose whether to queue follow-ups or steer the current turn. Use {{keybind}} to switch.",
   "settings.general.row.followUpBehavior.queue": "Queue",
   "settings.general.row.followUpBehavior.steer": "Steer",
+  "settings.general.row.questionSubmitKey.title": "Submit question answers with",
+  "settings.general.row.questionSubmitKey.description":
+    "The key that moves to the next question or submits. {{keybind}} selects an answer or starts a new line in your own answer.",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
   "settings.general.row.spellcheck.title": "Spellcheck",

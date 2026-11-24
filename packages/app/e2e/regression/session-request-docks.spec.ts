@@ -171,6 +171,152 @@ test("replies with predefined choices and the edited custom multiselect answer",
   expect(cancellations).toEqual([])
 })
 
+const includeForm = (id: string) => ({
+  id,
+  sessionID,
+  title: "Questions",
+  metadata: { kind: "question" },
+  fields: [
+    {
+      key: "q0",
+      type: "multiselect",
+      title: "Include",
+      description: "Which supporting surfaces should remain visible?",
+      options: [
+        { value: "files", label: "Changed files" },
+        { value: "terminal", label: "Terminal" },
+      ],
+      custom: true,
+    },
+  ],
+})
+
+const waitForReply = (page: Page, id: string) =>
+  page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/form/${id}/reply`,
+  )
+
+test("Enter submits a multiselect answer, and Shift+Enter marks answers and breaks custom lines", async ({ page }) => {
+  await mockServer(page, { forms: [includeForm("frm_question_enter")] })
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
+  const files = question.getByRole("checkbox", { name: "Changed files", exact: true })
+  const terminal = question.getByRole("checkbox", { name: "Terminal", exact: true })
+  const custom = question.getByRole("checkbox", { name: "Type your own answer…", exact: true })
+  const input = question.getByRole("textbox", { name: "Type your own answer…", exact: true })
+  const submit = question.getByRole("button", { name: "Submit", exact: true })
+
+  await expect(submit).toHaveAttribute("aria-keyshortcuts", "Enter Meta+Enter Control+Enter")
+  await files.press("Shift+Enter")
+  await expect(files).toBeChecked()
+  await terminal.press("Shift+Enter")
+  await terminal.press("Shift+Enter")
+  await expect(terminal).not.toBeChecked()
+
+  const height = await input.evaluate((el) => el.getBoundingClientRect().height)
+  await input.click()
+  await input.pressSequentially("First line")
+  await input.press("Shift+Enter")
+  await input.pressSequentially("Second line")
+  await expect(input).toHaveValue("First line\nSecond line")
+  await expect(custom).toBeChecked()
+  expect(await input.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(height)
+
+  const reply = waitForReply(page, "frm_question_enter")
+  await input.press("Enter")
+  expect((await reply).postDataJSON()).toEqual({ answer: { q0: ["files", "First line\nSecond line"] } })
+})
+
+test("Enter on a highlighted answer submits the answers marked so far", async ({ page }) => {
+  await mockServer(page, { forms: [includeForm("frm_question_enter_option")] })
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
+  const files = question.getByRole("checkbox", { name: "Changed files", exact: true })
+  const terminal = question.getByRole("checkbox", { name: "Terminal", exact: true })
+
+  await terminal.press("Space")
+  await expect(terminal).toBeChecked()
+
+  const reply = waitForReply(page, "frm_question_enter_option")
+  await files.press("Enter")
+  expect((await reply).postDataJSON()).toEqual({ answer: { q0: ["terminal"] } })
+})
+
+test("Enter on a single-choice answer picks it and submits", async ({ page }) => {
+  await mockServer(page, {
+    forms: [
+      {
+        id: "frm_question_single_enter",
+        sessionID,
+        title: "Questions",
+        metadata: { kind: "question" },
+        fields: [
+          {
+            key: "q0",
+            type: "string",
+            title: "Implementation",
+            description: "Which implementation should be used?",
+            options: [
+              { value: "minimal", label: "Minimal" },
+              { value: "extended", label: "Extended" },
+            ],
+            custom: true,
+          },
+        ],
+      },
+    ],
+  })
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
+  const reply = waitForReply(page, "frm_question_single_enter")
+  await question.getByRole("radio", { name: /Extended/ }).press("Enter")
+  expect((await reply).postDataJSON()).toEqual({ answer: { q0: "extended" } })
+})
+
+test("with Cmd/Ctrl+Enter set to submit, Enter marks answers and breaks custom lines", async ({ page }) => {
+  await mockServer(page, {
+    forms: [includeForm("frm_question_mod_enter")],
+    seed: { settings: { general: { questionSubmitKey: "mod+enter" } } },
+  })
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
+  const files = question.getByRole("checkbox", { name: "Changed files", exact: true })
+  const input = question.getByRole("textbox", { name: "Type your own answer…", exact: true })
+  const submit = question.getByRole("button", { name: "Submit", exact: true })
+  const replies: unknown[] = []
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_mod_enter/reply`
+    )
+      replies.push(request.postDataJSON())
+  })
+
+  await expect(submit).toHaveAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter")
+  await files.press("Enter")
+  await expect(files).toBeChecked()
+
+  await input.click()
+  await input.pressSequentially("One")
+  await input.press("Enter")
+  await input.pressSequentially("Two")
+  await expect(input).toHaveValue("One\nTwo")
+  expect(replies).toEqual([])
+
+  const reply = waitForReply(page, "frm_question_mod_enter")
+  await input.press("Control+Enter")
+  expect((await reply).postDataJSON()).toEqual({ answer: { q0: ["files", "One\nTwo"] } })
+})
+
 test("keeps a choice when a custom answer with its value is turned off, and replies once", async ({ page }) => {
   const form = {
     id: "frm_question_once",
@@ -714,6 +860,9 @@ test("restores the draft caret before typing after a request dock closes", async
   await expect(editor).toHaveText(`${draft.slice(0, cursor)}x${draft.slice(cursor)}`)
 })
 
-function mockServer(page: Page, requests: Pick<WorkspaceInput, "sessionPermissions" | "onPermissionReply" | "forms">) {
+function mockServer(
+  page: Page,
+  requests: Pick<WorkspaceInput, "sessionPermissions" | "onPermissionReply" | "forms" | "seed">,
+) {
   return mockWorkspace(page, { name: "RequestDocks", directory, sessions: [{ id: sessionID, title }], ...requests })
 }
