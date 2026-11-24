@@ -1673,6 +1673,13 @@ test("a newest page too far ahead of the loaded history replaces it, and the old
 
     // Messages 41 to 120 were never read, so nothing before them may show.
     expect(setup.ids()).toEqual(notes(121, 340).map((message) => message.id))
+    // The read gives up after three older pages.
+    expect(setup.server.requests.slice(2)).toEqual([
+      "message?limit=20&order=desc",
+      "message?limit=20&cursor=msg_321",
+      "message?limit=40&cursor=msg_301",
+      "message?limit=140&cursor=msg_261",
+    ])
     await setup.data.session.message.loadMore("ses_refresh")
     expect(setup.ids()).toEqual(notes(101, 340).map((message) => message.id))
   } finally {
