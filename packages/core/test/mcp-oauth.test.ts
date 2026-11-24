@@ -526,6 +526,7 @@ describe("MCP OAuth connections", () => {
       token: "ok" as "ok" | "unavailable" | "invalid_grant",
       tokenEndpoint: undefined as string | undefined,
       sent: [] as Array<string | null>,
+      scopes: [] as Array<string | null>,
       refused: 0,
     }
     const server = Bun.serve({
@@ -540,7 +541,9 @@ describe("MCP OAuth connections", () => {
             response_types_supported: ["code"],
           })
         if (request.method === "POST" && url.pathname === "/token") {
-          state.sent.push(new URLSearchParams(await request.text()).get("refresh_token"))
+          const form = new URLSearchParams(await request.text())
+          state.sent.push(form.get("refresh_token"))
+          state.scopes.push(form.get("scope"))
           if (state.token === "unavailable") return new Response("upstream unavailable", { status: 503 })
           if (state.token === "invalid_grant") return Response.json({ error: "invalid_grant" }, { status: 400 })
           return Response.json({ access_token: "a2", token_type: "Bearer", refresh_token: "r2", expires_in: 3600 })
@@ -587,6 +590,19 @@ describe("MCP OAuth connections", () => {
       "r2",
       guarded.server.url.origin,
     ])
+  })
+
+  test("sends the granted scope when it refreshes a token", async () => {
+    // Entra rejects a refresh with no scope (AADSTS90023): the grant's scope has to come back on the exchange.
+    const guarded = guardedServer()
+    await using processes = await setup(guarded.url, { metadata: { scope: "files.read" } })
+
+    const exit = await connect(await processes.provider(processes.first), guarded.url).finally(() =>
+      guarded.server.stop(true),
+    )
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+    expect(guarded.state.scopes).toEqual(["files.read"])
   })
 
   describe("ahead of expiry", () => {

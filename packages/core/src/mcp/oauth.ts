@@ -388,11 +388,14 @@ const exchange = (input: {
       if (typeof issuer === "string" && found.replace(/\/$/, "") !== issuer.replace(/\/$/, ""))
         throw new IssuerChanged({ message: `issued by ${issuer}, but discovery names ${found}` })
       const resource = saved?.resource ?? selectResource(input.config, server.resourceMetadata?.resource).toString()
+      // Entra rejects a refresh that names no scope (AADSTS90023), so keep the scope the grant was issued with.
+      const scope = typeof input.current.metadata?.scope === "string" ? input.current.metadata.scope : undefined
       const tokens = await refreshAuthorization(server.authorizationServerUrl, {
         metadata: server.authorizationServerMetadata,
         clientInformation: client,
         refreshToken: input.current.refresh,
         resource,
+        scope,
         fetchFn,
       })
       return toCredential({
