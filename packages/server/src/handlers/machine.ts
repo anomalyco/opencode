@@ -21,18 +21,18 @@ import { Socket } from "effect/socket"
 import { IncomingMessage } from "node:http"
 
 /** Handshakes in progress across the server: what strangers can hold open at once, each for at most ten seconds. */
-const MAX_HANDSHAKES = 32
+export const MAX_HANDSHAKES = 32
 /** Noise's largest message, so nothing longer is ever a frame. */
-const MAX_FRAME = 65_535
+export const MAX_FRAME = 65_535
 /** Noise's authentication tag, which every frame ends with, so nothing shorter is ever a frame. */
-const MIN_FRAME = 16
+export const MIN_FRAME = 16
 /**
  * The most that may wait unread. The link holds at most the one message it is reassembling, so a message's worth
  * waiting behind that means the socket is not holding the peer back, and the carrier ends rather than keep it.
  */
 const MAX_WAITING = Frames.MAX_MESSAGE
 /** How long a send waits on a peer that takes none of what the socket already holds. */
-const STALL = "60 seconds"
+export const STALL = "60 seconds"
 /** How often a served link is pinged. A peer not heard from since the last ping is gone, so within two of these. */
 const PING = "30 seconds"
 /** How long a machine that got past the handshake has to answer the home's close before its connection is dropped. */
@@ -43,7 +43,7 @@ const STOPPING = "1 second"
  * Policy violation, the code RFC 6455 gives for hiding the reason. Every close the home makes carries it and no
  * reason: a refused handshake, a bad frame, a removed machine and a shutdown look the same.
  */
-const CLOSE = 1008
+export const CLOSE = 1008
 
 /**
  * Only for tests, as `Link.Fixed` is: called with the endpoint's `ws` server when it is made, so a test can count its

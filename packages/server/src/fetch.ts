@@ -40,7 +40,10 @@ export interface BootOptions {
  * Object leaves the same durable signature as a killed process — replays orphaned turns on the
  * next boot, and the sweep is a no-op when nothing is suspended.
  */
-export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOptions = {}, boot: BootOptions = {}) {
+export const makeWithContext = Effect.fn("ServerFetch.makeWithContext")(function* (
+  options: ServerOptions = {},
+  boot: BootOptions = {},
+) {
   // Handlers capture the build context; without the caller's span, each request is its own trace.
   const context = yield* Layer.build(
     createRoutes(options, () => [], boot.overrides ?? []).pipe(Layer.provide(HttpServer.layerServices)),
@@ -48,11 +51,16 @@ export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOpti
   // Forked so the returned handler is never delayed; resumed drains are already
   // logged and durably recorded by the execution layer.
   yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)
-  return Context.get(context, HttpRouter.HttpRouter)
+  const handler = Context.get(context, HttpRouter.HttpRouter)
     .asHttpEffect()
     .pipe(
       RequestSite.middleware(options),
       HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       HttpEffect.toWebHandlerWith(context),
     )
+  return { context, handler }
+})
+
+export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOptions = {}, boot: BootOptions = {}) {
+  return (yield* makeWithContext(options, boot)).handler
 })
