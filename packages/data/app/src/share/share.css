@@ -441,15 +441,6 @@
     color: var(--stats-faint);
   }
 
-  /* A short note under a row's choices, in line with them, saying what the chosen one does. */
-  [data-slot="row-note"] {
-    margin: -4px 0 0 64px;
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--stats-faint);
-    text-wrap: pretty;
-  }
-
   /* With a fill row (the embed code), the rows shrink to the panel and that row scrolls instead of the panel. */
   [data-slot="rows"]:has([data-variant="fill"]) {
     flex: 0 1 auto;
