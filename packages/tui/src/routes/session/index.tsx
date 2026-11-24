@@ -96,7 +96,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
 import { useConfig, useNewDesigns } from "../../config"
 import { useClipboard } from "../../context/clipboard"
-import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
+import { nextThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseShellOutput, collapseToolOutput } from "../../util/collapse-tool-output"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
@@ -106,7 +106,6 @@ import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
-  completeGroupBoundary,
   createSessionRows,
   messageBoundaryIDs,
   resolvePart,
@@ -123,19 +122,19 @@ import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { SessionTurn } from "@opencode/util/session-turn"
 import { TextBoundary } from "@opencode/util/text-boundary"
 import { useSessionTabs, type ScrollAnchor } from "../../context/session-tabs"
-import { createSingleFlight } from "../../util/single-flight"
 import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { parseTodos } from "../../util/todo"
 import { createHistoryPrepend } from "./history"
-import { context, use, type PendingAction } from "./render-context"
+import { context, use } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
-import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
+import { containsAnchor, createTimelineAnchors } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
+import { afterScrollLayout, createPendingInbox, createRenderContext, loadOlderMessages, pinScrollAbove } from "./shared"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -180,8 +179,6 @@ export function Session(props: {
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
-  const messageIndexes = createMemo(() => new Map(messages().map((message, index) => [message.id, index])))
-  const legacy = createMemo(() => SessionTurn.legacy(messages()))
   const messagesBeforeRevert = () => {
     const messageID = session()?.revert?.messageID
     if (!messageID) return messages()
@@ -224,7 +221,6 @@ export function Session(props: {
   const pendingUsers = createMemo(() =>
     data.session.pending.list(route.sessionID).flatMap((item) => (item.type === "user" ? [item] : [])),
   )
-  const pendingDeliveries = createMemo(() => new Map(pendingUsers().map((item) => [item.id, item.delivery])))
   const queuedPrompts = createMemo(() =>
     pendingUsers().flatMap((item) =>
       item.delivery === "queue" ? [{ id: item.id, text: item.payload.text, payload: item.payload }] : [],
@@ -247,18 +243,8 @@ export function Session(props: {
 
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
-  const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
-  const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
-  const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
-  const groupExploration = createMemo(() => config.session?.grouping !== "none")
   const verbosity = createMemo(() => config.session?.verbosity ?? defaultVerbosity)
-  // High opens exploration and instruction summaries by default; everything else starts collapsed.
-  const groupExpanded = (groupID: string, kind: GroupKind) =>
-    sessionTabs.groupExpanded(sessionID, groupID) ??
-    (verbosity() === "high" && (kind === "exploration" || kind === "instructions"))
-  const groupedKind = (kind: GroupKind) =>
-    kind === "reasoning" ? thinkingMode() === "hide" : kind === "exploration" ? groupExploration() : true
 
   Keymap.createLayer(() => ({
     priority: 10,
@@ -266,7 +252,6 @@ export function Session(props: {
     commands: [{ bind: "escape,ctrl+c", title: "Close sidebar", group: "Session", run: props.onToggleSidebar }],
   }))
   const contentWidth = createMemo(() => (props.width ?? dimensions().width - props.verticalTabsWidth) - 4)
-  const models = createMemo(() => data.location.model.list(location()) ?? [])
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
@@ -406,22 +391,27 @@ export function Session(props: {
     r.set(route.prompt)
   }
 
-  /** Runs after the next frame's layout and before it paints, unless the transcript was torn down. */
-  const afterLayout = (continuation: () => void) => {
-    if (!scroll || scroll.isDestroyed) return
-    scroll.afterLayout(() => {
-      if (!scroll.isDestroyed) continuation()
-    })
-  }
+  const afterLayout = (continuation: () => void) => afterScrollLayout(() => scroll, continuation)
+  const pinAbove = () => pinScrollAbove(() => scroll)
 
-  // Pin an existing row before publication. Total height also counts streamed output below the
-  // reader, which must not move their viewport when it arrives alongside the older rows.
-  const pinAbove = () => {
-    if (!scroll || scroll.isDestroyed) return
-    if (scroll.stickyScroll && scroll.scrollTop >= scroll.scrollHeight - scroll.viewport.height) return
-    const node = scroll.getChildren().find((node) => node.height > 0 && node.y + node.height > scroll.viewport.y)
-    if (node) afterLayout(scroll.anchor(node))
-  }
+  const pendingInbox = createPendingInbox(sessionID)
+  const renderContext = createRenderContext({
+    sessionID: route.sessionID,
+    rows,
+    anchors,
+    scroll: () => scroll,
+    away: isAwayFromBottom,
+    width: contentWidth,
+    location,
+    mutatePending: pendingInbox.mutate,
+    onGroupToggle: () => afterLayout(saveScrollAnchor),
+  })
+  const groupedKind = (kind: GroupKind) =>
+    kind === "reasoning"
+      ? renderContext.thinkingMode() === "hide"
+      : kind === "exploration"
+        ? renderContext.groupExploration()
+        : true
 
   // Tail-first transcript mounting: only the newest rows mount when the session opens. Older rows
   // mount on demand near the top, keeping inactive tabs cheap to tear down. While the reader stays
@@ -431,7 +421,7 @@ export function Session(props: {
   const weights = createMemo(() =>
     rows.map((row) =>
       rowWeight(row, {
-        expanded: groupExpanded,
+        expanded: renderContext.groupExpanded,
         grouped: groupedKind,
       }),
     ),
@@ -444,19 +434,16 @@ export function Session(props: {
   const prependHistory = createHistoryPrepend({
     sessionID: () => route.sessionID,
     more: (id) => data.session.message.more(id),
-    loadMore: async (id) => {
-      const beforePublish = () => {
-        if (route.sessionID === id) pinAbove()
-      }
-      await data.session.message.loadMore(id, { beforePublish })
-      await completeGroupBoundary({
+    loadMore: (id) =>
+      loadOlderMessages({
+        sessionID: id,
+        messages: data.session.message,
         rows,
-        messages: () => data.session.message.list(id).length,
-        more: () => data.session.message.more(id),
-        loadMore: () => data.session.message.loadMore(id, { beforePublish }),
+        beforePublish: () => {
+          if (route.sessionID === id) pinAbove()
+        },
         active: () => route.sessionID === id,
-      })
-    },
+      }),
     afterLayout,
     active: (id) => route.sessionID === id && Boolean(scroll && !scroll.isDestroyed),
     scrollBy: (amount) => {
@@ -765,32 +752,12 @@ export function Session(props: {
         })
     }),
   )
-  const runPendingAction = createSingleFlight<string>()
-  // Uses the captured sessionID: after an await, route.sessionID may already name another tab, or none.
-  const requestPending = async (action: PendingAction, inboxID: string, failureLabel?: string) => {
-    const request =
-      action === "steer"
-        ? client.api.session.inbox.update({ sessionID, inboxID, delivery: "steer" })
-        : action === "queue"
-          ? client.api.session.inbox.update({ sessionID, inboxID, delivery: "queue" })
-          : client.api.session.inbox.cancel({ sessionID, inboxID })
-    const error = await request.then(
-      () => undefined,
-      (error) => error,
-    )
-    if (!error) return true
-    const label = failureLabel ?? (action === "cancel" ? "delete" : action)
-    toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
-    return false
-  }
-  const mutatePending = async (action: PendingAction, inboxID: string) =>
-    (await runPendingAction(inboxID, () => requestPending(action, inboxID))) ?? false
   // The cancel releases blobs nothing else references, so media refs load into the draft first. Resolves with the
   // composer it wrote to, if any, once the prompt is back; undefined if the cancel failed or was already running.
   const undoPending = (inboxID: string, message: ProjectedPrompt, failureLabel?: string) =>
-    runPendingAction(inboxID, async () => {
+    pendingInbox.run(inboxID, async () => {
       const restored = await restorePrompt(message)
-      if (!(await requestPending("cancel", inboxID, failureLabel))) return
+      if (!(await pendingInbox.request("cancel", inboxID, failureLabel))) return
       return { composer: appendToSessionPrompt(sessionID, restored, renderer.widthMethod) }
     })
   const openQueuedPrompts = () =>
@@ -805,7 +772,7 @@ export function Session(props: {
           footer: `${index + 1} of ${queuedPrompts().length}`,
         }))}
         onSelect={(option) => {
-          void mutatePending("steer", option.value).then((steered) => {
+          void pendingInbox.mutate("steer", option.value).then((steered) => {
             if (steered) dialog.clear()
           })
         }}
@@ -815,7 +782,7 @@ export function Session(props: {
             title: "delete",
             onTrigger: (option) => {
               const last = queuedPrompts().length === 1
-              void mutatePending("cancel", option.value).then((cancelled) => {
+              void pendingInbox.mutate("cancel", option.value).then((cancelled) => {
                 if (cancelled && last) dialog.clear()
               })
             },
@@ -1138,15 +1105,16 @@ export function Session(props: {
           dialog.clear()
           return
         }
-        const undo = pendingDeliveries().has(message.id)
-          ? undoPending(message.id, message)
-          : (async () => {
-              const restored = await restorePrompt(message)
-              await client.api.session.interrupt({ sessionID })
-              await client.api.experimental.session.wait({ sessionID })
-              await client.api.session.revert.stage({ sessionID, messageID: message.id })
-              appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
-            })()
+        const undo =
+          renderContext.pendingDelivery(message.id) !== undefined
+            ? undoPending(message.id, message)
+            : (async () => {
+                const restored = await restorePrompt(message)
+                await client.api.session.interrupt({ sessionID })
+                await client.api.experimental.session.wait({ sessionID })
+                await client.api.session.revert.stage({ sessionID, messageID: message.id })
+                appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
+              })()
         void undo.catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
         dialog.clear()
       },
@@ -1170,7 +1138,7 @@ export function Session(props: {
     },
     {
       title: (() => {
-        const next = nextThinkingMode(thinkingMode())
+        const next = nextThinkingMode(renderContext.thinkingMode())
         if (next === "hide") return "Collapse thinking"
         return "Expand thinking"
       })(),
@@ -1180,7 +1148,7 @@ export function Session(props: {
       run: () => {
         void configState
           .update((draft) => {
-            draft.session = { ...draft.session, thinking: nextThinkingMode(thinkingMode()) }
+            draft.session = { ...draft.session, thinking: nextThinkingMode(renderContext.thinkingMode()) }
           })
           .catch(toast.error)
         dialog.clear()
@@ -1201,14 +1169,14 @@ export function Session(props: {
       },
     },
     {
-      title: groupExploration() ? "Show tool calls individually" : "Group related tool calls",
+      title: renderContext.groupExploration() ? "Show tool calls individually" : "Group related tool calls",
       id: "session.toggle.exploration_grouping",
       group: "Session",
       palette: undefined,
       run: () => {
         void configState
           .update((draft) => {
-            draft.session = { ...draft.session, grouping: groupExploration() ? "none" : "auto" }
+            draft.session = { ...draft.session, grouping: renderContext.groupExploration() ? "none" : "auto" }
           })
           .catch(toast.error)
         dialog.clear()
@@ -1478,49 +1446,8 @@ export function Session(props: {
     ),
   )
 
-  // Memoized per axis so width readers do not re-run on height-only resizes
-  // (dimensions() is one object signal with identity equality) and vice versa.
-  const terminalWidth = createMemo(() => dimensions().width)
-  const terminalHeight = createMemo(() => dimensions().height)
-
   return (
-    <context.Provider
-      value={{
-        anchors,
-        groupExpanded,
-        setGroupExpanded: (id, expanded, anchor) => {
-          // A group that ends the transcript would open off screen while the reader follows the bottom.
-          const last = rows.findLast((row) => row.type !== "assistant-footer" && row.type !== "turn-usage")
-          const ending = last?.type === "group" && groupID(last, 0) === id
-          // Keeps the toggled disclosure's header on its viewport row through the next layout.
-          if (anchor && !(ending && !isAwayFromBottom())) afterLayout(scroll.anchor(anchor))
-          sessionTabs.setGroupExpanded(sessionID, id, expanded)
-          afterLayout(saveScrollAnchor)
-        },
-        get width() {
-          return contentWidth()
-        },
-        terminal: {
-          get width() {
-            return terminalWidth()
-          },
-          get height() {
-            return terminalHeight()
-          },
-        },
-        sessionID: route.sessionID,
-        thinkingMode,
-        markdownMode,
-        groupExploration,
-        diffWrapMode,
-        models,
-        messageIndex: (messageID) => messageIndexes().get(messageID),
-        legacyTurns: legacy,
-        config,
-        mutatePending,
-        pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
-      }}
-    >
+    <context.Provider value={renderContext}>
       <box flexDirection="row" flexGrow={1} minHeight={0}>
         <box
           flexGrow={1}
@@ -1665,7 +1592,7 @@ export function Session(props: {
                     onEmptySubmit={async () => {
                       const next = queuedPrompts()[0]
                       if (!next) return false
-                      return mutatePending("steer", next.id)
+                      return pendingInbox.mutate("steer", next.id)
                     }}
                     sessionID={route.sessionID}
                   />

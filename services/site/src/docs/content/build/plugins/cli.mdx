@@ -622,6 +622,47 @@ const current = context.ui.panel.current()
 context.ui.panel.close()
 ```
 
+## Session transcripts
+
+Render a native, scrollable session transcript without mounting a composer, for example inside a `session.panel` or a
+plugin route. Call `context.ui.session.transcript` during Solid rendering.
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { Show, createSignal } from "solid-js"
+
+function SubagentTranscript(props: { panel: PanelInput; initialSessionID: string }) {
+  const context = usePlugin()
+  const [selected, select] = createSignal(props.initialSessionID)
+
+  return context.ui.session.transcript({
+    get sessionID() {
+      return selected()
+    },
+    get width() {
+      return props.panel.width
+    },
+    onOpenSession: select,
+    onActivate: props.panel.focus,
+  })
+}
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.transcript"}>
+      <SubagentTranscript panel={panel} initialSessionID={panel.sessionID} />
+    </Show>
+  ),
+})
+```
+
+- `sessionID`: Session to render. Use a getter when the selection can change while mounted.
+- `width`: Available width in terminal columns; defaults to the terminal width when omitted.
+- `onOpenSession`: Handles clicks on subagent cards and completion notices instead of navigating the main route.
+- `onActivate`: Runs when the transcript is clicked before it focuses its scroll container, such as `panel.focus`.
+
 ## Formatting
 
 Format filesystem paths for display, including home-directory abbreviation.
