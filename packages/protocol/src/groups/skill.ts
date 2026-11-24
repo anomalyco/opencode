@@ -26,7 +26,7 @@ export const SkillGroup = HttpApiGroup.make("server.skill")
       ),
   )
   .add(
-    HttpApiEndpoint.get("skill.content", "/api/experimental/skill/:skillID/content", {
+    HttpApiEndpoint.get("skill.content", "/api/skill/:skillID/content", {
       params: { skillID: Skill.ID },
       query: LocationQuery,
       success: Location.response(SkillContent),
@@ -35,10 +35,10 @@ export const SkillGroup = HttpApiGroup.make("server.skill")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "experimental.skill.content",
+          identifier: "skill.content",
           summary: "Get skill content",
           description:
-            "Read a skill's SKILL.md body, loading it first when it loads on demand, such as an MCP skill fetched from its server. Fails with 502 when it can't be loaded. Experimental: may change without compatibility guarantees.",
+            "Read a skill's SKILL.md body, loading it first when it loads on demand, such as an MCP skill fetched from its server. Fails with 502 when it can't be loaded.",
         }),
       ),
   )

@@ -552,6 +552,7 @@ export function fromPromise(plugin: Plugin) {
           rpc: yield* rpcFromEffect(host.rpc, streams),
           skill: {
             list: adaptApiMethod(SkillEndpoints["skill.list"], host.skill.list),
+            content: adaptApiMethod(SkillEndpoints["skill.content"], host.skill.content),
             transform: transform(host.skill),
             reload: () => run(host.skill.reload()),
           },

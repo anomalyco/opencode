@@ -93,6 +93,7 @@ const SHOWN = [
   "GET /api/agent*",
   "GET /api/command",
   "GET /api/skill",
+  "GET /api/skill/{skillID}/content",
   "GET /api/model*",
   "GET /api/provider*",
   // Generation, and the stored blobs it returns.

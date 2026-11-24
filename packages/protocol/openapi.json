@@ -10236,10 +10236,10 @@
         "summary": "List skills"
       }
     },
-    "/api/experimental/skill/{skillID}/content": {
+    "/api/skill/{skillID}/content": {
       "get": {
         "tags": ["skill"],
-        "operationId": "experimental.skill.content",
+        "operationId": "skill.content",
         "parameters": [
           {
             "name": "skillID",
@@ -10345,7 +10345,7 @@
             }
           }
         },
-        "description": "Read a skill's SKILL.md body, loading it first when it loads on demand, such as an MCP skill fetched from its server. Fails with 502 when it can't be loaded. Experimental: may change without compatibility guarantees.",
+        "description": "Read a skill's SKILL.md body, loading it first when it loads on demand, such as an MCP skill fetched from its server. Fails with 502 when it can't be loaded.",
         "summary": "Get skill content"
       }
     },
@@ -26377,7 +26377,7 @@
           },
           "content": {
             "type": "string",
-            "description": "Deprecated: empty for a skill whose body loads on demand, such as an MCP skill. Read the body from GET /api/experimental/skill/{skillID}/content instead.",
+            "description": "Deprecated: empty for a skill whose body loads on demand, such as an MCP skill. Read the body from GET /api/skill/{skillID}/content instead.",
             "deprecated": true
           }
         },

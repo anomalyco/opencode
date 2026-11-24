@@ -213,8 +213,8 @@ import type {
   CommandListOutput,
   SkillListInput,
   SkillListOutput,
-  ExperimentalSkillContentInput,
-  ExperimentalSkillContentOutput,
+  SkillContentInput,
+  SkillContentOutput,
   RpcCallInput,
   RpcCallOutput,
   EventSubscribeInput,
@@ -1446,17 +1446,16 @@ const EndpointSkillList = (raw: RawClient["server.skill"]) => (input?: SkillList
     raw["skill.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupSkill = (raw: RawClient["server.skill"]) => ({ list: EndpointSkillList(raw) })
-
-const EndpointExperimentalSkillContent = (raw: RawClient["server.skill"]) => (input: ExperimentalSkillContentInput) =>
-  preserveEffect<ExperimentalSkillContentOutput>()(
+const EndpointSkillContent = (raw: RawClient["server.skill"]) => (input: SkillContentInput) =>
+  preserveEffect<SkillContentOutput>()(
     raw["skill.content"]({ params: { skillID: input["skillID"] }, query: { location: input["location"] } }).pipe(
       Effect.mapError(mapClientError),
     ),
   )
 
-const adaptGroupExperimentalSkill = (raw: RawClient["server.skill"]) => ({
-  content: EndpointExperimentalSkillContent(raw),
+const adaptGroupSkill = (raw: RawClient["server.skill"]) => ({
+  list: EndpointSkillList(raw),
+  content: EndpointSkillContent(raw),
 })
 
 const EndpointRpcCall = (raw: RawClient["server.rpc"]) => (input: RpcCallInput) =>
@@ -2065,7 +2064,6 @@ const adaptClient = (raw: RawClient) => {
       integration: adaptGroupExperimentalIntegration(raw["server.integration"]),
       mcp: adaptGroupExperimentalMcp(raw["server.mcp"]),
       file: adaptGroupExperimentalFile(raw["server.fs"]),
-      skill: adaptGroupExperimentalSkill(raw["server.skill"]),
       migration: adaptGroupExperimentalMigration(raw["server.migration"]),
       usage: adaptGroupExperimentalUsage(raw["server.usage"]),
       config: adaptGroupExperimentalConfig(raw["server.config"]),

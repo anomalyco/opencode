@@ -211,8 +211,8 @@ import type {
   CommandListOutput,
   SkillListInput,
   SkillListOutput,
-  ExperimentalSkillContentInput,
-  ExperimentalSkillContentOutput,
+  SkillContentInput,
+  SkillContentOutput,
   RpcCallInput,
   RpcCallOutput,
   EventSubscribeInput,
@@ -1418,20 +1418,6 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
-      skill: {
-        content: (input: ExperimentalSkillContentInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSkillContentOutput>(
-            {
-              method: "GET",
-              path: `/api/experimental/skill/${encodeURIComponent(input.skillID)}/content`,
-              query: { location: input["location"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 502],
-              empty: false,
-            },
-            requestOptions,
-          ),
-      },
       persistentPty: {
         read: (input: ExperimentalPersistentPtyReadInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalPersistentPtyReadOutput }>(
@@ -2382,6 +2368,18 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      content: (input: SkillContentInput, requestOptions?: RequestOptions) =>
+        request<SkillContentOutput>(
+          {
+            method: "GET",
+            path: `/api/skill/${encodeURIComponent(input.skillID)}/content`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 502],
             empty: false,
           },
           requestOptions,

@@ -49,6 +49,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.file)).toEqual(["read", "list", "find", "write", "watch", "unwatch"])
   expect(Object.keys(client.mcp)).toEqual(["list", "resource", "add", "remove", "connect", "disconnect", "client"])
   expect(Object.keys(client.config)).toEqual(["get", "shells", "update"])
+  expect(Object.keys(client.skill)).toEqual(["list", "content"])
   expect(Object.keys(client.vcs)).toEqual(["init", "get", "base", "status", "branch", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
@@ -59,7 +60,6 @@ test("exposes every standard HTTP API group", () => {
     "integration",
     "mcp",
     "file",
-    "skill",
     "persistentPty",
     "media",
     "blob",

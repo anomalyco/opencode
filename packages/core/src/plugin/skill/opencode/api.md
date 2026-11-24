@@ -102,6 +102,7 @@ Call any endpoint below from Code Mode with `fetch("opencode:///api/...")`. Each
 ## api/skill.md
 
 - GET /api/skill: List skills
+- GET /api/skill/{skillID}/content: Get skill content
 
 ## api/vcs.md
 

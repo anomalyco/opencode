@@ -255,7 +255,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const readBuiltin = (file: string, directory: string): Promise<FileContent | undefined> =>
       builtinSkill(file, directory).then((skill) =>
         skill
-          ? serverSDK.api.experimental.skill
+          ? serverSDK.api.skill
               .content({ skillID: skill.id, location: { directory } })
               .then((result) => ({ type: "text", content: result.data.content, mimeType: artifactMime(file) }))
           : undefined,

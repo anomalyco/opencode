@@ -58,7 +58,7 @@ it.live("reads a skill's content and reports an unknown skill", () =>
     })
     yield* server.pluginsLoaded(tmp.path)
     const content = (id: string) => {
-      const url = new URL(`/api/experimental/skill/${id}/content`, "http://opencode.local")
+      const url = new URL(`/api/skill/${id}/content`, "http://opencode.local")
       url.searchParams.set("location[directory]", tmp.path)
       return Effect.promise(() => server.fetch(url))
     }

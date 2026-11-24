@@ -4524,12 +4524,12 @@ export type SkillListInput = { readonly location?: { readonly directory?: string
 
 export type SkillListOutput = { location: LocationPublicRef; data: Array<SkillInfo> }
 
-export type ExperimentalSkillContentInput = {
+export type SkillContentInput = {
   readonly skillID: string
   readonly location?: { readonly directory?: string | undefined } | undefined
 }
 
-export type ExperimentalSkillContentOutput = { location: LocationPublicRef; data: SkillContent }
+export type SkillContentOutput = { location: LocationPublicRef; data: SkillContent }
 
 export type RpcCallInput = {
   readonly rpcID: string

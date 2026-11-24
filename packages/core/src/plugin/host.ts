@@ -499,6 +499,18 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
     },
     skill: {
       list: () => response(skill.list({ content: "eager" })),
+      content: (input) =>
+        response(
+          skill
+            .get(input.skillID)
+            .pipe(
+              Effect.flatMap((found) =>
+                found
+                  ? Effect.succeed({ content: found.content })
+                  : Effect.fail(new Error(`Skill not found: ${input.skillID}`)),
+              ),
+            ),
+        ),
       reload: skill.reload,
       transform: (callback) =>
         skill.transform((editor) => {

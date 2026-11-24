@@ -32,7 +32,7 @@ export const Info = Schema.Struct({
   path: AbsolutePath,
   content: Schema.String.annotate({
     description:
-      "Deprecated: empty for a skill whose body loads on demand, such as an MCP skill. Read the body from GET /api/experimental/skill/{skillID}/content instead.",
+      "Deprecated: empty for a skill whose body loads on demand, such as an MCP skill. Read the body from GET /api/skill/{skillID}/content instead.",
     deprecated: true,
   }),
 }).annotate({ identifier: "Skill.Info" })
