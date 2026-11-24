@@ -11,7 +11,7 @@ pub fn run(context: &Context) -> error::Result<()> {
         let server = connect(context).await?;
         let location = Some(here()?);
         super::client::wait_for_plugins(&server.client, location.clone()).await;
-        // Plugin activation precedes Copilot's background catalog fetch.
+        // Plugins can publish models after activation. A one-shot command would miss those updates.
         let status = RpcCallInput {
             rpc_id: "experimental.github-copilot".into(),
             method: "catalogReady".into(),

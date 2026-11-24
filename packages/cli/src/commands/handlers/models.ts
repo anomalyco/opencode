@@ -18,7 +18,7 @@ export default Runtime.handler(
     })
     const location = { directory: process.cwd() }
     yield* waitForPlugins(client, location.directory)
-    // The Copilot catalog is fetched in the background, even after plugins are active.
+    // Plugins can publish models after activation. A one-shot command would miss those updates.
     const copilot = client.rpc(Copilot.Definition)
     yield* Effect.tryPromise((signal) => copilot.catalogReady(undefined, { location, signal })).pipe(
       Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced("100 millis") }),
