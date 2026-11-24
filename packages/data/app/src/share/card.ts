@@ -616,7 +616,8 @@ function dotLayout(width: number, grid: { center: number; pitch: number }, end: 
   // In step with the grid: wide bars (the 16:9 card) get bigger dots, so they hold their own beside the bars.
   const dot = Math.min(8, Math.max(3, Math.round(grid.pitch * 0.22)))
   const first = grid.center - Math.floor(grid.center / grid.pitch) * grid.pitch
-  const inset = Math.max(0, first - dot / 2)
+  // A column that would start off the card's edge moves a whole pitch in, so every column stays on its bar's centre.
+  const inset = first - dot / 2 < 0 ? first - dot / 2 + grid.pitch : first - dot / 2
   const columns = Array.from(
     { length: Math.floor((width - inset - dot) / grid.pitch) + 1 },
     (_, index) => inset + index * grid.pitch,

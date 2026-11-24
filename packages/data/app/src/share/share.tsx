@@ -407,7 +407,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       // Never an explicit track: those are for choosing on purpose.
       setTrack(pick(shareTracks.filter((item) => !item.explicit)).id)
       setLead(pick(["top", "total"] as const))
-      setChartStyle(pick(chartStyles()))
+      // Live top is only ever chosen, never shuffled to.
+      setChartStyle(pick(chartStyles().filter((item) => item !== "terminal")))
       setPlaying(true)
     })
 
