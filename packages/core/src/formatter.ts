@@ -56,7 +56,7 @@ const layer = Layer.effect(
 
     const file = Effect.fn("Formatter.file")(function* (target: FileAccess.Target) {
       // A formatter is the server's own child, acting on the server's own disk.
-      if (!target.environment.hostsServer) return false
+      if (!target.environment.local) return false
       const filepath = target.absolute
       const extension = path.extname(filepath)
       const matching = state.get().formatters.filter((formatter) => formatter.extensions.includes(extension))

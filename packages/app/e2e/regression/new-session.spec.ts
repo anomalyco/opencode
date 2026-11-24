@@ -233,6 +233,9 @@ for (const binding of ["custom", "none"]) {
 
     await view.editor.press(`${modifier}+Alt+k`)
     await expect(newSessionBaseBranch(page)).toHaveText("from main")
+    await newSessionBaseBranch(page).hover()
+    await expect(tooltip).toContainText("Choose worktree")
+    await expect(keys).toHaveText([/X$/, /B$/])
     await view.editor.press(`${modifier}+Alt+x`)
     const search = page.getByRole("combobox", { name: "Search worktrees", exact: true })
 
@@ -443,11 +446,14 @@ test("the checkout branch opens the current project's worktree step", async ({ p
   await expect(local).toHaveText("dev")
   await local.click()
   await expect(search).toBeFocused()
-  await expect(back).toHaveText("Run session in")
+  await expect(dialog.getByRole("group", { name: "Run session in", exact: true })).toBeVisible()
   await expect(options.locator(".command-palette-title")).toHaveText(["Custom project", "New worktree", "quiet-river"])
   await search.press("ArrowDown")
   await expect(create).toHaveAttribute("data-active")
   await expect(selected).toHaveAccessibleName(main)
+  // "Run session in" is the list's heading, not a Tab stop; the back arrow in the search field steps back.
+  await search.press("Tab")
+  await expect(dialog.getByText("Run session in", { exact: true })).not.toBeFocused()
 
   // Stepping back lands on the projects step with the drilled project active, as after drilling in with →.
   await back.click()
@@ -504,8 +510,8 @@ test("the branch shortcut chooses a base branch and stays inactive on the main c
 
   await expect(base).toHaveAccessibleName("Choose base branch")
   await base.hover()
-  await expect(page.getByRole("tooltip")).toContainText("Choose base branch")
-  await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toContainText("B")
+  await expect(page.getByRole("tooltip")).toContainText(/Choose worktree.*Choose base branch/)
+  await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toHaveText([/O$/, /B$/])
   await expect(view.editor).toBeFocused()
   await view.editor.press(shortcut)
   await expect(search).toBeFocused()
@@ -1309,7 +1315,7 @@ test("the location dialog separates added projects from server projects and tags
   const rows = options.filter({ has: page.locator(".new-session-location-name") })
   const names = options.locator(".new-session-location-name")
   const paths = options.locator(".command-palette-description")
-  const back = dialog.locator(".new-session-location-back")
+  const heading = dialog.getByText("Run session in", { exact: true })
   const arrow = dialog.locator(".new-session-location-search-back")
   const leading = dialog.locator("[data-slot='text-input-v2-leading-icon']")
   const input = dialog.locator("[data-slot='text-input-v2-input']")
@@ -1358,7 +1364,7 @@ test("the location dialog separates added projects from server projects and tags
   const inputBox = await input.boundingBox()
   await others.click()
   await expect(names).toHaveText(["console", "sstapollo"])
-  await expect(back).toHaveCount(0)
+  await expect(heading).toHaveCount(0)
   await expect(arrow).toBeVisible()
   await expect(search).toHaveAttribute("placeholder", "Search other projects")
   expect(await leading.boundingBox()).toEqual(leadingBox)
@@ -1393,7 +1399,8 @@ test("the location dialog separates added projects from server projects and tags
   await page.keyboard.press("ArrowRight")
   // The worktree step has no "Add project".
   await expect(add).toHaveCount(0)
-  await expect(back).toHaveText("Run session in")
+  await expect(heading).toBeVisible()
+  await expect(arrow).toBeVisible()
   await expect(options.nth(0).locator('[data-component="tag"]')).toHaveText("apollo")
   await expect(dialog.getByRole("option", { selected: true })).toHaveCount(0)
   await search.fill("apollo-release")
@@ -1411,11 +1418,11 @@ test("the location dialog separates added projects from server projects and tags
   const open = (await page.evaluate(() => navigator.platform.includes("Mac"))) ? "Meta+o" : "Control+o"
   await search.fill("open")
   await page.keyboard.press(open)
-  await expect(back).toHaveCount(0)
+  await expect(heading).toHaveCount(0)
   await expect(search).toHaveAttribute("placeholder", "Search servers")
   await expect(search).toHaveValue("")
   await page.keyboard.press("Escape")
-  await expect(back).toHaveText("Run session in")
+  await expect(heading).toBeVisible()
   await expect(search).toHaveValue("open")
   await expect(options.locator(".command-palette-title")).toHaveText(["opencode", "New worktree", "opencode-beta"])
   await expect(options.nth(0)).toHaveAttribute("data-active")
@@ -1431,7 +1438,7 @@ test("the location dialog separates added projects from server projects and tags
   await page.keyboard.press("ArrowUp")
   await expect(options.nth(3)).toHaveAttribute("aria-selected", "true")
   await page.keyboard.press(open)
-  await expect(back).toHaveCount(0)
+  await expect(heading).toHaveCount(0)
   // The server the app runs beside shows its hostname and "This computer" instead of its address.
   await expect(options).toHaveText(["hailmaryThis computer", "apollo"])
   await search.press("Escape")

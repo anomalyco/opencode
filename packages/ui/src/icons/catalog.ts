@@ -294,6 +294,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<circle cx="5" cy="12" r="1.5" stroke="currentColor"/><path d="M5.22983 10.4384V5.43842M6.55305 11.8019H8.83276C9.94392 11.8019 10.8421 10.8962 10.8327 9.78506L10.7966 5.50012" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><circle cx="5" cy="4" r="1.5" stroke="currentColor"/><circle cx="11" cy="4" r="1.5" stroke="currentColor"/>`,
   },
+  pin: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M9.5 2.5L13.5 6.5M10.5 3.5L7.5 6.5H5.5L9.5 10.5V8.5L12.5 5.5M7.5 8.5L2.5 13.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
+  },
   edit: {
     viewBox: "0 0 16 16",
     body: `<path d="M8.5 2.5H2.5V13.5H13.5V7.5M7.5 8.5V6.5L12.5 1.5L14.5 3.5L9.5 8.5H7.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,

@@ -301,17 +301,23 @@ export function fromPromise(plugin: Plugin) {
           method: (input: never) => Effect.Effect<unknown, unknown>,
         ) => {
           const compiled = compileEndpoint(endpoint)
-          return ((input?: unknown) =>
-            Effect.gen(function* () {
-              // Match the generated Promise client, whose request body crosses JSON before endpoint decoding.
-              const normalized = yield* Schema.encodeUnknownEffect(JsonInput)(input ?? {}).pipe(
-                Effect.flatMap(Schema.decodeUnknownEffect(JsonInput)),
-              )
-              const decoded = yield* Effect.forEach(compiled.decode, (decode) => decode(normalized))
-              const result = yield* method(Object.assign({}, ...decoded) as never)
-              if (compiled.noContent) return undefined
-              return yield* compiled.encode(result)
-            }).pipe(Effect.runPromiseWith(runtime))) as PromiseMethod
+          return ((input?: unknown, options?: { readonly signal?: AbortSignal }) => {
+            // The runner evaluates synchronously before it checks the signal, so an aborted call could start a mutation.
+            if (options?.signal?.aborted) return Promise.reject(options.signal.reason)
+            return Effect.runPromiseWith(runtime)(
+              Effect.gen(function* () {
+                // Match the generated Promise client, whose request body crosses JSON before endpoint decoding.
+                const normalized = yield* Schema.encodeUnknownEffect(JsonInput)(input ?? {}).pipe(
+                  Effect.flatMap(Schema.decodeUnknownEffect(JsonInput)),
+                )
+                const decoded = yield* Effect.forEach(compiled.decode, (decode) => decode(normalized))
+                const result = yield* method(Object.assign({}, ...decoded) as never)
+                if (compiled.noContent) return undefined
+                return yield* compiled.encode(result)
+              }),
+              { signal: options?.signal },
+            )
+          }) as PromiseMethod
         }
 
         const transform =

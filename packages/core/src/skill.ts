@@ -6,7 +6,7 @@ import path from "path"
 import { Context, Effect, Layer, Types } from "effect"
 import { Skill } from "@opencode/schema/skill"
 import { Bus } from "./bus.js"
-import { Permission } from "./permission.js"
+import { PermissionPolicy } from "./permission/policy.js"
 import { State } from "./state.js"
 
 export const DirectorySource = Skill.DirectorySource
@@ -30,8 +30,8 @@ export type Name = Skill.Name
 
 export { Event } from "@opencode/schema/skill"
 
-export const available = (skills: ReadonlyArray<Info>, permissions: Permission.Ruleset) =>
-  skills.filter((skill) => Permission.evaluate("skill", skill.id, permissions).effect !== "deny")
+export const available = (skills: ReadonlyArray<Info>, policy: PermissionPolicy.Policy) =>
+  skills.filter((skill) => PermissionPolicy.evaluate(policy, "skill", skill.id).effect !== "deny")
 
 export const uri = (id: string, file?: string) => (file ? `skill://${id}/${file}` : `skill://${id}`)
 

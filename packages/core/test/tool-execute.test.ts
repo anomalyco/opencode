@@ -4,11 +4,14 @@ import path from "path"
 import { CodeModeDiffs } from "@opencode/core/codemode/diffs"
 import { CodeModeApi } from "@opencode/core/codemode/api"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { ai } from "@opencode/ai/effect"
+import { OpenAI } from "@opencode/ai/providers"
+import { compileRequest } from "@opencode/ai/testing"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
-import { execute } from "@opencode/core/tool/runtime"
+import { definition, execute } from "@opencode/core/tool/runtime"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -53,7 +56,7 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
     ["send", { ...send, freeform: { type: "text" } }],
   ])
   const codeMode = createCodeMode(tools)
-  expect(codeMode.freeform).toEqual({ type: "text" })
+  expect(codeMode.freeform).toEqual({ type: "text", field: "code" })
   expect(CodeModeTool.catalog({ tools }).tools.map((tool) => "signature" in tool && tool.signature)).toEqual([
     "tools.echo({\n  /** @minLength 1 */\n  text: string,\n}): Promise<string>",
     "tools.send(/** @minLength 1 */ text: string): Promise<string>",
@@ -65,11 +68,43 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
   expect(calls.output.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
 })
 
+test("with full_codemode, raw-text models set execute's timeout and background on a first line", async () => {
+  const codeMode = createCodeMode(new Map(), allowAll, codeModeServices(process.cwd()))
+  const prepared = await Effect.runPromise(
+    compileRequest(
+      ai.request({
+        model: OpenAI.model("gpt-5.4", { apiKey: "test" }),
+        prompt: "Run it.",
+        tools: [definition(codeMode)],
+      }),
+    ),
+  )
+  const [tool] = prepared.body.tools
+  expect(tool).toMatchObject({ type: "custom", name: "execute", format: { type: "grammar", syntax: "lark" } })
+  expect(tool.description).toContain(
+    "To set the parameters below, start with a `// @options:` line holding a JSON object of them",
+  )
+  expect(tool.format.definition).toContain('ff_pair: "\\"timeout\\"" " "* ":" " "* /[1-9][0-9]*/')
+  expect(tool.format.definition).toContain('| "\\"background\\"" " "* ":" " "* ("true" | "false")')
+  // Without `full_codemode` the code is the only parameter, and goes out as plain text.
+  const plain = await Effect.runPromise(
+    compileRequest(
+      ai.request({
+        model: OpenAI.model("gpt-5.4", { apiKey: "test" }),
+        prompt: "Run it.",
+        tools: [definition(createCodeMode(new Map()))],
+      }),
+    ),
+  )
+  expect(plain.body.tools[0]).toMatchObject({ type: "custom", name: "execute", format: { type: "text" } })
+})
+
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [
       "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
       "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
+      "Each call is a fresh program; nothing carries over from earlier calls.",
       "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
       "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
@@ -85,6 +120,9 @@ test("with full_codemode, execute names Bun's file APIs instead of ruling out fi
     "`fetch` is available for HTTP requests, and Bun's file APIs (`Bun.file`, `Bun.write`, `Bun.Glob`) for files, in place of Node's `fs`. Imports and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
   )
   expect(description).not.toContain("direct filesystem access")
+  expect(description.split("\n")[0]).toBe(
+    "Run JavaScript in a confined Code Mode runtime to work with files and data, script tool calls and HTTP requests, and compose their results.",
+  )
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
@@ -638,7 +676,7 @@ describe("fetch permissions", () => {
       {
         action: "webfetch",
         resources: [url],
-        save: ["*"],
+        save: [server.url.origin, `${server.url.origin}/*`],
         metadata: { method: "POST", url },
         sessionID: context.sessionID,
         agent: context.agent,
@@ -782,6 +820,36 @@ describe("Code Mode opencode:// fetch", () => {
         body: "",
       },
     ])
+  })
+
+  test("asks as the opencode api command that would make the same call", async () => {
+    const asked: Array<{ action: string; resources: ReadonlyArray<string>; save?: ReadonlyArray<string> }> = []
+    const sent: Array<string> = []
+    const handle = api((request) => Effect.sync(() => (sent.push(request.url), Response.json({ ok: true }))))
+    const run = (permission: Permission.Interface) =>
+      Effect.runPromise(
+        createCodeMode(new Map(), permission, undefined, handle).execute(
+          {
+            code: `try { await fetch("opencode:///api/session/current/prompt", { method: "POST", body: "{}" }); return "sent" } catch (e) { return e.message }`,
+          },
+          context,
+        ),
+      ).then((result) => result.output.output)
+
+    expect(await run(permissionService({ assert: (input) => Effect.sync(() => void asked.push(input)) }))).toBe("sent")
+    expect(asked).toEqual([
+      expect.objectContaining({
+        action: "shell",
+        resources: [`opencode api post /api/session/${context.sessionID}/prompt`],
+        save: ["opencode *"],
+      }),
+    ])
+    const denied = permissionService({
+      assert: (input) =>
+        Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
+    })
+    expect(await run(denied)).toContain("Permission denied: shell")
+    expect(sent).toHaveLength(1)
   })
 
   test("accepts only opencode:///api/... URLs, reports a disabled API, and fails without one", async () => {

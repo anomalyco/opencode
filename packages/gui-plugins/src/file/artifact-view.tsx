@@ -167,7 +167,11 @@ export default function ArtifactView(props: {
   )
 
   return (
-    <div data-slot="artifact-view" class="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div
+      data-slot="artifact-view"
+      data-source-only={fixedMode() === "source" || undefined}
+      class="flex min-h-0 flex-1 flex-col overflow-hidden"
+    >
       <ArtifactToolbar
         session={props.session}
         screen={props.screen}
