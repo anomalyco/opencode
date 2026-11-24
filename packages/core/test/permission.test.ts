@@ -9,6 +9,7 @@ import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { PermissionTable } from "@opencode/core/permission/sql"
 import { PermissionSaved } from "@opencode/core/permission/saved"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -28,7 +29,15 @@ const current = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      Agent.node,
+      PluginHooks.node,
+      Permission.node,
+    ]),
     [Location.node.replace(current)],
   ),
 )
@@ -148,7 +157,7 @@ describe("Permission.isActionDenied", () => {
     }
   })
 
-  test("composes override, restrict, and fallback with distinct precedence laws", () => {
+  test("composes override, restrict, and fallback with sound algebraic laws", () => {
     const base = Permission.Policy.fromRules([
       rule("read", "*", "ask"),
       rule("read", ".env", "deny"),
@@ -166,22 +175,78 @@ describe("Permission.isActionDenied", () => {
     expect(Permission.Policy.evaluateAll(base, "read", ["README.md", ".env"])).toBe("deny")
     expect(Permission.Policy.evaluateAll(withSaved, "read", ["README.md", "src/index.ts"])).toBe("allow")
 
-    // restrict is monotone: cannot be undone by fallback, and narrow restricts never unmask a blanket deny
-    const restricted = Permission.Policy.fallback(
-      Permission.Policy.restrict(Permission.Policy.fromRules([rule("skill", "*", "allow")]), [
-        { action: "skill", resource: "browser" },
-      ]),
-      Permission.Policy.fromRules([rule("skill", "*", "allow")]),
+    // fallback left/right identity & secondary denial reachability
+    const denyAll = Permission.Policy.fromRules([rule("*", "*", "deny")])
+    expect(
+      Permission.Policy.isActionDenied(Permission.Policy.fallback(Permission.Policy.empty, denyAll), "execute"),
+    ).toBe(true)
+    expect(
+      Permission.Policy.isActionDenied(
+        Permission.Policy.fallback(Permission.Policy.fromRules([rule("read", ".env", "deny")]), denyAll),
+        "read",
+      ),
+    ).toBe(true)
+
+    // universal wildcards (**, * *) behave like *
+    expect(Permission.Policy.isUniversalPattern("*")).toBe(true)
+    expect(Permission.Policy.isUniversalPattern("**")).toBe(true)
+    expect(Permission.Policy.isUniversalPattern("* *")).toBe(true)
+    expect(Permission.Policy.isUniversalPattern(" *")).toBe(false)
+    expect(Permission.Policy.isUniversalPattern("* **")).toBe(false)
+    expect(
+      Permission.Policy.isActionDenied(
+        Permission.Policy.restrict(Permission.Policy.empty, [{ action: "*", resource: "**" }]),
+        "read",
+      ),
+    ).toBe(true)
+    expect(Permission.Policy.scopedRules(Permission.Policy.fromRules([rule("read", "**", "ask")]), "read")).toEqual([])
+
+    // hasDeny ignores overridden denies and unreachable fallback branches
+    expect(
+      Permission.Policy.hasDeny(
+        Permission.Policy.fromRules([rule("*", "*", "deny"), rule("shell", "*", "allow")]),
+        "shell",
+      ),
+    ).toBe(false)
+    expect(
+      Permission.Policy.hasDeny(
+        Permission.Policy.fallback(
+          Permission.Policy.fromRules([rule("shell", "*", "allow")]),
+          Permission.Policy.fromRules([rule("shell", "*", "deny")]),
+        ),
+        "shell",
+      ),
+    ).toBe(false)
+
+    // restrict is immutable (copies caller array) and monotone under both override and fallback
+    const denies = [{ action: "skill", resource: "browser" }]
+    const restricted = Permission.Policy.override(
+      Permission.Policy.fallback(
+        Permission.Policy.restrict(Permission.Policy.fromRules([rule("skill", "*", "allow")]), denies),
+        Permission.Policy.fromRules([rule("skill", "*", "allow")]),
+      ),
+      [rule("skill", "*", "allow")],
     )
+    denies.push({ action: "*", resource: "*" })
     expect(Permission.Policy.evaluate(restricted, "skill", "browser").effect).toBe("deny")
     expect(Permission.Policy.evaluate(restricted, "skill", "other").effect).toBe("allow")
     expect(Permission.Policy.isActionDenied(restricted, "skill")).toBe(false)
     expect(Permission.Policy.hasDeny(restricted, "skill")).toBe(true)
 
-    const blanketRestricted = Permission.Policy.restrict(Permission.Policy.fromRules([rule("skill", "*", "deny")]), [
-      { action: "skill", resource: "browser" },
-    ])
-    expect(Permission.Policy.isActionDenied(blanketRestricted, "skill")).toBe(true)
+    // relevant does not put fallback.secondary after base, and scopedRules drops dead overridden scoped rules
+    const fallbackWithDeny = Permission.Policy.fallback(
+      Permission.Policy.fromRules([rule("read", ".env", "deny")]),
+      Permission.Policy.fromRules([rule("read", "*", "allow")]),
+    )
+    expect(Permission.evaluate("read", ".env", Permission.Policy.relevant(fallbackWithDeny, "read")).effect).toBe(
+      "deny",
+    )
+    expect(
+      Permission.Policy.scopedRules(
+        Permission.Policy.fromRules([rule("read", ".env", "deny"), rule("read", "*", "ask")]),
+        "read",
+      ),
+    ).toEqual([])
   })
 })
 
@@ -198,6 +263,23 @@ describe("Permission", () => {
       yield* setRules([])
       expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "ask" })
       expect(yield* service.get(Permission.ID.create("per_test"))).toBeDefined()
+    }),
+  )
+
+  it.effect("denies when Unattended is empty and an evaluate hook downgrades allow to ask", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
+      const hooks = yield* PluginHooks.Service
+      const service = yield* Permission.Service
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          event.effect = "ask"
+        }),
+      )
+      const error = yield* service
+        .assert(assertion())
+        .pipe(Effect.provideService(Permission.Unattended, []), Effect.flip)
+      expect(error).toBeInstanceOf(Permission.BlockedError)
     }),
   )
 

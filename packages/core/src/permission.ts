@@ -210,8 +210,14 @@ const layer = Layer.effect(
       const unattended = yield* Unattended
       if (event.effect !== "ask" || unattended === undefined)
         return { effect: event.effect, message: event.message, policy: effective }
-      const settled = PermissionPolicy.override(effective, unattended)
-      if (PermissionPolicy.evaluateAll(settled, input.action, input.resources) === "allow")
+      // When an evaluate hook downgraded `allow` to `ask`, unattended rules must explicitly allow the request
+      // rather than inheriting the pre-hook `allow` from `effective`.
+      const settled =
+        effect === "ask" ? PermissionPolicy.override(effective, unattended) : PermissionPolicy.fromRules(unattended)
+      if (
+        (effect === "ask" || input.resources.length > 0) &&
+        PermissionPolicy.evaluateAll(settled, input.action, input.resources) === "allow"
+      )
         return { effect: "allow" as const, policy: effective }
       return {
         effect: "deny" as const,
