@@ -166,10 +166,11 @@
     background: transparent;
     border: 0;
 
+    /* A see-through wash over the stage: it darkens the dots under it on the light stage, lightens them on the dark. */
     @media (hover: hover) and (pointer: fine) {
       &:hover {
         color: var(--stats-text);
-        background: var(--stats-layer-2);
+        background: light-dark(rgb(0 0 0 / 0.07), rgb(255 255 255 / 0.1));
       }
     }
   }
