@@ -255,13 +255,24 @@ const layer = Layer.effect(
     const watches = yield* FiberMap.make<ID>()
 
     /**
+     * Runs `effect` with `owner`'s Session capabilities. A plugin provides its instance's selector, which can serve the
+     * instance while it is still booting.
+     */
+    const inSession =
+      (owner: SessionSchema.Info) =>
+      <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        Effect.flatMap(Effect.serviceOption(Instance.Service), (selector) =>
+          Option.getOrElse(selector, () => instances).provide(owner)(effect),
+        )
+
+    /**
      * The agent a run's child Session starts with, if `owner` could start it with the subagent tool: not hidden, not
      * primary-only, within the depth limit and already allowed in the owner's current Location. The code/tools
      * authorized when the automation was created do not grant permission to start a child.
      */
     const subagent = (owner: SessionSchema.Info, id: Agent.ID, invocation?: Invocation) =>
       Effect.gen(function* () {
-        yield* Plugin.awaitActivation
+        yield* AutomationCode.awaitPlugins
         const location = yield* Location.Service
         if (location.project.id !== owner.projectID)
           return yield* new InvalidError({ reason: "The creating session's location is no longer in its project" })
@@ -296,7 +307,7 @@ const layer = Layer.effect(
             ),
           )
         return agent
-      }).pipe(instances.provide(owner))
+      }).pipe(inSession(owner))
 
     /** Runs `effect` in the Location of `directory`; fails with DirectoryNotFoundError when the folder is gone. */
     const inDirectory =
@@ -1096,7 +1107,7 @@ const layer = Layer.effect(
       if (action.type === "shell") {
         if (!owner) return yield* new InvalidError({ reason: "A shell action needs a session" })
         yield* AutomationShell.authorize(owner, input.name, trigger, action, invocation).pipe(
-          instances.provide(owner),
+          inSession(owner),
           Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
         )
         return action
