@@ -145,6 +145,8 @@ export type TimelineToolReveal = {
   consume: (entryKey: string) => void
   attempted: (target: string, found: boolean) => void
   register: (reveal: (target: string) => boolean) => void
+  /** The reader moved the view, by any input. A call that loads later must not take it from where they went. */
+  readerMoved: () => void
 }
 
 type ViewProps = {
@@ -1192,6 +1194,8 @@ export function createTimelineVirtualizer(input: Input) {
     scrollEvent.maxScroll = maxScroll
     scrollEvent.reader = seen.reader
     seen.reader = 0
+
+    if (scrollEvent.reader !== 0) input.reveal?.readerMoved()
     input.follow.dispatch(scrollEvent)
     dispatchCold(CHECK_REQUESTED)
     input.onScheduleScrollState(root)

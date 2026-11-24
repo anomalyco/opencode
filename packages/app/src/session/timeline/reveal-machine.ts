@@ -25,7 +25,10 @@ export type RevealSeekEvent =
       readonly oldestAssistantID: string | undefined
       readonly history: HistorySeekStatus
     }
-  /** The reader scrolled or pressed in the timeline, so a call found later would move the view against them. */
+  /**
+   * The reader moved the view by any input, pressed in the timeline, or asked to go somewhere else. A call found
+   * later would take the view from where they went.
+   */
   | { readonly type: "seek.cancelled" }
 
 /** Load the next older page toward the call. */
@@ -36,7 +39,7 @@ export type RevealSeekTransition = {
   readonly effects: readonly RevealSeekEffect[]
 }
 
-// Shared for the dispatch on every scroll gesture, so it allocates nothing.
+// Shared, so ending a seek allocates no event.
 export const SEEK_CANCELLED_EVENT: RevealSeekEvent = Object.freeze({ type: "seek.cancelled" })
 
 const IDLE: RevealSeekState = Object.freeze({ status: "idle" })

@@ -184,6 +184,90 @@ test.describe("timeline history", () => {
     expect(oldest).toBeGreaterThan(0)
   })
 
+  // The search for the call ended only on input the timeline handles itself. A native key or a drag of the scrollbar
+  // thumb left it running, and the call took the view from wherever the reader had gone.
+  test("a reader who moves on while a shell's call is sought is not taken to it", async ({ page }) => {
+    const history = historyMessages(120)
+    const text = Array.from({ length: 40 }, (_, index) => `Paragraph ${index}.`).join("\n\n")
+
+    const call = assistantMessage(
+      [
+        toolPart(
+          "prt_sought_call",
+          "shell",
+          "completed",
+          { command: "bun serve.ts", background: true },
+          { output: "listening", metadata: { shellID: "sh_00109_history_d_shell", status: "running" } },
+        ),
+      ],
+      { id: "msg_00109_history_c_call", parentID: "msg_00109_history_a_user", created: 1690001092000 },
+    )
+
+    // The notice is on the newest page, above a long reply. Its call is on the page before.
+    const messages: SessionMessageInfo[] = [
+      ...history.slice(0, 220),
+      call,
+      ...history.slice(220),
+      {
+        id: "msg_00120_shell_finished",
+        type: "synthetic",
+        text: '<shell id="sh_00109_history_d_shell" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+        description: "bun serve.ts",
+        metadata: { source: "shell", shellID: "sh_00109_history_d_shell", state: "completed" },
+        time: { created: 1690001200000 },
+      },
+      userMessage([textPart("prt_sought_prompt", "Summarise the run")], {
+        id: "msg_00121_later_a_user",
+        created: 1690001210000,
+      }),
+      assistantMessage([textPart("prt_sought_reply", text)], {
+        id: "msg_00121_later_b_assistant",
+        parentID: "msg_00121_later_a_user",
+        created: 1690001211000,
+      }),
+    ]
+
+    const older = Promise.withResolvers<void>()
+    const requests: { before?: string; phase: "start" | "end" }[] = []
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(16, limit))
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+      beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+      onMessages: (request) => requests.push(request),
+    })
+
+    const scroller = timelineScroller(page)
+    const notice = scroller.getByRole("button", { name: /^Shell finished/ })
+    const end = scroller.getByText("Paragraph 39.", { exact: true })
+    await expect(end).toBeInViewport()
+    await scroller.hover()
+    await expect(async () => {
+      await page.mouse.wheel(0, -200)
+      await expect(notice).toBeInViewport({ timeout: 1_000 })
+    }).toPass()
+    await notice.click()
+    await expect.poll(() => requests.some((request) => request.before && request.phase === "start")).toBe(true)
+
+    // A key the timeline leaves to the browser: the reader goes back to the end.
+    await page.keyboard.press("Control+End")
+    await expect(end).toBeInViewport()
+    const height = await scroller.evaluate((element) => element.scrollHeight)
+
+    older.resolve()
+    // The page with the call has landed above the reader.
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+    // Run the frames in which a reveal that was still to come would scroll.
+    await page.clock.install()
+    await page.clock.runFor(1_000)
+    await expect(end).toBeInViewport()
+    await expect(scroller.locator('[data-timeline-part-id="prt_sought_call"]')).not.toBeInViewport()
+  })
+
   test("restoring a paged transcript waits for another upward scroll before loading history", async ({ page }) => {
     const id = "ses_history_restore"
     const other = "ses_history_other"

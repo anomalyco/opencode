@@ -204,6 +204,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   let resumeFrame: (() => void) | undefined
 
   const resume = (behavior?: ScrollBehavior) => {
+    endRevealSeek()
     cursor.clear()
     const attempt = follow.beginReturn()
     // Scrolls on the next frame, before it paints. A submit resumes from its key handler right after changing the
@@ -239,12 +240,21 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       return
     }
 
+    endRevealSeek()
     cursor.jump(messages[target].id, "auto")
+  }
+
+  const seekingReveal = () => revealSeekTarget(untrack(() => revealSeek()[0]())) !== undefined
+
+  // The reader moved the view or asked to go somewhere else. A call that loads later would take the view from
+  // where they went, so the search for it ends. Runs on every scroll the reader makes, so it checks first.
+  function endRevealSeek() {
+    if (seekingReveal()) dispatchRevealSeek(SEEK_CANCELLED_EVENT)
   }
 
   // A gesture inside a nested scrollable region scrolls that region, not the timeline.
   const markUserScroll = (target?: EventTarget | null) => {
-    const seeking = revealSeekTarget(untrack(() => revealSeek()[0]())) !== undefined
+    const seeking = seekingReveal()
 
     if (!scroller || (!seeking && !hasFreshCursorOrSeek(untrack(cursor.state)))) return
     const element = target instanceof Element ? target : undefined
@@ -466,10 +476,14 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   return {
     actions: {
       navigateMessage,
-      jumpToMessage: (id: string) => cursor.jump(id, "auto"),
+      jumpToMessage: (id: string) => {
+        endRevealSeek()
+        cursor.jump(id, "auto")
+      },
       page: (direction: 1 | -1) => page(direction),
       // Find and tool reveals move the view like a scroll, so the chosen prompt is no longer where navigation starts.
       revealMessage: (id: string, partID?: string) => {
+        endRevealSeek()
         cursor.dispatch(SCROLL_MOVED_EVENT)
         revealMessage(id, partID)
       },
@@ -514,6 +528,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
         register: (reveal: (target: string) => boolean) => {
           revealPart = reveal
         },
+        readerMoved: endRevealSeek,
       },
       setScrollRef,
       setScrollToEnd: (scroll: (behavior?: ScrollBehavior) => void) => {

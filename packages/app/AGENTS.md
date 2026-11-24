@@ -130,8 +130,9 @@ This section is the single source for what may move or restyle the session timel
 - To check by hand: click a tool header, a link and a notice in the timeline, then scroll up and down with the wheel. The timeline must follow the wheel.
 - A link can name content that is older than the loaded messages, such as the call of a shell whose notice the reader clicks. The timeline pages history toward it and moves once, when it loads (`src/session/timeline/reveal-machine.ts`).
   - Page toward a target only while something says where it can be. A shell's call is older than the shell, and IDs ascend with creation, so the search ends once an assistant message older than the shell is loaded. Without that bound a target that does not exist loads the whole session: a shell that a Code Mode script started has no call, which was the case for 40 of 265 shell notices in four real sessions.
-  - The reader's scroll or press in the timeline ends the search. A move that lands after the reader has gone elsewhere is one they did not ask for.
-  - Keeper: "a shell notice opens its call from an older page, paging back only as far as the call" in `e2e/regression/timeline-history.spec.ts`.
+  - Any movement of the reader ends the search, and so does a request to go somewhere else (Jump to latest, a prompt, a Find hit). A move that lands after the reader has gone elsewhere is one they did not ask for.
+  - Take the reader's movement from the scroll event (`reader !== 0`, see "Following the end"), not from a list of inputs. The search once ended only on the wheel, a touch, the timeline's own scroll keys and a press. A drag of the scrollbar thumb, Ctrl+End or a page key on a focused button left it running, and the call then took the view 880 to 4,700 px from where the reader had gone.
+  - Keepers: "a shell notice opens its call from an older page, paging back only as far as the call" and "a reader who moves on while a shell's call is sought is not taken to it" in `e2e/regression/timeline-history.spec.ts`.
 
 ### Scroll writes
 
