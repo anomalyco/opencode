@@ -261,6 +261,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   // Load the card's font with the page, so the preview is ready the moment the editor opens.
   onMount(() => void loadShareFonts())
 
+  // Opening sets the settings itself (from last time, or at random); only changes made after are remembered.
+  let opening = false
   createEffect(() => {
     const value = request()
     if (!value) return
@@ -268,15 +270,20 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setNotice(undefined)
     // Stepping to another section keeps the editor open, its music and its options.
     if (dialog?.open) return
-    setFormat("video")
+    opening = true
     setMenu(undefined)
     setSheet(false)
-    shuffle()
-    // Opens silent: no music until one is chosen (or Shuffle picks one), and unmuted.
-    setTrack("none")
-    setMuted(false)
-    // The card it opens on is where undo stops.
+    // The settings from last time, once they were changed; otherwise a card made at random that opens silent, with no
+    // music until one is chosen (or Shuffle picks one).
+    if (!restoreSettings()) {
+      setFormat("video")
+      shuffle()
+      setTrack("none")
+      setMuted(false)
+    }
+    // The card it opens on is where undo stops; changes from here on are remembered.
     queueMicrotask(() => {
+      opening = false
       history.past = []
       history.future = []
     })
@@ -430,9 +437,37 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       history.past.push(last)
       history.future = []
     }
+    // Remembered for next time: every change made in the open editor, past its opening.
+    if (!opening && dialog?.open && last?.section === now.section) saveSettings(now)
     restoring = false
     last = now
   })
+  // The remembered settings, in this browser: all but the date, which belongs to its section.
+  const settingsKey = "opencode-data-share-settings"
+  const saveSettings = (value: ReturnType<typeof settings>) => {
+    const { section, day, ...kept } = value
+    try {
+      localStorage.setItem(settingsKey, JSON.stringify(kept))
+    } catch {
+      // Storage full or blocked: the settings just aren't remembered.
+    }
+  }
+  const restoreSettings = () => {
+    const saved = parseSettings(localStorage.getItem(settingsKey))
+    if (!saved) return false
+    batch(() => {
+      setFormat(saved.format)
+      setLead(saved.lead)
+      setChartStyle(saved.chart)
+      setShareOption("layout", saved.layout)
+      setShareOption("size", saved.size)
+      setShareOption("theme", saved.theme)
+      setTrack(saved.track)
+      setMuted(saved.muted)
+      setFixed(saved.fixed)
+    })
+    return true
+  }
   const travel = (redo: boolean) => {
     const target = (redo ? history.future : history.past).pop()
     const now = last
@@ -1094,6 +1129,35 @@ function tokens(code: string) {
       ]
     return [{ kind: match[6] ? "punctuation" : "space", text: match[0] }]
   })
+}
+
+// Settings saved by an earlier visit, if they're still all valid choices.
+function parseSettings(raw: string | null) {
+  const value: unknown = (() => {
+    try {
+      return raw ? JSON.parse(raw) : undefined
+    } catch {
+      return undefined
+    }
+  })()
+  if (!value || typeof value !== "object") return undefined
+  const item = value as Record<string, unknown>
+  const one = <T extends string>(key: string, choices: readonly T[]) => choices.find((choice) => choice === item[key])
+  const format = one("format", ["video", "image", "embed"] as const)
+  const lead = one("lead", ["top", "total"] as const)
+  const chart = one("chart", ["bars", "race"] as const)
+  const layout = one(
+    "layout",
+    layouts.map((entry) => entry.value),
+  )
+  const size = one(
+    "size",
+    sizes.map((entry) => entry.value),
+  )
+  const theme = one("theme", ["dark", "light", "leader"] as const)
+  const track = one("track", ["none", ...shareTracks.map((entry) => entry.id)])
+  if (!format || !lead || !chart || !layout || !size || !theme || !track) return undefined
+  return { format, lead, chart, layout, size, theme, track, muted: item.muted === true, fixed: item.fixed === true }
 }
 
 function pick<T>(items: readonly T[]) {
