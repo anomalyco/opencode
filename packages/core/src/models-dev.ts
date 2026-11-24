@@ -290,16 +290,23 @@ const normalize = Effect.fnUntraced(function* (
       return [
         { ...base, variants },
         ...tiers.flatMap((tier) => {
-          // "priority" is the tier people know as fast.
-          const name = tier === "priority" && !tiers.includes("fast") ? "fast" : tier
+          const mode = modes.find(([key, options]) => (options.service_tier ?? key) === tier)
+          // A mode for the tier keeps its ID, so a saved session asks for the same tier, unless another model already
+          // has that ID. Otherwise "priority" is the tier people know as fast.
+          const name =
+            mode && !ids.has(Model.ID.make(`${source.model.id}-${mode[0]}`))
+              ? mode[0]
+              : tier === "priority" && !tiers.includes("fast")
+                ? "fast"
+                : tier
           const speedID = Model.ID.make(`${source.model.id}-${name}`)
-          if (ids.has(speedID)) return []
-          // Until every tier has a multiplier, a mode for the tier may still carry its price.
-          const mode = modes.find(([key, options]) => (options.service_tier ?? key) === tier)?.[1]
+          // A mode's ID stays with the tier it asks for, even when another tier has that name.
+          if (ids.has(speedID) || (!mode && modes.some(([key]) => key === name))) return []
           return [
             modelInfo(providerID, { packageName, baseURL }, speedID, source, {
               ...speed(name, tier),
-              cost: modeCost(source.model, baseCost, tier, { cost: mode?.cost }),
+              // Until every tier has a multiplier, a mode for the tier may still carry its price.
+              cost: modeCost(source.model, baseCost, tier, { cost: mode?.[1].cost }),
               request: tierRequest(source.route.protocol, tier),
             }),
           ]
