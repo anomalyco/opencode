@@ -316,28 +316,13 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                         <button
                           type="button"
                           data-slot="chip"
-                          data-variant="wide"
+                          data-variant="text"
                           aria-pressed={format() === item}
                           onClick={() => {
                             setFormat(item)
                             setPlaying(true)
                           }}
                         >
-                          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                            <Show
-                              when={item === "video"}
-                              fallback={
-                                <path
-                                  d="M2.75 3.25h10.5v9.5H2.75zM2.75 10.5l3.25-3 2.5 2.25 1.75-1.5 3 2.75"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  stroke-width="1.5"
-                                />
-                              }
-                            >
-                              <path d="M5 3.5v9l7-4.5-7-4.5Z" fill="currentColor" />
-                            </Show>
-                          </svg>
                           <span>{item === "image" ? "Image" : "Video"}</span>
                         </button>
                       )}
@@ -350,11 +335,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                           type="button"
                           data-slot="chip"
                           aria-label={item.label}
-                          data-tip={item.label}
                           aria-pressed={options().layout === item.value}
                           onClick={() => setShareOption("layout", item.value)}
                         >
                           <LayoutGlyph layout={item.value} />
+                          <small>{item.label}</small>
                         </button>
                       )}
                     </For>

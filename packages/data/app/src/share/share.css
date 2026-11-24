@@ -461,7 +461,7 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    height: 56px;
+    height: 64px;
     padding: 0 4px;
     font-size: 12px;
     color: var(--stats-muted);
@@ -496,6 +496,12 @@
       gap: 8px;
       height: 36px;
       padding: 0 9px;
+      font-size: 13px;
+    }
+
+    /* Type: the label alone, centred, as tall as the wide choices. */
+    &[data-variant="text"] {
+      height: 36px;
       font-size: 13px;
     }
 
@@ -739,6 +745,7 @@
     }
 
     /* Taller rows for fingers, the same height for every row of wide choices. */
+    [data-slot="chip"][data-variant="text"],
     [data-slot="chip"][data-variant="wide"],
     [data-slot="track"] {
       height: 44px;
