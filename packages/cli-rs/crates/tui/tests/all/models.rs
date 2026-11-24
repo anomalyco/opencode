@@ -595,6 +595,30 @@ fn a_model_runs_at_its_last_speed_and_lists_name_it_once() {
 }
 
 #[test]
+fn a_variant_saved_for_a_speed_before_speeds_shared_it_still_applies() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(home.path());
+    std::fs::create_dir_all(&paths.state).unwrap();
+    let preferences = json!({
+        "recent": [],
+        "favorite": [],
+        "variant": { "anthropic/claude-sonnet-fast": "low" },
+        "speed": { "anthropic/claude-sonnet": "fast" },
+    });
+    std::fs::write(paths.state.join("model.json"), preferences.to_string()).unwrap();
+    let deps = Deps { roots: support::roots(paths, "test"), route: Route::Home, ..support::deps(Server::new()) };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || local.ready() && local.catalog_ready() && !local.agents().is_empty()));
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet-fast")));
+    assert_eq!(local.variant().as_deref(), Some("low"));
+    // The speeds share it, so the standard speed finds it too.
+    local.set_speed(None);
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet")));
+    assert_eq!(local.variant().as_deref(), Some("low"));
+}
+
+#[test]
 fn leader_a_switches_the_agent() {
     let h = mount();
     h.app.press("ctrl+x");

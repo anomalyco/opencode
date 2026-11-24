@@ -619,8 +619,16 @@ impl Local {
     fn preferred(&self, model: &Model) -> Selection {
         let configured = self.agent().and_then(|agent| agent.model);
         let fallback = self.configured();
-        // A model's speeds share its variant.
-        let preferred = self.state.borrow().preference.variant.get(&self.standard_model(model).key()).cloned();
+        // A model's speeds share its variant. Preferences saved before then may name one of its speeds instead.
+        let standard = self.standard_model(model);
+        let candidates: Vec<Model> = [standard.clone(), model.clone()]
+            .into_iter()
+            .chain(self.speeds_of(&standard).into_iter().map(|item| Model::new(&item.provider_id.0, item.id)))
+            .collect();
+        let preferred = {
+            let state = self.state.borrow();
+            candidates.iter().find_map(|item| state.preference.variant.get(&item.key()).cloned())
+        };
         let variant = preferred
             .or_else(|| {
                 configured
