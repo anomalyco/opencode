@@ -44,6 +44,7 @@ import { EventStreamRejectedError, EventStreamTerminatedError, reopen } from "./
 import { canonicalJson } from "../util/canonical-json.js"
 import { McpConnection } from "./connection.js"
 import { McpPool } from "./pool.js"
+import { McpToggles } from "./toggles.js"
 
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
@@ -396,6 +397,8 @@ export const layer = (options?: Options) =>
       const credentials = yield* Credential.Service
       const fetch = yield* FetchHttpClient.Fetch
       const pool = yield* McpPool.Service
+      const mcpToggles = yield* McpToggles.Service
+      const toggles = mcpToggles.forLocation(location)
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
@@ -811,6 +814,8 @@ export const layer = (options?: Options) =>
       })
 
       const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
+        // A config change decides again whether the server is on.
+        toggles.delete(name)
         const previous = entries.get(name)
         if (previous) yield* disposeServer(previous)
         const entry = makeEntry(name, serverConfig, yield* Clock.currentTimeMillis)
@@ -831,6 +836,7 @@ export const layer = (options?: Options) =>
 
       const removeServer = Effect.fnUntraced(function* (name: ServerName, entry: ServerEntry) {
         yield* disposeServer(entry)
+        toggles.delete(name)
         // Credentials are keyed by name + URL and intentionally survive removal for a later re-add.
         entries.delete(name)
         yield* bus.publish(McpEvent.StatusChanged, { server: name })
@@ -947,7 +953,8 @@ export const layer = (options?: Options) =>
 
           // Initial connections stay asynchronous so one slow server does not block Location startup.
           for (const [name, entry] of entries) {
-            if (entry.config.disabled) {
+            const enabled = toggles.get(name) ?? !entry.config.disabled
+            if (!enabled) {
               entry.status = { status: "disabled" }
               entry.startup.openUnsafe()
               yield* bus.publish(McpEvent.StatusChanged, { server: name })
@@ -1052,6 +1059,7 @@ export const layer = (options?: Options) =>
               const entry = yield* requireServer(name)
               yield* entry.connection.stop
               yield* entry.connection.start
+              toggles.set(name, true)
             }).pipe(locks.withLock(name)),
           )
         }),
@@ -1062,6 +1070,7 @@ export const layer = (options?: Options) =>
               const entry = yield* requireServer(name)
               yield* entry.connection.stop
               entry.status = { status: "disabled" }
+              toggles.set(name, false)
               yield* bus.publish(McpEvent.StatusChanged, { server: name })
             }).pipe(locks.withLock(name)),
           )
@@ -1283,6 +1292,7 @@ export function configured(options?: Options) {
       Flag.node,
       httpFetch,
       McpPool.node,
+      McpToggles.node,
     ],
   })
 }
