@@ -1015,6 +1015,55 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         changed.resources = callback
       },
     }
+    // A modern connection carries tool, prompt and resource changes on a `subscriptions/listen` stream the SDK opens
+    // for us behind the list-changed handlers, and the SDK never reopens it. A stream the server ends or drops leaves
+    // the catalog frozen while the server still reports connected, so own the stream: close the SDK's copy and open
+    // ours, refreshing after each open because a change announced while the stream was down is not replayed (#66072).
+    const autoOpened = client.autoOpenedSubscription
+    if (autoOpened) {
+      const filter = autoOpened.honoredFilter
+      yield* Effect.sync(() => void autoOpened.close().catch(() => {}))
+      const follow = Effect.acquireRelease(
+        Effect.tryPromise({
+          try: (signal) => client.listen(filter, { timeout: catalog.timeout, signal }),
+          catch: (error) => error,
+        }),
+        (subscription) => Effect.sync(() => void subscription.close().catch(() => {})),
+        // Opening waits for the server's ack; without this, closing the connection would wait for it too.
+        { interruptible: true },
+      ).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            changed.tools()
+            changed.prompts()
+            changed.resources()
+          }),
+        ),
+        // A close fails too, so the delay covers a stream the server ends at once, not only a refused open.
+        Effect.flatMap((subscription) =>
+          Effect.promise(() => subscription.closed).pipe(
+            Effect.flatMap((reason) =>
+              reason === "local"
+                ? Effect.interrupt
+                : Effect.fail(new Error(`the server closed the list change subscription (${reason})`)),
+            ),
+          ),
+        ),
+      )
+      yield* follow.pipe(
+        Effect.retry(
+          reopen.pipe(
+            Schedule.setInputType<unknown>(),
+            Schedule.while(({ input }) => !(input instanceof ProtocolError)),
+          ),
+        ),
+        Effect.tapError((error) =>
+          Effect.logWarning("MCP list change listener stopped", { server, error: describe(error) }),
+        ),
+        Effect.ignore,
+        Effect.forkScoped,
+      )
+    }
     // A server whose event types change at runtime says so on a `subscriptions/listen` stream; relisting keeps each
     // type's mirrored headers current. Open streams keep running.
     const settings = client.getServerCapabilities()?.extensions?.[EVENTS]
