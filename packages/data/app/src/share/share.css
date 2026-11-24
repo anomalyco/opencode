@@ -568,9 +568,10 @@
     width: 18px;
     height: 18px;
 
+    /* A light grey fill in the size's shape, like the layout icons' bars. */
     b {
-      box-sizing: border-box;
-      border: 1.5px solid currentColor;
+      background: currentColor;
+      opacity: 0.3;
     }
   }
 

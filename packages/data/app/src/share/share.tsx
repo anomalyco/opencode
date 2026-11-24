@@ -126,6 +126,10 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     onCleanup(() => clearTimeout(timer))
   })
 
+  // The preview's clock. Changing the layout, size or style redraws on the same clock, so the animation and its
+  // music carry on; only a new card, track, type or play state starts it again.
+  let clock = { key: "", start: 0, loop: -1 }
+
   // The preview: the still for an image; for a video, the animation on a loop with its soundtrack.
   createEffect(() => {
     const value = card()
@@ -142,23 +146,20 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       return drawShareCard(ctx, value, opts, Infinity, timing())
     }
     const length = shareDuration(value, opts, timing()) + 0.6
-    const start = performance.now()
-    let loop = -1
+    const key = [value.id, sound?.id ?? "none", format(), playing()].join(" ")
+    if (clock.key !== key) clock = { key, start: performance.now(), loop: -1 }
     const frame = () => {
-      const elapsed = (performance.now() - start) / 1000
+      const elapsed = (performance.now() - clock.start) / 1000
       const turn = Math.floor(elapsed / length)
-      if (turn !== loop) {
-        loop = turn
+      if (turn !== clock.loop) {
+        clock.loop = turn
         restartAudio(sound)
       }
       drawShareCard(ctx, value, opts, elapsed - turn * length, timing())
       handle = requestAnimationFrame(frame)
     }
     let handle = requestAnimationFrame(frame)
-    onCleanup(() => {
-      cancelAnimationFrame(handle)
-      audio?.pause()
-    })
+    onCleanup(() => cancelAnimationFrame(handle))
   })
 
   const restartAudio = (sound: ShareTrack | undefined) => {
