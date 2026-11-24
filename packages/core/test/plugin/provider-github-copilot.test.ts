@@ -793,6 +793,86 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("exposes and falls back to Auto when /models marks entries with top-level auto: true", () =>
+    Effect.gen(function* () {
+      const state = { listed: false, available: true }
+      const api = HttpClient.make((request) =>
+        Effect.gen(function* () {
+          if (request.url.endsWith("/copilot_internal/user"))
+            return HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))
+          if (request.url.endsWith("/models")) {
+            state.listed = true
+            return HttpClientResponse.fromWeb(
+              request,
+              Response.json({
+                data: [
+                  {
+                    model_picker_enabled: false,
+                    auto: true,
+                    id: "free-auto",
+                    name: "Free Auto",
+                    version: "free-auto-2026-08-01",
+                    supported_endpoints: ["/responses"],
+                    capabilities: {
+                      family: "gpt",
+                      limits: { max_prompt_tokens: 922_000, max_output_tokens: 128_000 },
+                      supports: { tool_calls: true, vision: true },
+                    },
+                  },
+                  {
+                    model_picker_enabled: false,
+                    id: "hidden-direct",
+                    name: "Hidden Direct",
+                    version: "hidden-direct-2026-08-01",
+                    capabilities: {
+                      family: "gpt",
+                      limits: { max_prompt_tokens: 128_000, max_output_tokens: 64_000 },
+                      supports: { tool_calls: true },
+                    },
+                  },
+                ],
+              }),
+            )
+          }
+          if (!state.available) return HttpClientResponse.fromWeb(request, new Response(null, { status: 503 }))
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              session_token: "token-free-auto",
+              expires_at: 4_000_000_000,
+              selected_model: { id: "free-auto" },
+            }),
+          )
+        }),
+      )
+      yield* connect({ apiEndpoint: "https://copilot.test" })
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, api))
+      const models = yield* Model.Service
+      yield* advance(() => state.listed)
+      yield* drain
+
+      expect(
+        (yield* models.available()).filter((model) => model.providerID === Provider.ID.githubCopilot).map((m) => m.id),
+      ).toEqual([Model.ID.make("auto")])
+
+      const hooks = yield* PluginHooks.Service
+      const ids = yield* sessions()
+      const resolve = (sessionID: Session.ID) =>
+        hooks
+          .trigger("session", "experimental.model.resolve", {
+            sessionID,
+            agent: Agent.ID.make("build"),
+            kind: "primary",
+            model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("auto") }),
+          })
+          .pipe(Effect.map((event) => (event.model.id === "auto" ? undefined : String(event.model.id))))
+
+      expect(yield* resolve(ids.parent)).toBe("free-auto")
+      state.available = false
+      expect(yield* resolve(ids.child)).toBe("free-auto")
+    }),
+  )
+
   it.effect("disables gpt-5-chat-latest before Copilot language selection", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service

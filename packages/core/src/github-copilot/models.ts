@@ -9,6 +9,7 @@ import { Provider } from "../provider.js"
 const RemoteModel = Schema.Struct({
   model_picker_enabled: Schema.Boolean,
   is_chat_fallback: Schema.optional(Schema.Boolean),
+  auto: Schema.optional(Schema.Boolean),
   id: Schema.String,
   name: Schema.String,
   version: Schema.String,
@@ -128,8 +129,13 @@ export function derive(baseURL: string, remote: Snapshot, existing: readonly Mod
 /** Copilot's Auto model. Copilot's router picks the model that serves each Session from the account's Auto pool. */
 export const auto = Model.ID.make("auto")
 
+/** Whether GitHub advertises a model as eligible for the account's Auto pool. */
+export function isAuto(model: UsableModel) {
+  return model.auto === true || model.billing?.auto_discount !== undefined
+}
+
 export function autoModel(baseURL: string, remote: Snapshot) {
-  const pool = Array.from(remote.values()).filter((model) => model.billing?.auto_discount !== undefined)
+  const pool = Array.from(remote.values()).filter(isAuto)
   if (pool.length === 0) return
   const route = routeFor(auto, "chat", baseURL)
   const limits = pool.map((model) => model.capabilities.limits)
