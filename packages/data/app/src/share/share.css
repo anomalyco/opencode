@@ -554,10 +554,16 @@
     }
   }
 
+  /* Layout and size drawings are light grey until chosen, then the text colour. */
   [data-slot="glyph"] {
     width: 36px;
     height: 25px;
     color: var(--stats-text);
+    opacity: 0.3;
+  }
+
+  [data-slot="chip"][aria-pressed="true"] :is([data-slot="glyph"], [data-slot="aspect"] b) {
+    opacity: 1;
   }
 
   /* An 18px slot for every size; the frame inside has the size's shape. */

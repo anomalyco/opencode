@@ -467,22 +467,9 @@ function TrackOption(props: {
           fallback={
             <Show when={!props.cover}>
               <svg width="16" height="16" viewBox="0 0 16 16">
-                {/* No music: a pair of beamed notes, struck through; the notes are cut 1px clear of the line either side. */}
-                <mask id="share-no-music-cut">
-                  <rect width="16" height="16" fill="#fff" />
-                  <path d="M14 2 2 14" stroke="#000" stroke-width="3.4" />
-                </mask>
-                <g mask="url(#share-no-music-cut)">
-                  <path
-                    d="M5.5 11.25V4.5l7-1.5v7M5.5 6.25l7-1.5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.4"
-                  />
-                  <circle cx="4.25" cy="11.5" r="1.6" fill="currentColor" />
-                  <circle cx="11.25" cy="10.25" r="1.6" fill="currentColor" />
-                </g>
-                <path d="M14 2 2 14" stroke="currentColor" stroke-width="1.4" />
+                {/* No music: the familiar muted speaker. */}
+                <path d="M2 6h2.75L8.5 3v10L4.75 10H2Z" fill="currentColor" />
+                <path d="m10.5 6 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
               </svg>
             </Show>
           }
@@ -515,20 +502,20 @@ function TrackOption(props: {
   )
 }
 
-// The layout icons: only what sits above the chart. Two headline lines, the big number as a block, or a single title
+// The layout icons, centred: only what sits above the chart. Two headline lines, the big number as a block, or a single title
 // line.
 function LayoutGlyph(props: { layout: ShareOptions["layout"] }) {
   return (
     <svg data-slot="glyph" viewBox="0 0 40 28" aria-hidden="true">
       <Show when={props.layout === "headline"}>
         <rect x="4" y="9" width="32" height="3" fill="currentColor" />
-        <rect x="4" y="16" width="22" height="3" fill="currentColor" />
+        <rect x="9" y="16" width="22" height="3" fill="currentColor" />
       </Show>
       <Show when={props.layout === "number"}>
-        <rect x="4" y="7" width="22" height="14" fill="currentColor" />
+        <rect x="9" y="7" width="22" height="14" fill="currentColor" />
       </Show>
       <Show when={props.layout === "chart"}>
-        <rect x="4" y="12.5" width="20" height="3" fill="currentColor" />
+        <rect x="10" y="12.5" width="20" height="3" fill="currentColor" />
       </Show>
     </svg>
   )
