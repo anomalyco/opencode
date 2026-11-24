@@ -56,18 +56,18 @@ export const shareSizes = {
   "16:9": [1920, 1080],
 } as const
 
-// The Data site's palettes (routes/index.css); dark matches the Open Graph cards (og/card.ts).
+// The Data site's palettes (routes/index.css). Dark sits on the site's own dark page colour (--stats-bg).
 const palettes = {
   dark: {
-    background: "#161616",
+    background: "#0c0c0c",
     text: "#ffffff",
     muted: "#c4c4c4",
     faint: "#8f8f8f",
     line: "#ffffff1f",
-    dot: "#2f2f2f",
+    dot: "#1e1e1e",
     meter: "#5e5e5e",
-    idle: "#2e2e2e",
-    track: "#242424",
+    idle: "#262626",
+    track: "#1c1c1c",
     accent: "#8190ff",
     mark: "#4b4b4b",
   },
