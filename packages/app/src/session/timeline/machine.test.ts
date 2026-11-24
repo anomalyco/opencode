@@ -91,6 +91,45 @@ test.each<{ name: string; events: FollowEvent[]; following: boolean }>([
     following: true,
   },
   {
+    // A cold link to a message detached, then the rows' real sizes shortened the scroll range to where the view
+    // was. That counted as arriving at the end, so the link was dropped and the session opened on its latest message.
+    name: "stays where navigation sent the view when a shrinking scroll range clamps it to the end",
+    events: [{ type: "detach" }, scroll(987, 1380, 987, 1380)],
+    following: false,
+  },
+  {
+    name: "stays where navigation sent the view when a shrinking scroll range clamps it to the zoomed end",
+    events: [{ type: "detach" }, scroll(984, 1380, 987, 1380), { type: "scroll.settled", atReachableEnd: true }],
+    following: false,
+  },
+  {
+    // At the end a wheel toward it scrolls nothing, so a reader the clamp left detached there had no way back.
+    name: "resumes when a shrinking scroll range clamps a reader who scrolled away to the end",
+    events: [{ type: "scroll.intent", upward: true, overflow: true }, scroll(940, 1000), scroll(900, 940, 900, 1000)],
+    following: true,
+  },
+  {
+    name: "resumes at a clamp once a wheel or key has scrolled on from where navigation sent the view",
+    events: [
+      { type: "detach" },
+      { type: "scroll.intent", upward: true, overflow: true },
+      scroll(940, 1000),
+      scroll(900, 940, 900, 1000),
+    ],
+    following: true,
+  },
+  {
+    name: "resumes at a clamp once a touch has scrolled on from where navigation sent the view",
+    events: [
+      { type: "detach" },
+      { type: "touch.start", nested: false },
+      scroll(940, 1000),
+      { type: "touch.end", scrolling: false },
+      scroll(900, 940, 900, 1000),
+    ],
+    following: true,
+  },
+  {
     name: "resumes when the content shrinks to fit",
     events: [{ type: "detach" }, scroll(0, 300, 0, 300)],
     following: true,
