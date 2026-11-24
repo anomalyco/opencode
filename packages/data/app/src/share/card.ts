@@ -335,13 +335,14 @@ function drawIntro(
   if (options.layout === "number") {
     // On the shorter cards the number and its caption set smaller, so the chart still has room.
     const compact = ctx.canvas.height <= 1080
-    const size = fit(ctx, card.stat.value, max, compact ? 112 : 200, 700)
+    // Regular, not bold: OpenMono ships no lighter weight, and the number reads cleaner without the extra weight.
+    const size = fit(ctx, card.stat.value, max, compact ? 112 : 200, 400)
     const label = compact ? 28 : 34
     const leading = compact ? 36 : 44
     const gap = compact ? 52 : 64
     rise(ctx, time, 0.14, y + gap + size * 0.8, size * 0.8, () => {
       ctx.fillStyle = colors.text
-      ctx.font = `700 ${size}px ${font}`
+      ctx.font = `400 ${size}px ${font}`
       ctx.fillText(card.stat.value, pad - size * 0.04, y + gap + size * 0.8)
     })
     ctx.font = `400 ${label}px ${font}`
