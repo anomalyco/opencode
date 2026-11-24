@@ -509,6 +509,7 @@ test("truncates committed revert messages without changing lifetime usage", asyn
 
   try {
     await data.session.sync(sessionID)
+    await data.session.message.sync(sessionID)
     emitEvent(events, {
       id: "evt_revert_boundary_started",
       created: 1,
@@ -610,6 +611,7 @@ test("updates session location when moved", async () => {
   const events = createEventStream()
   const destination = "/tmp/opencode-moved"
   const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/ses_test/message") return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/ses_test")
       return json({
         data: {
@@ -650,6 +652,7 @@ test("updates session location when moved", async () => {
   try {
     await mounted
     await data.session.sync("ses_test")
+    await data.session.message.sync("ses_test")
     emitEvent(events, {
       id: "evt_moved_1",
       created: 1,
@@ -1235,6 +1238,7 @@ test("removes committed revert messages from local state", async () => {
   ))
 
   try {
+    await data.session.message.sync(sessionID)
     for (const [seq, inboxID] of ["msg_001", "msg_002", "msg_003"].entries()) {
       emitEvent(events, {
         id: Event.ID.create(),
@@ -1331,6 +1335,8 @@ test("tracks session status from active sessions and execution events", async ()
   let settled = false
   const calls = createFetch((url) => {
     if (url.pathname === "/api/session/active") return json({ data: { "session-active": { type: "running" } } })
+    if (url.pathname === "/api/session/session-live/message" || url.pathname === "/api/session/session-failed/message")
+      return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/session-live")
       return json({
         data: {
@@ -1385,6 +1391,7 @@ test("tracks session status from active sessions and execution events", async ()
     await wait(() => data.session.status("session-active") === "running")
     expect(data.session.status("session-idle")).toBe("idle")
     await data.session.sync("session-live")
+    await data.session.message.sync("session-live")
 
     settled = true
     emitEvent(events, {
@@ -1453,6 +1460,7 @@ test("tracks session status from active sessions and execution events", async ()
     await wait(() => data.session.status("session-live") === "idle")
 
     await data.session.sync("session-failed")
+    await data.session.message.sync("session-failed")
     emitEvent(events, {
       id: "evt_failed_execution_started",
       created: 0,
@@ -2826,6 +2834,7 @@ test("reconciles active session forms when the event stream reconnects", async (
 test("settles pending tools when a live failure arrives", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-1/message") return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/session-1/message/msg_model_1")
       return json({
         data: {
@@ -2863,6 +2872,7 @@ test("settles pending tools when a live failure arrives", async () => {
 
   try {
     await mounted
+    await sync.session.message.sync("session-1")
     emitEvent(events, {
       id: "evt_agent_1",
       created: 0,
@@ -2999,12 +3009,9 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
   const events = createEventStream()
   const sessionID = "session-1"
   const messageID = "msg_user_1"
+  const page = Promise.withResolvers<Response>()
   const calls = createFetch((url) => {
-    if (url.pathname === `/api/session/${sessionID}/message`)
-      return json({
-        data: [{ id: messageID, type: "user", text: "hello", time: { created: 0 } }],
-        cursor: {},
-      })
+    if (url.pathname === `/api/session/${sessionID}/message`) return page.promise
   }, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
@@ -3032,6 +3039,8 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
 
   try {
     await mounted
+    // A session stores its messages once its transcript is asked for, which the session route does as it mounts.
+    const reading = sync.session.message.sync(sessionID)
     const received: string[] = []
     const unsubscribe = sync.listen((event) => received.push(event.name))
     emitEvent(events, {
@@ -3061,7 +3070,13 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     ])
     expect(sync.session.input.list(sessionID)).toEqual([messageID])
 
-    await sync.session.message.sync(sessionID)
+    page.resolve(
+      json({
+        data: [{ id: messageID, type: "user", text: "hello", time: { created: 0 } }],
+        cursor: {},
+      }),
+    )
+    await reading
     expect(sync.session.message.list(sessionID)?.[0]?.metadata).toBeUndefined()
 
     emitEvent(events, {
@@ -3097,7 +3112,9 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
 
 test("skips initial instruction state and projects later updates with their message ID", async () => {
   const events = createEventStream()
-  const calls = createFetch(undefined, events)
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-1/message") return json({ data: [], cursor: {} })
+  }, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -3124,6 +3141,7 @@ test("skips initial instruction state and projects later updates with their mess
 
   try {
     await mounted
+    await sync.session.message.sync("session-1")
     emitEvent(events, {
       id: "evt_instructions_1",
       created: 0,
@@ -3440,9 +3458,10 @@ test("hydrates durable pending prompts into the visible transcript", async () =>
     payload: { text: "waiting" },
     delivery: "steer" as const,
   }
+  const page = Promise.withResolvers<Response>()
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [item] })
-    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    if (url.pathname === `/api/session/${sessionID}/message`) return page.promise
   })
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
@@ -3470,12 +3489,15 @@ test("hydrates durable pending prompts into the visible transcript", async () =>
 
   try {
     await mounted
+    // A session stores its messages once its transcript is asked for, which the session route does as it mounts.
+    const reading = sync.session.message.sync(sessionID)
     await sync.session.pending.sync(sessionID)
     expect(sync.session.message.list(sessionID)).toEqual([
       { id: item.id, ...Expected.user("waiting"), time: { created: 5 } },
     ])
 
-    await sync.session.message.sync(sessionID)
+    page.resolve(json({ data: [], cursor: {} }))
+    await reading
     expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([item.id])
   } finally {
     app.renderer.destroy()
