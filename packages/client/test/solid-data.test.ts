@@ -1715,12 +1715,15 @@ test("a kept message that was still running is read again", async () => {
 })
 
 test.each([
-  { name: "that events alone built is replaced by its first read", created: false, first: 16, more: true },
-  { name: "built since the session's creation keeps its start", created: true, first: 11, more: false },
+  { name: "that events alone built is replaced by its first read", created: undefined, first: 16, more: true },
+  { name: "built since another client created the session keeps its start", created: "event", first: 11, more: false },
+  { name: "built since this client created the session keeps its start", created: "here", first: 11, more: false },
 ])("a transcript $name", async (item) => {
   const setup = transcript(notes(item.created ? 11 : 1, 35))
   try {
-    if (item.created)
+    if (item.created === "here")
+      await setup.data.session.create({ id: "ses_refresh", location: { directory: "/project" } }).request
+    if (item.created === "event")
       setup.emit({
         id: "evt_created",
         created: 0,
@@ -2014,7 +2017,7 @@ function transcript(messages: SessionMessageInfo[]) {
     baseUrl: "http://opencode.local",
     fetch: async (input, init) => {
       const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
-      const path = url.pathname.replace("/api/session/ses_refresh", "").slice(1)
+      const path = url.pathname.replace(/^\/api\/session(\/ses_refresh)?\/?/, "")
       if (path === "") return Response.json({ data: session(0) })
       if (path === "inbox") return Response.json({ data: [] })
       const request = path + decodeURIComponent(url.search)
