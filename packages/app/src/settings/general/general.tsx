@@ -232,6 +232,7 @@ export const SettingsGeneral: Component = () => {
   const settings = useSettings()
   const mobile = createMediaQuery("(max-width: 767px)")
   const desktop = createMemo(() => platform.platform === "desktop")
+  const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
 
   const pinchZoom = createOptimisticSetting({
     source: () => (desktop() && "getPinchZoomEnabled" in platform) || undefined,
@@ -301,6 +302,19 @@ export const SettingsGeneral: Component = () => {
               <Switch checked={spellcheck.value()} onChange={spellcheck.select} />
             </div>
           </SettingsRow>
+          <Show when={windows()}>
+            <SettingsRow
+              title={language.t("settings.general.row.taskbarProgress.title")}
+              description={language.t("settings.general.row.taskbarProgress.description")}
+            >
+              <div data-action="settings-taskbar-progress">
+                <Switch
+                  checked={settings.general.taskbarProgress()}
+                  onChange={(checked) => settings.general.setTaskbarProgress(checked)}
+                />
+              </div>
+            </SettingsRow>
+          </Show>
         </Show>
 
         <PluginSettingsSections page="general" section="general" />

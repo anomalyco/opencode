@@ -12,6 +12,7 @@ import {
   useCurrentRoute,
   useLanguage,
   usePluginServers,
+  useSettings,
   useTabs,
   useWindowTabActivity,
   type LayoutRoute,
@@ -279,6 +280,7 @@ function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "li
   onCleanup(bindDesktopMenu((id) => command.trigger(id)))
   const theme = useTheme()
   const language = useLanguage()
+  const settings = useSettings()
   const activity = useWindowTabActivity()
 
   createEffect(() => {
@@ -291,7 +293,7 @@ function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "li
 
   createEffect(() => {
     if (props.os !== "windows") return
-    const mode = selectTaskbarProgressMode(activity())
+    const mode = settings.general.taskbarProgress() ? selectTaskbarProgressMode(activity()) : "none"
     void props.api.setTaskbarProgress(mode)
   })
 
