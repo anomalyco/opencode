@@ -193,6 +193,56 @@ describe("SkillTool", () => {
               status: "completed",
               content: [{ type: "text", text: Skill.toModelOutput(flat, []) }],
             })
+
+            // The tool answers to the name a skill advertises, so a namespaced
+            // display name loads from any folder depth.
+            const nestedDirectory = path.join(tmp.path, "nested")
+            yield* Effect.promise(() => fs.mkdir(nestedDirectory, { recursive: true }))
+            const nested: Skill.Info = {
+              id: Skill.ID.make("nested"),
+              name: Skill.Name.make("acme:nested"),
+              description: "Nested guidance",
+              path: AbsolutePath.make(path.join(nestedDirectory, "SKILL.md")),
+              content: "Nested",
+            }
+            yield* Effect.promise(() => fs.writeFile(nested.path, "nested"))
+            current = [nested]
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: "call-named-skill", name: "skill", input: { id: "acme:nested" } },
+              }),
+            ).toMatchObject({ status: "completed", content: [{ type: "text", text: Skill.toModelOutput(nested, []) }] })
+
+            // A name two skills share is not a key: it must fail, not guess.
+            const twins: Skill.Info[] = ["first", "second"].map((id) => ({
+              id: Skill.ID.make(id),
+              name: Skill.Name.make("Shared"),
+              description: "Shared name",
+              path: AbsolutePath.make(path.join(tmp.path, `${id}.md`)),
+              content: id,
+            }))
+            yield* Effect.promise(() => Promise.all(twins.map((twin) => fs.writeFile(twin.path, twin.content))))
+            current = twins
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: "call-shared-name", name: "skill", input: { id: "Shared" } },
+              }),
+            ).toEqual({ status: "error", error: { type: "tool.execution", message: "Unable to load skill Shared" } })
+            // ...while each of them still loads by its own ID.
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: "call-shared-id", name: "skill", input: { id: "second" } },
+              }),
+            ).toMatchObject({
+              status: "completed",
+              content: [{ type: "text", text: Skill.toModelOutput(twins[1]!, []) }],
+            })
           }).pipe(Effect.provide(skillToolLayer))
         }),
       ),

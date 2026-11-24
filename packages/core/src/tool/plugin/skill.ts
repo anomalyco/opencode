@@ -10,7 +10,9 @@ import { Permission } from "../../permission.js"
 export const name = "skill"
 
 export const Input = Schema.Struct({
-  id: Skill.ID.annotate({ description: "The ID of an available skill or a skill explicitly referenced by the user" }),
+  id: Skill.ID.annotate({
+    description: "The ID or name of an available skill or of a skill explicitly referenced by the user",
+  }),
 })
 
 export const Output = Schema.Struct({
@@ -20,13 +22,21 @@ export const Output = Schema.Struct({
 export const description = [
   "Load a specialized skill's instructions and resources into the current conversation when the task at hand matches its description.",
   "",
-  "The skill ID must match an available skill or a skill explicitly referenced by the user.",
+  "The skill ID or name must match an available skill or a skill explicitly referenced by the user.",
 ].join("\n")
 
 export const toModelOutput = Skill.toModelOutput
 
 const unableToLoad = (name: string, error?: unknown) =>
   new ToolFailure({ message: `Unable to load skill ${name}`, error })
+
+// A skill also answers to the name it advertises, so a display name
+// (`acme:my-skill`) loads wherever the skill is nested. A name is not a key:
+// ambiguity resolves to nothing rather than to a guess.
+const byName = (skills: ReadonlyArray<Skill.Info>, id: string) => {
+  const matches = skills.filter((skill) => String(skill.name) === String(id))
+  return matches.length === 1 ? matches[0] : undefined
+}
 
 export const Plugin = {
   id: "opencode.tool.skill",
@@ -44,7 +54,7 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const skill = yield* skills.get(input.id)
+              const skill = (yield* skills.get(input.id)) ?? byName(yield* skills.list(), input.id)
               if (!skill) return yield* unableToLoad(input.id)
               return yield* Effect.gen(function* () {
                 yield* permission.assert({
