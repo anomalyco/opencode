@@ -143,6 +143,12 @@ This section is the single source for what may move or restyle the session timel
 - Keeper: "keeps the New timeline's rows fixed while older pages land in a turn and above a prompt" in `e2e/regression/timeline-history.spec.ts`.
 - To check by hand: scroll to the top of the loaded history with the network throttled, and watch the first rows while the older page lands.
 
+### Stuck headers
+
+- An open group's header sticks under the session title. Collapsing the group from there scrolls the timeline first, by how far the header is stuck, so the header stays under the pointer.
+- Measure that distance from where the header rests, not from the group's top. A header with a margin rests that margin away from the top: the New timeline's rests 6px above it, and the header moved up 6px on every collapse.
+- Keeper: "collapsing a group from its stuck header leaves the header where it was" in `e2e/regression/patch-sticky-header.spec.ts`.
+
 ### `:has()` selectors
 
 - Chromium rechecks an element's `:has()` when focus moves, an attribute changes, or an element is added or removed near it. In and around the timeline, that happens many times a second during a scroll.
