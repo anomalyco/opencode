@@ -818,6 +818,36 @@ describe("Code Mode opencode:// fetch", () => {
     ])
   })
 
+  test("asks as the opencode api command that would make the same call", async () => {
+    const asked: Array<{ action: string; resources: ReadonlyArray<string>; save?: ReadonlyArray<string> }> = []
+    const sent: Array<string> = []
+    const handle = api((request) => Effect.sync(() => (sent.push(request.url), Response.json({ ok: true }))))
+    const run = (permission: Permission.Interface) =>
+      Effect.runPromise(
+        createCodeMode(new Map(), permission, undefined, handle).execute(
+          {
+            code: `try { await fetch("opencode:///api/session/current/prompt", { method: "POST", body: "{}" }); return "sent" } catch (e) { return e.message }`,
+          },
+          context,
+        ),
+      ).then((result) => result.output.output)
+
+    expect(await run(permissionService({ assert: (input) => Effect.sync(() => void asked.push(input)) }))).toBe("sent")
+    expect(asked).toEqual([
+      expect.objectContaining({
+        action: "shell",
+        resources: [`opencode api post /api/session/${context.sessionID}/prompt`],
+        save: ["opencode *"],
+      }),
+    ])
+    const denied = permissionService({
+      assert: (input) =>
+        Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
+    })
+    expect(await run(denied)).toContain("Permission denied: shell")
+    expect(sent).toHaveLength(1)
+  })
+
   test("accepts only opencode:///api/... URLs, reports a disabled API, and fails without one", async () => {
     const run = (code: string, api?: Context.Context<CodeModeTool.Api>) =>
       Effect.runPromise(createCodeMode(new Map(), allowAll, undefined, api).execute({ code }, context)).then(
