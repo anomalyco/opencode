@@ -15,4 +15,3 @@ const session = await (await fetch("opencode:///api/session/current")).json()
 
 Read `skill://opencode/api.md` for the available endpoints, then the file it
 points to for the group you need.
-
