@@ -239,6 +239,56 @@ test.describe("timeline history", () => {
     await expect.poll(positions).toEqual(before)
   })
 
+  // Each native scroll write forces a layout of the rows resized before it.
+  test("corrects the scroll position once for each batch of rows an older page measures", async ({ page }) => {
+    const messages = [
+      ...historyMessages(40),
+      userMessage(),
+      assistantMessage([textPart("prt_active", "Checking the route")]),
+    ]
+
+    // Scroll writes on the timeline, counted for each synchronous run: a batch of measured rows is one run.
+    await page.addInitScript(() => {
+      const scrollTo = Element.prototype.scrollTo
+      const runs: number[] = (window.__scrollWrites = [])
+      const run = { open: false }
+
+      Element.prototype.scrollTo = function (this: Element) {
+        if (this.matches(".scroll-view__viewport") && !run.open) {
+          run.open = true
+          runs.push(0)
+          queueMicrotask(() => (run.open = false))
+        }
+
+        if (this.matches(".scroll-view__viewport")) runs[runs.length - 1]!++
+
+        return Reflect.apply(scrollTo, this, arguments)
+      }
+    })
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(16, limit))
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+    })
+
+    const scroller = timelineScroller(page)
+    await expect(scroller.getByText("Checking the route", { exact: true })).toBeInViewport()
+    await page.evaluate(() => window.__scrollWrites?.splice(0))
+    // Each scroll to the top loads an older page, whose rows are measured above the reader.
+    await scroller.hover()
+    await expect(async () => {
+      await page.mouse.wheel(0, -100_000)
+      await expect(scroller.getByText(/^Historical response 0\. /)).toBeInViewport({ timeout: 1_000 })
+    }).toPass()
+    const writes = await page.evaluate(() => window.__scrollWrites ?? [])
+    expect(writes.length).toBeGreaterThan(0)
+    expect(Math.max(...writes)).toBe(1)
+  })
+
   test("mounts every part once and in order while paging to the start", async ({ page }) => {
     test.setTimeout(240_000)
     const errors = trackPageErrors(page)
@@ -689,6 +739,7 @@ test.describe("timeline history", () => {
 declare global {
   interface Window {
     __historyRootProbe?: { arm(): string[]; hidden: boolean; settle(final: ProbeFinal): void; settled: boolean }
+    __scrollWrites?: number[]
   }
 }
 
