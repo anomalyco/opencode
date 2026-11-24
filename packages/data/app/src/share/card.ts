@@ -78,6 +78,8 @@ const palettes = {
     // The first ranked row's bar, and the winner's name in the headline; the Leader style colours them.
     lead: "#8190ff",
     highlight: "#ffffff",
+    // A highlighted series lights up in this colour instead of its own (the Top style's white); empty keeps its own.
+    spotlight: "",
   },
   light: {
     background: "#fbfbfb",
@@ -93,6 +95,7 @@ const palettes = {
     mark: "#c8c8c8",
     lead: "#3b5cf6",
     highlight: "#161616",
+    spotlight: "",
   },
 }
 
@@ -117,6 +120,7 @@ function leaderLook(card: ShareCard): { colors: Palette; card: ShareCard } {
     accent: grey(0.3),
     lead: color,
     highlight: color,
+    spotlight: "#ffffff",
   }
   if (card.chart.kind !== "stacked") return { colors, card }
   const steps = [1, 0.36, 0.29, 0.23, 0.19, 0.16]
@@ -343,6 +347,12 @@ function drawBackground(
   columns.forEach((x) => ctx.fillRect(x, height - inset - dot, dot, dot))
 }
 
+// A highlighted series' colour: its own, or in the Top style white for every series but the winner, whose grey would
+// sink into the dimmed greys around it.
+function spotlit(color: string, series: number, amount: number, colors: Palette) {
+  return colors.spotlight && series > 0 ? mix(color, colors.spotlight, amount) : color
+}
+
 function scaled(level: (column: number, columns: number) => number, amount: number) {
   return (column: number, columns: number) => level(column, columns) * amount
 }
@@ -540,11 +550,10 @@ function drawStacked(
       const value = column.values[series] ?? 0
       if (value <= 0 || total <= 0) return y
       const size = (value / total) * height
-      ctx.fillStyle = mix(
-        chart.series[series]?.color ?? colors.idle,
-        colors.idle,
-        series === focus.index ? 0 : focus.amount,
-      )
+      ctx.fillStyle =
+        series === focus.index
+          ? spotlit(chart.series[series]?.color ?? colors.idle, series, focus.amount, colors)
+          : mix(chart.series[series]?.color ?? colors.idle, colors.idle, focus.amount)
       ctx.fillRect(x, y - size, width, Math.max(0, size - (size > 3 ? 1 : 0)))
       return y - size
     }, base)
@@ -619,7 +628,7 @@ function drawCallout(
     ctx.restore()
   }
   line(1 - (focused ? focus.amount : 0), chart.total.label, chart.total.value)
-  if (focused) line(focus.amount, focused.label, focused.value, focused.color)
+  if (focused) line(focus.amount, focused.label, focused.value, spotlit(focused.color, focus.index, 1, colors))
 }
 
 // The full legend, each entry rising in turn once the highlights are done (`since` is the time since then; the still
