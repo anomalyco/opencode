@@ -2,7 +2,7 @@ import { FileVerificationError } from "./file-verification"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
 import { FileSource } from "../file/contract"
 import { ACTIVATION_DELAY_MS } from "./activation-delay"
-import { attachable } from "./prompt-gate"
+import { attachable, attachesUnopened } from "./prompt-gate"
 import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -778,6 +778,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // A prompt waits only while an attachment for its session is in flight on a server that can answer it.
   const attaching = (session: SessionRef) => sessionAttaching(machine(), session.key, attachable(session, online()))
+
+  // A session that runs in a tab nobody has opened since the app started attaches as the routed one does. Keyed by the
+  // sessions it applies to, so each attaches once when it starts to run, and a later run wakes its attachment itself.
+  const unopened = () => sessions.list().filter((ref) => attachesUnopened(ref, online()))
+  createKeyed(
+    () => unopened().map((ref) => ref.key).join("\n"),
+    () => unopened().forEach(attach),
+  )
 
   // A prompt is about to go to the session. Its first step lists the browser tools only if the server already holds
   // this desktop's attachment, so the session attaches now, routed or not, and the send waits while that is in flight

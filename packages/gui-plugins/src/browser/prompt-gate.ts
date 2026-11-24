@@ -9,3 +9,21 @@ import type { SessionRef } from "@opencode/plugin/gui"
 export function attachable(session: SessionRef, online: boolean) {
   return session.server.connected && session.server.compatible && session.location !== undefined && (online || session.server.local)
 }
+
+/**
+ * Whether a session that runs in one of this window's tabs attaches although nobody has opened it there. An agent
+ * lists the browser tools only once a desktop attached to its session, and after the app starts only the session on
+ * screen attaches: one the server resumed, or that an automation, a finished job or a subagent woke, would run every
+ * step without them until someone opened its tab. A session that holds the browser grant has a pane already, this
+ * window's or another's, and keeps it: a window that only lists a tab must not take the pane from the one that shows
+ * it.
+ */
+export function attachesUnopened(session: SessionRef, online: boolean) {
+  if (!attachable(session, online)) return false
+  const data = session.server.data.session
+
+  return (
+    data.status(session.id) === "running" &&
+    !data.get(session.id)?.permissions?.some((rule) => rule.action === "browser" && rule.resource === "*" && rule.effect === "allow")
+  )
+}
