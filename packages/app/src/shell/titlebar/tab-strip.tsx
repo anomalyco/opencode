@@ -73,6 +73,13 @@ const hiddenTabView: SessionTabView = {
   fallbackDirectory: undefined,
 }
 
+const sameSessionTabView = (a: SessionTabView, b: SessionTabView) =>
+  a.phase === b.phase &&
+  a.visible === b.visible &&
+  a.session === b.session &&
+  a.fallbackTitle === b.fallbackTitle &&
+  a.fallbackDirectory === b.fallbackDirectory
+
 function SessionTabSlot(
   props: TabCloseActions & {
     tab: SessionTab
@@ -303,7 +310,8 @@ function SessionTabEntry(
         return
     }
 
-    const timer = window.setTimeout(() => syncInactiveSession(ctx, id), 300 + props.index * 50)
+    // The stagger only sets the first delay; another row showing or closing must not restart this one's read.
+    const timer = window.setTimeout(() => syncInactiveSession(ctx, id), 300 + untrack(() => props.index) * 50)
 
     onCleanup(() => window.clearTimeout(timer))
   })
@@ -824,9 +832,14 @@ export function TitlebarTabStrip(props: {
     )
   })
 
-  const visibleTabs = createMemo(() =>
-    displayTabs().filter((tab) => tab.type === "draft" || !!views().get(tabKey(tab))?.visible),
+  // Notifies only when the shown tabs change, not on every rebuild of the views.
+  const visibleTabs = createMemo(
+    () => displayTabs().filter((tab) => tab.type === "draft" || !!views().get(tabKey(tab))?.visible),
+    [],
+    { equals: (a, b) => a.length === b.length && a.every((tab, index) => tab === b[index]) },
   )
+
+  const visiblePositions = createMemo(() => new Map(visibleTabs().map((tab, index) => [tabKey(tab), index])))
 
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
@@ -879,11 +892,19 @@ export function TitlebarTabStrip(props: {
     const group = section ? `tab:${section.key}` : undefined
     const menuExtra = props.tabContextMenu ? () => props.tabContextMenu!(tab) : undefined
     let ref!: HTMLDivElement
-    const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
+    // Each row memoizes its own place and view, so a change to one session re-renders only the rows it affects.
+    const visibleIndex = createMemo(() => visiblePositions().get(id) ?? -1)
+
+    const view = createMemo(() => views().get(id) ?? hiddenTabView, hiddenTabView, { equals: sameSessionTabView })
 
     const others = () => visibleTabs().filter((item) => tabKey(item) !== id)
 
     const after = () => visibleTabs().slice(visibleIndex() + 1)
+
+    // Counted from the position, so rows do not each filter every visible tab.
+    const hasOthers = () => visibleTabs().length > (visibleIndex() < 0 ? 0 : 1)
+
+    const hasAfter = () => visibleTabs().length > visibleIndex() + 1
 
     const closeOthers = () => props.onCloseTabs(others(), tab)
 
@@ -920,7 +941,7 @@ export function TitlebarTabStrip(props: {
           highlightActive={props.highlightActive}
           orientation={vertical() ? "vertical" : "horizontal"}
           serverCtx={serverCtx()}
-          view={views().get(id) ?? hiddenTabView}
+          view={view()}
           shortcut={shortcut(visibleIndex())}
           muted={vertical() ? props.tabMuted?.(tab) : undefined}
           menuItems={vertical() && props.tabMenu ? () => props.tabMenu?.(tab) : undefined}
@@ -937,8 +958,8 @@ export function TitlebarTabStrip(props: {
             props.onNavigate(tab, element)
           }}
           onClose={() => props.onClose(tab)}
-          onCloseOthers={others().length ? closeOthers : undefined}
-          onCloseAfter={after().length ? closeAfter : undefined}
+          onCloseOthers={hasOthers() ? closeOthers : undefined}
+          onCloseAfter={hasAfter() ? closeAfter : undefined}
         />
       )
     }
@@ -967,8 +988,8 @@ export function TitlebarTabStrip(props: {
           props.onNavigate(tab, element)
         }}
         onClose={() => props.onClose(tab)}
-        onCloseOthers={others().length ? closeOthers : undefined}
-        onCloseAfter={after().length ? closeAfter : undefined}
+        onCloseOthers={hasOthers() ? closeOthers : undefined}
+        onCloseAfter={hasAfter() ? closeAfter : undefined}
       />
     )
   }
@@ -1080,10 +1101,7 @@ export function TitlebarTabStrip(props: {
         }}
       >
         {vertical() ? leading()?.content : undefined}
-        <Show
-          when={!customDrag()}
-          fallback={renderList()}
-        >
+        <Show when={!customDrag()} fallback={renderList()}>
           <DragDropProvider
             sensors={[
               PointerSensor.configure({
@@ -1104,7 +1122,10 @@ export function TitlebarTabStrip(props: {
             ]}
             plugins={(defaults) => [
               ...defaults.filter((plugin) => plugin !== Accessibility),
-              AutoScroller.configure({ acceleration: 8, threshold: vertical() ? { x: 0, y: 0.05 } : { x: 0.05, y: 0 } }),
+              AutoScroller.configure({
+                acceleration: 8,
+                threshold: vertical() ? { x: 0, y: 0.05 } : { x: 0.05, y: 0 },
+              }),
               Feedback.configure({ dropAnimation: null }),
             ]}
             onDragStart={(event) => {
