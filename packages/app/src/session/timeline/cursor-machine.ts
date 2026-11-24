@@ -117,6 +117,8 @@ export type TimelineCursorEffect =
       readonly behavior: ScrollBehavior
     }
   | { readonly type: "seek.cancel" }
+  /** End the virtualizer's own scroll to the prompt: the cursor has put it in place. */
+  | { readonly type: "reveal.stop" }
 
 export type TimelineCursorTransition = {
   readonly state: TimelineCursorState
@@ -155,6 +157,8 @@ const FOLLOW_END: TimelineCursorEffect = Object.freeze({ type: "follow.end" })
 const FOLLOW_DETACH: TimelineCursorEffect = Object.freeze({ type: "follow.detach" })
 
 const HASH_CLEAR: TimelineCursorEffect = Object.freeze({ type: "hash.clear" })
+
+const REVEAL_STOP: readonly TimelineCursorEffect[] = Object.freeze([{ type: "reveal.stop" }])
 
 export function createTimelineCursorState(): TimelineCursorState {
   return { status: "applying", initial: true, scheduled: false, attempt: 0 }
@@ -280,7 +284,12 @@ export function transitionTimelineCursor(
   if (state.status !== "selected" || !state.seek || state.seek.paused || state.attempt !== event.attempt)
     return unchanged(state)
 
-  if (event.type === "seek.landed" || state.seek.retries >= CURSOR_SEEK_LIMIT) return changed(settled(state))
+  // The virtualizer keeps scrolling to the prompt's row for up to five seconds, until its own target is reached. Once
+  // the cursor has put the prompt in place, that scroll has nothing left to do, and anything it writes later would
+  // undo a scroll of the reader's. A seek that gives up leaves it running: it is all that still brings the prompt in.
+  if (event.type === "seek.landed") return changed(settled(state), REVEAL_STOP)
+
+  if (state.seek.retries >= CURSOR_SEEK_LIMIT) return changed(settled(state))
 
   return changed({ ...state, seek: { behavior: state.seek.behavior, retries: state.seek.retries + 1 } }, [
     { type: "seek.schedule", attempt: state.attempt, messageID: state.messageID, behavior: state.seek.behavior },

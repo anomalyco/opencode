@@ -676,13 +676,45 @@ export function createTimelineVirtualizer(input: Input) {
   function prepareNavigation() {
     input.follow.dispatch({ type: "release" })
     flushTouchAdjustment()
+    revealed = undefined
   }
 
-  // Ends TanStack's scroll to a revealed row. It writes its target again for up to five seconds, whenever a
-  // measurement moves the row, and so takes the view back from a reader who scrolled on. TanStack has no call for
-  // this. Its declaration names the field, so a rename fails the type check rather than leaving the scroll running.
-  function stopReveal() {
-    virtualizer["scrollState"] = null
+  // The row a message reveal scrolls to, and TanStack's scroll to it. TanStack names the row by its index for as long
+  // as that scroll lasts, up to five seconds.
+  let revealed: { key: string; index: number; align: "start" | "center"; scroll: unknown } | undefined
+
+  function revealRow(index: number, align: "start" | "center") {
+    virtualizer.scrollToIndex(index, { align })
+    revealed = { key: rowKeys()[index], index, align, scroll: virtualizer["scrollState"] }
+  }
+
+  // A page of history that arrives above gives the index to another row, and TanStack then scrolls to that one. The
+  // scroll goes on to the row it was made for. TanStack has the new rows by now: it takes them in a computation.
+  createEffect(
+    on(
+      rowKeys,
+      (keys) => {
+        if (!revealed || !revealed.scroll || revealed.scroll !== virtualizer["scrollState"]) return
+        const index = keys.indexOf(revealed.key)
+
+        if (index < 0) return stopScroll()
+
+        if (index !== revealed.index) revealRow(index, revealed.align)
+      },
+      { defer: true },
+    ),
+  )
+
+  // A reveal made while the cold mount is hidden works with rows that have no sizes yet. The scroll range can be too
+  // short to bring the row to its place, and nothing scrolls again when the range grows. The rows have their sizes
+  // when the cold mount shows, so the reveal is made again then, before the first paint.
+  function repeatReveal() {
+    const target = revealed
+
+    if (!target || !active() || !listRoot()?.isConnected || input.follow.following()) return
+    const index = rowKeys().indexOf(target.key)
+
+    if (index >= 0) revealRow(index, target.align)
   }
 
   function flushTouchAdjustment() {
@@ -808,8 +840,8 @@ export function createTimelineVirtualizer(input: Input) {
 
       if (index === undefined) return
       prepareNavigation()
-      virtualizer.scrollToIndex(index, { align: partIndex >= 0 ? "center" : "start" })
-    }, stopReveal)
+      revealRow(index, partIndex >= 0 ? "center" : "start")
+    }, stopScroll)
     input.setScrollToEnd?.((behavior) => {
       const root = listRoot()
 
@@ -1006,6 +1038,7 @@ export function createTimelineVirtualizer(input: Input) {
     clearTimeout(revealTimer)
     contentObserver?.disconnect()
     viewportObserver?.disconnect()
+    repeatReveal()
   }
 
   function sampleColdMount(): ColdMountSample {
@@ -1271,7 +1304,11 @@ export function createTimelineVirtualizer(input: Input) {
     scrollEvent.reader = seen.reader
     seen.reader = 0
     const following = input.follow.following()
-    input.follow.dispatch(scrollEvent)
+
+    // While the cold mount is hidden its rows have no sizes, so the end of its scroll range is not the session's end,
+    // and no scroll is the reader's. A view that navigation sent to a prompt must not count as having arrived at the
+    // end: that would follow the end from then on and drop the prompt's link.
+    if (following || !untrack(coldHidden)) input.follow.dispatch(scrollEvent)
 
     // A scroll of the reader's own that leaves the end also ends the timeline's scroll to it.
     if (following && !input.follow.following()) stopScroll()

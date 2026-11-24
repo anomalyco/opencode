@@ -344,6 +344,19 @@ describe("cursor machine", () => {
     })
   })
 
+  // The virtualizer went on scrolling to the prompt's row for up to five seconds after the cursor had put the prompt
+  // in place. A scroll of the reader's that sends no input event, such as a drag of the scrollbar, was undone when a
+  // row measured in that time.
+  test("a seek that lands ends the virtualizer's scroll to the prompt", () => {
+    const seeking = replay([jump("msg_5")], idle())
+    const result = transitionTimelineCursor(seeking, { type: "seek.landed", attempt: seeking.attempt })
+
+    expect(result.state).toMatchObject({ status: "selected", messageID: "msg_5", fresh: true })
+    expect(result.state).not.toHaveProperty("seek")
+    expect(result.effects).toEqual([{ type: "reveal.stop" }])
+  })
+
+  // A seek that gives up leaves that scroll running: nothing else still brings the prompt in.
   test("a seek retries for a bounded number of frames", () => {
     const seeking = replay([jump("msg_5")], idle())
     const missing: TimelineCursorEvent = { type: "seek.missing", attempt: seeking.attempt }

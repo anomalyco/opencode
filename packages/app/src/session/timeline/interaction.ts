@@ -168,6 +168,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     scroller: () => scroller,
     anchor,
     revealMessage: (id) => revealMessage(id),
+    stopReveal: () => stopReveal(),
     detach,
     toEnd: () => {
       follow.dispatch({ type: "follow" })

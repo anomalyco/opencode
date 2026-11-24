@@ -32,6 +32,8 @@ export function createTimelineCursor(input: {
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
   revealMessage: (id: string) => void
+  /** Ends the scroll `revealMessage` started. */
+  stopReveal: () => void
   detach: () => void
   toEnd: () => void
   seekHistory: () => void
@@ -60,6 +62,8 @@ export function createTimelineCursor(input: {
     if (effect.type === "follow.end") return input.toEnd()
 
     if (effect.type === "history.seek") return input.seekHistory()
+
+    if (effect.type === "reveal.stop") return input.stopReveal()
 
     if (effect.type === "hash.set")
       return navigate(location.pathname + location.search + `#${input.anchor(effect.messageID)}`, { replace: true })
