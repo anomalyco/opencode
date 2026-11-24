@@ -142,7 +142,7 @@ export function drawShareCard(
   // The footer's baseline sits as far from the bottom as its text from the side; the rule is 56px above its type.
   const footer = height - pad
   const rule = footer - 26 - 56
-  const legend = card.chart.kind === "stacked" ? legendLayout(card.chart.series, width) : undefined
+  const legend = card.chart.kind === "stacked" ? legendLayout(card.chart.series, width, height) : undefined
   const chartBottom = rule - 64 - (legend ? legend.height + 40 : 0)
   // The dots are gone by the x axis: a stacked chart's baseline sits its axis labels above the chart's bottom.
   const baseline = card.chart.kind === "stacked" ? chartBottom - axisHeight : chartBottom
@@ -333,22 +333,28 @@ function drawIntro(
   })
 
   if (options.layout === "number") {
-    const size = fit(ctx, card.stat.value, max, 200, 700)
-    rise(ctx, time, 0.14, y + 64 + size * 0.8, size * 0.8, () => {
+    // On the shorter cards the number and its caption set smaller, so the chart still has room.
+    const compact = ctx.canvas.height <= 1080
+    const size = fit(ctx, card.stat.value, max, compact ? 112 : 200, 700)
+    const label = compact ? 28 : 34
+    const leading = compact ? 36 : 44
+    const gap = compact ? 52 : 64
+    rise(ctx, time, 0.14, y + gap + size * 0.8, size * 0.8, () => {
       ctx.fillStyle = colors.text
       ctx.font = `700 ${size}px ${font}`
-      ctx.fillText(card.stat.value, pad - size * 0.04, y + 64 + size * 0.8)
+      ctx.fillText(card.stat.value, pad - size * 0.04, y + gap + size * 0.8)
     })
-    ctx.font = `400 34px ${font}`
+    ctx.font = `400 ${label}px ${font}`
     const lines = balance(ctx, card.stat.label, max).slice(0, 2)
+    const first = y + gap + size * 0.8 + gap
     lines.forEach((line, index) =>
-      rise(ctx, time, 0.3 + index * 0.07, y + 64 + size * 0.8 + 64 + index * 44, 34, () => {
+      rise(ctx, time, 0.3 + index * 0.07, first + index * leading, label, () => {
         ctx.fillStyle = colors.muted
-        ctx.font = `400 34px ${font}`
-        ctx.fillText(line, pad, y + 64 + size * 0.8 + 64 + index * 44)
+        ctx.font = `400 ${label}px ${font}`
+        ctx.fillText(line, pad, first + index * leading)
       }),
     )
-    return y + 64 + size * 0.8 + 64 + lines.length * 44 + 24
+    return first + lines.length * leading + 24
   }
 
   if (options.layout === "chart") {
@@ -362,7 +368,7 @@ function drawIntro(
   }
 
   const size =
-    [64, 56, 50, 44].find((value) => {
+    (ctx.canvas.height <= 1080 ? [52, 46, 40] : [64, 56, 50, 44]).find((value) => {
       ctx.font = `400 ${value}px ${font}`
       return wrap(ctx, card.headline, max).length <= 3
     }) ?? 44
@@ -472,10 +478,21 @@ function drawStacked(
   })
 }
 
-function legendLayout(series: ShareSeries[], width: number) {
+// On the shorter cards (1:1 and 16:9) the legend sets smaller and tighter, so the chart keeps its height.
+function legendLayout(series: ShareSeries[], width: number, height: number) {
   const columns = width > 1400 ? 3 : 2
   const rows = Math.ceil(series.length / columns)
-  return { columns, rows, row: 48, column: (width - pad * 2) / columns, height: rows * 48 }
+  const compact = height <= 1080
+  const row = compact ? 34 : 48
+  return {
+    columns,
+    rows,
+    row,
+    size: compact ? 19 : 24,
+    swatch: compact ? 14 : 18,
+    column: (width - pad * 2) / columns,
+    height: rows * row,
+  }
 }
 
 function drawLegend(
@@ -495,19 +512,19 @@ function drawLegend(
     ctx.globalAlpha = focus.amount
     ctx.translate(0, (1 - focus.amount) * 16)
     ctx.textBaseline = "middle"
-    // Set well clear of the chart's date labels.
-    const middle = y + 72
+    // Set well clear of the chart's date labels, and small enough not to compete with the headline.
+    const middle = y + 48
     ctx.fillStyle = focused.color
-    ctx.fillRect(x, middle - 18, 36, 36)
-    ctx.font = `700 52px ${font}`
+    ctx.fillRect(x, middle - 11, 22, 22)
+    ctx.font = `700 30px ${font}`
     const value = ctx.measureText(focused.value).width
     // The amount in the legend's lighter grey, as its values are.
     ctx.fillStyle = colors.muted
     ctx.fillText(focused.value, x + layout.column * layout.columns - value, middle + 2)
     ctx.fillStyle = colors.text
     ctx.fillText(
-      truncate(ctx, focused.label, layout.column * layout.columns - value - 36 - 24 - 40),
-      x + 36 + 24,
+      truncate(ctx, focused.label, layout.column * layout.columns - value - 22 - 16 - 40),
+      x + 22 + 16,
       middle + 2,
     )
     ctx.restore()
@@ -530,15 +547,19 @@ function drawLegend(
     ctx.globalAlpha = amount * shown
     ctx.translate(0, (1 - amount) * 14)
     ctx.fillStyle = mix(item.color, colors.idle, dim)
-    ctx.fillRect(left, middle - 9, 18, 18)
-    ctx.font = `400 24px ${font}`
+    ctx.fillRect(left, middle - layout.swatch / 2, layout.swatch, layout.swatch)
+    ctx.font = `400 ${layout.size}px ${font}`
     ctx.fillStyle = mix(colors.muted, colors.faint, dim)
     const measured = ctx.measureText(item.value).width
     const right = left + layout.column - (column === layout.columns - 1 ? 0 : 48)
     ctx.fillText(item.value, right - measured, middle)
-    ctx.font = `${index === focus.index && focus.amount > 0.5 ? 700 : 400} 24px ${font}`
+    ctx.font = `${index === focus.index && focus.amount > 0.5 ? 700 : 400} ${layout.size}px ${font}`
     ctx.fillStyle = mix(colors.text, colors.faint, dim)
-    ctx.fillText(truncate(ctx, item.label, right - measured - 24 - (left + 38)), left + 38, middle)
+    ctx.fillText(
+      truncate(ctx, item.label, right - measured - 24 - (left + layout.swatch + 20)),
+      left + layout.swatch + 20,
+      middle,
+    )
     ctx.restore()
   })
   ctx.restore()
