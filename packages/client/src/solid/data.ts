@@ -95,6 +95,9 @@ const messagePageLimit = 20
 // Sizes of the older pages that a new read of the newest page may read to reach the loaded history. They grow: a
 // short gap costs one small page, and the longest gap that is closed costs three requests.
 const bridgePageLimits = [20, 40, 140]
+// The same while a reader holds a place in the loaded history: the read goes on in the largest pages the server
+// gives, to about 1,000 messages back.
+const heldBridgePageLimits = [...bridgePageLimits, 200, 200, 200, 200]
 // Trailing window for event bursts that each ask for the same refetch.
 export const settleMs = 150
 
@@ -418,6 +421,8 @@ export function createData(config: CreateDataInput) {
   // Inputs by session that an inbox read stopped listing: delivered or cancelled while the event was missed. Their
   // rows stay where they were admitted until a transcript read places or drops them.
   const stranded = new Map<string, Set<string>>()
+  // Sessions whose reader holds a place in the loaded history, with the number of holds.
+  const held = new Map<string, number>()
   const omitFiles = () =>
     typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
   const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
@@ -2073,7 +2078,7 @@ export function createData(config: CreateDataInput) {
             // More than one page arrived while its events were missed, so messages lie between the newest page and
             // the loaded history. Older pages close the gap. After a longer absence only the newest messages stay,
             // as on a first read: the transcript never skips messages.
-            for (const limit of bridgePageLimits) {
+            for (const limit of held.has(sessionID) ? heldBridgePageLimits : bridgePageLimits) {
               const next = pages.at(-1)?.cursor.next
               if (!next || !apart(history(), read())) break
               pages.push(await api().message.list({ sessionID, limit, cursor: next }).catch(evictMissing))
@@ -2124,7 +2129,23 @@ export function createData(config: CreateDataInput) {
               // Kept pages keep the cursor to the page before them.
               if (!kept) setStore("session", "messageCursor", sessionID, pages.at(-1)?.cursor.next ?? undefined)
             })
+            // A read that long lets events overtake its newest page, so that page is read once more.
+            if (pages.length <= bridgePageLimits.length + 1) return
+            sync.invalidate(`session.message:${sessionID}`)
+            refresh(() => result.session.message.sync(sessionID))
           })
+        },
+        /**
+         * Says that a reader is somewhere in the session's loaded history, until the returned function is called. A
+         * new read of the transcript then reads further back to keep that history.
+         */
+        hold(sessionID: string) {
+          held.set(sessionID, (held.get(sessionID) ?? 0) + 1)
+          return () => {
+            const holds = (held.get(sessionID) ?? 1) - 1
+            if (holds > 0) held.set(sessionID, holds)
+            else held.delete(sessionID)
+          }
         },
         more(sessionID: string) {
           return store.session.messageCursor[sessionID] !== undefined

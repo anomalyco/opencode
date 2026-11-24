@@ -4,7 +4,8 @@
 admitted (`packages/client/src/solid/data.ts`, `message.sync`). When the page starts inside the loaded transcript,
 the loaded messages before it stay, with their cursor, and those that were still running are read again. When the
 page does not reach the loaded transcript, up to three older pages (20, 40 and 140 messages) are read to reach it;
-past that, the pages replace the transcript. A row after the start of the page that the page lacks is dropped: when the read started before a
+past that, the pages replace the transcript. While a view holds the loaded transcript for a reader who is not at its
+end (`message.hold`), four more pages of 200 are read, and the newest page is then read once more. A row after the start of the page that the page lacks is dropped: when the read started before a
 step, the `session.step.started` row and its text are gone once the page lands, and later deltas for that message
 are dropped because the row is not loaded. The reply reappears only after another invalidation. Events create rows for
 any session, also one the store found missing (`message.update` does `draft[sessionID] ??= []`).

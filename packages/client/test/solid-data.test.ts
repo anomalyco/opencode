@@ -1688,6 +1688,85 @@ test("a newest page too far ahead of the loaded history replaces it, and the old
   }
 })
 
+test("a reader's hold keeps the loaded history across a longer absence, until it is released", async () => {
+  const setup = transcript(notes(1, 40))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    await setup.data.session.message.loadMore("ses_refresh", { all: true })
+
+    setup.data.session.message.hold("ses_refresh")()
+    setup.server.messages = notes(1, 340)
+    setup.data.session.message.invalidate("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+    expect(setup.ids()).toEqual(notes(121, 340).map((message) => message.id))
+
+    setup.data.session.message.hold("ses_refresh")
+    // A second hold that is released leaves the first.
+    setup.data.session.message.hold("ses_refresh")()
+    setup.server.messages = notes(1, 640)
+    // A message arrives while the read is far back, so the newest page, which was read first, lacks it.
+    setup.server.hold = (request) => {
+      if (request.endsWith("limit=200&cursor=msg_421")) setup.server.messages = notes(1, 641)
+      return undefined
+    }
+    setup.data.session.message.invalidate("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+    // Joins the read of the newest page that follows a far read.
+    await setup.data.session.message.sync("ses_refresh")
+
+    expect(setup.ids()).toEqual(notes(121, 641).map((message) => message.id))
+    expect(setup.server.requests.slice(3)).toEqual([
+      "message?limit=20&order=desc",
+      "message?limit=20&cursor=msg_321",
+      "message?limit=40&cursor=msg_301",
+      "message?limit=140&cursor=msg_261",
+      "message?limit=20&order=desc",
+      "message?limit=20&cursor=msg_621",
+      "message?limit=40&cursor=msg_601",
+      "message?limit=140&cursor=msg_561",
+      "message?limit=200&cursor=msg_421",
+      // Only a read that went further back than three pages reads the newest page once more.
+      "message?limit=20&order=desc",
+    ])
+    // The kept messages keep the cursor to the page before them.
+    await setup.data.session.message.loadMore("ses_refresh")
+    expect(setup.ids()).toEqual(notes(101, 641).map((message) => message.id))
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a held history further back than a read reaches is replaced", async () => {
+  const setup = transcript(notes(1, 40))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    await setup.data.session.message.loadMore("ses_refresh", { all: true })
+    setup.data.session.message.hold("ses_refresh")
+
+    setup.server.messages = notes(1, 1400)
+    setup.server.requests.length = 0
+    setup.data.session.message.invalidate("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+
+    // The newest page and 1,000 older messages: messages 41 to 380 were never read.
+    expect(setup.ids()).toEqual(notes(381, 1400).map((message) => message.id))
+    expect(setup.server.requests.map((request) => request.replace(/&cursor.*/, ""))).toEqual([
+      "message?limit=20&order=desc",
+      "message?limit=20",
+      "message?limit=40",
+      "message?limit=140",
+      "message?limit=200",
+      "message?limit=200",
+      "message?limit=200",
+      "message?limit=200",
+      "message?limit=20&order=desc",
+    ])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("a kept message that was still running is read again", async () => {
   const tool = (state: object): SessionMessageInfo =>
     ({
