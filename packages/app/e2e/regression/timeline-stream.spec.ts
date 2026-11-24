@@ -1180,6 +1180,41 @@ test.describe("background work", () => {
     await expect(capsule).toHaveCount(0)
   })
 
+  // The rows are given the open session's family. Given every session the server has, each change to any other
+  // session rebuilt the footer of every reply in view.
+  test("a run of another session leaves the footer of a reply as it was", async ({ page }) => {
+    const otherID = "ses_other_run"
+
+    const timeline = await setupTimeline(page, {
+      sessionMessages: [user, completed],
+      sessions: [session(), session({ id: otherID, title: "Another session" })],
+      tabs: [sessionID, otherID],
+    })
+
+    const footer = page.locator('[data-slot="text-part-meta"]')
+    const other = page.locator(`[data-titlebar-tab-slot]:has(a[href*="${otherID}"])`)
+    await expect(footer).toHaveCount(1)
+    await expect(other).toHaveCount(1)
+
+    // Every node the footer gains or loses from here on.
+    const changed = await footer.evaluateHandle((element) => {
+      const seen = { nodes: 0 }
+
+      new MutationObserver((records) => {
+        seen.nodes += records.reduce((count, record) => count + record.addedNodes.length + record.removedNodes.length, 0)
+      }).observe(element, { childList: true, subtree: true })
+
+      return seen
+    })
+
+    // The other session's tab shows that each event arrived.
+    await timeline.transport.send(status("busy", 1, otherID))
+    await expect(other.locator('[data-mark="busy"]')).toBeVisible()
+    await timeline.transport.send(status("idle", 1, otherID))
+    await expect(other.locator('[data-mark="busy"]')).toBeHidden()
+    expect(await changed.evaluate((seen) => seen.nodes)).toBe(0)
+  })
+
   test("shows the shortcut for a blocking shell and lists background work in the capsule", async ({ page }) => {
     const backgroundID = "ses_background_existing"
 
