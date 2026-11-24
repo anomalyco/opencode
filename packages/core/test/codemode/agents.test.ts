@@ -61,6 +61,38 @@ describe("z", () => {
     })
   })
 
+  test("common zod refinements map to JSON Schema keywords", async () => {
+    const schema = await built(
+      `z.object({ name: z.string().min(1).max(40), id: z.string().uuid(), site: z.string().url().optional(), code: z.string().regex(/^[A-Z]{3}$/), count: z.number().int().nonnegative(), score: z.number().positive().max(1), tags: z.array(z.string()).nonempty(), pair: z.array(z.number()).length(2), note: z.string().nullish() })`,
+    )
+    const json = output(schema).json
+    expect(json.properties).toEqual({
+      name: { type: "string", minLength: 1, maxLength: 40 },
+      id: { type: "string", format: "uuid" },
+      site: { type: "string", format: "uri" },
+      code: { type: "string", pattern: "^[A-Z]{3}$" },
+      count: { type: "integer", minimum: 0 },
+      score: { type: "number", exclusiveMinimum: 0, maximum: 1 },
+      tags: { type: "array", items: { type: "string" }, minItems: 1 },
+      pair: { type: "array", items: { type: "number" }, minItems: 2, maxItems: 2 },
+      note: { anyOf: [{ type: "string" }, { type: "null" }] },
+    })
+    expect(json.required).toEqual(["name", "id", "code", "count", "score", "tags", "pair"])
+    expect(
+      Result.isFailure(
+        CodeModeAgents.check(output(schema), {
+          name: "",
+          id: "x",
+          code: "abc",
+          count: -1,
+          score: 2,
+          tags: [],
+          pair: [1],
+        }),
+      ),
+    ).toBe(true)
+  })
+
   test("a non-object root is wrapped for the model and unwrapped for the script", async () => {
     const schema = output(await built(`z.array(z.object({ file: z.string() }))`))
     expect(schema.wrapped).toBe(true)

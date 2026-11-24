@@ -54,8 +54,8 @@ const Findings = z.object({ findings: z.array(Finding) })
 ```
 
 - Types: `z.string()`, `z.number()`, `z.integer()`, `z.boolean()`, `z.null()`, `z.unknown()`, `z.literal(v)`, `z.enum([...])`, `z.array(item)`, `z.object({...})`, `z.union([...])`, `z.record(value)`.
-- Methods: `.optional()`, `.nullable()`, `.describe(text)`, `.default(value)`.
-- Limits as options: `z.string({ minLength, maxLength, pattern, format })`, `z.number({ minimum, maximum })`, `z.array(item, { minItems, maxItems })`.
+- Methods: `.optional()`, `.nullable()`, `.nullish()`, `.describe(text)`, `.default(value)`, `.min(n)`, `.max(n)`, `.length(n)`, `.nonempty()`, `.int()`, `.positive()`, `.nonnegative()`, `.email()`, `.url()`, `.uuid()`, `.datetime()`, `.regex(re)`. Nothing else from zod exists: no `.refine()`, `.transform()` or `.parse()`.
+- `.regex()` and JSON Schema `pattern` are shown to the model but not enforced; check those values in the script if they matter.
 - Object keys are required unless `.optional()`; extra keys are not allowed.
 - A root that is not an object works: `schema: z.array(Finding)` returns an array.
 - Plain JSON Schema works anywhere a `z` schema does.

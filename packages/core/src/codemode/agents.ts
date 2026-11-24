@@ -3,9 +3,20 @@ export * as CodeModeAgents from "./agents.js"
 import { Extension } from "@opencode/codemode"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { isRecord } from "@opencode/util/record"
-import { Context, Effect, Layer, type JsonSchema, Ref, Result, Schema, SchemaIssue, Scope, Semaphore } from "effect"
+import {
+  Context,
+  Effect,
+  JsonSchema,
+  Layer,
+  Ref,
+  Result,
+  Schema,
+  SchemaIssue,
+  SchemaRepresentation,
+  Scope,
+  Semaphore,
+} from "effect"
 import { Instructions } from "../instructions/index.js"
-import { codecFor } from "../tool/runtime.js"
 import { CodeModeExecution } from "./execution.js"
 
 /** A schema a script passed, ready to send to a model and to check its answer against. */
@@ -164,11 +175,14 @@ export const extension = Extension.make({
       boolean: () => build({ type: "boolean" }),
       null: () => build({ type: "null" }),
       unknown: () => build({}),
+      any: () => build({}),
       literal: (value: unknown) => build({ const: value }),
       enum: (values: unknown) => build({ enum: Array.isArray(values) ? values : [] }),
       array: (items: unknown, options?: unknown) => build({ type: "array", items: clean(items), ...keywords(options) }),
       object: (shape: unknown) => object(shape),
       union: (members: unknown) => build({ anyOf: Array.isArray(members) ? members.map(clean) : [] }),
+      optional: (inner: unknown) => build({ ...(isRecord(inner) ? strip(inner) : {}), [OPTIONAL]: true }),
+      nullable: (inner: unknown) => build({ anyOf: [clean(inner), { type: "null" }] }),
       record: (values: unknown) => build({ type: "object", additionalProperties: clean(values) }),
     },
   },
@@ -200,9 +214,16 @@ export function output(schema: unknown): Result.Result<Output, string> {
   const root: JsonSchema.JsonSchema = wrapped
     ? { type: "object", properties: { value: json }, required: ["value"], additionalProperties: false }
     : json
-  const codec = codecFor(root)
-  if (codec === undefined) return Result.fail("schema is not a JSON Schema this runtime can validate against.")
-  return Result.succeed({ json: root, wrapped, codec })
+  // Patterns guide the model but are not enforced: a regex written by one model and run on another's output could
+  // block the server.
+  const codec = Result.try(() =>
+    Schema.make<Schema.Codec<unknown>>(
+      SchemaRepresentation.fromJsonSchemaDocument(JsonSchema.fromSchemaDraft2020_12(root), { patterns: "ignore" }).ast,
+    ),
+  )
+  if (Result.isFailure(codec))
+    return Result.fail(`schema is not a JSON Schema this runtime can validate against: ${String(codec.failure)}`)
+  return Result.succeed({ json: root, wrapped, codec: codec.success })
 }
 
 /** Checks a model's answer against `output`; the failure lists what to fix, for the model to try again. */
@@ -328,13 +349,43 @@ const parseOutput = (name: string, schema: unknown) => {
   return Effect.fail(new TypeError(`${name}(): ${result.failure}`))
 }
 
-const build = (json: Record<string, unknown>): Record<string, unknown> => ({
-  ...json,
-  optional: () => build({ ...json, [OPTIONAL]: true }),
-  nullable: () => build({ anyOf: [strip(json), { type: "null" }], ...marker(json) }),
-  describe: (description: unknown) => build({ ...json, description: String(description) }),
-  default: (value: unknown) => build({ ...json, default: value }),
-})
+// zod's common refinements, mapped onto the JSON Schema keyword for the node's type.
+const build = (json: Record<string, unknown>): Record<string, unknown> => {
+  const bounds = (kind: "min" | "max", value: unknown) => {
+    const n = Number(value)
+    if (json.type === "string") return build({ ...json, [kind === "min" ? "minLength" : "maxLength"]: n })
+    if (json.type === "array") return build({ ...json, [kind === "min" ? "minItems" : "maxItems"]: n })
+    return build({ ...json, [kind === "min" ? "minimum" : "maximum"]: n })
+  }
+  const format = (name: string) => () => build({ ...json, format: name })
+  return {
+    ...json,
+    optional: () => build({ ...json, [OPTIONAL]: true }),
+    nullable: () => build({ anyOf: [strip(json), { type: "null" }], ...marker(json) }),
+    nullish: () => build({ anyOf: [strip(json), { type: "null" }], [OPTIONAL]: true }),
+    describe: (description: unknown) => build({ ...json, description: String(description) }),
+    default: (value: unknown) => build({ ...json, default: value }),
+    min: (value: unknown) => bounds("min", value),
+    max: (value: unknown) => bounds("max", value),
+    length: (value: unknown) =>
+      json.type === "array"
+        ? build({ ...json, minItems: Number(value), maxItems: Number(value) })
+        : build({ ...json, minLength: Number(value), maxLength: Number(value) }),
+    nonempty: () => bounds("min", 1),
+    int: () => build({ ...json, type: "integer" }),
+    positive: () => build({ ...json, exclusiveMinimum: 0 }),
+    nonnegative: () => build({ ...json, minimum: 0 }),
+    regex: (pattern: unknown) =>
+      build({
+        ...json,
+        pattern: isRecord(pattern) && typeof pattern.source === "string" ? pattern.source : String(pattern),
+      }),
+    email: format("email"),
+    url: format("uri"),
+    uuid: format("uuid"),
+    datetime: format("date-time"),
+  }
+}
 
 const object = (shape: unknown) => {
   const entries = isRecord(shape) ? Object.entries(shape) : []
