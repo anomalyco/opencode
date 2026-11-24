@@ -16819,6 +16819,26 @@
           "system": {
             "type": "string"
           },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "selected": {
+                    "type": "string"
+                  },
+                  "unselected": {
+                    "type": "string"
+                  }
+                },
+                "required": ["selected", "unselected"],
+                "additionalProperties": false
+              }
+            ]
+          },
           "description": {
             "type": "string"
           },

@@ -12,6 +12,7 @@ import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
 import { ModelResolver } from "../model-resolver.js"
 import { ModelRetry } from "../model-retry.js"
+import { Workspace } from "../workspace.js"
 import { SessionRunnerModel } from "./runner/model.js"
 
 const tokenSharingMessages = {
@@ -163,7 +164,12 @@ function providerError(type: string, reason: AIError["reason"]): SessionError.Er
 const machineMessage = (error: unknown): string | undefined => {
   if (error instanceof Machine.NotSent || error instanceof Machine.Unknown || error instanceof Machine.ProcessLost)
     return error.message
-  if (error instanceof Machines.NotFound || error instanceof MachinePath.NotAbsolute) return error.message
+  if (
+    error instanceof Machines.NotFound ||
+    error instanceof Workspace.NotFound ||
+    error instanceof MachinePath.NotAbsolute
+  )
+    return error.message
   if (
     error instanceof Environment.Failed ||
     error instanceof AppProcess.AppProcessError ||

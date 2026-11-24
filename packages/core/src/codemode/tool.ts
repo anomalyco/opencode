@@ -156,7 +156,7 @@ export const create = (
     name: "execute",
     description: description(services !== undefined),
     input: services ? FullInput : CodeMode.Input,
-    freeform: { type: "text" },
+    freeform: { type: "text", field: "code" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {

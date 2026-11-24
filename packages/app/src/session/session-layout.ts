@@ -25,11 +25,22 @@ export const useSessionLayout = () => {
   const tabs = useTabs()
   const { params, sessionKey, workspaceKey } = useSessionKey()
   const serverSDK = useServerSDK()
+  const location = useWorkspaceLocation()
 
   const currentTab = createMemo(() => {
     if (!params.id) return
 
     return tabs.sessionTab(ServerConnection.key(serverSDK.server), params.id)
+  })
+
+  const panelKey = createMemo(() => {
+    const tab = currentTab()
+    const sessionID = tab?.type === "session" ? tab.sessionId : params.id
+
+    return SessionStateKey.from(
+      serverSDK.scope,
+      SessionRouteKey.fromRoute(base64Encode(location().directory), sessionID),
+    )
   })
 
   const regions = {
@@ -55,7 +66,8 @@ export const useSessionLayout = () => {
 
       return tab && tabKey(tab)
     }),
-    tabs: createMemo(() => layout.tabs(sessionKey)),
+    // A child session shows its root session's panels, so both keep one strip.
+    tabs: createMemo(() => layout.tabs(panelKey)),
     view: createMemo(() => layout.view(sessionKey, regions)),
   }
 }

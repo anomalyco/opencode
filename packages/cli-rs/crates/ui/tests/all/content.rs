@@ -46,6 +46,23 @@ fn syntax_theme_matches_generate_syntax() {
 }
 
 #[test]
+fn equal_themes_share_one_syntax_theme() {
+    let shared = |a: &Theme, b: &Theme| std::sync::Arc::ptr_eq(&code::syntax_theme(a), &code::syntax_theme(b));
+    let (dark, light) = (theme("opencode", ThemeMode::Dark), theme("opencode", ThemeMode::Light));
+    // A theme loaded again resolves the same colors: no new syntax theme.
+    assert!(shared(&dark, &theme("opencode", ThemeMode::Dark)));
+    assert!(!shared(&dark, &light));
+    // Past the kept themes, an evicted theme builds an equal one again.
+    let before = code::syntax_theme(&dark);
+    for name in ["nord", "tokyonight", "dracula", "gruvbox"] {
+        code::syntax_theme(&theme(name, ThemeMode::Dark));
+    }
+    let after = code::syntax_theme(&dark);
+    assert!(!std::sync::Arc::ptr_eq(&before, &after));
+    assert_eq!(before, after);
+}
+
+#[test]
 fn paste_chip_text_is_the_page_color_on_a_transparent_page() {
     let tokyo = "#1a1b26 #f7768e #9ece6a #e0af68 #7aa2f7 #ad8ee6 #449dab #a9b1d6 #414868 #ff7a93 #b9f27c #ff9e64 #7da6ff #bb9af7 #0db9d7 #c0caf5";
     let day = "#e9e9ed #f52a65 #587539 #8c6c3e #2e7de9 #9854f1 #007197 #6172b0 #a1a6c5 #f52a65 #587539 #8c6c3e #2e7de9 #9854f1 #007197 #3760bf";
