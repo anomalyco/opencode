@@ -145,7 +145,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       )
       return new Set(items.map((item) => item.offsetTop)).size
     }
-    for (const level of wide ? [0, 1, 2] : [0]) {
+    for (const level of wide ? [0, 1, 2, 3] : [0]) {
       bar.dataset.compact = String(level)
       if (rows() <= 1) return
     }

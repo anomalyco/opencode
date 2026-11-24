@@ -83,6 +83,12 @@
 /* The share editor (share.tsx): a top bar, the card on a stage, and an inspector beside it. On phones it fills the
    screen and the inspector sits under the card, one group at a time behind tabs. */
 
+/* While the share editor is open the page behind it stays put; the scrollbar's room is kept so nothing shifts. */
+html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
 [data-page="stats"] dialog[data-component="share-editor"] {
   --editor-inset: 12px;
   /* The option cards, track rows and code: on the light panel a white card with a firm line; on the dark one a fill
@@ -1113,20 +1119,11 @@
     }
   }
 
-  /* Only when the full bar won't fit on one row (share.tsx measures): first the date hugs its label, the music shows
-     its cover alone and Export takes less room; then the date is its calendar alone. */
-  [data-slot="editor-bar"]:is([data-compact="1"], [data-compact="2"]) {
+  /* Only as far as the full bar needs to fit on one row (share.tsx measures), a step at a time: 1, the date hugs its
+     label and Export takes less room; 2, the music shows its cover alone; 3, the date is its calendar alone. */
+  [data-slot="editor-bar"]:is([data-compact="1"], [data-compact="2"], [data-compact="3"]) {
     [data-slot="date-tool"] [data-slot="dropdown-trigger"] {
       width: auto;
-    }
-
-    [data-slot="music-tool"] [data-slot="dropdown-trigger"] {
-      width: auto;
-      padding-right: 6px;
-
-      :is([data-slot="dropdown-value"], [data-slot="explicit"]) {
-        display: none;
-      }
     }
 
     [data-slot="bar-end"] [data-variant="primary"] {
@@ -1135,7 +1132,18 @@
     }
   }
 
-  [data-slot="editor-bar"][data-compact="2"]
+  [data-slot="editor-bar"]:is([data-compact="2"], [data-compact="3"])
+    [data-slot="music-tool"]
+    [data-slot="dropdown-trigger"] {
+    width: auto;
+    padding-right: 6px;
+
+    :is([data-slot="dropdown-value"], [data-slot="explicit"]) {
+      display: none;
+    }
+  }
+
+  [data-slot="editor-bar"][data-compact="3"]
     [data-slot="date-tool"]
     [data-slot="dropdown-trigger"]
     [data-slot="dropdown-value"] {
