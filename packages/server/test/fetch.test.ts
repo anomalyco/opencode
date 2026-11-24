@@ -97,7 +97,7 @@ it.live("manages a session whose directory was deleted", () =>
     const statuses = [
       yield* request(`/api/session/${session.id}`, "PATCH", { title: "Renamed" }),
       yield* request(`/api/session/${session.id}`, "PATCH", { archived: true }),
-      yield* request(`/api/session/${session.id}/interrupt`, "POST", {}),
+      yield* request(`/api/session/${session.id}/interrupt`, "POST"),
       yield* request(`/api/experimental/session/${session.id}/instructions/entries`, "GET"),
     ].map((response) => response.status)
     expect(statuses).toEqual([204, 204, 200, 200])
@@ -118,7 +118,7 @@ it.live("manages a session whose directory was deleted", () =>
       message: `Location not found: ${directory}`,
     })
 
-    const missing = yield* request("/api/session/ses_missing/interrupt", "POST", {})
+    const missing = yield* request("/api/session/ses_missing/interrupt", "POST")
     expect(missing.status).toBe(404)
     expect(((yield* Effect.promise(() => missing.json())) as { _tag: string })._tag).toBe("SessionNotFoundError")
   }),

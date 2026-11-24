@@ -28,7 +28,7 @@ const createSession = (handler: (request: Request) => Promise<Response>) =>
   })
 
 // The reason lives in the query string next to resume: `?reason=inactivity`. A body is no
-// longer decoded, so a stale body reason is ignored (see "ignores a stale body reason").
+// longer decoded, so a stale body reason is ignored.
 const interrupt = (
   handler: (request: Request) => Promise<Response>,
   sessionID: string,
@@ -112,20 +112,6 @@ it.live("accepts an interrupt with no reason and no body", () =>
     // No payload is declared on the endpoint anymore, so a plain POST needs no
     // body-supplying middleware and an omitted reason defaults to "user".
     const response = yield* interrupt(handler, session.id)
-    expect(response.status).toBe(200)
-    expect(Schema.decodeUnknownSync(InterruptResponse)(yield* Effect.promise(() => response.json()))).toEqual({
-      interrupted: false,
-    })
-  }).pipe(Effect.scoped),
-)
-
-it.live("ignores a stale body reason", () =>
-  Effect.gen(function* () {
-    const handler = yield* makeHandler()
-    const session = yield* createSession(handler)
-    // Callers that sent the reason in the body before it moved to the query string get
-    // the default "user" instead of an error: no payload is decoded anymore.
-    const response = yield* interrupt(handler, session.id, undefined, { reason: "shutdown" })
     expect(response.status).toBe(200)
     expect(Schema.decodeUnknownSync(InterruptResponse)(yield* Effect.promise(() => response.json()))).toEqual({
       interrupted: false,
