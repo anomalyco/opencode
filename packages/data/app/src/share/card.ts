@@ -603,10 +603,10 @@ function meter(time: number, beat: number, spectrum?: Spectrum) {
 // with the last bar; other charts take the banner's 24px pitch, centred.
 function dotGrid(chart: ShareChart, width: number) {
   if (chart.kind !== "stacked" || chart.columns.length === 0) return { center: width / 2, pitch: 24 }
-  // One day: a whole number of dots to each bar's slot, with a dot down the middle of every bar (dayBars).
+  // One day: the grid the bars are laid on (dayLayout), a dot down the middle of the first bar.
   if (chart.day !== undefined) {
-    const slot = (width - pad * 2) / Math.max(1, dayOrder(chart).length)
-    return { center: pad + slot / 2, pitch: slot / Math.max(3, Math.round(slot / 16)) }
+    const layout = dayLayout(dayOrder(chart).length, width - pad * 2)
+    return { center: pad + layout.bar / 2, pitch: layout.pitch }
   }
   const slot = (width - pad * 2) / chart.columns.length
   return { center: pad + (chart.columns.length - 0.5) * slot, pitch: slot * Math.ceil(14 / slot) }
@@ -896,11 +896,7 @@ function drawDay(
   const top = 64
   const plot = { ...box, y: box.y + top, height: box.height - axisHeight - top }
   const max = Math.max(0, ...order.map((series) => values[series] ?? 0)) || 1
-  const slot = plot.width / Math.max(1, order.length)
-  // On the dot grid (dotGrid): each bar an odd number of dot pitches wide round the dot at its middle, so its edges
-  // fall halfway between dot columns, with two or three pitches between bars.
-  const dots = Math.max(3, Math.round(slot / 16))
-  const gap = slot - (slot / dots) * Math.max(1, dots % 2 === 1 ? dots - 2 : dots - 3)
+  const layout = dayLayout(order.length, plot.width)
   const base = plot.y + plot.height
   const bars = order.map((series, position) => {
     const delay = (position / Math.max(1, order.length - 1)) * 0.5
@@ -909,7 +905,7 @@ function drawDay(
     const own = chart.series[series]?.color ?? colors.idle
     const muted = series === focus.index ? 0 : own === colors.other ? 1 : focus.amount
     const color = series === focus.index ? spotlit(own, series, focus.amount, colors) : own
-    const rect = [plot.x + position * slot + gap / 2, base - height, slot - gap, height] as const
+    const rect = [plot.x + position * layout.step, base - height, layout.bar, height] as const
     return { series, grow, rect, color, muted }
   })
   paintSegments(ctx, bars, colors, litDots)
@@ -931,6 +927,18 @@ function drawDay(
     ctx.fillText(value, center - ctx.measureText(value).width / 2, y - 16)
     ctx.restore()
   })
+}
+
+// A one-day chart's bars on the dot grid, edge to edge across `width`: each an odd number of dot pitches wide round the
+// dot at its middle, so its edges fall halfway between dot columns, with two or three pitches between them. Of those,
+// the one whose pitch is nearest the whole range's, about 16px.
+function dayLayout(count: number, width: number) {
+  const bars = Math.max(1, count)
+  const best = [2, 3]
+    .flatMap((gap) => Array.from({ length: 16 }, (_, index) => ({ gap, dots: index * 2 + 3 })))
+    .map((item) => ({ ...item, pitch: width / (bars * item.dots + (bars - 1) * item.gap) }))
+    .toSorted((a, b) => Math.abs(a.pitch - 16) - Math.abs(b.pitch - 16))[0]!
+  return { pitch: best.pitch, bar: best.dots * best.pitch, step: (best.dots + best.gap) * best.pitch }
 }
 
 // A one-day chart's bars: its series with anything that day, the most first and Other last.
