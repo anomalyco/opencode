@@ -84,14 +84,17 @@ const toolError = (tool: "edit" | "write" | "patch", error: Tool.Error): ToolErr
 })
 
 describe("plan plugin instructions", () => {
-  it.effect("adds Plan mode instructions to the plan agent without replacing its prompt", () =>
+  it.effect("gives the plan agent its own enter and leave texts without replacing its prompt", () =>
     Effect.gen(function* () {
       const { planAgent } = yield* run()
       expect(planAgent.system).toBeUndefined()
-      expect(planAgent.instructions).toContain("You are in Plan mode")
-      expect(planAgent.instructions).toContain("Do not create or update plan files unless the user explicitly asks you to")
-      expect(planAgent.instructions).toContain(planDirectory)
-      expect(planAgent.instructions).toContain("Do not modify any other files")
+      const instructions = planAgent.instructions
+      if (typeof instructions !== "object") return yield* Effect.die("expected selected and unselected instructions")
+      expect(instructions.selected).toContain("You are in Plan mode")
+      expect(instructions.selected).toContain("Do not create or update plan files unless the user explicitly asks you to")
+      expect(instructions.selected).toContain(planDirectory)
+      expect(instructions.selected).toContain("Do not modify any other files")
+      expect(instructions.unselected).toContain("You are no longer the Plan agent, so you are NO LONGER in Plan mode")
     }),
   )
 })

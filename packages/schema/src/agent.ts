@@ -26,8 +26,15 @@ export const Info = Schema.Struct({
   model: Model.Ref.pipe(optional),
   request: Provider.Request,
   system: Schema.String.pipe(optional),
-  /** Added to the default prompt while the agent is selected, without replacing it like `system`. */
-  instructions: Schema.String.pipe(optional),
+  /**
+   * Added to the default prompt while the agent is selected, without replacing it like `system`. A string is
+   * introduced as this agent's instructions, and core tells the model when they stop applying. `{ selected, unselected }`
+   * sends both texts exactly as written: `selected` while the agent is selected, `unselected` once when the session
+   * switches away.
+   */
+  instructions: Schema.Union([Schema.String, Schema.Struct({ selected: Schema.String, unselected: Schema.String })]).pipe(
+    optional,
+  ),
   description: Schema.String.pipe(optional),
   mode: Schema.Literals(["subagent", "primary", "all"]),
   hidden: Schema.Boolean,

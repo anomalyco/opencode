@@ -2195,6 +2195,59 @@ describe("SessionRunnerLLM", () => {
       ])
     })
 
+    scenario("sends an agent's own selected and unselected texts exactly as written", function* (s) {
+      const agent = yield* Agent.Service
+      const define = (unselected: string) =>
+        agent.transform((editor) =>
+          editor.update(plan, (item) => {
+            item.name = Agent.Name.make("Plan")
+            item.mode = "primary"
+            item.instructions = { selected: "Plan rules", unselected }
+          }),
+        )
+      yield* define("Left Plan mode")
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      expect(prompt(s.requests[0])).toContain("Plan rules")
+      expect(prompt(s.requests[0])).not.toContain("You are the Plan agent")
+
+      // Editing only the unselected text sends nothing while the agent is still selected.
+      yield* define("You have left Plan mode")
+      yield* s.runPrompt("Second")
+      expect(systemTexts(s.requests[1]!)).toEqual([])
+
+      yield* select(s, build)
+      yield* s.runPrompt("Third")
+      expect(systemTexts(s.requests[2]!)).toEqual(["You have left Plan mode"])
+
+      // After compaction on build, neither text is shown: unselected is only for the switch itself.
+      yield* s.llm.push(TestLLM.text("## Objective\n- summary", "custom-summary"))
+      yield* s.session.compact({ sessionID })
+      yield* s.resume
+      yield* s.runPrompt("Fourth")
+      expect(prompt(s.requests.at(-1))).not.toContain("Plan rules")
+      expect(prompt(s.requests.at(-1))).not.toContain("left Plan mode")
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("sends an agent's new selected text as written when a plugin edits it", function* (s) {
+      const agent = yield* Agent.Service
+      const define = (selected: string) =>
+        agent.transform((editor) =>
+          editor.update(plan, (item) => {
+            item.name = Agent.Name.make("Plan")
+            item.mode = "primary"
+            item.instructions = { selected, unselected: "Left Plan mode" }
+          }),
+        )
+      yield* define("Plan rules")
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* define("New plan rules")
+      yield* s.runPrompt("Second")
+      expect(systemTexts(s.requests[1]!)).toEqual(["New plan rules"])
+    })
+
     scenario("moves instructions into the system prompt at compaction", function* (s) {
       yield* defineAgents()
       yield* s.runPrompt("First")

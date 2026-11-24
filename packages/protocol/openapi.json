@@ -16594,7 +16594,24 @@
             "type": "string"
           },
           "instructions": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "selected": {
+                    "type": "string"
+                  },
+                  "unselected": {
+                    "type": "string"
+                  }
+                },
+                "required": ["selected", "unselected"],
+                "additionalProperties": false
+              }
+            ]
           },
           "description": {
             "type": "string"
