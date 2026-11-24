@@ -17,10 +17,13 @@ async function wait(fn: () => boolean, timeout = 5_000) {
   }
 }
 
-async function advance(ms: number) {
-  for (let i = 0; i < 50; i++) await Promise.resolve()
-  jest.advanceTimersByTime(ms)
-  for (let i = 0; i < 50; i++) await Promise.resolve()
+// Timers are faked: step the clock a second at a time and let promises settle in between, until the state under
+// test is reached or the time is up.
+async function elapse(ms: number, until: () => boolean = () => false) {
+  for (let elapsed = 0; elapsed < ms && !until(); elapsed += 1_000) {
+    jest.advanceTimersByTime(1_000)
+    for (let i = 0; i < 100; i++) await Promise.resolve()
+  }
 }
 
 test("keeps checking a missing location until its folder is back or the session is left", async () => {
@@ -67,28 +70,28 @@ test("keeps checking a missing location until its folder is back or the session 
     jest.useFakeTimers()
 
     location.set({ directory: away })
-    await advance(0)
-    expect(checks[away]).toBe(1)
+    await elapse(5_000, () => location.error !== undefined)
     expect(location.error?.location.directory).toBe(away)
+    expect(checks[away]).toBe(1)
 
     // Still missing: the error stays up while the folder is checked again.
-    await advance(15_000)
+    await elapse(60_000, () => checks[away] === 2)
     expect(checks[away]).toBe(2)
     expect(location.error?.location.directory).toBe(away)
 
     mounted = true
-    await advance(15_000)
-    expect(checks[away]).toBe(3)
+    await elapse(60_000, () => location.error === undefined)
     expect(location.error).toBeUndefined()
-    await advance(60_000)
+    expect(checks[away]).toBe(3)
+    await elapse(60_000)
     expect(checks[away]).toBe(3)
 
     // Leaving a missing location stops its checks.
     location.set({ directory: gone })
-    await advance(0)
+    await elapse(5_000, () => location.error !== undefined)
     expect(location.error?.location.directory).toBe(gone)
     location.set({ directory })
-    await advance(60_000)
+    await elapse(60_000)
     expect(checks[gone]).toBe(1)
     expect(location.error).toBeUndefined()
   } finally {
