@@ -1036,27 +1036,16 @@ function DataGlyph(props: { fixed: boolean }) {
   )
 }
 
-// Lead with: the top model as first place, the "01" badge of the leaderboard's ranks; the sum sign for the total.
+// Lead with: a medal for the top model, the sum sign for the total.
 function LeadGlyph(props: { lead: "top" | "total" }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <Show
-        when={props.lead === "top"}
-        fallback={<path d="M12 3.25H4.25L8.5 8l-4.25 4.75H12" fill="none" stroke="currentColor" stroke-width="1.5" />}
-      >
-        <rect x="1.75" y="2.75" width="12.5" height="10.5" fill="none" stroke="currentColor" stroke-width="1.5" />
-        <text
-          x="8"
-          y="10.6"
-          fill="currentColor"
-          font-family="OpenMono, ui-monospace, monospace"
-          font-size="7"
-          font-weight="700"
-          text-anchor="middle"
-        >
-          01
-        </text>
-      </Show>
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <Show when={props.lead === "top"} fallback={<path d="M12 3.25H4.25L8.5 8l-4.25 4.75H12" />}>
+          <path d="M4.25 1.75H6.75L8.75 6.9M11.75 1.75H9.25L7.25 6.9" />
+          <circle cx="8" cy="10.5" r="3.25" />
+        </Show>
+      </g>
     </svg>
   )
 }
