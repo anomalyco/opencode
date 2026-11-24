@@ -1,5 +1,4 @@
 [data-component="session-turn"] {
-  --sticky-header-height: calc(var(--session-title-height, 0px) + 24px);
   height: 100%;
   min-height: 0;
   min-width: 0;

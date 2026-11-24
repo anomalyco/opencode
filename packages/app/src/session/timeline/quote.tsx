@@ -6,6 +6,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
+import { scrollPort } from "@opencode/ui/scroll-port"
 import { Tooltip } from "@opencode/ui/tooltip"
 import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -381,7 +382,7 @@ export function createTimelineQuote(input: {
         last = measured ?? last
 
         if (!last) return
-        const bounds = measured?.bounds ?? root.getBoundingClientRect()
+        const bounds = measured?.bounds ?? shownBounds(root)
         const extent = measured?.extent ?? { ...last.extent, left: bounds.left, right: bounds.right }
         const position = quotePosition(bounds, extent, size, window.matchMedia("(hover: none)").matches)
 
@@ -495,14 +496,7 @@ function measureQuote(root: HTMLElement, selected: TimelineSelection, horizontal
   const view = root.getBoundingClientRect()
 
   if (!view.height || !view.width) return
-  const sticky = root.querySelector<HTMLElement>("[data-session-title]")
-
-  const bounds = {
-    top: view.top + (sticky?.offsetHeight ?? 0),
-    bottom: view.bottom,
-    left: view.left,
-    right: view.right,
-  }
+  const bounds = shownBounds(root, view)
 
   const rects = selectionRects(selected)
 
@@ -536,6 +530,14 @@ function measureQuote(root: HTMLElement, selected: TimelineSelection, horizontal
       backward: selected.backward,
     },
   }
+}
+
+// What shows of the timeline. Its viewport runs on under the session header and the composer region, and an action
+// placed there would cover them.
+function shownBounds(root: HTMLElement, view = root.getBoundingClientRect()) {
+  const port = scrollPort(root)
+
+  return { top: port.top, bottom: port.bottom, left: view.left, right: view.right }
 }
 
 function sameRange(a: Range, b: Range) {

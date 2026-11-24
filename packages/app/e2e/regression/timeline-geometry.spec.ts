@@ -311,6 +311,77 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
   await expect.poll(bottom).toBeLessThanOrEqual(1)
 })
 
+test("shows the Find bar of an open diff where the timeline shows", async ({ page }) => {
+  const id = "prt_file_find_patch"
+  const before = Array.from({ length: 80 }, (_, index) => `export const value${index} = ${index}\n`).join("")
+
+  await setupTimeline(page, {
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
+    },
+    messages: [
+      userMessage(),
+      assistantMessage([
+        toolPart(
+          id,
+          "patch",
+          "completed",
+          { patchText: "Update src/find.ts" },
+          {
+            metadata: {
+              files: [
+                {
+                  file: "src/find.ts",
+                  status: "modified",
+                  patch: createTwoFilesPatch(
+                    "a/src/find.ts",
+                    "b/src/find.ts",
+                    before,
+                    before.replaceAll(" = ", " = -"),
+                  ),
+                  additions: 80,
+                  deletions: 80,
+                },
+              ],
+            },
+          },
+        ),
+      ]),
+    ],
+    viewport: { width: 1200, height: 600 },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const wrapper = page.locator(`[data-timeline-part-id="${id}"]`)
+  await wrapper.locator('[data-slot="accordion-trigger"]').click()
+  await expect(wrapper.locator('[data-component="apply-patch-file-diff"]')).toBeVisible()
+
+  // The open diff is as tall as its lines, and the timeline follows its end: the diff's top is far above the screen.
+  await expect
+    .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1)
+  const view = (await scroller.boundingBox())!
+  await page.mouse.click(view.x + view.width / 2, view.y + view.height / 2)
+  await page.keyboard.press("ControlOrMeta+f")
+  const find = page.getByRole("textbox", { name: "Find", exact: true })
+  await expect(find).toBeFocused()
+
+  // The bar against the session header's lower edge and the composer region's top.
+  await expect
+    .poll(() =>
+      find.evaluate((element) => {
+        const bar = element.parentElement!.getBoundingClientRect()
+        const header = document.querySelector("[data-session-title]")!.firstElementChild!.getBoundingClientRect()
+        const dock = document.querySelector('[data-component="session-composer-dock"]')!.getBoundingClientRect()
+
+        if (bar.top < header.bottom) return "above the timeline"
+
+        return bar.bottom > dock.top ? "behind the composer" : "shown"
+      }),
+    )
+    .toBe("shown")
+})
+
 for (const outline of [
   { name: "shell outline at 1.25x", kind: "shell", deviceScaleFactor: 1.25 },
   { name: "shell outline at 1.5x", kind: "shell", deviceScaleFactor: 1.5 },
@@ -856,11 +927,31 @@ async function scrollsBehindComposerRegion(
 }
 
 test("shows the match Find moves to between the session header and a tall draft", async ({ page }) => {
+  const history = historyMessages(12)
+
+  // A reply much taller than what shows, with the match on its last line, far from the middle of its row.
+  const tall = [
+    userMessage(undefined, { id: "msg_00005_tall_a_user", created: 1690000055000 }),
+    assistantMessage(
+      [
+        textPart(
+          "prt_find_tall",
+          [...Array.from({ length: 40 }, (_, index) => `Filler paragraph ${index}.`), "The needle rests here."].join(
+            "\n\n",
+          ),
+        ),
+      ],
+      { id: "msg_00005_tall_b_assistant", parentID: "msg_00005_tall_a_user", created: 1690000056000 },
+    ),
+  ]
+
   // A short window and a tall draft: the composer region covers the middle of the viewport, which runs on under it.
   await setupTimeline(page, {
     viewport: { width: 1200, height: 460 },
     sessionMessages: validateTimelineMessages([
-      ...historyMessages(12),
+      ...history.slice(0, 12),
+      ...tall,
+      ...history.slice(12),
       userMessage(),
       assistantMessage([textPart("prt_find_tail", "The newest answer.")]),
     ]),
@@ -884,14 +975,11 @@ test("shows the match Find moves to between the session header and a tall draft"
   await expect(search).toBeFocused()
   const active = () => page.evaluate(() => CSS.highlights.get("timeline-search-hit-active")?.size ?? 0)
 
-  // The first search brings the match's row in from history, where its text renders late. Searching again, with the
-  // row rendered, is what scrolls to the match itself.
-  await search.fill("Historical response 3.")
+  // The match is in history that was not shown yet. The timeline brings its row in while the rows around it measure,
+  // and Find then scrolls to the match itself, so only where the match stays counts.
+  await search.fill("needle rests")
   await expect.poll(active).toBe(1)
-  await search.fill("Historical response 3")
-  await expect.poll(active).toBe(1)
-  // The row is brought in before the match is scrolled to, so only where the match stays counts.
-  await waitForVisualSettle(page, [`[data-timeline-part-id="${renderedPartID("prt_00003_history_text")}"]`], 6)
+  await waitForVisualSettle(page, [`[data-timeline-part-id="${renderedPartID("prt_find_tall")}"]`], 6)
 
   // The active match against the header's lower edge and the composer region's top.
   expect(

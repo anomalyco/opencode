@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { scrollPort } from "@opencode/ui/scroll-port"
 import {
   createFindHostRegistryState,
   INITIAL_FILE_FIND_STATE,
@@ -118,6 +119,15 @@ function scrollParent(el: HTMLElement): HTMLElement | undefined {
     if (style.overflowY === "auto" || style.overflowY === "scroll") return parent
     parent = parent.parentElement
   }
+}
+
+// Where an element starts to show: below the top edge of each scroller it sits in, and below what that scroller keeps
+// over its top. A diff in the session timeline is as tall as its lines, so its own top can be far above the screen.
+function shownTop(element: HTMLElement): number {
+  const scroller = scrollParent(element)
+  const top = scrollPort(element).top
+
+  return scroller ? Math.max(top, shownTop(scroller)) : top
 }
 
 type CreateFileFindOptions = {
@@ -348,15 +358,12 @@ export function createFileFind(opts: CreateFileFindOptions) {
     if (!wrapper) return
 
     const root = scrollParent(wrapper) ?? wrapper
-    const rect = root.getBoundingClientRect()
-    const title = parseFloat(getComputedStyle(root).getPropertyValue("--session-title-height"))
-    const header = Number.isNaN(title) ? 0 : title
 
     dispatch({
       type: "position.updated",
       pos: {
-        top: Math.round(rect.top) + header - 4,
-        right: Math.round(window.innerWidth - rect.right) + 8,
+        top: Math.round(shownTop(root)) - 4,
+        right: Math.round(window.innerWidth - root.getBoundingClientRect().right) + 8,
       },
     })
   }

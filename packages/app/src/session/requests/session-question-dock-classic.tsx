@@ -7,6 +7,7 @@ import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { LinkedText } from "@opencode/session-ui/linked-text"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
+import { scrollPort } from "@opencode/ui/scroll-port"
 import { TextInput } from "@opencode/ui/text-input"
 import { useSpring } from "@opencode/ui/motion-spring"
 import { observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
@@ -178,15 +179,12 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
   const measure = () => {
     if (!root) return
 
-    const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
-    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
+    const scroller = document.querySelector<HTMLElement>(
+      '[data-slot="session-timeline-scroll"] > .scroll-view__viewport',
+    )
 
-    const top =
-      head instanceof HTMLElement && head.classList.contains("sticky")
-        ? head.getBoundingClientRect().bottom
-        : scroller instanceof HTMLElement
-          ? scroller.getBoundingClientRect().top
-          : 0
+    // The timeline shows from below its session header, which covers the top of its viewport.
+    const top = scroller ? scrollPort(scroller).top : 0
 
     const dock = root.closest('[data-component="session-composer-dock"]')
     // In the app this row can have zero height and overflow upward; the containing panel bounds the question.

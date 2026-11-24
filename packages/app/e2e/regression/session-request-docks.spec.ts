@@ -2,6 +2,7 @@ import type { OpenCodeEvent } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import { SERVER, sessionHref } from "../utils/app"
 import { installSseTransport } from "../utils/sse-transport"
+import { waitForVisualSettle } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { mockWorkspace, type WorkspaceInput } from "../utils/workspace"
 
@@ -83,6 +84,58 @@ test("shows a pending question dock", async ({ page }) => {
   await question.getByRole("button", { name: "Submit" }).click()
   expect((await reply).postDataJSON()).toEqual({ answer: { q0: "minimal" } })
 })
+
+for (const experimental of [false, true]) {
+  test(`keeps a long question below the session header in the ${experimental ? "new" : "classic"} dock`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1200, height: 520 })
+    await mockServer(page, {
+      seed: { settings: { general: { newQuestionUI: experimental } } },
+      forms: [
+        {
+          id: "frm_question_long",
+          sessionID,
+          title: "Questions",
+          metadata: { kind: "question" },
+          fields: [
+            {
+              key: "q0",
+              type: "string",
+              title: "Implementation",
+              description: "Which implementation should be used?",
+              options: Array.from({ length: 30 }, (_, index) => ({
+                value: `option-${index}`,
+                label: `Option ${index}`,
+                description: "Use this option for the change",
+              })),
+              custom: true,
+            },
+          ],
+        },
+      ],
+    })
+
+    await page.goto(sessionHref(sessionID))
+    await expectSessionTitle(page, title)
+
+    const selector = '[data-component="dock-prompt"][data-kind="question"]'
+    const question = page.locator(selector)
+    await expect(question.getByRole("radio", { name: /Option 0/ })).toBeVisible()
+    await expect(question.getByRole("radio", { name: /Option 29/ })).not.toBeInViewport()
+    // The dock grows to its height on a spring; only where it rests counts.
+    await waitForVisualSettle(page, [selector], 6)
+
+    // As tall as it may get, the dock stops below the header and its fade, which cover the timeline's top.
+    expect(
+      await question.evaluate(
+        (element) =>
+          element.getBoundingClientRect().top -
+          document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom,
+      ),
+    ).toBeGreaterThanOrEqual(0)
+  })
+}
 
 test("replies with predefined choices and the edited custom multiselect answer", async ({ page }) => {
   await mockServer(page, {
@@ -714,6 +767,9 @@ test("restores the draft caret before typing after a request dock closes", async
   await expect(editor).toHaveText(`${draft.slice(0, cursor)}x${draft.slice(cursor)}`)
 })
 
-function mockServer(page: Page, requests: Pick<WorkspaceInput, "sessionPermissions" | "onPermissionReply" | "forms">) {
+function mockServer(
+  page: Page,
+  requests: Pick<WorkspaceInput, "sessionPermissions" | "onPermissionReply" | "forms" | "seed">,
+) {
   return mockWorkspace(page, { name: "RequestDocks", directory, sessions: [{ id: sessionID, title }], ...requests })
 }

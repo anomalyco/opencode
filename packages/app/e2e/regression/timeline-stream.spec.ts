@@ -3237,15 +3237,27 @@ test("places the quote action by the end a selection was made towards", async ({
   await scroll.evaluate((element) => (element.style.width = ""))
   await clear()
 
-  // A selection running past both edges of the timeline pins the action to its bottom.
+  // A line just below the session header has no room above it that shows, so the action goes below the line rather
+  // than over the header.
+  const header = await box(page.locator("[data-session-title] > div"))
+  await first.evaluate((element, bottom) => {
+    element.closest(".scroll-view__viewport")!.scrollTop += element.getBoundingClientRect().top - bottom - 6
+  }, header.y + header.height)
+  const top = await box(first)
+  const under = await drag({ x: top.x + 1, y: top.y + 8 }, { x: top.x + 200, y: top.y + 8 })
+  expect(under.y).toBeGreaterThanOrEqual(header.y + header.height)
+  await clear()
+
+  // A selection running past both edges of what shows of the timeline pins the action to its bottom, above the
+  // composer region the timeline runs on under.
   await first.click()
   await page.keyboard.press("ControlOrMeta+a")
   await expect(toolbar).toBeVisible()
   await scroller.evaluate((element) => (element.scrollTop = (element.scrollHeight - element.clientHeight) / 2))
-  const view = await box(scroller)
+  const shown = await box(page.locator('[data-slot="session-timeline-visible"]'))
   await expect
     .poll(async () => Math.round((await box(toolbar)).y + (await box(toolbar)).height))
-    .toBe(Math.round(view.y + view.height - 8))
+    .toBe(Math.round(shown.y + shown.height - 8))
 })
 
 test("keeps the quote action by a triple-clicked paragraph whose selection runs on to the next message", async ({
@@ -3315,7 +3327,9 @@ for (const input of [
     const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
     await expect(toolbar).toBeVisible()
     const line = await text.boundingBox()
-    const view = await page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport').boundingBox()
+    // What shows of the timeline, which runs on under the composer region.
+    const shown = page.locator('[data-slot="session-timeline-visible"]')
+    const view = await shown.boundingBox()
     const action = await toolbar.boundingBox()
 
     if (!line || !view || !action) throw new Error("Element is not laid out")
@@ -3342,10 +3356,7 @@ for (const input of [
       await expect
         .poll(async () => {
           const box = await popover.boundingBox()
-
-          const viewport = await page
-            .locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
-            .boundingBox()
+          const viewport = await shown.boundingBox()
 
           return box && viewport && Math.abs(box.y + box.height - (viewport.y + viewport.height - 8)) < 1
         })
