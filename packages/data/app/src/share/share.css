@@ -243,11 +243,11 @@
     padding: 56px calc(var(--editor-inspector) + 2px + var(--editor-inset) + 48px) 20px 48px;
     /* Grey on the light page; on the dark one a step lighter than the card (#0c0c0c), so it stands out, but well below
        the page's second layer, which glared. */
-    background-color: light-dark(var(--stats-layer-2), #151515);
+    background-color: light-dark(var(--stats-layer-2), #111111);
 
     /* A light card would sit pale on the light stage; the stage darkens a step under it. */
     &[data-card-theme="light"] {
-      background-color: light-dark(#d6d6d6, #151515);
+      background-color: light-dark(#d6d6d6, #111111);
     }
     background-image: radial-gradient(
       light-dark(var(--stats-line-strong), rgb(255 255 255 / 0.06)) 1px,
