@@ -2,6 +2,8 @@ import type { FileNode } from "@/runtime/server/types"
 
 /** Bounded fallback so a wedged server or network mount cannot leave a directory loading forever. */
 export const DIRECTORY_LIST_TIMEOUT_MS = 30_000
+/** Revalidate visible listings before their server watches expire, and recover evicted or missed watches. */
+export const DIRECTORY_REFRESH_INTERVAL_MS = 5 * 60_000
 
 /**
  * One directory's listing lifecycle, keyed by its normalized path. `expanded` holds in every status: collapsing keeps
@@ -48,6 +50,7 @@ export type FileTreeEvent =
   | { readonly type: "list.failed"; readonly dir: string; readonly attempt: number; readonly error: string }
   | { readonly type: "list.timed-out"; readonly dir: string; readonly attempt: number }
   | { readonly type: "reset" }
+  | { readonly type: "refresh.requested" }
   | { readonly type: "disposed" }
 
 export type FileTreeEffect =
@@ -85,6 +88,17 @@ export function transitionFileTree(state: FileTreeState, event: FileTreeEvent): 
     }
   }
 
+  if (event.type === "refresh.requested") {
+    return Object.entries(state.dirs).reduce<FileTreeTransition>(
+      (current, [dir, entry]) => {
+        if (!entry.expanded || entry.status !== "ready") return current
+        const next = transitionFileTree(current.state, { type: "list.requested", dir, force: true })
+        return { state: next.state, effects: [...current.effects, ...next.effects] }
+      },
+      unchanged(state),
+    )
+  }
+
   const entry = state.dirs[event.dir]
 
   if (event.type === "list.requested") {
@@ -114,6 +128,16 @@ export function transitionFileTree(state: FileTreeState, event: FileTreeEvent): 
     }
 
     if (entry?.expanded) return unchanged(state)
+
+    if (event.list && entry?.status === "ready") {
+      return startListing(state, event.dir, (attempt) => ({
+        ...entry,
+        status: "refreshing",
+        expanded: true,
+        attempt,
+        dirty: false,
+      }))
+    }
 
     return withDirectory(state, event.dir, entry ? { ...entry, expanded: true } : { status: "idle", expanded: true })
   }

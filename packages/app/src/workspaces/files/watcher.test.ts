@@ -18,7 +18,6 @@ describe("file watcher invalidation", () => {
       normalize: () => "",
       hasFile: () => false,
       loadFile: () => {},
-      node: () => undefined,
       isDirLoaded: (path) => path === "",
       refreshDir: (path) => refresh.push(path),
     })
@@ -33,7 +32,6 @@ describe("file watcher invalidation", () => {
       normalize: (input) => input,
       hasFile: (path) => path === "src/new.ts",
       loadFile: (path) => loads.push(path),
-      node: () => undefined,
       isDirLoaded: (path) => path === "src",
       refreshDir: (path) => refresh.push(path),
     })
@@ -50,13 +48,6 @@ describe("file watcher invalidation", () => {
       hasFile: () => false,
       isOpen: (path) => path === "src/open.ts",
       loadFile: (path) => loads.push(path),
-      node: () => ({
-        path: "src/open.ts",
-        type: "file",
-        name: "open.ts",
-        absolute: "/repo/src/open.ts",
-        ignored: false,
-      }),
       isDirLoaded: () => false,
       refreshDir: () => {},
     })
@@ -64,15 +55,14 @@ describe("file watcher invalidation", () => {
     expect(loads).toEqual(["src/open.ts"])
   })
 
-  test("refreshes only changed loaded directory nodes", () => {
+  test.each(["src", "src\\sub"])("refreshes the loaded directory %p without a node-key lookup", (directory) => {
     const refresh: string[] = []
 
-    invalidateFromWatcher(filesystemEvent("src", "change"), {
+    invalidateFromWatcher(filesystemEvent(directory, "change"), {
       normalize: (input) => input,
       hasFile: () => false,
       loadFile: () => {},
-      node: () => ({ path: "src", type: "directory", name: "src", absolute: "/repo/src", ignored: false }),
-      isDirLoaded: (path) => path === "src",
+      isDirLoaded: (path) => path === directory,
       refreshDir: (path) => refresh.push(path),
     })
 
@@ -80,18 +70,11 @@ describe("file watcher invalidation", () => {
       normalize: (input) => input,
       hasFile: () => false,
       loadFile: () => {},
-      node: () => ({
-        path: "src/file.ts",
-        type: "file",
-        name: "file.ts",
-        absolute: "/repo/src/file.ts",
-        ignored: false,
-      }),
-      isDirLoaded: () => true,
+      isDirLoaded: (path) => path === directory,
       refreshDir: (path) => refresh.push(path),
     })
 
-    expect(refresh).toEqual(["src"])
+    expect(refresh).toEqual([directory])
   })
 
   test("refreshes the parent of a Windows path", () => {
@@ -101,7 +84,6 @@ describe("file watcher invalidation", () => {
       normalize: (input) => input,
       hasFile: () => false,
       loadFile: () => {},
-      node: () => undefined,
       isDirLoaded: (path) => path === "src/sub",
       refreshDir: (path) => refresh.push(path),
     })
@@ -118,7 +100,6 @@ describe("file watcher invalidation", () => {
       loadFile: () => {
         throw new Error("should not load")
       },
-      node: () => undefined,
       isDirLoaded: () => true,
       refreshDir: (path) => refresh.push(path),
     })

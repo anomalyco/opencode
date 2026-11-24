@@ -36,33 +36,40 @@ const subscriptions = Effect.gen(function* () {
 describe("FileWatch", () => {
   it.effect("invalidates a browsed directory once per coalesce window", () =>
     Effect.gen(function* () {
-      const fileWatch = yield* FileWatch.Service
-      const test = yield* Watcher.Test
-      const bus = yield* Bus.Service
-      const tmp = yield* tmpdirScoped()
-      const input = { location: { directory: AbsolutePath.make(tmp.path) }, file: tmp.path, type: "children" } as const
-      const next = () =>
-        bus
-          .subscribe(FileSystem.Event.Changed)
-          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
-      yield* fileWatch.watch(input)
-      yield* fileWatch.watch(input)
-      expect(yield* test.subscriptions()).toEqual([{ path: tmp.path, type: "children" }])
+      const fs = yield* FSUtil.Service
+      yield* Effect.gen(function* () {
+        const fileWatch = yield* FileWatch.Service
+        const test = yield* Watcher.Test
+        const bus = yield* Bus.Service
+        const events: Array<{ file: string; event: string }> = []
+        yield* bus.subscribe(FileSystem.Event.Changed).pipe(
+          Stream.runForEach((event) => Effect.sync(() => void events.push(event.data))),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+        const input = children("src")
+        yield* fileWatch.watch(input)
+        yield* fileWatch.watch(input)
+        expect(yield* test.subscriptions()).toEqual([{ path: input.file, type: "children" }])
 
-      // The first update publishes immediately, without waiting for the window.
-      const leading = yield* next()
-      yield* test.emit({ path: path.join(tmp.path, "new.txt"), type: "create" })
-      const first = yield* Fiber.join(leading)
+        yield* test.emit({ path: path.join(input.file, "new.txt"), type: "create" })
+        yield* TestClock.adjust(0)
+        expect(events).toEqual([{ file: input.file, event: "change" }])
 
-      // Churn inside the window coalesces into one trailing publish when the window ends.
-      const trailing = yield* next()
-      yield* test.emit({ path: path.join(tmp.path, "renamed.txt"), type: "create" })
-      yield* test.emit({ path: path.join(tmp.path, "new.txt"), type: "delete" })
-      yield* TestClock.adjust(FileWatch.CHILDREN_COALESCE)
-      const second = yield* Fiber.join(trailing)
-
-      expect([...first, ...second].map((event) => ({ directory: event.location?.directory, ...event.data }))).toEqual(
-        Array.from({ length: 2 }, () => ({ directory: input.location.directory, file: tmp.path, event: "change" })),
+        yield* test.emit({ path: path.join(input.file, "renamed.txt"), type: "create" })
+        yield* test.emit({ path: path.join(input.file, "new.txt"), type: "delete" })
+        yield* TestClock.adjust(Duration.toMillis(FileWatch.CHILDREN_COALESCE) - 1)
+        expect(events).toHaveLength(1)
+        yield* TestClock.adjust(1)
+        expect(events).toEqual(Array.from({ length: 2 }, () => ({ file: input.file, event: "change" })))
+        yield* TestClock.adjust(FileWatch.CHILDREN_COALESCE)
+        expect(events).toHaveLength(2)
+      }).pipe(
+        // Existence is an input here; synchronous checks keep the clock assertions independent of real disk I/O.
+        Effect.provide(
+          FileWatch.layer().pipe(
+            Layer.provide(Layer.succeed(FSUtil.Service, { ...fs, existsSafe: () => Effect.succeed(true) })),
+          ),
+        ),
       )
     }),
   )

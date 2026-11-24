@@ -268,11 +268,31 @@ describe("file tree machine", () => {
     expect(paths(ready, "src")).toEqual(["src/a.ts"])
 
     const reopened = transitionFileTree(ready, { type: "dir.expanded", dir: "src", list: true })
-    expect(dir(reopened.state, "src")).toMatchObject({ status: "ready", expanded: true })
-    expect(reopened.effects).toEqual([])
+    expect(dir(reopened.state, "src")).toMatchObject({ status: "refreshing", expanded: true, children: ["src/a.ts"] })
+    expect(reopened.effects).toEqual([list("src", 2)])
     expect(transitionFileTree(reopened.state, { type: "list.requested", dir: "src", force: false }).state).toBe(
       reopened.state,
     )
+  })
+
+  test("revalidation refreshes expanded cached listings without duplicating pending work", () => {
+    const ready = replay([
+      { type: "list.requested", dir: "", force: false },
+      { type: "list.loaded", dir: "", attempt: 1, nodes: [directory("src"), directory("closed")] },
+      { type: "dir.expanded", dir: "src", list: true },
+      { type: "list.loaded", dir: "src", attempt: 2, nodes: [file("src/a.ts")] },
+      { type: "list.requested", dir: "closed", force: false },
+      { type: "list.loaded", dir: "closed", attempt: 3, nodes: [] },
+    ]).state
+
+    const refreshed = transitionFileTree(ready, { type: "refresh.requested" })
+    expect(refreshed.effects).toEqual([list("", 4), list("src", 5)])
+    expect(paths(refreshed.state, "src")).toEqual(["src/a.ts"])
+    expect(dir(refreshed.state, "closed")?.status).toBe("ready")
+    expect(transitionFileTree(refreshed.state, { type: "refresh.requested" }).state).toBe(refreshed.state)
+
+    const reset = transitionFileTree(refreshed.state, { type: "reset" }).state
+    expect(transitionFileTree(reset, { type: "refresh.requested" }).effects).toEqual([])
   })
 
   test("an untouched tree ignores a reset, and a disposed tree ignores everything", () => {
@@ -289,6 +309,7 @@ describe("file tree machine", () => {
       { type: "list.failed", dir: "src", attempt: 1, error: "boom" },
       { type: "list.requested", dir: "src", force: true },
       { type: "reset" },
+      { type: "refresh.requested" },
     ]
 
     events.forEach((event) => {

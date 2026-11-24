@@ -431,11 +431,14 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
 
 test("the file browser refreshes directory entries and rereads a reopened file", async ({ page }) => {
   const directory = "C:/OpenCode/FileBrowserRefresh"
-  const files = { names: ["notes.txt"], content: "before edit" }
+  const files = { names: ["notes.txt"], nested: ["old.txt"], content: "before edit" }
 
   const workspace = await openSession(page, {
     name: "FileBrowserRefresh",
-    fileList: () => files.names.map((name) => fileNode(directory, name)),
+    fileList: (path) =>
+      path.replace(/\\/g, "/").replace(/\/$/, "") === "src"
+        ? files.nested.map((name) => fileNode(directory, `src/${name}`))
+        : [...files.names.map((name) => fileNode(directory, name)), fileNode(directory, "src/", "directory")],
     fileContent: () => ({ type: "text", content: files.content }),
     seed: { panes: { ses_filebrowserrefresh: { review: true } } },
   })
@@ -464,6 +467,14 @@ test("the file browser refreshes directory entries and rereads a reopened file",
   files.names = ["context.txt"]
   await workspace.push([filesystemEvent(directory, directory, "change")])
   await expect(panel.getByRole("treeitem", { name: "notes.txt", exact: true })).toHaveCount(0)
+
+  // Real server directory entries end in a separator; directory watch events do not.
+  await panel.getByRole("treeitem", { name: "src", exact: true }).click()
+  await expect(panel.getByRole("treeitem", { name: "old.txt", exact: true })).toBeVisible()
+  files.nested = ["new.txt"]
+  await workspace.push([filesystemEvent(directory, `${directory}/src`, "change")])
+  await expect(panel.getByRole("treeitem", { name: "new.txt", exact: true })).toBeVisible()
+  await expect(panel.getByRole("treeitem", { name: "old.txt", exact: true })).toHaveCount(0)
 })
 
 for (const listed of [false, true]) {

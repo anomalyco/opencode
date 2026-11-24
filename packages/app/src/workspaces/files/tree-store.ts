@@ -4,6 +4,7 @@ import type { FileNode } from "@/runtime/server/types"
 import {
   canRefreshDirectory,
   createFileTreeState,
+  DIRECTORY_REFRESH_INTERVAL_MS,
   isDirectoryBusy,
   isDirectoryExpanded,
   isDirectoryLoaded,
@@ -72,7 +73,9 @@ export function createFileTreeStore(options: TreeStoreOptions) {
   }
 
   if (getOwner()) {
+    const refresh = setInterval(() => dispatch({ type: "refresh.requested" }), DIRECTORY_REFRESH_INTERVAL_MS)
     onCleanup(() => {
+      clearInterval(refresh)
       dispatch({ type: "disposed" })
       timers.forEach((timer) => clearTimeout(timer))
       timers.clear()
@@ -129,6 +132,7 @@ export function createFileTreeStore(options: TreeStoreOptions) {
   }
 
   return {
+    refresh: () => dispatch({ type: "refresh.requested" }),
     listDir,
     expandDir,
     collapseDir,
