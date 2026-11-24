@@ -133,6 +133,51 @@ test.each<{ name: string; events: FollowEvent[]; following: boolean }>([
     following: false,
   },
   {
+    // A reply streaming at the tail moved the end away while the wheel was on its way there, so the scroll landed a
+    // line short and the reader never rejoined it.
+    name: "rejoins the end when a downward wheel lands within reach of it",
+    events: [
+      { type: "scroll.intent", upward: true, overflow: true },
+      scroll(400, 500),
+      { type: "scroll.intent", upward: false, overflow: false },
+      scroll(1000, 400, 1064, 1000),
+    ],
+    following: true,
+  },
+  {
+    name: "stays detached when a downward wheel stops out of reach of the end",
+    events: [{ type: "detach" }, { type: "scroll.intent", upward: false, overflow: false }, scroll(900, 400)],
+    following: false,
+  },
+  {
+    name: "stays detached when the reader scrolls down within reach of the end after an upward wheel",
+    events: [{ type: "scroll.intent", upward: true, overflow: true }, scroll(940, 1000), scroll(960, 940)],
+    following: false,
+  },
+  {
+    // A size correction moves the offset down too, without the reader.
+    name: "stays detached when a size correction moves the view within reach of the end after a downward wheel",
+    events: [
+      { type: "detach" },
+      { type: "scroll.intent", upward: false, overflow: false },
+      scroll(600, 400),
+      scroll(960, 600, 1000, 1000, 0),
+    ],
+    following: false,
+  },
+  {
+    // A link or Find that lands near the end shows its target there, which following would scroll away.
+    name: "stays detached when navigation lands within reach of the end after a downward wheel",
+    events: [
+      { type: "detach" },
+      { type: "scroll.intent", upward: false, overflow: false },
+      scroll(600, 400),
+      { type: "detach" },
+      scroll(960, 600),
+    ],
+    following: false,
+  },
+  {
     // A cold link to a message detached, then the rows' real sizes shortened the scroll range to where the view
     // was. That counted as arriving at the end, so the link was dropped and the session opened on its latest message.
     name: "stays where navigation sent the view when a shrinking scroll range clamps it to the end",

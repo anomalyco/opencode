@@ -1081,6 +1081,61 @@ for (const input of ["Ctrl+Home", "PageUp on a control in a row", "the scrollbar
   })
 }
 
+for (const input of [
+  "PageDown in the transcript",
+  "PageDown in the composer",
+  "a wheel over the session header",
+] as const) {
+  test(`follows again when ${input} lands within reach of the end`, async ({ page }) => {
+    // A scroll toward the end that lands a line or two short of it follows again. That depended on where the input
+    // went: the composer's page scroll did not count as the reader's, and no wheel over the session header was heard.
+    const timeline = await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage([textPart("prt_reach_tail", notes("Line", 160))], { completed: false }),
+      ],
+    })
+
+    const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+    const editor = page.locator('[data-component="composer-editor"]')
+
+    const fromEnd = () =>
+      scroller.evaluate((element) => Math.round(element.scrollHeight - element.clientHeight - element.scrollTop))
+
+    await expect(page.getByText("Line note 160.", { exact: true })).toBeInViewport()
+    // Before the rows have their real sizes the timeline has nowhere to scroll, and a key would do nothing.
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+
+    // Away by the distance the input scrolls back, and 40px more.
+    if (input === "PageDown in the transcript") await scroller.press("PageUp")
+
+    if (input === "PageDown in the composer") await editor.press("PageUp")
+    await scroller.hover()
+
+    if (input === "a wheel over the session header") await page.mouse.wheel(0, -300)
+    await expect.poll(fromEnd).toBeGreaterThan(100)
+    const step = await fromEnd()
+    await page.mouse.wheel(0, -40)
+    await expect.poll(fromEnd).toBe(step + 40)
+
+    if (input === "PageDown in the transcript") await scroller.press("PageDown")
+
+    if (input === "PageDown in the composer") await editor.press("PageDown")
+
+    if (input === "a wheel over the session header") {
+      await page.locator("[data-session-title]").hover()
+      await page.mouse.wheel(0, step)
+    }
+
+    // 40px short of the end, or already at it.
+    await expect.poll(fromEnd).toBeLessThanOrEqual(40)
+    await timeline.send(partDelta("prt_reach_tail", `\n\n${notes("Streamed", 12)}`))
+    await expect(page.getByText("Streamed note 12.", { exact: true })).toBeInViewport()
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+  })
+}
+
 test("goes on following the reply after a group collapses from its stuck header", async ({ page }) => {
   // The group scrolls its header back into place before it collapses. At the end that scroll is not the reader
   // leaving: the shorter content takes the view to the new end, where the reply still streams.

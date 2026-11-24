@@ -1043,8 +1043,12 @@ export function createTimelineVirtualizer(input: Input) {
     input.follow.dispatch(intentEvent)
   }
 
-  const handleListWheel = (event: WheelEvent) => {
-    if (!active()) return
+  // Heard on the whole view: a wheel over the session header or the jump button, which lie over the timeline, scrolls
+  // it too, and its event never reaches the scroll element.
+  const handleViewWheel = (event: WheelEvent) => {
+    // A wheel with no vertical distance moves nothing in the timeline: a sideways one, over a code block for example.
+    // It is not the reader scrolling, so it ends no seek and says nothing about where the reader is headed.
+    if (!active() || !event.deltaY) return
     input.onUserScroll(event.target)
     dispatchIntent(event.deltaY < 0)
   }
@@ -1265,7 +1269,12 @@ export function createTimelineVirtualizer(input: Input) {
     }
 
     return (
-      <div ref={setViewRoot} class="relative w-full h-full min-w-0">
+      <div
+        ref={setViewRoot}
+        class="relative w-full h-full min-w-0"
+        // Passive, as on the scroll element: the compositor never waits on the main thread to scroll.
+        on:wheel={{ passive: true, handleEvent: handleViewWheel }}
+      >
         <div
           class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-[opacity,translate]"
           classList={{
@@ -1313,7 +1322,6 @@ export function createTimelineVirtualizer(input: Input) {
           thumbHoverTarget={viewRoot()}
           onBeforeScroll={prepareNavigation}
           verticalScrollAdjustment={rendering.scrollAdjustment}
-          onWheel={handleListWheel}
           onTouchStart={handleListTouchStart}
           onKeyDown={handleListKeyDown}
           onScroll={handleListScroll}
