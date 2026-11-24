@@ -300,14 +300,15 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 
   const close = () => dialog?.close()
 
-  // A card made at random: any layout and style, a size for a feed or a story (not Wide), and a track, never silence.
+  // A card made at random: any layout and style, a size for a feed or a story (not Wide), and a clean track, unmuted.
   // Playing from the start again, as each opening does.
   const shuffle = () =>
     batch(() => {
       setShareOption("layout", pick(layouts).value)
       setShareOption("size", pick(sizes.filter((item) => item.value !== "16:9")).value)
       setShareOption("theme", pick(["dark", "light", "leader"] as const))
-      setTrack(pick(shareTracks).id)
+      // Never an explicit track: those are for choosing on purpose.
+      setTrack(pick(shareTracks.filter((item) => !item.explicit)).id)
       setMuted(false)
       setPlaying(true)
     })
