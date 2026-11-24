@@ -38,6 +38,11 @@ describe("taskbar progress", () => {
     expect(selectTaskbarProgressMode({ waiting, failed, busy })).toBe(mode)
   })
 
+  test("a disabled setting suppresses every mode", () => {
+    expect(selectTaskbarProgressMode({ waiting: 1, failed: true, busy: true }, false)).toBe("none")
+    expect(selectTaskbarProgressMode({ waiting: 0, failed: false, busy: true }, false)).toBe("none")
+  })
+
   test("on win32 an idle launch makes no call and repeats are skipped", () => {
     Object.defineProperty(process, "platform", { value: "win32" })
     const fake = fakeWindow()

@@ -293,7 +293,7 @@ function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "li
 
   createEffect(() => {
     if (props.os !== "windows") return
-    const mode = settings.general.taskbarProgress() ? selectTaskbarProgressMode(activity()) : "none"
+    const mode = selectTaskbarProgressMode(activity(), settings.general.taskbarProgress())
     void props.api.setTaskbarProgress(mode)
   })
 
