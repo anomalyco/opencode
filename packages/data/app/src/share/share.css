@@ -583,7 +583,6 @@
     &[aria-pressed="true"] {
       color: var(--stats-text);
       border-color: var(--stats-accent);
-      box-shadow: inset 0 0 0 1px var(--stats-accent);
     }
 
     /* The swatch sits as far from the left edge as from the top and bottom: (36 - 14) / 2 = 11, less the 1px border. */
@@ -736,7 +735,6 @@
     &[aria-checked="true"] {
       color: var(--stats-text);
       border-color: var(--stats-accent);
-      box-shadow: inset 0 0 0 1px var(--stats-accent);
     }
 
     > span {
