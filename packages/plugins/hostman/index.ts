@@ -11,14 +11,19 @@ const MODEL_FETCH_TIMEOUT_MS = 15_000
  * a key stored through `/connect` wins over the `HOSTMAN_API_KEY` environment variable.
  * Models are discovered from `GET {baseURL}/models` and refreshed when a `provider.updated`
  * event fires (for example after a credential is stored or removed through `/connect`) and
- * on a periodic timer; the last good inventory is kept when the gateway is unreachable or
- * the key is invalid.
+ * on a periodic timer. A trigger during an in-flight fetch queues a rerun instead of being
+ * dropped, and a response fetched for a connection that is no longer active is discarded.
+ * The last good inventory is kept when the gateway is unreachable or the key is invalid.
  */
 export default Plugin.define({
   id: "opencode.hostman",
   async setup(ctx) {
     const options = resolveOptions(ctx.options)
-    const state: { current: Model.Info[]; running: boolean } = { current: [], running: false }
+    const state: { current: Model.Info[]; running: boolean; queued: boolean } = {
+      current: [],
+      running: false,
+      queued: false,
+    }
 
     await ctx.provider.transform((evt) => {
       const record = evt.get(PROVIDER_ID)
@@ -58,28 +63,51 @@ export default Plugin.define({
       })
     })
 
+    // Identity of an access choice; labels and refreshed token values do not identify a new connection.
+    const connectionKey = (
+      connection:
+        | { readonly type: "credential"; readonly id: string }
+        | { readonly type: "env"; readonly name: string },
+    ) => (connection.type === "credential" ? `credential:${connection.id}` : `env:${connection.name}`)
+
     const discover = async () => {
-      if (state.running) return
+      if (state.running) {
+        // A trigger during an in-flight fetch queues a rerun instead of being dropped.
+        state.queued = true
+        return
+      }
       state.running = true
       try {
-        // No connection yet means no key: stay silent, the loop retries on the next tick.
-        const connection = await ctx.integration.connection.active(PROVIDER_ID)
-        if (!connection) return
-        const credential = await ctx.integration.connection.resolve(connection)
-        const key = credential?.type === "key" ? credential.key : undefined
-        if (!key) return
-        const response = await fetch(`${options.baseURL}/models`, {
-          headers: { authorization: `Bearer ${key}` },
-          signal: AbortSignal.timeout(MODEL_FETCH_TIMEOUT_MS),
-        })
-        if (!response.ok) throw new Error(`GET /models answered HTTP ${response.status}`)
-        const next = parseModels(await response.json())
-        if (JSON.stringify(next) === JSON.stringify(state.current)) return
-        state.current = next
-        await ctx.provider.reload()
-      } catch (cause) {
-        // Keep the last good inventory and report the failure once per refresh tick.
-        console.warn("[opencode.hostman] model discovery failed:", cause instanceof Error ? cause.message : cause)
+        // The condition reruns the attempt when a trigger arrived while it was in flight.
+        do {
+          state.queued = false
+          try {
+            // No connection yet means no key: skip this attempt, the periodic tick retries.
+            const connection = await ctx.integration.connection.active(PROVIDER_ID)
+            if (!connection) continue
+            const credential = await ctx.integration.connection.resolve(connection)
+            const key = credential?.type === "key" ? credential.key : undefined
+            if (!key) continue
+            const response = await fetch(`${options.baseURL}/models`, {
+              headers: { authorization: `Bearer ${key}` },
+              signal: AbortSignal.timeout(MODEL_FETCH_TIMEOUT_MS),
+            })
+            if (!response.ok) throw new Error(`GET /models answered HTTP ${response.status}`)
+            const next = parseModels(await response.json())
+            // Drop the response when the active connection changed while the request was in flight.
+            const active = await ctx.integration.connection.active(PROVIDER_ID)
+            if (!active || connectionKey(active) !== connectionKey(connection)) {
+              state.queued = true
+              continue
+            }
+            if (JSON.stringify(next) === JSON.stringify(state.current)) continue
+            state.current = next
+            await ctx.provider.reload()
+          } catch (cause) {
+            // Keep the last good inventory and report the failure once per refresh tick.
+            console.warn("[opencode.hostman] model discovery failed:", cause instanceof Error ? cause.message : cause)
+          }
+        } while (state.queued)
       } finally {
         state.running = false
       }

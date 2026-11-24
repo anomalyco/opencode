@@ -157,9 +157,21 @@ describe("toModel", () => {
     expect(model.name).toBe("openai/gpt-5-mini")
     expect(model.type).toBe("chat")
     expect(model.enabled).toBe(true)
-    expect(model.capabilities).toEqual({ tools: true, input: ["text", "image"], output: ["text"] })
+    expect(model.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
     expect(model.limit).toEqual({ context: 200_000, output: 32_000 })
     expect(model.cost).toEqual([])
+  })
+
+  test("defaults to text-only input unless the gateway reports modalities", () => {
+    expect(toModel("yandex/yandexgpt-lite").capabilities.input).toEqual(["text"])
+    expect(toModel("openai/gpt-5.1", { input_modalities: ["text", "image"] }).capabilities.input).toEqual([
+      "text",
+      "image",
+    ])
+    expect(
+      toModel("openai/gpt-5.1", { architecture: { input_modalities: ["text", "image", "image"] } }).capabilities.input,
+    ).toEqual(["text", "image"])
+    expect(toModel("openai/gpt-5.1", { input_modalities: [] }).capabilities.input).toEqual(["text"])
   })
 
   test("reads gateway-reported metadata", () => {

@@ -98,6 +98,20 @@ function isChatModel(item: Record<string, unknown>, id: string): boolean {
 }
 
 /**
+ * Input modalities reported by the gateway when present (OpenRouter-style
+ * `input_modalities`, flat or nested under `architecture`), text-only otherwise.
+ * Claiming image support for a text-only model would send the attachment to the gateway,
+ * which then fails there instead of in OpenCode's attachment check.
+ */
+function inputModalities(raw: Record<string, unknown>): string[] {
+  const architecture = isRecord(raw.architecture) ? raw.architecture : undefined
+  const reported = architecture?.input_modalities ?? raw.input_modalities
+  if (!Array.isArray(reported)) return ["text"]
+  const modalities = reported.filter((modality): modality is string => typeof modality === "string")
+  return modalities.length > 0 ? Array.from(new Set(modalities)) : ["text"]
+}
+
+/**
  * Builds one catalog entry for a gateway model id such as `openai/gpt-5-mini`. The full
  * gateway id is kept as the `modelID`, so requests are sent back to the gateway verbatim.
  * Context and output limits are taken from the response when the gateway reports them
@@ -112,7 +126,7 @@ export function toModel(id: string, raw: Record<string, unknown> = {}): Model.In
     providerID: Provider.ID.make(PROVIDER_ID),
     type: "chat",
     name: stringOr(raw.name, raw.title, raw.display_name) ?? id,
-    capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+    capabilities: { tools: true, input: inputModalities(raw), output: ["text"] },
     variants: [],
     time: { released: 0 },
     cost: [],
