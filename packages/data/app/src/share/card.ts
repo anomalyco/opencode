@@ -1026,7 +1026,8 @@ function drawRace(
   // The bars grow in from nothing while the intro rises, before the days start to run.
   const grow = ease(Math.min(1, time / Math.max(0.01, timing.start)))
   const bar = Math.round(row * 0.72)
-  const size = Math.round(bar * 0.34)
+  // A third of the bar, but never under 26px (just below the subtitle) on the shorter cards, as far as the bar holds it.
+  const size = Math.round(Math.max(bar * 0.34, Math.min(bar * 0.58, 26)))
 
   // The day, faint in the lower right; it counts on with the race.
   ctx.save()
