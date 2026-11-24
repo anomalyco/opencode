@@ -24,8 +24,6 @@ import {
 } from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
 import { toolsUpdate } from "./tool-updates.js"
-import { thinkingBlock } from "./protocols/utils/anthropic-thinking.js"
-import { supportsNativeSystemUpdates } from "./protocols/utils/claude-model.js"
 
 const AUTO: CachePolicyObject = {
   tools: true,
@@ -188,24 +186,21 @@ const isTransient = (part: ContentPart) => part.type === "text" && part.transien
 const requestLocalStart = (messages: ReadonlyArray<Message>) => {
   const message = messages.findIndex((item) => item.content.some(isTransient))
   if (message < 0) return { message: messages.length, part: 0 }
-  const target = messages[message]!
-  // Wrapped system updates join all their text into one block.
-  return { message, part: target.role === "system" ? 0 : target.content.findIndex(isTransient) }
-}
-
-const releasesHeldUpdates = (request: LLMRequest, part: AssistantMessage["content"][number]) => {
-  if (part.type === "text") return part.text.trim() !== ""
-  if (part.type === "reasoning") return thinkingBlock(request, part) !== undefined
-  return part.type === "tool-call" || part.type === "tool-result" || part.type === "compaction"
+  const part = messages[message]!.content.findIndex(isTransient)
+  if (part > 0 && messages[message]!.role !== "system") return { message, part }
+  // Anthropic lowers a system update that user content follows differently from one that a reply follows, so the
+  // next request sends it in another form. End before such an update so the next request still reads this tail.
+  const previous = messages.findLastIndex((item, i) => i < message && effortUpdate(item) === undefined)
+  if (messages[previous]?.role !== "system") return { message, part: 0 }
+  return { message: messages.findLastIndex((item, i) => i < message && item.role !== "system") + 1, part: 0 }
 }
 
 const markMessages = (
-  request: LLMRequest,
+  messages: ReadonlyArray<Message>,
   strategy: NonNullable<CachePolicyObject["messages"]>,
   hint: CacheHint,
   budget: Budget,
 ): ReadonlyArray<Message> => {
-  const messages = request.messages
   const local = requestLocalStart(messages)
   // Messages before `end` repeat in later requests; so does the start of a message whose tail is request-local.
   const end = local.part > 0 ? local.message + 1 : local.message
@@ -214,30 +209,13 @@ const markMessages = (
   if (end === 0) return messages
   if (strategy === "latest-user-message") return mark(messages, lastIndexOfRole(messages, "user", end))
   if (strategy === "latest-assistant") return mark(messages, lastIndexOfRole(messages, "assistant", end))
-  const transient = local.message < messages.length
-  // The Messages protocols, including gateway wrappers, use Anthropic's message ordering.
-  let held =
-    transient && request.model.route.protocol.endsWith("-messages") && supportsNativeSystemUpdates(request.model)
-  let next = messages
   let start = end
   let remaining = strategy.tail
   while (remaining > 0 && start > 0) {
     start -= 1
-    const message = messages[start]!
-    if (isMarker(message)) continue
-    // Native system updates can move past any number of user/tool messages, including the reminder.
-    // Walking back past a durable assistant block establishes that earlier updates have already been sent.
-    if (held && message.role === "system") continue
-    if (held && message.role === "assistant") {
-      const content = start === local.message ? message.content.slice(0, local.part) : message.content
-      if (!content.some((part) => releasesHeldUpdates(request, part))) continue
-      held = false
-    }
-    remaining -= 1
-    // Spend a limited budget on the longest prefix that survives the one-off prompt.
-    if (transient) next = mark(next, start)
+    if (!isMarker(messages[start]!)) remaining -= 1
   }
-  if (transient) return next
+  let next = messages
   for (let i = start; i < end; i++) if (!isMarker(messages[i]!)) next = mark(next, i)
   return next
 }
@@ -265,7 +243,7 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   const budget = { remaining: Math.max(0, BREAKPOINT_CAP - countHints(request)) }
   const tools = policy.tools ? markLastTool(request.tools, hint, budget) : request.tools
   const system = policy.system ? markSystemBoundaries(request.system, hint, budget) : request.system
-  const messages = policy.messages ? markMessages(request, policy.messages, hint, budget) : request.messages
+  const messages = policy.messages ? markMessages(request.messages, policy.messages, hint, budget) : request.messages
 
   if (tools === request.tools && system === request.system && messages === request.messages) return request
   return { ...request, tools, system, messages }

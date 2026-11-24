@@ -3,7 +3,6 @@ import { Effect } from "effect"
 import { ai, CacheHint, CompactionPart, Message, ProviderID, ToolCallPart } from "../src/effect.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
-import { VercelAIGateway } from "../src/providers/vercel-ai-gateway.js"
 import {
   Alibaba,
   AmazonBedrock,
@@ -633,96 +632,6 @@ describe("applyCachePolicy", () => {
           message.content.flatMap((block) => (block.cache_control ? [block.text] : [])),
         ),
       ).toEqual(["Task"])
-    }),
-  )
-
-  it.effect("keeps every tail breakpoint on a prefix the next Anthropic request repeats", () =>
-    Effect.gen(function* () {
-      const model = AnthropicMessages.route
-        .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
-        .model({ id: "claude-opus-5" })
-      const history = [Message.user("Task"), Message.system("Changed instructions")]
-      const durable = Message.text("Follow-up")
-      const reminder = { ...Message.text("Reminder"), transient: true }
-      type Block = { role: string; text: string; marked: boolean }
-      const wire = (request: ReturnType<typeof ai.request>) =>
-        compileRequest(request).pipe(
-          Effect.map(({ body }) => {
-            const messages = (
-              body as { messages: Array<{ role: string; content: Array<{ text: string; cache_control?: unknown }> }> }
-            ).messages
-            return messages.flatMap((message) =>
-              message.content.map((part) => ({ role: message.role, text: part.text, marked: !!part.cache_control })),
-            )
-          }),
-        )
-      const marked = (blocks: Block[]) => blocks.filter((block) => block.marked).map((block) => block.text)
-      const prefix = (blocks: Block[], length: number) => blocks.slice(0, length).map(({ role, text }) => [role, text])
-      const cache = { messages: { tail: 2 } }
-      const next = yield* wire(
-        ai.request({
-          model,
-          cache,
-          messages: [...history, Message.user([durable]), Message.assistant("Reply")],
-        }),
-      )
-      for (const tail of [
-        [Message.user([durable, reminder])],
-        [Message.user([durable]), Message.user([reminder])],
-        [Message.user([durable]), Message.system([reminder]), Message.user("Generate")],
-      ]) {
-        const first = yield* wire(ai.request({ model, cache, messages: [...history, ...tail] }))
-        expect(marked(first)).toEqual(["Task", "Follow-up"])
-        const length = first.findLastIndex((block) => block.marked) + 1
-        expect(prefix(first, length)).toEqual(prefix(next, length))
-      }
-
-      const messages = [...history, Message.user([durable, reminder])]
-      const gateway = VercelAIGateway.configure({ apiKey: "test" }).messages("anthropic/claude-opus-5")
-      expect(marked(yield* wire(ai.request({ model: gateway, cache, messages })))).toEqual(["Task", "Follow-up"])
-      const limited = yield* wire(
-        ai.request({
-          model,
-          messages,
-          tools: [{ name: "lookup", description: "Search", inputSchema: { type: "object" } }],
-          system: ["Base", "Project"].map(Message.text),
-          cache: { ...cache, tools: true, system: true },
-        }),
-      )
-      expect(marked(limited)).toEqual(["Follow-up"])
-
-      const wrapped = yield* wire(ai.request({ model: anthropicModel, cache, messages }))
-      expect(marked(wrapped)).toEqual(["<system-update>\nChanged instructions\n</system-update>", "Follow-up"])
-
-      const released = yield* wire(
-        ai.request({
-          model,
-          cache: { messages: { tail: 3 } },
-          messages: [
-            Message.user("Task"),
-            Message.system("Earlier instructions"),
-            Message.assistant("Earlier reply"),
-            Message.system("Changed instructions"),
-            Message.assistant(" "),
-            Message.assistant([{ type: "reasoning", text: "Unsigned thinking" }]),
-            Message.user([durable, reminder]),
-          ],
-        }),
-      )
-      expect(marked(released)).toEqual(["Earlier instructions", "Earlier reply", "Follow-up"])
-
-      const explicit = yield* wire(
-        ai.request({
-          model,
-          cache,
-          messages: [
-            Message.user("Task"),
-            Message.system([{ ...Message.text("Manual"), cache: new CacheHint({ type: "ephemeral" }) }]),
-            Message.user([durable, reminder]),
-          ],
-        }),
-      )
-      expect(marked(explicit)).toEqual(["Task", "Follow-up", "Manual"])
     }),
   )
 

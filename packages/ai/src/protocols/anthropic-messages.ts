@@ -31,13 +31,7 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import { addsTools, foldTools, toolsUpdate, withdrawnTools, type ToolUpdateEncoding } from "../tool-updates.js"
 import * as Cache from "./utils/cache.js"
-import { thinkingBlock } from "./utils/anthropic-thinking.js"
-import {
-  claudeVersion,
-  supportsNativeSystemUpdates,
-  supportsThinkingBlockBinding,
-  THINKING_BINDING_BETA,
-} from "./utils/claude-model.js"
+import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
@@ -558,6 +552,18 @@ const cacheControl = (breakpoints: Cache.Breakpoints, cache: CacheHint | undefin
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
 
+const signatureFromMetadata = (metadata: ProviderMetadata | undefined, key: string): string | undefined => {
+  const provider = metadata?.[key]
+  if (!provider) return undefined
+  return typeof provider.signature === "string" ? provider.signature : undefined
+}
+
+const redactedDataFromMetadata = (metadata: ProviderMetadata | undefined, key: string): string | undefined => {
+  const provider = metadata?.[key]
+  if (!provider) return undefined
+  return typeof provider.redactedData === "string" ? provider.redactedData : undefined
+}
+
 const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition): AnthropicTool => ({
   name: tool.name,
   description: tool.description,
@@ -728,6 +734,36 @@ const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart
   return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request))
 })
 
+const requireThinkingSignature = (request: LLMRequest) => {
+  if (request.model.compatibility?.requireSignature !== undefined) return request.model.compatibility.requireSignature
+  const provider = request.model.provider.toLowerCase()
+  const model = request.model.id.toLowerCase()
+  const baseURL = (request.model.route.endpoint.baseURL ?? "").toLowerCase()
+  if (
+    provider === "kimi-for-coding" ||
+    provider === "moonshotai" ||
+    provider === "moonshotai-cn" ||
+    model.startsWith("kimi-") ||
+    baseURL.includes("api.kimi.com/coding") ||
+    baseURL.includes("api.moonshot.ai/anthropic") ||
+    baseURL.includes("api.moonshot.cn/anthropic")
+  )
+    return false
+  if (provider.includes("xiaomi") || model.includes("mimo") || baseURL.includes("xiaomimimo.com")) return false
+  if (model.startsWith("qwen") || model.startsWith("minimax-")) return false
+  return true
+}
+
+// Opus 4.8 and every Claude 5 model accept mid-conversation system messages; later versions inherit support.
+const supportsNativeSystemUpdates = (request: LLMRequest) => {
+  const override = request.model.capabilities?.systemUpdates
+  if (override !== undefined) return override
+  const version = claudeVersion(request.model.id)
+  if (version === undefined) return false
+  if (version.family === "opus" && version.major === 4) return version.minor >= 8
+  return version.major >= 5
+}
+
 // Native system messages must follow a user turn (tool results count) or a paused server-tool turn.
 const acceptsNativeSystemAfter = (message: AnthropicMessage | undefined) =>
   message?.role === "user" || (message?.role === "assistant" && message.content.at(-1)?.type === "server_tool_use")
@@ -801,7 +837,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   const providerMetadataKey = request.model.route.providerMetadataKey ?? request.model.provider
   // Text updates stay where they are unless a user turn follows them; then they move after the latest
   // user turn, the nearest spot where Anthropic accepts a native system message.
-  const holdUpdates = supportsNativeSystemUpdates(request.model)
+  const holdUpdates = supportsNativeSystemUpdates(request)
   const held: Array<LLMRequest["messages"][number]> = []
   // The tools declared so far, so each tool update can name the flattened tools it takes away.
   let declared = request.tools
@@ -875,8 +911,21 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
           continue
         }
         if (part.type === "reasoning") {
-          const block = thinkingBlock(request, part)
-          if (block) content.push(block)
+          // A signature marks visible thinking; only signature-less parts carrying
+          // redactedData round-trip as opaque redacted_thinking blocks.
+          const signature = part.encrypted ?? signatureFromMetadata(part.providerMetadata, providerMetadataKey)
+          const redactedData = redactedDataFromMetadata(part.providerMetadata, providerMetadataKey)
+          if (signature === undefined && redactedData !== undefined) {
+            content.push({ type: "redacted_thinking", data: redactedData })
+            continue
+          }
+          if (!signature || signature.trim().length === 0) {
+            if (part.text.trim().length > 0 && !requireThinkingSignature(request)) {
+              content.push({ type: "thinking", thinking: part.text, signature: "" })
+            }
+            continue
+          }
+          content.push({ type: "thinking", thinking: part.text, signature })
           continue
         }
         if (part.type === "tool-call") {
@@ -938,7 +987,7 @@ const supportsEffortUpdates = (request: LLMRequest) => {
 const toolUpdates = {
   kinds: ["add", "remove", "replace"],
   placeable: (request, index) => {
-    if (!supportsNativeSystemUpdates(request.model)) return false
+    if (!supportsNativeSystemUpdates(request)) return false
     const end = request.messages.findIndex((next, at) => at > index && next.role === "assistant")
     const role = request.messages
       .slice(0, end === -1 ? undefined : end)
