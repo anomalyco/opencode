@@ -1479,6 +1479,16 @@ export const dict = {
   "sidebar.inbox.section.drafts": "草稿",
   "sidebar.inbox.discardDraft": "丢弃草稿",
   "settings.shortcuts.addKey": "添加按键",
+  "settings.providers.account.remove.title": "删除 {{account}}？",
+  "settings.providers.account.remove.description": "{{provider}} 将不再使用此账户。",
+  "settings.providers.account.remove.finalDescription":
+    "这是你唯一的 {{provider}} 账户，因此 {{provider}} 将被断开连接。",
+  "settings.providers.disconnect.title": "断开 {{provider}} 连接？",
+  "settings.providers.disconnect.description": "已保存的凭据将被移除，其模型将不再可用。",
+  "settings.providers.disconnect.consoleDescription.one":
+    "你的登录信息将被移除，来自 {{workspace}} 的 {{count}} 个提供商将不再可用。",
+  "settings.providers.disconnect.consoleDescription.other":
+    "你的登录信息将被移除，来自 {{workspace}} 的 {{count}} 个提供商将不再可用。",
 } satisfies Partial<Record<Keys, string>>
 
 export default dict
