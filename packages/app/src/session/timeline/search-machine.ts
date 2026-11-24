@@ -230,6 +230,20 @@ export function timelineSearchView(state: TimelineSearchState): TimelineSearchVi
   }
 }
 
+/** Whether two views show the same. A seek's probes change the state on every frame and the view on none of them. */
+export function sameTimelineSearchView(a: TimelineSearchView, b: TimelineSearchView) {
+  return (
+    a.visible === b.visible &&
+    a.value === b.value &&
+    a.query === b.query &&
+    a.showCount === b.showCount &&
+    a.count === b.count &&
+    a.activeDisplay === b.activeDisplay &&
+    a.activePartID === b.activePartID &&
+    a.activeOccurrence === b.activeOccurrence
+  )
+}
+
 // User and assistant text in timeline order. A match reveals the turn that its user or shell message starts.
 export function extractSearchableParts(messages: readonly SessionMessageInfo[]) {
   const parts: SearchablePart[] = []
