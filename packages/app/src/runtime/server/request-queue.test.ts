@@ -105,7 +105,10 @@ describe("createRequestQueue", () => {
     expect(input.queue.inflight()).toBe(0)
   })
 
-  test("writes, then navigation reads, take the next free slot in order without promoting history or indexes", async () => {
+  // An older transcript page was a background read, in line behind every read queued before it. A walk up a
+  // transcript mounts rows that each look up the paths they name, so the page a reader waited for at the top of the
+  // loaded history was not sent for 4 to 6 s while those lookups were slow.
+  test("writes, navigation reads, then an older transcript page take the next free slot in order without promoting indexes", async () => {
     const input = setup({ limit: 1 })
 
     const requests: [string, string][] = [
@@ -141,8 +144,8 @@ describe("createRequestQueue", () => {
       "/api/session/ses_1/message?limit=40&order=desc",
       "/api/session?limit=2",
       "/api/session/ses_2/message",
-      "/api/b",
       "/api/session/ses_1/message?cursor=older&order=desc",
+      "/api/b",
       "/api/session/ses_1/message?limit=25&before=msg_1",
       "/api/session/ses_1/message?type=user&order=desc",
       "/api/session/ses_1/message?order=asc",

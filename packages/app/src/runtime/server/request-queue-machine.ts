@@ -21,7 +21,7 @@ export type RequestQueueConfig = {
   readonly stallMs: number
 }
 
-export type RequestPriority = 0 | 1 | 2
+export type RequestPriority = 0 | 1 | 2 | 3
 
 export type RequestEntry = {
   readonly id: number
@@ -148,7 +148,9 @@ export function isRequestInflight(state: RequestQueueState, id: number) {
 
 /**
  * The event stream bypasses the queue. Writes go first. Session lists and the first transcript page unblock
- * navigation, so they go ahead of location reads. Older pages and filtered indexes keep background priority.
+ * navigation, so they go ahead of location reads. An older transcript page comes next: a reader at the top of the
+ * loaded history waits for it, and the rows that mounted on the way there each ask for file lookups, which are
+ * queued before it. Filtered indexes keep background priority.
  * `prefix` is the server URL's path, such as `/opencode`, when the server sits under one.
  */
 export function classifyRequest(method: string, url: URL, prefix = ""): RequestClassification {
@@ -158,8 +160,10 @@ export function classifyRequest(method: string, url: URL, prefix = ""): RequestC
   // The event stream is long-lived; never count it against the request budget.
   if (pathname === "/api/event") return bypass
 
+  const messages = /^\/api\/session\/[^/]+\/message$/.test(pathname)
+
   const initialMessages =
-    /^\/api\/session\/[^/]+\/message$/.test(pathname) &&
+    messages &&
     !url.searchParams.has("cursor") &&
     !url.searchParams.has("before") &&
     !url.searchParams.has("type") &&
@@ -169,7 +173,14 @@ export function classifyRequest(method: string, url: URL, prefix = ""): RequestC
     bypass: false,
     slow: slowRequestPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`)),
     setup: method === "POST" && pathname === "/api/worktree",
-    priority: method !== "GET" ? 2 : pathname === "/api/session" || initialMessages ? 1 : 0,
+    priority:
+      method !== "GET"
+        ? 3
+        : pathname === "/api/session" || initialMessages
+          ? 2
+          : messages && url.searchParams.has("cursor")
+            ? 1
+            : 0,
   }
 }
 

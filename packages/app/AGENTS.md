@@ -135,6 +135,12 @@ This section is the single source for what may move or restyle the session timel
 - `scrollToFn` in `src/session/timeline/virtualizer.tsx` holds the corrections made while a batch of sizes is applied and writes the last one once. Keep scroll writes for size changes on that path, and call `flushHeldScroll` before code inside the batch reads the native offset.
 - Keeper: "corrects the scroll position once for each batch of rows an older page measures" in `e2e/regression/timeline-history.spec.ts`.
 
+### Requests
+
+- The app sends at most four requests to a server at once (`src/runtime/server/request-queue-machine.ts`); the rest wait in line by priority. A row that asks the server for something when it mounts takes a place in that line: each path a message names is looked up with `/api/fs/find` or `/api/fs/list`, and a walk through history mounts hundreds of rows.
+- The older page that a reader waits for at the top of the loaded history goes ahead of those reads. As a background read it stood behind them: with lookups that took seconds, the page was not sent for 4 to 6 s, and once for more than 10 s.
+- Keeper: "writes, navigation reads, then an older transcript page take the next free slot in order without promoting indexes" in `src/runtime/server/request-queue.test.ts`.
+
 ### `:has()` selectors
 
 - Chromium rechecks an element's `:has()` when focus moves, an attribute changes, or an element is added or removed near it. In and around the timeline, that happens many times a second during a scroll.
