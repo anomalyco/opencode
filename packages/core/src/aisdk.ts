@@ -40,6 +40,7 @@ import { makeParser } from "effect/encoding/Sse"
 import { FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AsyncLocalStorage } from "node:async_hooks"
 import type { ID, RuntimeInfo } from "./model.js"
+import { AISDKV2 } from "./aisdk-v2.js"
 import { Provider } from "./provider.js"
 import { State } from "./state.js"
 import { stringify } from "./tool/runtime.js"
@@ -362,9 +363,9 @@ export const locationLayer = Layer.effect(
           })
         sdks.set(sdkKey, sdk)
         const result = yield* service.runLanguage({ model, sdk, options }).pipe(initError(model.providerID))
-        const language = yield* Effect.sync(() => result.language ?? sdk.languageModel(model.modelID ?? model.id)).pipe(
-          initError(model.providerID),
-        )
+        const language = yield* Effect.sync(() =>
+          AISDKV2.asLanguageModelV3(result.language ?? sdk.languageModel(model.modelID ?? model.id)),
+        ).pipe(initError(model.providerID))
         languages.set(key, language)
         return language
       }),
