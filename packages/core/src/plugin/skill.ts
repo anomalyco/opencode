@@ -12,6 +12,7 @@ import { Flag } from "../flag.js"
 import os from "os"
 import opencodeContent from "./skill/opencode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }
+import apiContent from "./skill/opencode-api.md" with { type: "text" }
 import { files as apiFiles } from "./skill/opencode/api.js"
 
 export const OpencodeContent = opencodeContent
@@ -36,7 +37,8 @@ export const Plugin = define({
           name: Skill.Name.make("OpenCode"),
           description: OpencodeDescription,
           path: AbsolutePath.make("skill://opencode/SKILL.md"),
-          content: OpencodeContent,
+          // With opencode:// fetch, its API section points there instead of the `opencode api` command.
+          content: api ? OpencodeContent.replace(/## \[API\][^]*?(?=## \[Client\])/, apiContent) : OpencodeContent,
         }),
         api ? apiFiles : undefined,
       )
