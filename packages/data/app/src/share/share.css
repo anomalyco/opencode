@@ -331,7 +331,9 @@
   }
 
   /* The card's size in plain grey under it, on a fixed-height line so the stage never shifts. */
+  /* Clear of the card and its playback bar: twice the stage's gap above it. */
   [data-slot="editor-toolbar"] {
+    margin-top: 12px;
     display: flex;
     flex: none;
     gap: 4px;
