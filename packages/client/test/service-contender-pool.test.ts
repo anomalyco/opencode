@@ -15,6 +15,21 @@ afterEach(() => {
   })
 })
 
+test("a clean contender exit does not write a warning", async () => {
+  const original = console.warn
+  const warnings: unknown[][] = []
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args)
+  }
+  try {
+    const contender = clean()
+    await finished(contender)
+    expect(warnings).toEqual([])
+  } finally {
+    console.warn = original
+  }
+})
+
 test("remembers the first startup failure and reports it once no attempt is left", async () => {
   const pool = contenderPool({ ...defaultEnsureTiming, spawnDelay: 0 })
   const survivor = running()

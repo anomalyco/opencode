@@ -1,6 +1,6 @@
 import { appendFile, rename, rm, writeFile } from "node:fs/promises"
 
-const [registration, mode, delay] = process.argv.slice(2)
+const [registration, mode, delay, state] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
 if (mode === "failed") process.exit(1)
 if (mode === "stderr-failed") {
@@ -129,6 +129,7 @@ await writeFile(
     version,
     url: server.url.toString(),
     pid: process.pid,
+    ...(state === "ready" || state === "starting" ? { state } : {}),
     password: "private",
   }),
   { mode: 0o600 },

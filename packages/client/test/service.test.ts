@@ -18,6 +18,7 @@ const ensure = accelerate(Service.ensure)
 const stop = accelerate(Service.stop)
 const ensureSlowWindow = accelerate(Service.ensure, { unresponsiveWindow: 2_000, spawnDelay: 5_000 })
 const ensurePatient = accelerate(Service.ensure, { spawnDelay: 5_000 })
+const ensureTolerant = accelerate(Service.ensure, { startingWindow: 2_000, startingFailures: 12, spawnDelay: 5_000 })
 
 test("a concurrent same-version start cannot invalidate a resolved endpoint", async () => {
   await using fixture = await serviceFixture()
@@ -203,6 +204,53 @@ test("evicts an unresponsive registered service before starting its replacement"
   expect(await status(endpoint.url)).toMatchObject({ version: "test", pid: replacement.pid })
 })
 
+test("escalates a ready owner that stops answering after three probes", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("hanging", "0", "ready")
+  await fixture.waitForFile()
+  const starts: EnsureReason[] = []
+
+  const endpoint = await run(
+    ensure({
+      file: registration,
+      version: "test",
+      command: fixture.command("delayed", "10"),
+      onStart: (reason) => starts.push(reason),
+    }),
+  )
+  fixture.track((await Bun.file(registration).json()).pid)
+
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
+  expect(await existing.exited).toBe(stoppedExitCode)
+  expect(starts).toEqual(["missing"])
+  expect(endpoint.url).toBe((await Bun.file(registration).json()).url)
+})
+
+test("a starting owner survives the tolerant timeout window", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const starting = fixture.spawn("recovering", "0", "starting")
+  await fixture.waitForFile()
+  const starts: EnsureReason[] = []
+
+  const endpoint = await run(
+    ensureTolerant({
+      file: registration,
+      version: "test",
+      command: fixture.command("delayed", "10"),
+      onStart: (reason) => starts.push(reason),
+    }),
+  )
+
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
+  expect(starts).toEqual([])
+  expect(await fixture.signal()).toBeUndefined()
+  expect(starting.exitCode).toBe(null)
+  expect(await fixture.starts()).toHaveLength(0)
+  expect(endpoint.url).toBe((await Bun.file(registration).json()).url)
+})
+
 test("reuses a registered service that answers after a short timeout streak", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
@@ -267,12 +315,13 @@ test("two concurrent ensure calls share one reboot", async () => {
 
 test("restart lock honors the completion cooldown", async () => {
   await using fixture = await serviceFixture()
-  const timing: EnsureTiming = { ...defaultEnsureTiming, restartCooldown: 150 }
+  const clock = { now: 1_000 }
+  const timing: EnsureTiming = { ...defaultEnsureTiming, restartCooldown: 150, now: () => clock.now }
   const first = await tryBeginRestart(fixture.registration, timing)
   if (first === undefined) throw new Error("expected to acquire the restart lock")
-  await completeRestart(fixture.registration, first.token)
+  await completeRestart(fixture.registration, first.token, timing)
   expect(await tryBeginRestart(fixture.registration, timing)).toBeUndefined()
-  await Bun.sleep(180)
+  clock.now += 150
   const second = await tryBeginRestart(fixture.registration, timing)
   if (second === undefined) throw new Error("expected to acquire the restart lock after the cooldown")
   await releaseRestart(fixture.registration, second.token)
