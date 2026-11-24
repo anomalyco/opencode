@@ -9,14 +9,14 @@ import {
   DESKTOP_MENU,
   desktopMenuKey,
   desktopMenuVisible,
-  desktopMenuWithExtensions,
+  desktopMenuWithPlugins,
   type DesktopMenu,
   type DesktopMenuAction,
   type DesktopMenuEntry,
 } from "@/shell/commands/desktop-menu"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useMenubarItems } from "@/runtime/extension/menubar-items"
+import { useMenubarItems } from "@/runtime/plugin/menubar-items"
 
 const accelerators = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).flatMap((entry) => {
   if (entry.type === "separator" || !entry.action || !entry.accelerator?.windows) return []
@@ -40,7 +40,7 @@ export function WindowsAppMenu(props: {
   const menubar = useMenubarItems()
 
   const entries = (menu: DesktopMenu) =>
-    desktopMenuWithExtensions(
+    desktopMenuWithPlugins(
       (menu.items ?? [])
         .filter((entry) => desktopMenuVisible(entry, "windows"))
         .map((entry) => ({ key: desktopMenuKey(entry), entry })),

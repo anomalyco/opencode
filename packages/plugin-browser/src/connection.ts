@@ -1,92 +1,216 @@
 export * as BrowserConnection from "./connection.js"
 
+import { hostname } from "node:os"
+import { rm } from "node:fs/promises"
+import { BrowserFiles } from "./files.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { RpcRegistration } from "@opencode/plugin/effect/rpc"
-import type { Session } from "@opencode/schema/session"
+import { Location } from "@opencode/schema/location"
+import type { Permission } from "@opencode/schema/permission"
+import { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
-import { Deferred, Effect, Schema, Stream } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { BrowserMachine } from "./machine.js"
 import { Browser } from "./rpc.js"
-import { BrowserSkill } from "./skill.js"
 import { BrowserTunnel } from "./tunnel.js"
 
 type Attachment = {
-  connectionID: string
-  state: Browser.State
-  closed: Deferred.Deferred<"closed" | "replaced">
-  pending: Map<string, { command: Browser.Command; result: Deferred.Deferred<Browser.Result, Tool.Error> }>
-  tunnels: BrowserTunnel.Tunnels
+  readonly closed: Deferred.Deferred<"closed" | "replaced", "unavailable">
+  readonly tunnels: BrowserTunnel.Tunnels
 }
 
 export type Connection = Effect.Success<ReturnType<typeof make>>
 
-export const make = Effect.fn("BrowserConnection.make")(function* (
-  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event">,
-) {
-  const browsers = new Map<Session.ID, Attachment>()
-  // The browser tools and their skill, which an attachment allows together.
-  const access = [
-    { action: "browser", resource: "*" },
-    { action: "skill", resource: BrowserSkill.id },
-  ] as const
-  // Appended after config, so every agent hides the browser until an attachment allows it.
-  yield* ctx.agent.transform((editor) =>
-    editor
-      .list()
-      .forEach((agent) => agent.permissions.push(...access.map((rule) => ({ ...rule, effect: "deny" as const })))),
-  )
-  // Each attachment adds and removes its own allows, so a replaced attachment keeps the new one's.
-  const grant = (sessionID: Session.ID) =>
-    Effect.acquireRelease(
-      ctx.session.get({ sessionID }).pipe(
-        Effect.flatMap((session) =>
-          ctx.session.update({
-            sessionID,
-            permissions: [
-              ...(session.permissions ?? []),
-              ...access.map((rule) => ({ ...rule, effect: "allow" as const })),
-            ],
-          }),
-        ),
-        Effect.orDie,
-      ),
-      () =>
-        ctx.session.get({ sessionID }).pipe(
-          Effect.flatMap((session) => {
-            const current = session.permissions ?? []
-            const permissions = access.reduce((rules, allow) => {
-              const index = rules.findIndex(
-                (rule) => rule.action === allow.action && rule.resource === allow.resource && rule.effect === "allow",
-              )
-              return index === -1 ? rules : rules.toSpliced(index, 1)
-            }, current)
-            if (permissions.length === current.length) return Effect.void
-            return ctx.session.update({ sessionID, permissions })
-          }),
-          Effect.ignore,
-        ),
+/** The server process that wrote a session's grant, stored as `grant:<sessionID>` until its revoke succeeds. */
+const GrantOwner = Schema.Struct({ host: Schema.String, pid: Schema.Number, location: Location.Ref })
+
+const GRANT_PREFIX = "grant:"
+
+/**
+ * A crash or SIGKILL skips the revokes, so a session keeps its grant with no attachment behind it. Revokes the grants
+ * this location's servers recorded, except those of a process that still runs: several servers can share one
+ * database, and another one's attachment may be live. Runs before the RPC registers, so no attach here can race it.
+ */
+export const reconcileStaleGrants = Effect.fn("BrowserConnection.reconcileStaleGrants")(function* (ctx: {
+  readonly session: Pick<Context["session"], "get" | "update">
+  readonly storage: Pick<Context["storage"], "scan" | "remove">
+  readonly location: Pick<Context["location"], "directory" | "workspaceID">
+}) {
+  const revoke = (entry: { readonly key: string; readonly value: Schema.Json }) => {
+    const owner = Schema.decodeUnknownOption(GrantOwner)(entry.value)
+    if (
+      Option.isNone(owner) ||
+      owner.value.location.directory !== ctx.location.directory ||
+      owner.value.location.workspaceID !== ctx.location.workspaceID ||
+      running(owner.value)
     )
-  let active = true
-  const close = (sessionID: Session.ID, reason: "closed" | "replaced" = "closed") =>
-    Effect.gen(function* () {
-      const browser = browsers.get(sessionID)
-      if (!browser) return
-      browsers.delete(sessionID)
-      browser.tunnels.dispose()
-      yield* Deferred.succeed(browser.closed, reason)
+      return Effect.void
+    return writePermissions(ctx, Session.ID.make(entry.key.slice(GRANT_PREFIX.length)), false).pipe(
+      Effect.ignore,
+      Effect.andThen(ctx.storage.remove(entry.key)),
+    )
+  }
+  const page = (after?: string): Effect.Effect<void> =>
+    ctx.storage
+      .scan({ prefix: GRANT_PREFIX, after })
+      .pipe(
+        Effect.flatMap((result) =>
+          Effect.forEach(result.entries, revoke, { discard: true }).pipe(
+            Effect.andThen(result.next === undefined ? Effect.void : page(result.next)),
+          ),
+        ),
+      )
+  yield* page()
+})
+
+export const make = Effect.fn("BrowserConnection.make")(function* (
+  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event" | "permission" | "storage">,
+) {
+  // Each agent's rules from config and its definition, which an attachment's grant must not override.
+  const configured = new Map<string, readonly Permission.Rule[]>()
+  // Appended after config, so every agent hides the browser tools and their skill until an attachment allows them.
+  yield* ctx.agent.transform((editor) => {
+    configured.clear()
+    editor.list().forEach((agent) => {
+      configured.set(agent.id, [...agent.permissions])
+      agent.permissions.push(...BrowserMachine.ACCESS.map((rule) => ({ ...rule, effect: "deny" as const })))
     })
-  yield* Effect.addFinalizer(() => {
-    active = false
-    return Effect.forEach(browsers.keys(), (id) => close(id), { discard: true })
   })
+  const rulesFor = (session: Pick<Session.Info, "agent" | "permissions">, agent: string | undefined) => [
+    // Core denies everything to an agent it cannot resolve, such as a disabled or removed one; so does this.
+    ...(configured.get(agent ?? session.agent ?? "") ?? [{ action: "*", resource: "*", effect: "deny" as const }]),
+    ...(session.permissions ?? []).filter((rule) => !BrowserMachine.isGrant(rule)),
+  ]
+  // The attachment's grant is a session rule, evaluated after every agent rule, so core resolves every browser call to
+  // allow, and lists the browser tools and their skill to every agent of an attached session, one whose own rules
+  // deny the browser included. This hook alone refuses such an agent's calls, by the rules from config, the agent's
+  // definition and the session itself: a deny refuses the call. An ask rule is not applied in an attached session, as
+  // on dev, and no matching rule leaves the call allowed.
+  yield* ctx.permission.hook("evaluate", (event) => {
+    if (event.action !== "browser" || event.effect === "deny") return Effect.void
+    return ctx.session.get({ sessionID: event.sessionID }).pipe(
+      Effect.map((session) => {
+        const denied = denial(rulesFor(session, event.agent), event.resources)
+        if (denied) {
+          event.effect = "deny"
+          event.message = denied
+        }
+      }),
+      // Without the rules, the grant must not decide alone.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("Browser permission evaluation failed", cause).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              event.effect = "deny"
+              event.message = "Browser permissions could not be read; no action ran."
+            }),
+          ),
+        ),
+      ),
+    )
+  })
+  // Permission syncs run here. Registered first, so it closes last: after disposal has drained the revokes.
+  const work = yield* Scope.make()
+  yield* Effect.addFinalizer((exit) => Scope.close(work, exit))
+  const machine = { state: BrowserMachine.createConnectionState() }
+  const attachments = new Map<number, Attachment>()
+  const requests = new Map<string, Deferred.Deferred<Browser.Result, Tool.Error>>()
+  const drained = Deferred.makeUnsafe<void>()
+  // One event at a time, effects included, so controls reach the bus in transition order: `attached` before any
+  // `command` of that attachment.
+  const lock = Semaphore.makeUnsafe(1)
+  const step = (event: BrowserMachine.ConnectionEvent): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const next = BrowserMachine.transitionConnection(machine.state, event)
+      machine.state = next.state
+      return Effect.forEach(
+        next.effects,
+        (effect) =>
+          perform(effect).pipe(Effect.catchCause((cause) => Effect.logWarning("Browser effect failed", cause))),
+        { discard: true },
+      )
+    })
+  const dispatch = (event: BrowserMachine.ConnectionEvent) => lock.withPermit(step(event))
+  const perform = (effect: BrowserMachine.ConnectionEffect): Effect.Effect<void, unknown> => {
+    if (effect.type === "sync-permissions") return Effect.asVoid(Effect.forkIn(syncPermissions(effect), work))
+    if (effect.type === "close-attachment")
+      return Effect.suspend(() => {
+        const attachment = attachments.get(effect.attempt)
+        if (!attachment) return Effect.void
+        attachments.delete(effect.attempt)
+        attachment.tunnels.dispose()
+        return Deferred.done(
+          attachment.closed,
+          effect.outcome === "unavailable" ? Exit.fail(effect.outcome) : Exit.succeed(effect.outcome),
+        ).pipe(Effect.asVoid)
+      })
+    if (effect.type === "emit-control") return rpc.events.emit("control", effect.control)
+    if (effect.type === "dispatch-command")
+      return (
+        rpc.events
+          .emit("control", { type: "command", connectionID: effect.connectionID, requestID: effect.requestID })
+          // Already inside the lock, so the failure steps directly.
+          .pipe(Effect.catch((error) => step({ ...effect, type: "request.dispatch-failed", error })))
+      )
+    if (effect.type === "settle-request")
+      return Effect.suspend(() => {
+        const result = requests.get(effect.requestID)
+        if (!result) return Effect.void
+        requests.delete(effect.requestID)
+        return Deferred.done(
+          result,
+          effect.settlement.ok ? Exit.succeed(effect.settlement.result) : Exit.fail(effect.settlement.error),
+        ).pipe(Effect.asVoid)
+      })
+    if (effect.type === "warn") return Effect.logWarning(effect.message, effect.error)
+    return Deferred.done(drained, Exit.void).pipe(Effect.asVoid)
+  }
+  const owner: typeof GrantOwner.Encoded = {
+    host: hostname(),
+    pid: process.pid,
+    location: {
+      directory: ctx.location.directory,
+      ...(ctx.location.workspaceID === undefined ? {} : { workspaceID: ctx.location.workspaceID }),
+    },
+  }
+  const syncPermissions = (effect: Extract<BrowserMachine.ConnectionEffect, { readonly type: "sync-permissions" }>) =>
+    // The owner is recorded before the grant and forgotten after the revoke, so a stored grant always has one.
+    (effect.allow
+      ? ctx.storage
+          .set(GRANT_PREFIX + effect.sessionID, owner)
+          .pipe(Effect.andThen(writePermissions(ctx, effect.sessionID, true)))
+      : writePermissions(ctx, effect.sessionID, false).pipe(
+          Effect.andThen(ctx.storage.remove(GRANT_PREFIX + effect.sessionID)),
+        )
+    ).pipe(
+      Effect.timeoutOption(Duration.millis(BrowserMachine.PERMISSION_SYNC_TIMEOUT_MS)),
+      Effect.matchCauseEffect({
+        onSuccess: (done) =>
+          dispatch({
+            type: Option.isSome(done) ? "permissions.synced" : "permissions.timed-out",
+            sessionID: effect.sessionID,
+            attempt: effect.attempt,
+          }),
+        onFailure: (cause) =>
+          dispatch({
+            type: "permissions.failed",
+            sessionID: effect.sessionID,
+            attempt: effect.attempt,
+            error: Cause.squash(cause),
+          }),
+      }),
+    )
   const tunnels = (input: {
     sessionID: Session.ID
     connectionID: string
   }): Effect.Effect<BrowserTunnel.Tunnels, Error> => {
-    const browser = browsers.get(input.sessionID)
-    return browser?.connectionID === input.connectionID
-      ? Effect.succeed(browser.tunnels)
+    const attempt = BrowserMachine.selectAttachment(machine.state, input.sessionID, input.connectionID)
+    const attachment = attempt === undefined ? undefined : attachments.get(attempt)
+    return attachment
+      ? Effect.succeed(attachment.tunnels)
       : Effect.fail(new Error("Browser attachment is unavailable; its network connections were closed."))
   }
+  yield* reconcileStaleGrants(ctx)
   const rpc: RpcRegistration<typeof Browser.Definition> = yield* ctx.rpc
     .register(Browser.Definition, {
       attach: (input, call) =>
@@ -96,58 +220,58 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             .pipe(Effect.mapError(() => call.error("unavailable", "Session not found.", {})))
           if (session.location.directory !== ctx.location.directory)
             return yield* Effect.fail(call.error("unavailable", "Session belongs to another location.", {}))
-          const browser = yield* Effect.acquireRelease(
-            Effect.gen(function* () {
-              if (!active) return yield* Effect.fail(call.error("unavailable", "Browser is unavailable.", {}))
-              yield* close(input.sessionID, "replaced")
-              const browser: Attachment = {
-                connectionID: input.connectionID,
-                state: { tabs: [], focusedTabID: null },
-                closed: yield* Deferred.make<"closed" | "replaced">(),
-                pending: new Map(),
-                tunnels: BrowserTunnel.make(),
-              }
-              browsers.set(input.sessionID, browser)
-              return browser
-            }),
-            (browser) => (browsers.get(input.sessionID) === browser ? close(input.sessionID) : Effect.void),
+          return yield* Effect.acquireUseRelease(
+            lock.withPermit(
+              Effect.suspend(() => {
+                if (BrowserMachine.isConnectionDisposed(machine.state))
+                  return Effect.fail(call.error("unavailable", "Browser is unavailable.", {}))
+                const attempt = BrowserMachine.selectNextAttempt(machine.state)
+                const attachment: Attachment = { closed: Deferred.makeUnsafe(), tunnels: BrowserTunnel.make() }
+                attachments.set(attempt, attachment)
+                return step({
+                  type: "attach.started",
+                  sessionID: input.sessionID,
+                  attempt,
+                  connectionID: input.connectionID,
+                }).pipe(Effect.as({ attempt, attachment }))
+              }),
+            ),
+            (attached) =>
+              Deferred.await(attached.attachment.closed).pipe(
+                Effect.mapError(() => call.error("unavailable", "Browser permissions could not be granted.", {})),
+              ),
+            (attached) => dispatch({ type: "attach.closed", sessionID: input.sessionID, attempt: attached.attempt }),
           )
-          yield* grant(input.sessionID)
-          yield* rpc.events
-            .emit("control", { type: "attached", connectionID: input.connectionID, version: 4 })
-            .pipe(Effect.orDie)
-          return yield* Deferred.await(browser.closed)
-        }).pipe(Effect.scoped),
-      state: (input, call) =>
-        Effect.gen(function* () {
-          const browser = browsers.get(input.sessionID)
-          if (!browser || browser.connectionID !== input.connectionID)
-            return yield* Effect.fail(call.error("unavailable", "Browser is unavailable.", {}))
-          browser.state = input.state
         }),
+      state: (input, call) =>
+        Effect.suspend(() =>
+          BrowserMachine.isAttachedConnection(machine.state, input.sessionID, input.connectionID)
+            ? dispatch({
+                type: "state.updated",
+                sessionID: input.sessionID,
+                connectionID: input.connectionID,
+                browserState: input.state,
+              })
+            : Effect.fail(call.error("unavailable", "Browser is unavailable.", {})),
+        ),
       command: (input, call) =>
-        Effect.gen(function* () {
-          const browser = browsers.get(input.sessionID)
-          const pending =
-            browser?.connectionID === input.connectionID ? browser.pending.get(input.requestID) : undefined
-          if (!pending)
-            return yield* Effect.fail(call.error("unavailable", "Browser request is no longer available.", {}))
-          return pending.command
+        Effect.suspend(() => {
+          const command = BrowserMachine.selectPendingCommand(
+            machine.state,
+            input.sessionID,
+            input.connectionID,
+            input.requestID,
+          )
+          return command
+            ? Effect.succeed(command)
+            : Effect.fail(call.error("unavailable", "Browser request is no longer available.", {}))
         }),
       result: (input, call) =>
-        Effect.gen(function* () {
-          const browser = browsers.get(input.sessionID)
-          if (!browser || browser.connectionID !== input.connectionID)
-            return yield* Effect.fail(call.error("unavailable", "Browser is unavailable.", {}))
-          const pending = browser.pending.get(input.requestID)
-          if (!pending) return
-          if (input.outcome.type === "failure")
-            return yield* Deferred.fail(
-              pending.result,
-              new Tool.Error({ message: `[browser.${input.outcome.code}] ${input.outcome.message}` }),
-            ).pipe(Effect.asVoid)
-          yield* Deferred.succeed(pending.result, input.outcome.result)
-        }).pipe(Effect.asVoid),
+        Effect.suspend(() =>
+          BrowserMachine.isAttachedConnection(machine.state, input.sessionID, input.connectionID)
+            ? dispatch({ type: "request.settled", ...input })
+            : Effect.fail(call.error("unavailable", "Browser is unavailable.", {})),
+        ),
       "tunnel.open": (input, call) =>
         tunnels(input).pipe(
           Effect.flatMap((network) => network.open(input.target)),
@@ -170,31 +294,129 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         ),
     })
     .pipe(Effect.orDie)
-  yield* ctx.event.subscribe().pipe(
-    Stream.filter((event) => event.type === "session.deleted" || event.type === "session.moved"),
-    Stream.runForEach((event) => close(event.data.sessionID)),
+  yield* ctx.event.subscribe({ types: ["session.deleted", "session.moved"] }).pipe(
+    Stream.runForEach((event) =>
+      dispatch({
+        type: event.type === "session.deleted" ? "session.deleted" : "session.moved",
+        sessionID: event.data.sessionID,
+      }).pipe(
+        // A deleted session's grant went with it, and no revoke will forget its owner record.
+        Effect.andThen(
+            event.type === "session.deleted"
+              ? Effect.all([
+                  ctx.storage.remove(GRANT_PREFIX + event.data.sessionID),
+                  Effect.tryPromise(() => rm(BrowserFiles.exportRoot(event.data.sessionID), { recursive: true, force: true }))
+                    .pipe(Effect.tapError((error) => Effect.logWarning("Could not remove deleted session's browser exports", error))),
+                ]).pipe(Effect.ignore)
+            : Effect.void,
+        ),
+      ),
+    ),
     Effect.forkScoped({ startImmediately: true }),
   )
+  // A child copies its parent's permissions, browser grant included, but not the attachment. The grant is revoked while
+  // the child's prompt is admitted, so no step of the child lists browser tools. The lock keeps an attachment of the
+  // child's own from starting meanwhile; one that already exists keeps its grant.
+  yield* ctx.session.hook("prompt", (event) =>
+    ctx.session.get({ sessionID: event.sessionID }).pipe(
+      Effect.flatMap((session) =>
+        session.parentID === undefined || !session.permissions?.some(BrowserMachine.isGrant)
+          ? Effect.void
+          : lock.withPermit(
+              Effect.suspend(() =>
+                BrowserMachine.hasSession(machine.state, session.id)
+                  ? Effect.void
+                  : writePermissions(ctx, session.id, false),
+              ),
+            ),
+      ),
+      Effect.catchCause((cause) => Effect.logWarning("Browser permission revoke failed", cause)),
+    ),
+  )
+  // Registered last, so it runs first: attachments close and revokes drain while the RPC and `work` are still open.
+  yield* Effect.addFinalizer(() => dispatch({ type: "disposed" }).pipe(Effect.andThen(Deferred.await(drained))))
+
+  const request = Effect.fn("BrowserConnection.request")(function* (
+    sessionID: Session.ID,
+    connectionID: string,
+    action: Browser.Action,
+    tab: Browser.Tab | undefined,
+    files: readonly Browser.File[],
+    inspection: Pick<Browser.Command, "inspect" | "target">,
+  ) {
+    const requestID = crypto.randomUUID()
+    const target = { sessionID, connectionID, requestID }
+    const result = yield* Deferred.make<Browser.Result, Tool.Error>()
+    const command = {
+      action:
+        (action.type === "files.upload" || action.type === "files.drop") && !inspection.inspect
+          ? { ...action, paths: files.map((file) => file.name) }
+          : action,
+      ...(tab ? { generation: tab.generation } : {}),
+      files,
+      ...inspection,
+    }
+    // Once started, the request always reaches the machine's exit: a settlement, a timeout or a cancel.
+    return yield* Effect.uninterruptibleMask((restore) =>
+      Effect.sync(() => requests.set(requestID, result)).pipe(
+        Effect.andThen(dispatch({ type: "request.started", ...target, command })),
+        Effect.andThen(
+          restore(
+            Deferred.await(result).pipe(
+              Effect.timeoutOrElse({
+                duration: Duration.millis(BrowserMachine.REQUEST_TIMEOUT_MS),
+                orElse: () =>
+                  dispatch({ type: "request.timed-out", ...target }).pipe(Effect.andThen(Deferred.await(result))),
+              }),
+            ),
+          ),
+        ),
+        Effect.onInterrupt(() => dispatch({ type: "request.cancelled", ...target })),
+        Effect.ensuring(Effect.sync(() => requests.delete(requestID))),
+      ),
+    )
+  })
 
   return {
+    /**
+     * Refuses a call that config, the agent's definition or the session's own rules deny. It reads rules only and never
+     * prompts, so it runs before the tool reads a file, looks up a tab or says whether a desktop is attached: a denied
+     * call reveals nothing but the denial. Without a desktop the session has no grant, and core would deny the call
+     * with its own message before any hook ran.
+     */
+    refuse: Effect.fn("BrowserConnection.refuse")(function* (tool: Tool.Context, operations: readonly string[]) {
+      const session = yield* ctx.session
+        .get({ sessionID: tool.sessionID })
+        .pipe(Effect.mapError((error) => new Tool.Error({ message: `Session not found: ${tool.sessionID}`, error })))
+      const denied = denial(rulesFor(session, tool.agent), operations)
+      if (denied) return yield* new Tool.Error({ message: denied })
+    }),
+    /**
+     * The permission check for one call, with the operation as its resource. Its `permission.evaluate` hooks decide it:
+     * this plugin's (configured denies win over the grant) and others such as `tool.use` policies.
+     */
+    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, operations?: readonly string[]) {
+      const connection = BrowserMachine.selectConnection(machine.state, tool.sessionID)
+      if (!connection.ok) return { connected: false as const, message: connection.error.message }
+      yield* ctx.permission.assert({
+        sessionID: tool.sessionID,
+        agent: tool.agent,
+        action: "browser",
+        // Keep exact operation resources for existing permission rules and tool.use policies. A call that stands for
+        // more than one operation names each, and a deny of any of them refuses it.
+        resources: operations ?? [action.type],
+        source: { type: "tool", messageID: tool.messageID, id: tool.id },
+      })
+      return { connected: true as const }
+    }),
     target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action) {
-      const browser = browsers.get(sessionID)
-      if (!browser)
-        return yield* new Tool.Error({
-          message:
-            "[browser.disconnected] No desktop browser is connected to this session. Open this session in the desktop app and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
-        })
-      const tab = "tabID" in action ? browser.state.tabs.find((tab) => tab.id === action.tabID) : undefined
-      if ("tabID" in action && !tab)
-        return yield* new Tool.Error({
-          message:
-            "[browser.tab_unavailable] This tab is closed or does not belong to the connected session. Call browser.tabs.list({}) and use an exact returned tabID. If no tabs exist, use browser.tabs.open({}). Never substitute a request ID, file ID, or element ref for tabID.",
-        })
-      // Keep the selected attachment and document, even while permissions or file IO wait.
+      const selected = BrowserMachine.selectTarget(machine.state, sessionID, action)
+      if (!selected.ok) return yield* selected.error
+      // Requests go to the attachment selected here. One that closes first, even while file IO waits, runs nothing.
       return {
-        tab,
+        tab: selected.tab,
         inspect: () =>
-          request(rpc, browser, action, tab, [], { inspect: true }).pipe(
+          request(sessionID, selected.connectionID, action, selected.tab, [], { inspect: true }).pipe(
             Effect.flatMap((result) => Schema.decodeUnknownEffect(Browser.Target)(result.value)),
             Effect.mapError(
               (error) =>
@@ -208,59 +430,47 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             ),
           ),
         request: (files: readonly Browser.File[], target?: Browser.Target) =>
-          request(rpc, browser, action, tab, files, { target }),
+          request(sessionID, selected.connectionID, action, selected.tab, files, { target }),
       }
     }),
   }
 })
 
-const request = Effect.fn("BrowserConnection.request")(function* (
-  rpc: RpcRegistration<typeof Browser.Definition>,
-  browser: Attachment,
-  action: Browser.Action,
-  tab: Browser.Tab | undefined,
-  files: readonly Browser.File[],
-  inspection: Pick<Browser.Command, "inspect" | "target">,
+/** The refusal for the first operation the rules deny, or undefined when they deny none. */
+function denial(rules: readonly Permission.Rule[], operations: readonly string[]) {
+  const denied = operations
+    .map((operation) => ({ operation, rule: BrowserMachine.selectBrowserRule(rules, operation) }))
+    .find((item) => item.rule?.effect === "deny")
+  if (!denied) return undefined
+  return denied.rule?.resource === "*"
+    ? "[browser.denied] Browser tools are denied for this agent by configuration; no action ran. Do not retry browser tools."
+    : denied.operation === "preview"
+      ? // No tool has this name any more: it is the permission that covers showing a workspace file.
+        "[browser.denied] Showing a workspace file in the browser (permission browser.preview) is denied for this agent by configuration; no action ran. Do not retry it."
+      : `[browser.denied] browser.${denied.operation} is denied for this agent by configuration; no action ran. Do not retry it.`
+}
+
+function writePermissions(
+  ctx: { readonly session: Pick<Context["session"], "get" | "update"> },
+  sessionID: Session.ID,
+  allow: boolean,
 ) {
-  const requestID = crypto.randomUUID()
-  const pending = yield* Deferred.make<Browser.Result, Tool.Error>()
-  const command =
-    (action.type === "files.upload" || action.type === "files.drop") && !inspection.inspect
-      ? { ...action, paths: files.map((file) => file.name) }
-      : action
-  browser.pending.set(requestID, {
-    command: { action: command, ...(tab ? { generation: tab.generation } : {}), files, ...inspection },
-    result: pending,
-  })
-  return yield* rpc.events.emit("control", { type: "command", connectionID: browser.connectionID, requestID }).pipe(
-    Effect.mapError(
-      (error) =>
-        new Tool.Error({
-          message: `Could not dispatch browser.${action.type}. Check the desktop connection and call browser.tabs.list({}) before deciding whether to retry.`,
-          error,
-        }),
-    ),
-    Effect.andThen(Deferred.await(pending)),
-    Effect.raceFirst(
-      Deferred.await(browser.closed).pipe(
-        Effect.andThen(
-          new Tool.Error({
-            message:
-              "[browser.disconnected] Browser connection closed; the action may already have run. Reconnect this session in the desktop app, call browser.tabs.list({}), and inspect the target tab with browser.snapshot({tabID}). Do not repeat clicks, submissions, uploads, or evaluations until their outcome is known.",
-          }),
-        ),
-      ),
-    ),
-    Effect.onInterrupt(() =>
-      rpc.events.emit("control", { type: "cancel", connectionID: browser.connectionID, requestID }).pipe(Effect.ignore),
-    ),
-    Effect.timeoutOrElse({
-      duration: "60 seconds",
-      orElse: () =>
-        new Tool.Error({
-          message: `[browser.timeout] browser.${action.type} did not finish within 60 seconds; its outcome is unknown. Check the desktop connection, call browser.tabs.list({}), and inspect the tab or browser.files.list({tabID}) for completed work. Do not blindly repeat a mutating action or start another recording.`,
-        }),
+  return ctx.session.get({ sessionID }).pipe(
+    Effect.flatMap((session) => {
+      const permissions = BrowserMachine.reconcileBrowserPermissions(session.permissions, allow)
+      return permissions ? ctx.session.update({ sessionID, permissions }) : Effect.void
     }),
-    Effect.ensuring(Effect.sync(() => browser.pending.delete(requestID))),
   )
-})
+}
+
+// A process on another host, such as another container on a shared volume, cannot be checked; its grants count as live.
+// A reused process ID also counts as live, which only leaves a stale grant in place.
+function running(owner: typeof GrantOwner.Type) {
+  if (owner.host !== hostname()) return true
+  try {
+    process.kill(owner.pid, 0)
+    return true
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "EPERM"
+  }
+}

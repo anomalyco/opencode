@@ -1,12 +1,14 @@
 import { getFilename } from "@opencode/util/path"
-import type { PromptFileAttachment } from "@opencode/client/promise"
+import type { PromptAttachment } from "@opencode/client/promise"
 
-export function attached(file: PromptFileAttachment) {
+export function attached(file: PromptAttachment) {
   if (file.mention) return false
 
-  if (file.source.type === "inline") return true
+  const source = file.source
 
-  return file.source.uri.startsWith("data:") || file.source.uri.startsWith("blob:")
+  if (!source || source.type === "inline") return true
+
+  return source.uri.startsWith("data:") || source.uri.startsWith("blob:")
 }
 
 // Display names for common source extensions; any other extension is shown in upper case.

@@ -1,8 +1,8 @@
 import type { Accessor } from "solid-js"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
-import { authTokenFromCredentials } from "@/runtime/server/api"
-import { uuid } from "@/runtime/persistence/uuid"
+import { createApiForServer } from "@/runtime/server/api"
+import { uuid } from "@opencode/util/uuid"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import type { ComposerControls } from "../adapter"
 
@@ -26,13 +26,20 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
     local: server.isLocal,
     upload: async (file, report, signal) => {
       const info = await sdk.api.server.info({ signal })
+      const api = createApiForServer({ server: sdk.http, fetch: progressFetch(report) })
+
       // One directory per upload keeps the original filename without collisions; the server
       // normalizes the separators and returns the resolved path.
-      const url = new URL("/api/experimental/fs/write", server.conn.http.url)
-      url.searchParams.set("location[directory]", location().directory)
-      url.searchParams.set("path", `${info.paths.tmp}/uploads/${uuid()}/${file.name}`)
+      const written = await api.experimental.file.write(
+        {
+          location: { directory: location().directory },
+          path: `${info.paths.tmp}/uploads/${uuid()}/${file.name}`,
+          payload: file,
+        },
+        { signal },
+      )
 
-      return write(url, file, server.conn.http.password, report, signal)
+      return written.data.path
     },
   })
 }
@@ -40,24 +47,35 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
 // fetch cannot report upload progress and Chromium only streams request bodies over HTTP/2, so
 // the one request that needs both goes through XMLHttpRequest. The browser streams the File
 // from disk; nothing is buffered in the renderer.
-function write(url: URL, file: File, password: string | undefined, report: (loaded: number) => void, signal: AbortSignal) {
-  return new Promise<string>((resolve, reject) => {
-    if (signal.aborted) return reject(new DOMException("Upload aborted", "AbortError"))
-    const xhr = new XMLHttpRequest()
-    xhr.open("POST", url)
-    xhr.responseType = "json"
-    xhr.setRequestHeader("content-type", "application/octet-stream")
+function progressFetch(report: (loaded: number) => void): typeof globalThis.fetch {
+  const send = (input: RequestInfo | URL, init?: RequestInit) =>
+    new Promise<Response>((resolve, reject) => {
+      const signal = init?.signal
 
-    if (password) xhr.setRequestHeader("authorization", `Basic ${authTokenFromCredentials({ password })}`)
-    xhr.upload.addEventListener("progress", (event) => report(event.loaded))
-    xhr.addEventListener("load", () => {
-      if (xhr.status !== 200) return reject(new Error(`Upload failed with status ${xhr.status}`))
-      // SAFETY: a 200 from `fs.write` is its declared success body, `Location.response(FileSystem.Write)`.
-      resolve((xhr.response as { data: { path: string } }).data.path)
+      if (signal?.aborted) return reject(new DOMException("Upload aborted", "AbortError"))
+
+      const xhr = new XMLHttpRequest()
+      xhr.open(init?.method ?? "GET", input instanceof Request ? input.url : String(input))
+
+      new Headers(init?.headers).forEach((value, name) => xhr.setRequestHeader(name, value))
+      xhr.upload.addEventListener("progress", (event) => report(event.loaded))
+      xhr.addEventListener("load", () => {
+        const type = xhr.getResponseHeader("content-type")
+        const empty = [204, 205, 304].includes(xhr.status)
+        resolve(
+          new Response(empty ? null : xhr.responseText, {
+            status: xhr.status,
+            headers: type ? { "content-type": type } : undefined,
+          }),
+        )
+      })
+      xhr.addEventListener("error", () => reject(new TypeError("Upload failed")))
+      xhr.addEventListener("abort", () => reject(new DOMException("Upload aborted", "AbortError")))
+      signal?.addEventListener("abort", () => xhr.abort(), { once: true })
+      // SAFETY: only `experimental.file.write` uses this fetch, and its body is the File it was given.
+      xhr.send((init?.body ?? null) as XMLHttpRequestBodyInit | null)
     })
-    xhr.addEventListener("error", () => reject(new Error("Upload failed")))
-    xhr.addEventListener("abort", () => reject(new DOMException("Upload aborted", "AbortError")))
-    signal.addEventListener("abort", () => xhr.abort(), { once: true })
-    xhr.send(file)
-  })
+
+  // Bun's fetch type carries preconnect; the browser never calls it.
+  return Object.assign(send, { preconnect: () => {} })
 }

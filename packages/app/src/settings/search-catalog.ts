@@ -17,6 +17,12 @@ type Entry<Tab> = {
 
 export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "general", label: "settings.tab.preferences" },
+  {
+    tab: "general",
+    label: "settings.helpFeedback",
+    target: "settings-help-feedback",
+    keywords: "support report issue",
+  },
   { tab: "appearance", label: "settings.general.section.appearance" },
   { tab: "notifications", label: "settings.tab.notifications" },
   { tab: "shortcuts", label: "settings.shortcuts.title", keywords: "keybind keyboard hotkey" },
@@ -28,6 +34,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     label: "settings.general.row.interfaceMode.title",
     target: "settings-tab-layout",
     keywords: "top side tabs inbox sidebar mode layout vertical horizontal focus pro",
+  },
+  {
+    tab: "general",
+    label: "settings.general.row.sharedSidePanel.title",
+    description: "settings.general.row.sharedSidePanel.description",
+    target: "settings-shared-side-panel",
+    section: "settings.general.section.general",
+    keywords: "right side panel review sidebar persist keep open sessions switch",
   },
   {
     tab: "general",
@@ -53,6 +67,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     tab: "general",
     label: "settings.general.row.pinchZoom.title",
     target: "settings-pinch-zoom",
+    available: "desktop",
+  },
+  {
+    tab: "general",
+    label: "settings.general.row.spellcheck.title",
+    target: "settings-spellcheck",
+    keywords: "spelling spell check dictionary",
     available: "desktop",
   },
   {
@@ -86,6 +107,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.timeline.row.foldUserMessages.title",
+    description: "settings.timeline.row.foldUserMessages.description",
+    target: "settings-fold-user-messages",
+    section: "settings.timeline.title",
+    keywords: "fold collapse long messages prompts read more",
+  },
+  {
+    tab: "general",
     label: "settings.timeline.row.turnDiffs.title",
     description: "settings.timeline.row.turnDiffs.description",
     target: "settings-show-turn-diffs",
@@ -99,17 +128,31 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
-    label: "settings.experimental.row.newIcons.title",
-    target: "settings-new-icons",
-    description: "settings.experimental.row.newIcons.description",
-    keywords: "icons iconography glyphs redesign",
+    label: "settings.experimental.row.newTimeline.title",
+    target: "settings-new-timeline",
+    description: "settings.experimental.row.newTimeline.description",
+    keywords: "new timeline redesign activity explored edited ran grouping status",
   },
   {
     tab: "experimental",
-    label: "settings.experimental.row.newModelPicker.title",
-    target: "settings-new-model-picker",
-    description: "settings.experimental.row.newModelPicker.description",
-    keywords: "model picker selector switcher redesign",
+    label: "settings.experimental.row.newQuestionUI.title",
+    target: "settings-new-question-ui",
+    description: "settings.experimental.row.newQuestionUI.description",
+    keywords: "question answers keyboard dock redesign",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.tabGroups.title",
+    target: "settings-tab-groups",
+    description: "settings.experimental.row.tabGroups.description",
+    keywords: "tab groups server project colors drag organize search sessions",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.sidebarOrganize.title",
+    target: "settings-sidebar-organize",
+    description: "settings.experimental.row.sidebarOrganize.description",
+    keywords: "vertical side tabs projects recents organize sidebar",
   },
   {
     tab: "appearance",
@@ -138,6 +181,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "appearance",
+    label: "settings.appearance.row.zoom.title",
+    target: "settings-zoom",
+    keywords: "scale size text font larger bigger accessibility",
+    available: "desktop",
+  },
+  {
+    tab: "appearance",
     label: "settings.appearance.row.reduceMotion.title",
     target: "settings-reduce-motion",
     keywords: "animation accessibility",
@@ -157,6 +207,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.notifications",
     description: "settings.general.notifications.permissions.description",
     keywords: "desktop notifications permissions",
+  },
+  {
+    tab: "notifications",
+    label: "settings.general.notifications.questions.title",
+    target: "settings-notifications-questions",
+    section: "settings.general.section.notifications",
+    description: "settings.general.notifications.questions.description",
+    keywords: "desktop notifications questions mcp elicitation input",
   },
   {
     tab: "notifications",
@@ -181,6 +239,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.sounds",
     description: "settings.general.sounds.permissions.description",
     keywords: "sound audio permissions",
+  },
+  {
+    tab: "notifications",
+    label: "settings.general.sounds.questions.title",
+    target: "settings-sounds-questions",
+    section: "settings.general.section.sounds",
+    description: "settings.general.sounds.questions.description",
+    keywords: "sound audio questions mcp elicitation input",
   },
   {
     tab: "notifications",
@@ -213,7 +279,12 @@ export const serverSettings: Entry<SettingsServerTab | "servers">[] = [
     label: "settings.extensions.tab.mcps",
     keywords: "model context protocol tools",
   },
-  { tab: "extensions", subtab: "plugins", label: "settings.extensions.tab.plugins" },
+  {
+    tab: "extensions",
+    subtab: "plugins",
+    label: "settings.extensions.tab.plugins",
+    keywords: "extension gui built-in",
+  },
   { tab: "extensions", subtab: "skills", label: "settings.extensions.tab.skills" },
   {
     tab: "servers",

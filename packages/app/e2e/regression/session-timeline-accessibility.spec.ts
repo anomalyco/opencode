@@ -9,23 +9,33 @@ import {
   userMessage,
 } from "../utils/timeline"
 
-test("assistant steps remain accessible while the response is streaming", async ({ page }) => {
-  const text = "Streaming assistant output"
-  await setupTimeline(page, {
-    messages: [
-      userMessage(),
-      assistantMessage(
-        [shell("prt_accessible_shell", "completed", "done", "echo progress"), textPart("prt_accessible_text", text)],
-        { completed: false },
-      ),
-    ],
-  })
+for (const { newTimeline, shellLabel } of [
+  { newTimeline: false, shellLabel: "Used 1 Shell" },
+  { newTimeline: true, shellLabel: "Ran 1 command" },
+]) {
+  test(`assistant steps remain accessible while streaming in the ${newTimeline ? "New" : "current"} timeline`, async ({
+    page,
+  }) => {
+    const text = "Streaming assistant output"
+    await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage(
+          [shell("prt_accessible_shell", "completed", "done", "echo progress"), textPart("prt_accessible_text", text)],
+          { completed: false },
+        ),
+      ],
+      settings: { newTimeline },
+    })
 
-  const assistant = page.locator('[data-slot="session-turn-assistant-content"]')
-  await expect(assistant.filter({ hasText: text })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Used 1 Shell" })).toBeVisible()
-  await expect(assistant.filter({ hasText: text })).toMatchAriaSnapshot(`- paragraph: ${text}`)
-})
+    const assistant = page.locator('[data-slot="session-turn-assistant-content"]')
+    const reply = assistant.filter({ hasText: text })
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible()
+    await expect(reply).toBeVisible()
+    await expect(reply).toMatchAriaSnapshot(`- paragraph: ${text}`)
+    await expect(assistant.getByRole("button", { name: shellLabel, exact: true })).toBeVisible()
+  })
+}
 
 test("space activates a focused timeline button instead of scrolling", async ({ page }) => {
   const shellID = "prt_space_button_shell"
@@ -64,6 +74,46 @@ test("space activates a focused timeline button instead of scrolling", async ({ 
   expect(await scroller.evaluate((element) => element.scrollTop)).toBe(before)
 })
 
+test("Tab moves between timeline controls without stopping on the timeline itself", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_tab_stop_text", "Long response. ".repeat(600))])],
+    seedHistory: true,
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const first = scroller.getByRole("button", { name: "More actions", exact: true })
+  await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expect(scroller).toHaveAttribute("tabindex", "-1")
+  await first.press("Shift+Tab")
+  await expect(scroller).not.toBeFocused()
+})
+
+test("a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled", async ({
+  page,
+}) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        shell("prt_focus_unmount_shell", "completed", lines(5)),
+        textPart("prt_focus_unmount_text", "Latest response."),
+      ]),
+    ],
+    settings: { shellToolPartsExpanded: false },
+    seedHistory: true,
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const trigger = page.getByRole("button", { name: "Used 1 Shell", exact: true })
+  await trigger.focus()
+  await expect(trigger).toBeFocused()
+  await scroller.hover()
+  await page.mouse.wheel(0, -100_000)
+  // The row left the mounted range, and its control went with it.
+  await expect(trigger).toHaveCount(0)
+  // The timeline keeps focus for the scroll keys. No control in another row takes it and scrolls the timeline to itself.
+  await expect(scroller).toBeFocused()
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0)
+})
+
 test("jump to latest is reachable only while it is shown", async ({ page }) => {
   await setupTimeline(page, {
     messages: [userMessage(), assistantMessage([textPart("prt_jump_latest_text", "Latest response.")])],
@@ -86,6 +136,14 @@ test("jump to latest is reachable only while it is shown", async ({ page }) => {
   await expect(latest).toBeInViewport()
   // The click focused the button; hiding it must not leave focus on an invisible control.
   await expect(jump).not.toBeFocused()
+
+  // From the keyboard, focus continues in the prompt instead of falling to the page.
+  await page.mouse.wheel(0, -3000)
+  await expect(latest).not.toBeInViewport()
+  await jump.focus()
+  await page.keyboard.press("Enter")
+  await expect(latest).toBeInViewport()
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeFocused()
 })
 
 function lines(count: number) {

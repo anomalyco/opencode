@@ -2,15 +2,30 @@ import { TextField } from "@opencode/ui/text-field"
 import type { captureException } from "@sentry/solid"
 import { Logo } from "@opencode/ui/logo"
 import { Button } from "@opencode/ui/button"
-import { Component, createSignal, onCleanup, onMount, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Component, createEffect, createSignal, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { Predicate } from "effect"
-import { Updater } from "@opencode/gui-extensions/updater"
+import { Updater } from "@opencode/plugin/gui/updater"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
-import { createIpcClients } from "@/runtime/extension/ipc"
+import { createIpcClients } from "@/runtime/plugin/ipc"
 import { Icon } from "@opencode/ui/icon"
 import { errorDescriptionKey, errorStatus } from "./description"
+import {
+  INITIAL_ERROR_PAGE_STATE,
+  isUpdaterBusy,
+  selectActionError,
+  selectCanReport,
+  selectCheckingUpdates,
+  selectCheckUpdatesDisabled,
+  selectExportDisabled,
+  selectInstallUpdateDisabled,
+  selectReportDisabled,
+  selectReported,
+  selectUpdateVersion,
+  transitionErrorPage,
+  type ErrorPageEffect,
+  type ErrorPageEvent,
+} from "./machine"
 
 type InitError = {
   name: unknown
@@ -257,75 +272,132 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const language = useLanguage()
   const formattedError = () => formatError(props.error, language.t)
   const status = () => errorStatus(props.error)
-  let recordedFatalError: Promise<void> | undefined
+  const [pageState, setPageState] = createSignal(INITIAL_ERROR_PAGE_STATE)
+  let capture: typeof captureException | undefined
+  // The crash record in flight, which Export Logs waits for instead of recording the crash twice.
+  let recording: Promise<boolean> | undefined
+  const timers = new Set<ReturnType<typeof setTimeout>>()
 
-  const [store, setStore] = createStore<{
-    actionError: string | undefined
-    captureException: typeof captureException | undefined
-  }>({
-    actionError: undefined,
-    captureException: undefined,
-  })
+  // A crash can take the plugin root down with the app, so the page reaches the updater's
+  // main-process Ipc over the bridge itself.
+  const ipcs = createIpcClients(platform.plugins)
+  const updater = () => ipcs.typed(Updater)
 
-  function ensureFatalErrorRecorded() {
-    recordedFatalError ??=
+  const dispatch = (event: ErrorPageEvent) => {
+    const previous = untrack(pageState)
+    const next = transitionErrorPage(previous, event)
+
+    if (next.state !== previous) setPageState(next.state)
+    next.effects.forEach(run)
+  }
+
+  function run(effect: ErrorPageEffect) {
+    if (effect.type === "sentry.capture") return capture?.(props.error)
+
+    if (effect.type === "fatal.record") {
+      const attempt = effect.attempt
+      void record(attempt)
+      later(effect.timeoutMs, () => dispatch({ type: "fatal.settled", attempt, recorded: false }))
+
+      return
+    }
+
+    const attempt = effect.attempt
+
+    // Each action resolves to its error message, or undefined when it succeeded.
+    const settle = (work: Promise<string | undefined>) =>
+      void work.then(
+        (error) =>
+          dispatch(
+            error === undefined ? { type: "action.succeeded", attempt } : { type: "action.failed", attempt, error },
+          ),
+        (cause) => dispatch({ type: "action.failed", attempt, error: formatError(cause, language.t) }),
+      )
+
+    if (effect.type === "logs.export") {
+      const recorded = effect.recordFirst ? (recording ?? record(effect.fatalAttempt)) : Promise.resolve(true)
+
+      // A crash that cannot be recorded still leaves the logs to export; the native save dialog has no time limit.
+      return settle(
+        within(recorded, effect.recordTimeoutMs)
+          .then(() => platform.exportDebugLogs?.())
+          .then(() => undefined),
+      )
+    }
+
+    later(effect.timeoutMs, () =>
+      dispatch({ type: "action.timed-out", attempt, error: language.t("common.requestFailed") }),
+    )
+
+    if (effect.type === "updater.install") return settle(Promise.try(() => updater()?.install()).then(() => undefined))
+
+    settle(
+      Promise.try(() => updater()?.check()).then((state) => (state?.status === "error" ? state.message : undefined)),
+    )
+  }
+
+  function record(attempt: number) {
+    const pending = Promise.try(() =>
       platform.recordFatalRendererError?.({
         error: formattedError(),
         url: location.href,
         version: platform.version,
         platform: platform.platform,
         os: platform.os,
-      }) ?? Promise.resolve()
+      }),
+    ).then(
+      () => true,
+      () => false,
+    )
 
-    return recordedFatalError
+    recording = pending
+    void pending.then((recorded) => {
+      if (recording === pending) recording = undefined
+      dispatch({ type: "fatal.settled", attempt, recorded })
+    })
+
+    return pending
   }
 
+  function later(ms: number, fn: () => void) {
+    const timer = setTimeout(() => {
+      timers.delete(timer)
+      fn()
+    }, ms)
+
+    timers.add(timer)
+  }
+
+  function within(promise: Promise<unknown>, ms: number) {
+    return new Promise<void>((resolve) => {
+      later(ms, resolve)
+      void promise.then(() => resolve())
+    })
+  }
+
+  createEffect(
+    on(
+      () => props.error,
+      () => dispatch({ type: "error.presented" }),
+    ),
+  )
+
   onMount(() => {
-    void ensureFatalErrorRecorded().catch(() => undefined)
     void import("@sentry/solid")
       .then(({ captureException, isEnabled }) => {
-        if (isEnabled()) setStore("captureException", () => captureException)
+        const enabled = isEnabled()
+
+        if (enabled) capture = captureException
+        dispatch({ type: "sentry.loaded", enabled })
       })
       .catch(() => undefined)
   })
 
-  // A crash can take the extension root down with the app, so the page reaches the updater's
-  // main-process Ipc over the bridge itself.
-  const ipcs = createIpcClients(platform.extensions)
-  onCleanup(ipcs.dispose)
-  const updater = () => ipcs.typed(Updater)
-
-  async function checkForUpdates() {
-    const state = await updater()?.check()
-    setStore("actionError", state?.status === "error" ? state.message : undefined)
-  }
-
-  async function installUpdate() {
-    await updater()
-      ?.install()
-      .then(() => setStore("actionError", undefined))
-      .catch((err) => {
-        setStore("actionError", formatError(err, language.t))
-      })
-  }
-
-  const updateVersion = () => {
-    const state = updater()?.state()
-
-    return state?.status === "ready" || state?.status === "download-required" ? state.version : undefined
-  }
-
-  async function exportDebugLogs() {
-    const exportLogs = platform.exportDebugLogs
-
-    if (!exportLogs) return
-    await ensureFatalErrorRecorded()
-      .then(() => exportLogs())
-      .then(() => setStore("actionError", undefined))
-      .catch((err) => {
-        setStore("actionError", formatError(err, language.t))
-      })
-  }
+  onCleanup(() => {
+    ipcs.dispose()
+    timers.forEach(clearTimeout)
+    dispatch({ type: "disposed" })
+  })
 
   return (
     <div
@@ -358,53 +430,65 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
             {language.t(platform.platform === "web" ? "error.page.action.reload" : "error.page.action.restart")}
           </Button>
           <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>
-            <Button size="large" variant="ghost" onClick={exportDebugLogs}>
+            <Button
+              size="large"
+              variant="ghost"
+              disabled={selectExportDisabled(pageState())}
+              onClick={() => dispatch({ type: "export.clicked", available: !!platform.exportDebugLogs })}
+            >
               {language.t("error.page.action.exportLogs")}
             </Button>
           </Show>
-          <Show when={store.captureException}>
-            {(capture) => {
-              const [reported, setReported] = createSignal(false)
-
-              return (
-                <Button
-                  size="large"
-                  disabled={reported()}
-                  onClick={() => {
-                    capture()(props.error)
-                    setReported(true)
-                  }}
-                >
-                  {language.t(reported() ? "error.page.action.reported" : "error.page.action.report")}
-                </Button>
-              )
-            }}
+          <Show when={selectCanReport(pageState())}>
+            <Button
+              size="large"
+              disabled={selectReportDisabled(pageState())}
+              onClick={() => dispatch({ type: "report.clicked" })}
+            >
+              {language.t(selectReported(pageState()) ? "error.page.action.reported" : "error.page.action.report")}
+            </Button>
           </Show>
           <Show when={updater()}>
             <Show
-              when={updateVersion()}
+              when={selectUpdateVersion(updater()?.state())}
               fallback={
                 <Button
                   size="large"
                   variant="ghost"
-                  onClick={checkForUpdates}
-                  disabled={["checking", "downloading", "installing"].includes(updater()?.state()?.status ?? "")}
+                  onClick={() =>
+                    dispatch({
+                      type: "check.clicked",
+                      available: !!updater(),
+                      busy: isUpdaterBusy(updater()?.state()),
+                    })
+                  }
+                  disabled={selectCheckUpdatesDisabled(pageState(), updater()?.state())}
                 >
-                  {updater()?.state()?.status === "checking"
+                  {selectCheckingUpdates(pageState(), updater()?.state())
                     ? language.t("error.page.action.checking")
                     : language.t("error.page.action.checkUpdates")}
                 </Button>
               }
             >
               {(version) => (
-                <Button size="large" onClick={installUpdate}>
+                <Button
+                  size="large"
+                  disabled={selectInstallUpdateDisabled(pageState(), updater()?.state())}
+                  onClick={() =>
+                    dispatch({
+                      type: "install.clicked",
+                      available: !!updater(),
+                      busy: updater()?.state()?.status === "installing",
+                    })
+                  }
+                >
                   {language.t("error.page.action.updateTo", { version: version() })}
                 </Button>
               )}
             </Show>
           </Show>
         </div>
-        <Show when={store.actionError}>
+        <Show when={selectActionError(pageState())}>
           {(message) => <p class="text-xs text-text-danger-base text-center max-w-2xl">{message()}</p>}
         </Show>
         <div class="flex flex-col items-center gap-2 text-xs text-center">

@@ -1,4 +1,4 @@
-import type { FileContent } from "@opencode/gui-extensions/sdk"
+import type { FileContent } from "@opencode/plugin/gui"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 
@@ -26,15 +26,51 @@ export type FileViewState = {
   selectedLines?: SelectedLineRange | null
 }
 
-export type FileState = {
-  path: string
-  name: string
-  loaded?: boolean
-  loading?: boolean
-  notFound?: boolean
-  error?: string
-  content?: FileContent
-}
+type FileStateBase = { readonly path: string; readonly name: string }
+
+// The view `selectFileState` projects from the content machine. Each status fixes the plugin SDK's flags, so loaded
+// content never comes with an error and a missing file never shows as loading.
+export type FileState =
+  | (FileStateBase & {
+      readonly status: "loading"
+      readonly loaded: false
+      readonly loading: true
+      readonly notFound: false
+      readonly content?: never
+      readonly error?: never
+    })
+  | (FileStateBase & {
+      readonly status: "ready"
+      readonly loaded: true
+      readonly loading: false
+      readonly notFound: false
+      readonly content: FileContent
+      readonly error?: never
+    })
+  | (FileStateBase & {
+      readonly status: "refreshing"
+      readonly loaded: true
+      readonly loading: true
+      readonly notFound: false
+      readonly content: FileContent
+      readonly error?: never
+    })
+  | (FileStateBase & {
+      readonly status: "missing"
+      readonly loaded: false
+      readonly loading: false
+      readonly notFound: true
+      readonly content?: never
+      readonly error: string
+    })
+  | (FileStateBase & {
+      readonly status: "error"
+      readonly loaded: false
+      readonly loading: false
+      readonly notFound: false
+      readonly content?: never
+      readonly error: string
+    })
 
 export function selectionFromLines(range: SelectedLineRange): FileSelection {
   const startLine = Math.min(range.start, range.end)

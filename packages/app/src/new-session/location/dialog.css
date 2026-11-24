@@ -1,3 +1,132 @@
+.new-session-location .palette-menu-search {
+  padding: 6px 6px 0;
+}
+
+.new-session-location .palette-menu-search [data-component="text-input-v2"] {
+  height: 28px;
+  padding-inline-end: 6px;
+  background: transparent;
+}
+
+.new-session-location .palette-menu-search [data-slot="text-input-v2-value"] {
+  gap: 6px;
+}
+
+.new-session-location .palette-menu-search [data-slot="text-input-v2-leading-icon"] {
+  padding-inline-start: 6px;
+}
+
+/* The negative margin cancels the padding, so the button takes the icon's space. */
+.new-session-location-search-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: -4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+
+  &:is(:hover, :focus-visible) {
+    background: var(--v2-overlay-simple-overlay-hover);
+    outline: none;
+  }
+}
+
+.new-session-location .palette-menu-search [data-slot="text-input-v2-input"]::placeholder {
+  color: var(--v2-text-text-base);
+  opacity: 0.5;
+}
+
+.new-session-location-divider {
+  height: 1px;
+  flex-shrink: 0;
+  margin-block: 6px 2px;
+  background: var(--v2-border-border-base);
+  transform: scaleY(0.5);
+}
+
+.new-session-location .command-palette-results {
+  gap: 4px;
+  padding: 0 6px 6px;
+}
+
+.new-session-location .command-palette-group {
+  gap: 2px;
+}
+
+.new-session-location .command-palette-group:not(:has(> .command-palette-group-title:first-child)) {
+  padding-top: 4px;
+}
+
+.new-session-location-action-divider {
+  height: 1px;
+  flex-shrink: 0;
+  margin-block: 2px;
+  margin-inline: -6px;
+  background: var(--v2-border-border-base);
+  transform: scaleY(0.5);
+}
+
+.new-session-location .command-palette-group-title {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  margin: 0;
+  padding: 10px 8px 2px;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.05px;
+}
+
+.new-session-location .palette-menu-row[data-size="compact"] {
+  height: 32px;
+  padding-inline: 8px 6px;
+}
+
+.new-session-location .palette-menu-title {
+  font-weight: 440;
+}
+
+.new-session-location .palette-menu-row:is([data-active], :focus-visible) {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.new-session-location .command-palette-row-text {
+  flex: 1;
+}
+
+.new-session-location .command-palette-description {
+  flex: 1;
+  color: var(--v2-text-text-faint);
+}
+
+.new-session-location-workspace .command-palette-row-text > .command-palette-title {
+  max-width: 60%;
+  flex-shrink: 0;
+}
+
+.new-session-location .new-session-location-option .command-palette-title {
+  color: var(--v2-text-text-muted);
+}
+
+.new-session-location-other {
+  gap: 8px;
+}
+
+.new-session-location-count {
+  color: var(--v2-text-text-faint);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Its own hover, layered over the row's, shows that it drills in rather than choosing the row. The negative margin
+   keeps the glyph where the 16px slot put it. */
 .new-session-location-drill {
   display: flex;
   width: 20px;
@@ -5,46 +134,44 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
+  margin-inline: -2px;
   border-radius: 4px;
   color: var(--v2-icon-icon-faint);
 }
 
-.command-palette-row[data-active] .new-session-location-drill {
+.new-session-location-drill:hover {
+  background: var(--v2-overlay-simple-overlay-hover);
   color: var(--v2-icon-icon-base);
 }
 
-.new-session-location-drill:hover {
-  background: var(--v2-overlay-simple-overlay-hover);
-}
-
-.new-session-location-hints {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 16px;
-  padding: 8px 14px;
-  border-top: 0.5px solid var(--v2-border-border-muted);
-  color: var(--v2-text-text-muted);
-  font-size: 12px;
-  font-weight: 440;
-  line-height: 16px;
-  letter-spacing: -0.04px;
-  user-select: none;
-}
-
-.new-session-location-hints > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* The project name truncates before its server tag. */
+/* Keep the name legible while the path gives up space first. */
 .new-session-location-name {
   display: flex;
   min-width: 0;
-  max-width: 100%;
+  max-width: 55%;
+  flex-shrink: 0;
   align-items: center;
   gap: 6px;
+}
+
+.new-session-location-branch {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--v2-text-text-muted);
+}
+
+.new-session-location-branch [data-slot="icon-svg"] {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}
+
+.new-session-location-branch > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .new-session-location-tag {
@@ -62,45 +189,17 @@
 .new-session-location-tag > span {
   min-width: 0;
   overflow: hidden;
-  line-height: 16px;
+  line-height: var(--line-height-compact);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.new-session-location-add {
-  display: flex;
-  height: 24px;
-  align-items: center;
-  gap: 4px;
-  padding: 0 8px 0 6px;
-  border-radius: 4px;
-  color: var(--v2-text-text-muted);
-  font-size: 13px;
-  font-weight: 440;
-  line-height: 16px;
-  white-space: nowrap;
-  outline: none;
-}
-
-.new-session-location-add:is(:hover, :focus-visible) {
-  background: var(--v2-overlay-simple-overlay-hover);
-  color: var(--v2-text-text-base);
-}
-
-.new-session-location-add:focus-visible {
-  outline: 2px solid var(--v2-border-border-focus);
-  outline-offset: -2px;
-}
-
-/* Narrow screens keep only the icon; the tooltip names it. */
-@media (max-width: 480px) {
-  .new-session-location-add {
-    width: 24px;
-    justify-content: center;
-    padding: 0;
+@media (max-width: 640px) {
+  .new-session-location .palette-menu-row:has(.command-palette-description) {
+    min-height: 40px;
   }
 
-  .new-session-location-add > span {
-    display: none;
+  .new-session-location-name {
+    max-width: 100%;
   }
 }

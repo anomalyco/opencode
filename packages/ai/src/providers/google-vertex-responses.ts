@@ -1,14 +1,14 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenResponses } from "../protocols/open-responses.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("google-vertex")
 
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   GoogleVertexShared.OAuthOptions & {
     readonly baseURL?: string
     readonly location?: string
@@ -32,34 +32,19 @@ const route = Route.make({
   protocol: OpenResponses.protocol,
   endpoint: Endpoint.path(OpenResponses.PATH),
   transport: OpenResponses.httpTransport,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+  options: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
 export const routes = [route]
 
-const configuredRoute = (input: Config) => {
-  if ("apiKey" in input && input.apiKey !== undefined)
-    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Responses does not support API keys" })
-  const {
-    accessToken: _accessToken,
-    auth: _auth,
-    baseURL,
-    location: inputLocation,
-    project: inputProject,
-    ...rest
-  } = input
-  const location = GoogleVertexShared.location(inputLocation)
-  const project = GoogleVertexShared.project(inputProject)
-  return route.with({
-    ...rest,
-    endpoint: {
-      baseURL:
-        baseURL ??
-        `https://aiplatform.googleapis.com/v1/projects/${GoogleVertexShared.requireProject(project)}/locations/${location}/endpoints/openapi`,
-    },
-    auth: GoogleVertexShared.oauth(input, project),
-  })
-}
+const configuredRoute = (input: Config) =>
+  GoogleVertexShared.oauthRoute(
+    route,
+    "Responses",
+    input,
+    (project, location) =>
+      `https://aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/endpoints/openapi`,
+  )
 
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
@@ -75,19 +60,5 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
-  modelID,
-  { accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions },
-) => {
-  if (apiKey !== undefined)
-    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Responses does not support API keys" })
-  return configure({
-    accessToken,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    location,
-    project,
-    providerOptions,
-  }).model(modelID)
-}
+export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings = {}) =>
+  configure(GoogleVertexShared.oauthSettings<OpenResponsesProviderOptionsInput>("Responses", settings)).model(modelID)

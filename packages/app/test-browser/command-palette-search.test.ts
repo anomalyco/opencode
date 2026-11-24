@@ -62,7 +62,7 @@ describe("command palette search", () => {
     expect(signals[2].aborted).toBe(true)
   })
 
-  test("lists sessions first, open tabs leading, then commands, settings and files, publishes each source independently, and drops stale results on a new query", async () => {
+  test("lists commands first, then sessions with open tabs leading, settings and files, publishes each source independently, and drops stale results on a new query", async () => {
     const files = Promise.withResolvers<CommandPaletteEntry[]>()
     const sessions = Promise.withResolvers<CommandPaletteEntry[]>()
     const fileVisible = Promise.withResolvers<void>()
@@ -94,7 +94,7 @@ describe("command palette search", () => {
     expect(root.search.loading()).toBe(true)
     sessions.resolve([session, tab])
     await sessionVisible.promise
-    expect(root.search.items()).toEqual([tab, session, copy, setting, file])
+    expect(root.search.items()).toEqual([copy, tab, session, setting, file])
     expect(root.search.loading()).toBe(false)
     root.setQuery("new query")
     expect(root.search.items()).toEqual([copy, setting])

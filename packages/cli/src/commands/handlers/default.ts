@@ -5,6 +5,7 @@ import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
 import { Context, Effect, FileSystem, Option, Queue, Schedule, Semaphore } from "effect"
+import { CliError } from "effect/cli"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
@@ -20,7 +21,20 @@ export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     const requestedServer = Option.getOrUndefined(input.server)
-    if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
+    if (requestedDirectory !== undefined) {
+      const isDirectory = yield* FileSystem.FileSystem.pipe(
+        Effect.flatMap((fileSystem) => fileSystem.stat(requestedDirectory)),
+        Effect.map((info) => info.type === "Directory"),
+        Effect.orElseSucceed(() => false),
+      )
+      // `opencode login` reads as a mistyped command more often than a directory, so answer with help, not ENOENT.
+      if (!isDirectory)
+        return yield* new CliError.ShowHelp({
+          commandPath: [Commands.name],
+          errors: [new CliError.ValidationError({ message: `No directory or command named "${requestedDirectory}"` })],
+        })
+      process.chdir(requestedDirectory)
+    }
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
     const serviceStarts = yield* Queue.unbounded<{
@@ -102,6 +116,8 @@ export default Runtime.handler(Commands, (input) =>
       },
       server: {
         endpoint: server.endpoint,
+        // Managed and standalone servers run here; an explicit --server may be on another machine.
+        local: requestedServer === undefined,
         service: service
           ? {
               reconnect: (signal) => runServicePromise(service.reconnect(), { signal }),

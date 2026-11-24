@@ -247,6 +247,31 @@ describe("parseLatex", () => {
     })
   })
 
+  test("accepts the control space in strict mode", () => {
+    expect(parseLatex(String.raw`a\ b`, { strict: true })).toMatchObject({
+      type: "row",
+      body: [
+        { type: "symbol", value: "a" },
+        { type: "space", width: 1 },
+        { type: "symbol", value: "b" },
+      ],
+    })
+    expect(() => parseLatex(String.raw`\forall \varepsilon>0\ \exists K\in\mathbb{N}`, { strict: true })).not.toThrow()
+  })
+
+  test("accepts a backslash before a newline, a tab, or a line break as a control space", () => {
+    for (const whitespace of ["\n", "\t", "\r\n"]) {
+      expect(parseLatex(`a\\${whitespace}b`, { strict: true })).toMatchObject({
+        type: "row",
+        body: [
+          { type: "symbol", value: "a" },
+          { type: "space", width: 1 },
+          { type: "symbol", value: "b" },
+        ],
+      })
+    }
+  })
+
   test("bounds source and recursive macro expansion", () => {
     expect(() => parseLatex("12345", { maxSourceLength: 4 })).toThrow(/4-character limit/)
     expect(() =>

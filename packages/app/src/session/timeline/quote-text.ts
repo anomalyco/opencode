@@ -159,6 +159,7 @@ export function quoteText(selection: TimelineSelection) {
   }
 
   const output: string[] = []
+  const ranges: Range[] = []
   let length = 0
   let truncated = false
   let previous: { block: Element; part: Element | null } | undefined
@@ -197,9 +198,15 @@ export function quoteText(selection: TimelineSelection) {
 
     if (!text) return
     const current = { block: blockOf(parent), part: partOf(parent) }
+    const piece = document.createRange()
+    piece.setStart(node, start)
+    piece.setEnd(node, end)
 
     if (!pre && text === " ") {
-      if (previous?.block === current.block && !endsWithBreak() && !output.at(-1)?.endsWith(" ")) append(" ")
+      if (previous?.block === current.block && !endsWithBreak() && !output.at(-1)?.endsWith(" ")) {
+        append(" ")
+        ranges.push(piece)
+      }
 
       return
     }
@@ -212,9 +219,7 @@ export function quoteText(selection: TimelineSelection) {
     append((starts ? marker(parent) : "") + (!pre && endsWithBreak() ? text.trimStart() : text))
     first ??= { node, offset: start + raw.search(/\S|$/) }
     last = { node, offset: start + raw.trimEnd().length }
-    const piece = document.createRange()
-    piece.setStart(node, start)
-    piece.setEnd(node, end)
+    ranges.push(piece)
 
     for (const rect of piece.getClientRects()) {
       if (rect.width === 0) continue
@@ -263,6 +268,7 @@ export function quoteText(selection: TimelineSelection) {
       .replace(/\n{3,}/g, "\n\n")
       .trim(),
     truncated,
+    ranges,
     first,
     last,
     horizontal: left < right ? { left, right } : undefined,

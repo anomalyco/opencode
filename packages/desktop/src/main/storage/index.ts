@@ -8,7 +8,7 @@ import { setStorageSnapshotProvider } from "./snapshot"
 import { createDraftStore } from "./drafts"
 import { importLegacyStores } from "./legacy"
 import { createStateStore } from "./state"
-import { readEnableState } from "../extension/enable-state"
+import { readEnableState } from "../plugin/enable-state"
 
 export type Interface = ReturnType<typeof make>
 
@@ -24,6 +24,9 @@ export const layer = Layer.effect(
     const storage = make(path.join(userData, "drafts.sqlite"), (error) =>
       runFork(Effect.logError("storage flush failed", { error })),
     )
+
+    if (storage.moved)
+      yield* Effect.logWarning("drafts.sqlite was the OpenCode CLI database; moved it aside", { to: storage.moved })
 
     yield* importLegacyStores(storage.db, userData).pipe(
       Effect.tap((result) =>
@@ -47,7 +50,7 @@ export const layer = Layer.effect(
     )
     setStorageSnapshotProvider((names) => ({
       storage: Object.fromEntries(names.map((name) => [name, storage.state.items(name)])),
-      extensions: readEnableState(storage.db.$client),
+      plugins: readEnableState(storage.db.$client),
     }))
     marks.storage = Date.now()
 
@@ -65,6 +68,7 @@ export function make(filename: string, onError?: (error: unknown) => void) {
 
   return {
     db: database.db,
+    moved: database.moved,
     state,
     drafts,
     flush() {

@@ -75,6 +75,13 @@
       }
     }
 
+    /* The ring goes on the tab, which holds the label and close button, inset because the list scrolls and would clip
+       a ring drawn outside it. */
+    &:has([data-slot="tabs-trigger"]:focus-visible) {
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: -2px;
+    }
+
     [data-slot="tabs-trigger-close-button"] {
       display: flex;
       align-items: center;
@@ -495,10 +502,20 @@
     padding-inline-end: 12px;
     gap: 8px;
     --tabs-review-fade: 8px;
+
+    /* Like browser tabs, each tab keeps its natural width while they all fit; otherwise the longest titles truncate
+       first, and the strip scrolls only once every tab is at its minimum. Close buttons stay in view meanwhile. */
+    > :not(.sticky) {
+      flex: 1 1 0;
+      min-width: 72px;
+      max-width: max-content;
+    }
   }
 
   [data-slot="tabs-trigger-wrapper"] {
     height: 28px;
+    min-width: 0;
+    flex-shrink: 1;
     padding-inline: 10px;
     border: 0;
     background-color: transparent;
@@ -510,6 +527,15 @@
 
     [data-slot="tabs-trigger"] {
       padding: 0 !important;
+
+      /* A plugin's label shrinks with the tab so its own `truncate` text can ellipsize. */
+      > * {
+        min-width: 0;
+      }
+    }
+
+    [data-slot="tabs-trigger-close-button"] {
+      flex-shrink: 0;
     }
 
     /* The 20px close button sits 4px from the tab's end, as from its top and bottom. */
@@ -588,6 +614,8 @@
   width: auto;
   height: var(--tabs-bar-height);
   padding-inline-end: 0;
+  /* A tab scrolled into view by focus stops clear of the edge fades and the sticky "+". */
+  scroll-padding-inline: 24px calc(var(--tab-strip-add, 0px) + 24px);
   border-bottom: none;
   /* Tabs fade out at each edge with more of them past it. The tab strip's scroll handler sets the fade widths and the
      width of the sticky "+", which the second layer keeps unmasked. */

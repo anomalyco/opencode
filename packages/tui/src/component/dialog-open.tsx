@@ -62,7 +62,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
     })
     onCleanup(unsubscribe)
     return client.api.session
-      .list({ limit: 50, order: "desc", parentID: null })
+      .list({ limit: 50, order: "desc", parentID: null, archived: false })
       .then((response) => {
         if (!closed)
           props.onLoad(
@@ -161,7 +161,8 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
     const seen = new Set<string>()
     const match = matched()
     const list = [...data.session.list(), ...props.sessions, ...(match ? [match] : [])].filter((session) => {
-      if (session.parentID || seen.has(session.id)) return false
+      if ((session.parentID && session.id !== match?.id) || seen.has(session.id)) return false
+      if (session.time.archived !== undefined && session.id !== match?.id) return false
       seen.add(session.id)
       return true
     })

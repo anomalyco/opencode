@@ -39,9 +39,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         viewport: { width: 390, height: 844 },
       })
 
-      const scroller = page
-        .locator('[data-slot="session-timeline-scroll"]')
-        .getByRole("region", { name: "scrollable content", exact: true })
+      const scroller = timelineScroller(page)
 
       const part = page.locator(`[data-timeline-part-id="${renderedPartID(partID)}"]`)
       const anchor = part.getByText("Reading earlier output 59.", { exact: true })
@@ -363,7 +361,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         })
 
         const timeline = page.locator('[data-slot="session-timeline-scroll"]')
-        const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
+        const scroller = timelineScroller(page)
         const tail = page.getByText("Read output 59.", { exact: true })
         await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
         await expect(tail).toBeInViewport()
@@ -477,7 +475,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         })
 
         const timeline = page.locator('[data-slot="session-timeline-scroll"]')
-        const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
+        const scroller = timelineScroller(page)
         await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
         await expect(page.getByText("Reading 59.", { exact: true })).toBeInViewport()
         await page.evaluate(() => document.fonts.ready)
@@ -688,7 +686,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
           })
 
           const timeline = page.locator('[data-slot="session-timeline-scroll"]')
-          const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
+          const scroller = timelineScroller(page)
           const hidden = page.locator(`${thumbSelector}[data-visible="false"]`)
           const heading = page.locator(`[data-timeline-part-id="${renderedPartID("prt_target_heading")}"]`)
           const last = detach === "scroll" ? page.getByText("Part 79.", { exact: true }) : heading
@@ -732,7 +730,8 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
               timestamp: restingTimestamp(),
             })
 
-            for (let step = 1; step <= 23; step++)
+            // Far enough that the delayed image above the anchor comes back into the mounted window.
+            for (let step = 1; step <= 25; step++)
               await devtools.send("Input.dispatchTouchEvent", {
                 type: "touchMove",
                 touchPoints: [{ x: point.x, y: point.y + step * 30 }],
@@ -767,7 +766,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
             await expect(hidden).toHaveCount(1)
           }
 
-          const anchor = page.getByText(detach === "scroll" ? "Part 48." : "Reading 20.", { exact: true })
+          const anchor = page.getByText(detach === "scroll" ? "Part 50." : "Reading 20.", { exact: true })
           await expect(anchor).toBeInViewport()
           const before = await anchor.evaluate((element) => element.getBoundingClientRect().top)
           image.resolve()
@@ -804,7 +803,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         viewport: { width: 700, height: 844 },
       })
       const timeline = page.locator('[data-slot="session-timeline-scroll"]')
-      const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
+      const scroller = timelineScroller(page)
       await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
       const tail = page.getByText("Section 39.", { exact: false })
       await expect(tail).toBeInViewport()
@@ -867,7 +866,7 @@ test("painted motion rejects a prompt whose pixels disappear", async ({ page }) 
   const prompt = timeline.locator('[data-timeline-row="UserMessage"]')
   await expect(prompt).toBeInViewport()
   await markPrompt(page)
-  const view = (await timeline.getByRole("region", { name: "scrollable content", exact: true }).boundingBox())!
+  const view = (await timelineScroller(page).boundingBox())!
   const frames = [(await page.screenshot({ type: "jpeg" })).toString("base64")]
   // Negative control: a captured disappearance must fail even if the layout recovers.
   await prompt.evaluate((element) => (element.style.transform = "translateY(-500px)"))
@@ -879,9 +878,17 @@ test("painted motion rejects a prompt whose pixels disappear", async ({ page }) 
   expect(promptMotionIssues(positions)).toEqual([{ frame: 1, reason: "missing" }])
 })
 
+function timelineScroller(page: Page) {
+  // Expanded shell output can expose a nested region with the same accessible name.
+  return page
+    .locator('[data-slot="session-timeline-scroll"]')
+    .getByRole("region", { name: "scrollable content", exact: true })
+    .filter({ has: page.locator("[data-timeline-virtual-content]") })
+}
+
 async function readFrom(page: Page, text: string) {
   const timeline = page.locator('[data-slot="session-timeline-scroll"]')
-  const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
+  const scroller = timelineScroller(page)
   await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
   await page.evaluate(() => document.fonts.ready)
   await scroller.evaluate((element) => {

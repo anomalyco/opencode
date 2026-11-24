@@ -1,31 +1,30 @@
 import { define } from "@opencode/plugin/effect/plugin"
-import { Effect, Stream } from "effect"
-import { Bus } from "../../bus.js"
-import { Credential } from "../../credential.js"
+import { Effect } from "effect"
 import { Integration } from "../../integration.js"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
+import { storedCredential } from "./credential-settings.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const integrationID = Integration.ID.make("openai")
 const methodIDs = new Set(["chatgpt-browser", "chatgpt-headless", "chatgpt-token-sharing"])
 
 // The backend accepts each model's full input window, but larger requests use more of the ChatGPT plan. OpenAI's
-// default windows for ChatGPT plans are 272k, and 500k for gpt-6.1-sol; later models are assumed to keep 500k.
+// default windows for ChatGPT plans are 272k, and 500k from gpt-6.1 on; later models are assumed to keep 500k. Astra
+// models stay at 272k in every version.
 const legacyInput = 272_000
 const currentInput = 500_000
 
 export const OpenAIContextCapsPlugin = define({
   id: "opencode.provider.openai-context-caps",
   effect: Effect.fn(function* (ctx) {
-    const bus = yield* Bus.Service
     let signedIn = false
 
     const load = Effect.fn("OpenAIContextCapsPlugin.load")(function* () {
-      const connection = yield* ctx.integration.connection.active(integrationID)
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
+      const { credential } = yield* storedCredential(ctx, integrationID)
+      const previous = signedIn
       signedIn = credential?.type === "oauth" && methodIDs.has(credential.methodID)
+      return signedIn !== previous
     })
 
     yield* load()
@@ -39,17 +38,14 @@ export const OpenAIContextCapsPlugin = define({
         })
       }
     })
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(() => load().pipe(Effect.andThen(ctx.provider.reload()))),
-      Effect.forkScoped({ startImmediately: true }),
-    )
+    yield* ProviderRefresh.onSwitch(integrationID, ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload()))
   }),
 } satisfies PluginInternal.InternalPlugin)
 
 function cap(apiID: string) {
   const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
   if (!match) return currentInput
+  if (apiID.includes("-astra")) return legacyInput
   const major = Number(match[1])
   const minor = Number(match[2] ?? 0)
   return major > 6 || (major === 6 && minor >= 1) ? currentInput : legacyInput

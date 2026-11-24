@@ -52,7 +52,7 @@ export const ToastShow = Event.ephemeral({
 export const SessionSelect = Event.ephemeral({
   type: "tui.session.select",
   schema: {
-    sessionID: SessionID.annotate({ description: "Session ID to navigate to" }),
+    sessionID: SessionID.annotateKey({ description: "Session ID to navigate to" }),
   },
 })
 

@@ -1,13 +1,18 @@
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "./agent.js"
+import { App } from "./app.js"
+import { Artifact } from "./artifact.js"
 import { AISDK } from "./aisdk.js"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
+import { Flag } from "./flag.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
 import { FileMutation } from "./file-mutation.js"
+import { FileWrite } from "./file-write.js"
+import { Environments } from "./environment/environments.js"
 import { Environment } from "./environment/index.js"
 import { Formatter } from "./formatter.js"
 import { FileSystem } from "./filesystem.js"
@@ -49,7 +54,6 @@ import { InstructionDiscovery } from "./instruction-discovery.js"
 import { InstructionBuiltIns } from "./instructions/builtins.js"
 import { SessionInstructions } from "./session/instructions.js"
 import { McpTool } from "./tool/mcp.js"
-import { ReadToolFileSystem } from "./tool/read-filesystem.js"
 import { Tool } from "./tool.js"
 import { ToolOutput } from "./tool-output.js"
 import { Vcs } from "./vcs.js"
@@ -58,11 +62,15 @@ export * as Instance from "./instance.js"
 export { Service, node, type Interface } from "./instance/service.js"
 
 const nodes = [
+  App.node,
   Location.node,
   LocationLifecycle.node,
   Environment.node,
+  Environments.node,
   Config.node,
+  Flag.node,
   Agent.node,
+  Artifact.node,
   Command.node,
   Reference.node,
   Rpc.node,
@@ -87,6 +95,7 @@ const nodes = [
   InstructionDiscovery.node,
   FileAccess.node,
   FileMutation.node,
+  FileWrite.node,
   Formatter.node,
   Mcp.node,
   Permission.node,
@@ -99,7 +108,6 @@ const nodes = [
   Generate.node,
   Voice.node,
   UsageLimits.node,
-  ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,
   SessionRunnerModel.node,

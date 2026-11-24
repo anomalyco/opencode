@@ -1,0 +1,215 @@
+/* The V1 notice: the first thing in the content column, level with the top of the docs nav. It stays
+   there while the article scrolls behind it, and leaves with the article at the footer, like the
+   sidebars. */
+[data-site] [data-component="docs-version-notice"] {
+  position: sticky;
+  top: var(--content-top);
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+  min-height: 2rem;
+  /* A light grey bar (opaque, so the article scrolls behind it) with a hairline border all round;
+     the badge sits inside the border. */
+  background: var(--bg-weak);
+  border: 1px solid var(--border);
+  font: 400 13px/1.4 var(--font-mono);
+  color: var(--text-strong);
+
+  /* The article also scrolls behind the space above the bar, up to the window's top edge. Absolute
+     boxes start inside the border, so this one steps out by it to leave the top border showing and
+     cover the full width, and goes past the window's top so nothing shows through. */
+  &::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: -1px;
+    inset-inline-end: -1px;
+    bottom: calc(100% + 1px);
+    height: calc(var(--content-top) + 100vh);
+    background: var(--bg);
+  }
+
+  [data-slot="badge"] {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 1px 0.75rem 0;
+    background: var(--text-strong);
+    color: var(--bg);
+    font-weight: 700;
+  }
+
+  p {
+    align-self: center;
+    margin: 0;
+    padding: 0.375rem 0.75rem 0.3125rem;
+    text-wrap: pretty;
+  }
+
+  /* Settings › V1 notice. "boxed" is the rule above. The borderless ones cover the space above
+     without stepping out by a border. */
+  &:not([data-variant="boxed"], [data-variant="spaced"])::before {
+    inset-inline-start: 0;
+    inset-inline-end: 0;
+    bottom: 100%;
+  }
+
+  /* The box, over a page-coloured band, so the article disappears before it reaches the border. */
+  &[data-variant="spaced"]::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: -1px;
+    inset-inline-end: -1px;
+    top: calc(100% + 1px);
+    height: 1rem;
+    background: var(--bg);
+    pointer-events: none;
+  }
+
+  /* Part of the page: its background, with one rule under it. */
+  &[data-variant="hairline"] {
+    background: var(--bg);
+    border-width: 0 0 1px;
+  }
+
+  /* The article blurs behind a 92% tint between --bg-weak and --bg-weaker, a step off the page in
+     both themes. Over a black code block the tint darkens in light mode, so the hover blue is a
+     deeper one there (and a lighter one in dark mode), which keeps it at 4.5:1 over anything. */
+  &[data-variant="frosted"],
+  &[data-variant="frosted top"] {
+    --notice-link: light-dark(color-mix(in srgb, var(--link) 80%, black), color-mix(in srgb, var(--link) 85%, white));
+    border: 0;
+    background: color-mix(in srgb, color-mix(in srgb, var(--bg-weak) 50%, var(--bg-weaker)) 92%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+
+    p {
+      --link: var(--notice-link);
+    }
+  }
+
+  /* Frosted, stuck flush to the window's top edge with nothing solid above it. A faint rule of the
+     text colour marks its bottom on the page and all but disappears over a dark code block. */
+  &[data-variant="frosted top"] {
+    top: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--text-strong) 8%, transparent);
+
+    &::before {
+      content: none;
+    }
+  }
+
+  /* The text colour as the background. The hover blue is the other theme's, which passes 4.5:1 on it. */
+  &[data-variant="inverted"] {
+    --inline-link-color: var(--text-inverted);
+    --link: light-dark(var(--link-dark), #3b5cf6);
+    border: 0;
+    background: var(--bg-strong);
+    color: var(--text-inverted);
+
+    [data-slot="badge"] {
+      background: none;
+      color: inherit;
+      border-inline-end: 1px solid color-mix(in srgb, var(--text-inverted) 22%, transparent);
+    }
+  }
+
+  /* A light tint of the link blue (5% keeps the hover blue at 4.5:1), with a blue badge. */
+  &[data-variant="blue"] {
+    border: 0;
+    background: color-mix(in srgb, var(--link) 5%, var(--bg));
+
+    [data-slot="badge"] {
+      background: var(--link);
+      color: var(--text-inverted);
+    }
+  }
+
+  /* Not sticky: read once at the top, then it scrolls away with the article. */
+  &[data-variant="inline"] {
+    position: relative;
+    top: auto;
+
+    &::before {
+      content: none;
+    }
+  }
+
+  /* In the logo row, after the lockup's "| V1": plain text on the page, and the space down to the
+     content line is solid, so the article passes under the row rather than the text. */
+  &[data-variant="docked"] {
+    top: var(--top);
+    flex-shrink: 0;
+    height: var(--logo-height);
+    min-height: 0;
+    margin: calc(-1 * (var(--logo-height) + var(--logo-gap))) 0 var(--logo-gap);
+    background: var(--bg);
+    border: 0;
+    color: var(--text);
+
+    [data-slot="badge"] {
+      display: none;
+    }
+
+    p {
+      padding: 1px 0 0;
+    }
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset-inline-start: 0;
+      inset-inline-end: 0;
+      top: 100%;
+      height: calc(var(--logo-gap) - 0.5rem);
+      background: var(--bg);
+      pointer-events: none;
+    }
+  }
+}
+
+/* Phones: under the top bar, full content width, before the page menu. */
+@media (max-width: 60rem) {
+  [data-site] [data-component="docs-version-notice"] {
+    top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+    z-index: 9;
+    order: -1;
+    margin: 0 var(--edge);
+
+    &::before {
+      height: 0;
+    }
+
+    &[data-variant="inline"] {
+      top: auto;
+    }
+
+    /* Full-bleed under the top bar, so it reads as part of the header; the text keeps the page edge. */
+    &[data-variant="frosted top"] {
+      top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+      margin: 0;
+      padding-inline: var(--edge);
+    }
+
+    /* The lockup is in the menu here, so the docked line becomes the hairline bar. */
+    &[data-variant="docked"] {
+      top: calc(var(--topbar-height) + env(safe-area-inset-top, 0px));
+      height: auto;
+      min-height: 2rem;
+      margin: 0 var(--edge);
+      border-bottom: 1px solid var(--border);
+      color: var(--text-strong);
+
+      [data-slot="badge"] {
+        display: flex;
+      }
+
+      p {
+        padding: 0.375rem 0.75rem 0.3125rem;
+      }
+
+      &::after {
+        content: none;
+      }
+    }
+  }
+}

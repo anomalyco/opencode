@@ -83,6 +83,144 @@ it.effect("repairs tool input before validating its original schema", () =>
   }),
 )
 
+it.effect("runs a call to another harness's tool name as the matching Code Mode tool", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([
+      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
+      {
+        id: "shell-tool",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.tool.transform((draft) =>
+            draft.add({
+              name: "shell",
+              description: "Shell",
+              input: Schema.Struct({ command: Schema.String, timeout: Schema.optionalKey(Schema.Int) }),
+              execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "done" })),
+            }),
+          ),
+      },
+    ])
+    // shell is only offered inside Code Mode, so the renamed call runs as the program that calls it.
+    const snapshot = yield* registry.snapshot()
+    const result = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-bash", name: "bash", input: { command: "ls", timeout: "5000" } },
+    })
+    expect(executed).toEqual([{ command: "ls", timeout: 5000 }])
+    expect(result.content[0]).toEqual({
+      type: "text",
+      text: '<tool-repair>\nThere is no "bash" tool, so this ran inside execute as tools.shell(input). Call it there next time.\n</tool-repair>',
+    })
+  }),
+)
+
+it.effect("runs a call to another harness's tool name as the matching tool and says so", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([
+      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
+      {
+        id: "shell-tool",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.tool.transform((draft) =>
+            draft.add({
+              name: "shell",
+              options: { codemode: false },
+              description: "Shell",
+              input: Schema.Struct({ command: Schema.String, timeout: Schema.optionalKey(Schema.Int) }),
+              execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "done" })),
+            }),
+          ),
+      },
+    ])
+    const snapshot = yield* registry.snapshot()
+    const result = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-bash", name: "bash", input: { command: "ls", timeout: "5000" } },
+    })
+    expect(executed).toEqual([{ command: "ls", timeout: 5000 }])
+    expect(result.content).toEqual([
+      {
+        type: "text",
+        text: '<tool-repair>\nThere is no "bash" tool, so this ran as "shell". Call "shell" next time.\n</tool-repair>',
+      },
+      { type: "text", text: "done" },
+    ])
+
+    const direct = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-shell", name: "shell", input: { command: "pwd" } },
+    })
+    expect(direct.content).toEqual([{ type: "text", text: "done" }])
+
+    // A call rejected before it runs leaves no note behind for a later call with the same ID.
+    yield* snapshot
+      .execute({
+        ...identity,
+        call: { type: "tool-call", id: "call-reused", name: "bash", input: { command: "ls" } },
+        definitions: new Map(),
+      })
+      .pipe(Effect.flip)
+    const reused = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-reused", name: "shell", input: { command: "pwd" } },
+    })
+    expect(reused.content).toEqual([{ type: "text", text: "done" }])
+  }),
+)
+
+it.effect("runs a top-level call to a Code Mode tool and says to call it inside execute", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    yield* plugins.activate([
+      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
+      {
+        id: "acme-tools",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.tool.transform((draft) => {
+            draft.add({
+              name: "echo",
+              options: { namespace: "acme" },
+              description: "Echo",
+              input: Schema.Struct({ text: Schema.String }),
+              execute: ({ text }) => Effect.succeed({ content: text }),
+            })
+            draft.add({
+              name: "fails",
+              options: { namespace: "acme" },
+              description: "Fails",
+              input: Schema.Struct({}),
+              execute: () => Effect.fail(new Tool.Error({ message: "boom" })),
+            })
+          }),
+      },
+    ])
+    const snapshot = yield* registry.snapshot()
+    const note = (path: string) =>
+      `<tool-repair>\nacme.${path} is a Code Mode tool, so this ran inside execute as tools.acme.${path}(input). Call it there next time.\n</tool-repair>`
+    const result = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-echo", name: "acme.echo", input: { text: "hi" } },
+    })
+    expect(result.content[0]).toEqual({ type: "text", text: note("echo") })
+    // A failing program fails the call, with the note first.
+    const failed = yield* snapshot
+      .execute({ ...identity, call: { type: "tool-call", id: "call-fails", name: "acme.fails", input: {} } })
+      .pipe(Effect.flip)
+    expect(failed.message.startsWith(note("fails"))).toBe(true)
+    expect(failed.message).toContain("boom")
+  }),
+)
+
 it.effect("repairs namespaced inner tool input called from Code Mode", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
@@ -110,5 +248,49 @@ it.effect("repairs namespaced inner tool input called from Code Mode", () =>
       },
     })
     expect(executed).toEqual([{ count: 3 }])
+  }),
+)
+
+it.effect("repairs nested Code Mode calls against the Code Mode input schema", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+    yield* registry.transform((draft) =>
+      draft.add({
+        name: "inspect",
+        description: "Inspect",
+        input: Schema.Struct({ count: Schema.Int }),
+        options: {
+          codemode: {
+            input: Schema.Struct({ count: Schema.Int, detail: Schema.optionalKey(Schema.Boolean) }),
+          },
+        },
+        execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
+      }),
+    )
+
+    const inCodeMode = yield* registry.snapshot()
+    yield* inCodeMode.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-codemode-dynamic",
+        name: "execute",
+        input: { code: 'return await tools.inspect({ count: "3", detail: "true", extra: true })' },
+      },
+    })
+    const direct = yield* registry.snapshot(undefined, { tools: { direct: new Set(["inspect"]) } })
+    yield* direct.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-direct-dynamic",
+        name: "inspect",
+        input: { count: "4", detail: true },
+      },
+    })
+    expect(executed).toEqual([{ count: 3, detail: true }, { count: 4 }])
   }),
 )

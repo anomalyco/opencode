@@ -4,12 +4,16 @@ import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerUnauthorized } from "@/runtime/server/health-machine"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
+import { ServerSignedOutPanel } from "@/session/server-unavailable-panel"
+import { sessionKeyOpen } from "@/shell/state/helpers"
 import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
+import { useTabs } from "@/shell/tabs/tabs"
 import { requireServerKey } from "./session"
-import { ExtensionAttachment } from "@/runtime/extension/root"
+import { PluginAttachment } from "@/runtime/plugin/root"
 
 export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
 
@@ -86,7 +90,20 @@ function TargetServerRoute(props: ParentProps) {
 
   return (
     <Show when={connection()} keyed>
-      {(connection) => <ServerProvider conn={connection}>{props.children}</ServerProvider>}
+      {(connection) => (
+        <ServerProvider
+          conn={connection}
+          signedOut={
+            <div class="flex min-h-0 flex-1 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+              <SessionPanelFrame raised>
+                <ServerSignedOutPanel conn={connection} />
+              </SessionPanelFrame>
+            </div>
+          }
+        >
+          {props.children}
+        </ServerProvider>
+      )}
     </Show>
   )
 }
@@ -94,6 +111,7 @@ function TargetServerRoute(props: ParentProps) {
 function AppLayout(props: ParentProps) {
   const servers = useServers()
   const global = useGlobal()
+  const tabs = useTabs()
 
   // A lone server that rejects our credentials (e.g. the web app before pairing) has nothing else to show.
   const signedOut = () => {
@@ -101,16 +119,20 @@ function AppLayout(props: ParentProps) {
 
     if (only?.type !== "http") return
 
-    return global.servers.health[ServerConnection.key(only)]?.unauthorized ? only : undefined
+    return isServerUnauthorized(global.servers.health[ServerConnection.key(only)]) ? only : undefined
   }
+
+  // The layout keeps the side tabs of a limited number of sessions, and of every session open in a shell tab. It is
+  // told which those are once the saved shell tabs have loaded.
+  const open = () => (tabs.restoreReady() ? (key: string) => sessionKeyOpen(key, tabs.store, servers.scope) : undefined)
 
   return (
     <Show when={servers.list.length > 0 && !signedOut()} fallback={<ConnectServerScreen url={signedOut()?.http.url} />}>
-      <LayoutProvider>
+      <LayoutProvider open={open}>
         <SettingsSurfaceProvider>
-          <ExtensionAttachment>
+          <PluginAttachment>
             <Shell>{props.children}</Shell>
-          </ExtensionAttachment>
+          </PluginAttachment>
         </SettingsSurfaceProvider>
       </LayoutProvider>
     </Show>

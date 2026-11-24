@@ -7,7 +7,7 @@ import {
   TranscriptionModel,
   TranscriptionSegmentEvent,
   TranscriptionTextDeltaEvent,
-  type TranscriptionRequestFor,
+  type TranscriptionRequest,
   type TranscriptionSegment,
   type TranscriptionWord,
   type TranscriptionEvent,
@@ -33,7 +33,7 @@ export type GoogleTranscriptionOptions = {
   }
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequestFor<GoogleTranscriptionOptions>
+export type Request = TranscriptionRequest<TranscriptionModel<GoogleTranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema
@@ -172,7 +172,6 @@ const finish = (state: State) => {
       segments: state.segments.length === 0 ? undefined : state.segments,
       words: state.words.length === 0 ? undefined : state.words,
       usage: GeminiGenerateContent.usage(state.usage),
-      notices: GeminiGenerateContent.notices(route.name, state),
       providerMetadata: GeminiGenerateContent.providerMetadata(state),
     }),
   ])

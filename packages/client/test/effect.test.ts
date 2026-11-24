@@ -92,13 +92,15 @@ test("session instructions methods use the public HTTP contract", async () => {
   })
   const result = await Effect.gen(function* () {
     const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
-    const listed = yield* client.session.instructions.entry.list({ sessionID: Session.ID.make("ses_test") })
-    yield* client.session.instructions.entry.put({
+    const listed = yield* client.experimental.session.instructions.entry.list({
+      sessionID: Session.ID.make("ses_test"),
+    })
+    yield* client.experimental.session.instructions.entry.put({
       sessionID: Session.ID.make("ses_test"),
       key: "review-notes",
       value: instructions[0].value,
     })
-    yield* client.session.instructions.entry.remove({
+    yield* client.experimental.session.instructions.entry.remove({
       sessionID: Session.ID.make("ses_test"),
       key: "review-notes",
     })
@@ -264,9 +266,9 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       resume: false,
     })
     yield* client.session.compact({ sessionID: Session.ID.make("ses_test") })
-    yield* client.session.wait({ sessionID: Session.ID.make("ses_test") })
+    yield* client.experimental.session.wait({ sessionID: Session.ID.make("ses_test") })
     const context = yield* client.session.context({ sessionID: Session.ID.make("ses_test") })
-    const log = yield* client.session
+    const log = yield* client.experimental.session
       .log({ sessionID: Session.ID.make("ses_test"), after: Event.Seq.make(0) })
       .pipe(Stream.runCollect)
     const interrupted = yield* client.session.interrupt({ sessionID: Session.ID.make("ses_test") })
@@ -314,7 +316,9 @@ test("session.log retains the typed SessionNotFoundError", async () => {
   )
   const error = await Effect.gen(function* () {
     const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
-    return yield* client.session.log({ sessionID: Session.ID.make("ses_missing") }).pipe(Stream.runCollect, Effect.flip)
+    return yield* client.experimental.session
+      .log({ sessionID: Session.ID.make("ses_missing") })
+      .pipe(Stream.runCollect, Effect.flip)
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
   expect(error._tag).toBe("SessionNotFoundError")

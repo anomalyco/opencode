@@ -1,8 +1,9 @@
-import { useDialog } from "@opencode/ui/context/dialog"
+import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
 import { startTransition } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { isServerFailed } from "@/runtime/server/health-machine"
 import { useTabs } from "@/shell/tabs/tabs"
 import { createKnownServerSessions, createServerSessionEntries, type CommandPaletteEntry } from "./palette"
 import { CommandPaletteView } from "./dialog"
@@ -11,21 +12,22 @@ const RECENT_LIMIT = 10
 
 export function DialogSessionSearch() {
   const dialog = useDialog()
+  const layer = useDialogLayer()
   const global = useGlobal()
   const language = useLanguage()
   const tabs = useTabs()
   const registry = useServers()
 
-  const servers = registry.visible.filter(
-    (conn) => global.servers.health[ServerConnection.key(conn)]?.healthy !== false,
-  )
+  const servers = registry.visible.filter((conn) => !isServerFailed(global.servers.health[ServerConnection.key(conn)]))
 
-  const loaders = servers.map((conn) => {
-    const ctx = global.ensureServerCtx(conn)
+  const loaders = servers.flatMap((conn) => {
+    const ctx = global.serverCtx(ServerConnection.key(conn))
+
+    if (!ctx) return []
 
     const load = createServerSessionEntries({
       server: ServerConnection.key(conn),
-      known: createKnownServerSessions(ctx),
+      known: createKnownServerSessions(() => ctx),
       apply: ctx.data.session.apply,
       projects: ctx.projects.list,
       load: (search, signal) =>
@@ -47,10 +49,12 @@ export function DialogSessionSearch() {
             description: language.t("palette.session.location", { project: entry.description ?? "", server: tag }),
           }))
 
-    return {
-      items: (query: string) => format(load.items(query)),
-      search: (query: string) => load.search(query).then(format),
-    }
+    return [
+      {
+        items: (query: string) => format(load.items(query)),
+        search: (query: string, signal: AbortSignal) => load.search(query, signal).then(format),
+      },
+    ]
   })
 
   const items = (query: string) => {
@@ -61,34 +65,39 @@ export function DialogSessionSearch() {
     return query ? entries : entries.slice(0, RECENT_LIMIT)
   }
 
-  const sessions = async (query: string) => {
-    const entries = (await Promise.all(loaders.map((loader) => loader.search(query))))
-      .flat()
-      .toSorted((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
-
-    return query ? entries : entries.slice(0, RECENT_LIMIT)
-  }
-
   const select = (item: CommandPaletteEntry | undefined) => {
-    if (!item?.sessionID || !item.server) return
-    const sessionId = item.sessionID
-    const server = item.server
-    const directory = item.project?.worktree ?? item.directory
-    const conn = servers.find((conn) => ServerConnection.key(conn) === server)
-    dialog.close()
+    if (dialog.closing || !item?.sessionID || !item.server) return
 
-    if (conn && directory) global.ensureServerCtx(conn).projects.touch(directory)
-    void startTransition(() => tabs.select(tabs.addSessionTab({ server, sessionId })))
+    const { server, sessionID } = item
+    const directory = item.project?.worktree ?? item.directory
+
+    dialog.close(layer?.id)
+
+    if (directory) global.serverCtx(server)?.projects.touch(directory)
+    void startTransition(() => tabs.select(tabs.addSessionTab({ server, sessionId: sessionID })))
   }
 
+  // Each server is its own source, so a slow or failing server never holds back or hides another's sessions.
   return (
     <CommandPaletteView
       placeholder={language.t("home.sessions.search.placeholder")}
       items={items}
-      sources={[sessions]}
+      sources={loaders.map((loader) => loader.search)}
       highlight={() => {}}
       select={select}
-      close={() => dialog.close()}
+      close={() => dialog.close(layer?.id)}
+      bare
+      unhide={(entry) => {
+        const server = entry.server
+        const id = entry.sessionID
+
+        if (!server || !id || !global.sessionPreferences.hidden(server, id)) return
+
+        return () => {
+          global.sessionPreferences.update("hidden", server, id, false)
+          dialog.close(layer?.id)
+        }
+      }}
     />
   )
 }

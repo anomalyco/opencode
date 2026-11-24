@@ -1,0 +1,19 @@
+/* A neutral site button; the two labels share one grid cell so the width never changes. */
+[data-site] [data-slot="agent-rules"] {
+  [data-slot="labels"] {
+    display: inline-grid;
+
+    > span {
+      grid-area: 1 / 1;
+      visibility: hidden;
+    }
+
+    > [data-active] {
+      visibility: visible;
+    }
+  }
+
+  [data-slot="icon"] {
+    flex-shrink: 0;
+  }
+}

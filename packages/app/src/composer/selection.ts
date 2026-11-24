@@ -7,11 +7,20 @@ import { useProviders } from "@/providers/catalog/providers"
 import { useData } from "@/runtime/server/current"
 import { normalizeAgentList, normalizeProviderList } from "@/runtime/server/global-sync/utils"
 import { useModels } from "@/providers/models/models"
-import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/providers/models/variant"
+import {
+  cycleModelVariant,
+  durableVariantSelection,
+  getConfiguredAgentVariant,
+  INHERIT_VARIANT,
+  resolveModelVariant,
+  variantSelectionFrom,
+} from "@/providers/models/variant"
+import { cycleModelSpeed } from "@/providers/models/speed"
+import type { AgentChoices } from "@/providers/models/selection-machine"
 import { useComposerState } from "./persistence"
 import { useConfiguredModel } from "@/providers/models/configured"
-import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
 import { useGlobal } from "@/runtime/server/runtime"
+import { composerModelLabelKey, composerModelLabels, composerProviderName } from "./model-label"
 
 export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const local = useLocal()
@@ -20,7 +29,12 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const providers = useProviders(() => sdk().directory)
   const models = useGlobal().models
 
-  const providerName = (providerID: string, catalog = providers.all()) => composerProviderName(providerID, catalog)
+  const modelLabels = createMemo(() =>
+    composerModelLabels(
+      providers.all(),
+      providers.connected().map((provider) => provider.id),
+    ),
+  )
 
   const loading = () => {
     const selection = input.model ?? local.model
@@ -39,24 +53,41 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
     if (!expected) return
 
     const catalogs = providers.ready()
-      ? [providers.all()]
+      ? [
+          {
+            all: providers.all(),
+            connected: providers.connected().map((provider) => provider.id),
+          },
+        ]
       : [undefined, ...data.session.list().map((item) => item.location)].map((location) => {
           const provider = data.location.provider.list(location)
           const catalog = data.location.model.list(location)
 
-          return provider && catalog ? normalizeProviderList(provider, catalog).all : undefined
+          if (!provider || !catalog) return
+          const normalized = normalizeProviderList(provider, catalog)
+
+          return { all: normalized.all, connected: normalized.connected }
         })
 
     const match = catalogs
-      .map((all) => all && { all, model: all.get(expected.model.providerID)?.models[expected.model.modelID] })
+      .map(
+        (catalog) =>
+          catalog && {
+            ...catalog,
+            model: catalog.all.get(expected.model.providerID)?.models[expected.model.modelID],
+          },
+      )
       .find((item) => !!item?.model)
 
     if (!match?.model) return
     const variants = Object.keys(match.model.variants ?? {})
 
     return {
-      provider: providerName(expected.model.providerID, match.all),
+      provider: composerProviderName(expected.model.providerID, match.all, match.connected),
       model: match.model.name.replace("(latest)", "").trim(),
+      label: composerModelLabels(match.all, match.connected).get(
+        composerModelLabelKey(expected.model.providerID, expected.model.modelID),
+      ),
       variants,
       variant:
         resolveModelVariant({
@@ -82,8 +113,14 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
       },
       model: {
         selection,
-        // A model the catalog no longer offers still names its provider.
-        providerName: key && providerName(key.providerID),
+        providerName:
+          key &&
+          composerProviderName(
+            key.providerID,
+            providers.all(),
+            providers.connected().map((provider) => provider.id),
+          ),
+        label: key && modelLabels().get(composerModelLabelKey(key.providerID, key.modelID)),
         paid: providers.paid().length > 0,
         // The session's model applies only to its agent, so resolve agents before showing a model.
         loading: loading(),
@@ -92,24 +129,6 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
     }
   })
 }
-
-// Like the model picker, a Console-managed provider drops its "Workspace / " prefix unless the
-// same provider is also connected directly and the workspace is what tells them apart.
-export function composerProviderName(providerID: string, catalog: ReturnType<typeof normalizeProviderList>["all"]) {
-  const provider = catalog.get(providerID)
-
-  if (!provider) return providerID
-  const all = [...catalog.values()]
-  const managed = consoleProviderGroup(all)
-
-  if (!managed?.providers.includes(provider)) return provider.name
-  const direct = all.some((item) => !managed.providers.includes(item) && canonical(item) === canonical(provider))
-
-  return direct ? provider.name : consoleProviderName(managed, provider.name)
-}
-
-const canonical = (provider: { id: string; canonical?: string }) =>
-  provider.canonical ?? provider.id.replace(/^console-/, "")
 
 export function createComposerModelSelection(input: {
   agent: () => { name: string; model?: ModelKey; variant?: string } | undefined
@@ -179,18 +198,62 @@ export function createComposerModelSelection(input: {
       .filter((item): item is NonNullable<typeof item> => !!item),
   )
 
+  const currentKey = () => {
+    const item = current()
+
+    return item && { providerID: item.provider.id, modelID: item.id }
+  }
+
   const selection = {
     trackSessionCommit: local.model.trackSessionCommit,
-    remembered: () => Object.fromEntries(Object.entries(remembered).map(([name, model]) => [name, { model }])),
+    remembered: (): AgentChoices =>
+      Object.fromEntries(
+        Object.entries(remembered).flatMap(([name, model]) =>
+          model ? [[name, { providerID: model.providerID, modelID: model.modelID, variant: INHERIT_VARIANT }]] : [],
+        ),
+      ),
     ready: Object.assign(() => models.ready() && configuredModel.ready(), { promise: models.ready.promise }),
     key,
     current,
+    standard() {
+      const item = currentKey()
+
+      return item && models.find(models.standard(item))
+    },
     recent: recentModels,
     favorite: { list: favoriteModels, toggle: models.favorite.toggle },
-    list: models.list,
+    list: models.listed,
+    speed: {
+      list() {
+        const item = currentKey()
+
+        return item ? models.speed.list(item) : []
+      },
+      current() {
+        const item = currentKey()
+
+        return item && models.speed.of(item)
+      },
+      set(value: string | undefined) {
+        batch(() => {
+          const item = currentKey()
+          const target = item && models.speed.model(item, value)
+
+          if (!target) return
+          models.speed.remember(target, value)
+          selection.set(target)
+        })
+      },
+      cycle() {
+        const items = selection.speed.list()
+
+        if (items.length === 0) return
+        selection.speed.set(cycleModelSpeed(selection.speed.current(), items))
+      },
+    },
     cycle(direction: 1 | -1) {
       const items = recentModels()
-      const item = current()
+      const item = selection.standard()
 
       if (!item) return
       const index = items.findIndex((entry) => entry.provider.id === item.provider.id && entry.id === item.id)
@@ -202,13 +265,23 @@ export function createComposerModelSelection(input: {
 
       if (next) selection.set({ providerID: next.provider.id, modelID: next.id })
     },
-    set(item: ModelKey | undefined, options?: { recent?: boolean }) {
+    set(picked: ModelKey | undefined, options?: { recent?: boolean }) {
       batch(() => {
-        if (item && !valid(item)) return
-        const previous = current()
-        const same = item && previous?.provider.id === item.providerID && previous.id === item.modelID
+        if (picked && !valid(picked)) return
+        // A model runs at the speed last used with it.
+        const item = picked && models.speed.remembered(picked)
+        const previous = currentKey()
+        const prompted = prompt.model.current()
+
+        // Keep explicit choices across speeds, but resolve inherited variants for the target.
+        const same =
+          item &&
+          previous &&
+          models.standard(previous).modelID === models.standard(item).modelID &&
+          previous.providerID === item.providerID
+
         prompt.model.set(
-          item ? { ...item, variant: same ? (selection.variant.current() ?? null) : undefined } : undefined,
+          item ? { ...item, variant: same && prompted && valid(prompted) ? prompted.variant : undefined } : undefined,
         )
 
         if (!item) return
@@ -221,36 +294,33 @@ export function createComposerModelSelection(input: {
     setVisibility: models.setVisibility,
     variant: {
       configured(model = current()) {
-        const item = input.agent()
+        if (!model) return
 
-        if (!item || !model) return
+        const key = { providerID: model.provider.id, modelID: model.id }
+        const target = { ...key, baseModelID: models.standard(key).modelID, variants: model.variants }
         const global = configuredModel()
 
         return (
-          getConfiguredAgentVariant({
-            agent: { model: item.model, variant: item.variant },
-            model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
-          }) ??
-          getConfiguredAgentVariant({
-            agent: { model: global, variant: global?.variant },
-            model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
-          })
+          getConfiguredAgentVariant({ agent: input.agent(), model: target }) ??
+          getConfiguredAgentVariant({ agent: { model: global, variant: global?.variant }, model: target })
         )
-      },
-      selected() {
-        const model = prompt.model.current()
-
-        return model && valid(model) ? model.variant : undefined
       },
       current(item?: ModelKey) {
         const model = item ? models.find(item) : current()
         const same = !item || (current()?.provider.id === item.providerID && current()?.id === item.modelID)
+        const prompted = prompt.model.current()
+        const configured = this.configured(model)
 
         return resolveModelVariant({
           variants: Object.keys(model?.variants ?? {}),
-          selected: same ? this.selected() : undefined,
-          configured: this.configured(model),
-          preferred: model ? models.variant.get({ providerID: model.provider.id, modelID: model.id }) : undefined,
+          selected: same && prompted && valid(prompted) ? variantSelectionFrom(prompted.variant) : INHERIT_VARIANT,
+          configured,
+          preferred: model
+            ? models.variant.get(
+                { providerID: model.provider.id, modelID: model.id },
+                { siblingFallback: configured === undefined },
+              )
+            : undefined,
         })
       },
       list() {
@@ -272,7 +342,7 @@ export function createComposerModelSelection(input: {
         this.set(
           cycleModelVariant({
             variants,
-            selected: this.current() ?? null,
+            selected: durableVariantSelection(this.current()),
             configured: undefined,
           }),
         )

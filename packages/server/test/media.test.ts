@@ -4,11 +4,11 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
 import { OpenCode, type SessionMessageInfo } from "@opencode/client"
-import { SessionBlob } from "@opencode/core/session/blob"
 import { Session } from "@opencode/schema/session"
 import { Effect } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
+import { ContentHeaders } from "../src/content-headers"
 import { ServerFetch } from "../src/fetch"
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
@@ -63,7 +63,12 @@ const serve = (database: string, mediaBlob: boolean) =>
   ServerFetch.make({
     app: { version: "test" },
     database: { path: database },
-    config: { project: false, content: JSON.stringify(mediaBlob ? { experimental: { media_blob: true } } : {}) },
+    // Its own global config directory, so the developer's global config can't add remote MCP servers.
+    config: {
+      directory: path.dirname(database),
+      project: false,
+      content: JSON.stringify(mediaBlob ? { experimental: { media_blob: true } } : {}),
+    },
     models: { fetch: false },
     fs: { filewatcher: false },
   })
@@ -76,38 +81,6 @@ const client = (handler: (request: Request) => Promise<Response>, capabilities?:
       preconnect: fetch.preconnect,
     }),
   })
-
-// Import stores media inline, so move the imported rows' media into blobs the way the live write path stores them.
-const storeAsBlobs = (database: string) => {
-  const db = new Sqlite(database)
-  const rows = db
-    .query<
-      { id: string; session_id: string; seq: number; data: string },
-      []
-    >(`SELECT id, session_id, seq, data FROM session_message`)
-    .all()
-  for (const row of rows) {
-    const split = SessionBlob.split(JSON.parse(row.data))
-    if (!split.moved) continue
-    db.run(`UPDATE session_message SET data = ? WHERE id = ?`, [JSON.stringify(split.data), row.id])
-    for (const blob of split.blobs)
-      db.run(`INSERT OR IGNORE INTO blob (hash, mime, bytes, data, time_created) VALUES (?, ?, ?, ?, ?)`, [
-        blob.hash,
-        blob.mime,
-        blob.bytes,
-        blob.data,
-        Date.now(),
-      ])
-    for (const hash of split.hashes)
-      db.run(`INSERT OR IGNORE INTO blob_ref (session_id, message_id, hash, seq) VALUES (?, ?, ?, ?)`, [
-        row.session_id,
-        row.id,
-        hash,
-        row.seq,
-      ])
-  }
-  db.close()
-}
 
 const media = (base64: string) => `media:${hash(base64)}`
 const route = (base64: string) => `http://opencode.local/api/experimental/media/${hash(base64)}`
@@ -125,8 +98,8 @@ it.live("serves stored media as refs only to clients that opt in while experimen
 
       yield* Effect.promise(async () => {
         const template = await plain.session.create({ title: "Media wire" })
-        await plain.session.import({ info: { ...template, id: sessionID }, messages: [user, assistant] })
-        storeAsBlobs(database)
+        // With the flag on, import stores the media as blobs.
+        await plain.experimental.session.import({ info: { ...template, id: sessionID }, messages: [user, assistant] })
 
         // Without the capability, reads stay byte-for-byte what was imported.
         expect((await plain.message.list({ sessionID, order: "asc" })).data).toEqual([user, assistant])
@@ -187,23 +160,23 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         const single: unknown = await opted.session.message.get({ sessionID, messageID: "msg_media_user" })
         expect(single).toMatchObject({ files: [{ uri: media(png) }, { uri: media(text) }, {}, {}] })
         expect(await plain.session.message.get({ sessionID, messageID: "msg_media_user" })).toEqual(user)
-        expect((await opted.session.export({ sessionID })).messages).toEqual([user, assistant])
+        expect((await opted.experimental.session.export({ sessionID })).messages).toEqual([user, assistant])
 
-        // The route serves raw bytes, immutable caching and a 304, and never renders active content inline.
+        // The route serves raw bytes as downloads, with immutable caching and a 304; image types stay usable by <img>.
         const image = await handler(new Request(route(png)))
         expect(image.status).toBe(200)
         expect(image.headers.get("content-type")).toBe("image/png")
-        expect(image.headers.get("content-disposition")).toBeNull()
+        expect(image.headers.get("content-disposition")).toBe("attachment")
         expect(image.headers.get("cache-control")).toBe("private, max-age=31536000, immutable")
         expect(image.headers.get("etag")).toBe(`"${hash(png)}"`)
         expect(image.headers.get("x-content-type-options")).toBe("nosniff")
-        expect(image.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox")
+        expect(image.headers.get("content-security-policy")).toBe(ContentHeaders.CONTENT_SECURITY_POLICY)
         expect(Buffer.from(await image.arrayBuffer()).toString("base64")).toBe(png)
         for (const unsafe of [svg, html]) {
           const response = await handler(new Request(route(unsafe)))
           expect(response.headers.get("content-type")).toBe("application/octet-stream")
           expect(response.headers.get("content-disposition")).toBe("attachment")
-          expect(response.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox")
+          expect(response.headers.get("content-security-policy")).toBe(ContentHeaders.CONTENT_SECURITY_POLICY)
           expect(Buffer.from(await response.arrayBuffer()).toString("base64")).toBe(unsafe)
         }
         const cached = await handler(new Request(route(png), { headers: { "If-None-Match": `W/"${hash(png)}"` } }))

@@ -1,11 +1,13 @@
-import { Component, Show, createMemo, createResource } from "solid-js"
+import { Component, Show, createMemo } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
+import { Icon } from "@opencode/ui/icon"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
-import { ExtensionSettingsSections } from "@/runtime/extension/settings-page-view"
+import { ExternalLink } from "@/runtime/platform/external-link"
+import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
 import {
   type BackgroundActivity,
   type FollowUpBehavior,
@@ -17,7 +19,7 @@ import { formatKeybind } from "@/shell/commands/command"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { createShellOptions } from "./behavior"
-import type { ShellSettingsController } from "./controllers"
+import { createOptimisticSetting, type ShellSettingsController } from "./controllers"
 import { InterfaceModeSetting } from "./interface-mode"
 import "@/settings/settings.css"
 
@@ -69,11 +71,7 @@ const WorkspaceDestinationSetting: Component = () => {
   )
 }
 
-export const ShellSetting: Component<{
-  controller: ShellSettingsController
-  /** Search reveals the row with the default action; the Servers page names the other servers' rows apart. */
-  action?: string
-}> = (props) => {
+export const ShellSetting: Component<{ controller: ShellSettingsController }> = (props) => {
   const language = useLanguage()
 
   const options = createMemo(() =>
@@ -89,7 +87,7 @@ export const ShellSetting: Component<{
       description={language.t("settings.general.row.shell.description")}
     >
       <Select
-        data-action={props.action ?? "settings-shell"}
+        data-action="settings-shell"
         options={options()}
         current={options().find((option) => option.value === props.controller.current()) ?? options()[0]}
         placement="bottom-end"
@@ -141,6 +139,7 @@ const FollowUpBehaviorSetting: Component = () => {
 const BackgroundActivitySetting = () => {
   const language = useLanguage()
   const settings = useSettings()
+
   const options = createMemo((): { value: BackgroundActivity; label: string }[] => [
     { value: "off", label: language.t("settings.timeline.row.backgroundActivity.off") },
     { value: "left", label: language.t("settings.timeline.row.backgroundActivity.left") },
@@ -171,6 +170,7 @@ const BackgroundActivitySetting = () => {
 const TimelineWidthSetting = () => {
   const language = useLanguage()
   const settings = useSettings()
+
   const options = createMemo((): { value: TimelineWidth; label: string }[] => [
     { value: "focused", label: language.t("settings.timeline.row.width.focused") },
     { value: "comfortable", label: language.t("settings.timeline.row.width.comfortable") },
@@ -233,25 +233,38 @@ export const SettingsGeneral: Component = () => {
   const mobile = createMediaQuery("(max-width: 767px)")
   const desktop = createMemo(() => platform.platform === "desktop")
 
-  const [pinchZoom, { mutate: setPinchZoom }] = createResource(
-    () => desktop() && "getPinchZoomEnabled" in platform,
-    () => Promise.resolve(platform.getPinchZoomEnabled?.() ?? false).catch(() => false),
-    { initialValue: false },
-  )
+  const pinchZoom = createOptimisticSetting({
+    source: () => (desktop() && "getPinchZoomEnabled" in platform) || undefined,
+    initial: false,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getPinchZoomEnabled?.()) ?? false, meta: undefined }),
+    write: (checked) => platform.setPinchZoomEnabled?.(checked),
+  })
 
-  const onPinchZoomChange = (checked: boolean) => {
-    setPinchZoom(checked)
-    const update = platform.setPinchZoomEnabled?.(checked)
-
-    if (!update) return
-    void update.catch(() => setPinchZoom(!checked))
-  }
+  const spellcheck = createOptimisticSetting({
+    source: () => (desktop() && "getSpellcheckEnabled" in platform) || undefined,
+    initial: true,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getSpellcheckEnabled?.()) ?? true, meta: undefined }),
+    write: (checked) => platform.setSpellcheckEnabled?.(checked),
+  })
 
   const GeneralSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
-      <InterfaceModeSetting />
       <SettingsList>
+        <InterfaceModeSetting />
+        <SettingsRow
+          title={language.t("settings.general.row.sharedSidePanel.title")}
+          description={language.t("settings.general.row.sharedSidePanel.description")}
+        >
+          <div data-action="settings-shared-side-panel">
+            <Switch
+              checked={settings.general.sharedSidePanel()}
+              onChange={(checked) => settings.general.setSharedSidePanel(checked)}
+            />
+          </div>
+        </SettingsRow>
         <LanguageSetting />
 
         <WorkspaceDestinationSetting />
@@ -277,12 +290,20 @@ export const SettingsGeneral: Component = () => {
             description={language.t("settings.general.row.pinchZoom.description")}
           >
             <div data-action="settings-pinch-zoom">
-              <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} />
+              <Switch checked={pinchZoom.value()} onChange={pinchZoom.select} />
+            </div>
+          </SettingsRow>
+          <SettingsRow
+            title={language.t("settings.general.row.spellcheck.title")}
+            description={language.t("settings.general.row.spellcheck.description")}
+          >
+            <div data-action="settings-spellcheck">
+              <Switch checked={spellcheck.value()} onChange={spellcheck.select} />
             </div>
           </SettingsRow>
         </Show>
 
-        <ExtensionSettingsSections page="general" section="general" />
+        <PluginSettingsSections page="general" section="general" />
 
         <Show when={mobile()}>
           <SettingsRow
@@ -311,6 +332,16 @@ export const SettingsGeneral: Component = () => {
               {language.t("settings.preferences.description")}
             </span>
           </div>
+          <div class="settings-tab-header-actions">
+            <ExternalLink
+              data-action="settings-help-feedback"
+              href="https://opencode.ai/desktop-feedback"
+              class="inline-flex items-center gap-1.5 text-13-regular text-v2-text-text-muted no-underline hover:text-v2-text-text-base hover:underline"
+            >
+              {language.t("settings.helpFeedback")}
+              <Icon name="arrow-up-right" size="small" />
+            </ExternalLink>
+          </div>
         </div>
       </div>
       <div class="settings-tab-body settings-tab-body--sectioned">
@@ -328,6 +359,20 @@ export const SettingsGeneral: Component = () => {
             <TimelineWidthSetting />
             <BackgroundActivitySetting />
             <SettingsRow
+              title={language.t("settings.timeline.row.foldUserMessages.title")}
+              description={language.t("settings.timeline.row.foldUserMessages.description")}
+            >
+              <div data-action="settings-fold-user-messages">
+                <Switch
+                  checked={settings.general.foldUserMessages()}
+                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.timeline.row.foldUserMessages.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+            <SettingsRow
               title={language.t("settings.timeline.row.turnDiffs.title")}
               description={language.t("settings.timeline.row.turnDiffs.description")}
             >
@@ -338,10 +383,21 @@ export const SettingsGeneral: Component = () => {
                 />
               </div>
             </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.timeline.row.wrapCodeBlocks.title")}
+              description={language.t("settings.timeline.row.wrapCodeBlocks.description")}
+            >
+              <div data-action="settings-wrap-code-blocks">
+                <Switch
+                  checked={settings.general.wrapCodeBlocks()}
+                  onChange={(checked) => settings.general.setWrapCodeBlocks(checked)}
+                />
+              </div>
+            </SettingsRow>
           </SettingsList>
         </section>
 
-        <ExtensionSettingsSections page="general" />
+        <PluginSettingsSections page="general" />
       </div>
     </>
   )

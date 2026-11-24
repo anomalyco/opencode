@@ -911,7 +911,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     let client = initial
     while (true) {
       try {
-        await client.session.wait({ sessionID: input.sessionID }, { signal: controller.signal })
+        await client.experimental.session.wait({ sessionID: input.sessionID }, { signal: controller.signal })
         return client
       } catch (error) {
         // session.wait is a long poll that only answers once the session settles, so a dropped

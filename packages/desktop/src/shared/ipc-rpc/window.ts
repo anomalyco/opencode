@@ -1,9 +1,11 @@
+import { desktopZoomLevels } from "@opencode/app/desktop-menu"
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
 
 export const WindowThemeReady = Rpc.make("WindowThemeReady")
 
 export const WindowRequestMicrophone = Rpc.make("WindowRequestMicrophone", { success: Schema.Boolean })
+
 export const WindowSetVoiceCallActive = Rpc.make("WindowSetVoiceCallActive", { payload: { active: Schema.Boolean } })
 
 export const WindowGetFocused = Rpc.make("WindowGetFocused", { success: Schema.Boolean })
@@ -18,6 +20,12 @@ export const WindowGetZoomFactor = Rpc.make("WindowGetZoomFactor", { success: Sc
 
 export const WindowSetZoomFactor = Rpc.make("WindowSetZoomFactor", {
   payload: { factor: Schema.Number },
+})
+
+export const WindowGetZoomLevel = Rpc.make("WindowGetZoomLevel", { success: Schema.Literals(desktopZoomLevels) })
+
+export const WindowSetZoomLevel = Rpc.make("WindowSetZoomLevel", {
+  payload: { level: Schema.Literals(desktopZoomLevels) },
 })
 
 export const WindowGetPinchZoomEnabled = Rpc.make("WindowGetPinchZoomEnabled", {
@@ -41,7 +49,24 @@ export const WindowSetTrafficLightsPosition = Rpc.make("WindowSetTrafficLightsPo
   payload: { x: Schema.Number, y: Schema.Number },
 })
 
+export const WindowSetTaskbarBadge = Rpc.make("WindowSetTaskbarBadge", {
+  payload: { count: Schema.Int, description: Schema.String },
+})
+
+export const WindowRequestAttention = Rpc.make("WindowRequestAttention")
+
+export const WindowSetTaskbarProgress = Rpc.make("WindowSetTaskbarProgress", {
+  payload: { mode: Schema.Literals(["none", "indeterminate", "paused", "error"]) },
+})
+
+export const WindowShowToast = Rpc.make("WindowShowToast", {
+  payload: { tag: Schema.String, title: Schema.String, body: Schema.String },
+})
+
+export const WindowDismissToast = Rpc.make("WindowDismissToast", { payload: { tag: Schema.String } })
+
 export const WindowRpcs = RpcGroup.make(
+  WindowRequestAttention,
   WindowRequestMicrophone,
   WindowSetVoiceCallActive,
   WindowThemeReady,
@@ -51,8 +76,14 @@ export const WindowRpcs = RpcGroup.make(
   WindowShow,
   WindowGetZoomFactor,
   WindowSetZoomFactor,
+  WindowGetZoomLevel,
+  WindowSetZoomLevel,
   WindowGetPinchZoomEnabled,
   WindowSetPinchZoomEnabled,
   WindowSetTitlebar,
   WindowSetTrafficLightsPosition,
+  WindowSetTaskbarBadge,
+  WindowSetTaskbarProgress,
+  WindowShowToast,
+  WindowDismissToast,
 )

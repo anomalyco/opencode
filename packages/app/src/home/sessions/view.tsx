@@ -1,19 +1,35 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import { Key } from "@solid-primitives/keyed"
-import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show } from "solid-js"
-import { createStore, type SetStoreFunction } from "solid-js/store"
+import {
+  children,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Index,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  untrack,
+  type JSX,
+} from "solid-js"
+import { createStore } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { Loader } from "@opencode/ui/loader"
+import { ActivityRing } from "@opencode/ui/activity-ring"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { prefersReducedMotion } from "@opencode/ui/motion"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
+import { showToast } from "@/shell/notifications/toast"
 import { sessionLabel } from "@/session/title"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { shouldOpenSessionInBackground } from "./open"
 import { createAltHold } from "./alt-hold"
 import "./view.css"
@@ -24,6 +40,18 @@ import {
   type HomeSessionRecord,
   type OpenSessionOptions,
 } from "./controller"
+import type { HomeSessionsFailure, HomeSessionsListView, HomeSessionsUnavailableReason } from "./load-machine"
+import {
+  INITIAL_HOME_SESSION_ROW_STATE,
+  selectLongPressMoved,
+  selectRowEditor,
+  selectRowMenu,
+  selectRowSuppressClick,
+  transitionHomeSessionRow,
+  type HomeSessionRowEffect,
+  type HomeSessionRowEvent,
+  type HomeSessionRowState,
+} from "./row-machine"
 
 const SHOW_HOME_SESSION_ARCHIVE = false
 
@@ -31,12 +59,11 @@ const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 
 const HOME_SESSION_SEARCH_RESULTS_ID = "home-session-search-results"
 
-const HOME_SESSION_LONG_PRESS_MS = 500
+const POINTER_DOWN: HomeSessionRowEvent = Object.freeze({ type: "pointer.down" })
 
-const HOME_SESSION_PLACEHOLDER_DELAY_MS = 250
+const TOUCH_UP: HomeSessionRowEvent = Object.freeze({ type: "touch.up" })
 
-// Matches the list's reveal animation in view.css.
-const HOME_SESSION_REVEAL_MS = 200
+const TOUCH_CANCEL: HomeSessionRowEvent = Object.freeze({ type: "touch.cancel" })
 
 // Title widths for the placeholder rows, as a share of the row's label area.
 const HOME_SESSION_PLACEHOLDER_WIDTHS = [56, 38, 66, 46, 30, 52]
@@ -46,7 +73,7 @@ const HOME_SESSION_PLACEHOLDER_WIDTHS = [56, 38, 66, 46, 30, 52]
 function isBackgroundOpen(event: MouseEvent) {
   return shouldOpenSessionInBackground({
     button: event.button,
-    mac: typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
+    mac: /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
     meta: event.metaKey,
     ctrl: event.ctrlKey,
     shift: event.shiftKey,
@@ -57,7 +84,7 @@ function isBackgroundOpen(event: MouseEvent) {
 export type HomeSessionsViewProps = {
   language: ReturnType<typeof useLanguage>
   groups: HomeSessionGroup[]
-  loading: boolean
+  listView: HomeSessionsListView
   desktop: boolean
   location: (record: HomeSessionRecord) => { worktree: string; branch: string | undefined }
   onRevealLocations: (record?: HomeSessionRecord) => void
@@ -74,10 +101,17 @@ export type HomeSessionsViewProps = {
   titleOpacity: (id: HomeSessionGroup["id"]) => number
   isOpenTab: (record: HomeSessionRecord) => boolean
   onCreateSession: () => void
+  onRetry: () => void
   onOpenSession: (session: SessionInfo, options?: OpenSessionOptions) => void
   onArchiveSession: (session: SessionInfo) => Promise<void>
-  onRenameSession: (server: ServerConnection.Key, session: SessionInfo, title: string) => Promise<boolean>
-  onExportSession: (server: ServerConnection.Key, session: SessionInfo) => Promise<void>
+  onRenameSession: (
+    server: ServerConnection.Key,
+    session: SessionInfo,
+    title: string,
+    signal: AbortSignal,
+  ) => Promise<boolean>
+  onExportSession: (server: ServerConnection.Key, session: SessionInfo) => void
+  isExportingSession: (server: ServerConnection.Key, session: SessionInfo) => boolean
   onDeleteSession: (server: ServerConnection.Key, session: SessionInfo) => void
   onSetHoverTarget: (element: HTMLElement) => void
   onSetThumbTrack: (element: HTMLDivElement) => void
@@ -88,37 +122,113 @@ export type HomeSessionsViewProps = {
   onSetSearchInput: (element: HTMLInputElement) => void
   onSetSearchList: (element: HTMLDivElement) => void
   onSearchFocus: () => void
+  onSearchBlur: (next: EventTarget | null) => void
   onSearchInput: (value: string) => void
   onSearchClose: () => void
   onSearchMove: (delta: number) => void
   onSearchSelectActive: () => void
   onSearchHighlight: (record: HomeSessionRecord) => void
   onSearchSelect: (record: HomeSessionRecord, options?: OpenSessionOptions) => void
-}
-
-// Session store updates recreate row components, so row-local state would
-// close an open context menu or drop an in-progress rename. Keep both keyed
-// by session ID at the view root, like the projects list does.
-type HomeSessionRowUI = {
-  menu: { id: string; x: number; y: number } | undefined
-  editor: { id: string; draft: string; renaming: boolean } | undefined
+  /** Shown at the end of the search field, such as the project the list is scoped to. */
+  searchScope?: JSX.Element
+  /** The search filters `groups` in place: there is no results panel, and Enter opens the first match. */
+  searchInline?: boolean
 }
 
 export function HomeSessionsView(props: HomeSessionsViewProps) {
-  const [rowUI, setRowUI] = createStore<HomeSessionRowUI>({ menu: undefined, editor: undefined })
+  // Session store updates and date-group moves recreate row components, so the menu, long press and rename live here,
+  // keyed by session ID.
+  const [rowState, setRowState] = createSignal(INITIAL_HOME_SESSION_ROW_STATE)
   const [hover, setHover] = createStore<{ sessionID: string | undefined }>({ sessionID: undefined })
   const showLocations = createAltHold(props.desktop, props.onRevealLocations)
+  let longPressTimer: ReturnType<typeof setTimeout> | undefined
+  const renames = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+
   // A list that arrives within the delay paints directly; slower loads show placeholder rows until it does, which stay
   // mounted while the list fades in over them.
-  const [placeholder, setPlaceholder] = createSignal(false)
+  const skeleton = () =>
+    (props.listView.status === "loading" && props.listView.skeleton) ||
+    (props.listView.status === "ready" && props.listView.revealing)
+
+  const dispatchRow = (event: HomeSessionRowEvent) =>
+    untrack(() => {
+      const previous = rowState()
+      const next = transitionHomeSessionRow(previous, event)
+
+      if (next.state !== previous) setRowState(next.state)
+      next.effects.forEach(runRowEffect)
+    })
+
+  function runRowEffect(effect: HomeSessionRowEffect) {
+    if (effect.type === "long-press.start") {
+      clearTimeout(longPressTimer)
+      longPressTimer = setTimeout(
+        () => dispatchRow({ type: "long-press.fired", attempt: effect.attempt }),
+        effect.delayMs,
+      )
+
+      return
+    }
+
+    if (effect.type === "long-press.stop") return clearTimeout(longPressTimer)
+
+    if (effect.type === "rename.save") {
+      const attempt = effect.attempt
+      const controller = new AbortController()
+      const timer = setTimeout(() => dispatchRow({ type: "rename.timed-out", attempt }), effect.timeoutMs)
+      renames.set(attempt, { controller, timer })
+      // A cancelled save resolves false for an attempt the machine already left.
+      void props.onRenameSession(effect.server, effect.session, effect.title, controller.signal).then((saved) => {
+        clearTimeout(timer)
+        renames.delete(attempt)
+        dispatchRow({ type: saved ? "rename.succeeded" : "rename.failed", attempt })
+      })
+
+      return
+    }
+
+    if (effect.type === "rename.abort") {
+      const rename = renames.get(effect.attempt)
+      clearTimeout(rename?.timer)
+      rename?.controller.abort()
+      renames.delete(effect.attempt)
+
+      return
+    }
+
+    if (effect.type === "toast.rename-timeout") {
+      showToast({
+        title: props.language.t("common.requestFailed"),
+        description: props.language.t("home.sessions.load.timeout"),
+      })
+
+      return
+    }
+
+    // Focus targets are looked up by session ID: rows remount, so instance refs can point at detached nodes.
+    const row = `[data-component="home-session-row-container"][data-session-id="${effect.sessionID}"]`
+    const active = document.activeElement
+
+    if (effect.ifOwned && active !== document.body && !document.querySelector(row)?.contains(active)) return
+    requestAnimationFrame(() => {
+      if (effect.type === "focus.row") {
+        document.querySelector<HTMLButtonElement>(`${row} [data-component="home-session-row"]`)?.focus()
+
+        return
+      }
+
+      const input = document.querySelector<HTMLInputElement>(`${row} [data-component="home-session-rename"]`)
+      input?.focus()
+
+      if (effect.select) input?.select()
+    })
+  }
 
   createEffect(() => {
-    const timer = props.loading
-      ? setTimeout(() => setPlaceholder(true), HOME_SESSION_PLACEHOLDER_DELAY_MS)
-      : setTimeout(() => setPlaceholder(false), prefersReducedMotion() ? 0 : HOME_SESSION_REVEAL_MS)
-
-    onCleanup(() => clearTimeout(timer))
+    const sessionIDs = new Set(props.groups.flatMap((group) => group.sessions.map((record) => record.session.id)))
+    dispatchRow({ type: "sessions.synced", sessionIDs })
   })
+  onCleanup(() => dispatchRow({ type: "disposed" }))
 
   return (
     <section
@@ -127,7 +237,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
       aria-label={props.language.t("sidebar.project.recentSessions")}
     >
       <div
-        class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-1 pt-6 md:pb-3 lg:pt-12"
+        class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-1 pt-6 md:pb-3 md:pt-12"
         onWheel={props.onWheel}
       >
         <HomeSessionSearch
@@ -137,7 +247,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
         />
         <Show when={props.groups.length > 0 && props.canCreateSession}>
-          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
+          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[108px]">
             <Button
               data-action="home-new-session"
               variant="ghost-muted"
@@ -151,36 +261,69 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           </div>
         </Show>
       </div>
-      <div class="pointer-events-none sticky top-[68px] z-40 h-0 -mr-3 md:top-[84px] lg:top-[108px]">
+      <div class="pointer-events-none sticky top-[68px] z-40 h-0 -mr-3 md:top-[108px]">
         <div
           ref={props.onSetThumbTrack}
           data-component="home-session-scroll-track"
-          class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-84px)] lg:h-[calc(100cqh-108px)]"
+          class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-108px)]"
         />
       </div>
       <div
         data-slot="home-sessions-list"
-        data-reveal={placeholder() || undefined}
-        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"
-        aria-busy={props.loading}
+        data-focus-scope
+        data-reveal={skeleton() || undefined}
+        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-96px)]"
+        aria-busy={props.listView.status === "loading"}
       >
-        <Show when={placeholder()}>
+        <Show when={skeleton()}>
           <HomeSessionSkeleton
-            visible={props.loading}
+            visible={props.listView.status === "loading"}
             showProjectName={props.showProjectName}
             desktop={props.desktop}
           />
         </Show>
-        <Show when={!props.loading}>
-          <Show
-            when={props.groups.length > 0}
-            fallback={
-              <HomeSessionsEmpty
-                onNewSession={props.canCreateSession ? props.onCreateSession : undefined}
+        <Switch>
+          <Match when={props.listView.status === "error" && props.listView.failure} keyed>
+            {(failure) => (
+              <HomeSessionsUnavailable
+                role="alert"
+                title={props.language.t("home.sessions.load.failed")}
+                description={failureDescription(failure, props.language)}
+                onRetry={props.onRetry}
                 language={props.language}
               />
+            )}
+          </Match>
+          <Match when={props.listView.status === "unavailable" && props.listView.reason} keyed>
+            {(reason) => (
+              <HomeSessionsUnavailable
+                role="status"
+                title={props.language.t(UNAVAILABLE_TITLE[reason])}
+                onRetry={reason === "offline" ? props.onRetry : undefined}
+                language={props.language}
+              />
+            )}
+          </Match>
+          <Match
+            when={
+              props.searchInline &&
+              props.searchValue.trim() &&
+              !props.searchLoading &&
+              props.listView.status === "ready" &&
+              props.groups.length === 0
             }
           >
+            <div class={`px-2 pt-6 text-[13px] leading-[var(--line-height-compact)] ${HOME_SECTION_LABEL}`}>
+              {props.searchNoResultsLabel}
+            </div>
+          </Match>
+          <Match when={props.listView.status === "ready" && props.groups.length === 0}>
+            <HomeSessionsEmpty
+              onNewSession={props.canCreateSession ? props.onCreateSession : undefined}
+              language={props.language}
+            />
+          </Match>
+          <Match when={props.listView.status === "ready"}>
             <div ref={props.onSetContent} class="flex flex-col pt-1 pr-3 pb-16 md:pt-3">
               {/* Index keeps group subtrees mounted when the group arrays are
                   rebuilt, so store updates cannot recreate rows mid-gesture. */}
@@ -205,8 +348,8 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                           <HomeSessionRow
                             {...props}
                             record={record()}
-                            rowUI={rowUI}
-                            setRowUI={setRowUI}
+                            rowState={rowState()}
+                            onRowEvent={dispatchRow}
                             showLocations={showLocations()}
                             hoveredSession={hover.sessionID}
                             onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
@@ -218,14 +361,27 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                 )}
               </Index>
             </div>
-          </Show>
-        </Show>
+          </Match>
+        </Switch>
       </div>
     </section>
   )
 }
 
-function HomeSessionLeadingController(props: {
+const UNAVAILABLE_TITLE = {
+  offline: "session.error.unreachable",
+  auth: "session.error.signedOut",
+  incompatible: "session.error.incompatible",
+} as const satisfies Record<HomeSessionsUnavailableReason, string>
+
+function failureDescription(failure: HomeSessionsFailure, language: ReturnType<typeof useLanguage>) {
+  return failure.type === "timeout" ? language.t("home.sessions.load.timeout") : failure.message
+}
+
+// The project avatar leads the row and never changes; a working session shows its activity ring at the row's trailing
+// edge, as session tabs do. `order-last` moves the ring past the labels from here, so one status subscription serves
+// both, and `ms-auto` pins it to the end even where the labels are `display: contents`.
+function HomeSessionIndicators(props: {
   server: HomeSessionsViewProps["server"]
   isOpenTab: HomeSessionsViewProps["isOpenTab"]
   record: HomeSessionRecord
@@ -236,18 +392,19 @@ function HomeSessionLeadingController(props: {
       record={props.record}
       isOpenTab={props.isOpenTab}
       render={(state) => (
-        <HomeSessionLeading
-          record={props.record}
-          open={state.open()}
-          unread={state.unread()}
-          loading={state.loading()}
-        />
+        <>
+          {/* A busy session shows its activity ring instead of the unread dot. */}
+          <HomeSessionLeading record={props.record} open={state.open()} unread={state.unread() && !state.loading()} />
+          <Show when={state.loading()}>
+            <ActivityRing class="order-last ms-auto" />
+          </Show>
+        </>
       )}
     />
   )
 }
 
-function HomeSessionLeading(props: { record: HomeSessionRecord; open: boolean; unread: boolean; loading: boolean }) {
+function HomeSessionLeading(props: { record: HomeSessionRecord; open: boolean; unread: boolean }) {
   return (
     <div class="relative shrink-0">
       <Show when={props.open}>
@@ -264,7 +421,6 @@ function HomeSessionLeading(props: { record: HomeSessionRecord; open: boolean; u
         project={props.record.project}
         directory={props.record.session.location.directory}
         unread={props.unread}
-        loading={props.loading}
       />
     </div>
   )
@@ -277,12 +433,21 @@ function HomeSessionSearch(
     onHoverSession: (sessionID: string | undefined) => void
   },
 ) {
+  const scope = children(() => props.searchScope)
+
   return (
     <div class="w-full">
-      <div ref={props.onSetSearchRoot} data-component="home-session-search" class="relative z-30 w-full">
+      <div
+        ref={props.onSetSearchRoot}
+        data-component="home-session-search"
+        class="relative z-30 w-full"
+        onFocusOut={(event) => props.onSearchBlur(event.relatedTarget)}
+      >
         <Show when={props.searchOpen}>
+          {/* Pressing in the panel keeps focus in the input, so the search stays open until a result opens. */}
           <div
             data-component="home-session-search-panel"
+            onMouseDown={(event) => event.preventDefault()}
             class={`
               absolute flex flex-col overflow-hidden rounded-[12px]
               bg-v2-background-bg-base shadow-[var(--v2-elevation-floating)]
@@ -325,7 +490,7 @@ function HomeSessionSearch(
                       >
                         {props.language.t("home.sessions.search.sessions")}
                       </p>
-                      <div class="max-h-[min(20rem,40dvh)] overflow-y-auto" data-scrollable ref={props.onSetSearchList}>
+                      <MenuScroll class="max-h-[min(20rem,40dvh)]" viewportRef={props.onSetSearchList}>
                         <div class="flex flex-col gap-px pb-2">
                           <For each={props.searchResults}>
                             {(record) => (
@@ -337,7 +502,7 @@ function HomeSessionSearch(
                             )}
                           </For>
                         </div>
-                      </div>
+                      </MenuScroll>
                     </div>
                   </Show>
                 </Show>
@@ -346,6 +511,7 @@ function HomeSessionSearch(
           </div>
         </Show>
         <label
+          data-slot="home-session-search-field"
           class={`
             relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] py-1 ps-3 pe-2
             bg-v2-background-bg-layer-02/60 text-v2-icon-icon-muted transition-[background-color,box-shadow]
@@ -368,13 +534,20 @@ function HomeSessionSearch(
             aria-activedescendant={
               props.searchActive && props.searchOpen ? `home-session-search-option-${props.searchActive}` : undefined
             }
-            onFocus={props.onSearchFocus}
+            onFocus={() => props.onSearchFocus()}
             onInput={(event) => props.onSearchInput(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
                 event.preventDefault()
                 props.onSearchClose()
                 event.currentTarget.blur()
+
+                return
+              }
+
+              if (props.searchInline && event.key === "Enter" && !event.isComposing && props.searchResults.length > 0) {
+                event.preventDefault()
+                props.onSearchSelectActive()
 
                 return
               }
@@ -407,9 +580,11 @@ function HomeSessionSearch(
             <IconButton
               type="button"
               variant="ghost-muted"
-              size="small"
+              size={props.searchInline ? "normal" : "small"}
               class="relative z-20 shrink-0"
-              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
+              icon={
+                <Icon name="close" size={props.searchInline ? "normal" : "large"} class="text-v2-icon-icon-muted" />
+              }
               aria-label={props.searchPlaceholder}
               onClick={() => {
                 props.onSearchClose()
@@ -417,6 +592,10 @@ function HomeSessionSearch(
               }}
             />
           </Show>
+          <Show when={props.searchValue && scope()}>
+            <div aria-hidden="true" class="relative z-20 mx-0.5 h-4 w-px shrink-0 bg-v2-border-border-muted" />
+          </Show>
+          {scope()}
         </label>
       </div>
     </div>
@@ -445,9 +624,10 @@ function HomeSessionSearchResultRow(
       data-component="home-session-search-row"
       data-project-name={!!showProjectName()}
       role="option"
+      tabIndex={-1}
       aria-selected={props.selected}
       class={`
-        flex h-10 w-full shrink-0 cursor-default items-center border-0 py-3 pl-[18px] pr-6 text-left
+        flex h-10 w-full shrink-0 cursor-default items-center border-0 py-3 pl-[18px] pr-6 text-left text-v2-text-text-muted
         transition-[background-color] duration-[120ms] ease-in-out
         hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
       `}
@@ -472,11 +652,11 @@ function HomeSessionSearchResultRow(
         props.onSearchSelect(props.record, { background: true })
       }}
     >
-      <HomeSessionLeadingController server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
+      <HomeSessionIndicators server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
       <div data-slot="home-session-labels" class="flex min-w-0 flex-1 items-center gap-1.5">
         <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} search />
         <Show when={showProjectName()}>
-          <HomeSessionProjectName name={props.record.projectName} trailing={props.desktop} search />
+          <HomeSessionProjectName name={props.record.projectName} search />
         </Show>
         <HomeSessionLocation
           location={location()}
@@ -499,12 +679,18 @@ function HomeSessionGroupHeader(props: {
   onSetRef: (element: HTMLDivElement) => void
   elevated?: boolean
 }) {
+  let element!: HTMLDivElement
+
+  // Index reuses a header in place for whichever group lands at its position, so it reports itself again when its
+  // group changes; a one-time ref would leave it registered under the group it was created for.
+  createEffect(() => props.onSetRef(element))
+
   return (
     <div
-      ref={props.onSetRef}
+      ref={element}
       class={`
         pointer-events-none sticky top-[68px] flex h-7 min-w-0 items-center justify-between
-        bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[84px] lg:top-[108px]
+        bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[108px]
       `}
       classList={{ "home-session-group-header z-[5]": !!props.elevated, "z-10": !props.elevated }}
     >
@@ -518,8 +704,8 @@ function HomeSessionGroupHeader(props: {
 function HomeSessionRow(
   props: HomeSessionsViewProps & {
     record: HomeSessionRecord
-    rowUI: HomeSessionRowUI
-    setRowUI: SetStoreFunction<HomeSessionRowUI>
+    rowState: HomeSessionRowState
+    onRowEvent: (event: HomeSessionRowEvent) => void
     showLocations: boolean
     hoveredSession: string | undefined
     onHoverSession: (sessionID: string | undefined) => void
@@ -529,76 +715,12 @@ function HomeSessionRow(
   const location = createMemo(() => props.location(props.record))
   const showProjectName = () => props.showProjectName && props.record.projectName
   const sessionID = () => props.record.session.id
-  const menu = () => (props.rowUI.menu?.id === sessionID() ? props.rowUI.menu : undefined)
-  const editor = () => (props.rowUI.editor?.id === sessionID() ? props.rowUI.editor : undefined)
-  let longPressTimer: ReturnType<typeof setTimeout> | undefined
-  let longPressStart: { x: number; y: number } | undefined
-  let suppressClick = false
-  let menuInteractedOutside = false
-
-  // Focus targets are looked up by session ID: session store updates recreate
-  // row components, so instance refs can point at detached nodes by the time
-  // deferred focus runs.
-  const rowSelector = () => `[data-component="home-session-row-container"][data-session-id="${sessionID()}"]`
-
-  const rowButton = () =>
-    document.querySelector<HTMLButtonElement>(`${rowSelector()} [data-component="home-session-row"]`)
-
-  const renameInput = () =>
-    document.querySelector<HTMLInputElement>(`${rowSelector()} [data-component="home-session-rename"]`)
-
-  const clearLongPress = () => {
-    if (longPressTimer !== undefined) clearTimeout(longPressTimer)
-    longPressTimer = undefined
-    longPressStart = undefined
-  }
-
-  onCleanup(clearLongPress)
+  const menu = () => selectRowMenu(props.rowState, sessionID())
+  const editor = () => selectRowEditor(props.rowState, sessionID())
 
   const openMenu = (element: HTMLElement, clientX: number, clientY: number) => {
     const bounds = element.getBoundingClientRect()
-    props.setRowUI("menu", { id: sessionID(), x: clientX - bounds.left, y: clientY - bounds.top })
-  }
-
-  const openEditor = () => {
-    props.setRowUI("editor", { id: sessionID(), draft: title(), renaming: false })
-    requestAnimationFrame(() => {
-      const input = renameInput()
-      input?.focus()
-      input?.select()
-    })
-  }
-
-  const closeEditor = () => {
-    if (editor()?.renaming) return
-    props.setRowUI("editor", (value) => (value?.id === sessionID() ? undefined : value))
-  }
-
-  const saveEditor = async () => {
-    const current = editor()
-
-    if (!current || current.renaming) return
-    props.setRowUI("editor", { ...current, renaming: true })
-    const saved = await props.onRenameSession(props.server, props.record.session, current.draft)
-    // Disabling the input during the request drops focus to the body; restore
-    // it unless the user focused another control while the rename was pending.
-    const restore = document.activeElement === document.body || document.activeElement === renameInput()
-    props.setRowUI("editor", (value) => {
-      if (value?.id !== sessionID()) return value
-
-      return saved ? undefined : { ...value, renaming: false }
-    })
-
-    if (!restore) return
-    requestAnimationFrame(() => {
-      if (saved) {
-        rowButton()?.focus()
-
-        return
-      }
-
-      renameInput()?.focus()
-    })
+    props.onRowEvent({ type: "menu.open", sessionID: sessionID(), x: clientX - bounds.left, y: clientY - bounds.top })
   }
 
   return (
@@ -622,24 +744,25 @@ function HomeSessionRow(
             class="flex h-10 min-w-0 w-full flex-1 items-center py-3 ps-1.5 pe-3 md:ps-3"
             classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
           >
-            <HomeSessionLeadingController server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
+            <HomeSessionIndicators server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
             <div data-slot="home-session-labels" class="contents">
               <InlineInput
                 data-component="home-session-rename"
                 aria-label={props.language.t("common.rename")}
                 dir="auto"
                 value={editor()?.draft ?? ""}
-                disabled={editor()?.renaming ?? false}
+                // Read-only rather than disabled keeps focus here while saving, so Escape can cancel the save.
+                readOnly={editor()?.status === "renaming"}
+                aria-busy={editor()?.status === "renaming" || undefined}
                 class={`
                 block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base
                 [font-weight:530] field-sizing-content outline-none focus:outline-none focus-visible:outline-none
                  ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
               `}
-                style={{ "--inline-input-shadow": "none", "text-align": "start" }}
-                onInput={(event) => {
-                  const draft = event.currentTarget.value
-                  props.setRowUI("editor", (value) => (value?.id === sessionID() ? { ...value, draft } : value))
-                }}
+                style={{ "text-align": "start" }}
+                onInput={(event) =>
+                  props.onRowEvent({ type: "editor.input", sessionID: sessionID(), draft: event.currentTarget.value })
+                }
                 onKeyDown={(event) => {
                   event.stopPropagation()
 
@@ -651,17 +774,22 @@ function HomeSessionRow(
 
                   if (event.key === "Enter") {
                     event.preventDefault()
-                    void saveEditor()
+                    props.onRowEvent({
+                      type: "editor.submit",
+                      sessionID: sessionID(),
+                      server: props.server,
+                      session: props.record.session,
+                      title: title(),
+                    })
 
                     return
                   }
 
                   if (event.key !== "Escape") return
                   event.preventDefault()
-                  closeEditor()
-                  requestAnimationFrame(() => rowButton()?.focus())
+                  props.onRowEvent({ type: "editor.cancel", sessionID: sessionID(), reason: "escape" })
                 }}
-                onBlur={closeEditor}
+                onBlur={() => props.onRowEvent({ type: "editor.cancel", sessionID: sessionID(), reason: "blur" })}
               />
               <Show when={showProjectName()}>
                 <HomeSessionProjectName name={props.record.projectName} />
@@ -679,7 +807,7 @@ function HomeSessionRow(
             flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center rounded-[6px] border-0
             bg-transparent py-3 ps-1.5 pe-3 md:ps-3 text-start text-v2-text-text-muted [font-weight:530]
             transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
-            hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
+            hover:bg-v2-overlay-simple-overlay-hover
           `}
           classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
           onMouseDown={(event) => {
@@ -691,32 +819,24 @@ function HomeSessionRow(
           }}
           onMouseLeave={() => props.onHoverSession(undefined)}
           onPointerDown={(event) => {
-            suppressClick = false
-
-            if (event.pointerType !== "touch") return
-            clearLongPress()
-            const element = event.currentTarget
-            const x = event.clientX
-            const y = event.clientY
-            longPressStart = { x, y }
-            longPressTimer = setTimeout(() => {
-              suppressClick = true
-              clearLongPress()
-              openMenu(element, x, y)
-            }, HOME_SESSION_LONG_PRESS_MS)
+            if (event.pointerType !== "touch") return props.onRowEvent(POINTER_DOWN)
+            const bounds = event.currentTarget.getBoundingClientRect()
+            props.onRowEvent({
+              type: "touch.down",
+              sessionID: sessionID(),
+              x: event.clientX,
+              y: event.clientY,
+              menuX: event.clientX - bounds.left,
+              menuY: event.clientY - bounds.top,
+            })
           }}
           onPointerMove={(event) => {
-            if (!longPressStart) return
-
-            if (Math.abs(event.clientX - longPressStart.x) <= 8 && Math.abs(event.clientY - longPressStart.y) <= 8)
-              return
-            clearLongPress()
+            // Checked first so a move inside the slop, or with no long press pending, allocates nothing.
+            if (!selectLongPressMoved(props.rowState, event.clientX, event.clientY)) return
+            props.onRowEvent({ type: "touch.move", x: event.clientX, y: event.clientY })
           }}
-          onPointerUp={clearLongPress}
-          onPointerCancel={() => {
-            clearLongPress()
-            suppressClick = false
-          }}
+          onPointerUp={() => props.onRowEvent(TOUCH_UP)}
+          onPointerCancel={() => props.onRowEvent(TOUCH_CANCEL)}
           onKeyDown={(event) => {
             if (event.key !== "ContextMenu" && (event.key !== "F10" || !event.shiftKey)) return
             event.preventDefault()
@@ -724,17 +844,14 @@ function HomeSessionRow(
             openMenu(event.currentTarget, bounds.left + 12, bounds.bottom)
           }}
           onClick={(event) => {
-            // The flag stays set until the long-press compatibility click
-            // arrives, however delayed; keyboard activation (detail 0) is
-            // never that click and passes through.
-            if (suppressClick) {
-              suppressClick = false
+            // The long press's release click arrives however late; keyboard activation is never that click.
+            const suppress = selectRowSuppressClick(props.rowState, sessionID(), event.detail)
+            props.onRowEvent({ type: "row.clicked", sessionID: sessionID() })
 
-              if (event.detail !== 0) {
-                event.preventDefault()
+            if (suppress) {
+              event.preventDefault()
 
-                return
-              }
+              return
             }
 
             props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })
@@ -745,7 +862,7 @@ function HomeSessionRow(
             props.onOpenSession(props.record.session, { background: true })
           }}
         >
-          <HomeSessionLeadingController server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
+          <HomeSessionIndicators server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
           <div
             data-slot="home-session-labels"
             class="min-w-0 flex-1 items-center gap-1.5"
@@ -753,7 +870,7 @@ function HomeSessionRow(
           >
             <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
             <Show when={showProjectName()}>
-              <HomeSessionProjectName name={props.record.projectName} trailing={props.desktop} />
+              <HomeSessionProjectName name={props.record.projectName} />
             </Show>
             <HomeSessionLocation
               location={location()}
@@ -775,38 +892,44 @@ function HomeSessionRow(
         open={!!menu()}
         onOpenChange={(open) => {
           if (open) return
-          props.setRowUI("menu", (value) => (value?.id === sessionID() ? undefined : value))
+          props.onRowEvent({ type: "menu.closed", sessionID: sessionID() })
         }}
       >
+        {/* Disabled, so it takes no focus: Kobalte focuses the trigger on close, which would blur the rename editor
+            the Rename item just opened. Closing the menu restores focus to the row instead. */}
         <Menu.Trigger
           as="span"
           aria-hidden="true"
-          tabIndex={-1}
+          disabled
           class="pointer-events-none absolute size-px"
           style={{ left: `${menu()?.x ?? 0}px`, top: `${menu()?.y ?? 0}px` }}
         />
         <Menu.Portal>
           <Menu.Content
-            onInteractOutside={() => {
-              menuInteractedOutside = true
-            }}
-            onCloseAutoFocus={(event) => {
-              // The trigger is an invisible positioning span, so Kobalte's
-              // default close focus restore has no useful target. Skip the
-              // row focus when the rename editor owns focus or the user
-              // dismissed the menu by interacting elsewhere.
-              event.preventDefault()
-              const outside = menuInteractedOutside
-              menuInteractedOutside = false
-
-              if (outside || editor()) return
-              requestAnimationFrame(() => rowButton()?.focus())
-            }}
+            onInteractOutside={() => props.onRowEvent({ type: "menu.interact-outside", sessionID: sessionID() })}
+            // The trigger is an invisible positioning span, so Kobalte's close focus restore has no useful target;
+            // closing the menu restores focus to the row instead.
+            onCloseAutoFocus={(event) => event.preventDefault()}
           >
-            <Menu.Item onSelect={openEditor}>{props.language.t("common.rename")}</Menu.Item>
-            <Menu.Item onSelect={() => void props.onExportSession(props.server, props.record.session)}>
+            <Menu.Item onSelect={() => props.onOpenSession(props.record.session)}>
+              {props.language.t("common.open")}
+            </Menu.Item>
+            <Menu.Item onSelect={() => props.onOpenSession(props.record.session, { background: true })}>
+              {props.language.t("home.sessions.openInBackground")}
+            </Menu.Item>
+            <Menu.Separator />
+            <Menu.Item
+              onSelect={() => props.onRowEvent({ type: "rename.start", sessionID: sessionID(), title: title() })}
+            >
+              {props.language.t("common.rename")}
+            </Menu.Item>
+            <Menu.Item
+              disabled={props.isExportingSession(props.server, props.record.session)}
+              onSelect={() => props.onExportSession(props.server, props.record.session)}
+            >
               {props.language.t("common.export")}…
             </Menu.Item>
+            <SessionReadMenuItem server={props.server} session={props.record.session} />
             <Menu.Separator />
             <Menu.Item onSelect={() => props.onDeleteSession(props.server, props.record.session)}>
               {props.language.t("common.delete")}…
@@ -892,15 +1015,13 @@ function HomeSessionLocation(props: {
   )
 }
 
-function HomeSessionProjectName(props: { name: string; search?: boolean; trailing?: boolean }) {
+function HomeSessionProjectName(props: { name: string; search?: boolean }) {
   return (
     <span
       data-component="home-session-project-name"
       dir="auto"
-      class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]"
+      class="min-w-0 flex-[1_1_auto] overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-muted [font-weight:440]"
       classList={{
-        "flex-[0_1_auto]": !!props.trailing,
-        "flex-[1_1_auto]": !props.trailing,
         "text-[13px] leading-4 tracking-[-0.04px]": !!props.search,
       }}
     >
@@ -932,6 +1053,39 @@ function HomeSessionsEmpty(props: { onNewSession?: () => void; language: ReturnT
         {(onNewSession) => (
           <Button data-action="home-new-session" variant="neutral" size="normal" icon="edit" onClick={onNewSession()}>
             {props.language.t("command.session.new")}
+          </Button>
+        )}
+      </Show>
+    </div>
+  )
+}
+
+// The list could not load, or the server cannot answer. Never the empty state, which offers to create a session.
+function HomeSessionsUnavailable(props: {
+  role: "alert" | "status"
+  title: string
+  description?: string
+  onRetry?: () => void
+  language: ReturnType<typeof useLanguage>
+}) {
+  return (
+    <div
+      data-component="home-sessions-unavailable"
+      role={props.role}
+      class="flex min-h-full flex-col items-center gap-4 px-6 pt-[52px] text-center"
+    >
+      <div class="shrink-0 text-[13px] leading-text-compact tracking-[-0.04px] text-v2-text-text-base [font-weight:530]">
+        {props.title}
+      </div>
+      <Show when={props.description}>
+        <p class="mb-1 text-center text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]">
+          {props.description}
+        </p>
+      </Show>
+      <Show when={props.onRetry}>
+        {(onRetry) => (
+          <Button variant="neutral" size="normal" onClick={onRetry()}>
+            {props.language.t("common.retry")}
           </Button>
         )}
       </Show>

@@ -250,3 +250,165 @@ test("invalidations that land before a queued reload starts are absorbed by it",
     setup.dispose()
   }
 })
+
+test("event-driven session reads evict missing sessions without reporting an error, while explicit reads still reject", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const errors: unknown[] = []
+  const session: SessionInfo = {
+    id: "ses_ephemeral",
+    projectID: "project",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0, idle: 1 },
+    location: { directory: "/project" },
+  }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () =>
+      Response.json(
+        { _tag: "SessionNotFoundError", sessionID: session.id, message: `Session not found: ${session.id}` },
+        { status: 404 },
+      ),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      onError: (error) => errors.push(error),
+    }),
+    dispose,
+  }))
+  const viewed: OpenCodeEvent = {
+    id: "evt_ephemeral_viewed",
+    created: 2,
+    type: "session.viewed",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: { sessionID: session.id, idle: 2 },
+  }
+  try {
+    setup.data.session.remember(session)
+    expect(setup.data.session.get(session.id)).toBeDefined()
+    listeners.forEach((listener) => listener({ name: viewed.type, details: viewed }))
+    const deadline = Date.now() + 2_000
+    while (!setup.data.session.missing(session.id)) {
+      if (Date.now() > deadline) throw new Error("Timed out waiting for missing-session eviction")
+      await Bun.sleep(5)
+    }
+    expect(errors).toEqual([])
+    expect(setup.data.session.get(session.id)).toBeUndefined()
+    expect(setup.data.session.missing(session.id)).toBe(true)
+
+    await expect(setup.data.session.sync(session.id)).rejects.toMatchObject({
+      _tag: "SessionNotFoundError",
+      sessionID: session.id,
+    })
+    expect(errors).toEqual([])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("delayed metadata and family reads do not resurrect sessions deleted while in flight", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const makeSession = (id: string, parentID?: string): SessionInfo => ({
+    id,
+    projectID: "project",
+    ...(parentID ? { parentID } : {}),
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+    location: { directory: "/project" },
+  })
+  const root = makeSession("ses_root")
+  const child = makeSession("ses_child", root.id)
+  const ownStarted = Promise.withResolvers<void>()
+  const ownRelease = Promise.withResolvers<void>()
+  const familyStarted = Promise.withResolvers<void>()
+  const familyRelease = Promise.withResolvers<void>()
+  const requests: string[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
+      requests.push(`${url.pathname}${url.search}`)
+      if (url.pathname === `/api/session/${root.id}`) return Response.json({ data: root })
+      if (url.pathname === "/api/session" && url.searchParams.get("parentID") === root.id) {
+        familyStarted.resolve()
+        await familyRelease.promise
+        return Response.json({ data: [child], cursor: {} })
+      }
+      if (url.pathname === `/api/session/${child.id}` && requests.filter((item) => item === `/api/session/${child.id}`).length === 1) {
+        ownStarted.resolve()
+        await ownRelease.promise
+        return Response.json({ data: child })
+      }
+      return Response.json(
+        { _tag: "SessionNotFoundError", sessionID: child.id, message: `Session not found: ${child.id}` },
+        { status: 404 },
+      )
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  const emitDeleted = (sessionID: string, seq: number) => {
+    const event: OpenCodeEvent = {
+      id: `evt_del_${seq}`,
+      created: seq,
+      type: "session.deleted",
+      durable: { aggregateID: sessionID, seq, version: 1 },
+      data: { sessionID },
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+  }
+  try {
+    // Own metadata read started before deletion must not republish.
+    setup.data.session.remember(child)
+    setup.data.session.invalidate(child.id)
+    const ownSync = setup.data.session.sync(child.id)
+    await ownStarted.promise
+    emitDeleted(child.id, 1)
+    expect(setup.data.session.get(child.id)).toBeUndefined()
+    ownRelease.resolve()
+    await ownSync
+    expect(setup.data.session.get(child.id)).toBeUndefined()
+
+    // Parent family read started before child deletion must not republish or mark child synced.
+    setup.data.session.remember(root)
+    setup.data.session.remember(child)
+    const familySync = setup.data.session.sync(root.id, { children: true })
+    await familyStarted.promise
+    emitDeleted(child.id, 2)
+    expect(setup.data.session.get(child.id)).toBeUndefined()
+    familyRelease.resolve()
+    await familySync
+    expect(setup.data.session.get(child.id)).toBeUndefined()
+    expect(setup.data.session.family(root.id)).toEqual([root.id])
+    await expect(setup.data.session.sync(child.id)).rejects.toMatchObject({
+      _tag: "SessionNotFoundError",
+      sessionID: child.id,
+    })
+  } finally {
+    ownRelease.resolve()
+    familyRelease.resolve()
+    setup.dispose()
+  }
+})

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
+import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import { Persistence } from "@/runtime/persistence/schema"
 import { SessionMessage } from "@opencode/schema/session-message"
 import {
@@ -38,7 +39,8 @@ describe("composer persistence schemas", () => {
       cursor: -1,
       mode: "unknown",
       model: { providerID: 42, modelID: "model" },
-      retry: { id: "bad", agent: "build", providerID: "provider", modelID: "model" },
+      // A retry stored before fingerprints matched only the selection, so it cannot prove its payload.
+      retry: { id: "msg_retry", agent: "build", providerID: "provider", modelID: "model" },
       context: {
         items: [
           { type: "file", path: "src/app.ts", commentID: "note", key: "stale" },
@@ -74,11 +76,13 @@ describe("composer persistence schemas", () => {
     expect(decode({}).prompt).toEqual(DEFAULT_PROMPT)
   })
 
-  test("restores extension notes and legacy browser comments without their process-bound refs", () => {
+  test("restores plugin notes and legacy browser comments without their process-bound refs", () => {
     const durable = {
       type: "note" as const,
       origin: "example",
       label: "button#save",
+      title: "button#save",
+      subtitle: "Browser annotation",
       icon: "select-element",
       subject: 'the "button#save" element',
       href: "tab_00000000-0000-4000-8000-000000000000",
@@ -91,7 +95,7 @@ describe("composer persistence schemas", () => {
       live: { subject: 'the "button#save" element (browser ref @e42)', href: `${durable.href}#e42` },
     }
 
-    // A draft stored by a build before extension notes, as its composer schema encoded it.
+    // A draft stored by a build before plugin notes, as its composer schema encoded it.
     const browser = {
       type: "browser" as const,
       tabID: "tab_00000000-0000-4000-8000-000000000000",
@@ -102,7 +106,19 @@ describe("composer persistence schemas", () => {
       key: "browser:tab_00000000-0000-4000-8000-000000000000:c=picked",
     }
 
-    const value = decode({ context: { items: [note, { ...note, subject: null }, browser, { ...browser, url: null }] } })
+    const value = decode({
+      context: {
+        items: [
+          note,
+          { ...note, subject: null },
+          browser,
+          { ...browser, url: null },
+          { ...note, comment: "", commentID: "empty-live" },
+          { ...durable, comment: "", commentID: "empty-durable" },
+        ],
+      },
+    })
+
     expect(value.context.items).toEqual([
       { ...durable, key: "note:example:c=note" },
       {
@@ -117,7 +133,10 @@ describe("composer persistence schemas", () => {
         commentID: "picked",
         key: "note:browser:c=picked",
       },
+      { ...durable, comment: "", commentID: "empty-live", key: "note:example:c=empty-live" },
+      { ...durable, comment: "", commentID: "empty-durable", key: "note:example:c=empty-durable" },
     ])
+    expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 
   test("drops invalid parts without losing valid mentions or optional field recovery", () => {
@@ -140,7 +159,7 @@ describe("composer persistence schemas", () => {
         },
       ],
       model: { providerID: "provider", modelID: "model", variant: null },
-      retry: { id: "msg_retry", agent: "build", providerID: "provider", modelID: "model", variant: false },
+      retry: { id: "msg_retry", fingerprint: "42:abc", agent: "build" },
     })
 
     expect(value.prompt.map((part) => part.type)).toEqual(["text", "agent", "skill", "file"])
@@ -153,12 +172,7 @@ describe("composer persistence schemas", () => {
       filename: "app.ts",
     })
     expect(value.model?.variant).toBeNull()
-    expect(value.retry).toEqual({
-      id: SessionMessage.ID.make("msg_retry"),
-      agent: "build",
-      providerID: "provider",
-      modelID: "model",
-    })
+    expect(value.retry).toEqual({ id: SessionMessage.ID.make("msg_retry"), fingerprint: "42:abc" })
     expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 
@@ -221,6 +235,23 @@ describe("composer persistence schemas", () => {
     const encoded = Schema.encodeSync(ComposerStore)(value)
     expect(JSON.stringify(encoded)).not.toContain("dataUrl")
     expect(decode(encoded)).toEqual(value)
+  })
+
+  test("persists a restored media:<hash> image as a reference without a URL", () => {
+    const ref = `media:${"a".repeat(64)}`
+
+    const value = decode({
+      prompt: [
+        { ...image, blob: createLegacyBlobReference(ref) },
+        { ...image, blob: { id: ref, url: ref } },
+      ],
+    })
+
+    expect(value.prompt).toEqual([
+      { ...image, blob: { id: ref, url: "" } },
+      { ...image, blob: { id: ref, url: "" } },
+    ])
+    expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 
   test("migrates legacy history arrays and recovers entries, parts, and comments independently", () => {

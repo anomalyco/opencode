@@ -54,6 +54,14 @@ function ToastSurface(props: {
       borderColor={theme.text.feedback[props.toast.variant].base}
       border={["left", "right"]}
       customBorderChars={SplitBorder.customBorderChars}
+      renderAfter={function () {
+        // The host terminal draws its cursor above TUI cells, regardless of paint order.
+        const cursor = renderer.getCursorState()
+        const x = cursor.x - 1
+        const y = cursor.y - 1
+        if (!cursor.visible || x < this.x || x >= this.x + this.width || y < this.y || y >= this.y + this.height) return
+        renderer.setCursorPosition(cursor.x, cursor.y, false)
+      }}
       onMouseOver={() => hover(true)}
       onMouseOut={() => hover(false)}
       onMouseUp={() => {

@@ -1,0 +1,41 @@
+[data-page="legal-document"] [data-component="legal-document"] {
+  .table-wrapper {
+    margin: 0 0 1.5rem;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    min-width: 40rem;
+    border-collapse: collapse;
+    font-size: var(--fs-small);
+    line-height: 1.5;
+  }
+
+  th,
+  td {
+    padding-block: 0.75rem;
+    padding-inline: 0 1rem;
+    text-align: start;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+  }
+
+  th {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    color: var(--text-strong);
+    border-top: 1px solid var(--border);
+  }
+
+  td ul {
+    margin: 0;
+    border: 0;
+  }
+
+  td li {
+    padding-block: 0 0.25rem;
+    padding-inline: 1.5rem 0;
+    border: 0;
+  }
+}

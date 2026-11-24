@@ -1,7 +1,7 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
-import { uuid } from "@/runtime/persistence/uuid"
+import { uuid } from "@opencode/util/uuid"
 import { FileSelection } from "@/workspaces/files/types"
 import { durableNote, LegacyBrowserNote, NoteComment, QuoteComment, type ContextItem } from "./schema"
 
@@ -57,6 +57,8 @@ export function formatAttachmentReference(input: PromptAttachmentReference) {
 
 /** A note reads with its live subject while it stays in the app process that attached it. */
 export function formatNoteComment(input: NoteComment) {
+  if (!input.comment.trim()) return `The user referenced ${input.live?.subject ?? input.subject}.`
+
   return `The user made the following comment regarding ${input.live?.subject ?? input.subject}: ${input.comment}`
 }
 

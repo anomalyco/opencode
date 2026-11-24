@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { measureEditText } from "@opentui/core"
-import { expandTrackedPastedText } from "../../src/prompt/part"
+import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../src/prompt/part"
 
 const widthMethod = "wcwidth"
 const measure = (text: string) => measureEditText(text, { widthMethod })
@@ -20,4 +20,21 @@ test.each([
     return { start: measure(before), end: measure(before + marker), text: pasted }
   })
   expect(expandTrackedPastedText(pieces.join(marker), ranges, widthMethod)).toBe(pieces.join(pasted))
+})
+
+test("expands clipboard placeholders literally in document order without re-matching expanded text", () => {
+  const first = "echo $$ && replace('$&', `$`cmd``, $'\\n') and literal [Pasted ~4 lines]"
+  const second = "second\npasted\nfour\nlines"
+  expect(
+    expandPastedTextPlaceholders("prefix [Pasted ~3 lines] middle [Pasted ~4 lines] suffix", [
+      { text: first, source: { text: "[Pasted ~3 lines]", start: 7 } },
+      { text: second, source: { text: "[Pasted ~4 lines]", start: 32 } },
+    ]),
+  ).toBe(`prefix ${first} middle ${second} suffix`)
+  expect(
+    expandPastedTextPlaceholders("prefix [Pasted ~3 lines] middle [Pasted ~3 lines] suffix", [
+      { text: second, source: { text: "[Pasted ~3 lines]", start: 32 } },
+      { text: first, source: { text: "[Pasted ~3 lines]", start: 7 } },
+    ]),
+  ).toBe(`prefix ${first} middle ${second} suffix`)
 })

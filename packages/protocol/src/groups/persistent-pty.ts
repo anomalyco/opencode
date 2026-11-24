@@ -4,7 +4,13 @@ import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { Session } from "@opencode/schema/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
-import { ForbiddenError, InvalidRequestError, PtyNotFoundError, ServiceUnavailableError } from "../errors.js"
+import {
+  ForbiddenError,
+  InvalidRequestError,
+  PtyFeatureUnsupportedError,
+  PtyNotFoundError,
+  ServiceUnavailableError,
+} from "../errors.js"
 import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "./pty.js"
 
 export { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE }
@@ -25,12 +31,16 @@ export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
     HttpApiEndpoint.get("persistentPty.read", "/api/experimental/session/:sessionID/terminal/read", {
       params: { sessionID: Session.ID },
       query: {
-        lines: Schema.NumberFromString.pipe(Schema.decodeTo(PersistentPty.ReadLines), Schema.optional),
+        lines: Schema.NumberFromString.pipe(Schema.decodeTo(PersistentPty.ReadLines), Schema.optional).annotateKey({
+          description:
+            "Number of trailing rows to read, up to 65535. Defaults to the live terminal height; larger counts include retained history.",
+        }),
       },
       success: Schema.Struct({ data: Schema.NullOr(PersistentPty.ReadResult) }),
       error: [ServiceUnavailableError],
     }).annotateMerge(
       OpenApi.annotations({
+        identifier: "experimental.persistentPty.read",
         summary: "Read the session's most recently controlled terminal",
         description:
           "Read the last physical rows without changing selection or taking control. Omitted lines uses the live terminal height; larger counts include retained history. Blank rows are preserved. Screen dimensions and cursor remain relative to the live screen. Returns null when no current terminal exists. Selection is server-local and resets on restart. Experimental: may change without compatibility guarantees.",
@@ -42,7 +52,7 @@ export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
       params: { sessionID: Session.ID },
       success: Schema.Struct({ data: Schema.Array(PersistentPty.Info) }),
       error: errors,
-    }),
+    }).annotateMerge(OpenApi.annotations({ identifier: "experimental.persistentPty.list" })),
   )
   .add(
     HttpApiEndpoint.post("persistentPty.create", "/api/experimental/session/:sessionID/terminal", {
@@ -50,56 +60,66 @@ export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
       payload: PersistentPty.CreateInput,
       success: Schema.Struct({ data: PersistentPty.Info }),
       error: errors,
-    }),
+    }).annotateMerge(OpenApi.annotations({ identifier: "experimental.persistentPty.create" })),
   )
   .add(
     HttpApiEndpoint.post("persistentPty.shutdown", "/api/experimental/persistent-pty/shutdown", {
       success: HttpApiSchema.NoContent,
       error: [ServiceUnavailableError],
-    }),
+    }).annotateMerge(OpenApi.annotations({ identifier: "experimental.persistentPty.shutdown" })),
   )
   .add(
     HttpApiEndpoint.post("persistentPty.handoff", "/api/experimental/persistent-pty/handoff", {
       success: Schema.Struct({ handoff: Schema.NullOr(PersistentPty.Handoff) }),
       error: [ServiceUnavailableError],
-    }),
+    }).annotateMerge(OpenApi.annotations({ identifier: "experimental.persistentPty.handoff" })),
   )
   .add(
     HttpApiEndpoint.get("persistentPty.get", "/api/experimental/persistent-pty/:ptyID", {
       params: { ptyID: Pty.ID },
       success: Schema.Struct({ data: PersistentPty.Info }),
       error: terminalErrors,
-    }),
+    }).annotateMerge(OpenApi.annotations({ identifier: "experimental.persistentPty.get" })),
   )
   .add(
     HttpApiEndpoint.put("persistentPty.update", "/api/experimental/persistent-pty/:ptyID", {
       params: { ptyID: Pty.ID },
       payload: PersistentPty.UpdateInput,
       success: Schema.Struct({ data: PersistentPty.Info }),
-      error: terminalErrors,
-    }),
+      error: [...terminalErrors, PtyFeatureUnsupportedError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "experimental.persistentPty.update",
+        description:
+          "Resize when size is present and rename when title is present; a null title clears the user title so the shell's title shows again. Renaming fails with 501 while the terminal service predates renaming.",
+      }),
+    ),
   )
   .add(
     HttpApiEndpoint.get("persistentPty.snapshot", "/api/experimental/persistent-pty/:ptyID/snapshot", {
       params: { ptyID: Pty.ID },
       success: Schema.Struct({ data: PersistentPty.Snapshot }),
       error: terminalErrors,
-    }),
+    }).annotateMerge(OpenApi.annotations({ identifier: "experimental.persistentPty.snapshot" })),
   )
   .add(
     HttpApiEndpoint.delete("persistentPty.remove", "/api/experimental/persistent-pty/:ptyID", {
       params: { ptyID: Pty.ID },
       success: HttpApiSchema.NoContent,
       error: terminalErrors,
-    }),
+    }).annotateMerge(OpenApi.annotations({ identifier: "experimental.persistentPty.remove" })),
   )
   .add(
     HttpApiEndpoint.post("persistentPty.connectToken", "/api/experimental/persistent-pty/:ptyID/connect-token", {
       params: { ptyID: Pty.ID },
-      headers: Schema.Struct({ [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String) }),
+      headers: Schema.Struct({
+        [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String).annotateKey({
+          description: `Must be ${PTY_CONNECT_TOKEN_HEADER_VALUE}; requests without it are refused.`,
+        }),
+      }),
       success: Schema.Struct({ data: PtyTicket.ConnectToken }),
       error: [ForbiddenError, PtyNotFoundError, ServiceUnavailableError],
-    }),
+    }).annotateMerge(OpenApi.annotations({ identifier: "experimental.persistentPty.connectToken" })),
   )
   .add(
     HttpApiEndpoint.get("persistentPty.connect", PERSISTENT_PTY_CONNECT_PATH, {
@@ -108,7 +128,7 @@ export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
       error: [ForbiddenError, PtyNotFoundError, ServiceUnavailableError],
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "persistentPty.connect",
+        identifier: "experimental.persistentPty.connect",
         summary: "Connect to a persistent PTY",
         description: "Stream persistent PTY output through the OpenCode server.",
         transform: (operation) => ({
@@ -116,9 +136,15 @@ export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
           "x-websocket": true,
           parameters: [
             ...(operation.parameters ?? []),
-            ...["cursor", "role", "attachment_id", "takeover", "input_protocol", PTY_CONNECT_TICKET_QUERY].map(
-              (name) => ({ in: "query", name, schema: { type: "string" } }),
-            ),
+            { in: "query", name: "attachment_id", schema: { type: "string" } },
+            ...Object.entries({
+              cursor: "Output offset to replay from. Defaults to 0.",
+              role: "Attach as controller (the default) or observer.",
+              takeover: "Set to true to take over control of the terminal.",
+              input_protocol: "Set to 1 to send framed input messages instead of raw terminal input.",
+              [PTY_CONNECT_TICKET_QUERY]:
+                "Single-use ticket from experimental.persistentPty.connectToken, which authorizes the connection without the usual credentials.",
+            }).map(([name, description]) => ({ in: "query", name, description, schema: { type: "string" } })),
           ],
         }),
       }),

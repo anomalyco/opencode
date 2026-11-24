@@ -46,7 +46,7 @@ async function hang(
     await body(proc, pid)
   } finally {
     proc.kill("SIGKILL")
-    if (running(pid)) process.kill(pid, "SIGKILL")
+    kill(pid)
   }
 }
 
@@ -63,12 +63,12 @@ async function readLine(stream: ReadableStream<Uint8Array>, prefix: string) {
   }
 }
 
-function running(pid: number) {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false
+// The fixture's child can exit between any liveness check and the kill, so a missing process is not an error.
+function kill(pid: number) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return
   try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
+    process.kill(pid, "SIGKILL")
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error
   }
 }

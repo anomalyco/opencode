@@ -66,14 +66,16 @@ const SUBMIT = Symbol("submit")
 // Device-flow codes such as "R283-GOUEO"; when present they are copied instead of the URL.
 const OAUTH_CODE = /[A-Z0-9]{4}-[A-Z0-9]{4,5}/
 
+// OpenCode Go connects through OpenCode, so it's only listed for people who already saved a Go key.
 export function integrationOptions(list: IntegrationInfo[]) {
-  return list.toSorted(
-    (a, b) =>
-      Number(b.metadata?.source === "mcp") - Number(a.metadata?.source === "mcp") ||
-      (INTEGRATION_PRIORITY[a.id] ?? 99) - (INTEGRATION_PRIORITY[b.id] ?? 99) ||
-      a.name.localeCompare(b.name) ||
-      a.id.localeCompare(b.id),
-  )
+  return list
+    .filter((integration) => integration.id !== "opencode-go" || credentialConnections(integration).length > 0)
+    .toSorted(
+      (a, b) =>
+        (INTEGRATION_PRIORITY[a.id] ?? 99) - (INTEGRATION_PRIORITY[b.id] ?? 99) ||
+        a.name.localeCompare(b.name) ||
+        a.id.localeCompare(b.id),
+    )
 }
 
 export function connectMethods(integration: IntegrationInfo): ConnectMethod[] {
@@ -105,9 +107,12 @@ export function DialogIntegration(
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
   const location = currentLocation.ref ?? data.location.default()
+  // The MCP dialog signs its servers in through `integrationID`; the connect menu leaves them to it.
   const integrations = createMemo(() =>
-    integrationOptions(data.location.integration.list(location) ?? []).filter(
-      (integration) => props.integrationID === undefined || integration.id === props.integrationID,
+    integrationOptions(data.location.integration.list(location) ?? []).filter((integration) =>
+      props.integrationID === undefined
+        ? integration.metadata?.source !== "mcp"
+        : integration.id === props.integrationID,
     ),
   )
 
@@ -129,7 +134,6 @@ export function DialogIntegration(
       const credentials = credentialConnections(integration)
       let category = "Services"
       if (integration.id in INTEGRATION_PRIORITY) category = "Popular"
-      if (integration.metadata?.source === "mcp") category = "MCP"
       const status = integration.connections[0]?.status
       return {
         title: integration.name,
@@ -665,6 +669,7 @@ function OAuthAuto(props: {
   const toast = useToast()
   const clipboard = useClipboard()
   const newDesigns = useNewDesigns()
+  const theme = useTheme().surface("dialog")
   let timer: ReturnType<typeof setTimeout> | undefined
   let settled = false
 
@@ -685,8 +690,24 @@ function OAuthAuto(props: {
       .catch(toast.error)
   }
 
+  const [error, setError] = createSignal<string>()
+  const paste = (value: string) => {
+    if (!value.trim()) return open()
+    setError(undefined)
+    void client.api.integration.oauth
+      .complete({
+        integrationID: props.integration.id,
+        attemptID: props.attempt.attemptID,
+        location: locationQuery(props.location),
+        code: value,
+      })
+      .catch((cause) => setError(errorMessage(cause)))
+  }
+
   Keymap.createLayer(() => ({
     mode: "modal",
+    // The paste prompt owns typing and Enter.
+    enabled: !props.attempt.paste,
     commands: [
       { bind: newDesigns() ? "return" : "o", title: "Open authorization URL", group: "Dialog", run: open },
       { bind: "c", title: "Copy authorization details", group: "Dialog", run: copy },
@@ -733,14 +754,44 @@ function OAuthAuto(props: {
   })
 
   return (
-    <OAuthView
-      title={props.title}
-      url={props.attempt.url}
-      instructions={props.attempt.instructions}
-      message="Waiting for authorization…"
-      onCopy={copy}
-      onOpen={open}
-    />
+    <Show
+      when={props.attempt.paste}
+      fallback={
+        <OAuthView
+          title={props.title}
+          url={props.attempt.url}
+          instructions={props.attempt.instructions}
+          message="Waiting for authorization…"
+          onCopy={copy}
+          onOpen={open}
+        />
+      }
+    >
+      <DialogPrompt
+        title={props.title}
+        placeholder="Redirect URL"
+        onConfirm={paste}
+        actions={[
+          {
+            title: "copy link",
+            command: "dialog.integration.copy",
+            commandTitle: "Copy authorization link",
+            onTrigger: copy,
+          },
+        ]}
+        description={() => (
+          <box gap={1}>
+            <text fg={theme.text.muted}>{props.attempt.instructions}</text>
+            <Link href={props.attempt.url} fg={theme.markdown.link} />
+            <text fg={theme.text.muted}>
+              Waiting for authorization… Press enter to open the link. If the browser can't reach this machine, paste
+              the URL it was redirected to.
+            </text>
+            <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
+          </box>
+        )}
+      />
+    </Show>
   )
 }
 
@@ -756,7 +807,6 @@ function OAuthCode(props: {
   const client = useClient()
   const toast = useToast()
   const theme = useTheme().surface("dialog")
-  const newDesigns = useNewDesigns()
   const [error, setError] = createSignal<string>()
   let settled = false
 
@@ -772,7 +822,6 @@ function OAuthCode(props: {
   return (
     <DialogPrompt
       title={props.title}
-      subtitle={props.attempt.instructions}
       placeholder="Authorization code"
       onConfirm={(code) => {
         if (!code) return
@@ -791,9 +840,7 @@ function OAuthCode(props: {
       }}
       description={() => (
         <box gap={1}>
-          <Show when={!newDesigns()}>
-            <text fg={theme.text.muted}>{props.attempt.instructions}</text>
-          </Show>
+          <text fg={theme.text.muted}>{props.attempt.instructions}</text>
           <Link href={props.attempt.url} fg={theme.markdown.link} />
           <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
         </box>
@@ -1123,12 +1170,15 @@ function textAnswer(
               resolve(value)
             }}
             description={() => (
-              <box gap={1}>
-                <Show when={field.description}>
-                  {(description) => <text fg={theme.text.muted}>{description()}</text>}
-                </Show>
-                <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
-              </box>
+              // An empty box would still take a row in the prompt's gap, so render nothing without content.
+              <Show when={field.description || error()}>
+                <box gap={1}>
+                  <Show when={field.description}>
+                    {(description) => <text fg={theme.text.muted}>{description()}</text>}
+                  </Show>
+                  <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
+                </box>
+              </Show>
             )}
           />
         )
@@ -1262,7 +1312,7 @@ async function connected(
     data.location.provider.sync(location),
   ])
   toast.show({ variant: "success", message: `Connected ${integration.name}` })
-  if (onConnected && integration.metadata?.source !== "mcp") {
+  if (onConnected) {
     onConnected(providerID(data, location, integration.id))
     return
   }

@@ -3,6 +3,20 @@
 @import "@opencode/ui/styles/tokens";
 @import "tw-animate-css";
 
+/* Set on the timeline viewport and changed on every frame while the composer region grows. Neither inherits, so a change
+   restyles the viewport alone instead of every row inside it. */
+@property --session-timeline-inset {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --session-timeline-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
   src: url("/assets/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
@@ -50,6 +64,13 @@
   font-display: swap;
 }
 
+/* Panel motion sets this on the one element whose own layout reads it. An inherited property would restyle every
+   element under that element each time a flight starts or lands. */
+@property --panel-hold-width {
+  syntax: "*";
+  inherits: false;
+}
+
 @media (display-mode: standalone) {
   /* WebKit excludes safe-area insets from dvh in installed apps. */
   #root {
@@ -85,6 +106,10 @@
     );
   }
 
+  [data-slot="session-timeline-scroll"] > .scroll-view__viewport:has(> [data-slot="session-header-inset"]) {
+    scroll-padding-block-start: calc(var(--sticky-accordion-top, 0px) + 16px);
+  }
+
   /* The review panel's visible width, which the header fade below tracks while the panel animates. Its fixed-width
      content holds nothing else that reads it. */
   #review-panel,
@@ -93,7 +118,8 @@
   }
 
   /* Like the composer toolbar, fade only clipped content without reserving layout space.
-     The fade contracts as overflow clears; the second mask preserves the header divider. */
+     The fade contracts as overflow clears; the second mask preserves the header divider.
+     The third keeps the review toggle's slot at the bar's end. */
   #review-panel .session-review-v2-tabs-bar {
     --session-review-header-fade: clamp(0px, calc(100% - 100cqi), 24px);
     mask-image:
@@ -102,7 +128,7 @@
         #000 calc(100cqi - 40px - var(--session-review-header-fade)),
         transparent calc(100cqi - 40px)
       ),
-      linear-gradient(to top, #000 1px, transparent 1px);
+      linear-gradient(to top, #000 1px, transparent 1px), linear-gradient(to left, #000 40px, transparent 40px);
 
     &:dir(rtl) {
       mask-image:
@@ -111,17 +137,31 @@
           #000 calc(100cqi - 40px - var(--session-review-header-fade)),
           transparent calc(100cqi - 40px)
         ),
-        linear-gradient(to top, #000 1px, transparent 1px);
+        linear-gradient(to top, #000 1px, transparent 1px), linear-gradient(to right, #000 40px, transparent 40px);
     }
   }
 
-  ::highlight(timeline-search-hit) {
-    background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+  /* Root rules reach every element where highlights inherit; see quote-highlight.css in session-ui. */
+  @supports selector(:host-context(*)) {
+    :root::highlight(timeline-search-hit) {
+      background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+    }
+
+    :root::highlight(timeline-search-hit-active) {
+      background-color: var(--v2-icon-icon-accent);
+      color: var(--v2-background-bg-deep);
+    }
   }
 
-  ::highlight(timeline-search-hit-active) {
-    background-color: var(--v2-icon-icon-accent);
-    color: var(--v2-background-bg-deep);
+  @supports not selector(:host-context(*)) {
+    ::highlight(timeline-search-hit) {
+      background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+    }
+
+    ::highlight(timeline-search-hit-active) {
+      background-color: var(--v2-icon-icon-accent);
+      color: var(--v2-background-bg-deep);
+    }
   }
 
   [data-component="menu-v2-content"].desktop-app-menu {
@@ -243,15 +283,6 @@
     }
   }
 
-  @keyframes home-projects-fade-bottom {
-    from {
-      visibility: visible;
-    }
-    to {
-      visibility: hidden;
-    }
-  }
-
   @keyframes session-dropzone-enter {
     from {
       opacity: 0;
@@ -311,7 +342,7 @@
   }
 
   [data-color-scheme="dark"] [data-component="timeline-quote"] {
-    background-color: var(--v2-background-bg-layer-01);
+    background-color: var(--v2-background-bg-layer-02);
   }
 
   :root[data-motion="reduce"] {
@@ -323,16 +354,36 @@
     }
   }
 
-  [data-slot="home-projects-scroll"] {
-    timeline-scope: --home-projects-scroll;
+  /* A mask fades the rows themselves, so the edges work over any background, including the dropdown's. */
+  [data-slot="home-projects-viewport"][data-fade-top] {
+    --mask-start: 16px;
+  }
+
+  [data-slot="home-projects-viewport"][data-fade-bottom] {
+    --mask-end: 16px;
+  }
+
+  [data-slot="home-projects-viewport"]:is([data-fade-top], [data-fade-bottom]) {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--mask-start, 0px),
+      black calc(100% - var(--mask-end, 0px)),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--mask-start, 0px),
+      black calc(100% - var(--mask-end, 0px)),
+      transparent
+    );
   }
 
   [data-slot="manage-models-scroll"] {
     timeline-scope: --manage-models-scroll;
   }
 
-  [data-slot="home-projects-scroll"]::before,
-  [data-slot="home-projects-scroll"]::after,
   [data-slot="manage-models-scroll"]::before {
     content: "";
     position: absolute;
@@ -344,37 +395,9 @@
     visibility: hidden;
   }
 
-  [data-slot="home-projects-scroll"]::before {
-    top: 0;
-    background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
-  }
-
   [data-slot="manage-models-scroll"]::before {
     top: 0;
     background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
-  }
-
-  [data-slot="home-projects-scroll"]::after {
-    bottom: 0;
-    background: linear-gradient(to top, var(--v2-background-bg-base), transparent);
-  }
-
-  @supports (animation-timeline: --home-projects-scroll) and (timeline-scope: --home-projects-scroll) {
-    [data-slot="home-projects-viewport"] {
-      scroll-timeline: --home-projects-scroll y;
-    }
-
-    [data-slot="home-projects-scroll"]::before {
-      animation: home-projects-fade-top linear both;
-      animation-timeline: --home-projects-scroll;
-      animation-range: 0 0.1px;
-    }
-
-    [data-slot="home-projects-scroll"]::after {
-      animation: home-projects-fade-bottom linear both;
-      animation-timeline: --home-projects-scroll;
-      animation-range: calc(100% - 1.1px) calc(100% - 1px);
-    }
   }
 
   @supports (animation-timeline: --manage-models-scroll) and (timeline-scope: --manage-models-scroll) {

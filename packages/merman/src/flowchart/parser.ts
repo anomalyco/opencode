@@ -274,6 +274,61 @@ function hasInternalStatementSeparator(line: string): boolean {
   return false
 }
 
+function resolveSubgraphEndpoints(
+  nodes: Map<string, FlowchartNode>,
+  edges: readonly FlowchartEdge[],
+  subgraphs: FlowchartSubgraph[],
+  explicitShapeIds: ReadonlySet<string>,
+  referencedInOpenSubgraphs: ReadonlyMap<string, ReadonlySet<string>>,
+): void {
+  const resolved = new Set<string>()
+  const descendantsOf = (subgraphId: string): Set<string> => {
+    const ids = new Set<string>()
+    for (const child of subgraphs) {
+      if (child.parentId !== subgraphId) continue
+      ids.add(child.id)
+      for (const nested of descendantsOf(child.id)) ids.add(nested)
+    }
+    return ids
+  }
+  const membersOf = (subgraphId: string, descendants: ReadonlySet<string>): Set<string> => {
+    const ids = new Set<string>()
+    for (const candidate of subgraphs) {
+      if (candidate.id !== subgraphId && !descendants.has(candidate.id)) continue
+      for (const nodeId of candidate.nodeIds) {
+        if (nodeId === subgraphId || descendants.has(nodeId) || resolved.has(nodeId)) continue
+        ids.add(nodeId)
+      }
+    }
+    return ids
+  }
+
+  for (const subgraph of [...subgraphs].reverse()) {
+    subgraph.nodeIds = subgraph.nodeIds.filter((id) => !resolved.has(id))
+    const descendants = descendantsOf(subgraph.id)
+    const members = membersOf(subgraph.id, descendants)
+    const linksSelfOrDescendant = edges.some(
+      (edge) =>
+        (edge.from === subgraph.id && (edge.to === subgraph.id || members.has(edge.to) || descendants.has(edge.to))) ||
+        (edge.to === subgraph.id && (members.has(edge.from) || descendants.has(edge.from))),
+    )
+    if (
+      explicitShapeIds.has(subgraph.id) ||
+      referencedInOpenSubgraphs.get(subgraph.id)?.has(subgraph.id) ||
+      members.size === 0 ||
+      linksSelfOrDescendant
+    ) {
+      continue
+    }
+    resolved.add(subgraph.id)
+    nodes.delete(subgraph.id)
+  }
+
+  for (const subgraph of subgraphs) {
+    subgraph.nodeIds = subgraph.nodeIds.filter((id) => !resolved.has(id))
+  }
+}
+
 export function isMermaidFlowchartDiagram(content: string): boolean {
   return FLOWCHART_HEADER_RE.test(firstMeaningfulMermaidLine(content) ?? "")
 }
@@ -283,6 +338,18 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
   const edges: FlowchartEdge[] = []
   const subgraphs: FlowchartSubgraph[] = []
   const subgraphStack: Array<{ subgraph: FlowchartSubgraph; lineNumber: number; sourceLine: string }> = []
+  const explicitShapeIds = new Set<string>()
+  const referencedInOpenSubgraphs = new Map<string, Set<string>>()
+  const trackNodeToken = (stripped: string): string => {
+    const node = ensureNode(nodes, stripped)
+    if (hasExplicitNodeShape(stripped)) explicitShapeIds.add(node.id)
+    for (const open of subgraphStack) {
+      const set = referencedInOpenSubgraphs.get(node.id) ?? new Set<string>()
+      set.add(open.subgraph.id)
+      referencedInOpenSubgraphs.set(node.id, set)
+    }
+    return node.id
+  }
   let direction: FlowchartDirection = DEFAULT_DIRECTION
 
   for (const source of meaningfulNumberedMermaidLines(content)) {
@@ -348,22 +415,11 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
       ].map((group) => splitNodeGroup(group).map(stripNodeToken))
 
       if (nodeGroups.every((group) => group.every((token) => token.length > 0))) {
-        const unsupportedEndpoint = nodeGroups.find((group, index) => {
-          const orderOnlyEndpoint = edgeOperators[index - 1]?.orderOnly || edgeOperators[index]?.orderOnly
-          return group.some(
-            (stripped) =>
-              !(orderOnlyEndpoint && subgraphs.some((subgraph) => subgraph.id === stripped)) &&
-              !isSupportedNodeToken(stripped),
-          )
-        })
+        const unsupportedEndpoint = nodeGroups.find((group) =>
+          group.some((stripped) => !isSupportedNodeToken(stripped)),
+        )
         if (unsupportedEndpoint) throw new MermaidSyntaxError("flowchart", source.lineNumber, line)
-        const chainNodeIds = nodeGroups.map((group, index) => {
-          const orderOnlyEndpoint = edgeOperators[index - 1]?.orderOnly || edgeOperators[index]?.orderOnly
-          return group.map((stripped) => {
-            if (orderOnlyEndpoint && subgraphs.some((subgraph) => subgraph.id === stripped)) return stripped
-            return ensureNode(nodes, stripped).id
-          })
-        })
+        const chainNodeIds = nodeGroups.map((group) => group.map(trackNodeToken))
         for (const nodeId of chainNodeIds.flat()) {
           if (nodes.has(nodeId)) addNodeToSubgraph(currentSubgraph, nodeId)
         }
@@ -389,7 +445,7 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
 
     const nodeGroup = splitNodeGroup(line)
     if (nodeGroup.every(isSupportedNodeToken)) {
-      for (const token of nodeGroup) addNodeToSubgraph(currentSubgraph, ensureNode(nodes, stripNodeToken(token)).id)
+      for (const token of nodeGroup) addNodeToSubgraph(currentSubgraph, trackNodeToken(stripNodeToken(token)))
       continue
     }
 
@@ -406,5 +462,6 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
     )
   }
 
+  resolveSubgraphEndpoints(nodes, edges, subgraphs, explicitShapeIds, referencedInOpenSubgraphs)
   return { direction, nodes: [...nodes.values()], edges, subgraphs }
 }

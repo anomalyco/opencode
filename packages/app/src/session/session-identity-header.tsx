@@ -1,5 +1,5 @@
 import type { SessionInfo } from "@opencode/client/promise"
-import type { MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
+import type { MountedSession, SessionScreen } from "@opencode/plugin/gui"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -22,16 +22,18 @@ import {
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { ExtensionSlot } from "@/runtime/extension/render"
+import { PluginSlot } from "@/runtime/plugin/render"
 import { containsDirectory, getFilename } from "@opencode/util/path"
 import { useServer } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { ServerLabel } from "@/servers/registry/label"
 import { fileManagerApp } from "@/home/projects/file-manager"
+import { useProjectBrowser } from "@/home/projects/browse"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useLayout, type LocalProject } from "@/shell/state/layout"
+import { useProjectNavigation } from "@/shell/project-navigation"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useSettingsSurface } from "@/settings/surface"
 import { pathKey } from "@/workspaces/path-key"
@@ -47,27 +49,40 @@ import "./session-identity-header.css"
 
 const SessionHeaderCollapse = createContext<() => number>(() => 0)
 
-export function SessionTitleHeader(props: ParentProps) {
+export function SessionTitleHeader(props: ParentProps<{ separateFade?: boolean }>) {
   return (
     <>
       {/* The bottom inset reserves room for the fade without covering rows stuck below the bar. */}
       <div data-session-title class="pointer-events-none sticky top-0 z-30 w-full pb-4">
-        <div class="pointer-events-auto flex items-center bg-v2-background-bg-base pe-3 ps-2.5">
+        <div class="pointer-events-auto flex items-center bg-v2-background-bg-base pe-[var(--session-header-inset-end,12px)] ps-2.5">
           <CollapsedSidebarToggleSpace />
           <div class="min-w-0 flex-1">{props.children}</div>
         </div>
       </div>
-      {/* Stuck timeline headers stack above this fade, so it only fades content scrolling under the bar. */}
-      <div
-        aria-hidden="true"
-        class="session-header-fade pointer-events-none sticky z-[5] -mt-4 h-4 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base),transparent)]"
-      />
+      <Show when={!props.separateFade}>
+        <SessionHeaderFade />
+      </Show>
     </>
   )
 }
 
+export function SessionHeaderFade() {
+  // Stuck timeline headers stack above this fade, so it only fades content scrolling under the bar.
+  return (
+    <div
+      aria-hidden="true"
+      class="session-header-fade pointer-events-none sticky z-[5] -mt-4 h-4 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base),transparent)]"
+    />
+  )
+}
+
 export function SessionHeaderLayout(
-  props: ParentProps<{ title: string | undefined; location: JSX.Element; actions?: JSX.Element }>,
+  props: ParentProps<{
+    title: string | undefined
+    location: JSX.Element
+    /** Receives the fit: `compact` while the title needs the room the actions' details take. */
+    actions?: (fit: { readonly compact: boolean }) => JSX.Element
+  }>,
 ) {
   const fit = createSessionHeaderFit()
 
@@ -81,8 +96,7 @@ export function SessionHeaderLayout(
           </span>
           {props.children}
         </div>
-        {/* Each read of a JSX prop renders it again, so the actions render once, from the condition's value. */}
-        <Show when={props.actions}>{(actions) => <div class="session-header-actions">{actions()}</div>}</Show>
+        <Show when={props.actions}>{(actions) => <div class="session-header-actions">{actions()(fit)}</div>}</Show>
       </div>
     </SessionHeaderCollapse.Provider>
   )
@@ -108,6 +122,8 @@ export function SessionLocation(props: {
   const platform = usePlatform()
   const layout = useLayout()
   const settingsSurface = useSettingsSurface()
+  const projectNavigation = useProjectNavigation()
+  const browse = useProjectBrowser()
   const navigate = useNavigate()
   const collapse = useContext(SessionHeaderCollapse)
   const [store, setStore] = createStore({ open: false })
@@ -147,18 +163,14 @@ export function SessionLocation(props: {
       void server.ctx.data.location.vcs.sync({ directory: props.project.worktree }).catch(() => undefined)
   }
 
-  const copyPath = async () => {
-    const directory = props.directory
-
-    if (!directory) return
-
+  const copyText = async (text: string) => {
     try {
-      await (platform.writeClipboardText?.(directory) ?? navigator.clipboard.writeText(directory))
+      await (platform.writeClipboardText?.(text) ?? navigator.clipboard.writeText(text))
       showToast({
         variant: "success",
         icon: "circle-check",
         title: language.t("common.copied"),
-        description: directory,
+        description: text,
       })
     } catch (cause) {
       showToast({
@@ -185,6 +197,9 @@ export function SessionLocation(props: {
     const project = props.project
 
     if (!project) return
+
+    if (projectNavigation()) return browse({ server: server.key, directory: project.worktree })
+
     server.ctx.projects.touch(project.worktree)
     layout.home.setSelection({ server: server.key, directory: project.worktree })
     navigate("/")
@@ -205,7 +220,8 @@ export function SessionLocation(props: {
 
   return (
     <>
-      <Menu placement="bottom-start" gutter={4} modal={false} onOpenChange={onOpenChange}>
+      {/* The shift lines the card's icons and labels up with the trigger's: 2px card + 8px row padding vs the trigger's 6px. */}
+      <Menu placement="bottom-start" gutter={4} shift={-4} modal={false} onOpenChange={onOpenChange}>
         <Tooltip
           placement="bottom"
           value={<bdi dir="auto">{label()}</bdi>}
@@ -215,7 +231,7 @@ export function SessionLocation(props: {
           <Menu.Trigger
             data-slot="session-location-trigger"
             aria-label={label()}
-            class="relative flex h-7 min-w-0 max-w-full shrink items-center gap-2 overflow-hidden rounded-[6px] px-1.5 text-start text-[13px] font-normal leading-[var(--line-height-compact)] tracking-[-0.04px] text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-hover data-[expanded]:text-v2-text-text-base"
+            class="relative flex h-7 min-w-0 max-w-full shrink items-center gap-2 overflow-hidden rounded-[6px] px-1.5 text-start text-[13px] font-normal leading-[var(--line-height-compact)] tracking-[-0.04px] text-v2-text-text-muted transition-[background-color,color] hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base data-[expanded]:bg-v2-overlay-simple-overlay-hover data-[expanded]:text-v2-text-text-base"
           >
             <ProjectAvatar
               class="shrink-0"
@@ -231,7 +247,7 @@ export function SessionLocation(props: {
             <Show when={!props.compact && worktree()}>
               {(name) => (
                 <>
-                  <SessionHeaderSeparator glyph="slash" gap={0} before={0} after={0} />
+                  <SessionHeaderSeparator gap={0} before={0} after={0} />
                   <Icon
                     name="outline-worktree"
                     class="session-location-worktree-icon shrink-0 text-v2-icon-icon-muted"
@@ -266,7 +282,7 @@ export function SessionLocation(props: {
             <Show when={worktree() || git()}>
               <Show when={props.context} fallback={workspace()}>
                 {(context) => (
-                  <ExtensionSlot
+                  <PluginSlot
                     at="session.location.workspace"
                     fallback={workspace()}
                     input={{
@@ -291,10 +307,10 @@ export function SessionLocation(props: {
               </Show>
             </Show>
             <Show when={git()}>
-              <SessionLocationDetail icon="branch">
-                <Show
-                  when={branch()}
-                  fallback={
+              <Show
+                when={branch()}
+                fallback={
+                  <SessionLocationDetail icon="branch">
                     <span class="flex min-w-0 items-center gap-1.5">
                       <span class="shrink-0 whitespace-nowrap">{language.t("session.location.noBranch")}</span>
                       <Show when={baseBranch()}>
@@ -308,15 +324,50 @@ export function SessionLocation(props: {
                         )}
                       </Show>
                     </span>
-                  }
-                >
-                  {branch()}
-                </Show>
-              </SessionLocationDetail>
+                  </SessionLocationDetail>
+                }
+              >
+                {(name) => (
+                  <Menu.Sub gutter={4} overflowPadding={16} overlap>
+                    <Menu.SubTrigger class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted">
+                      <Icon name="branch" class="shrink-0 text-v2-icon-icon-muted" />
+                      <bdi dir="auto" class="min-w-0 truncate">
+                        {name()}
+                      </bdi>
+                    </Menu.SubTrigger>
+                    <Menu.Portal>
+                      <Menu.SubContent class="w-max min-w-[172px] max-w-[calc(100vw-32px)]" aria-label={name()}>
+                        <Menu.Item onSelect={() => void copyText(name())}>
+                          <Icon name="copy" class="text-v2-icon-icon-muted" />
+                          {language.t("session.location.copyBranch")}
+                        </Menu.Item>
+                        <Show when={props.context}>
+                          {(context) => (
+                            <PluginSlot
+                              at="session.location.branch.menu"
+                              input={{
+                                get session() {
+                                  return context().session
+                                },
+                                get screen() {
+                                  return context().screen
+                                },
+                                get shown() {
+                                  return store.open
+                                },
+                              }}
+                            />
+                          )}
+                        </Show>
+                      </Menu.SubContent>
+                    </Menu.Portal>
+                  </Menu.Sub>
+                )}
+              </Show>
             </Show>
             <Show when={props.context}>
               {(context) => (
-                <ExtensionSlot
+                <PluginSlot
                   at="session.location.menu"
                   input={{
                     get session() {
@@ -333,28 +384,32 @@ export function SessionLocation(props: {
               )}
             </Show>
             <Menu.Separator />
-            <SessionLocationDetail icon="server">
-              <ServerLabel server={server.conn} hint />
-            </SessionLocationDetail>
+            {/* The only server, on this computer, needs no name. */}
+            <Show when={servers.list.length > 1 || !servers.current(server.conn)}>
+              <SessionLocationDetail icon="server">
+                <ServerLabel server={server.conn} hint />
+              </SessionLocationDetail>
+            </Show>
             <Show when={props.directory}>
               {(directory) => (
                 <Menu.Sub gutter={4} overflowPadding={16} overlap>
                   <Menu.SubTrigger
                     data-slot="session-location-path"
                     class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted"
-                    style={{ height: "auto", "padding-block": "6px" }}
+                    // The split spans are flex items, which the accessible name would join with a space.
+                    aria-label={directory()}
                   >
-                    <span class="flex min-w-0 items-start gap-2 text-[12px] leading-4 text-v2-text-text-muted">
-                      <Icon name="folder" class="shrink-0 text-v2-icon-icon-muted" />
-                      <bdi dir="ltr" class="min-w-0 select-text break-all">
-                        {directory()}
-                      </bdi>
-                    </span>
+                    <Icon name="folder" class="shrink-0 text-v2-icon-icon-muted" />
+                    {/* Truncates in the middle: the parent folders shrink, the last folder stays whole. */}
+                    <bdi dir="ltr" class="flex min-w-0 select-text whitespace-nowrap">
+                      <span class="min-w-0 truncate">{directory().slice(0, lastSeparator(directory()))}</span>
+                      <span class="max-w-full shrink-0 truncate">{directory().slice(lastSeparator(directory()))}</span>
+                    </bdi>
                   </Menu.SubTrigger>
                   <Menu.Portal>
                     <Menu.SubContent class="w-max max-w-[calc(100vw-32px)]" aria-label={directory()}>
-                      <Menu.Item onSelect={() => void copyPath()}>
-                        <Icon name="outline-copy" class="text-v2-icon-icon-muted" />
+                      <Menu.Item onSelect={() => void copyText(directory())}>
+                        <Icon name="copy" class="text-v2-icon-icon-muted" />
                         {language.t("session.location.copyPath")}
                       </Menu.Item>
                       <Show when={canReveal()}>
@@ -362,6 +417,24 @@ export function SessionLocation(props: {
                           <Icon name="outline-arrow-up-right" class="text-v2-icon-icon-muted" />
                           {language.t(fileManagerApp(platform.os ?? "unknown").actionLabel)}
                         </Menu.Item>
+                      </Show>
+                      <Show when={props.context}>
+                        {(context) => (
+                          <PluginSlot
+                            at="session.location.path.menu"
+                            input={{
+                              get session() {
+                                return context().session
+                              },
+                              get screen() {
+                                return context().screen
+                              },
+                              get shown() {
+                                return store.open
+                              },
+                            }}
+                          />
+                        )}
                       </Show>
                     </Menu.SubContent>
                   </Menu.Portal>
@@ -377,7 +450,8 @@ export function SessionLocation(props: {
         </Menu.Portal>
       </Menu>
       <Show when={props.trailing}>
-        <SessionHeaderSeparator glyph="slash" gap={8} before={6} after={4} />
+        {/* A child's lineage follows, whose buttons pad 6px; a title pads 4px. */}
+        <SessionHeaderSeparator gap={8} before={6} after={props.compact ? 6 : 4} />
       </Show>
     </>
   )
@@ -385,11 +459,15 @@ export function SessionLocation(props: {
 
 function SessionLocationDetail(props: ParentProps<{ icon: ComponentProps<typeof Icon>["name"] }>) {
   return (
-    <div class="flex h-7 min-w-0 items-center gap-2 px-3 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px] text-v2-text-text-base">
+    <div class="flex h-7 min-w-0 items-center gap-2 px-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px] text-v2-text-text-base">
       <Icon name={props.icon} class="shrink-0 text-v2-icon-icon-muted" />
       <span class="flex min-w-0 truncate">{props.children}</span>
     </div>
   )
+}
+
+function lastSeparator(path: string) {
+  return Math.max(0, path.lastIndexOf("/"), path.lastIndexOf("\\"))
 }
 
 export function SessionAncestorTrail(props: {
@@ -437,21 +515,20 @@ export function SessionAncestorTrail(props: {
                 data-slot={ancestor.direct ? "session-title-parent" : "session-title-ancestor"}
                 data-session-id={ancestor.id}
                 title={ancestor.title}
-                class="max-w-[min(200px,40vw)] shrink-0 truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
-                classList={{ "ps-1": index() === 0 }}
+                class="h-7 max-w-[min(200px,40vw)] shrink-0 truncate rounded-[6px] px-1.5 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted"
                 onClick={() => open(props.sessionID, ancestor.id)}
               >
                 <bdi dir="auto">{ancestor.title}</bdi>
               </button>
               <Show when={index() < ancestors().length - 1}>
-                <SessionHeaderSeparator before={0} after={0} />
+                <SessionHeaderSeparator gap={8} before={6} after={6} />
               </Show>
             </>
           )}
         </For>
       </div>
       <Show when={props.trailing}>
-        <SessionHeaderSeparator before={0} />
+        <SessionHeaderSeparator gap={8} before={6} after={4} />
       </Show>
     </div>
   )
@@ -523,7 +600,11 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
   })
 
   const directory = createMemo(
-    () => props.session?.location.directory ?? pending()?.draft.directory ?? info()?.directory,
+    () =>
+      props.session?.location.directory ??
+      pending()?.view().directory ??
+      pending()?.draft.directory ??
+      info()?.directory,
   )
 
   const title = createMemo(() =>

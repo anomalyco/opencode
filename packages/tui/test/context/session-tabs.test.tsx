@@ -353,26 +353,6 @@ test("lists closed tabs newest first and reopens a selected entry", async () => 
   }
 })
 
-test("stores session tabs for the current working directory by default", async () => {
-  const setup = await renderSessionTabs("first")
-
-  try {
-    const file = path.join(setup.state, "test", "tui", "tabs.json")
-    await wait(async () => {
-      if (!(await Bun.file(file).exists())) return false
-      const stored = await Bun.file(file).json()
-      return stored.cwd[directory]?.tabs.some((tab: { sessionID: string }) => tab.sessionID === "first")
-    })
-    const stored = await Bun.file(file).json()
-    expect(stored.global).toEqual({ tabs: [], unread: {} })
-    expect(Object.keys(stored.cwd)).toEqual([directory])
-    expect(stored.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first"])
-    expect(stored.cwd[directory].unread).toEqual({})
-  } finally {
-    await setup.destroy()
-  }
-})
-
 test("keeps scroll anchors for open session tabs", async () => {
   const setup = await renderSessionTabs("first")
 
@@ -743,6 +723,39 @@ test("closing a tab is not undone by another TUI viewing the same session", asyn
       2_000,
       "first client to observe reopen",
     )
+  } finally {
+    await Promise.allSettled(clients.map((client) => client.destroy()))
+  }
+})
+
+test("closing a session whose tab another TUI closed selects its former neighbour", async () => {
+  await using temporary = await tmpdir()
+  const clients: Awaited<ReturnType<typeof renderSessionTabs>>[] = []
+
+  try {
+    const first = await renderSessionTabs("one", {
+      state: temporary.path,
+      persisted: ["one", "two", "three", "four", "five"],
+    })
+    clients.push(first)
+    const second = await renderSessionTabs("three", { state: temporary.path })
+    clients.push(second)
+    await wait(() => second.tabs.tabs().length === 5, 2_000, "second client to load tabs")
+
+    first.tabs.close("three")
+    await first.flush()
+    await wait(
+      () => !second.tabs.tabs().some((tab) => tab.sessionID === "three"),
+      2_000,
+      "second client to observe close",
+    )
+    // The other client's close leaves this view in place rather than switching sessions under the user.
+    expect(second.route.data).toEqual({ type: "session", sessionID: "three" })
+
+    second.tabs.close()
+    await wait(() => second.route.data.type !== "session" || second.route.data.sessionID !== "three")
+    expect(second.route.data).toEqual({ type: "session", sessionID: "four" })
+    expect(second.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["one", "two", "four", "five"])
   } finally {
     await Promise.allSettled(clients.map((client) => client.destroy()))
   }

@@ -2,8 +2,10 @@ export * as McpInstructions from "./instructions.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Permission } from "../permission.js"
+import type { CodeModeCatalog } from "../codemode/catalog.js"
+import type { Tool } from "../tool.js"
 import { McpTool } from "../tool/mcp.js"
+import { normalizedName } from "../tool/runtime.js"
 import { Mcp } from "./index.js"
 import { Instructions } from "../instructions/index.js"
 
@@ -28,40 +30,33 @@ const entries = (servers: ReadonlyArray<Summary>) =>
 const render = (servers: ReadonlyArray<Summary>) =>
   ["<mcp_instructions>", ...entries(servers), "</mcp_instructions>"].join("\n")
 
-const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary>) => {
-  const diff = Instructions.diffByKey(
-    previous,
-    current,
-    (server) => server.server,
-    (before, after) => before.instructions !== after.instructions || before.codemode !== after.codemode,
-  )
-  // Added, changed, and removed servers render as deltas; the full list is restated only when no entry differs.
-  if (diff.added.length === 0 && diff.changed.length === 0 && diff.removed.length === 0)
-    return [
-      "The available MCP server instructions have changed. This list supersedes the previous one.",
-      render(current),
-    ].join("\n")
-  return [
-    ...(diff.added.length === 0
-      ? []
-      : ["New MCP server instructions are available in addition to those previously listed:", ...entries(diff.added)]),
-    ...(diff.changed.length === 0
-      ? []
-      : [
-          "The following MCP server instructions have changed. Each entry replaces the previously listed server with the same name:",
-          ...entries(diff.changed.map((change) => change.current)),
-        ]),
-    ...(diff.removed.length === 0
-      ? []
-      : [
-          `Instructions for the following MCP servers are no longer available: ${diff.removed.map((server) => server.server).join(", ")}.`,
-        ]),
-  ].join("\n")
+const update = Instructions.listUpdate<Summary>({
+  key: (server) => server.server,
+  changed: (before, after) => before.instructions !== after.instructions || before.codemode !== after.codemode,
+  entries,
+  render,
+  text: {
+    replaced: "The available MCP server instructions have changed. This list supersedes the previous one.",
+    added: "New MCP server instructions are available in addition to those previously listed:",
+    changed:
+      "The following MCP server instructions have changed. Each entry replaces the previously listed server with the same name:",
+    removed: (names) => `Instructions for the following MCP servers are no longer available: ${names}.`,
+  },
+})
+
+function catalogPaths(
+  items: ReadonlyArray<CodeModeCatalog.Tool | CodeModeCatalog.Namespace>,
+  prefix = "",
+): ReadonlyArray<string> {
+  return items.flatMap((item) => {
+    const path = prefix ? `${prefix}.${item.name}` : item.name
+    return item.type === "tool" ? [path] : catalogPaths(item.tools, path)
+  })
 }
 
 export interface Interface {
-  /** Lists server instructions reachable under the given ruleset; callers pass the merged agent and Session permissions. */
-  readonly load: (permissions: Permission.Ruleset) => Effect.Effect<Instructions.List>
+  /** Lists instructions for MCP servers that have at least one tool in the Session's tool snapshot. */
+  readonly load: (tools: Pick<Tool.Snapshot, "definitions" | "codeModeCatalog">) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpInstructions") {}
@@ -72,7 +67,7 @@ export const layer = Layer.effect(
     const mcp = yield* Mcp.Service
 
     return Service.of({
-      load: Effect.fn("McpInstructions.load")(function* (permissions) {
+      load: Effect.fn("McpInstructions.load")(function* (snapshot) {
         const source = (value: ReadonlyArray<Summary> | Instructions.Removed) =>
           Instructions.make<ReadonlyArray<Summary>>({
             key: Instructions.Key.make("core/mcp-guidance"),
@@ -87,22 +82,18 @@ export const layer = Layer.effect(
         const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
           concurrency: "unbounded",
         })
-        const canExecute = Permission.evaluate("execute", "*", permissions).effect !== "deny"
+        const direct = new Set(snapshot.definitions.map((tool) => tool.name))
+        const codemode = new Set(snapshot.codeModeCatalog ? catalogPaths(snapshot.codeModeCatalog.tools) : [])
         // Instructions are useful only when this Session can reach at least one server tool.
         const visible = instructions
           .flatMap((item) => {
+            const namespace = McpTool.namespace(item.server)
             const owned = tools.filter((tool) => tool.server === item.server)
-            const codemode = owned[0]?.codemode !== false
-            if (codemode && !canExecute) return []
-            if (
-              !owned.some(
-                (tool) =>
-                  Permission.evaluate(McpTool.name(tool.server, tool.name), "*", permissions).effect !== "deny",
-              )
-            )
-              return []
+            const inCodeMode = owned.some((tool) => codemode.has(`${namespace}.${normalizedName({ name: tool.name })}`))
+            const inDirect = owned.some((tool) => direct.has(McpTool.name(item.server, tool.name)))
+            if (!inCodeMode && !inDirect) return []
             return [
-              codemode
+              inCodeMode
                 ? { server: item.server, instructions: item.instructions }
                 : { server: item.server, instructions: item.instructions, codemode: false as const },
             ]

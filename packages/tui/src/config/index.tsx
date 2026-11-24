@@ -3,7 +3,7 @@ export * as Config from "."
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
-import { createContext, onCleanup, type JSX, useContext } from "solid-js"
+import { createContext, createMemo, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { safeWatch } from "../util/watch"
 import path from "path"
@@ -155,6 +155,9 @@ export const Info = Schema.Struct({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
+      submit_scroll: Schema.optional(Schema.Literals(["bottom", "keep"])).annotate({
+        description: "Jump to the latest message when sending a prompt, or keep the current transcript position",
+      }),
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning by default",
       }),
@@ -169,7 +172,7 @@ export const Info = Schema.Struct({
         description: "Show user attachment and tool-result images in the session transcript",
       }),
       tps: Schema.optional(Schema.Boolean).annotate({
-        description: "Show average tokens per second",
+        description: "Show output tokens per second while the model streams",
       }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
@@ -267,7 +270,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   keybinds: TuiKeybind.BindingLookupView
   leader: { timeout: number }
   mouse: boolean
-  cursor?: {
+  cursor: {
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
@@ -315,12 +318,10 @@ export function resolve(
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
     mouse: input.mouse ?? true,
-    cursor: input.cursor
-      ? {
-          style: input.cursor.style ?? "block",
-          blinking: input.cursor.blinking ?? true,
-        }
-      : undefined,
+    cursor: {
+      style: input.cursor?.style ?? "block",
+      blinking: input.cursor?.blinking ?? true,
+    },
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
@@ -353,16 +354,20 @@ export function ConfigProvider(props: {
   const [config, setConfig] = createStore(props.config)
   const host = props.service
   const apply = (info: Info) => setConfig(reconcile(resolve(info, props.options ?? { terminalSuspend: true })))
-  const update = async (update: (draft: any) => void) => {
+  let pending: Promise<unknown> = Promise.resolve()
+  const update: Interface["update"] = async (update) => {
     if (!host) throw new Error("Config updates are not available")
-    const info = await host.update(update)
-    apply(info)
-    return info
+    const save = pending.then(async () => {
+      const info = await host.update(update)
+      apply(info)
+      return info
+    })
+    pending = save.catch(() => {})
+    return save
   }
-  let reload = Promise.resolve()
   const watcher = host?.path
     ? safeWatch(path.dirname(host.path), () => {
-        reload = reload
+        pending = pending
           .then(() => host.get())
           .then(apply)
           .catch(() => {})
@@ -380,10 +385,19 @@ export function useConfig() {
   return value
 }
 
-/** Reactive accessor for the temporary "new-designs" experiment. */
+/**
+ * The configured textarea cursor, replaced only when the cursor config changes. A fresh object on every render effect
+ * would restyle the textarea whenever an unrelated prop changes, discarding a style a plugin set on it.
+ */
+export function useCursorStyle() {
+  const config = useConfig()
+  return createMemo(() => ({ style: config.data.cursor.style, blinking: config.data.cursor.blinking }))
+}
+
+/** Reactive accessor for the temporary "new-designs" experiment. On unless the config turns it off. */
 export function useNewDesigns() {
   const config = useConfig()
-  return () => config.data.experimental?.["new-designs"] === true
+  return () => config.data.experimental?.["new-designs"] !== false
 }
 
 /** Reactive accessor for the temporary "client-mcp" experiment. */

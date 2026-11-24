@@ -37,9 +37,10 @@ function mix(style: ComponentProps<"div">["style"], value?: string) {
 
   if (!style) return { "--card-accent": value }
 
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Solid's typed style prop is either a CSS string or an object
   if (typeof style === "string") return `${style};--card-accent:${value};`
 
-  return { ...(style as Record<string, string | number>), "--card-accent": value }
+  return { ...style, "--card-accent": value }
 }
 
 export function Card(props: CardProps) {
@@ -83,7 +84,7 @@ export function CardTitle(props: CardTitleProps) {
   const name = () => {
     if (split.icon === false || split.icon === null) return
 
-    if (typeof split.icon === "string") return split.icon
+    if (split.icon) return split.icon
 
     return pick(split.variant ?? "normal")
   }
@@ -101,7 +102,7 @@ export function CardTitle(props: CardTitleProps) {
     >
       <Show when={show()}>
         <span data-slot="card-title-icon" data-placeholder={placeholder() || undefined}>
-          <Icon name={name() ?? "dash"} size="small" />
+          <Icon name={name() ?? "minus"} />
         </span>
       </Show>
       {split.children}

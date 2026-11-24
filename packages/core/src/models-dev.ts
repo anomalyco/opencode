@@ -1,7 +1,10 @@
-import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
-import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
+import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { ConfigProvider } from "@opencode/schema/config/provider"
+import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
+import { FreeformFormat } from "@opencode/schema/tool"
 import { App } from "./app.js"
 import { Hash } from "@opencode/util/hash"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -14,141 +17,408 @@ import { Provider } from "./provider.js"
 import { Variant } from "./variant.js"
 import { KV } from "./kv.js"
 import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
+import { isV1, toV2 } from "./models-dev/v1.js"
 
-export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
-export type CatalogModelStatus = typeof CatalogModelStatus.Type
-
-// models.dev treats a model without a type as a chat model.
-export const CatalogModelType = Schema.Literals([
-  "chat",
-  "image",
-  "video",
-  "embedding",
-  "reranking",
-  "decision",
-  "transcription",
-  "speech",
-  "realtime",
+// Only the fields opencode reads are decoded. Unknown keys are ignored, and a model that
+// doesn't match is skipped rather than failing the whole catalog.
+const Price = Money.USDPerMillionTokens
+const CacheWrite = Schema.Union([Price, Schema.Record(Schema.String, Price)])
+const CachePrices = Schema.Struct({
+  read: Schema.optional(Price),
+  write: Schema.optional(CacheWrite),
+  explicit: Schema.optional(Schema.Struct({ write: Schema.optional(CacheWrite) })),
+})
+const When = Schema.Record(Schema.String, Schema.Unknown)
+// A number scales every price below it; an object scales only the prices it names.
+type Factor = number | { readonly [key: string]: Factor }
+const Factor: Schema.Codec<Factor> = Schema.Union([
+  Schema.Finite,
+  Schema.Record(
+    Schema.String,
+    Schema.suspend((): Schema.Codec<Factor> => Factor),
+  ),
 ])
-export type CatalogModelType = typeof CatalogModelType.Type
+const SourceCost = Schema.Struct({
+  text: Schema.optional(
+    Schema.Struct({
+      input: Schema.optional(
+        Schema.Struct({
+          unit: Schema.optional(Schema.String),
+          price: Price,
+          cache: Schema.optional(CachePrices),
+          overrides: Schema.optional(
+            Schema.Array(
+              Schema.Struct({ when: When, price: Schema.optional(Price), cache: Schema.optional(CachePrices) }),
+            ),
+          ),
+        }),
+      ),
+      output: Schema.optional(
+        Schema.Struct({
+          unit: Schema.optional(Schema.String),
+          price: Price,
+          overrides: Schema.optional(Schema.Array(Schema.Struct({ when: When, price: Schema.optional(Price) }))),
+        }),
+      ),
+    }),
+  ),
+  multipliers: Schema.optional(Schema.Array(Schema.Struct({ when: When, factor: Factor }))),
+})
+type SourceCost = typeof SourceCost.Type
 
-type Cost = {
-  readonly input: Money.USDPerMillionTokens
-  readonly output: Money.USDPerMillionTokens
-  readonly cache_read?: Money.USDPerMillionTokens
-  readonly cache_write?: Money.USDPerMillionTokens
-  readonly tiers?: readonly (Cost & { readonly tier: { readonly type: "context"; readonly size: number } })[]
-}
+// API entries and modes are lists models.dev keeps adding to, so each is decoded on its own and an
+// entry this version doesn't understand is skipped instead of failing the model.
+const SourceApi = Schema.Struct({
+  base_url: Schema.optional(Schema.String),
+  capabilities: Schema.optional(
+    Schema.Struct({
+      // Format names this version doesn't know are skipped when the route is built.
+      tools: Schema.optional(Schema.Struct({ freeform: Schema.optional(Schema.Array(Schema.String)) })),
+    }),
+  ),
+  sdk: Schema.optional(
+    Schema.Struct({ aisdk: Schema.optional(Schema.String), opencodeai: Schema.optional(Schema.String) }),
+  ),
+  compatibility: Schema.optional(
+    Schema.Struct({
+      reasoning_field: Schema.optional(Schema.String),
+      max_tokens_field: Schema.optional(Schema.String),
+      media_input: Schema.optional(Schema.String),
+    }),
+  ),
+})
 
-type Modality = "text" | "audio" | "image" | "video" | "pdf"
+const SourceMode = Schema.Struct({
+  service_tier: Schema.optional(Schema.String),
+  cost: Schema.optional(SourceCost),
+  body: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+})
+type SourceMode = typeof SourceMode.Type
 
-type SourceModel = {
+const SourceModel = Schema.Struct({
+  id: Schema.String,
+  type: Schema.String,
+  name: Schema.String,
+  family: Schema.optional(Schema.String),
+  release_date: Schema.String,
+  status: Schema.optional(Schema.String),
+  modalities: Schema.Struct({ input: Schema.Array(Schema.String), output: Schema.Array(Schema.String) }),
+  capabilities: Schema.Struct({
+    tools: Schema.Struct({ supported: Schema.Boolean }),
+    reasoning: ConfigProvider.Reasoning,
+    temperature: Schema.optional(Schema.Boolean),
+    // The faster and slower ways the provider serves the model, such as "priority" or "flex".
+    service_tier: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  limit: Schema.optional(
+    Schema.Struct({
+      context: Schema.optional(Schema.Finite),
+      input: Schema.optional(Schema.Finite),
+      output: Schema.optional(Schema.Finite),
+    }),
+  ),
+  cost: Schema.optional(SourceCost),
+  // Ordered: the first API is the model's default.
+  api: Schema.Record(Schema.String, Schema.Unknown),
+  recommended_api: Schema.optional(Schema.Unknown),
+  experimental: Schema.optional(
+    Schema.Struct({ modes: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)) }),
+  ),
+})
+type SourceModel = typeof SourceModel.Type
+
+const SourceProvider = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  env: Schema.Array(Schema.String),
+  models: Schema.Record(Schema.String, Schema.Unknown),
+})
+
+// The model types opencode keeps. Only chat models are offered for sessions; the others are listed on request,
+// realtime ones as voice models.
+const TYPES: readonly string[] = ["chat", "decision", "image", "video", "realtime"]
+
+const ContextCondition = Schema.Struct({ gt: Schema.optional(Schema.Finite), gte: Schema.optional(Schema.Finite) })
+const decodeModel = Schema.decodeUnknownResult(SourceModel)
+const decodeApi = Schema.decodeUnknownOption(SourceApi)
+const decodeMode = Schema.decodeUnknownOption(SourceMode)
+const decodeProvider = Schema.decodeUnknownOption(SourceProvider)
+const decodeContext = Schema.decodeUnknownOption(ContextCondition)
+const decodeMaxTokensField = Schema.decodeUnknownOption(MaxTokensField)
+const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
+const knownFreeformFormat = Schema.is(FreeformFormat)
+const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
+
+/** A realtime model that answers in speech and calls tools, by the API it speaks (`live`, `realtime`…). */
+export type VoiceModel = {
   readonly id: string
   readonly name: string
-  readonly type?: CatalogModelType
-  readonly family?: string
-  readonly release_date: string
-  readonly attachment: boolean
-  readonly reasoning: boolean
-  readonly reasoning_options?: readonly (
-    | { readonly type: "effort"; readonly values: readonly (string | null)[] }
-    | Exclude<Variant.Support, { type: "effort" }>
-  )[]
-  readonly temperature?: boolean
-  readonly tool_call: boolean
-  readonly interleaved?: boolean | string | { readonly field: string }
-  readonly cost?: Cost
-  readonly limit: { readonly context: number; readonly input?: number; readonly output: number }
-  readonly modalities?: { readonly input: readonly Modality[]; readonly output: readonly Modality[] }
-  readonly experimental?: {
-    readonly modes?: Readonly<
-      Record<
-        string,
-        {
-          readonly cost?: Cost
-          readonly provider?: {
-            readonly body?: Provider.Settings
-            readonly headers?: Readonly<Record<string, string>>
-          }
-        }
-      >
-    >
-  }
-  readonly status?: CatalogModelStatus
-  readonly provider?: {
-    readonly npm?: string
-    readonly api?: string
-    readonly shape?: "responses" | "completions"
-  }
-}
-
-type SourceProvider = {
-  readonly api?: string
-  readonly name: string
-  readonly env: readonly string[]
-  readonly id: string
-  readonly npm: string
-  readonly models: Readonly<Record<string, SourceModel>>
+  readonly api: string
+  readonly releaseDate: string
 }
 
 export type Snapshot = {
   readonly info: Provider.Info
   readonly models: readonly Model.Info[]
+  readonly voices?: readonly VoiceModel[]
   readonly environment: readonly string[]
-  /** The models.dev type of each typed model, by catalog model ID. */
-  readonly types?: ReadonlyMap<Model.ID, CatalogModelType>
+  /** On `openai` only: the model IDs (modes included) each ChatGPT subscription sign-in can use; see `OPENAI_SUBSCRIPTIONS`. */
+  readonly subscriptions?: Readonly<Record<string, readonly string[]>>
 }
 
-function nativePackage(provider: SourceProvider, model?: SourceModel) {
-  const npm = model?.provider?.npm ?? provider.npm
-  return (
-    AISDKNative.native(npm, {
-      providerID: provider.id,
-      modelID: model?.id,
-      shape: model?.provider?.shape,
-    }) ?? Provider.aisdk(npm)
+// Temporary stopgap until the official v2 models.dev API, which returns these by default: the ChatGPT subscription
+// sign-ins (Codex, Sign in with ChatGPT) serve a subset of OpenAI's models. models.dev lists each as a provider it hides
+// unless asked for. They never become providers here: their model IDs are attached to `openai`, for that sign-in's
+// plugin to read (see plugin/provider/openai-subscription-models.ts).
+const OPENAI_SUBSCRIPTIONS = ["openai-codex", "openai-chatgpt"]
+const Subscription = Schema.Struct({
+  models: Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      id: Schema.String,
+      experimental: Schema.optional(
+        Schema.Struct({ modes: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)) }),
+      ),
+    }),
+  ),
+})
+const decodeSubscription = Schema.decodeUnknownOption(Subscription)
+
+type Route = {
+  readonly protocol: string
+  readonly package: string
+  readonly freeform?: Model.Capabilities["freeform"]
+  readonly baseURL?: string
+  readonly compatibility?: Model.Compatibility
+}
+
+// These packages build their URL from provider settings (region, resource, account, project…), which
+// only happens when no baseURL is set. The catalog's URL for them is a template or SDK default.
+const BUILDS_OWN_URL = new Set([
+  "@opencode/ai/providers/amazon-bedrock",
+  "@opencode/ai/providers/azure/chat",
+  "@opencode/ai/providers/azure/images",
+  "@opencode/ai/providers/azure/messages",
+  "@opencode/ai/providers/azure/responses",
+  "@opencode/ai/providers/cloudflare-ai-gateway",
+  "@opencode/ai/providers/cloudflare-ai-gateway/decisions",
+  "@opencode/ai/providers/cloudflare-workers-ai",
+  "@opencode/ai/providers/cloudflare-workers-ai/decisions",
+  "@opencode/ai/providers/cloudflare-workers-ai/images",
+  "@opencode/ai/providers/google-vertex/gemini",
+  "@opencode/ai/providers/google-vertex/images",
+  "@opencode/ai/providers/google-vertex/messages",
+  "aisdk:@jerome-benoit/sap-ai-provider-v2",
+  "aisdk:watsonx-ai-provider",
+])
+
+const normalize = Effect.fnUntraced(function* (
+  catalog: Record<string, unknown>,
+  recommended: boolean,
+  speeds: boolean,
+) {
+  const failed: { readonly model: string; readonly issue: unknown }[] = []
+  const unknown = new Set<string>()
+  const source = isV1(catalog) ? toV2(catalog) : catalog
+  const subscriptions = Object.fromEntries(
+    OPENAI_SUBSCRIPTIONS.flatMap((id) => {
+      const list = Option.getOrUndefined(decodeSubscription(source[id]))
+      if (!list) return []
+      const ids = Object.values(list.models).flatMap((model) => [
+        model.id,
+        ...Object.keys(model.experimental?.modes ?? {}).map((mode) => `${model.id}-${mode}`),
+      ])
+      return [[id, ids]]
+    }),
   )
-}
-
-function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
-  const providers: Snapshot[] = []
-  for (const item of Object.values(input)) {
+  const snapshots = Object.values(source).flatMap((value) => {
+    const item = Option.getOrUndefined(decodeProvider(value))
+    if (!item || OPENAI_SUBSCRIPTIONS.includes(item.id)) return []
     const providerID = Provider.ID.make(item.id)
-    const packageName = nativePackage(item)
+    // Vertex needs separate handling for location and Express Mode.
+    const prefer = recommended && providerID !== Provider.ID.googleVertex
+    const voices: VoiceModel[] = []
+    const sources = Object.entries(item.models).flatMap(([key, value]) => {
+      const decoded = decodeModel(value)
+      if (Result.isFailure(decoded)) failed.push({ model: `${item.id}/${key}`, issue: decoded.failure })
+      const model = Result.isSuccess(decoded) ? decoded.success : undefined
+      // Translation and streaming models are realtime too, but don't answer in speech or call tools.
+      const api = model?.type === "realtime" ? Object.keys(model.api)[0] : undefined
+      const speaks = model?.modalities.output.some((output) => output.startsWith("audio"))
+      if (model && api && speaks && model.capabilities.tools.supported && model.status !== "deprecated")
+        voices.push({ id: model.id, name: model.name, api, releaseDate: model.release_date })
+      // The fetch already asks for these types, but custom files and v1 catalogs may hold any type.
+      const target = model && TYPES.includes(model.type) && route(providerID, model, unknown, prefer)
+      return model && target ? [{ model, route: target }] : []
+    })
+    if (sources.length === 0) return []
+    // v2 lists APIs per model, so the provider defaults are what most of its models use. A model that
+    // builds its own URL would inherit a provider baseURL, so then every model carries its own instead.
+    const packageName = mostCommon(sources.map((source) => source.route.package))
+    if (!packageName) return []
+    const urls = sources.map((source) => source.route.baseURL)
+    const baseURL = urls.every((url) => url !== undefined) ? mostCommon(urls) : undefined
     const info = {
       id: providerID,
       name: item.name,
       activation: "auto",
       package: packageName,
-      ...(item.api && packageName !== "@opencode/ai/providers/cloudflare-workers-ai"
-        ? { settings: { baseURL: item.api } }
-        : {}),
+      ...(baseURL ? { settings: { baseURL } } : {}),
     } satisfies Provider.Info
-    const models: Model.Info[] = []
-    const types = new Map<Model.ID, CatalogModelType>()
-    for (const model of Object.values(item.models)) {
-      const baseCost = cost(model.cost)
-      const id = Model.ID.make(model.id)
-      const base = modelInfo(item, id, model, { cost: baseCost })
-      const variants = Variant.resolve({ ...base, package: nativePackage(item, model) }, supports(model))
-      models.push({ ...base, variants })
-      if (model.type) types.set(id, model.type)
-      for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
-        const modeID = Model.ID.make(`${model.id}-${mode}`)
-        models.push(
-          modelInfo(item, modeID, model, {
-            name: modeName(model, mode),
-            cost: mergeCost(baseCost, options.cost),
-            request: options.provider,
-            variants,
-          }),
-        )
-        if (model.type) types.set(modeID, model.type)
-      }
-    }
-    providers.push({ info, models, environment: [...item.env], types })
+    const ids = new Set(sources.map((source) => source.model.id))
+    const models = sources.flatMap((source) => {
+      const baseCost = cost(source.model.cost)
+      const id = Model.ID.make(source.model.id)
+      const base = modelInfo(providerID, { packageName, baseURL }, id, source, { cost: baseCost })
+      const variants = Variant.resolve(
+        { ...base, package: source.route.package },
+        Variant.supports(source.model.capabilities.reasoning),
+      )
+      const modes = entries(source.model.experimental?.modes, decodeMode)
+      // Each service tier is a model of its own ("gpt-5.5-fast"), marked as a speed of this one. Only the request
+      // code of an @opencode/ai package knows where a tier goes in the request.
+      const tiers =
+        speeds && !Provider.isAISDK(source.route.package)
+          ? [...(source.model.capabilities.service_tier ?? [])].sort((a, b) => tierRank(a) - tierRank(b))
+          : []
+      const speed = (name: string, tier: string) => ({
+        name: `${source.model.name} ${name.charAt(0).toUpperCase()}${name.slice(1)}`,
+        variants,
+        ...(speeds ? { speed: { base: id, id: name, faster: !SLOWER.has(tier) } } : {}),
+      })
+      return [
+        { ...base, variants },
+        ...tiers.flatMap((tier) => {
+          // "priority" is the tier people know as fast.
+          const name = tier === "priority" && !tiers.includes("fast") ? "fast" : tier
+          const speedID = Model.ID.make(`${source.model.id}-${name}`)
+          if (ids.has(speedID)) return []
+          // Until every tier has a multiplier, a mode for the tier may still carry its price.
+          const mode = modes.find(([key, options]) => (options.service_tier ?? key) === tier)?.[1]
+          return [
+            modelInfo(providerID, { packageName, baseURL }, speedID, source, {
+              ...speed(name, tier),
+              cost: modeCost(source.model, baseCost, tier, { cost: mode?.cost }),
+              request: tierRequest(source.route.protocol, tier),
+            }),
+          ]
+        }),
+        // A mode says how to ask for it itself. models.dev keeps the modes of a service tier for versions that
+        // don't read the tiers, so here they only add what the tiers don't cover, such as OpenAI's "pro".
+        ...modes
+          .filter(([mode, options]) => !tiers.includes(options.service_tier ?? mode))
+          .map(([mode, options]) =>
+            modelInfo(providerID, { packageName, baseURL }, Model.ID.make(`${source.model.id}-${mode}`), source, {
+              ...(TIERS.includes(mode)
+                ? speed(mode, mode)
+                : { name: `${source.model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`, variants }),
+              cost: modeCost(source.model, baseCost, mode, options),
+              request: options,
+            }),
+          ),
+      ]
+    })
+    return [
+      {
+        info,
+        models,
+        ...(voices.length > 0 ? { voices } : {}),
+        environment: [...item.env],
+        ...(providerID === Provider.ID.openai && Object.keys(subscriptions).length > 0 ? { subscriptions } : {}),
+      },
+    ]
+  })
+  if (failed.length > 0)
+    yield* Effect.logWarning("Skipped models.dev models that failed to parse", {
+      count: failed.length,
+      models: failed.slice(0, 10).map((item) => item.model),
+      issue: String(failed[0]?.issue),
+    })
+  if (unknown.size > 0)
+    yield* Effect.logDebug("Skipped models.dev APIs with entrypoints this build doesn't have", {
+      entrypoints: [...unknown],
+    })
+  return snapshots as readonly Snapshot[]
+})
+
+// The service tiers models.dev names, slowest first. Any other tier counts as faster than the standard one.
+const TIERS = ["standby", "flex", "priority", "fast", "ultrafast"]
+const SLOWER = new Set(["standby", "flex"])
+const tierRank = (tier: string) => (TIERS.includes(tier) ? TIERS.indexOf(tier) : TIERS.length)
+
+// How a model is asked for a service tier. The request code of each API puts the `serviceTier` setting where
+// that API reads it.
+function tierRequest(protocol: string, tier: string) {
+  // The Messages API calls its fast tier a speed.
+  if (protocol === "messages" && tier === "fast") return { settings: { speed: "fast" } }
+  // Converse only names Bedrock's own tiers. A model reads its own tier as one of its request fields.
+  if (protocol === "converse" && tier !== "priority" && tier !== "flex")
+    return { body: { additionalModelRequestFields: { service_tier: tier } } }
+  return { settings: { serviceTier: tier } }
+}
+
+function entries<A>(record: Record<string, unknown> | undefined, decode: (input: unknown) => Option.Option<A>) {
+  return Object.entries(record ?? {}).flatMap(([key, value]) =>
+    Option.match(decode(value), { onNone: () => [], onSome: (entry) => [[key, entry] as const] }),
+  )
+}
+
+function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>, recommended: boolean) {
+  // A chat model uses its first API with a package. Other types (image, decision…) only run through the
+  // opencode entrypoint for their type (`providers/<P>/images`) that this build can load, and are skipped
+  // without one: a chat entrypoint loads a chat model, which can't generate images or decisions.
+  const apis = entries(model.api, decodeApi).map(
+    ([protocol, entry]) => [protocol, entry, loadable(entry.sdk?.opencodeai, unknown)] as const,
+  )
+  const eligible = ([, entry, opencodeai]: (typeof apis)[number]) =>
+    model.type === "chat" ? opencodeai || entry.sdk?.aisdk : opencodeai?.endsWith(`/${model.type}s`)
+  const preferred = recommended ? apis.find((api) => api[0] === model.recommended_api && eligible(api)) : undefined
+  const [protocol, api, opencodeai] = preferred ?? apis.find(eligible) ?? []
+  if (!protocol || !api) return undefined
+  const aisdk = api.sdk?.aisdk
+  const packageName =
+    opencodeai ??
+    (aisdk &&
+      (AISDKNative.native(aisdk, {
+        providerID,
+        modelID: model.id,
+        shape: protocol === "responses" ? "responses" : protocol === "chat-completions" ? "completions" : undefined,
+      }) ??
+        Provider.aisdk(aisdk)))
+  if (!packageName) return undefined
+  const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
+  const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
+  const compatibility = {
+    ...(api.compatibility?.reasoning_field ? { reasoningField: api.compatibility.reasoning_field } : {}),
+    ...(maxTokensField ? { maxTokensField } : {}),
+    ...(mediaInput ? { mediaInput } : {}),
   }
-  return providers
+  return {
+    protocol,
+    package: packageName,
+    freeform: api.capabilities?.tools?.freeform?.filter(knownFreeformFormat),
+    // An empty base_url is how models.dev says it has no URL for the API.
+    ...(BUILDS_OWN_URL.has(packageName) || !api.base_url ? {} : { baseURL: api.base_url }),
+    ...(Object.keys(compatibility).length > 0 ? { compatibility } : {}),
+  }
+}
+
+// Newer catalogs may name @opencode/ai entrypoints that older builds don't ship, so those count as no package.
+function loadable(opencodeai: string | undefined, unknown: Set<string>) {
+  const name = Provider.packageName(opencodeai)
+  if (!name?.startsWith("@opencode/ai/") || Provider.builtinPackages.has(name)) return opencodeai
+  unknown.add(name)
+  return undefined
+}
+
+function mostCommon<T>(values: readonly T[]) {
+  const counts = new Map<T, number>()
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1)
+  return [...counts].reduce<[T, number] | undefined>(
+    (best, entry) => (!best || entry[1] > best[1] ? entry : best),
+    undefined,
+  )?.[0]
 }
 
 function released(date: string) {
@@ -156,115 +426,220 @@ function released(date: string) {
   return Number.isFinite(time) ? time : 0
 }
 
-function cost(input: SourceModel["cost"]): Model.Info["cost"] {
+const COMPATIBLE = new Set(["@opencode/ai/providers/openai-compatible", "@opencode/ai/providers/anthropic-compatible"])
+
+const zero = Money.USDPerMillionTokens.zero
+
+// Only per-token text prices are kept: per-image, per-second and similar prices have
+// no place in opencode's cost yet. Context overrides become tiers; other conditions
+// (service tier, time of day…) are left out.
+function cost(input: SourceCost | undefined): Model.Info["cost"] {
+  const text = perTokenText(input)
+  if (!text) return [{ input: zero, output: zero, cache: { read: zero, write: zero } }]
+  const textInput = text.input
+  const textOutput = text.output
   const base = {
-    input: input?.input ?? Money.USDPerMillionTokens.zero,
-    output: input?.output ?? Money.USDPerMillionTokens.zero,
-    cache: {
-      read: input?.cache_read ?? Money.USDPerMillionTokens.zero,
-      write: input?.cache_write ?? Money.USDPerMillionTokens.zero,
-    },
+    input: textInput.price,
+    output: textOutput.price,
+    cache: { read: textInput.cache?.read ?? zero, write: cacheWrite(textInput.cache) ?? zero },
   }
-  return [
-    base,
-    ...(input?.tiers?.map((item) => ({
-      tier: item.tier,
-      input: item.input,
-      output: item.output,
+  // An override merges field by field, so a tier keeps every base price it doesn't set.
+  const tiers = new Map<number, Model.Info["cost"][number]>()
+  const tier = (when: Record<string, unknown>) => {
+    const context = Object.keys(when).length === 1 ? Option.getOrUndefined(decodeContext(when.context)) : undefined
+    const size = context?.gt ?? context?.gte
+    if (size === undefined) return undefined
+    const entry = tiers.get(size) ?? { ...base, tier: { type: "context" as const, size } }
+    tiers.set(size, entry)
+    return entry
+  }
+  for (const override of textInput.overrides ?? []) {
+    const entry = tier(override.when)
+    if (!entry) continue
+    tiers.set(entry.tier!.size, {
+      ...entry,
+      input: override.price ?? entry.input,
       cache: {
-        read: item.cache_read ?? Money.USDPerMillionTokens.zero,
-        write: item.cache_write ?? Money.USDPerMillionTokens.zero,
+        read: override.cache?.read ?? entry.cache.read,
+        write: cacheWrite(override.cache) ?? entry.cache.write,
       },
-    })) ?? []),
-  ]
-}
-
-function mergeCost(base: Model.Info["cost"], override: SourceModel["cost"] | undefined) {
-  if (!override) return base
-  const next = cost(override)
-  const [baseDefault, ...baseTiers] = base
-  const [nextDefault, ...nextTiers] = next
-  const tierKey = (item: Model.Info["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
-  const merge = (left: Model.Info["cost"][number], right: Model.Info["cost"][number]) => ({
-    ...left,
-    ...right,
-    tier: right.tier ?? left.tier,
-    cache: { ...left.cache, ...right.cache },
-  })
-  const tiers = new Map(baseTiers.map((item) => [tierKey(item), item]))
-  for (const item of nextTiers) {
-    const current = tiers.get(tierKey(item))
-    tiers.set(tierKey(item), current ? merge(current, item) : item)
+    })
   }
+  for (const override of textOutput.overrides ?? []) {
+    const entry = tier(override.when)
+    if (entry) tiers.set(entry.tier!.size, { ...entry, output: override.price ?? entry.output })
+  }
+  return [base, ...tiers.values()]
+}
+
+// Both text prices, when both are set and per token; otherwise opencode can't price the model.
+function perTokenText(source: SourceCost | undefined) {
+  const text = source?.text
+  const perToken = (unit: string | undefined) => unit === undefined || unit === "token"
+  if (!text?.input || !text.output || !perToken(text.input.unit) || !perToken(text.output.unit)) return undefined
+  return { input: text.input, output: text.output }
+}
+
+// opencode has one cache write price: the first TTL listed, else the explicit cache's.
+function cacheWrite(cache: typeof CachePrices.Type | undefined) {
+  const first = (write: typeof CacheWrite.Type | undefined) =>
+    typeof write === "object" ? Object.values(write)[0] : write
+  return first(cache?.write) ?? first(cache?.explicit?.write)
+}
+
+// A mode (a speed, or a mode listed as its own model) without its own cost takes the base prices scaled by its
+// service tier's multiplier (the mode name by default), or else the tier's own prices, context tiers included. The base
+// context tiers are otherwise kept as they are.
+function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mode: SourceMode): Model.Info["cost"] {
+  const [baseDefault, ...baseTiers] = base
+  if (mode.cost) return [cost(mode.cost)[0], ...baseTiers]
+  const tier = mode.service_tier ?? name
+  // A tier's multiplier may only hold for some dates (an introductory price); the one for today is used.
+  const today = new Date().toISOString().slice(0, 10)
+  const factor = model.cost?.multipliers?.find((multiplier) => {
+    if (!Object.keys(multiplier.when).every((key) => key === "service_tier" || key === "date")) return false
+    if (Option.getOrUndefined(decodeServiceTier(multiplier.when.service_tier))?.equals !== tier) return false
+    if (multiplier.when.date === undefined) return true
+    const date = Option.getOrUndefined(decodeDate(multiplier.when.date))
+    return (
+      date !== undefined &&
+      (date.lt === undefined || today < date.lt) &&
+      (date.lte === undefined || today <= date.lte) &&
+      (date.gt === undefined || today > date.gt) &&
+      (date.gte === undefined || today >= date.gte)
+    )
+  })?.factor
+  if (!baseDefault) return base
+  if (factor === undefined) return [baseDefault, ...baseTiers].map((prices) => tierPrices(model.cost, prices, tier))
+  const scale = (price: Money.USDPerMillionTokens, path: readonly string[]) =>
+    Money.USDPerMillionTokens.make(Math.round(price * factorAt(factor, path) * 1e10) / 1e10)
   return [
-    merge(
-      baseDefault ?? {
-        input: Money.USDPerMillionTokens.zero,
-        output: Money.USDPerMillionTokens.zero,
-        cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+    {
+      input: scale(baseDefault.input, ["text", "input", "price"]),
+      output: scale(baseDefault.output, ["text", "output", "price"]),
+      cache: {
+        read: scale(baseDefault.cache.read, ["text", "input", "cache", "read"]),
+        write: scale(baseDefault.cache.write, ["text", "input", "cache", "write"]),
       },
-      nextDefault,
-    ),
-    ...tiers.values(),
+    },
+    ...baseTiers,
   ]
 }
 
-function modeName(model: SourceModel, mode: string) {
-  return `${model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`
+// Hosts such as DigitalOcean list a tier's prices instead of a multiplier, as overrides of the base prices. A context
+// tier takes the overrides for both the service tier and its context size.
+function tierPrices(source: SourceCost | undefined, base: Model.Info["cost"][number], tier: string) {
+  const matches = (when: Record<string, unknown>) => {
+    const context = Option.getOrUndefined(decodeContext(when.context))
+    return (
+      Object.keys(when).length === (base.tier ? 2 : 1) &&
+      Option.getOrUndefined(decodeServiceTier(when.service_tier))?.equals === tier &&
+      (!base.tier || (context?.gt ?? context?.gte) === base.tier.size)
+    )
+  }
+  // The base is free when its prices aren't per token, and so is every tier.
+  const text = perTokenText(source)
+  if (!text) return base
+  const input = text.input.overrides?.find((override) => matches(override.when))
+  const output = text.output.overrides?.find((override) => matches(override.when))
+  return {
+    ...base,
+    input: input?.price ?? base.input,
+    output: output?.price ?? base.output,
+    cache: { read: input?.cache?.read ?? base.cache.read, write: cacheWrite(input?.cache) ?? base.cache.write },
+  }
 }
 
-function supports(model: SourceModel): readonly Variant.Support[] {
-  return (model.reasoning_options ?? []).map((option) =>
-    option.type === "effort"
-      ? { type: "effort", values: option.values.filter((value): value is string => value !== null && value !== "null") }
-      : option,
+const decodeServiceTier = Schema.decodeUnknownOption(Schema.Struct({ equals: Schema.optional(Schema.String) }))
+// ISO dates (YYYY-MM-DD), which compare as strings.
+const decodeDate = Schema.decodeUnknownOption(
+  Schema.Struct({
+    lt: Schema.optional(Schema.String),
+    lte: Schema.optional(Schema.String),
+    gt: Schema.optional(Schema.String),
+    gte: Schema.optional(Schema.String),
+  }),
+)
+
+// Prices an object factor doesn't name keep factor 1.
+function factorAt(factor: Factor, path: readonly string[]): number {
+  const node = path.reduce<Factor | undefined>(
+    (node, key) => (node === undefined || typeof node === "number" ? node : node[key]),
+    factor,
   )
+  if (node === undefined) return 1
+  if (typeof node === "number") return node
+  // A cache write factor is keyed by TTL; opencode keeps the first one.
+  const first = Object.values(node)[0]
+  return typeof first === "number" ? first : 1
+}
+
+// v2 lists exact MIME types; opencode's capabilities use the broad kind.
+function modality(value: string) {
+  if (value === "application/pdf") return "pdf"
+  const kind = value.split("/")[0]
+  return kind === "text" || kind === "image" || kind === "audio" || kind === "video" ? kind : value
+}
+
+function modalities(values: readonly string[]) {
+  return [...new Set(values.map(modality))]
 }
 
 function modelInfo(
-  provider: SourceProvider,
+  providerID: Provider.ID,
+  provider: { readonly packageName: string; readonly baseURL?: string },
   id: Model.ID,
-  model: SourceModel,
+  source: { readonly model: SourceModel; readonly route: Route },
   input: {
     readonly name?: string
     readonly cost?: Model.Info["cost"]
-    readonly request?: NonNullable<NonNullable<SourceModel["experimental"]>["modes"]>[string]["provider"]
+    readonly request?: {
+      readonly settings?: Provider.Settings
+      readonly body?: Provider.Settings
+      readonly headers?: Readonly<Record<string, string>>
+    }
     readonly variants?: NonNullable<Model.Info["variants"]>
+    readonly speed?: NonNullable<Model.Info["experimental"]>["speed"]
   } = {},
 ): Model.Info {
-  const providerID = Provider.ID.make(provider.id)
-  const resolved = nativePackage(provider, model)
-  const pkg = model.provider?.npm || resolved !== nativePackage(provider) ? resolved : undefined
-  // Per model, so it never merges into a model that overrides to a different package.
+  const model = source.model
+  // Per model, so it never merges into a model that overrides to a different package. Compatible
+  // packages are told the real host, so requests and saved provider state carry its ID.
   const settings = {
-    ...(model.provider?.api ? { baseURL: model.provider.api } : {}),
-    ...(resolved === "@opencode/ai/providers/openai-compatible" ? { provider: providerID } : {}),
+    ...(source.route.baseURL !== undefined && source.route.baseURL !== provider.baseURL
+      ? { baseURL: source.route.baseURL }
+      : {}),
+    ...(COMPATIBLE.has(source.route.package) ? { provider: providerID } : {}),
+    ...input.request?.settings,
   }
   return {
     id,
     modelID: Model.ID.make(model.id),
     providerID,
+    type: model.type,
     name: input.name ?? model.name,
-    compatibility: Model.compatibility(model.interleaved),
+    compatibility: source.route.compatibility,
     family: model.family ? Model.Family.make(model.family) : undefined,
-    package: pkg,
+    package: source.route.package !== provider.packageName ? source.route.package : undefined,
     settings: Object.keys(settings).length === 0 ? undefined : settings,
     capabilities: {
-      tools: model.tool_call,
-      input: [...(model.modalities?.input ?? [])],
-      output: [...(model.modalities?.output ?? [])],
-      temperature: model.temperature,
+      tools: model.capabilities.tools.supported,
+      ...(source.route.freeform && { freeform: source.route.freeform }),
+      input: modalities(model.modalities.input),
+      output: modalities(model.modalities.output),
+      temperature: model.capabilities.temperature,
     },
     variants: [...(input.variants ?? [])],
+    ...(input.speed ? { experimental: { speed: input.speed } } : {}),
     time: { released: released(model.release_date) },
     cost: (input.cost ?? cost(model.cost)).map((item) => ({
       ...item,
       tier: item.tier && { ...item.tier },
       cache: { ...item.cache },
     })),
-    status: model.status ?? "active",
+    status: Option.getOrElse(decodeStatus(model.status), () => "active" as const),
     enabled: true,
-    limit: { context: model.limit.context, input: model.limit.input, output: model.limit.output },
+    limit: { context: model.limit?.context ?? 0, input: model.limit?.input, output: model.limit?.output ?? 0 },
     headers: input.request?.headers ? { ...input.request.headers } : undefined,
     body: input.request?.body ? { ...input.request.body } : undefined,
   }
@@ -273,7 +648,8 @@ function modelInfo(
 export { Event } from "@opencode/schema/models-dev"
 
 export interface Interface {
-  readonly get: () => Effect.Effect<readonly Snapshot[]>
+  /** `speeds` also lists each of a model's service tiers as a model of its own, marked as a speed of it. */
+  readonly get: (recommended?: boolean, speeds?: boolean) => Effect.Effect<readonly Snapshot[]>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
@@ -288,8 +664,7 @@ export type Options = typeof Options.Type
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
 const CatalogJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
-const decodeCatalog = (text: string) =>
-  Schema.decodeUnknownEffect(CatalogJson)(text).pipe(Effect.map((catalog) => catalog as Record<string, SourceProvider>))
+const decodeCatalog = (text: string) => Schema.decodeUnknownEffect(CatalogJson)(text)
 const Cache = Schema.Struct({
   updatedAt: Schema.Number,
   // Digest of the raw body, persisted so refresh() can skip republishing a
@@ -304,30 +679,35 @@ const CacheMeta = Schema.Struct({
 })
 const defaultSource = "https://models.opencode.ai"
 
-export const decodeSnapshot = (text: string) => decodeCatalog(text).pipe(Effect.map(normalize))
+// The experimental v2 API, limited to the model types opencode keeps, with the hidden OpenAI subscription lists included.
+export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}&include=${OPENAI_SUBSCRIPTIONS.join(",")}`
 
-// Bundled snapshot of https://models.opencode.ai/api.json, committed at
+export const decodeSnapshot = (text: string, recommended = false, speeds = false) =>
+  decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended, speeds)))
+
+// Bundled snapshot of the catalog at `catalogPath`, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
 // `bun run script/update-models-snapshot.ts`. Release builds bundle the live
 // catalog in its place when it can be fetched. Decoded and normalized once per
-// isolate: the snapshot is a multi-MB module-level constant and one isolate can
+// flag value per isolate: the snapshot is a multi-MB module-level constant and one isolate can
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
-let bundledCache: readonly Snapshot[] | undefined
-const bundledSnapshot = Effect.suspend(() =>
-  bundledCache
-    ? Effect.succeed(bundledCache)
-    : decodeSnapshot(snapshotText).pipe(
-        Effect.map((snapshot) => {
-          bundledCache = snapshot
-          return bundledCache
-        }),
-      ),
-)
+const bundledCache = new Map<string, readonly Snapshot[]>()
+const bundledSnapshot = (recommended: boolean, speeds: boolean) =>
+  Effect.suspend(() => {
+    const key = `${recommended}:${speeds}`
+    const cached = bundledCache.get(key)
+    return cached
+      ? Effect.succeed(cached)
+      : decodeSnapshot(snapshotText, recommended, speeds).pipe(
+          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(key, snapshot))),
+        )
+  })
 
+// Versioned so an entry cached for another catalog query is never read: v1 was the v1 API, v2 had no realtime models.
 function cacheKey(source: string) {
-  if (source === defaultSource) return "models-dev:catalog"
-  return `models-dev:catalog:${Hash.fast(source)}`
+  if (source === defaultSource) return "models-dev:v3:catalog"
+  return `models-dev:v3:catalog:${Hash.fast(source)}`
 }
 
 export function bodyDigest(text: string) {
@@ -340,16 +720,14 @@ export const layer = (options?: Options) =>
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const bus = yield* Bus.Service
-      const app = yield* App.Metadata
+      const app = yield* App.Service
       const kv = yield* KV.Service
-      const http = HttpClient.filterStatusOk(
-        (yield* HttpClient.HttpClient).pipe(
-          HttpClient.retryTransient({
-            retryOn: "errors-and-responses",
-            times: 2,
-            schedule: Schedule.exponential(200).pipe(Schedule.jittered),
-          }),
-        ),
+      const http = (yield* HttpClient.HttpClient).pipe(
+        HttpClient.retryTransient({
+          retryOn: "errors-and-responses",
+          times: 2,
+          schedule: Schedule.exponential(200).pipe(Schedule.jittered),
+        }),
       )
 
       const source = options?.url || defaultSource
@@ -359,13 +737,19 @@ export const layer = (options?: Options) =>
       const metaKey = `${key}:meta`
       const ttl = Duration.minutes(5)
       const lock = Semaphore.makeUnsafe(1)
+      // Free the multi-MB rows cached under earlier keys.
+      yield* Effect.forEach(
+        ["models-dev:", "models-dev:v2:"].map((prefix) => key.replace("models-dev:v3:", prefix)),
+        (old) => Effect.andThen(kv.remove(old), kv.remove(`${old}:meta`)),
+        { discard: true },
+      )
 
       const loadFromCache = Effect.fnUntraced(function* () {
         const value = yield* kv.get(key)
         const cached = Schema.decodeUnknownOption(Cache)(value)
         if (Option.isSome(cached))
           return {
-            catalog: cached.value.body as Record<string, SourceProvider>,
+            catalog: cached.value.body,
             updatedAt: cached.value.updatedAt,
             digest: cached.value.digest,
           }
@@ -374,33 +758,45 @@ export const layer = (options?: Options) =>
         yield* kv.remove(metaKey)
       })
 
-      const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* (etag?: string) {
-        return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
+      const fetchPath = (path: string, etag?: string) =>
+        HttpClientRequest.get(`${source}${path}`).pipe(
           HttpClientRequest.setHeader("User-Agent", userAgent),
           HttpClientRequest.setHeaders(etag ? { "If-None-Match": etag } : {}),
           http.execute,
-          Effect.flatMap((res) => Effect.map(res.text, (text) => ({ text, etag: res.headers.etag }))),
+          Effect.flatMap((res) =>
+            etag && res.status === 304
+              ? Effect.undefined
+              : HttpClientResponse.filterStatusOk(res).pipe(
+                  Effect.flatMap((ok) => Effect.map(ok.text, (text) => ({ text, etag: ok.headers.etag }))),
+                ),
+          ),
           Effect.timeout("10 seconds"),
+        )
+
+      const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* (etag?: string) {
+        return yield* fetchPath(catalogPath, etag).pipe(
+          // A custom mirror may only serve the v1 catalog, which is converted when decoded.
+          Effect.catchIf(
+            (error) =>
+              source !== defaultSource && HttpClientError.isHttpClientError(error) && error.response?.status === 404,
+            () => fetchPath("/api.json", etag),
+          ),
         )
       })
 
       const loadFromFile = options?.file
         ? fs.readJson(options.file).pipe(
-            Effect.map((input) => input as Record<string, SourceProvider>),
+            Effect.flatMap((input) => Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown))(input)),
             Effect.orElseSucceed(() => undefined),
           )
         : Effect.undefined
-
-      // The bundled snapshot is the boot-time floor for the catalog; the
-      // periodic fetch below still refreshes on top.
-      const loadSnapshot = options?.snapshot === false ? Effect.undefined : bundledSnapshot
 
       const writeMeta = (updatedAt: number, digest: string | undefined, etag: string | undefined) =>
         kv.set(metaKey, { updatedAt, ...(digest ? { digest } : {}), ...(etag ? { etag } : {}) })
 
       // Best-effort: a cache-write failure must never kill catalog
       // population. The payload has outgrown some KV backends' per-value
-      // limits (Durable Object SQLite caps values at 2 MB and api.json
+      // limits (Durable Object SQLite caps values at 2 MB and the catalog
       // passed it in Aug 2026); a boot without a cache hit just refetches.
       const writeCache = Effect.fn("ModelsDev.writeCache")(function* (
         text: string,
@@ -419,17 +815,19 @@ export const layer = (options?: Options) =>
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const response = yield* fetchApi()
+        if (!response) return {}
         const catalog = yield* decodeCatalog(response.text)
         yield* writeCache(response.text, response.etag)
         return catalog
       })
 
-      const populate = Effect.gen(function* () {
+      const populate = Effect.fn("ModelsDev.populate")(function* (recommended: boolean, speeds: boolean) {
         const fromFile = yield* loadFromFile
-        if (fromFile) return normalize(fromFile)
+        if (fromFile) return yield* normalize(fromFile, recommended, speeds)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return normalize(cached.catalog)
-        const bundled = yield* loadSnapshot
+        if (cached) return yield* normalize(cached.catalog, recommended, speeds)
+        // The bundled snapshot is the boot-time floor until the periodic fetch refreshes it.
+        const bundled = options?.snapshot === false ? undefined : yield* bundledSnapshot(recommended, speeds)
         if (bundled) return bundled
         if (!fetch) return []
         const catalog = yield* lock.withPermit(
@@ -439,12 +837,15 @@ export const layer = (options?: Options) =>
             return yield* fetchAndWrite()
           }),
         )
-        return normalize(catalog)
-      }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
+        return yield* normalize(catalog, recommended, speeds)
+      }, Effect.orDie)
 
-      const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
-
-      const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
+      // One per combination of the two flags, each normalized on first use.
+      const caches = yield* Effect.forEach(
+        [false, true].flatMap((recommended) => [false, true].map((speeds) => [recommended, speeds] as const)),
+        ([recommended, speeds]) => Effect.cachedInvalidateWithTTL(populate(recommended, speeds), Duration.infinity),
+      )
+      const get = (recommended = false, speeds = false) => caches[Number(recommended) * 2 + Number(speeds)][0]
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
         yield* lock
@@ -454,12 +855,7 @@ export const layer = (options?: Options) =>
                 Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
               )
               if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
-              const response = yield* fetchApi(force ? undefined : stored?.etag).pipe(
-                Effect.catchIf(
-                  (error) => HttpClientError.isHttpClientError(error) && error.response?.status === 304,
-                  () => Effect.undefined,
-                ),
-              )
+              const response = yield* fetchApi(force ? undefined : stored?.etag)
               const digest = response && bodyDigest(response.text)
               // models.dev rarely changes between polls; skip invalidation and
               // the Refreshed event for a byte-identical body so downstream
@@ -471,7 +867,7 @@ export const layer = (options?: Options) =>
               if (!response) return
               yield* decodeCatalog(response.text)
               yield* writeCache(response.text, response.etag, digest)
-              yield* invalidate
+              yield* Effect.forEach(caches, ([, invalidate]) => invalidate, { discard: true })
               yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
             }),
           )

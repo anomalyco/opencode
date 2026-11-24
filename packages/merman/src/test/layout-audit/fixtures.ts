@@ -510,6 +510,29 @@ export function layoutFixtures(): readonly LayoutFixture[] {
   end`,
       curated: true,
     },
+    {
+      id: "flowchart/subgraph-pipeline/curated",
+      kind: "flowchart" as const,
+      family: "subgraph-pipeline",
+      profile: "short" as const,
+      source: `flowchart TD
+  subgraph S1["1. provider.transform (seed)"]
+    A1["Catalog model → copy catalog variants"]
+    A2["Custom model → apply package/modelID/limit + seed default variants"]
+  end
+  subgraph S2["2. plugin model.transform"]
+    B["Plugin can replace variants, clear to [], or ignore"]
+  end
+  subgraph S3["3. config model.transform (post)"]
+    C1{"Config sets reasoning or variants?"}
+    C1 -- yes --> C2["Apply explicit config"]
+    C1 -- no --> C3{"Config changed package (or recreated removed model)?"}
+    C3 -- yes --> C4["Respell / reseed variants"]
+    C3 -- no --> C5["Keep current variants"]
+  end
+  S1 --> S2 --> S3`,
+      curated: true,
+    },
     ...states,
   ]
 }

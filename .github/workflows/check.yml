@@ -4,7 +4,7 @@ on:
   push:
     branches: [dev]
   pull_request:
-    branches: [dev]
+    branches: [dev, beta]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
@@ -34,7 +34,7 @@ jobs:
       - name: Typecheck (TypeScript 7.1)
         run: bun run typecheck:tsc
 
-      # Every GUI package file (app, desktop, gui-extensions, ui, session-ui) a pull request adds or edits must be free of
+      # Every GUI package file (app, desktop, gui-plugins, the plugin package's GUI SDK, ui, session-ui) a pull request adds or edits must be free of
       # oxlint problems, warn-level rules (anti-slop) included. Other packages are not affected.
       - name: Lint changed files
         if: github.event_name == 'pull_request'

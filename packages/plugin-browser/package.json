@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/plugin-browser",
-  "version": "2.1.4",
+  "version": "2.4.1",
   "description": "OpenCode's desktop browser plugin",
   "type": "module",
   "license": "MIT",
@@ -19,10 +19,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./rpc": "./src/rpc.ts",
+    "./workspace": "./src/workspace.ts",
+    "./preview-path": "./src/preview-path.ts",
     "./proxy": "./src/proxy.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "pack": "bun run script/pack.ts",
     "typecheck": "bun check --no-script -p tsconfig.test.json",
     "typecheck:tsc": "tsc --noEmit -p tsconfig.test.json",
     "test": "bun test"
@@ -30,6 +33,7 @@
   "dependencies": {
     "@opencode/plugin": "workspace:*",
     "@opencode/schema": "workspace:*",
+    "@opencode/util": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

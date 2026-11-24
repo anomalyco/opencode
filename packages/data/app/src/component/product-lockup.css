@@ -1,0 +1,43 @@
+/* The product name and its menus (packages/nav-menus styles the lockup) use OpenTUI Mono from routes/index.css. */
+
+/* The site's GitHub mark: a 40px circular link, the mark on a page-coloured disc. */
+[data-slot="github-mark"] {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--github-ink, currentColor);
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    translate: -50% -50%;
+    border-radius: 50%;
+    background: var(--github-page, transparent);
+  }
+
+  /* A 44px target around the 40px circle. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+  }
+
+  svg {
+    position: relative;
+    display: block;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--github-focus, currentColor);
+    outline-offset: 2px;
+  }
+}

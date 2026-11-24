@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { ephemeral, inventory } from "./event.js"
 import { optional } from "./schema.js"
 
-export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
+export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"), Schema.annotate({ identifier: "Plugin.ID" }))
 export type ID = typeof ID.Type
 
 export const Source = Schema.Union([
@@ -25,8 +25,21 @@ export const Features = Schema.Struct({
   server: Schema.Literal(true).pipe(optional),
   tui: Schema.Literal(true).pipe(optional),
   rpc: Schema.Literal(true).pipe(optional),
+  /** The package exports `./gui-experimental`, the GUI bundle the desktop app loads. */
+  gui: Schema.Literal(true).pipe(optional),
 }).annotate({ identifier: "Plugin.Features" })
 export type Features = typeof Features.Type
+
+/** A plugin's prebuilt CommonJS `./gui-experimental` bundle. */
+export interface GuiBundle extends Schema.Schema.Type<typeof GuiBundle> {}
+export const GuiBundle = Schema.Struct({
+  /** The bundle's CommonJS code. */
+  code: Schema.String,
+  /** An opaque value that changes whenever the plugin, its options or its bundle change. */
+  revision: Schema.String,
+  /** The plugin's options from its `opencode.json` entry, as its server entry receives them. */
+  options: Schema.Record(Schema.String, Schema.Json),
+}).annotate({ identifier: "Plugin.GuiBundle" })
 
 export const State = Schema.Union([
   Schema.Struct({ status: Schema.Literal("active") }),

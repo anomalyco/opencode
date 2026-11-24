@@ -48,7 +48,8 @@ function content(data: Record<string, unknown>) {
   return { ...data, content: data.content.map(part) }
 }
 
-function part(value: unknown) {
+/** Upgrades an assistant content part written before v2.1. */
+export function part(value: unknown) {
   if (!isRecord(value)) return value
   if (value.type === "text" || value.type === "reasoning") return rename(value, "state", "native")
   // A tool part's own `state` is its lifecycle status, not native data.

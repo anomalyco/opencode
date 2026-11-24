@@ -1,7 +1,7 @@
 import { createEffect, on, Show, type JSX, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
-import { DrawerContext } from "@opencode/gui-extensions/sdk"
+import { DrawerContext } from "@opencode/plugin/gui/host"
 import { useLanguage } from "@/runtime/i18n/language"
 import { MobileDrawer, MobileDrawerClose, MobileDrawerContent, MobileDrawerLabel } from "./mobile-drawer"
 import "./mobile-panel-drawer.css"

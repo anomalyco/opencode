@@ -24,10 +24,45 @@
   },
   "overrides": [
     {
+      "files": ["packages/ai/src/**"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "Reflect",
+            "message": "Use typed property access or direct invocation. Suppress this rule only for genuine reflection."
+          },
+          {
+            "name": "fetch",
+            "message": "Send HTTP through RequestExecutor, which applies executor-wide and scoped middleware (HTTP hooks). A request sent any other way skips them."
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "effect/http",
+                "importNames": ["HttpClient", "FetchHttpClient"],
+                "message": "Send HTTP through RequestExecutor, which applies executor-wide and scoped middleware (HTTP hooks). Only route/executor.ts holds the HTTP client."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/ai/src/route/executor.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
       "files": [
         "packages/app/**",
         "packages/desktop/**",
-        "packages/gui-extensions/**",
+        "packages/gui-plugins/**",
+        "packages/plugin/src/gui/**",
         "packages/ui/**",
         "packages/session-ui/**"
       ],
@@ -54,7 +89,13 @@
       }
     },
     {
-      "files": ["packages/app/**", "packages/desktop/**", "packages/gui-extensions/**", "packages/session-ui/**"],
+      "files": [
+        "packages/app/**",
+        "packages/desktop/**",
+        "packages/gui-plugins/**",
+        "packages/plugin/src/gui/**",
+        "packages/session-ui/**"
+      ],
       "rules": {
         "anti-slop-effect/no-manual-effect-error-tag": "warn",
         "anti-slop-effect/no-manual-tag-comparison": "warn",
@@ -64,7 +105,7 @@
       }
     },
     {
-      "files": ["packages/gui-extensions/src/*.ts", "packages/gui-extensions/src/*.tsx"],
+      "files": ["packages/gui-plugins/src/*.ts", "packages/gui-plugins/src/*.tsx"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -73,7 +114,7 @@
               {
                 "name": "solid-js",
                 "importNames": ["createEffect", "createRenderEffect", "createComputed"],
-                "message": "Extension code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
+                "message": "GUI plugin code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
               }
             ]
           }
@@ -81,7 +122,7 @@
       }
     },
     {
-      "files": ["packages/gui-extensions/src/*/**"],
+      "files": ["packages/gui-plugins/src/*/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -90,21 +131,21 @@
               {
                 "name": "solid-js",
                 "importNames": ["createEffect", "createRenderEffect", "createComputed"],
-                "message": "Extension code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
+                "message": "GUI plugin code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
               }
             ],
             "patterns": [
               {
                 "regex": "^@opencode/(app|desktop)(/|$)",
-                "message": "GUI extensions never import the app or desktop packages. Use the SDK."
+                "message": "GUI plugins never import the app or desktop packages. Use the SDK."
               },
               {
                 "regex": "^@/",
-                "message": "GUI extensions never import app internals. Use the SDK."
+                "message": "GUI plugins never import app internals. Use the SDK."
               },
               {
-                "group": ["../*/*", "!../*/contract", "!../sdk/*"],
-                "message": "Import another extension only through its contract.ts."
+                "group": ["../*/*", "!../*/contract"],
+                "message": "Import another built-in plugin only through its contract.ts."
               },
               {
                 "regex": "\\.css$",
@@ -116,7 +157,7 @@
       }
     },
     {
-      "files": ["packages/gui-extensions/src/sdk/**"],
+      "files": ["packages/plugin/src/gui/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -124,19 +165,15 @@
             "patterns": [
               {
                 "regex": "^@opencode/(app|desktop)(/|$)",
-                "message": "GUI extensions never import the app or desktop packages. Use the SDK."
+                "message": "The GUI SDK never imports the app or desktop packages; the hosts implement it."
+              },
+              {
+                "regex": "^@opencode/gui-plugins(/|$)",
+                "message": "The GUI SDK never imports the built-in plugins; they import the SDK."
               },
               {
                 "regex": "^@/",
-                "message": "GUI extensions never import app internals. Use the SDK."
-              },
-              {
-                "group": ["../*/*", "!../*/contract", "!../sdk/*"],
-                "message": "Import another extension only through its contract.ts."
-              },
-              {
-                "regex": "\\.css$",
-                "message": "Import CSS with ?inline and contribute it with ctx.add(Style, css)."
+                "message": "The GUI SDK never imports app internals."
               }
             ]
           }
@@ -151,6 +188,7 @@
     "**/.sst",
     "**/*.d.ts",
     "**/sdk.gen.ts",
+    "packages/cli-rs/**",
     "packages/plugins/figma/skills/**",
     ".agent/**",
     ".agents/**",
@@ -163,6 +201,8 @@
     ".pi/**",
     ".roo/**",
     ".windsurf/**",
-    "script/oxlint/anti-slop/**"
+    "script/oxlint/anti-slop/**",
+    "services/site/public/arcade3d/basis/**",
+    "services/site/public/arcade3d/draco/**"
   ]
 }

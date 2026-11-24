@@ -16,13 +16,14 @@ import { PortOwner } from "../src/services/port-owner"
 import { ServiceConfig } from "../src/services/service-config"
 import { ServiceRegistration } from "../src/services/service-registration"
 import { isolatedEnv, transpilerCache } from "./fixture/environment"
+import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "../../core/test/lib/effect"
 
 const it = testEffect(NodeFileSystem.layer)
 
 test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0e0)
+  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("next", "linux")).toBe(0xc0de)
   expect(ServiceConfig.defaultPort("local", "linux")).toBe(0xc0df)
@@ -33,7 +34,7 @@ test("managed service ports are stable per installation channel", () => {
 
 test("managed service ports on Windows stay below the ranges Windows and WSL reserve", () => {
   expect(ServiceConfig.defaultPort("latest", "win32")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70e0)
+  expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70de)
   expect(ServiceConfig.defaultPort("local", "win32")).toBe(0x70df)
   const ports = Array.from({ length: 200 }, (_, index) => ({
     windows: ServiceConfig.defaultPort(`preview-${index}`, "win32"),
@@ -60,6 +61,36 @@ test("service disabled accepts only booleans without changing configuration on i
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
+})
+
+test.each([
+  [
+    ["service", "set", "password", "not-in-log"],
+    ["service", "set", "password", "<redacted>"],
+  ],
+  [
+    ["service", "set", "env", "PROVIDER_KEY", "not-in-log"],
+    ["service", "set", "env", "PROVIDER_KEY", "<redacted>"],
+  ],
+  // The command fails to parse, but its arguments are logged first.
+  [
+    ["--server", "http://127.0.0.1:9", "service", "set", "password", "not-in-log"],
+    ["--server", "http://127.0.0.1:9", "service", "set", "password", "<redacted>"],
+  ],
+])("service set keeps the value out of the CLI log: %j", async (args, logged) => {
+  await using root = await tmpdir()
+  const child = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), ...args], {
+    env: isolatedEnv(root.path),
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+  await child.exited
+  const directory = path.join(root.path, "data", "opencode", "log")
+  const log = (
+    await Promise.all((await fs.readdir(directory)).map((file) => Bun.file(path.join(directory, file)).text()))
+  ).join("")
+  expect(log).toContain(`args=${JSON.stringify(JSON.stringify(logged))}`)
+  expect(log).not.toContain("not-in-log")
 })
 
 // Enabling remote creates a real tunnel, so only the paths that stay local are covered here.
@@ -261,9 +292,9 @@ test.skipIf(process.platform === "win32")("port owner is unknown for a free port
   ).toBeUndefined()
 })
 
-test("service filenames share release channels and identify dev and preview channels", () => {
+test("service filenames share release channels and identify preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
-  expect(ServiceConfig.filename("dev")).toBe("service-dev.json")
+  expect(ServiceConfig.filename("dev")).toBe("service.json")
   expect(ServiceConfig.filename("beta")).toBe("service.json")
   expect(ServiceConfig.filename("next")).toBe("service.json")
   expect(ServiceConfig.filename("local")).toBe("service-local.json")

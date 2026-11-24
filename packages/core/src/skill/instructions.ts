@@ -2,7 +2,7 @@ export * as SkillInstructions from "./instructions.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Permission } from "../permission.js"
+import type { PermissionPolicy } from "../permission/policy.js"
 import { Skill } from "../skill.js"
 import { Instructions } from "../instructions/index.js"
 
@@ -32,40 +32,22 @@ const render = (skills: ReadonlyArray<Summary>) =>
       : ["<available_skills>", ...entries(skills), "</available_skills>"]),
   ].join("\n")
 
-const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary>) => {
-  const diff = Instructions.diffByKey(
-    previous,
-    current,
-    (skill) => skill.id,
-    (before, after) => before.name !== after.name || before.description !== after.description,
-  )
-  // Added, changed, and removed skills render as deltas; the full list is restated only when no entry differs.
-  if (diff.added.length === 0 && diff.changed.length === 0 && diff.removed.length === 0)
-    return [
-      "The available skills have changed. This list supersedes the previous available skills list.",
-      render(current),
-    ].join("\n")
-  return [
-    ...(diff.added.length === 0
-      ? []
-      : ["New skills are available in addition to those previously listed:", ...entries(diff.added)]),
-    ...(diff.changed.length === 0
-      ? []
-      : [
-          "The following skills have changed. Each entry replaces the previously listed skill with the same ID:",
-          ...entries(diff.changed.map((change) => change.current)),
-        ]),
-    ...(diff.removed.length === 0
-      ? []
-      : [
-          `The following skill IDs are no longer available and must not be used: ${diff.removed.map((skill) => skill.id).join(", ")}.`,
-        ]),
-  ].join("\n")
-}
+const update = Instructions.listUpdate<Summary>({
+  key: (skill) => skill.id,
+  changed: (before, after) => before.name !== after.name || before.description !== after.description,
+  entries,
+  render,
+  text: {
+    replaced: "The available skills have changed. This list supersedes the previous available skills list.",
+    added: "New skills are available in addition to those previously listed:",
+    changed: "The following skills have changed. Each entry replaces the previously listed skill with the same ID:",
+    removed: (ids) => `The following skill IDs are no longer available and must not be used: ${ids}.`,
+  },
+})
 
 export interface Interface {
-  /** Lists skills the given ruleset does not deny; callers pass the merged agent and Session permissions. */
-  readonly load: (permissions: Permission.Ruleset) => Effect.Effect<Instructions.List>
+  /** Lists skills the given policy does not deny; callers pass the session's effective permission policy. */
+  readonly load: (policy: PermissionPolicy.Policy) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SkillInstructions") {}
@@ -76,8 +58,8 @@ const layer = Layer.effect(
     const skills = yield* Skill.Service
 
     return Service.of({
-      load: Effect.fn("SkillInstructions.load")(function* (permissions) {
-        const available = Skill.available(yield* skills.list(), permissions)
+      load: Effect.fn("SkillInstructions.load")(function* (policy) {
+        const available = Skill.available(yield* skills.list(), policy)
           .flatMap((skill) =>
             skill.description === undefined || skill.autoinvoke === false
               ? []

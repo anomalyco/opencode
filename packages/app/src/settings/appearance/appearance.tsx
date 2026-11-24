@@ -1,4 +1,4 @@
-import { Component } from "solid-js"
+import { Component, Show } from "solid-js"
 import { Select } from "@opencode/ui/select"
 import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -113,7 +113,7 @@ export const SettingsAppearance: Component = () => {
               description={
                 <>
                   {language.t("settings.general.row.theme.description")}{" "}
-                  <ExternalLink class="settings-link" href="https://opencode.ai/v2/docs/themes">
+                  <ExternalLink class="settings-link" href="https://opencode.ai/docs/themes">
                     {language.t("common.learnMore")}
                   </ExternalLink>
                 </>
@@ -134,6 +134,24 @@ export const SettingsAppearance: Component = () => {
             <FontSetting kind="ui" fonts={appearance.fonts} />
             <FontSetting kind="code" fonts={appearance.fonts} />
             <FontSetting kind="terminal" fonts={appearance.fonts} />
+
+            <Show when={appearance.zoom.available()}>
+              <SettingsRow
+                title={language.t("settings.appearance.row.zoom.title")}
+                description={language.t("settings.appearance.row.zoom.description")}
+              >
+                <Select
+                  data-action="settings-zoom"
+                  options={appearance.zoom.options}
+                  current={appearance.zoom.current()}
+                  placement="bottom-end"
+                  gutter={6}
+                  value={(level) => String(level)}
+                  label={appearance.zoom.label}
+                  onSelect={(level) => level && appearance.zoom.select(level)}
+                />
+              </SettingsRow>
+            </Show>
 
             <SettingsRow
               title={language.t("settings.appearance.row.reduceMotion.title")}

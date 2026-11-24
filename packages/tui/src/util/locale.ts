@@ -67,11 +67,13 @@ export function truncateLeft(str: string, len: number): string {
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
+  if (maxLength <= 0) return ""
   if (str.length <= maxLength) return str
 
   const ellipsis = "…"
   const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
   const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
+  if (keepEnd <= 0) return str.slice(0, keepStart) + ellipsis
 
   return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
 }

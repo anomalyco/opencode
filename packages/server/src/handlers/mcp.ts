@@ -11,7 +11,7 @@ import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { locationErrors, requestRef, response } from "../location"
-import { type Outbound, runPtySocket } from "./pty-socket"
+import { holdLocation, type Outbound, runPtySocket } from "./pty-socket"
 
 const notFound = <A, R>(effect: Effect.Effect<A, Mcp.NotFoundError, R>) =>
   effect.pipe(Effect.mapError((error) => new McpServerNotFoundError({ server: error.server, message: error.message })))
@@ -112,6 +112,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
             const { McpSocketClient } = yield* Effect.promise(() => import("@opencode/core/mcp/socket-client"))
             const socket = yield* Effect.orDie(ctx.request.upgrade)
             const outbox = yield* Queue.unbounded<Outbound>()
+            yield* holdLocation(outbox)
             const state = { attached: false, disconnected: false }
             const transport = McpSocketClient.make({
               send: (text) => Queue.offerUnsafe(outbox, text),

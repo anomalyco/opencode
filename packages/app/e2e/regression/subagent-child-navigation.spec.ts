@@ -4,8 +4,10 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 import { expectPath, SERVER, sessionHref } from "../utils/app"
 import { currentSession } from "../utils/mock-server"
 import { assistantMessage, session, sessionID, setupTimeline, textPart, userMessage } from "../utils/timeline"
+import { storedStrips } from "../utils/side-panel"
 import { expectSessionTitle } from "../utils/waits"
-import { mockWorkspace } from "../utils/workspace"
+import { mockWorkspace, type WorkspaceInput } from "../utils/workspace"
+import { base64Encode } from "@opencode/util/encode"
 
 const directory = "C:/OpenCode/SubagentNavigation"
 
@@ -78,7 +80,53 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
   }
 })
 
-test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {
+test("shows the parent session's side panel tabs in a subagent", async ({ page }) => {
+  const parentStrip = `local\u0000${base64Encode(directory)}/${parentID}`
+
+  await setup(page, undefined, 0, {
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      tabs: [parentID],
+      panes: { [parentID]: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: {
+            [parentStrip]: { all: ["file://README.md", "file://notes.md"], active: "file://notes.md" },
+          },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const strip = side.getByRole("tab")
+
+  const expectParentStrip = async () => {
+    await expect(strip).toHaveText(["README.md", "notes.md"])
+    await expect(side.getByRole("tab", { name: "notes.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  }
+
+  await page.goto(sessionHref(parentID))
+  await expectSessionTitle(page, parentTitle)
+  await expectParentStrip()
+
+  await page.locator(`a[href="${sessionHref(childID)}"]`).click()
+  await expectSessionTitle(page, taskDescription)
+  await expectParentStrip()
+
+  // A tab picked in the subagent is the parent's too.
+  await side.getByRole("tab", { name: "README.md", exact: true }).click()
+  await expect(side.getByRole("tab", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await page.locator('[data-slot="session-title-parent"]').click()
+  await expectSessionTitle(page, parentTitle)
+  await expect(side.getByRole("tab", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(strip).toHaveText(["README.md", "notes.md"])
+
+  expect(await storedStrips(page)).toEqual([parentStrip])
+})
+
+test("navigates from a running subagent card without a background control", async ({ page }) => {
   const runningChildID = "ses_running_child"
   await setupTimeline(page, {
     settings: { timelineDetail: { ...timelinePresets[2].value, subagents: { placement: "separate" } } },
@@ -95,11 +143,12 @@ test("navigates from a running subagent card and hides background controls in th
             id: "call_subagent",
             name: "subagent",
             state: {
-              status: "running",
+              status: "completed",
               input: { description: "Inspect code" },
               metadata: { status: "running", sessionID: runningChildID },
+              content: [{ type: "text", text: "The subagent is working in the background." }],
             },
-            time: { created: 2 },
+            time: { created: 2, completed: 3 },
           },
         ],
         time: { created: 2 },
@@ -109,7 +158,7 @@ test("navigates from a running subagent card and hides background controls in th
     sessionStatus: { [sessionID]: { type: "busy" }, [runningChildID]: { type: "busy" } },
   })
   const hint = page.getByRole("button", { name: /move running work to the background/i })
-  await expect(hint).toBeVisible()
+  await expect(hint).toHaveCount(0)
   await page.locator('[data-component="task-tool-card"]').click()
   await expect(page).toHaveURL(new RegExp(`/session/${runningChildID}$`))
   await expect(hint).toHaveCount(0)
@@ -136,6 +185,10 @@ test("shows the full ancestor path and navigates to an earlier subagent", async 
   await expect(header.locator('[data-slot="session-title-ancestor"]')).toHaveText([parentTitle, childTitle])
   await expect(header.locator('[data-slot="session-title-parent"]')).toHaveText(grandchildTitle)
   await expect(header.getByRole("heading", { name: greatGrandchildTitle })).toBeVisible()
+  // Project, each ancestor and the title are all split by the same slash.
+  const separators = header.locator('[data-slot="session-title-separator"]')
+  await expect(separators).toHaveCount(4)
+  await expect(separators.locator('[data-component="slash"]')).toHaveCount(4)
 
   await header.getByRole("button", { name: childTitle, exact: true }).click()
   await expect(page).toHaveURL(sessionHref(childID))
@@ -327,14 +380,35 @@ test.describe("session ID links", () => {
     await expectSessionTitle(page, "Timeline visual stability")
     const markdown = page.locator('[data-component="markdown"]').filter({ hasText: "Visit" })
     await expect(markdown).toHaveAttribute("data-markdown-ready", "")
-    await expect(markdown.getByRole("button", { name: "Linked session", exact: true })).toHaveCount(2)
+    await expect(markdown.getByRole("button", { name: "@Linked session", exact: true })).toHaveCount(2)
     await markdown
       .locator("p")
       .filter({ hasText: "Or" })
-      .getByRole("button", { name: "Linked session", exact: true })
+      .getByRole("button", { name: "@Linked session", exact: true })
       .press("Enter")
     await expectPath(page, sessionHref(target))
     await expect(page.locator(`[data-titlebar-tab-link][href$="/session/${target}"]`)).toContainText("Linked session")
+  })
+
+  test("titles a session this window never loaded and copies its ID from the context menu", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"])
+    await setupTimeline(page, {
+      sessions: [session(), session({ id: target, title: "Linked session" })],
+      messages: [userMessage(), assistantMessage([textPart("prt_session_menu", `Visit ${target}.`)])],
+    })
+    await expectSessionTitle(page, "Timeline visual stability")
+    const markdown = page.locator('[data-component="markdown"]').filter({ hasText: "Visit" })
+    await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+    await markdown.getByRole("button", { name: "@Linked session", exact: true }).click({ button: "right" })
+    await expect(page.getByRole("menuitem", { name: "Open Session", exact: true })).toBeVisible()
+    await expect(page.getByRole("menuitem", { name: "Copy Session Title", exact: true })).toBeVisible()
+    await page.getByRole("menuitem", { name: "Copy Session ID", exact: true }).click()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(target)
+    await expect(page.getByRole("menu")).toHaveCount(0)
+    await expectPath(page, sessionHref(sessionID))
   })
 
   test("does not navigate to an ID that is absent from the current server", async ({ page }) => {
@@ -349,7 +423,12 @@ test.describe("session ID links", () => {
   })
 })
 
-async function setup(page: Page, events?: () => OpenCodeEvent[], nestedDepth: 0 | 1 | 2 = 0) {
+async function setup(
+  page: Page,
+  events?: () => OpenCodeEvent[],
+  nestedDepth: 0 | 1 | 2 = 0,
+  input: Partial<WorkspaceInput> = {},
+) {
   await mockWorkspace(page, {
     name: "SubagentNavigation",
     sessions: [
@@ -366,6 +445,7 @@ async function setup(page: Page, events?: () => OpenCodeEvent[], nestedDepth: 0 
     events,
     eventRetry: events ? 16 : undefined,
     seed: { tabs: [parentID] },
+    ...input,
   })
   // The child session resolves by ID but is absent from the session list,
   // matching a subagent session that has not been loaded into the list cache yet.
@@ -398,7 +478,11 @@ function titleInlineStart(title: Locator) {
   return title.evaluate((element) => {
     const range = document.createRange()
 
-    range.selectNodeContents(element)
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    const text = walker.nextNode()
+
+    if (!text) return 0
+    range.selectNodeContents(text)
 
     const bounds = range.getBoundingClientRect()
 

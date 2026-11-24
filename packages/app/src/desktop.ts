@@ -14,10 +14,12 @@ export { useGlobal } from "./runtime/server/runtime"
 
 export { useTabs } from "./shell/tabs/tabs"
 
+export { useWindowTabActivity, type WindowTabActivity } from "./shell/layout/project-avatar-state"
+
 export { createDraftStore } from "./runtime/persistence/drafts"
 
 export { createNamespaceStorage, type NamespaceStorage } from "./runtime/persistence/namespace"
 
 export { flushPersisted } from "./runtime/persistence/persist"
 
-export { useExtensionServers } from "./runtime/extension/servers"
+export { usePluginServers } from "./runtime/plugin/servers"

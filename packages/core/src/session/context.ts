@@ -4,18 +4,33 @@ import { Model } from "../model.js"
 import { Permission } from "../permission.js"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
+import type { SessionRequestKind } from "@opencode/plugin/effect/session"
+import { CodeModeApi } from "../codemode/api.js"
 import { CodeModeInstructions } from "../codemode/instructions.js"
+import { CodeModeTool } from "../codemode/tool.js"
 import { Database } from "../database/database.js"
+import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
+import { FileMutation } from "../file-mutation.js"
+import { FileWrite } from "../file-write.js"
+import { Flag } from "../flag.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
+import { AgentInstructions } from "../instructions/agent.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
+import { MachineInstructions } from "../machine/instructions.js"
+import { Environments } from "../environment/environments.js"
 import { McpInstructions } from "../mcp/instructions.js"
 import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
 import { Tool } from "../tool.js"
+import { modelTools } from "../tool/model-policy.js"
+import { WebSearch } from "../websearch.js"
+import { SessionCwd } from "./cwd.js"
+import { SessionCwdInstructions } from "./cwd-instructions.js"
 import { AgentNotFoundError } from "./error.js"
 import { SessionHistory } from "./history.js"
 import { InstructionEntry } from "./instruction-entry.js"
@@ -36,7 +51,7 @@ export interface Loaded {
   readonly session: SessionSchema.Info
   readonly agent: Agent.Selection & { readonly info: Agent.Info }
   readonly model: SessionRunnerModel.Resolved
-  readonly initial: string
+  readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
   readonly tools: Tool.Snapshot
 }
@@ -54,6 +69,7 @@ export interface Interface {
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
   readonly resolveModel: (
     session: SessionSchema.Info,
+    request: { readonly kind: SessionRequestKind; readonly agent: Agent.ID },
   ) => Effect.Effect<SessionRunnerModel.Resolved, SessionRunnerModel.Error>
   /** Selects auxiliary title capabilities without instruction or tool preflight. */
   readonly selectTitle: (session: SessionSchema.Info) => Effect.Effect<
@@ -79,7 +95,12 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
+    const flags = yield* Flag.Service
+    const environment = yield* Environment.Service
     const location = yield* Location.Service
+    const sessionCwd = yield* SessionCwd.make
+    const cwdInstructions = yield* SessionCwdInstructions.Service
+    const machineInstructions = yield* MachineInstructions.Service
     const mcpInstructions = yield* McpInstructions.Service
     const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
@@ -88,13 +109,21 @@ const layer = Layer.effect(
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
+    const services = yield* CodeModeTool.services
+    const api = yield* CodeModeApi.Service
+    const websearch = yield* WebSearch.Service
 
-    const resolveModel = (session: SessionSchema.Info) => models.resolve(session, model.available)
+    const resolveModel = (
+      session: SessionSchema.Info,
+      request: { readonly kind: SessionRequestKind; readonly agent: Agent.ID },
+    ) => models.resolve(session, model.available, request)
 
     const selectTitle = Effect.fn("SessionContext.selectTitle")(function* (session: SessionSchema.Info) {
       const agent = yield* agents.get(Agent.ID.make("title"))
       if (!agent) return
-      const primary = yield* resolveModel(session).pipe(Effect.orElseSucceed(() => undefined))
+      const primary = yield* resolveModel(session, { kind: "title", agent: agent.id }).pipe(
+        Effect.orElseSucceed(() => undefined),
+      )
       const candidate = yield* Effect.gen(function* () {
         if (agent.model) {
           const info = yield* model.get(agent.model.providerID, agent.model.id)
@@ -110,14 +139,17 @@ const layer = Layer.effect(
       })
       const preferred =
         candidate &&
-        (yield* resolveModel({
-          ...session,
-          model: Model.Ref.make({
-            providerID: candidate.info.providerID,
-            id: candidate.info.id,
-            ...(candidate.variant ? { variant: candidate.variant } : {}),
-          }),
-        }).pipe(Effect.orElseSucceed(() => undefined)))
+        (yield* resolveModel(
+          {
+            ...session,
+            model: Model.Ref.make({
+              providerID: candidate.info.providerID,
+              id: candidate.info.id,
+              ...(candidate.variant ? { variant: candidate.variant } : {}),
+            }),
+          },
+          { kind: "title", agent: agent.id },
+        ).pipe(Effect.orElseSucceed(() => undefined)))
       const selected = preferred ?? primary
       if (!selected) return
       return { agent, primary, selected }
@@ -133,15 +165,40 @@ const layer = Layer.effect(
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
-      const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
+      const policy = Permission.Policy.fromRules(agent.info.permissions, session.permissions ?? [])
+      const [selected, hasWebSearch, fullCodeMode, opencodeApi] = yield* Effect.all(
+        [
+          models.select(session, model.available).pipe(Effect.orElseSucceed(() => undefined)),
+          websearch.available(),
+          flags.enabled("full_codemode"),
+          flags.enabled("opencode_api"),
+        ],
+        { concurrency: "unbounded" },
+      )
+      const fallbackRef = session.model ?? agent.info.model
+      const policyModel = selected?.info ?? (fallbackRef && Model.Info.default(fallbackRef.providerID, fallbackRef.id))
+      const tools = yield* registry.snapshot(policy, {
+        services,
+        api: Context.make(CodeModeApi.Service, opencodeApi ? api : CodeModeApi.disabled).pipe(
+          Context.add(Location.Service, location),
+        ),
+        // An agent that can't run `execute` (such as explore) keeps every tool direct, so give it the flag-off policy.
+        tools: modelTools({
+          model: policyModel,
+          websearch: hasWebSearch,
+          fullCodeMode: fullCodeMode && Tool.codeModeAvailable(policy),
+        }),
+      })
+      const cwd = yield* sessionCwd.current(session.id)
       const loaded = yield* Effect.all(
         {
-          tools: registry.snapshot(permissions),
-          builtins: builtins.load(),
+          builtins: builtins.load({ cwd: cwd && SessionCwd.describe(cwd, environment.id) }),
+          cwd: cwdInstructions.load(cwd, session.id),
           discovery: discovery.load(),
-          skills: skillInstructions.load(permissions),
+          skills: skillInstructions.load(policy),
           references: referenceInstructions.load(),
-          mcp: mcpInstructions.load(permissions),
+          mcp: mcpInstructions.load(tools),
+          machines: machineInstructions.load(),
           entries: entries.load(sessionID),
         },
         { concurrency: "unbounded" },
@@ -153,20 +210,24 @@ const layer = Layer.effect(
         // prompt-cache prefix: user-level catalog and guidance, then project instructions, then
         // the date and environment, which vary by day and directory.
         instructions: Instructions.combine([
-          CodeModeInstructions.make(loaded.tools.codeModeCatalog),
+          CodeModeInstructions.make(tools.codeModeCatalog),
           loaded.mcp,
           loaded.references,
           loaded.skills,
+          loaded.machines,
           loaded.discovery,
           loaded.builtins,
+          loaded.cwd,
           loaded.entries,
+          // Last: it changes whenever the user switches agents, so the sources above stay cached.
+          AgentInstructions.make(agent.info),
         ]),
-        tools: loaded.tools,
+        tools,
       }
     })
 
     const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
-      const model = yield* resolveModel(selection.session)
+      const model = yield* resolveModel(selection.session, { kind: "primary", agent: selection.agent.id })
       const history = yield* SessionHistory.entriesForRunner(
         db,
         selection.session.id,
@@ -207,19 +268,29 @@ export const node = makeLocationNode({
   layer,
   deps: [
     Agent.node,
+    CodeModeApi.node,
     Model.node,
     Database.node,
+    Environment.node,
+    FileAccess.node,
+    FileMutation.node,
+    FileWrite.node,
+    Flag.node,
     InstructionBuiltIns.node,
     InstructionDiscovery.node,
     InstructionEntry.node,
     Location.node,
+    MachineInstructions.node,
+    Environments.node,
     McpInstructions.node,
     McpTool.node,
     ReferenceInstructions.node,
+    SessionCwdInstructions.node,
     SessionRunnerModel.node,
     SessionModelRequest.node,
     SessionStore.node,
     SkillInstructions.node,
     Tool.node,
+    WebSearch.node,
   ],
 })

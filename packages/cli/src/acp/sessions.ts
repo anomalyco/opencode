@@ -101,7 +101,7 @@ export const make = Effect.fnUntraced(function* (input: {
             const config = mcpConfig(server)
             if (isDeepStrictEqual(registered.get(server.name), config)) return Effect.void
             registered.set(server.name, config)
-            return input.client.mcp.add({ server: server.name, location: { directory: attached.cwd }, config }).pipe(
+            return input.client.experimental.mcp.add({ server: server.name, location: { directory: attached.cwd }, config }).pipe(
               Effect.catch(ACPClient.classify),
               Effect.onError(() => Effect.sync(() => registered.delete(server.name))),
               Effect.uninterruptible,

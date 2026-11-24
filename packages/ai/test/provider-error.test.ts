@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { isContextOverflow, isContextOverflowFailure, isRetryable } from "../src/effect.js"
-import { AIError, HttpContext } from "../src/schema/index.js"
+import { AIError, HttpContext, RateLimitError, TransportError } from "../src/schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
@@ -21,6 +21,8 @@ describe("provider error classification", () => {
       "Prompt exceeds max length",
       "The input is too long for the selected model.",
       "This text request is too large for the model's configured input limit.",
+      // LiteLLM's own check, before it calls the model.
+      "litellm.ContextWindowExceededError: litellm.BadRequestError: litellm._pre_call_checks: Context Window exceeded for given call. No models have context window large enough for this call.",
     ]
 
     expect(messages.every(isContextOverflow)).toBe(true)
@@ -201,10 +203,20 @@ describe("provider error classification", () => {
         classifyProviderFailure({ message: messages.error.message, rawBody: JSON.stringify(messages) }),
       ].map((failure) => failure._tag),
     ).toEqual(["ContentPolicy", "ContentPolicy", "ContentPolicy"])
-    const stability = { id: "a1b2", name: "content_moderation", errors: ["Your request was flagged"] }
+  })
+
+  test("classifies OpenAI cyber policy refusals before and during a stream", () => {
+    const message =
+      "This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request."
+    const http = { error: { message, type: "invalid_request_error", param: null, code: "cyber_policy" } }
+    const frame = { type: "error", sequence_number: 1, code: "cyber_policy", message, param: null }
+
     expect(
-      classifyProviderFailure({ message: "Forbidden", status: 403, rawBody: JSON.stringify(stability) })._tag,
-    ).toBe("ContentPolicy")
+      [
+        classifyProviderFailure({ message, status: 400, rawBody: JSON.stringify(http) }),
+        classifyProviderFailure({ message: `cyber_policy: ${message}`, rawBody: JSON.stringify(frame) }),
+      ].map((failure) => failure._tag),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
   })
 
   test("classifies Alibaba Model Studio data inspection failures", () => {
@@ -261,6 +273,19 @@ describe("provider error classification", () => {
     expect(
       classifyProviderFailure({ message: zen.error.message, status: 400, rawBody: JSON.stringify(zen) })._tag,
     ).toBe("ContentPolicy")
+  })
+
+  test("classifies Gemini terms-of-use refusals as policy rejections, not authentication failures", () => {
+    const message = "Request rejected in accordance with our terms of use and policies."
+    const gemini = { error: { code: 403, message, status: "PERMISSION_DENIED" } }
+    const zen = { error: { type: "server_error", message: `Upstream request failed: [403] ${message}` } }
+
+    expect(
+      [gemini, zen].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 403, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
   })
 
   test("keeps invalid_prompt schema validation failures as invalid requests", () => {
@@ -447,6 +472,27 @@ describe("provider error classification", () => {
     expect(isContextOverflow("Too many tokens per day, please wait before trying again.")).toBe(false)
     // Plain overflow phrasing without the throttle cue still compacts.
     expect(isContextOverflow("Too many tokens")).toBe(true)
+  })
+
+  test("classifies 429 throttles as retryable rate limits, not context overflow", () => {
+    const bodies = [
+      // Cerebras, captured live
+      '{"message":"Tokens per minute limit exceeded - too many tokens processed.","type":"too_many_tokens_error","param":"quota","code":"token_quota_exceeded"}',
+      '{"message":"Token limit reached: too many tokens per minute for this model."}',
+      '{"error":{"message":"User 10s request rate limit exhausted (3 of 3).","type":"rate_limit_exceeded","code":null}}',
+    ]
+    for (const body of bodies) {
+      const error = new AIError({
+        reason: classifyProviderFailure({
+          message: providerErrorMessage(body),
+          status: 429,
+          rawBody: body,
+          retryAfterMs: 4000,
+        }),
+      })
+      expect(error.reason).toMatchObject({ _tag: "RateLimit", retryAfterMs: 4000 })
+      expect(isRetryable(error)).toBe(true)
+    }
   })
 
   test("does not infer context overflow from known throttling exceptions", () => {
@@ -701,5 +747,54 @@ describe("provider error messages", () => {
         "invalid parameter",
       ].map(providerErrorMessage),
     ).toEqual([undefined, undefined, undefined, undefined])
+  })
+})
+
+describe("AIError getters", () => {
+  const rateLimit = new AIError({
+    reason: new RateLimitError({
+      message: "Rate limit reached",
+      http: new HttpContext({ url: "https://api.test/v1", status: 429, headers: { "retry-after": "2" } }),
+      retryAfterMs: 2000,
+    }),
+  })
+  const invalidBody = '{"error":{"message":"model not found","type":"invalid_request_error","code":"model_not_found"}}'
+  const invalidRequest = new AIError({
+    reason: classifyProviderFailure({
+      message: providerErrorMessage(invalidBody),
+      status: 404,
+      rawBody: invalidBody,
+      http: new HttpContext({ url: "https://api.test/v1", status: 404, headers: {} }),
+    }),
+  })
+  const transport = new AIError({
+    reason: new TransportError({ message: "socket hang up", transport: "http", operation: "request" }),
+  })
+
+  test("status", () => {
+    expect([rateLimit.status, invalidRequest.status, transport.status]).toEqual([429, 404, undefined])
+  })
+
+  test("code", () => {
+    expect([rateLimit.code, invalidRequest.code, transport.code]).toEqual([undefined, "model_not_found", undefined])
+    expect(
+      new AIError({
+        reason: new TransportError({ message: "reset", transport: "http", operation: "read", code: "ECONNRESET" }),
+      }).code,
+    ).toBe("ECONNRESET")
+  })
+
+  test("isRetryable", () => {
+    expect(invalidRequest.reason._tag).toBe("InvalidRequest")
+    expect([rateLimit.isRetryable, invalidRequest.isRetryable, transport.isRetryable]).toEqual([true, false, true])
+    expect([rateLimit, invalidRequest, transport].map(isRetryable)).toEqual([true, false, true])
+  })
+
+  test("retryAfterMs", () => {
+    expect([rateLimit.retryAfterMs, invalidRequest.retryAfterMs, transport.retryAfterMs]).toEqual([
+      2000,
+      undefined,
+      undefined,
+    ])
   })
 })

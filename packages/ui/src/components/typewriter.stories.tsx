@@ -1,6 +1,4 @@
-// @ts-nocheck
-import * as mod from "./typewriter"
-import { create } from "../storybook/scaffold"
+import { Typewriter } from "./typewriter"
 
 const docs = `### Overview
 Animated typewriter text effect for short inline messages.
@@ -25,12 +23,12 @@ Use for short status lines; avoid long paragraphs.
 
 `
 
-const story = create({ title: "UI/Typewriter", mod, args: { text: "Typewriter text" } })
-
 export default {
   title: "UI/Typewriter",
   id: "components-typewriter",
-  component: story.meta.component,
+  component: Typewriter,
+  args: { text: "Typewriter text", as: "p" },
+  argTypes: { as: { control: "select", options: ["p", "span"] } },
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -41,7 +39,7 @@ export default {
   },
 }
 
-export const Basic = story.Basic
+export const Basic = {}
 
 export const Inline = {
   args: {
@@ -49,3 +47,5 @@ export const Inline = {
     as: "span",
   },
 }
+
+export const Empty = { args: { text: "" } }

@@ -19,4 +19,14 @@ export interface Definition<
   readonly model: (modelID: string, settings: ProviderSettings) => LanguageModel<Options, Compact>
 }
 
+/** A provider's `model` export. Settings are optional when every key is optional. */
+export type Model<
+  ProviderSettings extends Settings = Settings,
+  Options extends ProviderOptions = ProviderOptions,
+  Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
+> = (
+  modelID: string,
+  ...settings: {} extends ProviderSettings ? [settings?: ProviderSettings] : [settings: ProviderSettings]
+) => LanguageModel<Options, Compact>
+
 export * as ProviderPackage from "./provider-package.js"

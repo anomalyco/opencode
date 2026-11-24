@@ -1,0 +1,12 @@
+diff --git a/dist/index.js b/dist/index.js
+index 0bf00fc8965a8255e47694b450163f9cf6616bd8..5a901d835c022175ae45c393b34b12caf0686aaa 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -735,6 +735,7 @@ textarea.addEventListener("input", () => {
+   textarea.style.height = Math.min(textarea.scrollHeight, 140) + "px";
+ });
+ window.addEventListener("keydown", (event) => {
++  if (event.code === "KeyD" && !active && !event.composedPath().includes(host)) return;
+   if (
+     dialog.classList.contains("open") &&
+     (event.metaKey || event.ctrlKey) &&

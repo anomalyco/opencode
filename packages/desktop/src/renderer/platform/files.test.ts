@@ -23,7 +23,6 @@ function fileApi(events: string[]): Parameters<typeof createDesktopFiles>[0] {
     saveFile: async () => false,
     openExternal: () => {},
     openBrowser: async () => true,
-    openLocalFile: () => {},
     resolveAppPath: async () => null,
     openPath: async () => undefined,
     revealPath: async () => false,
@@ -59,6 +58,14 @@ describe("desktop attachment files", () => {
       "file:second.txt",
       "release:selection",
     ])
+  })
+
+  test("returns picked paths without reading the files, and releases the token", async () => {
+    const events: string[] = []
+    const files = createDesktopFiles(fileApi(events), "windows")
+
+    expect(await files.openFilePathPickerDialog({})).toEqual(["C:\\first.txt", "C:\\second.txt"])
+    expect(events).toEqual(["release:selection"])
   })
 
   test("releases the token when a selected file callback fails", async () => {

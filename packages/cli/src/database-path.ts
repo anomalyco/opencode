@@ -4,7 +4,7 @@ import { OPENCODE_CHANNEL } from "./version"
 export function databasePath(data: string) {
   const filename =
     process.env.OPENCODE_DB ??
-    (["latest", "beta", "next", "prod"].includes(OPENCODE_CHANNEL) ||
+    (["latest", "dev", "beta", "next", "prod"].includes(OPENCODE_CHANNEL) ||
     process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
     process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
       ? "opencode.db"

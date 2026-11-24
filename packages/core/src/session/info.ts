@@ -2,6 +2,7 @@ import { DateTime, Schema } from "effect"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { AbsolutePath, RelativePath } from "../schema.js"
+import { SessionCwdStore } from "./cwd-store.js"
 import { SessionSchema } from "./schema.js"
 import type { SessionTable } from "./sql.js"
 import { PersistedRevert } from "@opencode/schema/session-revert"
@@ -45,13 +46,14 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
       workspaceID: row.workspace_id ?? undefined,
     },
     subpath: row.path ? RelativePath.make(row.path) : undefined,
-    metadata: row.metadata ?? undefined,
+    metadata: SessionCwdStore.readStored(row.metadata).metadata,
     permissions: row.permission ?? undefined,
     revert: row.revert ? decodeRevert(row.revert) : undefined,
     outcome: row.idle_outcome ?? undefined,
     time: {
       created: DateTime.makeUnsafe(row.time_created),
       updated: DateTime.makeUnsafe(row.time_updated),
+      busy: row.time_busy === null ? undefined : DateTime.makeUnsafe(row.time_busy),
       idle: row.time_idle === null ? undefined : DateTime.makeUnsafe(row.time_idle),
       viewed: row.time_viewed === null ? undefined : DateTime.makeUnsafe(row.time_viewed),
       archived: row.time_archived === null ? undefined : DateTime.makeUnsafe(row.time_archived),
