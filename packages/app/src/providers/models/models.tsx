@@ -220,6 +220,7 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
   }
 
   const variantKey = (model: ModelKey) => `${model.providerID}/${model.modelID}`
+
   // A model's speeds share its variant. Preferences saved before then may name one of its speeds instead.
   const getVariant = (model: ModelKey) => {
     const base = standard(model)
