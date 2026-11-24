@@ -662,6 +662,39 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("marks discovery ready on the first transient failure and publishes after the retry", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Deferred.make<void>()
+      const retry = yield* Deferred.make<void>()
+      const api = copilotAPI([])
+      const state = { attempts: 0 }
+      yield* connect({ apiEndpoint: "https://copilot.test" })
+      yield* addPlugin().pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) => {
+            if (!request.url.endsWith("/models")) return api.execute(request)
+            if (++state.attempts > 1) return Deferred.await(retry).pipe(Effect.andThen(api.execute(request)))
+            return Deferred.await(catalog).pipe(
+              Effect.as(HttpClientResponse.fromWeb(request, new Response(null, { status: 503 }))),
+            )
+          }),
+        ),
+      )
+      const providers = yield* Provider.Service
+      expect(yield* providers.discoveryReady).toBe(false)
+      yield* Deferred.succeed(catalog, undefined)
+      yield* drain
+      expect(yield* providers.discoveryReady).toBe(true)
+
+      yield* Deferred.succeed(retry, undefined)
+      const models = yield* Model.Service
+      yield* advance(() => state.attempts > 1)
+      yield* drain
+      expect((yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5")))?.enabled).toBe(true)
+    }),
+  )
+
   it.effect("routes Auto through Copilot's router and keeps the pick until compaction", () =>
     Effect.gen(function* () {
       const picks: unknown[] = []

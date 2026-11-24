@@ -1,6 +1,6 @@
 export * as SharedCache from "./shared-cache.js"
 
-import { Cause, Clock, Context, Duration, Effect, Exit, Fiber, FiberSet, Layer, Schedule } from "effect"
+import { Cause, Clock, Context, Deferred, Duration, Effect, Exit, Fiber, FiberSet, Layer, Schedule } from "effect"
 import { HttpClientError } from "effect/http"
 import { Hash } from "@opencode/util/hash"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -16,6 +16,8 @@ export interface Input<A, E> {
   readonly interval?: Duration.Input
   /** Skips the age check, but still joins a running load. */
   readonly force?: boolean
+  /** Notifies this caller when a shared load enters retry backoff, without changing its result or retry policy. */
+  readonly onRetry?: Effect.Effect<void>
 }
 
 export interface Interface {
@@ -43,7 +45,10 @@ export const transient = (error: unknown) =>
 
 interface Entry {
   last?: { readonly exit: Exit.Exit<unknown, unknown>; readonly time: number }
-  loading?: Fiber.Fiber<unknown, unknown>
+  loading?: {
+    readonly fiber: Fiber.Fiber<unknown, unknown>
+    readonly retrying: Deferred.Deferred<void>
+  }
   read: number
   unread: number
 }
@@ -82,18 +87,34 @@ const layer = Layer.effect(
       const last = entry.last
       // The key decides the value's type, so a stored or joined result under the same key has this caller's types.
       if (!input.force && last && now - last.time < age) return yield* last.exit as Exit.Exit<A, E>
-      // Yield first so `entry.loading` is set before a synchronous load can finish and clear it.
-      entry.loading ??= run(
-        Effect.yieldNow.pipe(
-          Effect.andThen(start(input.key, entry, input.load)),
-          Effect.ensuring(
-            Effect.sync(() => {
-              entry.loading = undefined
-            }),
+      if (!entry.loading) {
+        const retrying = Deferred.makeUnsafe<void>()
+        const load = input.load.pipe(
+          Effect.tapError((error) => (transient(error) ? Deferred.succeed(retrying, undefined) : Effect.void)),
+        )
+        // Yield first so `entry.loading` is set before a synchronous load can finish and clear it.
+        const fiber = run(
+          Effect.yieldNow.pipe(
+            Effect.andThen(start(input.key, entry, load)),
+            Effect.ensuring(
+              Effect.sync(() => {
+                entry.loading = undefined
+              }),
+            ),
           ),
-        ),
+        )
+        entry.loading = { fiber, retrying }
+      }
+      const loading = entry.loading
+      if (
+        input.onRetry &&
+        (yield* Effect.raceFirst(
+          Deferred.await(loading.retrying).pipe(Effect.as(true)),
+          Fiber.await(loading.fiber).pipe(Effect.as(false)),
+        ))
       )
-      return yield* Fiber.join(entry.loading as Fiber.Fiber<A, E>)
+        yield* input.onRetry
+      return yield* Fiber.join(loading.fiber as Fiber.Fiber<A, E>)
     })
 
     return Service.of({ get })

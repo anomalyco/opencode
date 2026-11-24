@@ -9,7 +9,7 @@ import { SharedCache } from "../../shared-cache.js"
 type Connection = Parameters<typeof IntegrationConnection.key>[0]
 
 /** How a load asks `SharedCache.get` for its list. */
-export type Options = { readonly interval?: Duration.Input; readonly force?: boolean }
+export type Options = Pick<SharedCache.Input<unknown, unknown>, "interval" | "force" | "onRetry">
 
 /** Runs `effect` each time the active credential of `integrationID` switches, until the scope closes. */
 export const onSwitch = <E, R>(integrationID: string, effect: Effect.Effect<unknown, E, R>) =>
@@ -70,18 +70,29 @@ export const start = Effect.fnUntraced(function* <A>(input: {
       )
       .pipe(Effect.uninterruptible)
   const load = (options: Options) => Effect.suspend(() => input.load(state.current, { interval, ...options }))
-  const refresh = load({}).pipe(Effect.flatMap(apply))
+  const refresh = (options: Options) => load(options).pipe(Effect.flatMap(apply))
   yield* onSwitch(
     input.integrationID,
-    FiberHandle.run(loading, Effect.scoped(input.discovery.pipe(Effect.andThen(switched(load, apply))))),
+    FiberHandle.run(
+      loading,
+      Effect.scoped(
+        Effect.gen(function* () {
+          const discovery = yield* input.discovery
+          yield* switched(
+            (options) => load({ ...options, onRetry: discovery.dispose }),
+            (next) => apply(next).pipe(Effect.andThen(discovery.dispose)),
+          )
+        }),
+      ),
+    ),
   )
-  yield* FiberHandle.run(loading, refresh, { onlyIfMissing: true }).pipe(
+  yield* FiberHandle.run(loading, refresh({ onRetry: discovery.dispose }), { onlyIfMissing: true }).pipe(
     Effect.flatMap(Fiber.await),
     Effect.ensuring(discovery.dispose),
     Effect.forkScoped,
   )
   yield* Effect.sleep(interval).pipe(
-    Effect.andThen(FiberHandle.run(loading, refresh, { onlyIfMissing: true })),
+    Effect.andThen(FiberHandle.run(loading, refresh({}), { onlyIfMissing: true })),
     Effect.forever,
     Effect.forkScoped,
   )
