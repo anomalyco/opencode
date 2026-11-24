@@ -617,11 +617,18 @@ impl Local {
     }
 
     fn preferred(&self, model: &Model) -> Selection {
+        // A model runs at the speed last used with it.
+        let speed = self.state.borrow().preference.speed.get(&model.key()).cloned();
+        let remembered = speed.and_then(|speed| {
+            self.speeds_of(model).into_iter().find(|item| speed_info(item).is_some_and(|item| item.id == speed))
+        });
+        let target =
+            remembered.map_or_else(|| model.clone(), |remembered| Model::new(&model.provider_id, remembered.id));
         let configured = self.agent().and_then(|agent| agent.model);
         let fallback = self.configured();
         // A model's speeds share its variant. Preferences saved before then may name one of its speeds instead.
         let standard = self.standard_model(model);
-        let candidates: Vec<Model> = [standard.clone(), model.clone()]
+        let candidates: Vec<Model> = [standard.clone(), target.clone()]
             .into_iter()
             .chain(self.speeds_of(&standard).into_iter().map(|item| Model::new(&item.provider_id.0, item.id)))
             .collect();
@@ -637,14 +644,9 @@ impl Local {
             })
             .or_else(|| fallback.filter(|f| f.model == *model).and_then(|f| f.variant));
         let variant = model_pref::normalize_variant(variant.as_deref()).map(str::to_owned);
-        let info = self.model_info(model);
-        // A model runs at the speed last used with it.
-        let speed = self.state.borrow().preference.speed.get(&model.key()).cloned();
-        let remembered = speed.and_then(|speed| {
-            self.speeds_of(model).into_iter().find(|item| speed_info(item).is_some_and(|item| item.id == speed))
-        });
+        let info = self.model_info(&target);
         Selection {
-            model: remembered.map_or_else(|| model.clone(), |remembered| Model::new(&model.provider_id, remembered.id)),
+            model: target,
             variant: variant
                 .filter(|variant| info.is_some_and(|info| info.variants.iter().any(|item| item.id == *variant))),
         }
