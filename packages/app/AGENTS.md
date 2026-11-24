@@ -135,6 +135,13 @@ This section is the single source for what may move or restyle the session timel
 - `scrollToFn` in `src/session/timeline/virtualizer.tsx` holds the corrections made while a batch of sizes is applied and writes the last one once. Keep scroll writes for size changes on that path, and call `flushHeldScroll` before code inside the batch reads the native offset.
 - Keeper: "corrects the scroll position once for each batch of rows an older page measures" in `e2e/regression/timeline-history.spec.ts`.
 
+### Work when a row mounts
+
+- A row mounts in the frame that scrolls it in, so what it does then is part of that frame. A reply's text is parsed and sanitized (a new document for each block) when its row mounts, unless the Markdown cache holds it.
+- The virtualizer names the rows next to the mounted ones through `prepareRows` (`src/session/timeline/virtualizer.tsx`), and the timeline renders their small text blocks into the cache in idle callbacks with `prewarmMarkdown`. Do work for a row there when it can be done ahead, and keep the cache key in step with the one `Markdown` reads.
+- It is best effort: a main thread with no idle time prepares nothing, and the row then renders its text as before.
+- Keeper: "renders the Markdown of the rows next to the mounted ones before they mount" in `e2e/regression/timeline-cache.spec.ts`.
+
 ### `:has()` selectors
 
 - Chromium rechecks an element's `:has()` when focus moves, an attribute changes, or an element is added or removed near it. In and around the timeline, that happens many times a second during a scroll.
