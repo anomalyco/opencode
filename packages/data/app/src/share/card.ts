@@ -995,13 +995,14 @@ function drawRace(
   const order = (day: number) => named.toSorted((a, b) => value(day, b) - value(day, a))
   const ranks = { from: order(from), to: order(to) }
   const rows = Math.min(6, named.length)
-  const row = Math.min(170, box.height / (rows + 0.35))
-  const top = box.y + row * 0.15
+  // Room under the rows for the date, so it never runs into the last one.
+  const row = Math.min(150, box.height / (rows + 0.9))
+  const top = box.y
   const max = Math.max(1e-9, ...named.map(now))
   // The bars grow in from nothing while the intro rises, before the days start to run.
   const grow = ease(Math.min(1, time / Math.max(0.01, timing.start)))
-  const name = Math.round(row * 0.25)
-  const bar = Math.round(row * 0.4)
+  const bar = Math.round(row * 0.72)
+  const size = Math.round(bar * 0.46)
 
   // The day, large and faint, in the lower right; it counts on with the race.
   ctx.save()
@@ -1013,45 +1014,45 @@ function drawRace(
   ctx.fillText(date, box.x + box.width - ctx.measureText(date).width, box.y + box.height)
   ctx.restore()
 
+  ctx.font = `400 ${size}px ${font}`
+  const indent = ctx.measureText("00").width + size * 0.7
   named.forEach((series) => {
     const was = ranks.from.indexOf(series)
     const will = ranks.to.indexOf(series)
     const place = was + (will - was) * swap
     const shown = Math.max(0, Math.min(1, rows - place))
     if (shown <= 0) return
-    const y = top + place * row
+    const y = top + place * row + (row - bar) / 2
+    const middle = y + bar / 2 + size * 0.36
     const item = chart.series[series]
+    const color = item?.color ?? colors.idle
     const share = whole > 0 ? now(series) / whole : 0
-    const width = Math.max(bar * 0.2, (now(series) / max) * box.width * grow)
+    const span = box.width - indent
+    const length = Math.max(bar * 0.12, (now(series) / max) * span * grow)
     ctx.save()
     ctx.globalAlpha *= shown
     ctx.textBaseline = "alphabetic"
-    ctx.font = `400 ${Math.round(name * 0.85)}px ${font}`
+    ctx.font = `400 ${size}px ${font}`
     ctx.fillStyle = colors.faint
-    const rank = String(Math.round(place) + 1).padStart(2, "0")
-    ctx.fillText(rank, box.x, y + name)
-    const indent = ctx.measureText("00").width + name * 0.8
-    ctx.font = `${Math.round(place) === 0 ? 700 : 400} ${name}px ${font}`
-    ctx.fillStyle = colors.text
-    ctx.fillText(truncate(ctx, item?.label ?? "", box.width - indent), box.x + indent, y + name)
-    const length = Math.max(0, Math.min(width, box.width - indent))
-    const barTop = y + name * 1.4
-    ctx.fillStyle = item?.color ?? colors.idle
-    ctx.fillRect(box.x + indent, barTop, length, bar)
-    // The share rides at the end of its bar, or just inside it when the bar runs to the edge.
-    const percent = `${(share * 100).toFixed(share >= 0.1 ? 0 : 1)}%`
-    ctx.font = `400 ${Math.round(bar * 0.62)}px ${font}`
-    const percentWidth = ctx.measureText(percent).width
-    const outside = box.x + indent + length + bar * 0.3
-    const inside = outside + percentWidth > box.x + box.width
-    ctx.fillStyle = inside ? colors.background : colors.muted
-    ctx.fillText(
-      percent,
-      inside ? box.x + indent + length - percentWidth - bar * 0.3 : outside,
-      barTop + bar / 2 + bar * 0.22,
-    )
+    ctx.fillText(String(Math.round(place) + 1).padStart(2, "0"), box.x, middle)
+    ctx.fillStyle = color
+    ctx.fillRect(box.x + indent, y, Math.min(length, span), bar)
+    // One line a row: the name and share inside the bar when it's long enough, otherwise just past its end.
+    ctx.font = `${Math.round(place) === 0 ? 700 : 400} ${size}px ${font}`
+    const label = `${item?.label ?? ""}  ${(share * 100).toFixed(share >= 0.1 ? 0 : 1)}%`
+    const inner = size * 0.6
+    const fits = ctx.measureText(label).width + inner * 2 <= length
+    ctx.fillStyle = fits ? (luminance(color) > 0.5 ? "#0c0c0c" : "#ffffff") : colors.text
+    const x = fits ? box.x + indent + inner : box.x + indent + length + inner
+    ctx.fillText(truncate(ctx, label, box.x + box.width - x), x, middle)
     ctx.restore()
   })
+}
+
+// A colour's relative brightness (0 to 1), to set dark or white text on it.
+function luminance(color: string) {
+  const [r, g, b] = rgb(color)
+  return (0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (b ?? 0)) / 255
 }
 
 // A one-day chart's bars on the dot grid, edge to edge across `width`: each an odd number of dot pitches wide round the
