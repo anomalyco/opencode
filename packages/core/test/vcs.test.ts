@@ -672,6 +672,89 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("keeps dirty-only submodule rows while scanning submodules once", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          const upstream = path.join(directory, "upstream")
+          await initGit(upstream, "-b", "main")
+          await fs.writeFile(path.join(upstream, "a.txt"), "one\n")
+          await commitAll(upstream, "initial")
+          const root = path.join(directory, "root")
+          await initGit(root, "-b", "main")
+          await fs.writeFile(path.join(root, "keep.txt"), "one\n")
+          for (const name of ["clean", "dirty", "moved", "untracked"])
+            await git(root, "-c", "protocol.file.allow=always", "submodule", "add", upstream, name)
+          await commitAll(root, "initial")
+          await fs.writeFile(path.join(root, "dirty/a.txt"), "two\n")
+          await fs.writeFile(path.join(root, "moved/b.txt"), "b\n")
+          await commitAll(path.join(root, "moved"), "move")
+          await fs.writeFile(path.join(root, "moved/a.txt"), "three\n")
+          await fs.writeFile(path.join(root, "untracked/new.txt"), "new\n")
+        })
+        const vcs = yield* Vcs.Service
+        const processes = yield* AppProcess.Service
+        const commands: string[][] = []
+        const context = host()
+        yield* VcsGitPlugin.Plugin.effect({
+          ...context,
+          vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+        }).pipe(
+          Effect.provideService(
+            AppProcess.Service,
+            AppProcess.Service.of({
+              ...processes,
+              run: (command, options) => {
+                commands.push([...(command as unknown as { args: string[] }).args])
+                return processes.run(command, options)
+              },
+            }),
+          ),
+        )
+
+        const diff = yield* vcs.diff("working")
+        expect(diff.map((row) => [row.file, row.status, row.additions, row.deletions])).toEqual([
+          ["dirty", "modified", 0, 0],
+          ["moved", "modified", 1, 1],
+        ])
+        expect(diff.find((row) => row.file === "dirty")?.patch).toContain("-dirty")
+        expect(diff.find((row) => row.file === "moved")?.patch).toContain("-dirty")
+        const diffs = commands.filter((args) => args.includes("diff") && !args.includes("--no-index"))
+        expect(diffs.length).toBeGreaterThan(0)
+        const rescans = diffs.filter((args) => !args.includes("--ignore-submodules=dirty"))
+        expect(rescans.every((args) => args.at(-1) !== "." && !args.includes(":(top,literal)untracked"))).toBeTrue()
+      }).pipe(provide(path.join(directory, "root"), { git: true, worktree: path.join(directory, "root") })),
+    ),
+  )
+
+  it.live("hides a submodule the repository is configured to ignore", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          const upstream = path.join(directory, "upstream")
+          await initGit(upstream, "-b", "main")
+          await fs.writeFile(path.join(upstream, "a.txt"), "one\n")
+          await commitAll(upstream, "initial")
+          const root = path.join(directory, "root")
+          await initGit(root, "-b", "main")
+          await git(root, "-c", "protocol.file.allow=always", "submodule", "add", upstream, "sub")
+          await git(root, "config", "submodule.sub.ignore", "all")
+          await commitAll(root, "initial")
+          await fs.writeFile(path.join(root, "sub/b.txt"), "b\n")
+          await commitAll(path.join(root, "sub"), "move")
+        })
+        const vcs = yield* Vcs.Service
+        const context = host()
+        yield* VcsGitPlugin.Plugin.effect({
+          ...context,
+          vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+        })
+
+        expect(yield* vcs.diff("working")).toEqual([])
+      }).pipe(provide(path.join(directory, "root"), { git: true, worktree: path.join(directory, "root") })),
+    ),
+  )
+
   it.live("lists an untracked folder as one entry and its entries from inside it when asked for folders", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
