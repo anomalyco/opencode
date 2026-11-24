@@ -79,7 +79,7 @@
   --editor-inset: 12px;
   /* The option cards, track rows and code: on the light panel a white card with a firm line; on the dark one a fill
      and line only just off the panel, so the choices don't shout. */
-  --editor-control: light-dark(var(--stats-layer), #111111);
+  --editor-control: light-dark(var(--stats-layer), color-mix(in srgb, var(--stats-bg) 50%, var(--stats-layer)));
   --editor-control-line: light-dark(var(--stats-line-strong), var(--stats-line));
   box-sizing: border-box;
   /* Smaller than the window, so the page stays in view around it. */
@@ -125,6 +125,7 @@
     }
   }
 
+  /* grey-ok: the backdrop is outside the page, so the page's tokens don't reach it; this is the dark page colour */
   &::backdrop {
     background: rgb(12 12 12 / 0);
     transition:
@@ -141,6 +142,7 @@
       background: rgb(12 12 12 / 0);
     }
   }
+  /* grey-ok-end */
 
   button {
     font: inherit;
@@ -259,11 +261,14 @@
     padding: 56px calc(var(--editor-inspector) + var(--editor-inset) + 48px) 20px 48px;
     /* Grey on the light page; on the dark one a step lighter than the card (#0c0c0c), so it stands out, but well below
        the page's second layer, which glared. */
-    background-color: light-dark(var(--stats-layer-2), #111111);
+    background-color: light-dark(var(--stats-layer-2), color-mix(in srgb, var(--stats-bg) 50%, var(--stats-layer)));
 
     /* A light card would sit pale on the light stage; the stage darkens a step under it. */
     &[data-card-theme="light"] {
-      background-color: light-dark(#d6d6d6, #111111);
+      background-color: light-dark(
+        color-mix(in srgb, var(--stats-layer-2) 88%, var(--stats-text)),
+        color-mix(in srgb, var(--stats-bg) 50%, var(--stats-layer))
+      );
     }
     background-image: radial-gradient(
       light-dark(var(--stats-line-strong), rgb(255 255 255 / 0.06)) 1px,
@@ -657,6 +662,7 @@
   }
 
   /* 14px across with its border. */
+  /* grey-ok: each swatch shows its card's own background, the same whatever the page's theme */
   [data-slot="swatch"] {
     flex: none;
     width: 12px;
@@ -668,6 +674,7 @@
       background: #fbfbfb;
     }
   }
+  /* grey-ok-end */
 
   /* Pulled out by each row's padding and border, so the track squares line up with the Music title. */
   /* The tracks sit in the options column, styled like the chips above it. */
@@ -723,6 +730,7 @@
 
   /* The explicit-lyrics badge, on the right of its track: solid black with bold white capitals, like the label on a
      CD sleeve. A hairline keeps its edge on a dark page. */
+  /* grey-ok: the Explicit badge is white on black on purpose, like the label on a CD sleeve */
   [data-slot="explicit"] {
     flex: none;
     padding: 3px 5px;
@@ -736,6 +744,7 @@
     background: #000;
     box-shadow: 0 0 0 1px rgb(255 255 255 / 0.18);
   }
+  /* grey-ok-end */
 
   [data-slot="track-icon"] {
     display: grid;
@@ -754,6 +763,7 @@
   }
 
   /* A track's single cover fills its square; on the chosen track the play state sits over a darkened cover. */
+  /* grey-ok: the play state sits on the cover art, white whatever the theme */
   [data-slot="track-icon"][data-cover] {
     position: relative;
     overflow: hidden;
@@ -781,6 +791,7 @@
       filter: brightness(0.5);
     }
   }
+  /* grey-ok-end */
 
   /* A small equaliser on the chosen track. */
   /* Three bars made of 2px dots, like the card's equaliser, that climb and fall dot by dot from the bottom. */
@@ -917,6 +928,7 @@
 }
 
 /* Design mode's controls, styled like opencode.ai's (services/site design-mode.css): blue, above the preview. */
+/* grey-ok: Design mode: an internal overlay, only in development */
 [data-page="stats"] [data-component="share-design"] {
   display: flex;
   flex-wrap: wrap;
@@ -973,3 +985,4 @@
     opacity: 0.75;
   }
 }
+/* grey-ok-end */

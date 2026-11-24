@@ -24,8 +24,10 @@ html:has([data-page="embed"]) body {
     cursor: pointer;
   }
 
+  /* grey-ok: the embed page has none of the site's page tokens; this is the site's faint grey */
   [data-slot="embed-missing"] {
     font: 14px/1.4 var(--font-mono, monospace);
     color: #8f8f8f;
   }
+  /* grey-ok-end */
 }
