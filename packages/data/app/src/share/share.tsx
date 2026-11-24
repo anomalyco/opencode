@@ -194,6 +194,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     const still = format() === "image" || matchMedia("(prefers-reduced-motion: reduce)").matches
     if (still || !playing()) {
       audio?.pause()
+      // So playing again starts the animation and its track over; the clock would otherwise look unchanged.
+      clock.key = ""
       return drawShareCard(ctx, value, opts, Infinity, timing())
     }
     // An embed plays its card once, silently, and rests on it, as it will on the host page.
