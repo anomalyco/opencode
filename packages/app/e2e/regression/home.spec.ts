@@ -340,6 +340,31 @@ test("tabbing out of session search closes its results, and tabbing back reopens
   await expect(panel.getByRole("option")).toContainText(earlier.title)
 })
 
+test("picking a project from the picker in session search clears the search", async ({ page }) => {
+  const earlier = { id: "ses_home_search_scope", title: "Finished earlier" }
+  const workspace = await mockWorkspace(page, { name: "HomeScope", sessions: [earlier] })
+  await seed(page, { usedProjects: { local: [workspace.projectID] } })
+  // Between md and lg the project picker sits inside the search field instead of a projects column.
+  await page.setViewportSize({ width: 900, height: 720 })
+  await page.goto("/")
+  const search = page.getByRole("textbox", { name: /Search sessions/ })
+  const panel = page.locator('[data-component="home-session-search-panel"]')
+  await expect(row(page, earlier.title)).toBeVisible()
+
+  await search.fill("Finished")
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+  await page.getByRole("button", { name: "Projects", exact: true }).click()
+  await page
+    .getByRole("dialog", { name: "Projects", exact: true })
+    .getByRole("button", { name: /HomeScope/ })
+    .click()
+
+  // The results panel closes with the picker, so a query left in the field would no longer filter anything.
+  await expect(search).toHaveValue("")
+  await expect(search).toHaveAttribute("placeholder", "Search sessions in HomeScope")
+  await expect(row(page, earlier.title)).toBeVisible()
+})
+
 test("Escape cancels an inline rename whose save does not answer", async ({ page }) => {
   const target = { id: "ses_home_rename_hang", title: "Rename me" }
   await mockWorkspace(page, { name: "HomeRename", sessions: [target] })
