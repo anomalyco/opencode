@@ -74,7 +74,7 @@ export function resolveSlots<Render>(input: {
   const winners = new Map<string, Claim<Render>>()
   for (const claim of input.claims) {
     if (claim.placement.kind !== "replace") continue
-    if (!input.paths.has(claim.placement.target)) {
+    if (!validPath(claim.placement.target) || !input.paths.has(claim.placement.target)) {
       suppressed.push({ claim })
       continue
     }
@@ -115,6 +115,10 @@ export function resolveSlots<Render>(input: {
     const kind = claim.placement.kind
     if (kind === "replace") continue
     const target = claim.placement.target
+    if (!validPath(target)) {
+      suppressed.push({ claim })
+      continue
+    }
     // Inside placements targeting a replaced boundary are part of its
     // contents; sibling placements on the boundary itself stay outside it.
     const inside = kind === "prepend" || kind === "append" ? boundaries.get(target) : undefined
@@ -150,8 +154,14 @@ function depth(path: string) {
   return path.split(".").length
 }
 
+function validPath(path: string) {
+  return path.length > 0 && !path.startsWith(".") && !path.endsWith(".") && !path.includes("..")
+}
+
 function survivingAncestor(path: string, paths: ReadonlySet<string>) {
-  for (let index = path.lastIndexOf("."); index !== -1; index = path.lastIndexOf(".", index - 1)) {
+  // lastIndexOf clamps a negative start to 0, so stop before index 0 to avoid
+  // looping on a leading dot.
+  for (let index = path.lastIndexOf("."); index > 0; index = path.lastIndexOf(".", index - 1)) {
     const ancestor = path.slice(0, index)
     if (paths.has(ancestor)) return ancestor
   }
