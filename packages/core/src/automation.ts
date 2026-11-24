@@ -90,6 +90,14 @@ export class DisabledError extends Schema.TaggedError<DisabledError>()("Automati
   }
 }
 
+/**
+ * Set for a create a plugin makes. Its subagent target is checked against the agents loaded now instead of waiting for
+ * plugin activation, which may be running that plugin's setup and so would never finish.
+ */
+export const FromPlugin = Context.Reference<boolean>("@opencode/Automation/FromPlugin", {
+  defaultValue: () => false,
+})
+
 export interface ListInput {
   readonly sessionID?: SessionSchema.ID
   readonly projectID?: ProjectID
@@ -255,7 +263,7 @@ const layer = Layer.effect(
      */
     const subagent = (owner: SessionSchema.Info, id: Agent.ID, invocation?: Invocation) =>
       Effect.gen(function* () {
-        yield* Plugin.awaitActivation
+        if (!(yield* FromPlugin)) yield* Plugin.awaitActivation
         const location = yield* Location.Service
         if (location.project.id !== owner.projectID)
           return yield* new InvalidError({ reason: "The creating session's location is no longer in its project" })

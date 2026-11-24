@@ -323,7 +323,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       },
       automation: {
         // A plugin has no UI listener to answer an interactive ask, so asks settle unattended, as they do over HTTP.
-        create: (input) => automations.create(input).pipe(Effect.provideService(Permission.Unattended, [])),
+        create: (input) =>
+          automations
+            .create(input)
+            .pipe(Effect.provideService(Permission.Unattended, []), Effect.provideService(Automation.FromPlugin, true)),
         list: (input) => automations.list(input),
         delete: (input) => automations.remove(input.automationID),
       },
