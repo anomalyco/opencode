@@ -418,6 +418,52 @@ test("a steer shows as pending in the timeline as the composer clears, before th
   await expect(prompt.locator('[data-component="user-message"]')).toHaveAttribute("data-pending", "true")
 })
 
+// The optimistic prompt measures the mounted rows in its own render. A height a row has only then, between two
+// layouts of one frame, never reaches the ResizeObserver, so the row kept it.
+test("a steer leaves every row as tall as its content", async ({ page }) => {
+  const mock = createQueueMock(
+    [],
+    [
+      {
+        id: "msg_queue_initial_user",
+        type: "user",
+        text: "Inspect the queue ordering.",
+        time: { created: 1700000000000 },
+      },
+      {
+        id: "msg_queue_initial_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "queue-model", providerID: "opencode" },
+        content: [{ type: "text", text: "I will inspect the current implementation." }],
+        finish: "tool-calls",
+        time: { created: 1700000000001, completed: 1700000000002 },
+      },
+    ],
+  )
+
+  const view = await openQueue(page, mock, "steer")
+  const transcript = page.locator("[data-timeline-virtual-content]")
+  await expect(transcript.getByText("I will inspect the current implementation.", { exact: true })).toBeVisible()
+  await expect(view.input).toBeEditable()
+  await view.input.fill("Also check the retry path.")
+  await view.input.press("Enter")
+  await expect.poll(() => mock.rows.map((row) => row.delivery)).toEqual(["steer"])
+  await expect(userRow(page, mock.rows[0]!.id)).toContainText("Also check the retry path.")
+
+  // How much taller than its content the tallest mismatch is.
+  const slack = () =>
+    transcript.evaluate((root) =>
+      Math.max(
+        ...[...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].map((row) =>
+          Math.abs(row.getBoundingClientRect().height - row.firstElementChild!.getBoundingClientRect().height),
+        ),
+      ),
+    )
+
+  await expect.poll(slack).toBeLessThanOrEqual(1)
+})
+
 test("a prompt sent while the session's agents and models load shows as pending at once and sends once they load", async ({
   page,
 }) => {

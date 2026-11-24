@@ -792,7 +792,9 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       }
     }
 
-    test("keeps the visible row anchored through reflow and touch cancellation", async ({ page }, testInfo) => {
+    test("keeps the words on the reading line anchored through reflow and touch cancellation", async ({
+      page,
+    }, testInfo) => {
       await setupTimeline(page, {
         messages: [
           userMessage(),
@@ -827,32 +829,44 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         .toBeGreaterThan(before + 50)
       await expect(page.locator(`${thumbSelector}[data-visible="false"]`)).toHaveCount(1)
 
-      const chosen = await scroller.evaluate((root) => {
-        const view = root.getBoundingClientRect()
-        const rows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")]
-        const above = rows.filter((row) => row.getBoundingClientRect().bottom <= view.top).slice(-2)
-        const first = rows.find((row) => row.getBoundingClientRect().bottom > view.top)!
+      // The row on the reading line, 40% of the way down from the session header to the composer region, and how far
+      // into that row the line falls.
+      const reading = () =>
+        scroller.evaluate((root) => {
+          const view = root.getBoundingClientRect()
+          const style = getComputedStyle(root)
+          const top = view.top + (parseFloat(style.scrollPaddingTop) || 0)
+          const line = top + (view.bottom - (parseFloat(style.scrollPaddingBottom) || 0) - top) * 0.4
 
-        return {
-          above: above.map((row) => ({ key: row.dataset.timelineKey, height: row.getBoundingClientRect().height })),
-          key: first.dataset.timelineKey,
-          top: first.getBoundingClientRect().top,
-        }
-      })
+          const row = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].find((row) => {
+            const box = row.getBoundingClientRect()
 
-      expect(chosen.above).toHaveLength(2)
+            return box.top <= line && box.bottom > line
+          })!
+
+          const box = row.getBoundingClientRect()
+
+          return { key: row.dataset.timelineKey!, into: (line - box.top) / box.height, height: box.height }
+        })
+
+      // How far the words that were on the line are from it now. Every row wraps again at the new width.
+      const drift = async () => {
+        const now = await reading()
+
+        return now.key === words.key ? Math.abs(now.into - words.into) * now.height : Number.POSITIVE_INFINITY
+      }
+
+      const words = await reading()
       await page.setViewportSize({ width: 390, height: 844 })
-
-      for (const row of chosen.above)
-        await expect
-          .poll(async () => (await scroller.locator(`[data-timeline-key="${row.key}"]`).boundingBox())?.height)
-          .toBeGreaterThan(row.height)
-      const anchor = scroller.locator(`[data-timeline-key="${chosen.key}"]`)
+      const row = scroller.locator(`[data-timeline-key="${words.key}"]`)
+      await expect.poll(async () => (await row.boundingBox())?.height).toBeGreaterThan(words.height)
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
       await testInfo.attach("reflow-held.png", { body: await page.screenshot(), contentType: "image/png" })
-      expect((await anchor.boundingBox())?.y).toBeCloseTo(chosen.top, 0)
+      // The words stay within two lines of the reading line: the rows above them moved the view, not them.
+      expect(await drift()).toBeLessThanOrEqual(40)
       await devtools.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] })
       await testInfo.attach("reflow-cancelled.png", { body: await page.screenshot(), contentType: "image/png" })
-      expect((await anchor.boundingBox())?.y).toBeCloseTo(chosen.top, 0)
+      expect(await drift()).toBeLessThanOrEqual(40)
     })
   })
 }

@@ -239,6 +239,67 @@ test.describe("timeline history", () => {
     await expect.poll(positions).toEqual(before)
   })
 
+  // The space above a reply row depends on the reply row before it. Here that row is on the older page, so the first
+  // loaded row changes height when the page lands.
+  test("keeps visible rows fixed while an older page that ends inside a turn prepends", async ({ page }) => {
+    const older = Promise.withResolvers<void>()
+    const requests: { before?: string; phase: "start" | "end" }[] = []
+    const prompt = "msg_0500_split_user"
+
+    const messages = [
+      ...historyMessages(4),
+      userMessage([{ id: "prt_split_prompt", type: "text", text: "Answer in two steps." }], { id: prompt }),
+      assistantMessage([textPart("prt_split_first", "The first step of the answer.")], {
+        id: "msg_0501_split_assistant",
+        parentID: prompt,
+      }),
+      assistantMessage(
+        Array.from({ length: 12 }, (_, index) =>
+          textPart(`prt_split_second_${index}`, `Second step ${index}. ${"More context. ".repeat(40)}`),
+        ),
+        { id: "msg_0502_split_assistant", parentID: prompt },
+      ),
+    ]
+
+    await setupTimeline(page, {
+      sessionMessages: validateTimelineMessages(messages),
+      // The newest page holds the second reply of the turn only.
+      pageMessages: (_, __, before) =>
+        before ? { items: messages.slice(0, -1) } : { items: messages.slice(-1), cursor: messages.at(-1)!.id },
+      beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+      onMessages: (request) => requests.push(request),
+    })
+
+    const scroller = timelineScroller(page)
+    await expect(scroller.getByText(/^Second step 11\. /)).toBeInViewport()
+    await scroller.hover()
+    await page.mouse.wheel(0, -100_000)
+    await expect.poll(() => requests.some((request) => request.before && request.phase === "start")).toBe(true)
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeLessThanOrEqual(1)
+
+    const positions = () =>
+      scroller.evaluate((element) => {
+        const top = element.getBoundingClientRect().top
+
+        return [0, 1, 2].map((index) => {
+          const row = [...element.querySelectorAll<HTMLElement>("[data-timeline-part-id]")].find((part) =>
+            part.textContent?.startsWith(`Second step ${index}. `),
+          )
+
+          return row && Math.round((row.getBoundingClientRect().top - top) * devicePixelRatio) / devicePixelRatio
+        })
+      })
+
+    const before = await positions()
+    const height = await scroller.evaluate((element) => element.scrollHeight)
+    expect(before.every((position) => position !== undefined)).toBe(true)
+
+    older.resolve()
+    await expect(scroller.getByText("The first step of the answer.", { exact: true })).toBeAttached()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+    await expect.poll(positions).toEqual(before)
+  })
+
   // Each native scroll write forces a layout of the rows resized before it.
   test("corrects the scroll position once for each batch of rows an older page measures", async ({ page }) => {
     const messages = [

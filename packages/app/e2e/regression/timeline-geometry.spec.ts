@@ -311,6 +311,267 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
   await expect.poll(bottom).toBeLessThanOrEqual(1)
 })
 
+// A patch whose diff renders after its row mounts: its accordion opens by default and mounts its body a frame later.
+function lateDiff(id: string, file: string) {
+  const before = Array.from({ length: 80 }, (_, index) => `export const value${index} = ${index}\n`).join("")
+  const after = before.replaceAll(" = ", " = compute(").replaceAll("\n", ")\n")
+
+  return toolPart(
+    id,
+    "patch",
+    "completed",
+    { patchText: `Update ${file}` },
+    {
+      metadata: {
+        files: [
+          {
+            file,
+            status: "modified",
+            patch: createTwoFilesPatch(`a/${file}`, `b/${file}`, before, after),
+            additions: 80,
+            deletions: 80,
+          },
+        ],
+      },
+    },
+  )
+}
+
+const paragraph = (label: string) => `${label}. ${"More context. ".repeat(60)}`
+
+const fromEnd = (scroller: Locator) =>
+  scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+
+// The cold mount has shown the rows and pinned the end. A wheel or a key before then does nothing, or leaves the
+// view where the rows that have not rendered yet put it.
+async function restingAtEnd(page: Page, scroller: Locator) {
+  await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+  await expect(scroller.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
+  await expect.poll(() => fromEnd(scroller)).toBeLessThanOrEqual(1)
+}
+
+// The virtualizer has applied the row's content height.
+const unmeasured = (row: Locator) =>
+  row.evaluate((element) => {
+    const content = element.querySelector<HTMLElement>("[data-index]")
+
+    return content
+      ? Math.abs(element.getBoundingClientRect().height - content.getBoundingClientRect().height)
+      : Number.POSITIVE_INFINITY
+  })
+
+test("keeps the rows in view still while a file diff the reader scrolled up to renders", async ({ page }) => {
+  const id = "prt_late_growth_patch"
+  const jumped = "msg_1000_late_growth_user"
+  await setupTimeline(page, {
+    settings: { timelineDetail: timelinePresets[0].value },
+    messages: [
+      userMessage([userText("Change the file.", { id: "prt_late_growth_first_text" })], {
+        id: "msg_0900_late_growth_user",
+      }),
+      assistantMessage(
+        [
+          ...Array.from({ length: 24 }, (_, index) =>
+            textPart(`prt_late_growth_earlier_${index}`, `Earlier step ${index}.`),
+          ),
+          lateDiff(id, "src/late.ts"),
+          ...Array.from({ length: 6 }, (_, index) =>
+            textPart(`prt_late_growth_later_${index}`, paragraph(`Later step ${index}`)),
+          ),
+        ],
+        { id: "msg_0901_late_growth_assistant", parentID: "msg_0900_late_growth_user" },
+      ),
+      userMessage([userText("Carry on.", { id: "prt_late_growth_second_text" })], { id: jumped }),
+      assistantMessage(
+        Array.from({ length: 18 }, (_, index) =>
+          textPart(`prt_late_growth_tail_${index}`, paragraph(`Last step ${index}`)),
+        ),
+        { id: "msg_1001_late_growth_assistant", parentID: jumped },
+      ),
+    ],
+    viewport: { width: 1200, height: 600 },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const patch = page.locator(`[data-timeline-part-id="${id}"]`)
+  const prompt = `[data-timeline-row="UserMessage"][data-message-id="${jumped}"]`
+
+  const later = Array.from(
+    { length: 6 },
+    (_, index) => `[data-timeline-part-id="${renderedPartID(`prt_late_growth_later_${index}`)}"]`,
+  )
+
+  await expect(page.locator(`[data-timeline-part-id="${renderedPartID("prt_late_growth_tail_17")}"]`)).toBeInViewport()
+
+  // A jump to the second prompt leaves the end of the first reply mounted above the view. The diff is further up:
+  // its row has never mounted, so it still has its 60px estimate, like the rows between.
+  await page.evaluate((message) => (location.hash = `#message-${message}`), jumped)
+  await expect(page.locator(prompt)).toBeInViewport()
+  await waitForVisualSettle(page, [later[5]!, prompt])
+  await expect(patch).toHaveCount(0)
+
+  const watched = await scroller.evaluate((element, selectors) => {
+    const index = selectors.findIndex((selector) => element.querySelector(selector))
+
+    return {
+      index,
+      y: element.querySelector(selectors[index]!)!.getBoundingClientRect().y,
+      top: element.getBoundingClientRect().y,
+    }
+  }, later)
+
+  // One wheel puts the diff's row 150px into the view, above the watched row, before it has rendered anything.
+  const distance = Math.round(watched.top + 150 - watched.y + 60 * (watched.index + 1))
+  await scroller.hover()
+  await page.mouse.wheel(0, -distance)
+  await expect(patch.locator('[data-component="apply-patch-file-diff"]')).toBeVisible()
+  await expect.poll(() => unmeasured(page.locator("[data-timeline-key]", { has: patch }))).toBeLessThanOrEqual(1)
+
+  // The watched row moved as far as the wheel did: the rows that rendered above it grew away from it.
+  await expect(page.locator(later[watched.index]!)).toBeInViewport()
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+
+  const moved = await page
+    .locator(later[watched.index]!)
+    .evaluate((element, y) => element.getBoundingClientRect().y - y, watched.y)
+
+  expect(Math.abs(moved - distance)).toBeLessThanOrEqual(1)
+})
+
+test("leaves the rows a reader rests on in place while a patch that arrives under them renders", async ({ page }) => {
+  const timeline = await setupTimeline(page, {
+    settings: { timelineDetail: timelinePresets[0].value },
+    messages: [
+      userMessage(),
+      assistantMessage(
+        Array.from({ length: 14 }, (_, index) => textPart(`prt_arrival_${index}`, paragraph(`Step ${index}`))),
+        { completed: false },
+      ),
+    ],
+    viewport: { width: 1200, height: 600 },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const last = `[data-timeline-part-id="${renderedPartID("prt_arrival_13")}"]`
+  const patch = page.locator('[data-timeline-part-id="prt_arrival_patch"]')
+  await expect(page.locator(last)).toBeInViewport()
+  await restingAtEnd(page, scroller)
+
+  // The reader nudges up to stop following the reply, and rests 30px above its end: far enough that a row that gets
+  // shorter cannot bring the end back under them, and near enough that the patch and the text after it arrive in view.
+  await scroller.hover()
+  await page.mouse.wheel(0, -30)
+  await waitForVisualSettle(page, [last])
+  expect(Math.abs((await fromEnd(scroller)) - 30)).toBeLessThanOrEqual(1)
+  const resting = await scroller.evaluate((element) => element.scrollTop)
+
+  // A finished patch and the text after it arrive together, so the text is under the patch while its diff renders.
+  await timeline.send([
+    ...partUpdated(lateDiff("prt_arrival_patch", "src/arrival.ts")),
+    ...partUpdated(textPart("prt_arrival_after", "Done.")),
+  ])
+  await expect(patch.locator('[data-component="apply-patch-file-diff"]')).toBeVisible()
+  await expect.poll(() => unmeasured(page.locator("[data-timeline-key]", { has: patch }))).toBeLessThanOrEqual(1)
+
+  expect(Math.abs((await scroller.evaluate((element) => element.scrollTop)) - resting)).toBeLessThanOrEqual(1)
+  await expect(page.locator(last)).toBeInViewport()
+})
+
+test("keeps the start of the session in view after Home while its rows render", async ({ page }) => {
+  const first = "msg_0900_start_user"
+  await setupTimeline(page, {
+    messages: [
+      userMessage([userText("Start of the session.", { id: "prt_start_first_text" })], { id: first }),
+      assistantMessage(
+        Array.from({ length: 12 }, (_, index) =>
+          textPart(`prt_start_first_${index}`, paragraph(`First step ${index}`)),
+        ),
+        { id: "msg_0901_start_assistant", parentID: first },
+      ),
+      userMessage(),
+      assistantMessage(
+        Array.from({ length: 18 }, (_, index) => textPart(`prt_start_tail_${index}`, paragraph(`Last step ${index}`))),
+      ),
+    ],
+    viewport: { width: 1200, height: 600 },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const prompt = page.locator(`[data-timeline-row="UserMessage"][data-message-id="${first}"]`)
+  await expect(page.locator(`[data-timeline-part-id="${renderedPartID("prt_start_tail_17")}"]`)).toBeInViewport()
+  await restingAtEnd(page, scroller)
+  await expect(prompt).toHaveCount(0)
+
+  // The rows at the start have never mounted. Each renders taller than its estimate, and grows downward from the
+  // first prompt.
+  await scroller.focus()
+  await page.keyboard.press("Home")
+  await expect(prompt).toBeInViewport()
+
+  await expect
+    .poll(() => unmeasured(page.locator("[data-timeline-key]", { has: page.getByText("First step 0.") })))
+    .toBeLessThanOrEqual(1)
+
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0)
+  await expect(prompt).toBeInViewport()
+})
+
+test("keeps the text a reader is on in place when the review panel narrows the timeline", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage(
+        Array.from({ length: 14 }, (_, index) => textPart(`prt_reflow_${index}`, paragraph(`Step ${index}`))),
+      ),
+    ],
+    viewport: { width: 1400, height: 700 },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const part = (index: number) => `[data-timeline-part-id="${renderedPartID(`prt_reflow_${index}`)}"]`
+  await expect(page.locator(part(13))).toBeInViewport()
+  await restingAtEnd(page, scroller)
+
+  // The reader scrolls up three rows and rests. The row 40% of the way down from the session header to the composer
+  // region is the one they are on.
+  await scroller.hover()
+  await page.mouse.wheel(0, -650)
+  await expect(page.locator(part(13))).not.toBeInViewport()
+  await waitForVisualSettle(page, [part(9), part(10)])
+
+  const reading = () =>
+    scroller.evaluate((element) => {
+      const view = element.getBoundingClientRect()
+      const style = getComputedStyle(element)
+      const top = view.top + (parseFloat(style.scrollPaddingTop) || 0)
+      const line = top + (view.bottom - (parseFloat(style.scrollPaddingBottom) || 0) - top) * 0.4
+
+      const row = [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find((row) => {
+        const box = row.getBoundingClientRect()
+
+        return box.top <= line && box.bottom > line
+      })!
+
+      const box = row.getBoundingClientRect()
+
+      return { key: row.dataset.timelineKey!, into: (line - box.top) / box.height, height: box.height }
+    })
+
+  const before = await reading()
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  await expect(page.locator("#review-panel")).toHaveAttribute("aria-hidden", "false")
+  const row = page.locator(`[data-timeline-key="${before.key}"]`)
+  await expect
+    .poll(() => row.evaluate((element) => element.getBoundingClientRect().height))
+    .toBeGreaterThan(before.height)
+  await expect.poll(() => unmeasured(row)).toBeLessThanOrEqual(1)
+
+  // The words that were on that line are within two lines of it: every row wrapped, and none pushed them away.
+  const after = await reading()
+  expect(after.key).toBe(before.key)
+  expect(Math.abs(after.into - before.into) * after.height).toBeLessThanOrEqual(40)
+})
+
 for (const outline of [
   { name: "shell outline at 1.25x", kind: "shell", deviceScaleFactor: 1.25 },
   { name: "shell outline at 1.5x", kind: "shell", deviceScaleFactor: 1.5 },

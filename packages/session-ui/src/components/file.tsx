@@ -575,7 +575,12 @@ function useViewerRender<I extends RenderTarget, O>(config: ViewerRenderConfig<I
 
     if (effect.type === "refresh-find") return viewer.find.refresh({ reset: true })
 
-    if (effect.type === "notify-rendered") return config.onRendered()
+    if (effect.type === "notify-rendered") {
+      // The timeline reads this to tell a view that has drawn from one still to grow.
+      viewer.wrapper.toggleAttribute("data-file-ready", true)
+
+      return config.onRendered()
+    }
 
     instance?.cleanUp()
     instance = undefined
