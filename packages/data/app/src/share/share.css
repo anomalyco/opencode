@@ -303,9 +303,10 @@
     height: auto;
     max-width: 100%;
     max-height: 100%;
-    /* Layered, tight shadows: a hairline, then contact, near and far shade. */
+    /* Layered, tight shadows: a hairline, then contact, near and far shade. On the dark stage the hairline is light, so
+       the card's edge still shows. */
     box-shadow:
-      0 0 0 1px rgb(0 0 0 / 0.06),
+      0 0 0 1px light-dark(rgb(0 0 0 / 0.06), rgb(255 255 255 / 0.1)),
       0 1px 1px rgb(0 0 0 / 0.08),
       0 2px 4px -1px rgb(0 0 0 / 0.08),
       0 6px 12px -4px rgb(0 0 0 / 0.1),
