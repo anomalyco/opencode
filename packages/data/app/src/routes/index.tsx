@@ -1,7 +1,6 @@
 import { Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { scaleSqrt } from "d3-scale"
-import countryCodesSource from "i18n-iso-countries/codes.json?raw"
 import {
   type CacheRatioEntry,
   type CountryEntry,
@@ -29,9 +28,40 @@ import { homeSummary } from "../lib/summaries"
 import { formatCatalogLabName, isKnownCatalogLab } from "./model-catalog"
 import { NewModelsSection } from "./new-models"
 import { SectionHeading } from "./section-heading"
-import type { ShareChart, ShareSeries } from "../share/card"
 import { installShareDesign } from "../share/design"
 import { ShareButton, ShareDialog, type ShareDraft } from "../share/share"
+import {
+  usageColors,
+  marketColors,
+  usageTotal,
+  formatTokens,
+  formatUsers,
+  formatRetentionRate,
+  formatBillions,
+  getTopModelsSegmentOrder,
+  formatTopModelsMobileDate,
+  formatCountryName,
+  formatGeoTokens,
+  formatGeoShare,
+  getMarketAuthorOrder,
+  formatTrillions,
+  marketDateParts,
+  getRankColor,
+  formatRatio,
+  formatDollars,
+  formatSessionCost,
+  modelNames,
+} from "../share/sections"
+import {
+  cacheRatioCard,
+  geoCard,
+  marketShareCard,
+  retentionCard,
+  sessionCostCard,
+  tokenCostCard,
+  topModelsCard,
+  uniqueUsersCard,
+} from "../share/sections"
 import { setStatsPageCacheHeaders } from "./stats-cache"
 import { ComparisonCardsSection, uniqueComparisonPairs, type ComparisonModelRef } from "./compare-cards"
 import {
@@ -52,28 +82,9 @@ const comparisonPairIndexes = [
   [2, 3, "Top model alternative"],
 ] as const
 const statsUnfurlPath = "banner.jpg"
-const usageColors = [
-  "#ed6aff",
-  "#a684ff",
-  "#7c86ff",
-  "#51a2ff",
-  "#00d3f2",
-  "#00d5be",
-  "#00bc7d",
-  "#9ae600",
-  "#ffb900",
-  "#ff8904",
-  "#ff6467",
-]
-const marketColors = ["#ed6aff", "#a684ff", "#7c86ff", "#51a2ff", "#00d3f2", "#00d5be", "#00bc7d", "#9ae600", "#ffb900"]
 
-type IsoCountryCode = readonly [string, string, string]
 type HomeLeaderboardEntry = HomePageData["leaderboard"]["weekly"][number]
 type HomeRetentionEntry = HomePageData["retention"][number]
-
-const countryNumericIds = new Map(
-  (JSON.parse(countryCodesSource) as IsoCountryCode[]).map((country) => [country[0], country[2]] as const),
-)
 
 const getData = query(async () => {
   "use server"
@@ -422,21 +433,9 @@ function TopModelsSection(props: {
         share={
           <ShareButton
             label={`Share ${i18n.t("nav.topModels")}`}
-            card={() => {
-              const leader = leaderboard()[0]
-              const chart = usageShareChart(props.data[chartPeriod()], (value) => formatTokens(value), "All models")
-              if (!chart || !leader) return undefined
-              const when = period() === "weekly" ? "in the past 7 days" : "yesterday"
-              return {
-                id: "top-models",
-                title: i18n.t("nav.topModels"),
-                range: shareRange(chart, chartPeriod()),
-                highlight: leader.name,
-                headline: `${leader.name} led OpenCode usage ${when}, with ${formatBillions(leader.tokens)} tokens`,
-                stat: { value: formatBillions(leader.tokens), label: `tokens for ${leader.name}, ${when}` },
-                chart,
-              }
-            }}
+            card={() =>
+              topModelsCard(props.data[chartPeriod()], leaderboard(), { period: chartPeriod(), leaderboard: period() })
+            }
           />
         }
       />
@@ -721,21 +720,7 @@ function UniqueUsersSection(props: { data: HomePageData["users"]; names: Map<str
         title={i18n.t("home.uniqueUsersTitle")}
         description={i18n.t("home.uniqueUsersDescription")}
         action={<PeriodToggle value={period()} onChange={setPeriod} label={i18n.t("home.uniqueUsersTitle")} />}
-        share={() => {
-          const chart = usageShareChart(props.data[period()], formatUsers, "All models")
-          const top = chart && leadingSeries(chart)
-          if (!chart || !top) return undefined
-          const when = shareWhen(chart, period())
-          return {
-            id: "unique-users",
-            title: i18n.t("home.uniqueUsersTitle"),
-            range: shareRange(chart, period()),
-            highlight: props.names.get(top.key) ?? top.label,
-            headline: `${props.names.get(top.key) ?? top.label} had the most OpenCode users ${when}, with ${top.value}`,
-            stat: { value: top.value, label: `OpenCode users on ${props.names.get(top.key) ?? top.label}, ${when}` },
-            chart,
-          }
-        }}
+        share={() => uniqueUsersCard(props.data[period()], period(), props.names)}
       />
       <Show
         when={props.data[period()].some((item) => usageTotal(item) > 0)}
@@ -766,25 +751,7 @@ function RetentionSection(props: { data: HomeRetentionEntry[] }) {
         id="retention"
         title="Weekly Retention"
         description="Weekly users returning the next week."
-        share={() => {
-          const top = props.data[0]
-          if (!top) return undefined
-          return {
-            id: "retention",
-            title: "Weekly Retention",
-            range: "Week over week",
-            highlight: top.name,
-            headline: `${top.name} kept ${formatRetentionRate(top.rate)} of its OpenCode users from one week to the next`,
-            stat: { value: formatRetentionRate(top.rate), label: `of ${top.name} users came back the next week` },
-            chart: rankedShareChart(
-              props.data.map((item) => ({
-                label: item.model,
-                value: formatRetentionRate(item.rate),
-                fill: item.rate / 100,
-              })),
-            ),
-          }
-        }}
+        share={() => retentionCard(props.data)}
       />
       <Show
         when={props.data.length > 0}
@@ -874,10 +841,6 @@ function RetentionMarker(props: { rate: number; active: boolean }) {
   )
 }
 
-function formatRetentionRate(value: number) {
-  return `${value.toFixed(1)}%`
-}
-
 function isTopModelsBlankHover(bar: HTMLElement, clientY: number) {
   const stack = bar.querySelector<HTMLElement>('[data-slot="top-models-stack"]')
   if (!stack) return true
@@ -914,12 +877,6 @@ function stackedTopModelsSegments(point: UsagePoint, order: Map<string, number>)
     .sort((a, b) => (order.get(b.segment.model) ?? b.index) - (order.get(a.segment.model) ?? a.index))
 }
 
-function getTopModelsSegmentOrder(data: UsagePoint[]) {
-  return new Map(
-    data.find((point) => point.segments.length > 0)?.segments.map((segment, index) => [segment.model, index]) ?? [],
-  )
-}
-
 function getTopModelsSegmentColor(
   model: string,
   index: number,
@@ -951,19 +908,6 @@ function scrollDenseChartToEnd(element: HTMLDivElement | undefined, count: numbe
   })
 }
 
-function formatTopModelsMobileDate(label: string) {
-  return label.split(" - ")[0] ?? label
-}
-
-function usageTotal(point: UsagePoint) {
-  return point.segments.reduce((sum, item) => sum + item.value, 0)
-}
-
-function formatTokens(value: number) {
-  if (value >= 1) return `${value.toFixed(value >= 10 ? 0 : 1)}T`
-  return `${Math.round(value * 1000)}B`
-}
-
 function formatUsageChartValue(value: number, metric: "tokens" | "users") {
   if (metric === "users") return formatUsers(value)
   return formatTokens(value)
@@ -972,12 +916,6 @@ function formatUsageChartValue(value: number, metric: "tokens" | "users") {
 function usageChartTotalLabel(metric: "tokens" | "users", i18n: ReturnType<typeof useI18n>) {
   if (metric === "users") return i18n.t("home.modelUsers")
   return i18n.t("home.total")
-}
-
-function formatUsers(value: number) {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`
-  return new Intl.NumberFormat("en").format(Math.round(value))
 }
 
 function Leaderboard(props: {
@@ -1101,11 +1039,6 @@ function LeaderboardCard(props: {
   )
 }
 
-function formatBillions(value: number) {
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}T`
-  return `${value}B`
-}
-
 function formatChange(value: number | null, i18n: ReturnType<typeof useI18n>) {
   if (value === null) return i18n.t("home.new")
   if (value > 0) return `+${value}%`
@@ -1139,21 +1072,7 @@ function MarketShareSection(props: { data: HomePageData["market"]; labPaths: Hom
         title={i18n.t("home.marketShareTitle")}
         description={i18n.t("home.marketShareDescription")}
         action={<PeriodToggle value={period()} onChange={setPeriod} label={i18n.t("home.marketShareTitle")} />}
-        share={() => {
-          const chart = marketShareChart(data(), authorOrder())
-          const top = chart && leadingSeries(chart)
-          if (!chart || !top) return undefined
-          const when = shareWhen(chart, period())
-          return {
-            id: "market-share",
-            title: i18n.t("home.marketShareTitle"),
-            range: shareRange(chart, period()),
-            highlight: top.label,
-            headline: `${top.label} served ${top.value} of OpenCode tokens ${when}`,
-            stat: { value: top.value, label: `of OpenCode tokens went to ${top.label} models, ${when}` },
-            chart,
-          }
-        }}
+        share={() => marketShareCard(data(), period())}
       />
       <Show
         when={today()}
@@ -1459,26 +1378,7 @@ function GeoBreakdownSection(props: { data: CountryEntry[] }) {
       <SectionTitle
         id="geo-breakdown"
         title={i18n.t("home.geoTitle")}
-        share={() => {
-          const top = topCountries()[0]
-          if (!top) return undefined
-          const name = (country: string) => formatCountryName(country, "en", i18n.t("home.unknown"))
-          return {
-            id: "geo-breakdown",
-            title: i18n.t("home.geoTitle"),
-            range: "Past 2 months",
-            highlight: name(top.country),
-            headline: `${name(top.country)} sent the most OpenCode tokens in the past 2 months, ${formatGeoShare(top.share)} of the total`,
-            stat: { value: formatGeoShare(top.share), label: `of OpenCode tokens came from ${name(top.country)}` },
-            chart: rankedShareChart(
-              topCountries().map((item) => ({
-                label: name(item.country),
-                value: `${formatGeoTokens(item.tokens)}  ${formatGeoShare(item.share)}`,
-                fill: item.tokens / maxTokens(),
-              })),
-            ),
-          }
-        }}
+        share={() => geoCard(topCountries(), i18n.t("home.unknown"))}
       />
       <Show
         when={props.data.length > 0}
@@ -1562,25 +1462,6 @@ function MethodologySection() {
   )
 }
 
-function countryNumericId(country: string) {
-  return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
-}
-
-function formatCountryName(country: string, locale: string, unknown: string) {
-  const code = country.toUpperCase()
-  if (code === "ZZ") return unknown
-  if (!countryNumericId(code)) return code
-  return new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? code
-}
-
-function formatGeoTokens(value: number) {
-  return formatTrillions(value)
-}
-
-function formatGeoShare(value: number) {
-  return `${value.toFixed(value > 0 && value < 1 ? 1 : 0)}%`
-}
-
 function getMarketSegmentColor(author: string, color: string, activeAuthor: string | undefined) {
   if (!activeAuthor) return color
   if (activeAuthor === author) return color
@@ -1598,33 +1479,6 @@ function stackedMarketAuthors(day: MarketDay, order: Map<string, number>) {
     .sort((a, b) => (order.get(b.author.author) ?? b.index) - (order.get(a.author.author) ?? a.index))
 }
 
-function getMarketAuthorOrder(data: MarketDay[]) {
-  return getRankOrder(
-    data.flatMap((day) => day.authors.map((author, index) => ({ key: author.author, value: author.tokens, index }))),
-  )
-}
-
-function getRankOrder(items: { key: string; value: number; index: number }[]) {
-  return new Map<string, number>(
-    Object.values(
-      items.reduce<Record<string, { key: string; value: number; index: number }>>((result, item) => {
-        result[item.key] = {
-          key: item.key,
-          value: (result[item.key]?.value ?? 0) + item.value,
-          index: Math.min(result[item.key]?.index ?? item.index, item.index),
-        }
-        return result
-      }, {}),
-    )
-      .toSorted((a, b) => b.value - a.value || a.index - b.index || a.key.localeCompare(b.key))
-      .map((item, index) => [item.key, index] as const),
-  )
-}
-
-function getRankColor(key: string, fallbackIndex: number, order: Map<string, number>, colors: readonly string[]) {
-  return colors[order.get(key) ?? fallbackIndex] ?? "var(--stats-text)"
-}
-
 function isMarketMobileLabelHidden(index: number, count: number) {
   return count > 7 && (count - 1 - index) % 2 === 1
 }
@@ -1633,21 +1487,9 @@ function formatMarketMobileDate(label: string) {
   return marketDateParts(label).start
 }
 
-function formatTrillions(value: number) {
-  if (value === 0) return "0"
-  if (value < 0.001) return `${Number((value * 1_000_000).toFixed(value >= 0.00001 ? 0 : 1))}M`
-  if (value < 1) return `${Number((value * 1_000).toFixed(value >= 0.01 ? 0 : 1))}B`
-  return `${value.toFixed(value >= 10 ? 0 : 1)}T`
-}
-
 function formatMarketDate(day: MarketDay | undefined, fallback: string) {
   if (!day) return fallback
   return formatPeriodDate(day.start, day.end)
-}
-
-function marketDateParts(label: string) {
-  const [start, end] = label.split(" - ")
-  return { start: start ?? label, end: end ?? start ?? label }
 }
 
 function TokenCostSection(props: { data: TokenCostEntry[]; names: Map<string, string> }) {
@@ -1663,26 +1505,7 @@ function TokenCostSection(props: { data: TokenCostEntry[]; names: Map<string, st
         id="token-cost"
         title={i18n.t("home.tokenCostTitle")}
         description={i18n.t("home.tokenCostDescription")}
-        share={() => {
-          const items = visible()
-          const top = items.find((item) => item.total > 0) ?? items[0]
-          const max = Math.max(0, ...items.map((item) => item.total)) || 1
-          if (!top) return undefined
-          return {
-            id: "token-cost",
-            title: i18n.t("home.tokenCostTitle"),
-            range: "USD per 1M output tokens",
-            highlight: props.names.get(top.model) ?? top.model,
-            headline: `${props.names.get(top.model) ?? top.model} has the lowest output price on OpenCode, at ${formatDollars(top.total)} per 1M tokens`,
-            stat: {
-              value: formatDollars(top.total),
-              label: `per 1M output tokens for ${props.names.get(top.model) ?? top.model}`,
-            },
-            chart: rankedShareChart(
-              items.map((item) => ({ label: item.model, value: formatDollars(item.total), fill: item.total / max })),
-            ),
-          }
-        }}
+        share={() => tokenCostCard(visible(), props.names)}
       />
       <Show
         when={visible().length > 0}
@@ -1757,24 +1580,7 @@ function CacheRatioSection(props: { data: CacheRatioEntry[]; names: Map<string, 
         id="cache-ratio"
         title={i18n.t("home.cacheRatioTitle")}
         description={i18n.t("home.cacheRatioDescription")}
-        share={() => {
-          const top = visible()[0]
-          if (!top) return undefined
-          return {
-            id: "cache-ratio",
-            title: i18n.t("home.cacheRatioTitle"),
-            range: "Share of input tokens",
-            highlight: props.names.get(top.model) ?? top.model,
-            headline: `${props.names.get(top.model) ?? top.model} served ${formatRatio(top.ratio)} of its input tokens from cache`,
-            stat: {
-              value: formatRatio(top.ratio),
-              label: `of ${props.names.get(top.model) ?? top.model} input tokens came from cache`,
-            },
-            chart: rankedShareChart(
-              visible().map((item) => ({ label: item.model, value: formatRatio(item.ratio), fill: item.ratio / 100 })),
-            ),
-          }
-        }}
+        share={() => cacheRatioCard(visible(), props.names)}
       />
       <Show
         when={visible().length > 0}
@@ -1857,14 +1663,6 @@ function CacheRatioMarker(props: { ratio: number; active: boolean }) {
   )
 }
 
-function formatRatio(value: number) {
-  return `${value.toFixed(value > 0 && value < 10 ? 1 : 0)}%`
-}
-
-function formatDollars(value: number) {
-  return `$${value.toFixed(value > 0 && value < 0.01 ? 4 : 2)}`
-}
-
 function MetricBar(props: { value: number; max: number; active: boolean }) {
   const fill = createMemo(() => Math.min(1, Math.max(props.value / props.max, props.value > 0 ? 0.03 : 0)))
   return (
@@ -1892,29 +1690,7 @@ function SessionCostSection(props: { data: SessionCostEntry[]; names: Map<string
         id="session-cost"
         title={i18n.t("home.sessionCostTitle")}
         description={i18n.t("home.sessionCostDescription")}
-        share={() => {
-          const top = visible()[0]
-          const max = Math.max(0, ...visible().map((item) => item.cost)) || 1
-          if (!top) return undefined
-          return {
-            id: "session-cost",
-            title: i18n.t("home.sessionCostTitle"),
-            range: "Average per session",
-            highlight: props.names.get(top.model) ?? top.model,
-            headline: `An OpenCode session with ${props.names.get(top.model) ?? top.model} costs ${formatSessionCost(top.cost)} on average`,
-            stat: {
-              value: formatSessionCost(top.cost),
-              label: `average cost of an OpenCode session with ${props.names.get(top.model) ?? top.model}`,
-            },
-            chart: rankedShareChart(
-              visible().map((item) => ({
-                label: item.model,
-                value: formatSessionCost(item.cost),
-                fill: item.cost / max,
-              })),
-            ),
-          }
-        }}
+        share={() => sessionCostCard(visible(), props.names)}
       />
       <Show
         when={visible().length > 0}
@@ -1988,115 +1764,6 @@ function SessionCostChart(props: {
 function formatTokenCount(value: number) {
   if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`
   return `${Math.round(value / 1_000)}K`
-}
-
-function formatSessionCost(value: number) {
-  return `$${value.toFixed(4)}`
-}
-
-// Share cards (share/card.ts) leave out the last bucket, which is still filling in, show the six leading series and
-// fold the rest into Other, as the site's colours rank them.
-const shareSeriesLimit = 6
-const shareOtherColor = "#6b6b6b"
-
-function usageShareChart(data: UsagePoint[], format: (value: number) => string, total: string) {
-  const points = data.length > 1 ? data.slice(0, -1) : data
-  const order = getTopModelsSegmentOrder(points)
-  const keys = [...order.keys()].filter((key) => key !== "Other").slice(0, shareSeriesLimit)
-  return stackedShareChart(
-    points.map((point) => ({
-      label: formatTopModelsMobileDate(point.date),
-      values: new Map(point.segments.map((segment) => [segment.model, segment.value])),
-    })),
-    keys.map((key) => ({ key, label: key, color: getRankColor(key, 0, order, usageColors) })),
-    format,
-    false,
-    total,
-  )
-}
-
-function marketShareChart(data: MarketDay[], order: Map<string, number>) {
-  const days = data.length > 1 ? data.slice(0, -1) : data
-  const keys = [...order.keys()].filter((key) => key !== "Other").slice(0, shareSeriesLimit)
-  return stackedShareChart(
-    days.map((day) => ({
-      label: marketDateParts(day.date).start,
-      values: new Map(day.authors.map((author) => [author.author, author.share])),
-    })),
-    keys.map((key) => ({
-      key,
-      label: formatCatalogLabName(key),
-      color: getRankColor(key, 0, order, marketColors),
-    })),
-    (value) => `${value.toFixed(1)}%`,
-    true,
-    "All labs",
-  )
-}
-
-function stackedShareChart(
-  columns: { label: string; values: Map<string, number> }[],
-  named: Omit<ShareSeries, "value">[],
-  format: (value: number) => string,
-  normalized: boolean,
-  total: string,
-): Extract<ShareChart, { kind: "stacked" }> | undefined {
-  if (columns.length === 0 || named.length === 0) return undefined
-  const keys = new Set(named.map((item) => item.key))
-  const rows = columns.map((column) => {
-    const values = named.map((item) => column.values.get(item.key) ?? 0)
-    const other = [...column.values].reduce((sum, [key, value]) => (keys.has(key) ? sum : sum + value), 0)
-    return { label: column.label, values: [...values, other] }
-  })
-  const last = rows.at(-1)?.values ?? []
-  return {
-    kind: "stacked",
-    normalized,
-    columns: rows,
-    // The latest column's whole: its sum, or 100% when the columns are shares.
-    total: {
-      label: `${total}, ${rows.at(-1)?.label ?? ""}`,
-      value: normalized ? "100%" : format(last.reduce((sum, value) => sum + value, 0)),
-    },
-    series: [...named, { key: "other", label: "Other", color: shareOtherColor }]
-      .map((item, index) => ({ ...item, value: format(last[index] ?? 0) }))
-      .filter((item, index) => item.key !== "other" || (last[index] ?? 0) > 0),
-  }
-}
-
-function rankedShareChart(rows: { label: string; value: string; fill: number }[]): ShareChart {
-  return {
-    kind: "ranked",
-    rows: rows.map((row, index) => ({ ...row, rank: String(index + 1).padStart(2, "0") })),
-  }
-}
-
-// Model display names by ID, for share card headlines; charts and lists elsewhere show IDs.
-function modelNames(data: HomePageData) {
-  return new Map(
-    [...data.leaderboard.weekly, ...data.leaderboard.daily, ...data.retention].map((entry) => [
-      entry.model,
-      entry.name,
-    ]),
-  )
-}
-
-// The named series with the most in the latest column.
-function leadingSeries(chart: Extract<ShareChart, { kind: "stacked" }>) {
-  const last = chart.columns.at(-1)?.values ?? []
-  return chart.series
-    .map((item, index) => ({ item, value: last[index] ?? 0 }))
-    .filter((entry) => entry.item.key !== "other")
-    .toSorted((a, b) => b.value - a.value)[0]?.item
-}
-
-function shareRange(chart: Extract<ShareChart, { kind: "stacked" }>, period: Period) {
-  return period === "weekly" ? `Past ${chart.columns.length} weeks` : `Past ${chart.columns.length} days`
-}
-
-function shareWhen(chart: Extract<ShareChart, { kind: "stacked" }>, period: Period) {
-  const label = chart.columns.at(-1)?.label ?? ""
-  return period === "weekly" ? `in the week of ${label}` : `on ${label}`
 }
 
 function homeStructuredData(
