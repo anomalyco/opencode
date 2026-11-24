@@ -74,6 +74,10 @@
 [data-page="stats"] dialog[data-component="share-editor"] {
   --editor-inspector: 344px;
   --editor-inset: 12px;
+  /* The option cards, track rows and code: on the light panel a white card with a firm line; on the dark one a fill
+     and line only just off the panel, so the choices don't shout. */
+  --editor-control: light-dark(var(--stats-layer), #111111);
+  --editor-control-line: light-dark(var(--stats-line-strong), var(--stats-line));
   box-sizing: border-box;
   /* Smaller than the window, so the page stays in view around it. */
   width: min(1200px, calc(100vw - 160px));
@@ -233,8 +237,10 @@
     /* The same 48px either side of the card's area: from the stage's left edge, and from the panel's (its width, its
        1px borders and its inset). The section arrows sit in those margins. */
     padding: 56px calc(var(--editor-inspector) + 2px + var(--editor-inset) + 48px) 20px 48px;
-    background-color: var(--stats-layer-2);
-    background-image: radial-gradient(var(--stats-line-strong) 1px, transparent 1px);
+    /* Grey on the light page; on the dark one a step lighter than the card (#0c0c0c), so it stands out, but well below
+       the page's second layer, which glared. */
+    background-color: light-dark(var(--stats-layer-2), #151515);
+    background-image: radial-gradient(light-dark(var(--stats-line-strong), var(--stats-line)) 1px, transparent 1px);
     background-size: 16px 16px;
   }
 
@@ -471,8 +477,8 @@
     padding: 10px;
     overflow-y: auto;
     overscroll-behavior: contain;
-    background: var(--stats-layer);
-    border: 1px solid var(--stats-line-strong);
+    background: var(--editor-control);
+    border: 1px solid var(--editor-control-line);
 
     code {
       display: block;
@@ -542,8 +548,8 @@
     padding: 0 4px;
     font-size: 12px;
     color: var(--stats-muted);
-    background: var(--stats-layer);
-    border: 1px solid var(--stats-line-strong);
+    background: var(--editor-control);
+    border: 1px solid var(--editor-control-line);
     border-radius: 0;
     transition:
       border-color 120ms ease,
@@ -695,8 +701,8 @@
     padding: 0 9px 0 5px;
     text-align: left;
     color: var(--stats-muted);
-    background: var(--stats-layer);
-    border: 1px solid var(--stats-line-strong);
+    background: var(--editor-control);
+    border: 1px solid var(--editor-control-line);
     border-radius: 0;
     transition:
       border-color 120ms ease,
