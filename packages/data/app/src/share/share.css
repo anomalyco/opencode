@@ -1170,6 +1170,11 @@
     > span {
       min-width: 4ch;
     }
+
+    /* The name as large as its ratio, only greyer. */
+    small {
+      font-size: inherit;
+    }
   }
 
   /* The music: its dropdown shows the cover and the name. */
