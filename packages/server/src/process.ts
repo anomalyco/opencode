@@ -56,23 +56,13 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   transform?: Transform,
   remoteURLs?: () => ReadonlyArray<string>,
 ) {
-  const startupStartedAt = performance.now()
   const password = options.password
   if (!password) return yield* Effect.fail(new Error("Missing server password"))
   const hostname = options.hostname ?? "127.0.0.1"
   const port = Option.fromNullishOr(options.port)
   const shutdown = yield* Latch.make()
   const status = yield* Status.make()
-  const listenerStartedAt = performance.now()
-  const bound = yield* listen({ hostname, port }).pipe(
-    Effect.tapError((cause) =>
-      Effect.logError("server listener bind failed", {
-        durationMs: Math.round(performance.now() - listenerStartedAt),
-        cause,
-      }),
-    ),
-  )
-  const listenerDurationMs = Math.round(performance.now() - listenerStartedAt)
+  const bound = yield* listen({ hostname, port })
   const localURLs = () => {
     const address = bound.server.address()
     if (address === null || typeof address === "string") return []
@@ -122,8 +112,6 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
 
   // Built without the startup span: route handlers and background fibers capture this context, and would
   // otherwise nest every request and session turn for the life of the process under one trace.
-  const bootPhase = yield* Ref.make<string>("routes")
-  const bootStartedAt = performance.now()
   const boot = Effect.gen(function* () {
     const context = yield* Layer.buildWithScope(
       createRoutes(
@@ -135,13 +123,11 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
       applicationScope,
     )
-    yield* Ref.set(bootPhase, "restart continuity")
     if (lifecycle) {
       yield* installRestartContinuity(Context.get(context, SessionRestart.Service)).pipe(
         Effect.provideService(Scope.Scope, applicationScope),
       )
     }
-    yield* Ref.set(bootPhase, "background services")
     // Automations run from any server process (`service`, `opencode serve`, or `--standalone`); the table holds all their state.
     yield* Effect.forkIn(Context.get(context, Automation.Service).run, applicationScope)
     // Likewise the one-time session search build, once a location has sqlite_fts on.
@@ -149,15 +135,6 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     yield* Ref.set(machinesFlag, yield* machinesEnabled.pipe(Effect.provide(context)))
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
-    yield* Ref.set(bootPhase, "ready")
-    const memory = process.memoryUsage()
-    yield* Effect.logInfo("server ready", {
-      listenerDurationMs,
-      bootDurationMs: Math.round(performance.now() - bootStartedAt),
-      startupDurationMs: Math.round(performance.now() - startupStartedAt),
-      rssBytes: memory.rss,
-      heapUsedBytes: memory.heapUsed,
-    })
     const bus = Context.get(context, Bus.Service)
     return {
       address: bound.http.address,
@@ -168,29 +145,20 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     }
   }).pipe(
     withoutParentSpan,
-    Effect.catchCause((cause) =>
-      Effect.gen(function* () {
-        if (!lifecycle || Cause.hasInterruptsOnly(cause)) return yield* Effect.failCause(cause)
-        const phase = yield* Ref.get(bootPhase)
-        yield* status.fail
-        yield* Scope.close(applicationScope, Exit.failCause(cause)).pipe(
-          Effect.catchCause((cleanupCause) =>
-            Effect.logError("failed to clean up background service boot", { cause: cleanupCause }),
+    Effect.catchCause((cause) => {
+      if (!lifecycle || Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
+      return status.fail.pipe(
+        Effect.andThen(
+          Scope.close(applicationScope, Exit.failCause(cause)).pipe(
+            Effect.catchCause((cleanupCause) =>
+              Effect.logError("failed to clean up background service boot", { cause: cleanupCause }),
+            ),
           ),
-        )
-        const memory = process.memoryUsage()
-        yield* Effect.logError("background service boot failed", {
-          cause,
-          phase,
-          listenerDurationMs,
-          bootDurationMs: Math.round(performance.now() - bootStartedAt),
-          startupDurationMs: Math.round(performance.now() - startupStartedAt),
-          rssBytes: memory.rss,
-          heapUsedBytes: memory.heapUsed,
-        })
-        return yield* Effect.never
-      }),
-    ),
+        ),
+        Effect.andThen(Effect.logError("background service boot failed", { cause })),
+        Effect.andThen(Effect.never),
+      )
+    }),
   )
   if (!lifecycle) return yield* boot
   return yield* Effect.raceFirst(boot, shutdown.await.pipe(Effect.andThen(Effect.interrupt)))

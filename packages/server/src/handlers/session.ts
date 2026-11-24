@@ -82,12 +82,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   heapUsedBytes: memory.heapUsed,
                 })
               }),
-              Effect.tapError((error) =>
-                Effect.logError("session list failed", {
-                  durationMs: Math.round(performance.now() - startedAt),
-                  errorType: error instanceof Error ? error.name : typeof error,
-                }),
-              ),
               Effect.catchTag(
                 "Session.InvalidListCursorError",
                 (error) => new InvalidCursorError({ message: error.message }),
