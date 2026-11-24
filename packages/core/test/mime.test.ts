@@ -28,6 +28,25 @@ describe("Mime.detect", () => {
     }
   })
 
+  test("finds a PDF header within the first kilobyte", () => {
+    const pdf = (prefix: string) =>
+      Buffer.concat([
+        Buffer.from(prefix),
+        Buffer.from("%PDF-1.7\n%"),
+        Buffer.from([0xe2, 0xe3, 0xcf, 0xd3]),
+        Buffer.from("\n"),
+      ])
+    expect(Mime.detect(pdf(""))).toBe("application/pdf")
+    expect(Mime.detect(pdf("\r\n"))).toBe("application/pdf")
+    expect(Mime.detect(pdf("x".repeat(1000)))).toBe("application/pdf")
+    expect(Mime.detect(pdf("x".repeat(2000)))).toBe("application/octet-stream")
+  })
+
+  test("keeps text mentioning a PDF header as text", () => {
+    for (const text of ["Every PDF starts with %PDF-1.7 on its first line.\n", "header:\n%PDF-2.0\n"])
+      expect(Mime.detect(Buffer.from(text))).toBe("text/plain")
+  })
+
   test("tells ISO-BMFF brands apart", () => {
     expect(Mime.detect(ftyp("000000206674797061766966000000004d695072617669666d6961666d696631"))).toBe("image/avif")
     expect(Mime.detect(ftyp("000000186674797061766973000000006d73663161766973"))).toBe("image/avif")
