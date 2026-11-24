@@ -499,7 +499,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
           callback({
             list: () => mutable(editor.list()),
             get: editor.get,
-            add: (value) => editor.add(Schema.decodeUnknownSync(Skill.Info)(value)),
+            add: (value, files) => editor.add(Schema.decodeUnknownSync(Skill.Info)(value), files),
             update: editor.update,
             remove: editor.remove,
           })

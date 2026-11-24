@@ -28,9 +28,7 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const reportContent = yield* reportContentWithDiagnostics(ctx.app)
     const api = yield* Flag.enabled("opencode_api")
-    const skills = yield* Skill.Service
-    // Skill.Service rather than ctx.skill, whose editor can't add a skill's files.
-    yield* skills.transform((editor) => {
+    yield* ctx.skill.transform((editor) => {
       editor.add(
         Skill.Info.make({
           id: Skill.ID.make("opencode"),
