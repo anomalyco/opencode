@@ -1170,7 +1170,7 @@ function drawPodium(
     // over the change on the right, all centred. A taller one puts the place in its corner and the rest at its foot.
     const row = !across && tile.height < 180
     const inset = across ? 32 : 36
-    const size = across ? 34 : row ? 36 : Math.min(44, tile.height * 0.19)
+    const size = across ? 34 : row ? 28 : Math.min(44, tile.height * 0.19)
     const small = Math.round(size * 0.72)
     ctx.textBaseline = "alphabetic"
     ctx.font = `400 ${row ? size : small}px ${font}`
@@ -1216,8 +1216,10 @@ function drawVersus(
   const middle = box.x + box.width / 2
   const half = box.width / 2
   const head = Math.min(150, box.height * 0.26)
+  // The names scale with the room the header has, so their providers stay above the rows.
   const name = Math.min(
     40,
+    head * 0.3,
     fit(ctx, chart.models.reduce((a, b) => (a.label.length > b.label.length ? a : b)).label, half - 40, 40, 700),
   )
   chart.models.forEach((model, side) => {
@@ -1270,22 +1272,28 @@ function drawVersus(
     if (amount <= 0) return
     ctx.save()
     ctx.globalAlpha = amount
-    ctx.font = `400 22px ${font}`
+    // Sized to the row: on a short card (under a big number) the type and bar shrink so each row keeps to its own.
+    const scale = Math.min(1, row / 84)
+    const caption = Math.round(22 * scale)
+    const figure = Math.round(30 * scale)
+    const baseline = y + figure
+    const bar = y + row * 0.58
+    const thick = Math.max(5, Math.round(10 * scale))
+    ctx.font = `400 ${caption}px ${font}`
     ctx.fillStyle = mix(colors.faint, colors.mark, dim)
     const label = item.label.toUpperCase()
-    spaced(ctx, label, middle - (ctx.measureText(label).width + label.length * 2) / 2, y + 22, 2)
-    const bar = y + 52
+    spaced(ctx, label, middle - (ctx.measureText(label).width + label.length * 2) / 2, baseline, 2)
     const reach = half - 8
     item.values.forEach((value, side) => {
       const lead = item.lead === side
       const fill = Math.max(0.02, Math.min(1, item.fills[side] ?? 0)) * reach * grow
       ctx.fillStyle = colors.track
-      ctx.fillRect(side === 0 ? middle - 4 - reach : middle + 4, bar, reach, 10)
+      ctx.fillRect(side === 0 ? middle - 4 - reach : middle + 4, bar, reach, thick)
       ctx.fillStyle = mix(lead ? colors.lead : colors.idle, colors.idle, dim)
-      ctx.fillRect(side === 0 ? middle - 4 - fill : middle + 4, bar, fill, 10)
-      ctx.font = `${lead ? 700 : 400} 30px ${font}`
+      ctx.fillRect(side === 0 ? middle - 4 - fill : middle + 4, bar, fill, thick)
+      ctx.font = `${lead ? 700 : 400} ${figure}px ${font}`
       ctx.fillStyle = mix(lead ? colors.text : colors.muted, colors.faint, dim)
-      ctx.fillText(value, side === 0 ? box.x : box.x + box.width - ctx.measureText(value).width, y + 24)
+      ctx.fillText(value, side === 0 ? box.x : box.x + box.width - ctx.measureText(value).width, baseline)
     })
     ctx.restore()
   })
