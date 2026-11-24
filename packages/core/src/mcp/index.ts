@@ -953,7 +953,9 @@ export const layer = (options?: Options) =>
 
           // Initial connections stay asynchronous so one slow server does not block Location startup.
           for (const [name, entry] of entries) {
-            const enabled = toggles.get(name) ?? !entry.config.disabled
+            const toggle = toggles.get(name)
+            const enabled =
+              toggle && isDeepStrictEqual(toggle.config, entry.config) ? toggle.enabled : !entry.config.disabled
             if (!enabled) {
               entry.status = { status: "disabled" }
               entry.startup.openUnsafe()
@@ -1059,7 +1061,7 @@ export const layer = (options?: Options) =>
               const entry = yield* requireServer(name)
               yield* entry.connection.stop
               yield* entry.connection.start
-              toggles.set(name, true)
+              toggles.set(name, { enabled: true, config: entry.config })
             }).pipe(locks.withLock(name)),
           )
         }),
@@ -1070,7 +1072,7 @@ export const layer = (options?: Options) =>
               const entry = yield* requireServer(name)
               yield* entry.connection.stop
               entry.status = { status: "disabled" }
-              toggles.set(name, false)
+              toggles.set(name, { enabled: false, config: entry.config })
               yield* bus.publish(McpEvent.StatusChanged, { server: name })
             }).pipe(locks.withLock(name)),
           )

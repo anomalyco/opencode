@@ -28,6 +28,7 @@ import { Shell } from "@opencode/core/shell"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { Mcp } from "@opencode/core/mcp/index"
+import { McpToggles } from "@opencode/core/mcp/toggles"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
@@ -102,6 +103,8 @@ const applicationServiceNodes = [
   SpaceStore.node,
   LocationServiceMap.node,
   LocationActivity.node,
+  // `/mcps` choices outlive an idle Location's eviction, so they belong to the server.
+  McpToggles.node,
   SessionRestart.node,
   Automation.node,
   // Read by the blob route.
