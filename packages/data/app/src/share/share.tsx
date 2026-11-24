@@ -532,11 +532,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                         )}
                       </For>
                     </Row>
-                    <p data-slot="row-note">
-                      {fixed()
-                        ? "Keeps today's numbers, even as the data changes."
-                        : "Always shows the latest data when it loads."}
-                    </p>
+                    <p data-slot="row-note">{fixed() ? "Keeps today's numbers" : "Always the latest data"}</p>
                     <Row label="Code" variant="fill">
                       <div data-slot="embed-code">
                         <code>

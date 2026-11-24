@@ -561,7 +561,8 @@
     height: 64px;
     padding: 0 4px;
     font-size: 12px;
-    color: var(--stats-muted);
+    /* Unchosen choices sit back in the light grey, drawing and words alike; the chosen one is all in the text colour. */
+    color: var(--stats-faint);
     background: var(--editor-control);
     border: 1px solid var(--editor-control-line);
     border-radius: 0;
@@ -646,7 +647,6 @@
     small {
       font-size: 10px;
       line-height: 1;
-      color: var(--stats-faint);
     }
   }
 
