@@ -299,6 +299,7 @@ export function drawShareCard(
   const slides = introSlides(card, options, timing)
   if (slides && at < slides.end) {
     drawSlide(ctx, card, options, colors, width, height, at, slides)
+    veilIn(ctx, colors, width, height, at)
     ctx.restore()
     return
   }
@@ -392,6 +393,18 @@ export function drawShareCard(
   if (card.chart.kind === "versus") drawVersus(ctx, card.chart, colors, box, progress, focus, time)
 
   drawFooter(ctx, card, colors, width, footer, rule)
+  veilIn(ctx, colors, width, height, at)
+  ctx.restore()
+}
+
+// A video opens on a blank card: everything on it, the grid, the lockup and the footer too, fades up from the card's
+// background over the first moments, as the text rises and the chart builds.
+function veilIn(ctx: CanvasRenderingContext2D, colors: Palette, width: number, height: number, time: number) {
+  if (time >= 0.45) return
+  ctx.save()
+  ctx.globalAlpha = (1 - Math.max(0, time) / 0.45) ** 2
+  ctx.fillStyle = colors.background
+  ctx.fillRect(0, 0, width, height)
   ctx.restore()
 }
 
