@@ -42,6 +42,10 @@ export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1bet
 // so their tool-result attachments lower as a separate user turn instead.
 const routesLegacyToolMedia = (modelID: string) => /gemini-2[.-]5(?:[.-]|$)/i.test(modelID)
 
+// Gemini 4 documents native audio/video function responses; earlier versions can accept nested
+// fileData without seeing the video, so only Gemini 4 nests audio/video fileData.
+const nestsFunctionResponseAudioVideo = (modelID: string) => /(?:^|\/)gemini-4(?:[.-]|$)/i.test(modelID)
+
 // Blacklist: Gemini 1.x/2.x ignore or reject explicit function call ids.
 // Every other model id (Gemini 3+, gemma, anything unrecognized) gets them.
 const omitsFunctionCallIds = (modelID: string) => {
@@ -74,7 +78,6 @@ const GeminiInlineDataPart = Schema.Struct({
   }),
   thoughtSignature: optionalNull(Schema.String),
 })
-type GeminiInlineDataPart = Schema.Schema.Type<typeof GeminiInlineDataPart>
 
 const GeminiFileDataPart = Schema.Struct({
   fileData: Schema.Struct({
@@ -82,6 +85,9 @@ const GeminiFileDataPart = Schema.Struct({
     fileUri: Schema.String,
   }),
 })
+
+const GeminiFunctionResponseMediaPart = Schema.Union([GeminiInlineDataPart, GeminiFileDataPart])
+type GeminiFunctionResponseMediaPart = Schema.Schema.Type<typeof GeminiFunctionResponseMediaPart>
 
 const GeminiFunctionCallPart = Schema.Struct({
   functionCall: Schema.Struct({
@@ -97,7 +103,7 @@ const GeminiFunctionResponsePart = Schema.Struct({
     id: Schema.optional(Schema.String),
     name: Schema.String,
     response: Schema.Unknown,
-    parts: Schema.optional(Schema.Array(GeminiInlineDataPart)),
+    parts: Schema.optional(Schema.Array(GeminiFunctionResponseMediaPart)),
   }),
 })
 
@@ -299,7 +305,8 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const metadataKey = request.model.route.providerMetadataKey ?? request.model.provider
   const omitCallIds = omitsFunctionCallIds(request.model.id)
   const legacyToolMedia = routesLegacyToolMedia(request.model.id)
-  let pendingMedia: Array<GeminiInlineDataPart | typeof GeminiFileDataPart.Type> | undefined
+  const nestedAudioVideo = nestsFunctionResponseAudioVideo(request.model.id)
+  let pendingMedia: GeminiFunctionResponseMediaPart[] | undefined
   const flushMedia = () => {
     if (!pendingMedia) return
     contents.push({ role: "user", parts: [{ text: "Attached media from tool result:" }, ...pendingMedia] })
@@ -390,12 +397,17 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
       }
       const content: ReadonlyArray<Tool.Content> = part.result.value
       const text = content.filter((item) => item.type === "text").map((item) => item.text)
-      const media: GeminiInlineDataPart[] = []
+      const media: GeminiFunctionResponseMediaPart[] = []
       for (const item of content) {
         if (item.type === "text") continue
-        const value = yield* GeminiGenerateContent.mediaPart("Gemini", GeminiGenerateContent.toolMedia(item))
-        // Nested fileData can be accepted without the model seeing the video, even on newer Gemini models.
-        if (legacyToolMedia || "fileData" in value) (pendingMedia ??= []).push(value)
+        const asset =
+          nestedAudioVideo && /^audio\//i.test(item.mime) && item.uri.startsWith("gs://")
+            ? Media.ref("google", item.uri, item.mime)
+            : GeminiGenerateContent.toolMedia(item)
+        const value = yield* GeminiGenerateContent.mediaPart("Gemini", asset)
+        const nestFileData =
+          nestedAudioVideo && "fileData" in value && /^(?:audio|video)\//i.test(value.fileData.mimeType)
+        if (legacyToolMedia || ("fileData" in value && !nestFileData)) (pendingMedia ??= []).push(value)
         else media.push(value)
       }
       parts.push({
