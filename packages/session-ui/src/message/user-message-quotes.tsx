@@ -42,11 +42,10 @@ function UserMessageQuote(props: { quote: Quote }) {
   return (
     <div data-slot="user-message-quote-group">
       <Show when={text()}>
-        <blockquote data-slot="user-message-quote">
+        <blockquote data-slot="user-message-quote" data-single-line={single() ? "" : undefined}>
           <div
             data-slot="user-message-quote-text"
             data-open={open() ? "" : undefined}
-            data-single-line={single() ? "" : undefined}
             data-expandable={expandable() ? "" : undefined}
             role={expandable() ? "button" : undefined}
             tabIndex={expandable() ? 0 : undefined}
@@ -91,7 +90,7 @@ function UserMessageQuote(props: { quote: Quote }) {
 function UserMessageReference(props: { reference: Reference }) {
   return (
     <div data-slot="user-message-quote-group">
-      <blockquote data-slot="user-message-quote">
+      <blockquote data-slot="user-message-quote" data-single-line>
         <span data-slot="user-message-quote-reference">
           {props.reference.type === "note" ? (
             <>
