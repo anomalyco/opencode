@@ -25,6 +25,8 @@ import { installSseTransport } from "./sse-transport"
 
 type Resolvable<T> = T | (() => T)
 
+const decodeSkill = Schema.decodeUnknownOption(Schema.Struct({ id: Schema.String, content: Schema.String }))
+
 // A hook's replacement response.
 export type MockAnswer = { status: number; body: unknown }
 
@@ -911,15 +913,12 @@ function mockHandlers(
         skill: () => Effect.sync(() => ({ location: location(config), data: resolve(config.skills ?? []) })),
         skillContent: (ctx) =>
           Effect.suspend(() => {
-            const skill = resolve(config.skills ?? []).find(
-              (item): item is { id: string; content: string } =>
-                Predicate.isObject(item) &&
-                Predicate.hasProperty(item, "id") &&
-                item.id === ctx.params.skillID &&
-                Predicate.hasProperty(item, "content") &&
-                typeof item.content === "string",
-            )
+            const skill = resolve(config.skills ?? [])
+              .flatMap((item) => Option.toArray(decodeSkill(item)))
+              .find((item) => item.id === ctx.params.skillID)
+
             if (!skill) return Effect.fail(new MockNotFound({ message: `Skill not found: ${ctx.params.skillID}` }))
+
             return Effect.succeed({ location: location(config), data: { content: skill.content } })
           }),
         plugin: () => Effect.sync(() => ({ location: location(config), data: resolve(config.plugins ?? []) })),
