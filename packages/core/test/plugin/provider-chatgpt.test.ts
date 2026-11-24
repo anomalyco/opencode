@@ -53,7 +53,12 @@ const subscriptionCatalog = (lists: { current: Record<string, readonly string[]>
     get: () =>
       Effect.sync(() => [
         {
-          info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
+          info: {
+            id: Provider.ID.openai,
+            name: "OpenAI",
+            activation: "auto",
+            package: "@opencode/ai/providers/openai",
+          },
           models: [],
           environment: [],
           subscriptions: lists.current,
@@ -541,12 +546,13 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  it.effect("reauthorizes with the client ID issued to an existing ChatGPT connection", () =>
+  it.effect("registers a new client to add an account, and reuses an expired connection's client to reconnect it", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       const kv = yield* KV.Service
+      const storage = PluginHost.storage(kv, ChatGPTPlugin.id)
       const hostID = "urn:uuid:00000000-0000-4000-8000-000000000000"
-      yield* PluginHost.storage(kv, ChatGPTPlugin.id).set("chatgpt-agent-host-id", hostID)
+      yield* storage.set("chatgpt-agent-host-id", hostID)
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: Credential.OAuth.make({
@@ -555,13 +561,22 @@ describe("ChatGPTPlugin", () => {
           access: "chatgpt-token",
           refresh: "refresh",
           expires: Date.now() + 60 * 60_000,
-          metadata: { clientID: "oaiapp_issued" },
+          metadata: { clientID: "oaiapp_issued", email: "a@example.com", idToken: "id-token" },
         }),
       })
       yield* addPlugin()
+      const adding = yield* authorize()
+      expect(adding.searchParams.get("client_id")).toBe("dynamic_agent_client")
+      expect(adding.searchParams.get("agent_name_hint")).toBe("OpenCode")
+      expect(adding.searchParams.get("ext_agent_host_id")).toBe(hostID)
+      expect(adding.searchParams.has("id_token_hint")).toBe(false)
+
+      yield* storage.set("chatgpt-expired-clients", ["oaiapp_issued"])
       const url = yield* authorize()
       expect(url.searchParams.get("client_id")).toBe("oaiapp_issued")
       expect(url.searchParams.has("agent_name_hint")).toBe(false)
+      expect(url.searchParams.get("id_token_hint")).toBe("id-token")
+      expect(url.searchParams.get("login_hint")).toBe("a@example.com")
       expect(url.searchParams.get("ext_agent_host_id")).toBe(hostID)
       expect(new URL(url.searchParams.get("redirect_uri") ?? "").hostname).toBe("127.0.0.1")
     }),
@@ -570,6 +585,8 @@ describe("ChatGPTPlugin", () => {
   it.live("rejects a reauthorization callback that returns a different client ID", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
+      const kv = yield* KV.Service
+      yield* PluginHost.storage(kv, ChatGPTPlugin.id).set("chatgpt-expired-clients", ["oaiapp_issued"])
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: Credential.OAuth.make({
@@ -968,7 +985,10 @@ describe("ChatGPTPlugin", () => {
         }),
       })
       yield* addPlugin().pipe(
-        Effect.provideService(ModelsDev.Service, subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } })),
+        Effect.provideService(
+          ModelsDev.Service,
+          subscriptionCatalog({ current: { "openai-chatgpt": ["gpt-6-sol", "gpt-7"] } }),
+        ),
       )
       expect(
         (yield* models.available())
