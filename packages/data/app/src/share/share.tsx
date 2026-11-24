@@ -133,6 +133,32 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const [hovered, setHovered] = createSignal<string>()
   // The open dropdown or the date picker, by id; one at a time.
   const [menu, setMenu] = createSignal<string>()
+  // The bar compacts only when it has to: its full layout first, then step by step (share.css data-compact) until it
+  // fits on one row. On phones the settings are in the sheet and this stays off.
+  let bar: HTMLDivElement | undefined
+  const fitBar = () => {
+    if (!bar) return
+    const wide = matchMedia("(min-width: 761px)").matches
+    const rows = () => {
+      const items = [...bar!.children].filter(
+        (item): item is HTMLElement => item instanceof HTMLElement && item.offsetParent !== null,
+      )
+      return new Set(items.map((item) => item.offsetTop)).size
+    }
+    for (const level of wide ? [0, 1, 2] : [0]) {
+      bar.dataset.compact = String(level)
+      if (rows() <= 1) return
+    }
+  }
+  createEffect(() => {
+    format()
+    leads()
+    day()
+    track()
+    starts()
+    if (!card()) return
+    requestAnimationFrame(fitBar)
+  })
   // Counts Shuffle presses: each one spins the changed settings' reels, like an odometer, to their new values.
   const [rolls, setRolls] = createSignal(0)
   const roll = () => setRolls((count) => count + 1)
@@ -504,7 +530,17 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
           <div data-slot="editor">
             {/* The bar across the top, like an editor's: Close and Shuffle, every option as a dropdown, the music with
                 arrows either side, and Export on the right. */}
-            <div data-slot="editor-bar" role="toolbar" aria-label={`Share ${value().title}`}>
+            <div
+              ref={(element) => {
+                bar = element
+                const observer = new ResizeObserver(() => fitBar())
+                observer.observe(element)
+                onCleanup(() => observer.disconnect())
+              }}
+              data-slot="editor-bar"
+              role="toolbar"
+              aria-label={`Share ${value().title}`}
+            >
               <button type="button" data-slot="icon-button" aria-label="Close" data-tooltip="Close" onClick={close}>
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                   <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" />
