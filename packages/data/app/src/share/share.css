@@ -209,6 +209,15 @@
       background: var(--stats-accent);
       border-color: var(--stats-accent);
 
+      /* Rendering: the button fills with the accent from the left as the video renders, over a paler accent. */
+      &[data-rendering] {
+        background: linear-gradient(var(--stats-accent), var(--stats-accent)) left / var(--progress) 100% no-repeat
+          color-mix(in srgb, var(--stats-accent) 45%, var(--stats-bg));
+        border-color: transparent;
+        cursor: progress;
+        font-variant-numeric: tabular-nums;
+      }
+
       @media (hover: hover) and (pointer: fine) {
         &:hover:not(:disabled) {
           background: color-mix(in srgb, var(--stats-accent) 88%, black);
@@ -299,29 +308,6 @@
       0 2px 4px -1px rgb(0 0 0 / 0.08),
       0 6px 12px -4px rgb(0 0 0 / 0.1),
       0 14px 24px -10px rgb(0 0 0 / 0.14);
-  }
-
-  [data-slot="editor-rendering"] {
-    position: absolute;
-    bottom: 24px;
-    left: 50%;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 220px;
-    padding: 12px 14px;
-    font-size: 12px;
-    color: var(--stats-text);
-    background: var(--stats-popover);
-    border: 1px solid var(--stats-line-strong);
-    translate: -50% 0;
-
-    i {
-      display: block;
-      height: 3px;
-      background: linear-gradient(var(--stats-accent), var(--stats-accent)) left / var(--progress) 100% no-repeat
-        var(--stats-line);
-    }
   }
 
   /* The card's size in plain grey under it, on a fixed-height line so the stage never shifts. */

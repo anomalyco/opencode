@@ -404,12 +404,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   aria-label={value().headline}
                   style={{ "aspect-ratio": `${size()[0]} / ${size()[1]}` }}
                 />
-                <Show when={rendering() !== undefined}>
-                  <div data-slot="editor-rendering" role="status">
-                    <span>Rendering video</span>
-                    <i style={{ "--progress": `${(rendering() ?? 0) * 100}%` } as JSX.CSSProperties} />
-                  </div>
-                </Show>
               </div>
               <div data-slot="editor-toolbar">
                 <span data-slot="editor-meta" role="status" aria-live="polite">
@@ -556,11 +550,15 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   type="button"
                   data-slot="bar-button"
                   data-variant="primary"
+                  data-rendering={rendering() !== undefined ? "" : undefined}
+                  // While a video renders, the button is its progress bar: it fills from the left as the frames go.
+                  style={{ "--progress": `${(rendering() ?? 0) * 100}%` } as JSX.CSSProperties}
                   disabled={rendering() !== undefined}
+                  aria-live="polite"
                   onClick={exportFile}
                 >
                   {rendering() !== undefined
-                    ? "Rendering video…"
+                    ? `Rendering video ${Math.round((rendering() ?? 0) * 100)}%`
                     : { image: "Export image", video: "Export video", embed: copied() ? "Copied" : "Copy embed code" }[
                         format()
                       ]}
