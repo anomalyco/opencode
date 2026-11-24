@@ -1351,7 +1351,7 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("moves blocking work to the background on a steer only with auto_background", function* (s) {
+  scenario("auto background moves blocking work only with auto_background, without a notice", function* (s) {
     const jobs = yield* Job.Service
     const config = yield* Config.Test
     const recovery = { kind: "shell", sessionID, shellID: "shell-blocking", command: "sleep 10" } as const
@@ -1359,15 +1359,13 @@ describe("SessionRunnerLLM", () => {
     yield* jobs.block({ id: "shell-blocking", sessionID }).pipe(Effect.forkChild)
     yield* Effect.yieldNow
 
-    yield* s.admit("Without the option")
+    yield* s.session.autoBackground(sessionID)
     expect(yield* jobs.runningBackground).toEqual([])
 
     yield* config.setEntries([new Document({ type: "document", info: new Info({ auto_background: true }) })])
-    yield* s.session.prompt({ sessionID, text: "Queued", delivery: "queue", resume: false })
-    expect(yield* jobs.runningBackground).toEqual([])
-
-    yield* s.admit("Steer")
+    yield* s.session.autoBackground(sessionID)
     expect(yield* jobs.runningBackground).toEqual([recovery])
+    expect(yield* s.inbox).toEqual([])
   })
 
   scenario("runs the idle hook again when a background notice wakes the session", function* (s) {

@@ -319,6 +319,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
                 ),
                 locationErrors,
+                // A steered client message moves blocking work aside so the agent reads it at its next step.
+                Effect.tap(() =>
+                  (ctx.payload.delivery ?? "steer") === "steer"
+                    ? session
+                        .autoBackground(ctx.params.sessionID)
+                        .pipe(Effect.catchTag("Session.NotFoundError", missingSession), locationErrors)
+                    : Effect.void,
+                ),
               ),
           }
         }),

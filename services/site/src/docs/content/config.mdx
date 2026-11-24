@@ -417,9 +417,9 @@ considerations, and [cache lifetime](/models#cache-lifetime) for `cache.ttl`.
 
 ### Auto background
 
-Move a running session's blocking tools to the background whenever a new
-message steers it, so the agent reads the message at its next step. Queued
-messages leave blocking tools in place. Disabled by default.
+Move a running session's blocking tools to the background whenever you steer
+it with a new message, so the agent reads the message at its next step. Queued
+messages and automations leave blocking tools in place. Disabled by default.
 
 ```jsonc
 {
