@@ -588,8 +588,10 @@
       transform: scale(0.97);
     }
 
+    /* Chosen: the accent line over a very light wash of it. */
     &[aria-pressed="true"] {
       color: var(--stats-text);
+      background: color-mix(in srgb, var(--stats-accent) 7%, var(--editor-control));
       border-color: var(--stats-accent);
     }
 
@@ -700,6 +702,7 @@
 
     &[aria-checked="true"] {
       color: var(--stats-text);
+      background: color-mix(in srgb, var(--stats-accent) 7%, var(--editor-control));
       border-color: var(--stats-accent);
     }
 
