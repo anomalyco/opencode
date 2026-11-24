@@ -67,109 +67,74 @@ it.live("Effect plugins cannot store an automation with an invalid target", () =
   }),
 )
 
-it.live("a plugin can create a code automation while its Location activates", () =>
-  Effect.gen(function* () {
-    const automations = yield* Automation.Service
-    const location = yield* Location.Service
-    const locations = yield* LocationServiceMap.Service
-    const loaded: string[] = []
+const setupActions = {
+  code: { type: "code", code: "return" },
+  subagent: { type: "prompt", prompt: "Triage the inbox.", to: { subagent: Agent.ID.make("general") } },
+} as const
 
-    // Activate the Location's own plugins, the ones a create in that Location waits for.
-    yield* Effect.gen(function* () {
-      const plugins = yield* Plugin.Service
-      yield* plugins.awaitActivation
-      yield* plugins.activate([
-        {
-          id: "test.automation.effect",
-          revision: "1",
-          effect: (ctx) =>
-            Effect.gen(function* () {
-              const session = yield* ctx.session.create({ title: "Effect code automation" })
-              yield* ctx.experimental.automation.create({
-                sessionID: session.id,
-                name: "effect code",
-                trigger: { type: "cron", cron: "0 * * * *" },
-                action: { type: "code", code: "return" },
-              })
-              loaded.push("effect")
-            }).pipe(Effect.orDie),
-        },
-        {
-          revision: "1",
-          ...PluginPromise.fromPromise({
-            id: "test.automation.promise",
-            async setup(ctx) {
-              const session = await ctx.session.create({ title: "Promise code automation" })
-              await ctx.experimental.automation.create({
-                sessionID: session.id,
-                name: "promise code",
-                trigger: { type: "cron", cron: "0 * * * *" },
-                action: { type: "code", code: "return" },
-              })
-              loaded.push("promise")
-            },
-          }),
-        },
-        { id: "test.automation.after", revision: "1", effect: () => Effect.sync(() => loaded.push("after")) },
-      ])
-    }).pipe(Effect.provide(locations.get(LocationServiceMap.canonical({ directory: location.directory }))))
+for (const kind of ["code", "subagent"] as const) {
+  it.live(`a plugin's ${kind} automation is refused while its Location activates and created after`, () =>
+    Effect.gen(function* () {
+      const automations = yield* Automation.Service
+      const location = yield* Location.Service
+      const locations = yield* LocationServiceMap.Service
+      const loaded: string[] = []
+      const later: Array<() => Promise<unknown>> = []
+      const input = (name: string) =>
+        ({ name, trigger: { type: "every", every: "1 hour" }, action: setupActions[kind] }) as const
 
-    expect(loaded).toEqual(["effect", "promise", "after"])
-    expect((yield* automations.list()).map((item) => item.name)).toEqual(
-      expect.arrayContaining(["effect code", "promise code"]),
-    )
-  }),
-)
+      // Activate the Location's own plugins. Their permissions are not all applied yet, so creates that need them fail.
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        yield* plugins.activate([
+          { ...AgentPlugin.Plugin, revision: "1" },
+          {
+            id: "test.automation.effect",
+            revision: "1",
+            effect: (ctx) =>
+              Effect.gen(function* () {
+                const session = yield* ctx.session.create({ title: `Effect ${kind} automation` })
+                const create = ctx.experimental.automation.create({ ...input("effect"), sessionID: session.id })
+                loaded.push(
+                  yield* create.pipe(
+                    Effect.match({
+                      onFailure: (error) =>
+                        String(error).includes("still loading") ? "effect refused" : String(error),
+                      onSuccess: () => "effect created",
+                    }),
+                  ),
+                )
+                later.push(() => Effect.runPromise(create))
+              }).pipe(Effect.orDie),
+          },
+          {
+            revision: "1",
+            ...PluginPromise.fromPromise({
+              id: "test.automation.promise",
+              async setup(ctx) {
+                const session = await ctx.session.create({ title: `Promise ${kind} automation` })
+                const create = () => ctx.experimental.automation.create({ ...input("promise"), sessionID: session.id })
+                await create().then(
+                  () => loaded.push("promise created"),
+                  (error: unknown) =>
+                    loaded.push(String(error).includes("still loading") ? "promise refused" : String(error)),
+                )
+                later.push(create)
+              },
+            }),
+          },
+          { id: "test.automation.after", revision: "1", effect: () => Effect.sync(() => loaded.push("after")) },
+        ])
+      }).pipe(Effect.provide(locations.get(LocationServiceMap.canonical({ directory: location.directory }))))
 
-it.live("a plugin can create a subagent prompt automation while its Location activates", () =>
-  Effect.gen(function* () {
-    const automations = yield* Automation.Service
-    const location = yield* Location.Service
-    const locations = yield* LocationServiceMap.Service
-    const loaded: string[] = []
-    const triage = {
-      name: "triage",
-      trigger: { type: "every", every: "1 hour" },
-      action: { type: "prompt", prompt: "Triage the inbox.", to: { subagent: Agent.ID.make("general") } },
-    } as const
-
-    // Activate the Location's own plugins, the ones a create in that Location waits for.
-    yield* Effect.gen(function* () {
-      const plugins = yield* Plugin.Service
-      yield* plugins.awaitActivation
-      yield* plugins.activate([
-        { ...AgentPlugin.Plugin, revision: "1" },
-        {
-          id: "test.automation.effect",
-          revision: "1",
-          effect: (ctx) =>
-            Effect.gen(function* () {
-              const session = yield* ctx.session.create({ title: "Effect subagent automation" })
-              yield* ctx.experimental.automation.create({ ...triage, sessionID: session.id, name: "effect triage" })
-              loaded.push("effect")
-            }).pipe(Effect.orDie),
-        },
-        {
-          revision: "1",
-          ...PluginPromise.fromPromise({
-            id: "test.automation.promise",
-            async setup(ctx) {
-              const session = await ctx.session.create({ title: "Promise subagent automation" })
-              await ctx.experimental.automation.create({ ...triage, sessionID: session.id, name: "promise triage" })
-              loaded.push("promise")
-            },
-          }),
-        },
-        { id: "test.automation.after", revision: "1", effect: () => Effect.sync(() => loaded.push("after")) },
-      ])
-    }).pipe(Effect.provide(locations.get(LocationServiceMap.canonical({ directory: location.directory }))))
-
-    expect(loaded).toEqual(["effect", "promise", "after"])
-    expect((yield* automations.list()).map((item) => item.name)).toEqual(
-      expect.arrayContaining(["effect triage", "promise triage"]),
-    )
-  }),
-)
+      expect(loaded).toEqual(["effect refused", "promise refused", "after"])
+      expect((yield* automations.list()).map((item) => item.name)).toEqual([])
+      yield* Effect.promise(() => Promise.all(later.map((create) => create())))
+      expect((yield* automations.list()).map((item) => item.name).toSorted()).toEqual(["effect", "promise"])
+    }),
+  )
+}
 
 it.live("a plugin's create for another Location waits for that Location's plugins", () =>
   Effect.gen(function* () {

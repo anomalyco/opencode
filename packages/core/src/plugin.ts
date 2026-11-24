@@ -269,6 +269,7 @@ const layer = Layer.effect(
       activate,
       close,
       awaitActivation: ready.await,
+      activated: Effect.sync(() => pending.size === 0),
       hold,
       list,
       gui,
