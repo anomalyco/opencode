@@ -3,6 +3,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, 
 import {
   barTiming,
   drawShareCard,
+  leaderColor,
   loadShareFonts,
   shareDuration,
   shareSizes,
@@ -370,7 +371,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     </For>
                   </Row>
                   <Row label="Style">
-                    <For each={["dark", "light"] as const}>
+                    <For each={["dark", "light", "leader"] as const}>
                       {(item) => (
                         <button
                           type="button"
@@ -379,8 +380,12 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                           aria-pressed={options().theme === item}
                           onClick={() => setShareOption("theme", item)}
                         >
-                          <i data-slot="swatch" data-theme={item} />
-                          <span>{item === "dark" ? "Dark" : "Light"}</span>
+                          <i
+                            data-slot="swatch"
+                            data-theme={item}
+                            style={item === "leader" ? { background: leaderColor(value()) } : undefined}
+                          />
+                          <span>{{ dark: "Dark", light: "Light", leader: "Leader" }[item]}</span>
                         </button>
                       )}
                     </For>

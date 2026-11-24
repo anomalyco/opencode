@@ -35,7 +35,8 @@ export type ShareCard = {
 
 export type ShareOptions = {
   layout: "headline" | "number" | "chart"
-  theme: "dark" | "light"
+  // leader: the card takes the leading series' colour, and the chart turns to tones of one ink (leaderLook).
+  theme: "dark" | "light" | "leader"
   size: "4:5" | "1:1" | "9:16" | "16:9"
   background: "dots" | "plain" | "band"
   motion: "highlight" | "build"
@@ -90,6 +91,61 @@ const palettes = {
 
 type Palette = (typeof palettes)["dark"]
 
+/** The colour the Leader style takes: the leading series' colour, or the site's accent for a ranked list. */
+export function leaderColor(card: Pick<ShareCard, "chart">) {
+  return card.chart.kind === "stacked" ? (card.chart.series[0]?.color ?? "#a684ff") : "#a684ff"
+}
+
+// The Leader style. The card is the leader's colour, so the leader can't also be drawn in it: every part of the card
+// turns to one ink, black or white, whichever reads better on that colour, mixed into the background in steps. The
+// leader is the solid ink, the next series lighter tints of it, and the rest of the card follows the same scale.
+function leaderLook(card: ShareCard): { colors: Palette; card: ShareCard } {
+  const background = leaderColor(card)
+  const ink = luminance(background) > 0.4 ? "#0c0c0c" : "#ffffff"
+  const tone = (amount: number) => hex(background, ink, amount)
+  const colors: Palette = {
+    background,
+    text: ink,
+    muted: tone(0.8),
+    faint: tone(0.62),
+    line: tone(0.22),
+    dot: tone(0.1),
+    meter: tone(0.4),
+    idle: tone(0.16),
+    track: tone(0.12),
+    accent: ink,
+    mark: tone(0.45),
+  }
+  if (card.chart.kind !== "stacked") return { colors, card }
+  const steps = [1, 0.66, 0.5, 0.4, 0.32, 0.26]
+  const series = card.chart.series.map((item, index) => ({
+    ...item,
+    color: item.key === "other" ? tone(0.2) : tone(steps[index] ?? 0.22),
+  }))
+  return { colors, card: { ...card, chart: { ...card.chart, series } } }
+}
+
+function luminance(color: string) {
+  const [r = 0, g = 0, b = 0] = rgb(color).map((value) => {
+    const channel = value / 255
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+// mix() as a #rrggbb colour, for palette entries that are mixed again later.
+function hex(from: string, to: string, amount: number) {
+  const a = rgb(from)
+  const b = rgb(to)
+  return `#${a
+    .map((value, index) =>
+      Math.round(value + ((b[index] ?? value) - value) * amount)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`
+}
+
 const font = '"OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", ui-monospace, monospace'
 const pad = 80
 // The still holds long enough for the legend to arrive after the highlights.
@@ -131,13 +187,15 @@ export function shareDuration(card: ShareCard, options: ShareOptions, timing = f
 
 export function drawShareCard(
   ctx: CanvasRenderingContext2D,
-  card: ShareCard,
+  input: ShareCard,
   options: ShareOptions,
   time: number,
   timing = freeTiming,
 ) {
   const [width, height] = shareSizes[options.size]
-  const colors = palettes[options.theme]
+  const look = options.theme === "leader" ? leaderLook(input) : { colors: palettes[options.theme], card: input }
+  const colors = look.colors
+  const card = look.card
   ctx.save()
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = colors.background

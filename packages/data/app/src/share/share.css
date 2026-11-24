@@ -581,6 +581,18 @@
     }
   }
 
+  /* Three wide choices in a row (Style) set tighter, so their labels fit. */
+  [data-slot="row-options"]:has(> [data-variant="wide"]:nth-child(3)) > [data-variant="wide"] {
+    gap: 6px;
+    padding: 0 7px;
+    font-size: 12px;
+
+    [data-slot="swatch"] {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
   [data-slot="swatch"] {
     flex: none;
     width: 16px;

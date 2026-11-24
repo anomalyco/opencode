@@ -34,6 +34,7 @@ export const shareControls = [
     options: [
       ["dark", "Dark"],
       ["light", "Light"],
+      ["leader", "Leader"],
     ],
   },
   {
