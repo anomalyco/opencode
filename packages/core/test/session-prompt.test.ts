@@ -1554,6 +1554,87 @@ describe("Session.inbox", () => {
     }),
   )
 
+  it.effect("fenced cancel is opt-in and rejects every later admission of that ID", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const fencedID = SessionMessage.ID.make("msg_fence_cancelled")
+      yield* session.prompt({ id: fencedID, sessionID, text: "Queue this", delivery: "queue", resume: false })
+      yield* session.cancelInbox({ sessionID, inboxID: fencedID, fence: true })
+      expect(yield* session.inbox(sessionID)).toEqual([])
+      // A retry or a still-in-flight submission with the same ID must now be refused, not re-admitted.
+      const refused = yield* session.prompt({ id: fencedID, sessionID, text: "Queue this", delivery: "queue", resume: false }).pipe(Effect.flip)
+      expect(refused).toMatchObject({ _tag: "Session.PromptConflictError", sessionID, messageID: fencedID })
+      expect(yield* session.inbox(sessionID)).toEqual([])
+    }),
+  )
+
+  it.effect("a fence placed before the submission ever arrives still refuses it", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const lateID = SessionMessage.ID.make("msg_fence_never_seen")
+      // Nothing pending: fenced cancel is still a harmless no-op that records the fence.
+      yield* session.cancelInbox({ sessionID, inboxID: lateID, fence: true }).pipe(Effect.catchTag("Session.InboxConflictError", () => Effect.void))
+      const refused = yield* session.prompt({ id: lateID, sessionID, text: "Too late", delivery: "queue", resume: false }).pipe(Effect.flip)
+      expect(refused).toMatchObject({ _tag: "Session.PromptConflictError", messageID: lateID })
+      expect(yield* session.inbox(sessionID)).toEqual([])
+    }),
+  )
+
+  it.effect("fence guard is atomic with admission: a submission that reaches projection after the fence is not admitted", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const racingID = SessionMessage.ID.make("msg_fence_racing")
+      yield* session.cancelInbox({ sessionID, inboxID: racingID, fence: true }).pipe(Effect.catchTag("Session.InboxConflictError", () => Effect.void))
+      // Bypass the prompt-level reconcile entirely, as a submission already past it would: only the projector guard remains.
+      const exit = yield* Effect.exit(
+        bus.publish(SessionEvent.InboxEnqueued, { sessionID, inboxID: racingID, item: { type: "user", payload: { text: "in flight" }, delivery: "queue" } }),
+      )
+      expect(exit._tag).toBe("Failure")
+      expect(yield* session.inbox(sessionID)).toEqual([])
+    }),
+  )
+
+  it.effect("a promoted (delivered) item is visible as a message, so a fenced cancel conflict means delivered, never lost", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const id = SessionMessage.ID.make("msg_fence_promoted")
+      yield* session.prompt({ id, sessionID, text: "deliver me", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      // Promotion removed the pending row and inserted the message in one event transaction.
+      const cancelled = yield* session.cancelInbox({ sessionID, inboxID: id, fence: true }).pipe(Effect.flip)
+      expect(cancelled).toMatchObject({ _tag: "Session.InboxConflictError", inboxID: id })
+      const message = yield* db.select({ id: SessionMessageTable.id }).from(SessionMessageTable).where(eq(SessionMessageTable.id, id)).get().pipe(Effect.orDie)
+      expect(message?.id).toBe(id)
+      expect(yield* session.inbox(sessionID)).toEqual([])
+    }),
+  )
+
+  it.effect("a fence is per session: it never blocks the same ID in another session", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const other = Session.ID.make("ses_prompt_test_other")
+      yield* db
+        .insert(SessionTable)
+        .values({ id: other, project_id: Project.ID.global, slug: "other", directory: "/project", title: "other", version: "test" })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* Session.Service
+      const shared = SessionMessage.ID.make("msg_fence_shared")
+      yield* session.cancelInbox({ sessionID, inboxID: shared, fence: true }).pipe(Effect.catchTag("Session.InboxConflictError", () => Effect.void))
+      expect(yield* session.prompt({ id: shared, sessionID: other, text: "elsewhere", delivery: "queue", resume: false })).toMatchObject({ id: shared })
+      expect(yield* session.prompt({ id: shared, sessionID, text: "here", delivery: "queue", resume: false }).pipe(Effect.flip)).toMatchObject({ _tag: "Session.PromptConflictError" })
+    }),
+  )
+
   it.effect("moves pending input between steer and queue delivery", () =>
     Effect.gen(function* () {
       yield* setup

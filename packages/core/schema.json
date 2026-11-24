@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "6fdb1fc8-74cd-4f15-8faa-e109d3030da9",
-  "prevIds": ["74cace2e-430e-4672-bf3b-eba14ae0c399"],
+  "id": "a817cd30-a2e8-491a-85e1-9f27e81c4e5d",
+  "prevIds": ["6fdb1fc8-74cd-4f15-8faa-e109d3030da9"],
   "ddl": [
     {
       "name": "account_state",
@@ -74,6 +74,10 @@
     },
     {
       "name": "instruction_state",
+      "entityType": "tables"
+    },
+    {
+      "name": "session_inbox_fence",
       "entityType": "tables"
     },
     {
@@ -1372,6 +1376,36 @@
     },
     {
       "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "session_inbox_fence"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "session_inbox_fence"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "session_inbox_fence"
+    },
+    {
+      "type": "text",
       "notNull": false,
       "autoincrement": false,
       "default": null,
@@ -2145,6 +2179,17 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
+      "name": "fk_session_inbox_fence_session_id_session_v2_id_fk",
+      "entityType": "fks",
+      "table": "session_inbox_fence"
+    },
+    {
+      "columns": ["session_id"],
+      "tableTo": "session_v2",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
       "name": "fk_session_inbox_session_id_session_v2_id_fk",
       "entityType": "fks",
       "table": "session_inbox"
@@ -2231,6 +2276,13 @@
       "name": "instruction_entry_pk",
       "entityType": "pks",
       "table": "instruction_entry"
+    },
+    {
+      "columns": ["session_id", "id"],
+      "nameExplicit": false,
+      "name": "session_inbox_fence_pk",
+      "entityType": "pks",
+      "table": "session_inbox_fence"
     },
     {
       "columns": ["message_id", "ordinal"],

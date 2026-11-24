@@ -626,13 +626,15 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.delete("session.inbox.cancel", "/api/session/:sessionID/inbox/:inboxID", {
         params: { sessionID: Session.ID, inboxID: SessionMessage.ID },
+        query: { fence: BooleanFromString.pipe(Schema.optional) },
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.inbox.cancel",
           summary: "Cancel inbox input",
-          description: "Cancel an inbox item that has not yet been delivered. Unavailable items are a no-op.",
+          description:
+            "Cancel an inbox item that has not yet been delivered. Unavailable items are a no-op. With fence=true the inbox ID is also fenced first: it can never be admitted again, even by a submission still in flight, so after this returns the input is either delivered (visible as a message) or will never be delivered.",
         }),
       ),
     )

@@ -3677,7 +3677,11 @@ export type SessionInboxListInput = { readonly sessionID: string }
 
 export type SessionInboxListOutput = { data: Array<SessionInboxInfo> }["data"]
 
-export type SessionInboxCancelInput = { readonly sessionID: string; readonly inboxID: string }
+export type SessionInboxCancelInput = {
+  readonly sessionID: string
+  readonly inboxID: string
+  readonly fence?: boolean | undefined
+}
 
 export type SessionInboxCancelOutput = void
 

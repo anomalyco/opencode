@@ -127,6 +127,26 @@ export const SessionPartTable = sqliteTable(
   ],
 )
 
+/**
+ * Fence for an inbox ID: once recorded, that ID can never be admitted (again). Written by an explicit fenced cancel,
+ * so a caller can prove a possibly-in-flight submission will not take effect. Plain cancel keeps allowing re-admission.
+ */
+export const SessionInboxFenceTable = sqliteTable(
+  "session_inbox_fence",
+  {
+    id: text().$type<SessionMessage.ID>().notNull(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    time_created: integer()
+      .notNull()
+      .$default(() => Date.now()),
+  },
+  // Per session: a fence in one session never blocks the same ID elsewhere.
+  (table) => [primaryKey({ columns: [table.session_id, table.id] })],
+)
+
 export const SessionInboxTable = sqliteTable(
   "session_inbox",
   {
