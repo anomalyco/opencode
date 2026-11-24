@@ -155,7 +155,9 @@ const layer = Layer.effect(
           : undefined
       const from = base ?? workingDirectory
       const id = parsed?.environment ?? from.environment.id
-      if (id === environment.id) {
+      // The host's path rules apply only to an environment without its own: a sandboxed Location's paths are POSIX even
+      // on a Windows server, so they resolve below with its rules rather than becoming `C:\...` host paths.
+      if (id === environment.id && !environment.path) {
         const written = parsed?.path ?? text
         const origin = parsed ? location.directory : from.absolute
         return {
