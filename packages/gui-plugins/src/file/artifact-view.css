@@ -6,10 +6,10 @@
   background-color: var(--v2-background-bg-layer-01);
 }
 
-/* Plain text and code keep the code view's own background, not the artifact surface. */
+/* Plain text and code sit on the code view's diff background, not the artifact surface. */
 [data-slot="artifact-view"][data-source-only] {
-  --opencode-diffs-bg: initial;
-  background-color: transparent;
+  --opencode-diffs-bg: var(--color-background-stronger);
+  background-color: var(--color-background-stronger);
 }
 
 [data-slot="artifact-toolbar"] {
@@ -23,7 +23,7 @@
 }
 
 [data-slot="artifact-view"][data-source-only] [data-slot="artifact-toolbar"] {
-  background-color: transparent;
+  background-color: var(--color-background-stronger);
 }
 
 [data-slot="artifact-filename"] {
