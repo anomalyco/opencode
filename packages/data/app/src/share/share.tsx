@@ -123,6 +123,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   // The chosen track, and whether the video is muted; muting keeps the choice for unmuting.
   const [track, setTrack] = createSignal(shareTracks[0]?.id ?? "")
   const [muted, setMuted] = createSignal(false)
+  // The track under the pointer in the open music list, playing in place of the chosen one until the list closes.
+  const [hovered, setHovered] = createSignal<string>()
   // The open dropdown or the date picker, by id; one at a time.
   const [menu, setMenu] = createSignal<string>()
   // The chart column the card is about, or the whole range; each section starts on the whole range.
@@ -168,7 +170,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const options = createMemo<ShareOptions>(() => ({ ...shareOptions }))
   const size = createMemo(() => shareSizes[options().size])
   const chosen = createMemo(() => shareTracks.find((item) => item.id === track()))
-  const music = createMemo(() => (muted() ? undefined : chosen()))
+  const music = createMemo(() => {
+    const id = hovered()
+    if (id) return shareTracks.find((item) => item.id === id)
+    return muted() ? undefined : chosen()
+  })
   // The chosen track's spectrum, for the dot equaliser; measured once per track (spectrum.ts). A plain signal, not a
   // resource: a resource would suspend the page's Suspense boundary, which takes the dialog out of the DOM and puts it
   // back no longer modal, under the page.
@@ -581,8 +587,18 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   onOpen={setMenu}
                   value={fixed() ? "fixed" : "live"}
                   options={[
-                    { value: "live" as const, label: "Live data", detail: "Always the latest" },
-                    { value: "fixed" as const, label: "Fixed data", detail: "Today's numbers" },
+                    {
+                      value: "live" as const,
+                      label: "Live data",
+                      detail: "Always the latest",
+                      icon: <DataGlyph fixed={false} />,
+                    },
+                    {
+                      value: "fixed" as const,
+                      label: "Fixed data",
+                      detail: "Today's numbers",
+                      icon: <DataGlyph fixed />,
+                    },
                   ]}
                   onSelect={(item) => setFixed(item === "fixed")}
                 />
@@ -602,6 +618,10 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                       icon: <MusicCover cover={item.cover} />,
                     }))}
                     show="both"
+                    onPreview={(id) => {
+                      setHovered(id)
+                      if (id) setPlaying(true)
+                    }}
                     trigger={
                       <MusicCover
                         cover={chosen()?.cover}
@@ -738,8 +758,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <button
                   type="button"
                   data-slot="icon-button"
-                  aria-label="Previous section"
-                  data-tooltip="Previous section"
+                  aria-label="Previous"
+                  data-tooltip="Previous"
                   onClick={() => step(-1)}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -752,8 +772,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <button
                   type="button"
                   data-slot="icon-button"
-                  aria-label="Next section"
-                  data-tooltip="Next section"
+                  aria-label="Next"
+                  data-tooltip="Next"
                   onClick={() => step(1)}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -783,6 +803,8 @@ function Dropdown<T extends string>(props: {
   value: T
   options: { value: T; label: string; detail?: string; explicit?: boolean; icon?: JSX.Element }[]
   show?: "icon" | "value" | "both"
+  // Called with the choice under the pointer or keyboard focus while the list is open, and with undefined once it closes.
+  onPreview?: (value: T | undefined) => void
   trigger?: JSX.Element
   onSelect: (value: T) => void
 }) {
@@ -796,7 +818,7 @@ function Dropdown<T extends string>(props: {
   }
   // Opening focuses the chosen item, so the arrow keys start from it.
   createEffect(() => {
-    if (!open()) return
+    if (!open()) return props.onPreview?.(undefined)
     requestAnimationFrame(() => element?.querySelector<HTMLElement>("[role=option][aria-selected=true]")?.focus())
     const away = (event: PointerEvent) => {
       if (element && !element.contains(event.target as Node)) close(false)
@@ -846,6 +868,8 @@ function Dropdown<T extends string>(props: {
                 role="option"
                 data-slot="dropdown-item"
                 aria-selected={item.value === props.value}
+                onPointerEnter={() => props.onPreview?.(item.value)}
+                onFocus={() => props.onPreview?.(item.value)}
                 onClick={() => {
                   props.onSelect(item.value)
                   close(true)
@@ -919,11 +943,31 @@ function MusicCover(props: { cover?: string; state?: "playing" | "paused" }) {
   )
 }
 
+// The embed's data: a broadcast for live, a padlock for fixed.
+function DataGlyph(props: { fixed: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <Show
+          when={props.fixed}
+          fallback={
+            <>
+              <path d="M8 6.75v2.5M5.25 5a4 4 0 0 0 0 6M10.75 5a4 4 0 0 1 0 6M3.25 3a6.75 6.75 0 0 0 0 10M12.75 3a6.75 6.75 0 0 1 0 10" />
+            </>
+          }
+        >
+          <path d="M3.75 7.25h8.5v6.5h-8.5zM5.5 7.25V5a2.5 2.5 0 0 1 5 0v2.25" />
+        </Show>
+      </g>
+    </svg>
+  )
+}
+
 // Lead with: a trophy for the top model, the sum sign for the total.
 function LeadGlyph(props: { lead: "top" | "total" }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
         <Show when={props.lead === "top"} fallback={<path d="M12 3.25H4.25L8.5 8l-4.25 4.75H12" />}>
           <path d="M4.75 2.75h6.5v3a3.25 3.25 0 0 1-6.5 0zM4.75 4H2.75v.75a2.25 2.25 0 0 0 2.25 2.25M11.25 4h2v.75A2.25 2.25 0 0 1 11 7M8 9v3.25M5.25 13.25h5.5" />
         </Show>
@@ -937,8 +981,8 @@ function TypeGlyph(props: { format: "video" | "image" | "embed" }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <Show when={props.format === "video"}>
-        <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
-          <rect x="1.75" y="4.25" width="8.5" height="7.5" rx="1" />
+        <g fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.75" y="4.25" width="8.5" height="7.5" />
           <path d="m10.25 7 4-2.25v6.5l-4-2.25" />
         </g>
       </Show>
@@ -959,17 +1003,17 @@ function TypeGlyph(props: { format: "video" | "image" | "embed" }) {
   )
 }
 
-// The layout icons, each a card: three lines of headline; a big number over its line; a short title over a chart.
+// The layout icons, each a card: three lines of headline; a big number; a short title over a chart.
 function LayoutGlyph(props: { layout: ShareOptions["layout"] }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <g fill="none" stroke="currentColor" stroke-width="1.5">
-        <rect x="2.25" y="1.75" width="11.5" height="12.5" rx="1" />
+        <rect x="2.25" y="1.75" width="11.5" height="12.5" />
         <Show when={props.layout === "headline"}>
           <path d="M4.75 5h6.5M4.75 7.75h6.5M4.75 10.5h3.5" />
         </Show>
         <Show when={props.layout === "number"}>
-          <path d="M9.75 6.25a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0v2.5A1.5 1.5 0 0 1 8.25 10.25H6.75M4.75 12h6.5" />
+          <path d="M9.75 7a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0v2.5A1.5 1.5 0 0 1 8.25 11H6.75" />
         </Show>
         <Show when={props.layout === "chart"}>
           <path d="M4.75 4.75h4M5.5 11.75v-2M8 11.75V7.75M10.5 11.75v-3" />

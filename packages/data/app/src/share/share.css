@@ -984,7 +984,7 @@
     flex-direction: column;
     min-width: 100%;
     max-height: min(420px, 60dvh);
-    padding: 4px 0;
+    padding: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     background: var(--stats-bg);
@@ -1000,8 +1000,8 @@
     }
   }
 
-  /* The choices, as OpenCode's menus set them (nav-menus.css): grey until hovered, the chosen one in the text colour
-     with the active bar down its leading edge; no checkmarks. */
+  /* The choices, as the OpenCode docs' menus set them: every name in the text colour; hover or keyboard focus gives a
+     grey row and a faint bar down its leading edge; the chosen one keeps a darker bar. No checkmarks. */
   [data-slot="dropdown-item"] {
     position: relative;
     display: flex;
@@ -1009,46 +1009,66 @@
     align-items: center;
     gap: 10px;
     min-height: 36px;
-    padding: 4px 14px;
+    padding: 8px 14px;
     font-size: 13px;
-    color: var(--stats-faint);
+    color: var(--stats-text);
     text-align: left;
     white-space: nowrap;
     background: transparent;
     border: 0;
+    border-radius: 0;
     outline: none;
-    transition:
-      background-color 150ms ease,
-      color 150ms ease;
+
+    /* grey-ok: the docs menus' hint bar, a step of the shared scale with no token of its own */
+    &::before {
+      position: absolute;
+      inset-block: 0;
+      inset-inline-start: -1px;
+      width: 2px;
+      content: "";
+      background: light-dark(#888888, #6a6a6a);
+      opacity: 0;
+    }
+    /* grey-ok-end */
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {
-        color: var(--stats-text);
-        background: color-mix(in srgb, var(--stats-accent) 10%, var(--stats-bg));
+        background: var(--stats-layer-2);
+
+        &::before {
+          opacity: 1;
+        }
       }
     }
 
     &:focus-visible {
-      color: var(--stats-text);
-      background: color-mix(in srgb, var(--stats-accent) 10%, var(--stats-bg));
-    }
-
-    &[aria-selected="true"] {
-      color: var(--stats-text);
+      background: var(--stats-layer-2);
 
       &::before {
-        position: absolute;
-        inset-block: 0;
-        inset-inline-start: 0;
-        width: 2px;
-        content: "";
-        background: var(--stats-faint);
+        opacity: 1;
       }
+    }
+
+    /* grey-ok: the docs menus' pressed row, a step of the shared scale with no token of its own */
+    &:active {
+      background: light-dark(#e0e0e0, #2e2e2e);
+    }
+    /* grey-ok-end */
+
+    &[aria-selected="true"]::before {
+      background: var(--stats-muted);
+      opacity: 1;
     }
 
     [data-slot="explicit"] {
       margin-left: 16px;
     }
+  }
+
+  /* The music list's covers and names in line with the cover and name in its button. */
+  [data-component="dropdown"][data-id="music"] [data-slot="dropdown-item"] {
+    gap: 6px;
+    padding-left: 6px;
   }
 
   /* The name takes the row's spare width, so the Explicit badges and the checks line up on the right. */
