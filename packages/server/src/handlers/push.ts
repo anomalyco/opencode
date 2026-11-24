@@ -8,10 +8,10 @@ import type { Session } from "@opencode/schema/session"
 
 export const makePush = Effect.gen(function* () {
   const list = yield* PushList.Service
-  const options = yield* PushOptions.make
+  const options = yield* PushOptions.Service
 
   const requireEnabled = Effect.gen(function* () {
-    const current = yield* options
+    const current = yield* options.get()
     if (current.enabled) return current
     return yield* new PushNotFoundError({ message: "Push notifications are off on this server." })
   })

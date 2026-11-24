@@ -15,13 +15,13 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
   Effect.gen(function* () {
     const pairing = yield* ServerPairing.Service
     const auth = yield* ServerAuth.Config
-    const pushOptions = yield* PushOptions.make
+    const pushOptions = yield* PushOptions.Service
 
     return handlers
       .handle("server.info", () =>
         Effect.gen(function* () {
           const info = yield* ServerInfo.Service
-          const push = yield* pushOptions
+          const push = yield* pushOptions.get()
           return {
             version: info.app.version ?? "unknown",
             pid: process.pid ?? 0,
