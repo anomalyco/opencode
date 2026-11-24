@@ -26,8 +26,9 @@
   font-weight: 500;
   line-height: 1;
   color: var(--stats-text);
-  background: var(--stats-layer);
-  border: 1px solid color-mix(in srgb, var(--stats-text) 28%, transparent);
+  /* As the leaderboard's cards: a hairline over the layer, lit faintly from the top. */
+  background: linear-gradient(180deg, #ffffff0a 0%, #ffffff00 100%), var(--stats-layer);
+  border: 1px solid var(--stats-line);
   border-radius: 0;
   cursor: pointer;
   transition:
@@ -50,7 +51,7 @@
   @media (hover: hover) and (pointer: fine) {
     &:hover {
       background: var(--stats-layer-2);
-      border-color: color-mix(in srgb, var(--stats-text) 44%, transparent);
+      border-color: var(--stats-line-strong);
     }
   }
 

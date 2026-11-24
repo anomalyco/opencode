@@ -1638,13 +1638,18 @@ body {
   background: linear-gradient(var(--stats-text), var(--stats-text)) center / 6px 6px no-repeat;
 }
 
+/* The range choices as the leaderboard's cards and the Share button beside them: 28px, a hairline over the layer; the
+   chosen one in full colour with a firmer line. */
 [data-page="stats"] [data-component="usage-filter"][data-variant="range"] button {
-  height: 24px;
-  padding: 0 8px;
+  height: 28px;
+  padding: 0 10px;
+  background: linear-gradient(180deg, #ffffff0a 0%, #ffffff00 100%), var(--stats-layer);
+  border: 1px solid var(--stats-line);
 }
 
 [data-page="stats"] [data-component="usage-filter"][data-variant="range"] button[data-active="true"] {
-  background: var(--stats-layer-2);
+  color: var(--stats-text);
+  border-color: var(--stats-line-strong);
 }
 
 [data-page="stats"] [data-slot="leaderboard-period"] {
