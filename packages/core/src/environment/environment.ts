@@ -1,5 +1,6 @@
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { Global } from "@opencode/util/global"
 import { Context, Effect, Layer, PlatformError, Schema } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { posix, type PlatformPath } from "node:path"
@@ -26,33 +27,40 @@ export const Place = Schema.Struct({
 })
 export type Place = typeof Place.Type
 
-/** What an environment says about itself, set by whoever makes it. Absent means no, or the server's own. */
-export interface Facts {
+/** Target properties supplied by whoever constructs an Environment. */
+export interface Options {
+  /**
+   * True only when commands and files live on the server's own OS process (false on workerd and all remotes):
+   * commands start from the server's variables, cwds resolve here, the process daemon can hold them, and host
+   * formatters and worktree strategies reach its files.
+   */
+  readonly local?: boolean
   /** The path rules of its files, when they are not the server's. */
   readonly path?: PlatformPath
   /** The shell every command there runs under, when it is not the configured one. */
   readonly shell?: string
+  /** Resolves `~` in this environment when available (host homedir locally, `hello.home` on paired machines). */
+  readonly home?: Effect.Effect<string, unknown>
   /**
-   * Whether this is the computer the server itself runs on, so a command there is the server's own child: it starts
-   * from the server's variables, its cwd is made absolute here, the server's process daemon can hold it, and the
-   * server's formatters reach its files.
+   * Ripgrep command to spawn in this environment (`undefined` means search is unavailable).
+   * Local environments (`local: true`) use the bundled `RipgrepBinary` when `rg` is set.
    */
-  readonly hostsServer?: boolean
-  /** Whether a search can run over its files. It goes when the search tools no longer need a ripgrep binary there. */
-  readonly searchable?: boolean
+  readonly rg?: Effect.Effect<string, unknown>
 }
 
-export interface Interface extends Facts {
+export interface Interface extends Options {
   readonly id: ID
+  readonly local: boolean
   readonly files: Files
   readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"]
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Environment") {}
 
-export const make = (id: ID, driver: Driver, facts?: Facts): Interface => ({
-  ...facts,
+export const make = (id: ID, driver: Driver, options?: Options): Interface => ({
+  ...options,
   id,
+  local: options?.local === true,
   files: makeFiles(driver),
   spawner: driver.spawner,
 })
@@ -63,12 +71,14 @@ export const local = (spawner: ChildProcessSpawner.ChildProcessSpawner["Service"
     localID,
     makeLocalDriver(spawner),
     // Runtimes without local process execution (such as workerd) cannot host local commands or search.
-    spawner === EnvironmentUnavailable.spawner ? {} : { hostsServer: true, searchable: true },
+    spawner === EnvironmentUnavailable.spawner
+      ? {}
+      : { local: true, home: Effect.sync(() => Global.Path.home), rg: Effect.succeed("rg") },
   )
 
 /** A workspace sandbox environment; runs ripgrep through its own spawner and uses POSIX path rules. */
 export const workspace = (id: Workspace.ID, driver: Driver) =>
-  make(ID.make(id), driver, { path: posix, searchable: true })
+  make(ID.make(id), driver, { path: posix, rg: Effect.succeed("rg") })
 
 /**
  * A total environment handle that fails every file and command operation loudly with `cause` instead of

@@ -12,7 +12,6 @@ import { Flag } from "@opencode/core/flag"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Location } from "@opencode/core/location"
 import { Machines } from "@opencode/core/machine/machines"
-import { MachinePath } from "@opencode/core/machine/path"
 import { Permission } from "@opencode/core/permission"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -162,7 +161,7 @@ describe("Environments", () => {
         const environments = yield* Environments.Service
         const local = yield* environments.get(Environment.localID)
         expect(local.id).toBe(Environment.localID)
-        expect(local.hostsServer).toBe(true)
+        expect(local.local).toBe(true)
 
         const removedID = Environment.ID.make("ghost")
         const removed = yield* environments.get(removedID)
@@ -280,7 +279,7 @@ describe("Environments", () => {
 
         for (const bad of [`${wrkID}:~/notes`, `${wrkID}:relative`, "local:relative"]) {
           const err = yield* access.locate(bad).pipe(Effect.flip)
-          expect(err.cause).toBeInstanceOf(MachinePath.NotAbsolute)
+          expect(err.cause).toBeInstanceOf(EnvironmentPath.NotAbsolute)
         }
       }).pipe(Effect.provide(layer))
     }),
