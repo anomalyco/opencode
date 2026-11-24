@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessageInfo } from "@opencode/client/promise"
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled"
 
@@ -9,20 +9,14 @@ export type Todo = {
 
 const statuses = new Set<unknown>(["pending", "in_progress", "completed", "cancelled"])
 
-const completedTodoCall = (item: SessionMessageAssistant["content"][number]) =>
-  item.type === "tool" && item.name === "todowrite" && item.state.status === "completed"
-
 // The experimental `todowrite` tool keeps no server state: the current list is the input of the latest completed call
 // before the revert boundary.
 export function sessionTodos(messages: readonly SessionMessageInfo[], boundary?: string): Todo[] {
   const end = boundary ? messages.findIndex((message) => message.id === boundary) : -1
-  // From the end, so the search stops at the latest call instead of walking the transcript.
   const input = messages
-    .findLast(
-      (message, index): message is SessionMessageAssistant =>
-        (end === -1 || index < end) && message.type === "assistant" && message.content.some(completedTodoCall),
-    )
-    ?.content.findLast(completedTodoCall)
+    .slice(0, end === -1 ? messages.length : end)
+    .flatMap((message) => (message.type === "assistant" ? message.content : []))
+    .findLast((item) => item.type === "tool" && item.name === "todowrite" && item.state.status === "completed")
   const todos = input?.type === "tool" && input.state.status === "completed" ? input.state.input.todos : undefined
 
   if (!Array.isArray(todos)) return []
