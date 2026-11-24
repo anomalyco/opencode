@@ -1,6 +1,6 @@
 export * as PushCrypto from "./crypto.js"
 
-import { createECDH, hkdfSync, type ECDH } from "node:crypto"
+import { createCipheriv, createECDH, hkdfSync, randomBytes, type ECDH } from "node:crypto"
 import { Effect, Option } from "effect"
 
 export const context = "OpenCode mobile notifications v2"
@@ -30,4 +30,12 @@ export const newServerKey = () => {
   const server = createECDH("prime256v1")
   server.generateKeys()
   return server
+}
+
+/** Encrypts a message for one phone: base64 of nonce, ciphertext and tag. */
+export const seal = (secret: string, id: string, plaintext: string, nonce = randomBytes(12)) => {
+  const cipher = createCipheriv("aes-256-gcm", Buffer.from(secret, "base64"), nonce)
+  cipher.setAAD(Buffer.from(`${context}:${id}`, "utf8"))
+  const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()])
+  return Buffer.concat([nonce, ciphertext, cipher.getAuthTag()]).toString("base64")
 }

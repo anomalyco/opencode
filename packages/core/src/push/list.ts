@@ -61,6 +61,13 @@ export interface Interface {
   readonly settings: () => Effect.Effect<Push.Settings>
   readonly setSettings: (settings: Push.Settings) => Effect.Effect<Push.Settings, InvalidError>
   readonly info: () => Effect.Effect<Push.Info>
+  readonly targets: () => Effect.Effect<Targets>
+}
+
+export interface Targets {
+  readonly settings: Push.Settings
+  readonly devices: readonly Stored[]
+  readonly sessions: Record<string, Push.Bell>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PushList") {}
@@ -316,6 +323,15 @@ const layer = Layer.effect(
       if (found) yield* changed
     })
 
+    const targets = Effect.fn("PushList.targets")(function* () {
+      const now = yield* Clock.currentTimeMillis
+      return {
+        settings: yield* readSettings(now),
+        devices: yield* readDevices(now),
+        sessions: yield* readSessionBells(now),
+      }
+    })
+
     yield* bus.subscribe([SessionEvent.Deleted]).pipe(
       Stream.runForEach((event) => lock.withPermit(forgetSession(event.data.sessionID))),
       Effect.forkScoped({ startImmediately: true }),
@@ -341,6 +357,7 @@ const layer = Layer.effect(
       settings: () => lock.withPermit(settings()),
       setSettings: (input) => lock.withPermit(setSettings(input)),
       info: () => lock.withPermit(info()),
+      targets: () => lock.withPermit(targets()),
     })
   }),
 )
