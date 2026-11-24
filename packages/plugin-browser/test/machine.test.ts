@@ -175,7 +175,11 @@ describe("handshake", () => {
       const first = run(initial, attach(initial, "conn_1"))
       const grant = lastSync(first.effects)
       const closed = run(first.state, type === "attach.closed" ? { type, sessionID, attempt: 1 } : { type, sessionID })
-      expect(closed.effects).toEqual([{ type: "close-attachment", attempt: 1, outcome: "closed" }])
+      // A step that waited for the attach goes on without it.
+      expect(closed.effects).toEqual([
+        { type: "close-attachment", attempt: 1, outcome: "closed" },
+        { type: "notify-settled", sessionID },
+      ])
 
       const settled = run(closed.state, synced(grant.attempt))
       expect(controls(settled.effects)).toEqual([])
@@ -468,6 +472,83 @@ describe("session lifecycle", () => {
   })
 })
 
+// A step lists the browser tools only if its session holds the grant when the step selects its tools. After the server
+// restarted or unloaded a location, the desktop attaches again only once it sees the session run, which is just too
+// late for that step: so a session whose attachment ended is expected, and its next step waits for the desktop, once.
+describe("expected desktop", () => {
+  /** The session after its desktop's attachment ended and the revoke settled. */
+  function ended() {
+    const closed = run(attached(), { type: "attach.closed", sessionID, attempt: 1 })
+    return { closed, revoked: run(closed.state, synced(lastSync(closed.effects).attempt)) }
+  }
+
+  test("a session whose attachment ended is expected, and a step waits until its desktop holds the grant again", () => {
+    const { closed, revoked } = ended()
+    expect(BrowserMachine.isAwaited(closed.state, sessionID)).toBe(true)
+    expect(entry(revoked.state)).toEqual({ status: "expected" })
+    expect(revoked.effects).toEqual([{ type: "record-expectation", sessionID }])
+    // No attachment owns the session's rules meanwhile, and no tool call reaches a desktop.
+    expect(BrowserMachine.hasSession(revoked.state, sessionID)).toBe(false)
+    expect(BrowserMachine.selectConnection(revoked.state, sessionID).ok).toBe(false)
+
+    const back = run(revoked.state, attach(revoked.state, "conn_2"))
+    expect(back.effects).toContainEqual({ type: "forget-expectation", sessionID })
+    expect(BrowserMachine.isAwaited(back.state, sessionID)).toBe(true)
+
+    const granted = run(back.state, synced(lastSync(back.effects).attempt))
+    expect(granted.effects).toContainEqual({ type: "notify-settled", sessionID })
+    expect(BrowserMachine.isAwaited(granted.state, sessionID)).toBe(false)
+  })
+
+  test("the step that waits in vain ends the expectation, also while the revoke is still in flight", () => {
+    const { closed, revoked } = ended()
+    const waited = run(revoked.state, { type: "step.timed-out", sessionID })
+    expect(entry(waited.state)).toBeUndefined()
+    expect(waited.effects).toEqual([
+      { type: "forget-expectation", sessionID },
+      { type: "notify-settled", sessionID },
+    ])
+
+    const early = run(closed.state, { type: "step.timed-out", sessionID })
+    expect(early.effects).toEqual([{ type: "notify-settled", sessionID }])
+    const done = run(early.state, synced(lastSync(closed.effects).attempt))
+    expect(entry(done.state)).toBeUndefined()
+    expect(done.effects).toEqual([])
+  })
+
+  test.each(["session.moved", "session.deleted"] as const)("%s ends the expectation: no step here waits", (type) => {
+    const gone = run(ended().revoked.state, { type, sessionID })
+    expect(entry(gone.state)).toBeUndefined()
+    expect(gone.effects).toContainEqual({ type: "forget-expectation", sessionID })
+  })
+
+  test("a session that moved while attached is not expected here", () => {
+    const moved = run(attached(), { type: "session.moved", sessionID })
+    expect(BrowserMachine.isAwaited(moved.state, sessionID)).toBe(false)
+    const done = run(moved.state, synced(lastSync(moved.effects).attempt))
+    expect(entry(done.state)).toBeUndefined()
+    expect(done.effects).toEqual([])
+  })
+
+  test("a step waits for an attach in flight only: its grace running out changes nothing", () => {
+    const initial = BrowserMachine.createConnectionState()
+    const attaching = run(initial, attach(initial, "conn_1"))
+    expect(BrowserMachine.isAwaited(attaching.state, sessionID)).toBe(true)
+    const waited = BrowserMachine.transitionConnection(attaching.state, { type: "step.timed-out", sessionID })
+    expect(waited.state).toBe(attaching.state)
+    expect(waited.effects).toEqual([])
+  })
+
+  test("the sessions an earlier instance left expected start expected, and stay stored when this one goes away", () => {
+    const initial = BrowserMachine.createConnectionState([sessionID])
+    expect(BrowserMachine.isAwaited(initial, sessionID)).toBe(true)
+    expect(BrowserMachine.isAwaited(initial, other)).toBe(false)
+
+    const disposed = run(initial, { type: "disposed" })
+    expect(disposed.effects).toEqual([{ type: "notify-settled", sessionID }, { type: "notify-drained" }])
+  })
+})
+
 describe("disposal", () => {
   test("an idle plugin drains at once", () => {
     const next = run(BrowserMachine.createConnectionState(), { type: "disposed" })
@@ -486,9 +567,10 @@ describe("disposal", () => {
     expect(BrowserMachine.selectTarget(disposed.state, sessionID, { type: "tabs.list" }).ok).toBe(false)
     expect(BrowserMachine.selectAttachment(disposed.state, sessionID, "conn_1")).toBeUndefined()
 
+    // The desktop was attached when the plugin went away, so the next instance expects it for the session.
     const revoke = lastSync(disposed.effects)
     const firstDone = run(disposed.state, synced(revoke.attempt))
-    expect(firstDone.effects).toEqual([])
+    expect(firstDone.effects).toEqual([{ type: "record-expectation", sessionID }])
 
     // The other session's grant was still in flight; it is revoked before the plugin drains.
     const otherSettled = run(firstDone.state, synced(otherGrant.attempt, other))

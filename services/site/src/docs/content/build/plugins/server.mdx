@@ -1379,7 +1379,7 @@ so later hooks see changes made by earlier hooks.
 
 ### Sessions
 
-Session hooks intercept prompt admission, model calls, native HTTP, and retries.
+Session hooks intercept prompt admission, step selection, model calls, native HTTP, and retries.
 
 #### Forks
 
@@ -1430,6 +1430,25 @@ Keep prompt hooks retry-safe. They are not an exactly-once side-effect boundary:
 - Retrying an ID already pending or delivered returns the original admission without rerunning hooks.
 - Concurrent submissions can run hooks more than once, but only the first successful admission wins.
 - Prompt hooks transform input and do not expose a typed rejection API.
+
+#### Before a step
+
+Experimental. Runs before a session selects the agent, tools, and instructions of a step, and again before each retry
+of that step. State the hook settles first decides what the step lists, such as session permissions a client is about
+to grant.
+
+```ts
+await ctx.session.hook("experimental.step.before", async ({ sessionID }) => {
+  // `attached` is your own promise for a client that is connecting to this session.
+  await Promise.race([attached(sessionID), new Promise((resolve) => setTimeout(resolve, 2_000))])
+})
+```
+
+The step waits for the hook, so follow these rules:
+
+- Bound every wait on something outside the server, as the example does.
+- Return at once when there is nothing to wait for. The hook runs for every step of every session.
+- The hook cannot add tools or edit the request. Use `context` for that.
 
 #### Model requests
 
@@ -1651,6 +1670,11 @@ interface SessionHooks {
   "experimental.ws.send": SessionWebSocketSendHook
   "experimental.ws.receive": SessionWebSocketReceiveHook
   retry: SessionRetryHook
+  "experimental.step.before": SessionStepBeforeHook
+}
+
+interface SessionStepBeforeHook {
+  readonly sessionID: string
 }
 
 interface SessionModelResolveHook {

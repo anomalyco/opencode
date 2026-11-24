@@ -204,6 +204,15 @@ export interface SessionIdle {
   readonly background: ReadonlyArray<SessionIdleBackground>
 }
 
+/**
+ * Runs before a Session selects the agent, tools and instructions of a step, and again before each retry of that step.
+ * State the hook settles first, such as Session permissions a client is about to grant, decides what the step lists.
+ * The step waits for the hook, so a hook that waits on anything outside the server must bound that wait. Experimental.
+ */
+export interface SessionStepBefore {
+  readonly sessionID: Session.ID
+}
+
 export interface SessionHooks {
   readonly fork: { readonly sessionID: Session.ID }
   readonly prompt: SessionPrompt
@@ -220,6 +229,7 @@ export interface SessionHooks {
   readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
   readonly "experimental.idle": SessionIdle
+  readonly "experimental.step.before": SessionStepBefore
 }
 
 export type SessionDomain = Pick<

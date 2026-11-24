@@ -146,6 +146,18 @@ restart recovery and the hook keeps running. Persist your own state if the loop 
 fails, fails the execution like any other session hook, so handle errors from slow or remote work such as a judge model
 call.
 
+Before a Session selects the agent, tools and instructions of a step, the `experimental.step.before` hook runs, and
+again before each retry of that step. It is experimental: its name and shape may still change. State the hook settles
+first decides what the step lists, such as Session permissions a client is about to grant. The step waits for the hook,
+so bound any wait on something outside the server, and return at once when there is nothing to wait for:
+
+```ts
+await ctx.session.hook("experimental.step.before", async (event) => {
+  // `attached` is your own promise for a client that is connecting to this Session.
+  await Promise.race([attached(event.sessionID), new Promise((resolve) => setTimeout(resolve, 2_000))])
+})
+```
+
 Promise tools use complete executable tool values with async executors:
 
 ```ts

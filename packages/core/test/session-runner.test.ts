@@ -1304,6 +1304,31 @@ describe("SessionRunnerLLM", () => {
     expect(idles).toEqual([2])
   })
 
+  scenario("selects each step's tools by the session permissions its step hook settled first", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    const before: number[] = []
+    yield* hooks.register("session", "experimental.step.before", (event) =>
+      Effect.gen(function* () {
+        before.push(s.requests.length)
+        // The first step's hook withdraws a tool, as a client that lets go of it would; the next one gives it back.
+        yield* s.session
+          .setPermissions({
+            sessionID: event.sessionID,
+            permissions: before.length === 1 ? [{ action: "defect", resource: "*", effect: "deny" }] : [],
+          })
+          .pipe(Effect.orDie)
+      }),
+    )
+    yield* s.admit("Start")
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "echo", { text: "hello" }), TestLLM.text("Done", "text-done"))
+
+    yield* s.resume
+
+    expect(before).toEqual([0, 1])
+    expect(s.requests[0]?.tools.map((tool) => tool.name)).toEqual(["echo", "storefail"])
+    expect(s.requests[1]?.tools.map((tool) => tool.name)).toEqual(["defect", "echo", "storefail"])
+  })
+
   scenario("passes background work of the session and its descendants to the idle hook", function* (s) {
     const jobs = yield* Job.Service
     const hooks = yield* PluginHooks.Service
