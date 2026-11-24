@@ -92,8 +92,9 @@ export type CreateDataInput = {
 }
 
 const messagePageLimit = 20
-// Older pages that a new read of the newest page may read to reach the loaded history.
-const bridgePageLimit = 10
+// Sizes of the older pages that a new read of the newest page may read to reach the loaded history. They grow: a
+// short gap costs one small page, and the longest gap that is closed costs three requests.
+const bridgePageLimits = [20, 40, 140]
 // Trailing window for event bursts that each ask for the same refetch.
 export const settleMs = 150
 
@@ -2072,12 +2073,10 @@ export function createData(config: CreateDataInput) {
             // More than one page arrived while its events were missed, so messages lie between the newest page and
             // the loaded history. Older pages close the gap. After a longer absence only the newest messages stay,
             // as on a first read: the transcript never skips messages.
-            while (pages.length <= bridgePageLimit) {
+            for (const limit of bridgePageLimits) {
               const next = pages.at(-1)?.cursor.next
               if (!next || !apart(history(), read())) break
-              pages.push(
-                await api().message.list({ sessionID, limit: messagePageLimit, cursor: next }).catch(evictMissing),
-              )
+              pages.push(await api().message.list({ sessionID, limit, cursor: next }).catch(evictMissing))
               if ((deletedAt.get(sessionID) ?? 0) > started) return
             }
             const fetched = read().map(stored)

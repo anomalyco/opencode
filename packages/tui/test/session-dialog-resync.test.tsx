@@ -46,7 +46,7 @@ const messages = Array.from({ length: 30 }, (_, i) => {
 })
   .flat()
   .toReversed() as SessionMessageInfo[]
-// More turns than a resync reads back to reach the loaded history: the newest page and ten older ones.
+// More turns than a resync reads back to reach the loaded history: the newest page and three older ones.
 const ahead = [
   ...(Array.from({ length: 125 }, (_, i) => {
     const turn = String(i).padStart(3, "0")
@@ -86,7 +86,7 @@ async function openDialogThenResync(target: string, dialog: string) {
       if (start === 0) firstPages++
       // The session moved on while the stream was down. The resync has read all it reads once it asks for this page.
       const source = firstPages < 2 ? messages : ahead
-      if (firstPages === 2 && start === 200) resync.resolve()
+      if (firstPages === 2 && start === 80) resync.resolve()
       return json({ data: source.slice(start, end), cursor: end < source.length ? { next: String(end) } : {} })
     },
   })

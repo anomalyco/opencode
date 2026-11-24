@@ -3,8 +3,8 @@
 **TypeScript.** `message.sync` publishes the latest page and keeps local input rows that are in the outbox or
 admitted (`packages/client/src/solid/data.ts`, `message.sync`). When the page starts inside the loaded transcript,
 the loaded messages before it stay, with their cursor, and those that were still running are read again. When the
-page does not reach the loaded transcript, up to 10 older pages are read to reach it; past that, the pages replace
-the transcript. A row after the start of the page that the page lacks is dropped: when the read started before a
+page does not reach the loaded transcript, up to three older pages (20, 40 and 140 messages) are read to reach it;
+past that, the pages replace the transcript. A row after the start of the page that the page lacks is dropped: when the read started before a
 step, the `session.step.started` row and its text are gone once the page lands, and later deltas for that message
 are dropped because the row is not loaded. The reply reappears only after another invalidation. Events create rows for
 any session, also one the store found missing (`message.update` does `draft[sessionID] ??= []`).
