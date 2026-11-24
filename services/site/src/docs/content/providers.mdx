@@ -246,6 +246,10 @@ Native package options include:
 - `@opencode/ai/providers/azure/chat`
 - `@opencode/ai/providers/azure/responses`
 - `@opencode/ai/providers/amazon-bedrock`
+- `@opencode/ai/providers/amazon-bedrock/converse`
+- `@opencode/ai/providers/amazon-bedrock/chat`
+- `@opencode/ai/providers/amazon-bedrock/responses`
+- `@opencode/ai/providers/amazon-bedrock/messages`
 - `@opencode/ai/providers/amazon-bedrock/mantle`
 - `@opencode/ai/providers/amazon-bedrock/mantle/chat`
 - `@opencode/ai/providers/amazon-bedrock/mantle/messages`
@@ -459,6 +463,22 @@ VPC endpoint, set `baseURL` while keeping the same profile and region.
 
 Bedrock API keys use `AWS_BEARER_TOKEN_BEDROCK`. Other AWS variables feed SigV4 and are not stored as OpenCode API-key
 accounts.
+
+OpenCode uses a model's catalog-recommended Bedrock Runtime API (Converse, Responses, Chat Completions, or Messages)
+when the catalog declares a native route. To pin a particular model to Converse, set its `package` to
+`@opencode/ai/providers/amazon-bedrock/converse` under `providers.amazon-bedrock.models` - or likewise for other APIs.
+The base `@opencode/ai/providers/amazon-bedrock` package still uses Converse.
+
+| Runtime API | Default path prefix for an endpoint origin |
+| --- | --- |
+| Converse | None |
+| Chat Completions and Responses | `/openai/v1` |
+| Anthropic Messages | `/anthropic/v1` |
+
+An override such as `https://gateway.example.com/custom/v1` supplies its own prefix. Leave the operation path, such as
+`/chat/completions`, out of `baseURL`. Model IDs and inference-profile IDs are sent unchanged. Runtime Responses accepts
+system-defined inference profiles, not application inference profiles, and also requires permission on the default
+project. See the [AWS endpoint guide](https://docs.aws.amazon.com/bedrock/latest/userguide/endpoints.html) for details.
 
 ## Vertex
 

@@ -9,9 +9,11 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
+import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { ModelsDevPlugin } from "@opencode/core/plugin/models-dev"
 import { Plugin } from "@opencode/core/plugin"
@@ -128,6 +130,123 @@ const richSnapshot = (name = "Acme") => {
 }
 
 describe("ModelsDevPlugin", () => {
+  isolated.effect("uses recommended Bedrock Runtime APIs by default but honors an explicit model package", () =>
+    Effect.gen(function* () {
+      const providerID = Provider.ID.amazonBedrock
+      const kimi = Model.ID.make("global.moonshotai.kimi-k3.1")
+      const glm = Model.ID.make("us.zai.glm-5.3")
+      const claude = Model.ID.make("global.anthropic.claude-sonnet-4-6")
+      const nova = Model.ID.make("global.amazon.nova-2-lite-v1:0")
+      const first = Model.ID.make("us.moonshotai.kimi-k3.1")
+      const converse = "@opencode/ai/providers/amazon-bedrock"
+      const explicitConverse = "@opencode/ai/providers/amazon-bedrock/converse"
+      const chat = "@opencode/ai/providers/amazon-bedrock/chat"
+      const responses = "@opencode/ai/providers/amazon-bedrock/responses"
+      const endpoint = "https://bedrock-runtime.${AWS_REGION}.amazonaws.com"
+      const api = {
+        converse: { base_url: endpoint, sdk: { opencodeai: converse } },
+        "chat-completions": { base_url: `${endpoint}/openai/v1`, sdk: { opencodeai: chat } },
+        responses: { base_url: `${endpoint}/openai/v1`, sdk: { opencodeai: responses } },
+      }
+      const entry = (
+        id: Model.ID,
+        recommended_api?: string,
+        routes: Record<string, (typeof api)[keyof typeof api]> = api,
+      ) => ({
+        id,
+        name: id,
+        type: "chat",
+        release_date: "2026-01-01",
+        modalities: { input: ["text"], output: ["text"] },
+        capabilities: { tools: { supported: true }, reasoning: { supported: true, effort: ["low", "max"] } },
+        limit: { context: 128_000, output: 8192 },
+        api: routes,
+        recommended_api,
+      })
+      const data = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          [providerID]: {
+            id: providerID,
+            name: "Amazon Bedrock",
+            env: [],
+            models: {
+              [kimi]: entry(kimi, "chat-completions"),
+              [glm]: entry(glm, "responses"),
+              [claude]: entry(claude, "messages", {
+                converse: api.converse,
+                messages: {
+                  base_url: `${endpoint}/anthropic`,
+                  sdk: { opencodeai: "@opencode/ai/providers/amazon-bedrock/messages" },
+                },
+              }),
+              [nova]: entry(nova),
+              [first]: entry(first, undefined, {
+                "chat-completions": api["chat-completions"],
+                converse: api.converse,
+                responses: api.responses,
+              }),
+            },
+          },
+        }),
+      )
+      const source = ModelsDev.Service.of({ get: () => Effect.succeed(data), refresh: () => Effect.void })
+      const location = yield* owner
+      const config = Context.get(location.context, Config.Test)
+      const settings = { region: "us-west-2", profile: "work", baseURL: "https://vpce.${AWS_REGION}.test" }
+      yield* config.setEntries([
+        new Document({ type: "document", info: Info.make({ providers: { [providerID]: { settings } } }) }),
+      ])
+      yield* ModelsDevPlugin.effect(location.host).pipe(
+        Effect.provideService(ModelsDev.Service, source),
+        Effect.provideContext(location.context),
+      )
+      yield* ConfigProviderPlugin.Plugin.effect(location.host).pipe(Effect.provideContext(location.context))
+      yield* activate(location.providers)
+
+      const resolve = (id: Model.ID) =>
+        location.models.get(providerID, id).pipe(
+          Effect.map(required),
+          Effect.flatMap((model) => ModelResolver.fromCatalogModel(model)),
+        )
+      const selected = yield* resolve(kimi)
+      expect(selected.route.id).toBe("bedrock-runtime-chat")
+      expect(String(selected.id)).toBe(kimi)
+      expect(selected.route.endpoint.baseURL).toBe("https://vpce.us-west-2.test/openai/v1")
+      expect((yield* location.models.get(providerID, kimi))?.variants).toContainEqual({
+        id: Model.VariantID.make("max"),
+        settings: { reasoningEffort: "max" },
+      })
+      expect((yield* resolve(glm)).route.id).toBe("bedrock-runtime-responses")
+      const selectedClaude = yield* resolve(claude)
+      expect(selectedClaude.route.id).toBe("bedrock-runtime-messages")
+      expect(selectedClaude.route.endpoint.baseURL).toBe("https://vpce.us-west-2.test/anthropic/v1")
+      expect((yield* location.models.get(providerID, claude))?.variants).toContainEqual({
+        id: Model.VariantID.make("max"),
+        settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "max" },
+      })
+      expect((yield* resolve(nova)).route.id).toBe("bedrock-converse")
+      expect((yield* resolve(first)).route.id).toBe("bedrock-runtime-chat")
+
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: Info.make({
+            providers: { [providerID]: { settings, models: { [kimi]: { package: explicitConverse } } } },
+          }),
+        }),
+      ])
+      yield* ConfigProviderPlugin.Plugin.effect(location.host).pipe(Effect.provideContext(location.context))
+      expect((yield* resolve(kimi)).route).toMatchObject({
+        id: "bedrock-converse",
+        endpoint: { baseURL: "https://vpce.us-west-2.test" },
+      })
+      expect((yield* location.models.get(providerID, kimi))?.variants).toContainEqual({
+        id: Model.VariantID.make("low"),
+        body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } } },
+      })
+    }),
+  )
+
   for (const enabled of [true, false]) {
     isolated.effect(`uses the ${enabled ? "recommended" : "first"} API and its variants`, () =>
       Effect.gen(function* () {
