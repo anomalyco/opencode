@@ -1600,8 +1600,15 @@ body {
   gap: 24px;
 }
 
+/* The range choices in one frame, as the leaderboard's cards and the Share button beside them: a hairline over the
+   layer, 28px tall; the chosen one on grey inside it. */
 [data-page="stats"] [data-component="usage-filter"][data-variant="range"] {
-  gap: 6px;
+  box-sizing: border-box;
+  gap: 2px;
+  height: 28px;
+  padding: 2px;
+  background: linear-gradient(180deg, #ffffff0a 0%, #ffffff00 100%), var(--stats-layer);
+  border: 1px solid var(--stats-line);
 }
 
 [data-page="stats"] [data-component="usage-filter"] button {
@@ -1638,18 +1645,14 @@ body {
   background: linear-gradient(var(--stats-text), var(--stats-text)) center / 6px 6px no-repeat;
 }
 
-/* The range choices as the leaderboard's cards and the Share button beside them: 28px, a hairline over the layer; the
-   chosen one in full colour with a firmer line. */
 [data-page="stats"] [data-component="usage-filter"][data-variant="range"] button {
-  height: 28px;
-  padding: 0 10px;
-  background: linear-gradient(180deg, #ffffff0a 0%, #ffffff00 100%), var(--stats-layer);
-  border: 1px solid var(--stats-line);
+  height: 22px;
+  padding: 0 8px;
 }
 
 [data-page="stats"] [data-component="usage-filter"][data-variant="range"] button[data-active="true"] {
   color: var(--stats-text);
-  border-color: var(--stats-line-strong);
+  background: var(--stats-layer-2);
 }
 
 [data-page="stats"] [data-slot="leaderboard-period"] {
