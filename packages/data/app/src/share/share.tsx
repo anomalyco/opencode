@@ -590,13 +590,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     {
                       value: "live" as const,
                       label: "Live data",
-                      detail: "Always the latest",
                       icon: <DataGlyph fixed={false} />,
                     },
                     {
                       value: "fixed" as const,
                       label: "Fixed data",
-                      detail: "Today's numbers",
                       icon: <DataGlyph fixed />,
                     },
                   ]}
@@ -952,7 +950,8 @@ function DataGlyph(props: { fixed: boolean }) {
           when={props.fixed}
           fallback={
             <>
-              <path d="M8 6.75v2.5M5.25 5a4 4 0 0 0 0 6M10.75 5a4 4 0 0 1 0 6M3.25 3a6.75 6.75 0 0 0 0 10M12.75 3a6.75 6.75 0 0 1 0 10" />
+              <circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none" />
+              <path d="M5.25 5a4 4 0 0 0 0 6M10.75 5a4 4 0 0 1 0 6M3.25 3a6.75 6.75 0 0 0 0 10M12.75 3a6.75 6.75 0 0 1 0 10" />
             </>
           }
         >

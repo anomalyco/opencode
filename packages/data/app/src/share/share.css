@@ -894,6 +894,11 @@
     color: var(--stats-faint);
   }
 
+  /* Every icon in the editor's controls drawn with 1px lines: the bar, its lists, the calendar and the section arrows. */
+  :is([data-slot="editor-bar"], [data-slot="editor-toolbar"]) svg :is(path, rect, circle) {
+    stroke-width: 1px;
+  }
+
   /* Close as far from the first dropdown as Shuffle is from Export: the gap and 4px more. */
   [data-slot="editor-bar"] > [data-slot="icon-button"]:first-child {
     margin-right: 4px;
@@ -977,7 +982,7 @@
   }
 
   [data-slot="date-tool"] [data-slot="dropdown-trigger"] {
-    width: 264px;
+    width: 212px;
   }
 
   [data-slot="dropdown-menu"] {
@@ -1015,7 +1020,8 @@
     align-items: center;
     gap: 10px;
     min-height: 36px;
-    padding: 8px 14px;
+    /* Each choice's icon starts where its button's does: the border and the button's 8px. */
+    padding: 8px 14px 8px 9px;
     font-size: 13px;
     color: var(--stats-text);
     text-align: left;
@@ -1090,7 +1096,11 @@
     }
   }
 
-  /* Sizes: each ratio with its name to its right, the names in a column. */
+  /* Sizes: each ratio where its button's value starts, with its name to its right, the names in a column. */
+  [data-component="dropdown"][data-id="size"] [data-slot="dropdown-item"] {
+    padding-left: 13px;
+  }
+
   [data-component="dropdown"][data-id="size"] [data-slot="dropdown-label"] {
     flex-direction: row;
     gap: 12px;
@@ -1154,7 +1164,7 @@
       height: 20px;
     }
 
-    /* Lines stay 1.5px on screen at the larger size, rather than scaling up with it. */
+    /* Lines stay their width on screen at the larger size, rather than scaling up with it. */
     > svg * {
       vector-effect: non-scaling-stroke;
     }
