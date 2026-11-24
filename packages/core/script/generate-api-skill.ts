@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 
 // Writes the `opencode` skill's API reference (`skill://opencode/api.md` and `api/<group>.md`) from the protocol's
-// OpenAPI document. Protocol's `bun run generate` runs it after writing openapi.json, or run `bun run generate:api-skill` from packages/core; test/opencode-api-skill.test.ts fails when stale.
+// OpenAPI document. Protocol's `bun run generate` runs it after writing openapi.json; `bun run generate:api-skill` from
+// packages/core runs it alone. test/opencode-api-skill.test.ts fails when the files are stale.
 
 import fs from "node:fs/promises"
 import path from "node:path"
