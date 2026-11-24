@@ -31,6 +31,7 @@ import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
+import { Flag } from "../flag.js"
 import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
@@ -386,6 +387,7 @@ export const layer = (options?: Options) =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const environment = yield* Environment.Service
+      const skills = yield* Flag.enabled("mcp_skills")
       const bus = yield* Bus.Service
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
@@ -696,6 +698,7 @@ export const layer = (options?: Options) =>
             config,
             directory: location.directory,
             clientInfo: options?.clientInfo,
+            skills,
             authProvider: Effect.suspend(() =>
               selectCredential(entry).pipe(Effect.flatMap((credential) => connectProvider(name, entry, credential))),
             ),
@@ -1257,6 +1260,7 @@ export function configured(options?: Options) {
       Form.node,
       Integration.node,
       Credential.node,
+      Flag.node,
       httpFetch,
       McpPool.node,
     ],

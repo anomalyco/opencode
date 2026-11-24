@@ -17992,6 +17992,9 @@
               "opencode_api": {
                 "type": "boolean"
               },
+              "mcp_skills": {
+                "type": "boolean"
+              },
               "sqlite_fts": {
                 "type": "boolean"
               },

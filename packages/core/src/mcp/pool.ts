@@ -51,9 +51,10 @@ export const key = (input: {
   /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
   readonly credential?: string
   readonly clientInfo?: { readonly name: string; readonly version: string }
+  readonly skills?: boolean
 }) => {
   const config = input.config
-  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null]
+  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null, input.skills ?? false]
   if (config.type === "remote")
     return JSON.stringify([
       "remote",

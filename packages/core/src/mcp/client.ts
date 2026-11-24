@@ -356,6 +356,8 @@ export interface ConnectOptions {
   readonly roots?: boolean
   /** Experimental: declares MCP Events, a beta extension, and exposes `Connection.events` for a 2026-07-28 server that offers them. */
   readonly events?: boolean
+  /** Experimental: declares MCP Skills, a beta extension, and exposes `Connection.skills` for a server that offers them. */
+  readonly skills?: boolean
 }
 
 /**
@@ -432,7 +434,14 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         // Legacy era only: roots are deprecated as of 2026-07-28 and modern servers cannot request them.
         // Some legacy servers refuse to run without one (https://github.com/anomalyco/opencode/issues/2308).
         ...(options.roots === false ? {} : { roots: {} }),
-        extensions: { ...(options.events ? { [EVENTS]: {} } : {}), [SKILLS_EXTENSION_ID]: {} },
+        ...(options.events || options.skills
+          ? {
+              extensions: {
+                ...(options.events ? { [EVENTS]: {} } : {}),
+                ...(options.skills ? { [SKILLS_EXTENSION_ID]: {} } : {}),
+              },
+            }
+          : {}),
       },
       versionNegotiation: negotiation(protocol, timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT),
       listChanged: {
@@ -716,7 +725,8 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         return yield* reject(-32602, `Arguments for ${input.name} do not match its inputSchema`)
     })
     // MCP Skills (SEP-2640), a beta extension, serves skill files as resources.
-    const skills = advertised("resources") ? new SkillsClient(client, { skipInvalid: true }) : undefined
+    const skills =
+      options.skills && advertised("resources") ? new SkillsClient(client, { skipInvalid: true }) : undefined
 
     // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
     const connection: Connection = {

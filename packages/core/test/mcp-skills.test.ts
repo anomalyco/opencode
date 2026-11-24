@@ -5,6 +5,7 @@ import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Document, Info } from "@opencode/schema/config"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Credential } from "@opencode/core/credential"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
@@ -40,6 +41,7 @@ const it = testEffect(
     ]),
     [
       Config.node.replace(config),
+      Flag.node.replace(Flag.testLayer([], { overrides: "mcp_skills" })),
       Location.node.replace(tempLocationLayer),
       Environment.node.replace(hostEnvironmentLayer),
       Integration.node.replace(
