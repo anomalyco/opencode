@@ -255,10 +255,6 @@ export interface Interface {
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
-  /** Moves blocking work to the background, without a notice, when the Session's config sets `auto_background`. */
-  readonly autoBackground: (
-    sessionID: SessionSchema.ID,
-  ) => Effect.Effect<void, NotFoundError | FileSystem.DirectoryNotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly resume?: boolean }) => Effect.Effect<boolean>
   readonly synthetic: (
@@ -514,7 +510,19 @@ const layer = Layer.effect(
               Bus.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      prompt: (input, onAccepted) => sessions.forSession(input.sessionID).prompt(input, onAccepted),
+      prompt: Effect.fn("Session.prompt")(function* (input, onAccepted) {
+        const admitted = yield* sessions.forSession(input.sessionID).prompt(input, onAccepted)
+        // With `auto_background`, a steer moves blocking work to the background so the agent reads it at its next step.
+        if ((input.delivery ?? "steer") !== "steer") return admitted
+        const session = yield* result.get(input.sessionID)
+        const enabled = yield* Effect.gen(function* () {
+          const config = yield* Config.Service
+          return Config.latest(yield* config.entries(), "auto_background") ?? false
+        }).pipe(instances.provide(session))
+        // No notice: each moved tool's own result already says it is still running, so the steer is read in one step.
+        if (enabled) yield* jobs.backgroundAll({ sessionID: input.sessionID })
+        return admitted
+      }),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
         return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(
@@ -568,15 +576,6 @@ const layer = Layer.effect(
             ].join("\n"),
           })
           .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
-      }),
-      autoBackground: Effect.fn("Session.autoBackground")(function* (sessionID) {
-        const session = yield* result.get(sessionID)
-        const enabled = yield* Effect.gen(function* () {
-          const config = yield* Config.Service
-          return Config.latest(yield* config.entries(), "auto_background") ?? false
-        }).pipe(instances.provide(session))
-        // No notice: each moved tool's own result already says it is still running, so the steer is read in one step.
-        if (enabled) yield* jobs.backgroundAll({ sessionID })
       }),
       resume: (sessionID) => sessions.forSession(sessionID).resume(),
       synthetic: (input) => sessions.forSession(input.sessionID).synthetic(input),
