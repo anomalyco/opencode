@@ -154,7 +154,10 @@ export function drawShareCard(
     dotGrid(card.chart, width),
     baseline * 0.4,
     baseline,
-    timing.beat && time < (timing.length ?? Infinity) ? meter(time, timing.beat, timing.spectrum) : undefined,
+    // The equaliser waits for the chart to finish building, then eases in over a beat.
+    timing.beat && time >= timing.build && time < (timing.length ?? Infinity)
+      ? scaled(meter(time, timing.beat, timing.spectrum), settle(time, timing.build, timing.beat))
+      : undefined,
   )
   drawLogo(ctx, options.logo, colors, pad, pad)
 
@@ -261,6 +264,10 @@ function drawBackground(
   ctx.fillStyle = colors.dot
   if (kind !== "band") return
   columns.forEach((x) => ctx.fillRect(x, height - inset - dot, dot, dot))
+}
+
+function scaled(level: (column: number, columns: number) => number, amount: number) {
+  return (column: number, columns: number) => level(column, columns) * amount
 }
 
 // The equaliser's level for each dot column at `time`: the track's own spectrum once it's measured (spectrum.ts);
