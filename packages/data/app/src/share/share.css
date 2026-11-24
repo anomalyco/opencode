@@ -241,6 +241,11 @@
     /* Grey on the light page; on the dark one a step lighter than the card (#0c0c0c), so it stands out, but well below
        the page's second layer, which glared. */
     background-color: light-dark(var(--stats-layer-2), #151515);
+
+    /* A light card would sit pale on the light stage; the stage darkens a step under it. */
+    &[data-card-theme="light"] {
+      background-color: light-dark(#e2e2e2, #151515);
+    }
     background-image: radial-gradient(light-dark(var(--stats-line-strong), var(--stats-line)) 1px, transparent 1px);
     background-size: 16px 16px;
   }
@@ -592,6 +597,21 @@
     &[data-variant="text"] {
       height: 36px;
       font-size: 13px;
+    }
+
+    /* A label with a two-line note under it (an embed's Data). */
+    &[data-variant="described"] {
+      gap: 4px;
+      height: auto;
+      padding: 10px 12px;
+      font-size: 13px;
+
+      small {
+        font-size: 11px;
+        line-height: 1.3;
+        text-align: center;
+        text-wrap: balance;
+      }
     }
 
     /* A quick label above icon-only choices; the button's aria-label says the same. */

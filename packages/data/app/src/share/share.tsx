@@ -321,7 +321,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       <Show when={card()}>
         {(value) => (
           <div data-slot="editor">
-            <div data-slot="editor-stage">
+            <div data-slot="editor-stage" data-card-theme={options().theme}>
               <button type="button" data-slot="icon-button" data-variant="close" aria-label="Close" onClick={close}>
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                   <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" />
@@ -518,11 +518,12 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                           <button
                             type="button"
                             data-slot="chip"
-                            data-variant="text"
+                            data-variant="described"
                             aria-pressed={fixed() === item}
                             onClick={() => setFixed(item)}
                           >
                             <span>{item ? "Fixed" : "Live"}</span>
+                            <small>{item ? "Keeps today's numbers" : "Always the latest data"}</small>
                           </button>
                         )}
                       </For>
