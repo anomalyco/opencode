@@ -244,8 +244,9 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
         font-variant-numeric: tabular-nums;
       }
 
+      /* Not while it renders: the pointer that pressed it is still over it, and the progress must show at once. */
       @media (hover: hover) and (pointer: fine) {
-        &:hover:not(:disabled) {
+        &:hover:not(:disabled, [data-rendering]) {
           background: color-mix(in srgb, var(--stats-accent) 88%, black);
         }
       }
