@@ -794,9 +794,9 @@
     background: var(--stats-layer-2);
   }
 
+  /* Chosen, the icon darkens on its grey square. */
   [data-slot="track"][aria-checked="true"] [data-slot="track-icon"] {
-    color: var(--stats-on-accent);
-    background: var(--stats-accent);
+    color: var(--stats-text);
   }
 
   /* A track's single cover fills its square; on the chosen track the play state sits over a darkened cover. */

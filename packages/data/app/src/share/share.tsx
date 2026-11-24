@@ -620,7 +620,7 @@ function TrackOption(props: {
             <Show when={!props.cover}>
               <svg width="16" height="16" viewBox="0 0 16 16">
                 {/* No music: the familiar muted speaker. */}
-                <path d="M2 6h2.75L8.5 3v10L4.75 10H2Z" fill="currentColor" />
+                <path d="M1 6h2.5L7 3v10L3.5 10H1Z" fill="currentColor" />
                 <path d="m10.5 6 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
               </svg>
             </Show>
