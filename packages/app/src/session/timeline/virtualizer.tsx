@@ -153,7 +153,10 @@ export function createTimelineVirtualizer(input: Input) {
   const language = useLanguage()
   const active = () => input.active?.() !== false
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const topOffset = () => (input.showHeader() ? 64 : isDesktop() ? 0 : 16)
+  // The session header is one 48px row over the top of the viewport (session-identity-header.css), and its fade takes
+  // 16px more. The header inset inside the viewport reserves both.
+  const headerHeight = 48
+  const topOffset = () => (input.showHeader() ? headerHeight + 16 : isDesktop() ? 0 : 16)
   // Reserved below the last row: a 36px lane for the live status row and its background hint, a 14px gap, then the
   // activity pill and its 10px composer gap. Without hover the pill grows from 32px to its 44px touch size
   // (composer-lane.css), and the tail grows with it. Both come and go inside it, so neither moves the rows above.
@@ -291,7 +294,6 @@ export function createTimelineVirtualizer(input: Input) {
   // layout. While a batch of sizes is applied, a request replaces the one before it, and the last is written once.
   let scrollHeld = false
   let heldScroll: (() => void) | undefined
-  const [headerHeight, setHeaderHeight] = createSignal(48)
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -301,16 +303,8 @@ export function createTimelineVirtualizer(input: Input) {
     // The viewport runs on under the composer region. The virtualizer sees only the part above it, which the
     // inset spacer below the rows keeps consistent with the native scroll range.
     observeElementRect: (instance, callback) => {
-      reportRect = (rect) => {
-        const root = listRoot()
-        batch(() => {
-          // The container-responsive header can be 48px or 80px.
-          setHeaderHeight(
-            root ? parseFloat(getComputedStyle(root).getPropertyValue("--session-header-height")) || 48 : 48,
-          )
-          callback({ width: rect.width, height: Math.max(0, rect.height - bottomInset()) })
-        })
-      }
+      reportRect = (rect) =>
+        batch(() => callback({ width: rect.width, height: Math.max(0, rect.height - bottomInset()) }))
 
       return observeElementRect(instance, (rect) => {
         if (active()) reportRect?.(rect)
@@ -415,7 +409,7 @@ export function createTimelineVirtualizer(input: Input) {
     },
     // Revealed prompts sit below the solid header and its 16px fade.
     get scrollPaddingStart() {
-      return input.showHeader() ? headerHeight() + 16 : 0
+      return input.showHeader() ? headerHeight + 16 : 0
     },
     get rangeExtractor() {
       return rangeExtractor()
@@ -1234,7 +1228,7 @@ export function createTimelineVirtualizer(input: Input) {
             if (window.getSelection()?.toString()) input.follow.dispatch({ type: "detach" })
           }}
           class="relative min-w-0 w-full h-full"
-          style={{ "--sticky-accordion-top": input.showHeader() ? "var(--session-header-height, 48px)" : "0px" }}
+          style={{ "--sticky-accordion-top": input.showHeader() ? `${headerHeight}px` : "0px" }}
         >
           <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
             {props.headerInset}
