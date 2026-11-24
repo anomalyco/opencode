@@ -249,7 +249,10 @@
     &[data-card-theme="light"] {
       background-color: light-dark(#d6d6d6, #151515);
     }
-    background-image: radial-gradient(light-dark(var(--stats-line-strong), rgb(255 255 255 / 0.06)) 1px, transparent 1px);
+    background-image: radial-gradient(
+      light-dark(var(--stats-line-strong), rgb(255 255 255 / 0.06)) 1px,
+      transparent 1px
+    );
     background-size: 16px 16px;
   }
 

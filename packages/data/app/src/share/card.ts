@@ -1046,35 +1046,27 @@ function drawPodiumSlide(
     return
   }
 
+  // Straight on the card, no tile: the logo large and faint at its right, the type punching in on the cut.
   const punch = 1 + 0.04 * (1 - settle(since, 0, 0.4))
   const dark = colors.background !== palettes.light.background
+  const logo = shareLogo(entry.logo, dark)
+  if (logo) {
+    const size = Math.min(box.height * 0.95, box.width * 0.9)
+    ctx.save()
+    ctx.globalAlpha = (dark ? 0.08 : 0.07) * settle(since, 0, 0.5)
+    ctx.drawImage(logo, width - size * 0.72, box.y + (box.height - size) / 2, size, size)
+    ctx.restore()
+  }
   ctx.save()
   ctx.translate(box.x + box.width / 2, box.y + box.height / 2)
   ctx.scale(punch, punch)
   ctx.translate(-(box.x + box.width / 2), -(box.y + box.height / 2))
-  ctx.globalAlpha = 0.55
-  ctx.fillStyle = colors.track
-  ctx.fillRect(box.x, box.y, box.width, box.height)
-  ctx.globalAlpha = 1
-  ctx.strokeStyle = colors.line
-  ctx.lineWidth = 2
-  ctx.strokeRect(box.x + 1, box.y + 1, box.width - 2, box.height - 2)
-  ctx.beginPath()
-  ctx.rect(box.x, box.y, box.width, box.height)
-  ctx.clip()
-  const logo = shareLogo(entry.logo, dark)
-  if (logo) {
-    const size = Math.min(box.height * 0.95, box.width * 0.9)
-    ctx.globalAlpha = dark ? 0.08 : 0.07
-    ctx.drawImage(logo, box.x + box.width - size * 0.72, box.y + (box.height - size) / 2, size, size)
-    ctx.globalAlpha = 1
-  }
   // Bottom up: the change beside the tokens on their baseline (under them when there's no room), the tokens' caption
   // over them, the provider with its logo, the name; the place large and faint in the top corner.
-  const inset = 64
-  const left = box.x + inset
-  const room = box.width - inset * 2
-  const bottom = box.y + box.height - inset
+  const inset = 0
+  const left = box.x
+  const room = box.width
+  const bottom = box.y + box.height
   const place = Math.min(200, box.height * 0.22)
   const number = Math.min(220, box.height * 0.24, fit(ctx, entry.value, room * 0.62, 220, 400))
   ctx.font = `400 ${number}px ${font}`
