@@ -283,7 +283,6 @@ test("scrolls within a long answer without mounting unrelated history", async ({
   await expect(answer.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
 })
 
-// Each cached view provides its own Markdown context, so it must pass the app's code wrap setting on.
 // A reply's text is parsed and sanitized when its row mounts, in the frame that scrolls it in, unless the cache has it.
 test("renders the Markdown of the rows next to the mounted ones before they mount", async ({ page }) => {
   // DOMPurify builds one document for each block it sanitizes, counted here by whether an idle callback is running.
@@ -333,6 +332,7 @@ test("renders the Markdown of the rows next to the mounted ones before they moun
   expect((await sanitized()).busy).toBe(settled.busy)
 })
 
+// Each cached view provides its own Markdown context, so it must pass the app's code wrap setting on.
 test("wraps the code blocks of a cached view when the setting is on", async ({ page }) => {
   await mockStressTimeline(page, { pageMessages: () => ({ items: messages[fixture.sourceID] }) })
   await installTimelineSettings(page)
