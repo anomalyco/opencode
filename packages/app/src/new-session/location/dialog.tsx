@@ -251,21 +251,25 @@ function NewSessionLocationDialog(props: {
   const placeholder = () => language.t(view().placeholderKey)
 
   const choosesServer = () => (props.project?.servers().length ?? 0) > 1
-  command.register("new-session-location", () => [
-    {
-      id: "project.open",
-      title: language.t("command.project.open"),
-      category: language.t("command.category.project"),
-      keybind: "mod+o",
-      onSelect: () => choose({ id: "add", type: "add" }),
-    },
-  ])
-  createEventListener(document, "keydown", (event) => {
-    if (event.isComposing || !command.matches("project.open", event)) return
-    event.preventDefault()
-    event.stopPropagation()
-    command.trigger("project.open", "keybind")
-  })
+
+  // A dialog that only lists one project's worktrees has no projects to open one from, so it leaves Mod+O to the app.
+  if (props.project) {
+    command.register("new-session-location", () => [
+      {
+        id: "project.open",
+        title: language.t("command.project.open"),
+        category: language.t("command.category.project"),
+        keybind: "mod+o",
+        onSelect: () => choose({ id: "add", type: "add" }),
+      },
+    ])
+    createEventListener(document, "keydown", (event) => {
+      if (event.isComposing || !command.matches("project.open", event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      command.trigger("project.open", "keybind")
+    })
+  }
 
   // Every step opens on its first row; the user's choice holds while it stays in the results.
   const typeahead = createTypeahead<LocationEntry>({
