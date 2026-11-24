@@ -424,7 +424,7 @@ function TopModelsSection(props: {
             label={`Share ${i18n.t("nav.topModels")}`}
             card={() => {
               const leader = leaderboard()[0]
-              const chart = usageShareChart(props.data[chartPeriod()], (value) => formatTokens(value))
+              const chart = usageShareChart(props.data[chartPeriod()], (value) => formatTokens(value), "All models")
               if (!chart || !leader) return undefined
               const when = period() === "weekly" ? "in the past 7 days" : "yesterday"
               return {
@@ -721,7 +721,7 @@ function UniqueUsersSection(props: { data: HomePageData["users"]; names: Map<str
         description={i18n.t("home.uniqueUsersDescription")}
         action={<PeriodToggle value={period()} onChange={setPeriod} label={i18n.t("home.uniqueUsersTitle")} />}
         share={() => {
-          const chart = usageShareChart(props.data[period()], formatUsers)
+          const chart = usageShareChart(props.data[period()], formatUsers, "All models")
           const top = chart && leadingSeries(chart)
           if (!chart || !top) return undefined
           const when = shareWhen(chart, period())
@@ -1991,7 +1991,7 @@ function formatSessionCost(value: number) {
 const shareSeriesLimit = 6
 const shareOtherColor = "#6b6b6b"
 
-function usageShareChart(data: UsagePoint[], format: (value: number) => string) {
+function usageShareChart(data: UsagePoint[], format: (value: number) => string, total: string) {
   const points = data.length > 1 ? data.slice(0, -1) : data
   const order = getTopModelsSegmentOrder(points)
   const keys = [...order.keys()].filter((key) => key !== "Other").slice(0, shareSeriesLimit)
@@ -2003,6 +2003,7 @@ function usageShareChart(data: UsagePoint[], format: (value: number) => string) 
     keys.map((key) => ({ key, label: key, color: getRankColor(key, 0, order, usageColors) })),
     format,
     false,
+    total,
   )
 }
 
@@ -2021,6 +2022,7 @@ function marketShareChart(data: MarketDay[], order: Map<string, number>) {
     })),
     (value) => `${value.toFixed(1)}%`,
     true,
+    "All labs",
   )
 }
 
@@ -2029,6 +2031,7 @@ function stackedShareChart(
   named: Omit<ShareSeries, "value">[],
   format: (value: number) => string,
   normalized: boolean,
+  total: string,
 ): Extract<ShareChart, { kind: "stacked" }> | undefined {
   if (columns.length === 0 || named.length === 0) return undefined
   const keys = new Set(named.map((item) => item.key))
@@ -2042,6 +2045,11 @@ function stackedShareChart(
     kind: "stacked",
     normalized,
     columns: rows,
+    // The latest column's whole: its sum, or 100% when the columns are shares.
+    total: {
+      label: `${total}, ${rows.at(-1)?.label ?? ""}`,
+      value: normalized ? "100%" : format(last.reduce((sum, value) => sum + value, 0)),
+    },
     series: [...named, { key: "other", label: "Other", color: shareOtherColor }]
       .map((item, index) => ({ ...item, value: format(last[index] ?? 0) }))
       .filter((item, index) => item.key !== "other" || (last[index] ?? 0) > 0),

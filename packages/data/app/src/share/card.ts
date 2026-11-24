@@ -14,6 +14,8 @@ export type ShareChart =
       series: ShareSeries[]
       // values[i] is series[i]'s value in the column; series[0] stacks at the bottom.
       columns: { label: string; values: number[] }[]
+      // The line under the chart before a series takes it, such as the latest column's total.
+      total: { label: string; value: string }
     }
   | {
       kind: "ranked"
@@ -90,7 +92,8 @@ type Palette = (typeof palettes)["dark"]
 
 const font = '"OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", ui-monospace, monospace'
 const pad = 80
-const hold = 1.6
+// The still holds long enough for the legend to arrive after the highlights.
+const hold = 2.2
 // The space under a stacked chart for its date labels.
 const axisHeight = 44
 
@@ -143,7 +146,11 @@ export function drawShareCard(
   const footer = height - pad
   const rule = footer - 26 - 56
   const legend = card.chart.kind === "stacked" ? legendLayout(card.chart.series, width, height) : undefined
-  const chartBottom = rule - 64 - (legend ? legend.height + 40 : 0)
+  // A stacked chart keeps one line under it (the total, then each series in turn) while it builds and highlights;
+  // once the highlights are done it eases shorter to make room for the full legend. The still is that last state.
+  const reveal = legend ? settle(time, highlightsEnd(card, options, timing), 0.8) : 0
+  const below = legend ? 96 + (legend.height + 40 - 96) * reveal : 0
+  const chartBottom = rule - 64 - below
   // The dots are gone by the x axis: a stacked chart's baseline sits its axis labels above the chart's bottom.
   const baseline = card.chart.kind === "stacked" ? chartBottom - axisHeight : chartBottom
   drawBackground(
@@ -175,7 +182,18 @@ export function drawShareCard(
       progress,
       focus,
     )
-    if (legend) drawLegend(ctx, card.chart.series, legend, colors, pad, chartBottom + 40, focus, time)
+    if (legend) {
+      drawCallout(ctx, card.chart, legend, colors, pad, chartBottom + 40, focus, 1 - reveal)
+      drawLegend(
+        ctx,
+        card.chart.series,
+        legend,
+        colors,
+        pad,
+        chartBottom + 40,
+        time - highlightsEnd(card, options, timing),
+      )
+    }
   }
   if (card.chart.kind === "ranked")
     drawRanked(
@@ -205,6 +223,12 @@ function focusAt(card: ShareCard, options: ShareOptions, time: number, timing: S
   const first = turn === 0 ? Math.min(1, within / 0.25) : 1
   const last = turn === order.length - 1 ? Math.min(1, (step - within) / 0.25) : 1
   return { index: order[turn] ?? -1, amount: ease(Math.min(first, last)) }
+}
+
+// When the last highlight lets go: the build alone when there are no highlights.
+function highlightsEnd(card: ShareCard, options: ShareOptions, timing: ShareTiming) {
+  const count = highlights(card, options).length * timing.rounds
+  return count > 0 ? timing.start + count * timing.step : timing.build
 }
 
 function highlights(card: ShareCard, options: ShareOptions) {
@@ -496,6 +520,47 @@ function legendLayout(series: ShareSeries[], width: number, height: number) {
   }
 }
 
+// The one line under the chart while it builds and highlights: the total, then each series as it's highlighted,
+// crossfading between them. `shown` fades the whole line out as the legend takes over.
+function drawCallout(
+  ctx: CanvasRenderingContext2D,
+  chart: Extract<ShareChart, { kind: "stacked" }>,
+  layout: ReturnType<typeof legendLayout>,
+  colors: Palette,
+  x: number,
+  y: number,
+  focus: Focus,
+  shown: number,
+) {
+  if (shown <= 0) return
+  const focused = chart.series[focus.index]
+  const width = layout.column * layout.columns
+  const middle = y + 36
+  const line = (amount: number, label: string, value: string, color?: string) => {
+    if (amount <= 0) return
+    ctx.save()
+    ctx.globalAlpha = amount * shown
+    ctx.textBaseline = "middle"
+    ctx.font = `700 30px ${font}`
+    const measured = ctx.measureText(value).width
+    // The amount in the legend's lighter grey, as its values are.
+    ctx.fillStyle = colors.muted
+    ctx.fillText(value, x + width - measured, middle + 2)
+    const left = color ? x + 22 + 16 : x
+    if (color) {
+      ctx.fillStyle = color
+      ctx.fillRect(x, middle - 11, 22, 22)
+    }
+    ctx.fillStyle = colors.text
+    ctx.fillText(truncate(ctx, label, x + width - measured - 40 - left), left, middle + 2)
+    ctx.restore()
+  }
+  line(1 - (focused ? focus.amount : 0), chart.total.label, chart.total.value)
+  if (focused) line(focus.amount, focused.label, focused.value, focused.color)
+}
+
+// The full legend, each entry rising in turn once the highlights are done (`since` is the time since then; the still
+// passes Infinity).
 function drawLegend(
   ctx: CanvasRenderingContext2D,
   series: ShareSeries[],
@@ -503,59 +568,30 @@ function drawLegend(
   colors: Palette,
   x: number,
   y: number,
-  focus: Focus,
-  time: number,
+  since: number,
 ) {
-  // While a series is highlighted the legend gives way to that series alone, set large where the legend was.
-  const focused = series[focus.index]
-  if (focused && focus.amount > 0) {
-    ctx.save()
-    ctx.globalAlpha = focus.amount
-    ctx.translate(0, (1 - focus.amount) * 16)
-    ctx.textBaseline = "middle"
-    // Set well clear of the chart's date labels, and small enough not to compete with the headline.
-    const middle = y + 48
-    ctx.fillStyle = focused.color
-    ctx.fillRect(x, middle - 11, 22, 22)
-    ctx.font = `700 30px ${font}`
-    const value = ctx.measureText(focused.value).width
-    // The amount in the legend's lighter grey, as its values are.
-    ctx.fillStyle = colors.muted
-    ctx.fillText(focused.value, x + layout.column * layout.columns - value, middle + 2)
-    ctx.fillStyle = colors.text
-    ctx.fillText(
-      truncate(ctx, focused.label, layout.column * layout.columns - value - 22 - 16 - 40),
-      x + 22 + 16,
-      middle + 2,
-    )
-    ctx.restore()
-  }
-  const shown = 1 - focus.amount
-  if (shown <= 0) return
+  if (since < 0) return
   ctx.save()
-  ctx.globalAlpha = shown
   ctx.textBaseline = "middle"
   series.forEach((item, index) => {
     const column = Math.floor(index / layout.rows)
     const row = index % layout.rows
     const left = x + column * layout.column
     const middle = y + row * layout.row + layout.row / 2
-    const dim = index === focus.index ? 0 : focus.amount
-    // Each entry rises in after the headline, down each column in turn.
-    const amount = settle(time, 0.45 + index * 0.05, 0.6)
+    // Down each column in turn, starting as the chart begins to make room.
+    const amount = settle(since, 0.25 + index * 0.07, 0.6)
     if (amount <= 0) return
     ctx.save()
-    ctx.globalAlpha = amount * shown
+    ctx.globalAlpha = amount
     ctx.translate(0, (1 - amount) * 14)
-    ctx.fillStyle = mix(item.color, colors.idle, dim)
+    ctx.fillStyle = item.color
     ctx.fillRect(left, middle - layout.swatch / 2, layout.swatch, layout.swatch)
     ctx.font = `400 ${layout.size}px ${font}`
-    ctx.fillStyle = mix(colors.muted, colors.faint, dim)
+    ctx.fillStyle = colors.muted
     const measured = ctx.measureText(item.value).width
     const right = left + layout.column - (column === layout.columns - 1 ? 0 : 48)
     ctx.fillText(item.value, right - measured, middle)
-    ctx.font = `${index === focus.index && focus.amount > 0.5 ? 700 : 400} ${layout.size}px ${font}`
-    ctx.fillStyle = mix(colors.text, colors.faint, dim)
+    ctx.fillStyle = colors.text
     ctx.fillText(
       truncate(ctx, item.label, right - measured - 24 - (left + layout.swatch + 20)),
       left + layout.swatch + 20,
